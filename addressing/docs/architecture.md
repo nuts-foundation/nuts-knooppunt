@@ -11,7 +11,7 @@ The Application has the following services:
 - Update service: Updating data in the directory.
 - Feed service: Feeding data into the directory.
 
-![Application Layer](img/Addressering Application Layer.png)
+![Addressering Application Layer](https://github.com/user-attachments/assets/64df1e0e-daf1-4cde-8bfa-8635f9cbe2e2)
 
 ## Query process
 
@@ -21,4 +21,4 @@ The actor `Care Giver` performs an action which requires a query to the `Directo
 
 The query process is descibed in the IHE mCSD [ITI-90](https://profiles.ihe.net/ITI/mCSD/ITI-90.html) transaction.
 
-![Query Process](img/Addressering Query Process.png)
+![Address Query Process](https://github.com/user-attachments/assets/5049b12b-49b3-4cfc-ba5b-2cd8b7e78713)
