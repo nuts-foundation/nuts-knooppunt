@@ -39,9 +39,21 @@ The directory must support the `_since` parameter and return the changes since t
 The Update Client will then process the changes by consolidating the changes into the local one and and update the local directory by using the feed service as described in the IHE mCSD [ITI-130](https://profiles.ihe.net/ITI/mCSD/ITI-130.html) transaction.
 
 ### Consolidating from multiple sources
+
 Each update client will be configured with a local target directory which the updates will be applied to, an optional list of authentic directories for specific properties (such as identifiers like `AGB-code` or `Organization-Type`) and one directory which is the authentic source of Organizations, their unique identifier and their directory endpoint.
 
 The Update Client will start with the authentic source directory to get a list of organisations and their identifier (URA). Then it uses the provided endpoints to query the directories. This process will be repeated for each optional authentic directory. The last step is to query the local target directory for each of the changed organisations and consolidate the changes.
 
 The feed client (which is part of of the Update Client) will then use the feed the updated resources back into the local target directory.
 ![Address Sync detail](https://github.com/user-attachments/assets/7d852042-e3ec-4c1a-b14b-4f57f5651032)
+
+## Authoritive Directories
+
+Each directory can be configured to be authoritative for a specific set of properties. For this the FHIRPath language is used. Each directory can contain a list of FHIRPath expressions which are used to determine if the directory is authoritative for a specific property.
+If a property is claimed by a directory, the value from another directory will be ignored.
+
+When multiple directories are configured to be authoritative values can be combined. If multiple values are not allowed, the behaviour is undefined and should result in an error.
+
+For example, the LRZa directory is authoritative for the `identifier` of type `URA` and the `name` of type `official`. When the Organization's directory also provides a `name` of type `official`, the value should be ignored.
+
+When consolidating, a common agreed identifier per resource must be used. For Organizations in the the dutch healthcare sector this is the `URA`. Each directory who has a system wide unique resource must identify it with the agreed `identifier`.
