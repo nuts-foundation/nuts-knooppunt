@@ -34,12 +34,14 @@ The update process can be triggered by an event. Usually this is a timer event.
 After being triggered, the update client uses a list of directories to query. It uses the `_since` parameter to query the update server for changes since the last update.
 
 The directory must support the `_since` parameter and return the changes since the last update.
-![Address Sync Process](https://github.com/user-attachments/assets/5113906a-1377-4231-80e6-c349e0690d82)
+![Address Sync Process](https://github.com/user-attachments/assets/cdbba74a-7331-49cf-897b-fb6094a79fc7)
 
 The Update Client will then process the changes by consolidating the changes into the local one and and update the local directory by using the feed service as described in the IHE mCSD [ITI-130](https://profiles.ihe.net/ITI/mCSD/ITI-130.html) transaction.
 
-Each update client will be configuerd with a local target directory which the updates will be applied to, an optional list of authentic directories for specific properties and one directory which is the authentic source of organisations, their unique identifier and their directory endpoint.
+### Consolidating from multiple sources
+Each update client will be configured with a local target directory which the updates will be applied to, an optional list of authentic directories for specific properties (such as identifiers like `AGB-code` or `Organization-Type`) and one directory which is the authentic source of Organizations, their unique identifier and their directory endpoint.
 
-The Update Client will start with the authentic source directory to get a list of organisations and their identifier (URA). Then it uses the provided endpoints to query the directories. This process will be repeated for each optional authentic directory. The last step is to query the local target directory for each of the changed organisations and consolidate the changes into the local directory.
+The Update Client will start with the authentic source directory to get a list of organisations and their identifier (URA). Then it uses the provided endpoints to query the directories. This process will be repeated for each optional authentic directory. The last step is to query the local target directory for each of the changed organisations and consolidate the changes.
 
-The feed client (which is part of the Update Client) will then use the feed the updated resources back into the local target directory.
+The feed client (which is part of of the Update Client) will then use the feed the updated resources back into the local target directory.
+![Address Sync detail](https://github.com/user-attachments/assets/7d852042-e3ec-4c1a-b14b-4f57f5651032)
