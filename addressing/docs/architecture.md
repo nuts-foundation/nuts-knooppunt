@@ -38,4 +38,8 @@ The directory must support the `_since` parameter and return the changes since t
 
 The Update Client will then process the changes by consolidating the changes into the local one and and update the local directory by using the feed service as described in the IHE mCSD [ITI-130](https://profiles.ihe.net/ITI/mCSD/ITI-130.html) transaction.
 
+Each update client will be configuerd with a local target directory which the updates will be applied to, an optional list of authentic directories for specific properties and one directory which is the authentic source of organisations, their unique identifier and their directory endpoint.
 
+The Update Client will start with the authentic source directory to get a list of organisations and their identifier (URA). Then it uses the provided endpoints to query the directories. This process will be repeated for each optional authentic directory. The last step is to query the local target directory for each of the changed organisations and consolidate the changes into the local directory.
+
+The feed client (which is part of the Update Client) will then use the feed the updated resources back into the local target directory.
