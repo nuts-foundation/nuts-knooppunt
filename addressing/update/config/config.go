@@ -38,7 +38,7 @@ func NewExampleConfig() *Config {
 			Url:  url.URL{Scheme: "https", Host: "example.com", Path: "/master"},
 			AuthoritativeOf: []string{
 				// Authoritative of the URA identifier for organizations
-				"Organization.identifiers.where(type='http://fhir.nl/fhir/NamingSystem/ura')", "Endpoint",
+				"Organization.identifiers.where(type='http://fhir.nl/fhir/NamingSystem/ura')",
 				// Authoritative of the mCSD-directory connection type for endpoints
 				"Endpoint.connectionType.coding.where(system='http://fhir.nl/fhir/NamingSystem/endpoint-connection-type').where(code='mCSD-directory')",
 			},
