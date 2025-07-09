@@ -1,7 +1,13 @@
 package config
 
-import "net/url"
+import (
+	"net/url"
+)
 
+const FHIR_SYSTEM_URA = "http://fhir.nl/fhir/NamingSystem/ura"
+const FHIR_CONNECTION_TYPE_SYTEM = "http://fhir.nl/fhir/NamingSystem/endpoint-connection-type"
+
+// Directory represents a mCSD directory. It contains configuration values about the name, URL, and properties of the directory.
 type Directory struct {
 	Name string  `json:"name"`
 	Url  url.URL `json:"url"`
@@ -31,11 +37,11 @@ func NewExampleConfig() *Config {
 		},
 		LocalDirectory: Directory{
 			Name: "local",
-			Url:  url.URL{Scheme: "file", Path: "./data"},
+			Url:  url.URL{Scheme: "http", Host: "localhost:8080", Path: "/fhir/local/"},
 		},
 		MasterDirectory: Directory{
 			Name: "master",
-			Url:  url.URL{Scheme: "https", Host: "example.com", Path: "/master"},
+			Url:  url.URL{Scheme: "http", Host: "localhost:8080", Path: "/fhir/LRZA/"},
 			AuthoritativeOf: []string{
 				// Authoritative of the URA identifier for organizations
 				"Organization.identifiers.where(type='http://fhir.nl/fhir/NamingSystem/ura')",
@@ -43,15 +49,15 @@ func NewExampleConfig() *Config {
 				"Endpoint.connectionType.coding.where(system='http://fhir.nl/fhir/NamingSystem/endpoint-connection-type').where(code='mCSD-directory')",
 			},
 		},
-		AuthenticDirectories: []Directory{
-			{
-				Name: "authentic1",
-				Url:  url.URL{Scheme: "https", Host: "authentic1.com", Path: "/data"},
-			},
-			{
-				Name: "authentic2",
-				Url:  url.URL{Scheme: "https", Host: "authentic2.com", Path: "/data"},
-			},
-		},
+		// AuthenticDirectories: []Directory{
+		// 	{
+		// 		Name: "authentic1",
+		// 		Url:  url.URL{Scheme: "https", Host: "authentic1.com", Path: "/data"},
+		// 	},
+		// 	{
+		// 		Name: "authentic2",
+		// 		Url:  url.URL{Scheme: "https", Host: "authentic2.com", Path: "/data"},
+		// 	},
+		// },
 	}
 }
