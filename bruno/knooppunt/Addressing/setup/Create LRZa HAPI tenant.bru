@@ -1,0 +1,27 @@
+meta {
+  name: Create LRZa HAPI tenant
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://localhost:8080/fhir/DEFAULT/$partition-management-create-partition
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "resourceType": "Parameters",
+    "parameter": [ {
+      "name": "id",
+      "valueInteger": 1
+    }, {
+      "name": "name",
+      "valueCode": "LRZA"
+    }, {
+      "name": "description",
+      "valueString": "The LRZA directory"
+    } ]
+  }
+}

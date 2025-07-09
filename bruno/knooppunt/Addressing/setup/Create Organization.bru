@@ -1,0 +1,29 @@
+meta {
+  name: Create Organization
+  type: http
+  seq: 4
+}
+
+put {
+  url: http://localhost:8080/fhir/LRZA/Organization/1
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+  "id":"1",
+    "resourceType" : "Organization",
+    "identifier": [{
+      "use":"official",
+      "system":"http://fhir.nl/fhir/NamingSystem/ura",
+      "value":"123"
+    }],
+    "active" : true,
+    "name" : "OrgA",
+    "endpoint": [{
+      "reference":"Endpoint/4"
+    }]
+  
+  }
+}

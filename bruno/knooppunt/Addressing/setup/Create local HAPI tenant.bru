@@ -1,0 +1,27 @@
+meta {
+  name: Create local HAPI tenant
+  type: http
+  seq: 3
+}
+
+post {
+  url: http://localhost:8080/fhir/DEFAULT/$partition-management-create-partition
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "resourceType": "Parameters",
+    "parameter": [ {
+      "name": "id",
+      "valueInteger": 2
+    }, {
+      "name": "name",
+      "valueCode": "local"
+    }, {
+      "name": "description",
+      "valueString": "The local directory"
+    } ]
+  }
+}

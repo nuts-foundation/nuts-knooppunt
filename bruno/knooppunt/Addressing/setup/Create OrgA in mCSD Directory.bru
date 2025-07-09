@@ -1,0 +1,24 @@
+meta {
+  name: Create OrgA in mCSD Directory
+  type: http
+  seq: 6
+}
+
+post {
+  url: http://localhost:8080/fhir/OrgA/Organization
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+  
+    "resourceType" : "Organization",
+    "identifier": [{
+      "use":"official",
+      "system":"http://fhir.nl/fhir/NamingSystem/ura",
+      "value":"123"
+    }],
+    "alias": ["Organisatie A"]
+  }
+}

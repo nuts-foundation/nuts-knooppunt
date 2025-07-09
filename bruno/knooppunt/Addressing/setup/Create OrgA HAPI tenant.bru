@@ -1,0 +1,27 @@
+meta {
+  name: Create OrgA HAPI tenant
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:8080/fhir/DEFAULT/$partition-management-create-partition
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "resourceType": "Parameters",
+    "parameter": [ {
+      "name": "id",
+      "valueInteger": 3
+    }, {
+      "name": "name",
+      "valueCode": "OrgA"
+    }, {
+      "name": "description",
+      "valueString": "The mCSD directory of OrgA"
+    } ]
+  }
+}

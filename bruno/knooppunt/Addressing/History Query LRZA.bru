@@ -1,0 +1,15 @@
+meta {
+  name: History Query LRZA
+  type: http
+  seq: 2
+}
+
+get {
+  url: http://localhost:8080/fhir/LRZA/_history?_since=2025-07-08T16:49:12+00:00
+  body: none
+  auth: inherit
+}
+
+params:query {
+  _since: 2025-07-08T16:49:12+00:00
+}
