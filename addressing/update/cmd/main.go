@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"github.com/nuts-foundation/nuts-knooppunt/addressing/update/client"
 	"github.com/nuts-foundation/nuts-knooppunt/addressing/update/config"
@@ -15,8 +14,8 @@ func main() {
 	cfg := config.NewExampleConfig()
 
 	httpClient := http.Client{}
-	updateClient := client.NewClient(httpClient)
-	_, err := updateClient.RequestUpdates(context.Background(), cfg.MasterDirectory, time.Now())
+	updateClient := client.NewClient(cfg, &httpClient)
+	err := updateClient.SyncMasterDirectory(context.Background())
 	if err != nil {
 		println("Error requesting updates:", err.Error())
 		return

@@ -68,3 +68,9 @@ Examples of FHIRPath expressions for authoritative properties:
 For each organisation there will be a directory. For each directory the update client will keep track of the last update time. This should be stored persistently. A key-value store is recommended for this purpose, where the key is the directory identifier (url) and the value is the last update time.
 
 During the updat process, the update client will collect all the changes and current state before consolidating the changes and applying them to the local directory. The last update time will be updated after the changes have been applied. This temporary state can be stored in memory. Since we might want introduce parallel processing in the future, it is recommended to use a thread-safe data structure for this purpose.
+
+## Findings
+
+During developement of the update client, several findings were made:
+
+- The HAPI FHIR server does not allow the same id to be present, even if the resources are on different tenants. This means that the update client must use a unique identifier for each resource.
