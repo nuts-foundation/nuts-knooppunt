@@ -1,0 +1,80 @@
+meta {
+  name: Create LRZA OrgA + Endpoint
+  type: http
+  seq: 4
+}
+
+post {
+  url: http://localhost:8080/fhir/LRZA/
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "resourceType": "Bundle",
+    "type": "transaction",
+    "entry": [
+      {
+        "fullUrl": "urn:uuid:{{$orgId}}",
+        "resource": {
+          "resourceType": "Organization",
+          "identifier": [
+            {
+              "use": "official",
+              "system": "http://fhir.nl/fhir/NamingSystem/ura",
+              "value": "123"
+            }
+          ],
+          "active": true,
+          "name": "OrgA",
+          "endpoint": [
+            {
+              "reference": "urn:uuid:{{$endpointId}}"
+            }
+          ]
+        },
+        "request": {
+          "method": "POST",
+          "url": "Organization",
+          "ifNoneExist": "Organization?identifier=http://fhir.nl/fhir/NamingSystem/ura|123"
+        }
+      },
+      {
+        "fullUrl": "urn:uuid:{{$endpointId}}",
+        "resource": {
+          "resourceType": "Endpoint",
+          "meta": {
+            "profile": [
+              "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"
+            ]
+          },
+          "status": "active",
+          "connectionType": {
+            "system": "http://fhir.nl/fhir/NamingSystem/endpoint-connection-type",
+            "code": "mcsd-directory"
+          },
+          "name": "mCSD Directory",
+          "managingOrganization": {
+            "reference": "urn:uuid:{{$orgId}}"
+          },
+          "period": {
+            "start": "2025-02-10"
+          },
+          "address": "http://localhost:8080/fhir/OrgA/"
+        },
+        "request": {
+          "method": "POST",
+          "url": "Endpoint"
+        }
+      }
+    ]
+  }
+}
+
+script:pre-request {
+  const { v4: uuidv4 } = require('uuid');
+  
+  const endpointId = uuidv4();
+  const orgId = uuidv4();
+}
