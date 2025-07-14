@@ -16,32 +16,32 @@ body:json {
     "type": "transaction",
     "entry": [
       {
-        "fullUrl": "urn:uuid:{{$orgId}}",
+        "fullUrl": "urn:uuid:{{orgId}}",
         "resource": {
           "resourceType": "Organization",
           "identifier": [
             {
               "use": "official",
               "system": "http://fhir.nl/fhir/NamingSystem/ura",
-              "value": "123"
+              "value": "124"
             }
           ],
           "active": true,
           "name": "OrgA",
           "endpoint": [
             {
-              "reference": "urn:uuid:{{$endpointId}}"
+              "reference": "urn:uuid:{{endpointId}}"
             }
           ]
         },
         "request": {
           "method": "POST",
           "url": "Organization",
-          "ifNoneExist": "Organization?identifier=http://fhir.nl/fhir/NamingSystem/ura|123"
+          "ifNoneExist": "Organization?identifier=http://fhir.nl/fhir/NamingSystem/ura|124"
         }
       },
       {
-        "fullUrl": "urn:uuid:{{$endpointId}}",
+        "fullUrl": "urn:uuid:{{endpointId}}",
         "resource": {
           "resourceType": "Endpoint",
           "meta": {
@@ -56,7 +56,7 @@ body:json {
           },
           "name": "mCSD Directory",
           "managingOrganization": {
-            "reference": "urn:uuid:{{$orgId}}"
+            "reference": "urn:uuid:{{orgId}}"
           },
           "period": {
             "start": "2025-02-10"
@@ -65,7 +65,8 @@ body:json {
         },
         "request": {
           "method": "POST",
-          "url": "Endpoint"
+          "url": "Endpoint",
+          "ifNoneExist": "Endpoint?organization=urn:uuid:{{orgId}}&connection-type=http://fhir.nl/fhir/NamingSystem/endpoint-connection-type|mcsd-directory"
         }
       }
     ]
@@ -73,8 +74,6 @@ body:json {
 }
 
 script:pre-request {
-  const { v4: uuidv4 } = require('uuid');
-  
-  const endpointId = uuidv4();
-  const orgId = uuidv4();
+  bru.setVar("orgId",bru.interpolate('{{$randomUUID}}'));
+  bru.setVar("endpointId",bru.interpolate('{{$randomUUID}}'))
 }
