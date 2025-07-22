@@ -1,0 +1,4 @@
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/zorgbijjou/golang-fhir-models/fhir-models v0.0.0-20250508174153-3ca2640a22ea h1:bCoBMDpl539eaEoOTkQPnRTelZxr9STHhEoCFg7cTMU=
+github.com/zorgbijjou/golang-fhir-models/fhir-models v0.0.0-20250508174153-3ca2640a22ea/go.mod h1:HaPwolHwUUf/6El6rie/+Rr9hRKVq4P3wDdQJv7QDMo=

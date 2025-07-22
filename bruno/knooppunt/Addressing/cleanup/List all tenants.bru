@@ -1,0 +1,15 @@
+meta {
+  name: List all tenants
+  type: http
+  seq: 1
+}
+
+get {
+  url: http://localhost:8080/fhir/DEFAULT/$partition-management-list-partitions
+  body: none
+  auth: inherit
+}
+
+headers {
+  ~Content-Type: application/none
+}

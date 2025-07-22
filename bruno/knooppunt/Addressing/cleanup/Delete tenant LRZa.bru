@@ -1,0 +1,22 @@
+meta {
+  name: Delete tenant LRZa
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:8080/fhir/DEFAULT/$partition-management-delete-partition
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "resourceType": "Parameters",
+    "parameter": [ {
+      "name": "id",
+      "valueInteger": 1
+    } ]
+  }
+  
+}
