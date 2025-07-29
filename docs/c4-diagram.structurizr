@@ -1,0 +1,171 @@
+workspace "Name" "Description"
+
+    !identifiers hierarchical
+
+    model {
+    
+        group "Remote CareProvider Systems" {
+            mcsdUpdateClient = softwareSystem "mCSD Update Client" "Syncing data from mCSD directory" {
+                tags "external"
+            }
+            
+            mcsdDirectory = softwareSystem "Organization mCSD Directory" "Authority of Organization Endpoints, HealthcareServices and PractitionerRoles" "external"
+            
+            externalViewer = softwareSystem "External Viewer" "Request healthcare data from other Care Providers" "external"
+        }
+        
+        
+        group "Nation Generic Function Systems" {
+            lrza = softwareSystem "LRZA mCSD Directory" "Authority of combination URA and the mCSD Directory" "external"
+            nvi = softwareSystem "NVI" "Nationale Verwijs Index, Contains enrtries with URA and patient" "external"
+            otv = softwareSystem "OTV" "Nation Online Consent System, contains patient consents" "external"
+        }
+        
+        group "Local Care Provider Systems" {
+            xis = softwareSystem "XIS" "The XIS implementing the knooppunt" {
+                viewer = container "Viewer" {
+                    mcsdClient = component "mCSD Client" "queries the mcsd Directory"
+                    localisationClient = component "Localisation Client" "Localise patient data"
+                }
+                
+                ehr = container "EHR" {
+                    localisationPublisher = component "Localisation Publisher" "Publish patient localisation data"
+                }
+            }
+            
+            kpSystem = softwareSystem "Nuts Knooppunt" {
+                kp = container "Knooppunt Container" {
+                    group "Authentication" {
+                        nuts = component "Nuts Node"
+                    }
+                    group "Adressing" {
+                        mcsdSyncer = component "mCSD Update client" "Syncing data from remote mCSD directory and consolidate into a local Directory"
+                        mcsdQueryClient = component "mCSD Query client" "Webapp to search the local mCSD directory, can be used for demo purposes and development"{
+                            tags "demo,webapp"
+                        }
+                        mcsdDataEntry = component "Addressing Admin" "Administring Organization mCSD resources" {
+                            tags "webapp"
+                        }
+                    }
+                    
+                    group "Localisation" {
+                        localisationClient = component "NVI Client" "Administer NVI entries and search NVI"
+                        lmr = component "Localisation Metadata Registry" "FHIR Server which can be used to search records by predefined meta data"
+                    }
+                    
+                    group "Consent" {
+                        otvClient = component "OTV Client" "Request consent information from the Mitz OTV"
+                    }
+                }
+                
+                admin = container "Nuts admin"
+                
+                db = container "Database" {
+                    tags "database"
+                }
+                
+                fhir = container "FHIR Server" "Contains mCSD Directors" {
+                    tags "database"
+                    local = component "Local mCSD Cache for query client"
+                    orgDir = component "mCSD directory for the organization"
+                }
+                
+                keyStore = container "Secure Key storage" {
+                    tags "database"
+                }
+                
+                kp.nuts -> keyStore "Creates and uses keys"
+                kp.nuts -> db "Store credentials, dids etc."
+                
+                kp.mcsdSyncer -> fhir.local "Writes mCSD Resources"
+                kp.mcsdSyncer -> lrza "Fetch Organizations with their URA and mCSD Directory endpoints"
+                kp.mcsdSyncer -> fhir.orgDir "Fetch Organizations resources"
+                kp.mcsdSyncer -> mcsdDirectory "Fetch Organization resources"
+                kp.mcsdDataEntry -> fhir.orgDir "CRUD on organization resources"
+                kp.mcsdQueryClient -> fhir.local "Perform queries on the local mCSD Directory"
+                
+                kp.localisationClient -> nvi "Register Patients, Query for URAs per patient"
+                kp.localisationClient -> kp.lmr "Search for FHIR resources by metadata"
+                
+                kp.otvClient -> otv "Perform the 'gesloten-vraag'"
+                
+                admin -> kp.nuts "Manage Nuts node"
+            }
+            
+            xis -> kpSystem "Queries addressing data"
+            
+            xis.viewer.mcsdClient -> kpSystem.fhir "Query the mCSD addressing directory"
+            xis.ehr.localisationPublisher -> kpSystem.kp.localisationClient "Publish localisation metadata"
+            mcsdUpdateClient -> kpSystem.fhir.orgDir "Query for organization mCSD resources"
+            
+            externalViewer -> kpSystem.kp.nuts "Request AccessToken"
+        }
+    }
+
+
+    views {
+        systemLandscape "Landscape1" {
+            include *
+            autolayout lr
+        }
+        
+        systemContext kpSystem "Diagram1" {
+            include *
+            autolayout lr
+        }
+        
+        systemContext xis "XisDiagram" {
+            include *
+            autolayout lr
+        }
+        
+        container kpSystem "Diagram2" {
+            include *
+            autolayout lr
+        }
+        
+        component kpSystem.kp "knooppunt" {
+            include *
+        }
+
+        styles {
+            element "Element" {
+                color #0773af
+                stroke #0773af
+                strokeWidth 7
+                shape roundedbox
+            }
+            
+            element "demo" {
+                stroke "#cccccc"
+            }
+            
+            element "Group" {
+                stroke "#0773af"
+                color #0773af
+                strokeWidth 5
+            }
+            
+            
+            element "Person" {
+                shape person
+            }
+            element "database" {
+                shape cylinder
+            }
+            element "Boundary" {
+                strokeWidth 5
+            }
+            element "external" {
+                border dashed
+            }
+            element "webapp" {
+                shape WebBrowser
+            }
+            relationship "Relationship" {
+                thickness 4
+            }
+        }
+    }
+
+}
