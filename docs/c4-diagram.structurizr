@@ -43,7 +43,7 @@ workspace "Nuts Knooppunt" "Description"
                         mcsdQueryClient = component "mCSD Query client" "Webapp to search the local mCSD directory, can be used for demo purposes and development"{
                             tags "demo,webapp"
                         }
-                        mcsdDataEntry = component "Addressing Admin" "Administring Organization mCSD resources" {
+                        mcsdDataEntry = component "Addressing Admin" "Administering Organization mCSD resources" {
                             tags "webapp"
                         }
                     }
