@@ -64,7 +64,7 @@ workspace "Nuts Knooppunt" "Description"
                     tags "database"
                 }
                 
-                fhir = container "FHIR Server" "Contains mCSD Directors" {
+                fhir = container "FHIR Server" "Contains mCSD Directories" {
                     tags "database"
                     local = component "Local mCSD Cache for query client"
                     orgDir = component "mCSD directory for the organization"
