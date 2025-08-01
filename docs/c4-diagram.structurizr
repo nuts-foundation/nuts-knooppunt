@@ -9,7 +9,7 @@ workspace "Nuts Knooppunt" "Description"
                 tags "external"
             }
             
-            mcsdDirectory = softwareSystem "Organization mCSD Directory" "Authority of Organization Endpoints, HealthcareServices and PractitionerRoles" "external"
+            mcsdDirectory = softwareSystem "Organization mCSD Directory" "Authority of Organization Endpoints, HealthcareServices and PractitionerRoles" "external,addressing"
             
             externalViewer = softwareSystem "External Viewer" "Request healthcare data from other Care Providers" "external"
         }
@@ -17,14 +17,14 @@ workspace "Nuts Knooppunt" "Description"
         
         group "Nation Generic Function Systems" {
             lrza = softwareSystem "LRZA mCSD Directory" "Authority of combination URA and the mCSD Directory" "external"
-            nvi = softwareSystem "NVI" "Nationale Verwijs Index, Contains entries with URA and patient" "external"
+            nvi = softwareSystem "NVI" "Nationale Verwijs Index, Contains enrtries with URA and patient" "external"
             otv = softwareSystem "OTV" "Nation Online Consent System, contains patient consents" "external"
         }
         
         group "Local Care Provider Systems" {
             xis = softwareSystem "XIS" "The XIS implementing the knooppunt" {
                 viewer = container "Viewer" {
-                    mcsdClient = component "mCSD Client" "queries the mcsd Directory"
+                    mcsdClient = component "mCSD Client" "queries the mcsd Directory" "addressing"
                     localisationClient = component "Localisation Client" "Localise patient data"
                 }
                 
@@ -38,13 +38,15 @@ workspace "Nuts Knooppunt" "Description"
                     group "Authentication" {
                         nuts = component "Nuts Node"
                     }
-                    group "Addressing" {
-                        mcsdSyncer = component "mCSD Update client" "Syncing data from remote mCSD directory and consolidate into a local Directory"
-                        mcsdQueryClient = component "mCSD Query client" "Webapp to search the local mCSD directory, can be used for demo purposes and development"{
-                            tags "demo,webapp"
+                    group "Adressing" {
+                        mcsdSyncer = component "mCSD Update client" "Syncing data from remote mCSD directory and consolidate into a local Directory"{ 
+                            tags "addressing" 
                         }
-                        mcsdDataEntry = component "Addressing Admin" "Administering Organization mCSD resources" {
-                            tags "webapp"
+                        mcsdQueryClient = component "mCSD Query client" "Webapp to search the local mCSD directory, can be used for demo purposes and development"{
+                            tags "demo,webapp,addressing"
+                        }
+                        mcsdDataEntry = component "Addressing Admin" "Administring Organization mCSD resources" {
+                            tags "webapp,addressing"
                         }
                     }
                     
@@ -64,8 +66,8 @@ workspace "Nuts Knooppunt" "Description"
                     tags "database"
                 }
                 
-                fhir = container "FHIR Server" "Contains mCSD Directories" {
-                    tags "database"
+                fhir = container "FHIR Server" "Contains mCSD Directors" {
+                    tags "database,addressing"
                     local = component "Local mCSD Cache for query client"
                     orgDir = component "mCSD directory for the organization"
                 }
@@ -124,8 +126,12 @@ workspace "Nuts Knooppunt" "Description"
             autolayout lr
         }
         
-        component kpSystem.kp "knooppunt" {
-            include *
+        //component kpSystem.kp "knooppunt" {
+        //    include *
+        //}
+        
+        component kpSystem.kp "addressing" {
+            include element.tag==addressing
         }
 
         styles {
