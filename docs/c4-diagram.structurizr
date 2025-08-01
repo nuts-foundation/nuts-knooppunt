@@ -17,7 +17,7 @@ workspace "Nuts Knooppunt" "Description"
         
         group "Nation Generic Function Systems" {
             lrza = softwareSystem "LRZA mCSD Directory" "Authority of combination URA and the mCSD Directory" "external"
-            nvi = softwareSystem "NVI" "Nationale Verwijs Index, Contains enrtries with URA and patient" "external"
+            nvi = softwareSystem "NVI" "Nationale Verwijs Index, Contains entries with URA and patient" "external"
             otv = softwareSystem "OTV" "Nation Online Consent System, contains patient consents" "external"
         }
         
