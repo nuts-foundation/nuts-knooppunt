@@ -38,7 +38,7 @@ workspace "Nuts Knooppunt" "Description"
                     group "Authentication" {
                         nuts = component "Nuts Node"
                     }
-                    group "Adressing" {
+                    group "Addressing" {
                         mcsdSyncer = component "mCSD Update client" "Syncing data from remote mCSD directory and consolidate into a local Directory"{ 
                             tags "addressing" 
                         }
