@@ -126,9 +126,10 @@ workspace "Nuts Knooppunt" "Description"
             autolayout lr
         }
         
-        //component kpSystem.kp "knooppunt" {
-        //    include *
-        //}
+        component kpSystem.kp "knooppunt" {
+            include *
+            autolayout lr
+        }
         
         component kpSystem.kp "addressing" {
             include element.tag==addressing
