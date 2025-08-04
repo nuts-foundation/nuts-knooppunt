@@ -1,0 +1,87 @@
+{
+  "resourceType": "Bundle",
+  "id": "e32f54e9-c93e-4597-9083-02bb3ad9af3c",
+  "meta": {
+    "lastUpdated": "2025-08-01T14:29:41.647+00:00"
+  },
+  "type": "history",
+  "total": 2,
+  "link": [
+    {
+      "relation": "self",
+      "url": "http://localhost:8080/fhir/PARTITION-123/_history"
+    }
+  ],
+  "entry": [
+    {
+      "fullUrl": "http://localhost:8080/fhir/PARTITION-123/Endpoint/9d6b6281-59f5-4398-9879-833cbcbae89f",
+      "resource": {
+        "resourceType": "Endpoint",
+        "id": "9d6b6281-59f5-4398-9879-833cbcbae89f",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-01T14:29:31.987+00:00",
+          "source": "#hpKMB7cfCrc1HLHA",
+          "profile": [
+            "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"
+          ]
+        },
+        "status": "active",
+        "connectionType": {
+          "system": "http://fhir.nl/fhir/NamingSystem/endpoint-connection-type",
+          "code": "mcsd-directory"
+        },
+        "name": "mCSD Directory",
+        "managingOrganization": {
+          "reference": "Organization/04cf3137-295b-4653-a88d-897634da43c2"
+        },
+        "period": {
+          "start": "2025-02-10"
+        },
+        "address": "http://localhost:8080/fhir/OrgA/"
+      },
+      "request": {
+        "method": "POST",
+        "url": "Endpoint/9d6b6281-59f5-4398-9879-833cbcbae89f/_history/1"
+      },
+      "response": {
+        "status": "201 Created",
+        "etag": "W/\"1\""
+      }
+    },
+    {
+      "fullUrl": "http://localhost:8080/fhir/PARTITION-123/Organization/04cf3137-295b-4653-a88d-897634da43c2",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "04cf3137-295b-4653-a88d-897634da43c2",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-01T14:29:31.987+00:00",
+          "source": "#hpKMB7cfCrc1HLHA"
+        },
+        "identifier": [
+          {
+            "use": "official",
+            "system": "http://fhir.nl/fhir/NamingSystem/ura",
+            "value": "124"
+          }
+        ],
+        "active": true,
+        "name": "OrgA",
+        "endpoint": [
+          {
+            "reference": "Endpoint/9d6b6281-59f5-4398-9879-833cbcbae89f"
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "Organization/04cf3137-295b-4653-a88d-897634da43c2/_history/1"
+      },
+      "response": {
+        "status": "201 Created",
+        "etag": "W/\"1\""
+      }
+    }
+  ]
+}

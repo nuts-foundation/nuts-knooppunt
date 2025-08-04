@@ -1,0 +1,15 @@
+{
+  "resourceType": "Bundle",
+  "id": "23298fec-8dc0-4cb1-931d-b3076ba84e01",
+  "meta": {
+    "lastUpdated": "2025-08-01T14:20:17.741+00:00"
+  },
+  "type": "history",
+  "total": 0,
+  "link": [
+    {
+      "relation": "self",
+      "url": "http://localhost:8080/fhir/PARTITION-123/_history"
+    }
+  ]
+}
