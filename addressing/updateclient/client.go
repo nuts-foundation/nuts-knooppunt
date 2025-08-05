@@ -186,6 +186,7 @@ func (c *UpdateClient) GetOrganisationsPerDirectory(historyBundle *fhir.Bundle) 
 	return dirOrgMap, nil
 }
 
+// GetHistoryBundleForAuthoritativeDirectories retrieves history bundles for directories and returns a map with bundles of authoratative entries for each directory.
 func (c *UpdateClient) GetHistoryBundleForAuthoritativeDirectories(dirOrgMap orgsPerDirectory, since *time.Time) (map[url.URL]*fhir.Bundle, error) {
 	historyBundles := make(map[url.URL]*fhir.Bundle)
 
@@ -195,39 +196,10 @@ func (c *UpdateClient) GetHistoryBundleForAuthoritativeDirectories(dirOrgMap org
 			return nil, fmt.Errorf("failed to create request for %s: %w", dirUrl.String(), err)
 		}
 
-		dirBundle, err = excludeUnauthorizedEntries(dirBundle, orgIds)
+		dirBundle, err = ExcludeUnauthorizedEntries(dirBundle, orgIds)
 		if err != nil {
 			return nil, fmt.Errorf("failed to exclude unauthorized entries for %s: %w", dirUrl.String(), err)
 		}
-		// dirBundle.Entry = authorizedEntries.Entry
-		//
-		// // only keep entries from organizations that the directory is authoritative for
-		// dirBundle.Entry = slices.DeleteFunc(dirBundle.Entry, func(entry fhir.BundleEntry) bool {
-		// 	if entry.Resource == nil {
-		// 		return true
-		// 	}
-		// 	resourceType, err := extractResourceType(entry.Resource)
-		// 	if err != nil {
-		// 		fmt.Printf("Failed to extract resource type: %v\n", err)
-		// 		return true
-		// 	}
-		// 	if resourceType == "Organization" {
-		// 		org := &fhir.Organization{}
-		// 		if err := json.Unmarshal(entry.Resource, org); err != nil {
-		// 			fmt.Printf("Failed to unmarshal Organization resource: %v\n", err)
-		// 			return true // Skip if unmarshalling fails
-		// 		}
-		// 		orgIdentifier := extractIdentifier(org.Identifier, "http://fhir.nl/fhir/NamingSystem/ura")
-		// 		if orgIdentifier == "" {
-		// 			fmt.Printf("No identifier found for Organization resource: %s\n", *org.Id)
-		// 			return true // Skip if no identifier found
-		// 		}
-		// 		// Check if the organization ID is in the list of orgIds
-		// 		return !slices.Contains(orgIds, orgIdentifier)
-		// 	}
-		// 	// todo: handle other resource types
-		// 	return true // remove all unknown resource types
-		// })
 
 		historyBundles[dirUrl] = dirBundle
 	}
@@ -235,7 +207,9 @@ func (c *UpdateClient) GetHistoryBundleForAuthoritativeDirectories(dirOrgMap org
 	return historyBundles, nil
 }
 
-func excludeUnauthorizedEntries(bundle *fhir.Bundle, orgIds []string) (*fhir.Bundle, error) {
+// ExcludeUnauthorizedEntries filters a FHIR Bundle to keep only entries for authorized organizations
+// It returns a filtered Bundle and any error encountered during the process
+func ExcludeUnauthorizedEntries(bundle *fhir.Bundle, orgIds []string) (*fhir.Bundle, error) {
 	if bundle == nil {
 		return nil, fmt.Errorf("bundle is nil")
 	}
