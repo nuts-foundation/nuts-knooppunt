@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -183,6 +184,108 @@ func (c *UpdateClient) GetOrganisationsPerDirectory(historyBundle *fhir.Bundle) 
 		}
 	}
 	return dirOrgMap, nil
+}
+
+func (c *UpdateClient) GetHistoryBundleForAuthoritativeDirectories(dirOrgMap orgsPerDirectory, since *time.Time) (map[url.URL]*fhir.Bundle, error) {
+	historyBundles := make(map[url.URL]*fhir.Bundle)
+
+	for dirUrl, orgIds := range dirOrgMap {
+		dirBundle, err := c.GetHistoryBundle(dirUrl.Path, since)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request for %s: %w", dirUrl.String(), err)
+		}
+
+		dirBundle, err = excludeUnauthorizedEntries(dirBundle, orgIds)
+		if err != nil {
+			return nil, fmt.Errorf("failed to exclude unauthorized entries for %s: %w", dirUrl.String(), err)
+		}
+		// dirBundle.Entry = authorizedEntries.Entry
+		//
+		// // only keep entries from organizations that the directory is authoritative for
+		// dirBundle.Entry = slices.DeleteFunc(dirBundle.Entry, func(entry fhir.BundleEntry) bool {
+		// 	if entry.Resource == nil {
+		// 		return true
+		// 	}
+		// 	resourceType, err := extractResourceType(entry.Resource)
+		// 	if err != nil {
+		// 		fmt.Printf("Failed to extract resource type: %v\n", err)
+		// 		return true
+		// 	}
+		// 	if resourceType == "Organization" {
+		// 		org := &fhir.Organization{}
+		// 		if err := json.Unmarshal(entry.Resource, org); err != nil {
+		// 			fmt.Printf("Failed to unmarshal Organization resource: %v\n", err)
+		// 			return true // Skip if unmarshalling fails
+		// 		}
+		// 		orgIdentifier := extractIdentifier(org.Identifier, "http://fhir.nl/fhir/NamingSystem/ura")
+		// 		if orgIdentifier == "" {
+		// 			fmt.Printf("No identifier found for Organization resource: %s\n", *org.Id)
+		// 			return true // Skip if no identifier found
+		// 		}
+		// 		// Check if the organization ID is in the list of orgIds
+		// 		return !slices.Contains(orgIds, orgIdentifier)
+		// 	}
+		// 	// todo: handle other resource types
+		// 	return true // remove all unknown resource types
+		// })
+
+		historyBundles[dirUrl] = dirBundle
+	}
+
+	return historyBundles, nil
+}
+
+func excludeUnauthorizedEntries(bundle *fhir.Bundle, orgIds []string) (*fhir.Bundle, error) {
+	if bundle == nil {
+		return nil, fmt.Errorf("bundle is nil")
+	}
+
+	// Filter entries based on the organization IDs
+	bundle.Entry = slices.DeleteFunc(bundle.Entry, func(entry fhir.BundleEntry) bool {
+		if entry.Resource == nil {
+			return true // Remove entries with no resource
+		}
+
+		resourceType, err := extractResourceType(entry.Resource)
+		if err != nil {
+			fmt.Printf("Failed to extract resource type: %v\n", err)
+			return true // Remove entries with unknown resource type
+		}
+
+		switch resourceType {
+		// TODO: Handle other resource types
+		case "Organization":
+			org := &fhir.Organization{}
+			if err := json.Unmarshal(entry.Resource, org); err != nil {
+				fmt.Printf("Failed to unmarshal Organization resource: %v\n", err)
+				return true // Remove entries with unmarshalling errors
+			}
+
+			orgIdentifier := extractIdentifier(org.Identifier, "http://fhir.nl/fhir/NamingSystem/ura")
+			if orgIdentifier == "" {
+				fmt.Printf("No identifier found for Organization resource: %s\n", *org.Id)
+				return true // Remove entries with no identifier
+			}
+
+			return !slices.Contains(orgIds, orgIdentifier) // Keep only authorized organizations
+		}
+
+		return true // Remove all other resource types
+	})
+
+	return bundle, nil
+}
+
+func extractIdentifier(identifier []fhir.Identifier, system string) string {
+	for _, c := range identifier {
+		if c.System != nil && *c.System == system {
+			if c.Value != nil {
+				return *c.Value
+			}
+			return ""
+		}
+	}
+	return ""
 }
 
 // extractResourceType is a helper function to extract the resourceType from a FHIR resource since the zorgbijjou/fhir-models package does not provide a direct way to access it.
