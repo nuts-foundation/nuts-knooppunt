@@ -303,5 +303,255 @@ func TestUpdateClient_GetOrganizationsPerDirectory(t *testing.T) {
 	if orgs[0] != "124" {
 		t.Errorf("Expected organization ID '124', got '%s'", orgs[0])
 	}
+}
 
+func TestExcludeUnauthorizedEntries(t *testing.T) {
+	// Test case 1: Nil bundle should return an error
+	t.Run("nil bundle", func(t *testing.T) {
+		result, err := updateclient.ExcludeUnauthorizedEntries(nil, []string{"124"})
+		if err == nil {
+			t.Errorf("Expected an error for nil bundle, got nil")
+		}
+		if result != nil {
+			t.Errorf("Expected nil result for nil bundle, got %v", result)
+		}
+	})
+
+	// Test case 2: Empty bundle should return an empty bundle
+	t.Run("empty bundle", func(t *testing.T) {
+		total := 0
+		emptyBundle := &fhir.Bundle{
+			Type:  fhir.BundleTypeHistory,
+			Total: &total,
+			Entry: []fhir.BundleEntry{},
+		}
+		result, err := updateclient.ExcludeUnauthorizedEntries(emptyBundle, []string{"124"})
+		if err != nil {
+			t.Errorf("Expected no error for empty bundle, got %v", err)
+		}
+		if result == nil {
+			t.Errorf("Expected non-nil result for empty bundle")
+		}
+		if len(result.Entry) != 0 {
+			t.Errorf("Expected empty entries in result, got %d entries", len(result.Entry))
+		}
+	})
+
+	// Test case 3: Bundle with authorized organization should keep the organization
+	t.Run("authorized organization", func(t *testing.T) {
+		// Create an organization resource with an authorized identifier
+		system := "http://fhir.nl/fhir/NamingSystem/ura"
+		value := "124"
+		id := "org-1"
+		orgResource := createOrganizationResource(t, &id, &system, &value)
+		orgJson, _ := json.Marshal(orgResource)
+
+		// Create a bundle with the authorized organization
+		total := 1
+		bundle := &fhir.Bundle{
+			Type:  fhir.BundleTypeHistory,
+			Total: &total,
+			Entry: []fhir.BundleEntry{
+				{
+					Resource: orgJson,
+				},
+			},
+		}
+
+		// Call the function with authorized org IDs
+		result, err := updateclient.ExcludeUnauthorizedEntries(bundle, []string{"124"})
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		// Validate the bundle contains the authorized organization
+		if result == nil {
+			t.Fatalf("Expected non-nil result")
+		}
+		if len(result.Entry) != 1 {
+			t.Errorf("Expected 1 entry in result, got %d entries", len(result.Entry))
+		}
+
+		// Extract resource type and validate
+		if len(result.Entry) > 0 {
+			resourceType, err := extractResourceType(result.Entry[0].Resource)
+			if err != nil {
+				t.Errorf("Failed to extract resource type: %v", err)
+			}
+			if resourceType != "Organization" {
+				t.Errorf("Expected Organization resource, got %s", resourceType)
+			}
+
+			// Extract organization and validate identifier
+			org := &fhir.Organization{}
+			if err := json.Unmarshal(result.Entry[0].Resource, org); err != nil {
+				t.Errorf("Failed to unmarshal Organization: %v", err)
+			}
+			if org.Id == nil || *org.Id != "org-1" {
+				t.Errorf("Expected organization ID 'org-1', got %v", org.Id)
+			}
+		}
+	})
+
+	// Test case 4: Bundle with unauthorized organization should remove the organization
+	t.Run("unauthorized organization", func(t *testing.T) {
+		// Create an organization resource with an unauthorized identifier
+		system := "http://fhir.nl/fhir/NamingSystem/ura"
+		value := "999"
+		id := "org-2"
+		orgResource := createOrganizationResource(t, &id, &system, &value)
+		orgJson, _ := json.Marshal(orgResource)
+
+		// Create a bundle with the unauthorized organization
+		total := 1
+		bundle := &fhir.Bundle{
+			Type:  fhir.BundleTypeHistory,
+			Total: &total,
+			Entry: []fhir.BundleEntry{
+				{
+					Resource: orgJson,
+				},
+			},
+		}
+
+		// Call the function with authorized org IDs that don't include this one
+		result, err := updateclient.ExcludeUnauthorizedEntries(bundle, []string{"124"})
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		// Validate the bundle has no entries (unauthorized org was removed)
+		if result == nil {
+			t.Fatalf("Expected non-nil result")
+		}
+		if len(result.Entry) != 0 {
+			t.Errorf("Expected 0 entries in result (unauthorized org removed), got %d entries", len(result.Entry))
+		}
+	})
+
+	// Test case 5: Bundle with mixed resource types should only keep authorized organizations
+	t.Run("mixed resource types", func(t *testing.T) {
+		// Create an organization resource with an authorized identifier
+		system := "http://fhir.nl/fhir/NamingSystem/ura"
+		value := "124"
+		id := "org-1"
+		orgResource := createOrganizationResource(t, &id, &system, &value)
+		orgJson, _ := json.Marshal(orgResource)
+
+		// Create an endpoint resource (non-Organization type)
+		endpointResource := map[string]any{
+			"resourceType": "Endpoint",
+			"id":           "endpoint-1",
+			"status":       "active",
+			"address":      "http://example.org",
+		}
+		endpointJson, _ := json.Marshal(endpointResource)
+
+		// Create a bundle with mixed resource types
+		total := 2
+		bundle := &fhir.Bundle{
+			Type:  fhir.BundleTypeHistory,
+			Total: &total,
+			Entry: []fhir.BundleEntry{
+				{
+					Resource: orgJson,
+				},
+				{
+					Resource: endpointJson,
+				},
+			},
+		}
+
+		// Call the function with authorized org IDs
+		result, err := updateclient.ExcludeUnauthorizedEntries(bundle, []string{"124"})
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		// Validate only authorized Organization is kept (Endpoint should be removed)
+		if result == nil {
+			t.Fatalf("Expected non-nil result")
+		}
+		if len(result.Entry) != 1 {
+			t.Errorf("Expected 1 entry in result (only authorized org), got %d entries", len(result.Entry))
+		}
+
+		// Validate the remaining entry is the Organization
+		if len(result.Entry) > 0 {
+			resourceType, err := extractResourceType(result.Entry[0].Resource)
+			if err != nil {
+				t.Errorf("Failed to extract resource type: %v", err)
+			}
+			if resourceType != "Organization" {
+				t.Errorf("Expected Organization resource, got %s", resourceType)
+			}
+		}
+	})
+
+	// Test case 6: Organization with no identifiers should be removed
+	t.Run("organization without identifier", func(t *testing.T) {
+		// Create an organization resource with no identifier
+		id := "org-3"
+		orgResource := createOrganizationResource(t, &id, nil, nil)
+		orgJson, _ := json.Marshal(orgResource)
+
+		// Create a bundle with the organization without identifier
+		total := 1
+		bundle := &fhir.Bundle{
+			Type:  fhir.BundleTypeHistory,
+			Total: &total,
+			Entry: []fhir.BundleEntry{
+				{
+					Resource: orgJson,
+				},
+			},
+		}
+
+		// Call the function with any org IDs
+		result, err := updateclient.ExcludeUnauthorizedEntries(bundle, []string{"124"})
+		if err != nil {
+			t.Errorf("Expected no error, got %v", err)
+		}
+
+		// Validate the bundle has no entries (org with no identifier was removed)
+		if result == nil {
+			t.Fatalf("Expected non-nil result")
+		}
+		if len(result.Entry) != 0 {
+			t.Errorf("Expected 0 entries in result (org with no identifier removed), got %d entries", len(result.Entry))
+		}
+	})
+}
+
+// Helper function to create an Organization resource for testing
+func createOrganizationResource(t *testing.T, id, identifierSystem, identifierValue *string) *fhir.Organization {
+	t.Helper()
+	active := true
+	org := &fhir.Organization{
+		Id:     id,
+		Active: &active,
+	}
+
+	if identifierSystem != nil && identifierValue != nil {
+		org.Identifier = []fhir.Identifier{
+			{
+				System: identifierSystem,
+				Value:  identifierValue,
+			},
+		}
+	}
+
+	return org
+}
+
+// Helper function to extract resource type from a raw JSON resource
+func extractResourceType(r json.RawMessage) (string, error) {
+	resource := struct {
+		ResourceType string `json:"resourceType"`
+	}{}
+
+	if err := json.Unmarshal(r, &resource); err != nil {
+		return "", err
+	}
+	return resource.ResourceType, nil
 }
