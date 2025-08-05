@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -46,10 +48,10 @@ func WithClient(httpClient *http.Client) func(*UpdateClient) {
 	}
 }
 
-// GetUpdate gets an update for the given parameters
+// GetHistoryBundle gets an update for the given parameters
 // If since is not nil, it will be used as the _since query parameter
 // Returns the Bundle containing history data or an error
-func (c *UpdateClient) GetUpdate(basePath string, since *time.Time) (*fhir.Bundle, error) {
+func (c *UpdateClient) GetHistoryBundle(basePath string, since *time.Time) (*fhir.Bundle, error) {
 	// Create a request with query parameters if needed
 	req, err := http.NewRequest("GET", c.baseURL, nil)
 	if err != nil {
@@ -91,4 +93,109 @@ func (c *UpdateClient) GetUpdate(basePath string, since *time.Time) (*fhir.Bundl
 	}
 
 	return &bundle, nil
+}
+
+// orgsPerDirectory is a map that associates authoritative directories (URLs) with a list of their organization IDs.
+type orgsPerDirectory map[url.URL][]string
+
+// GetOrganisationsPerDirectory extracts the authoritative directories and their associated organization IDs from a FHIR Bundle.
+func (c *UpdateClient) GetOrganisationsPerDirectory(historyBundle *fhir.Bundle) (orgsPerDirectory, error) {
+
+	dirOrgMap := make(orgsPerDirectory)
+
+	// loop twice over the entries, first to map the org references to their identifiers
+	// refIdMap is a map that associates organization IDs with their identifiers.
+	refIdMap := make(map[string]string)
+	for _, entry := range historyBundle.Entry {
+		if entry.Resource == nil {
+			continue
+		}
+
+		resourceType, err := extractResourceType(entry.Resource)
+		if err != nil {
+			fmt.Printf("Failed to extract resource type: %v\n", err)
+			continue // Skip if resourceType cannot be determined
+		}
+
+		if resourceType == "Organization" {
+			org := &fhir.Organization{}
+			if err := json.Unmarshal(entry.Resource, org); err != nil {
+				fmt.Printf("Failed to unmarshal Organization resource: %v\n", err)
+				continue
+			}
+
+			if org.Id == nil || *org.Id == "" {
+				continue // Skip if no organization ID
+			}
+			if org.Identifier == nil || len(org.Identifier) == 0 {
+				continue // Skip if no identifier
+			}
+
+			refIdMap[*org.Id] = *org.Identifier[0].Value // Assuming the first identifier is the authoritative one
+		}
+	}
+
+	for _, entry := range historyBundle.Entry {
+		if entry.Resource == nil {
+			continue
+		}
+
+		resourceType, err := extractResourceType(entry.Resource)
+		if err != nil {
+			fmt.Printf("Failed to extract resource type: %v\n", err)
+			continue // Skip if resourceType cannot be determined
+		}
+
+		if resourceType == "Endpoint" {
+			endpoint := &fhir.Endpoint{}
+			if err := json.Unmarshal(entry.Resource, endpoint); err != nil {
+				fmt.Printf("Failed to unmarshal Endpoint resource: %v\n", err)
+				continue
+			}
+
+			if endpoint.ConnectionType.Code == nil || *endpoint.ConnectionType.Code != "mcsd-directory" {
+				continue // Skip if not a directory endpoint
+			}
+
+			if endpoint.ManagingOrganization == nil || endpoint.ManagingOrganization.Reference == nil {
+				continue // Skip if no organization reference
+			}
+			orgRef := *endpoint.ManagingOrganization.Reference
+			orgId := strings.TrimPrefix(orgRef, "Organization/") // Assuming the reference is in the format "Organization/{id}"
+
+			orgIdentifier, ok := refIdMap[orgId]
+			if !ok || orgIdentifier == "" {
+				fmt.Printf("No matching organization ID found for Endpoint: %s\n", *endpoint.ManagingOrganization.Reference)
+				continue // Skip if no matching organization ID
+			}
+
+			dirUrl, err := url.Parse(endpoint.Address)
+			if err != nil {
+				fmt.Printf("Failed to parse Endpoint address '%s': %v\n", endpoint.Address, err)
+				continue // Skip if address is not a valid baseURL
+			}
+			dirOrgs, ok := dirOrgMap[*dirUrl]
+			if !ok {
+				dirOrgMap[*dirUrl] = []string{}
+			}
+
+			dirOrgMap[*dirUrl] = append(dirOrgs, orgIdentifier)
+		}
+	}
+	return dirOrgMap, nil
+}
+
+// extractResourceType is a helper function to extract the resourceType from a FHIR resource since the zorgbijjou/fhir-models package does not provide a direct way to access it.
+func extractResourceType(r json.RawMessage) (string, error) {
+	resource := struct {
+		ResourceType string `json:"resourceType"`
+	}{}
+
+	if err := json.Unmarshal(r, &resource); err != nil {
+		return "", fmt.Errorf("failed to unmarshal resource: %w", err)
+	}
+	if resource.ResourceType == "" {
+		return "", fmt.Errorf("resourceType is empty in resource")
+	}
+	return resource.ResourceType, nil
 }
