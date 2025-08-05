@@ -3,6 +3,7 @@ package updateclient_test
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -96,7 +97,7 @@ func TestUpdateClient_GetUpdate(t *testing.T) {
 		client := updateclient.NewUpdateClient(updateclient.WithBaseURL(server.URL()))
 
 		// Make the request without a since parameter
-		bundle, err := client.GetUpdate("/fhir/test", nil)
+		bundle, err := client.GetHistoryBundle("/fhir/test", nil)
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
@@ -118,7 +119,7 @@ func TestUpdateClient_GetUpdate(t *testing.T) {
 		client := updateclient.NewUpdateClient(updateclient.WithBaseURL(server.URL()))
 
 		// Make the request without a since parameter
-		bundle, err := client.GetUpdate("/fhir/PARTITION-123", nil)
+		bundle, err := client.GetHistoryBundle("/fhir/PARTITION-123", nil)
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
@@ -150,7 +151,7 @@ func TestUpdateClient_GetUpdate(t *testing.T) {
 		client := updateclient.NewUpdateClient(updateclient.WithBaseURL(server.URL()))
 
 		// Make the request
-		bundle, err := client.GetUpdate("/fhir/error", nil)
+		bundle, err := client.GetHistoryBundle("/fhir/error", nil)
 
 		// Verify that we got an error
 		if err == nil {
@@ -182,7 +183,7 @@ func TestUpdateClient_GetUpdate(t *testing.T) {
 		client := updateclient.NewUpdateClient(updateclient.WithBaseURL(server.URL()))
 
 		// Make the request without a since parameter - should fail validation
-		bundle, err := client.GetUpdate("/fhir/validate", nil)
+		bundle, err := client.GetHistoryBundle("/fhir/validate", nil)
 		// Our client doesn't add the _since parameter, so we expect this to fail with a 400
 		if err == nil {
 			t.Errorf("Expected an error, got nil")
@@ -207,7 +208,7 @@ func TestUpdateClient_GetUpdate(t *testing.T) {
 		client := updateclient.NewUpdateClient(updateclient.WithBaseURL(server.URL()))
 
 		// Make the request
-		bundle, err := client.GetUpdate("/fhir/malformed", nil)
+		bundle, err := client.GetHistoryBundle("/fhir/malformed", nil)
 		if err == nil {
 			t.Errorf("Expected an error for malformed JSON, got nil")
 		} else if !strings.Contains(err.Error(), "failed to decode response") {
@@ -237,7 +238,7 @@ func TestUpdateClient_GetUpdate(t *testing.T) {
 
 		// Make the request with a since parameter
 		sinceTime := time.Date(2025, 8, 1, 10, 15, 30, 0, time.UTC)
-		bundle, err := client.GetUpdate("/fhir/with-since", &sinceTime)
+		bundle, err := client.GetHistoryBundle("/fhir/with-since", &sinceTime)
 		if err != nil {
 			t.Errorf("Expected no error, got %v", err)
 		}
@@ -258,4 +259,49 @@ func TestUpdateClient_GetUpdate(t *testing.T) {
 			t.Errorf("Expected _since=%s, got %s", expectedSince, sinceParam)
 		}
 	})
+}
+
+func TestUpdateClient_GetOrganizationsPerDirectory(t *testing.T) {
+	// Create test server
+	server := NewTestServer()
+	defer server.Close()
+
+	// Configure the test server to serve our JSON response with organizations
+	server.AddJSONFileHandler("/fhir/_history", "lrza_initial_history_response.json")
+	server.Start()
+
+	// Create a client that points to our test server
+	client := updateclient.NewUpdateClient(updateclient.WithBaseURL(server.URL()))
+
+	historyBundle, err := client.GetHistoryBundle("/fhir", nil)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	dirOrgMap, err := client.GetOrganisationsPerDirectory(historyBundle)
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	// Validate the organizations
+	if len(dirOrgMap) != 1 {
+		t.Errorf("Expected 1 directory, got %d", len(dirOrgMap))
+	}
+
+	expectedURL, _ := url.Parse("http://localhost:8080/fhir/OrgA/")
+
+	// Check the directory URL
+	orgs, ok := dirOrgMap[*expectedURL]
+	if !ok {
+		t.Errorf("Expected directory 'http://localhost:8080/fhir/OrgA/' to be in map")
+	}
+
+	if len(orgs) != 1 {
+		t.Errorf("Expected 1 organization in directory 'foo', got %d", len(orgs))
+	}
+
+	if orgs[0] != "124" {
+		t.Errorf("Expected organization ID '124', got '%s'", orgs[0])
+	}
+
 }
