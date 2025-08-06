@@ -11,6 +11,7 @@ var _ component.Lifecycle = (*Component)(nil)
 type Component struct {
 }
 
+// New creates an instance of the status component, which provides a simple health check endpoint.
 func New() *Component {
 	return &Component{}
 }

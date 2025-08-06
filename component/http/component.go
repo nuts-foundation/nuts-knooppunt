@@ -15,6 +15,7 @@ type Component struct {
 	server *http.Server
 }
 
+// New creates an instance of the HTTP component, which handles the HTTP interfaces for the application.
 func New(mux *http.ServeMux) *Component {
 	return &Component{
 		mux: mux,
