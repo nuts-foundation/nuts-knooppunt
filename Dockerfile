@@ -7,7 +7,7 @@ ARG GIT_COMMIT=0
 ARG GIT_BRANCH=main
 ARG GIT_VERSION=undefined
 
-ENV GOPATH /
+ENV GOPATH=/
 
 COPY go.mod .
 COPY go.sum .
