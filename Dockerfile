@@ -3,6 +3,10 @@ FROM golang:1.24.4-alpine AS builder
 ARG TARGETARCH
 ARG TARGETOS
 
+ARG GIT_COMMIT=0
+ARG GIT_BRANCH=main
+ARG GIT_VERSION=undefined
+
 ENV GOPATH /
 
 COPY go.mod .
@@ -11,7 +15,7 @@ RUN go mod download && go mod verify
 COPY . .
 
 RUN mkdir /app
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /app/bin .
+RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-w -s -X 'github.com/nuts-foundation/nuts-knooppunt/core.GitCommit=${GIT_COMMIT}' -X 'github.com/nuts-foundation/nuts-knooppunt/core.GitBranch=${GIT_BRANCH}' -X 'github.com/nuts-foundation/nuts-knooppunt/core.GitVersion=${GIT_VERSION}'" -o /app/bin .
 
 # alpine
 FROM alpine:3.22.0
