@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	httpComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
+	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -22,6 +23,7 @@ func main() {
 	components := []component.Lifecycle{
 		status.New(),
 		httpComponent.New(mux),
+		nutsnode.New(),
 	}
 
 	// Components: RegisterHandlers()
