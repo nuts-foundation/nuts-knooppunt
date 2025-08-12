@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/netutil"
 	"github.com/nuts-foundation/nuts-node/cmd"
 	"github.com/nuts-foundation/nuts-node/core"
 	httpEngine "github.com/nuts-foundation/nuts-node/http"
+	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"net/http"
 	"os"
@@ -17,7 +20,14 @@ import (
 var _ component.Lifecycle = (*Component)(nil)
 
 func New() *Component {
-	return &Component{}
+	// Nuts node uses logrus, register a hook to convert logrus logs to zerolog.
+	logrus.AddHook(&logrusZerologBridgeHook{})
+	// set nil logger to avoid logrus output
+	logrus.StandardLogger().SetOutput(&devNullWriter{})
+	return &Component{
+		internalAddr: "127.0.0.1:" + strconv.Itoa(netutil.FreeTCPPort()),
+		publicAddr:   "127.0.0.1:" + strconv.Itoa(netutil.FreeTCPPort()),
+	}
 }
 
 type Component struct {
@@ -29,11 +39,19 @@ type Component struct {
 }
 
 func (c *Component) Start() error {
-	os.Setenv("NUTS_CONFIGFILE", "config.yaml")
-	defer os.Unsetenv("NUTS_CONFIGFILE")
+	envVars := map[string]string{
+		"NUTS_CONFIGFILE":            "config.nuts.yaml",
+		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr,
+		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr,
+		"NUTS_DATADIR":               "data/nuts",
+		"NUTS_VERBOSITY":             zerolog.GlobalLevel().String(),
+	}
+	for key, value := range envVars {
+		if err := os.Setenv(key, value); err != nil {
+			return fmt.Errorf("set environment variable %s: %w", key, err)
+		}
+	}
 
-	c.internalAddr = "127.0.0.1:" + strconv.Itoa(freeTCPPort())
-	c.publicAddr = "127.0.0.1:" + strconv.Itoa(freeTCPPort())
 	log.Debug().Msgf("Starting Nuts node (internal-address: %s, public-address: %s)", c.internalAddr, c.publicAddr)
 
 	c.system = cmd.CreateSystem(func() {
@@ -66,8 +84,9 @@ func (c Component) Stop(_ context.Context) error {
 }
 
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	publicProxy := createProxy(c.publicAddr)
+	const componentHTTPBasePath = "/nuts"
+	publicProxy := createProxy(c.publicAddr, componentHTTPBasePath)
 	publicMux.Handle("/nuts/{rest...}", publicProxy)
-	internalProxy := createProxy(c.internalAddr)
+	internalProxy := createProxy(c.internalAddr, componentHTTPBasePath)
 	internalMux.Handle("/nuts/{rest...}", internalProxy)
 }

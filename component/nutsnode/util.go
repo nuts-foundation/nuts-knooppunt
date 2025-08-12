@@ -1,19 +1,49 @@
 package nutsnode
 
-import "net"
+import (
+	"github.com/rs/zerolog"
+	"github.com/sirupsen/logrus"
+	"io"
+)
 
-// freeTCPPort asks the kernel for a free open port that is ready to use.
-// Taken from https://gist.github.com/sevkin/96bdae9274465b2d09191384f86ef39d
-func freeTCPPort() (port int) {
-	if a, err := net.ResolveTCPAddr("tcp", "localhost:0"); err == nil {
-		var l *net.TCPListener
-		if l, err = net.ListenTCP("tcp", a); err == nil {
-			defer l.Close()
-			return l.Addr().(*net.TCPAddr).Port
-		} else {
-			panic(err)
-		}
-	} else {
-		panic(err)
+var _ logrus.Hook = (*logrusZerologBridgeHook)(nil)
+
+// logrusZerologBridgeHook is a logrus hook that bridges logrus logs to zerolog.
+type logrusZerologBridgeHook struct {
+}
+
+func (a logrusZerologBridgeHook) Levels() []logrus.Level {
+	return logrus.AllLevels
+}
+
+func (a logrusZerologBridgeHook) Fire(entry *logrus.Entry) error {
+	entry.Data["component"] = "nutsnode"
+	fields := map[string]interface{}(entry.Data)
+	logger := zerolog.DefaultContextLogger
+	switch entry.Level {
+	case logrus.DebugLevel:
+		logger.Debug().Fields(fields).Msg(entry.Message)
+	case logrus.InfoLevel:
+		logger.Info().Fields(fields).Msg(entry.Message)
+	case logrus.WarnLevel:
+		logger.Warn().Fields(fields).Msg(entry.Message)
+	case logrus.ErrorLevel:
+		logger.Error().Fields(fields).Msg(entry.Message)
+	case logrus.FatalLevel:
+		logger.Fatal().Fields(fields).Msg(entry.Message)
+	case logrus.PanicLevel:
+		logger.Panic().Fields(fields).Msg(entry.Message)
+	default:
+		// For any other level, we just log it as info.
+		logger.Info().Fields(fields).Msg(entry.Message)
 	}
+	return nil
+}
+
+var _ io.Writer = (*devNullWriter)(nil)
+
+type devNullWriter struct{}
+
+func (d devNullWriter) Write(in []byte) (n int, _ error) {
+	return len(in), nil
 }

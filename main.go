@@ -24,7 +24,9 @@ func main() {
 	components := []component.Lifecycle{
 		status.New(),
 		httpComponent.New(publicMux, internalMux),
-		nutsnode.New(),
+	}
+	if os.Getenv("KNPT_NUTS_ENABLED") != "false" {
+		components = append(components, nutsnode.New())
 	}
 
 	// Components: RegisterHandlers()
