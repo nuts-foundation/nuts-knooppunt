@@ -13,6 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"strconv"
 )
@@ -85,8 +86,16 @@ func (c Component) Stop(_ context.Context) error {
 
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	const componentHTTPBasePath = "/nuts"
-	publicProxy := createProxy(c.publicAddr, componentHTTPBasePath)
+	publicProxy := createProxy(c.publicAddr, RemovePrefixRewriter(componentHTTPBasePath))
 	publicMux.Handle("/nuts/{rest...}", publicProxy)
-	internalProxy := createProxy(c.internalAddr, componentHTTPBasePath)
+	// Nuts uses compliant well-known paths, e.g.:
+	//  /.well-known/oauth-authorization-server/nuts/oauth2/<subject>
+	// has to be rewritten to:
+	//  /.well-known/oauth-authorization-server/oauth2/<subject>
+	wellKnownProxy := createProxy(c.publicAddr, func(request *httputil.ProxyRequest) {
+		request.Out.URL.Path = "/.well-known/" + request.In.PathValue("identifier") + "/" + request.In.PathValue("rest")
+	})
+	publicMux.Handle("/.well-known/{identifier}/nuts/{rest...}", wellKnownProxy)
+	internalProxy := createProxy(c.internalAddr, RemovePrefixRewriter(componentHTTPBasePath))
 	internalMux.Handle("/nuts/{rest...}", internalProxy)
 }

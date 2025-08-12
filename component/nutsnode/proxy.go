@@ -6,21 +6,32 @@ import (
 	"strings"
 )
 
-func createProxy(targetAddress string, routePrefix string) *httputil.ReverseProxy {
+// createProxy creates a reverse proxy that forwards requests to the target address.
+// It can do the following URL rewriting (in the following order):
+// - if removeRoutePrefix is set, it is stripped from the request URL path before forwarding
+// - if addRoutePrefix is set, it is prepended to the request URL path before forwarding (this can be useful for /.well-known routes)
+func createProxy(targetAddress string, rewriter ProxyRequestRewriter) *httputil.ReverseProxy {
 	targetURL := must.ParseURL("http://" + targetAddress)
 	return &httputil.ReverseProxy{
 		Rewrite: func(request *httputil.ProxyRequest) {
 			request.SetURL(targetURL)
 			request.Out.Host = request.In.Host
-			// Strip routePrefix from the request URL path (e.g. /nuts)
-			if routePrefix != "" {
-				if strings.HasPrefix(request.In.URL.Path, routePrefix) {
-					request.Out.URL.Path = strings.TrimPrefix(request.In.URL.Path, routePrefix)
-					if request.Out.URL.Path == "" || !strings.HasPrefix(request.Out.URL.Path, "/") {
-						request.Out.URL.Path = "/"
-					}
-				}
+			if rewriter != nil {
+				rewriter(request)
 			}
 		},
 	}
 }
+
+func RemovePrefixRewriter(prefix string) ProxyRequestRewriter {
+	return func(request *httputil.ProxyRequest) {
+		if strings.HasPrefix(request.In.URL.Path, prefix) {
+			request.Out.URL.Path = strings.TrimPrefix(request.In.URL.Path, prefix)
+			if request.Out.URL.Path == "" || !strings.HasPrefix(request.Out.URL.Path, "/") {
+				request.Out.URL.Path = "/"
+			}
+		}
+	}
+}
+
+type ProxyRequestRewriter func(request *httputil.ProxyRequest)
