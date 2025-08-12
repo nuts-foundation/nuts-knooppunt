@@ -1,28 +1,60 @@
 package main
 
 import (
+	"context"
+	"github.com/nuts-foundation/nuts-knooppunt/component"
+	httpComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
+	"github.com/nuts-foundation/nuts-knooppunt/component/status"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	const interfaceAddress = ":8080"
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	zerolog.DefaultContextLogger = &log.Logger
-	log.Info().Msgf("Public interface listens on %s", interfaceAddress)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("Hello, World!"))
-	})
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("OK"))
-	})
-	if err := http.ListenAndServe(interfaceAddress, nil); err != nil {
-		if !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal().Err(err).Msg("Failed to start server")
-		}
+	mux := http.NewServeMux()
+	components := []component.Lifecycle{
+		status.New(),
+		httpComponent.New(mux),
 	}
+
+	// Components: RegisterHandlers()
+	for _, cmp := range components {
+		cmp.RegisterHttpHandlers(mux)
+	}
+
+	// Components: Start()
+	for _, cmp := range components {
+		log.Trace().Msgf("Starting component: %T", cmp)
+		if err := cmp.Start(); err != nil {
+			panic(errors.Wrapf(err, "failed to start component: %T", cmp))
+		}
+		log.Trace().Msgf("Component started: %T", cmp)
+	}
+
+	// Listen for interrupt signals (CTRL/CMD+C, OS instructing the process to stop) to cancel context.
+	ctx := context.Background()
+	ctx, cancelFunc := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer cancelFunc()
+
+	log.Debug().Msgf("System started, waiting for shutdown...")
+	<-ctx.Done()
+
+	// Components: Stop()
+	log.Trace().Msgf("Shutdown signalled, stopping components...")
+	for _, cmp := range components {
+		log.Trace().Msgf("Stopping component: %T", cmp)
+		if err := cmp.Stop(ctx); err != nil {
+			log.Error().Err(err).Msgf("Error stopping component: %T", cmp)
+		}
+		log.Trace().Msgf("Component stopped: %T", cmp)
+	}
+
 	log.Info().Msg("Goodbye!")
 }
