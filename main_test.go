@@ -62,7 +62,7 @@ func waitForUp(t *testing.T) bool {
 		if i < 9 {
 			time.Sleep(1 * time.Second)
 		} else {
-			t.Error("Time-out waiting for status endpoint to be available")
+			t.Fatal("Time-out waiting for status endpoint to be available")
 			return true
 		}
 	}
