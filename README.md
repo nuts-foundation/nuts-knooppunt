@@ -15,7 +15,7 @@ docker run -p 8080:8080 nutsfoundation/nuts-knooppunt:local
 
 ### Knooppunt Endpoints
 - Landing page: [http://localhost:8080](http://localhost:8080)
-- Health check endpoint: [http://localhost:8080/health](http://localhost:8080/health)
+- Status check endpoint: [http://localhost:8080/status](http://localhost:8080/status)
 
 ### Embedded Subsystems
 - Nuts node: [http://localhost:8080/nuts/](http://localhost:8080/nuts/)
@@ -23,13 +23,22 @@ docker run -p 8080:8080 nutsfoundation/nuts-knooppunt:local
 
 ## Architecture
 
-The Knooppunt application embeds subsystems using a proxy architecture:
+The Knooppunt application uses a **component-based architecture** with embedded subsystems:
+
+### Component Framework
+- **Components** implement the `Lifecycle` interface with `Start()`, `Stop()`, and `RegisterHttpHandlers()` methods
+- **HTTP Component** manages the main server lifecycle on port `:8080`
+- **Status Component** provides application health checks at `/status`
+- **Subsystems Component** manages embedded subsystems with proxy routing
+
+### Subsystem Integration
+The subsystems component provides:
 
 1. **Subsystems** run their own HTTP servers on localhost ports
-2. **Proxy handlers** route traffic from the main Knooppunt server to subsystem servers
+2. **Proxy handlers** route traffic from the main Knooppunt server to subsystem servers  
 3. **Route prefixes** separate different subsystems (e.g., `/nuts/` for the Nuts node)
 
-This approach allows subsystems like the Nuts node (which uses Echo framework) to maintain their own HTTP server management while being integrated into the Knooppunt application.
+This approach allows subsystems like the Nuts node (which uses Echo framework) to maintain their own HTTP server management while being integrated into the Knooppunt application through the component framework.
 
 ### Subsystem Ports
 - Nuts node public interface: `127.0.0.1:8280`
