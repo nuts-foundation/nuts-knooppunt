@@ -6,86 +6,57 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/nuts-foundation/nuts-knooppunt/internal/subsystems"
-	"github.com/nuts-foundation/nuts-knooppunt/internal/subsystems/nuts"
+	"github.com/nuts-foundation/nuts-knooppunt/component"
+	httpComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
+	"github.com/nuts-foundation/nuts-knooppunt/component/status"
+	subsystemsComponent "github.com/nuts-foundation/nuts-knooppunt/component/subsystems"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
 func main() {
-	const interfaceAddress = ":8080"
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	zerolog.DefaultContextLogger = &log.Logger
-	log.Info().Msgf("Nuts Knooppunt starting on %s", interfaceAddress)
 
-	// Create subsystem manager
-	manager := subsystems.NewManager()
-
-	// Register Nuts node subsystem
-	nutsSubsystem := nuts.NewSubsystem()
-	if err := manager.Register(nutsSubsystem); err != nil {
-		log.Fatal().Err(err).Msg("Failed to register Nuts subsystem")
-	}
-
-	// Start all subsystems
-	ctx := context.Background()
-	if err := manager.Start(ctx); err != nil {
-		log.Fatal().Err(err).Msg("Failed to start subsystems")
-	}
-
-	// Create main HTTP handler
 	mux := http.NewServeMux()
-
-	// Knooppunt endpoints
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"message": "Nuts Knooppunt", "version": "1.0.0"}`))
-	})
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status": "ok", "service": "nuts-knooppunt"}`))
-	})
-
-	// Mount subsystem handlers
-	subsystemHandler := manager.CreateHandler()
-	mux.Handle("/nuts/", subsystemHandler)
-
-	// Create HTTP server
-	server := &http.Server{
-		Addr:    interfaceAddress,
-		Handler: mux,
+	components := []component.Lifecycle{
+		status.New(),
+		subsystemsComponent.New(), // Add subsystems component
+		httpComponent.New(mux),
 	}
 
-	// Start HTTP server
-	go func() {
-		log.Info().Str("addr", interfaceAddress).Msg("Starting Nuts Knooppunt server")
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal().Err(err).Msg("Failed to start server")
+	// Components: RegisterHandlers()
+	for _, cmp := range components {
+		cmp.RegisterHttpHandlers(mux)
+	}
+
+	// Components: Start()
+	for _, cmp := range components {
+		log.Trace().Msgf("Starting component: %T", cmp)
+		if err := cmp.Start(); err != nil {
+			panic(errors.Wrapf(err, "failed to start component: %T", cmp))
 		}
-	}()
-
-	// Wait for shutdown signal
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	<-c
-
-	log.Info().Msg("Shutting down Nuts Knooppunt")
-
-	// Shutdown with timeout
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Stop HTTP server
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("Error shutting down HTTP server")
+		log.Trace().Msgf("Component started: %T", cmp)
 	}
 
-	// Stop all subsystems
-	if err := manager.Stop(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("Error stopping subsystems")
+	// Listen for interrupt signals (CTRL/CMD+C, OS instructing the process to stop) to cancel context.
+	ctx := context.Background()
+	ctx, cancelFunc := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer cancelFunc()
+
+	log.Debug().Msgf("System started, waiting for shutdown...")
+	<-ctx.Done()
+
+	// Components: Stop()
+	log.Trace().Msgf("Shutdown signalled, stopping components...")
+	for _, cmp := range components {
+		log.Trace().Msgf("Stopping component: %T", cmp)
+		if err := cmp.Stop(ctx); err != nil {
+			log.Error().Err(err).Msgf("Error stopping component: %T", cmp)
+		}
+		log.Trace().Msgf("Component stopped: %T", cmp)
 	}
 
 	log.Info().Msg("Goodbye!")
