@@ -3,8 +3,11 @@ module github.com/nuts-foundation/nuts-knooppunt
 go 1.24.4
 
 require (
+	github.com/nuts-foundation/nuts-node v1.0.1-0.20250730220338-25f40d3afc95
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.34.0
+	github.com/sirupsen/logrus v1.9.3
+	github.com/spf13/pflag v1.0.7
 	github.com/stretchr/testify v1.10.0
 )
 
@@ -44,7 +47,6 @@ require (
 	github.com/eko/gocache/store/go_cache/v4 v4.2.2 // indirect
 	github.com/eko/gocache/store/memcache/v4 v4.2.2 // indirect
 	github.com/eko/gocache/store/redis/v4 v4.2.2 // indirect
-	github.com/elazarl/goproxy v1.7.2 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor v1.5.1 // indirect
 	github.com/go-chi/chi/v5 v5.2.2 // indirect
@@ -129,7 +131,6 @@ require (
 	github.com/nuts-foundation/go-did v0.17.0 // indirect
 	github.com/nuts-foundation/go-leia/v4 v4.1.0 // indirect
 	github.com/nuts-foundation/go-stoabs v1.11.0 // indirect
-	github.com/nuts-foundation/nuts-node v1.0.1-0.20250730220338-25f40d3afc95 // indirect
 	github.com/nuts-foundation/sqlite v1.0.0 // indirect
 	github.com/oapi-codegen/runtime v1.1.2 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
@@ -154,10 +155,8 @@ require (
 	github.com/shengdoushi/base58 v1.0.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sietseringers/go-sse v0.0.0-20200801161811-e2cf2c63ca50 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/cobra v1.9.1 // indirect
-	github.com/spf13/pflag v1.0.7 // indirect
 	github.com/templexxx/cpu v0.0.9 // indirect
 	github.com/templexxx/xorsimd v0.4.1 // indirect
 	github.com/tidwall/gjson v1.17.0 // indirect
