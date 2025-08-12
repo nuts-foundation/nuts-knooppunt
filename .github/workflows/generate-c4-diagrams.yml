@@ -23,8 +23,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          # For PRs, checkout the head branch to allow commits
-          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+          # For PRs from same repo, checkout the head branch to allow commits
+          # For PRs from forks, checkout base branch (no write access anyway)
+          ref: ${{ github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref || github.ref }}
       
       - name: Generate C4 diagrams
         run: |
@@ -33,6 +34,8 @@ jobs:
             --output images
       
       - name: Commit and push changes
+        # Only attempt to commit if it's a push event or a PR from the same repository
+        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -43,3 +46,28 @@ jobs:
           else
             echo "No changes in generated diagrams"
           fi
+      
+      - name: Upload diagrams as artifacts
+        # Upload artifacts for PRs from forks (no write access) or for any PR for convenience
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: c4-diagrams
+          path: docs/images/
+          retention-days: 7
+      
+      - name: Comment on PR with generated diagrams
+        # Only comment on PRs from forks where we can't push commits
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ## C4 Diagrams Generated
+            
+            The C4 diagrams have been generated for this PR. Since this is from a fork, the diagrams are available as artifacts.
+            
+            **[Download diagrams from workflow artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})**
+            
+            Once this PR is merged, the diagrams will be automatically committed to the main branch.
