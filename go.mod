@@ -44,6 +44,7 @@ require (
 	github.com/eko/gocache/store/go_cache/v4 v4.2.2 // indirect
 	github.com/eko/gocache/store/memcache/v4 v4.2.2 // indirect
 	github.com/eko/gocache/store/redis/v4 v4.2.2 // indirect
+	github.com/elazarl/goproxy v1.7.2 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor v1.5.1 // indirect
 	github.com/go-chi/chi/v5 v5.2.2 // indirect

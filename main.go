@@ -19,16 +19,17 @@ func main() {
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	zerolog.DefaultContextLogger = &log.Logger
 
-	mux := http.NewServeMux()
+	publicMux := http.NewServeMux()
+	internalMux := http.NewServeMux()
 	components := []component.Lifecycle{
 		status.New(),
-		httpComponent.New(mux),
+		httpComponent.New(publicMux, internalMux),
 		nutsnode.New(),
 	}
 
 	// Components: RegisterHandlers()
 	for _, cmp := range components {
-		cmp.RegisterHttpHandlers(mux)
+		cmp.RegisterHttpHandlers(publicMux, internalMux)
 	}
 
 	// Components: Start()

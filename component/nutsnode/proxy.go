@@ -1,7 +1,12 @@
 package nutsnode
 
-import "net/http"
+import (
+	"github.com/nuts-foundation/nuts-knooppunt/lib/must"
+	"net/http/httputil"
+)
 
-func createProxy() *Proxy {
-	http.ProxyURL()
+func createProxy(targetAddress string) *httputil.ReverseProxy {
+	targetURL := must.ParseURL("http://" + targetAddress)
+	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+	return proxy
 }

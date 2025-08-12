@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/pflag"
 	"net/http"
 	"os"
+	"strconv"
 )
 
 var _ component.Lifecycle = (*Component)(nil)
@@ -20,14 +21,20 @@ func New() *Component {
 }
 
 type Component struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	system *core.System
+	ctx          context.Context
+	cancel       context.CancelFunc
+	system       *core.System
+	internalAddr string
+	publicAddr   string
 }
 
 func (c *Component) Start() error {
 	os.Setenv("NUTS_CONFIGFILE", "config.yaml")
 	defer os.Unsetenv("NUTS_CONFIGFILE")
+
+	c.internalAddr = "127.0.0.1:" + strconv.Itoa(freeTCPPort())
+	c.publicAddr = "127.0.0.1:" + strconv.Itoa(freeTCPPort())
+	log.Debug().Msgf("Starting Nuts node (internal-address: %s, public-address: %s)", c.internalAddr, c.publicAddr)
 
 	c.system = cmd.CreateSystem(func() {
 		// Not sure how to handle this
@@ -58,6 +65,9 @@ func (c Component) Stop(_ context.Context) error {
 	return c.system.Shutdown()
 }
 
-func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
-
+func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
+	publicProxy := createProxy(c.publicAddr)
+	publicMux.Handle("/nuts/{rest...}", publicProxy)
+	internalProxy := createProxy(c.internalAddr)
+	internalMux.Handle("/nuts/{rest...}", internalProxy)
 }
