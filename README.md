@@ -44,3 +44,26 @@ Start the stack with:
 docker compose -f docker-compose.dev.yml up
 ```
 
+## Architecture Diagrams
+
+The C4 architecture diagrams are automatically generated from the Structurizr DSL definition in [`docs/c4-diagram.structurizr`](docs/c4-diagram.structurizr). To generate them locally
+run the following command:
+
+```bash
+docker run --rm -v "$(pwd)/docs":/docs extenda/structurizr-to-png --path c4-diagram.structurizr --output images
+```
+
+### System Landscape
+![System Landscape](docs/images/structurizr-Landscape1.png)
+
+### System Context - Nuts Knooppunt
+![System Context - Nuts Knooppunt](docs/images/structurizr-Diagram1.png)
+
+### System Context - XIS
+![System Context - XIS](docs/images/structurizr-XisDiagram.png)
+
+### Container Diagram
+![Container Diagram](docs/images/structurizr-Diagram2.png)
+
+### Component Diagram
+![Component Diagram](docs/images/structurizr-knooppunt.png)

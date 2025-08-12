@@ -1,0 +1,45 @@
+name: Generate C4 Diagrams
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'docs/c4-diagram.structurizr'
+      - '.github/workflows/generate-c4-diagrams.yml'
+  pull_request:
+    paths:
+      - 'docs/c4-diagram.structurizr'
+      - '.github/workflows/generate-c4-diagrams.yml'
+  workflow_dispatch:
+
+jobs:
+  generate-diagrams:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # For PRs, checkout the head branch to allow commits
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
+      
+      - name: Generate C4 diagrams
+        run: |
+          docker run --rm -v ${{ github.workspace }}/docs:/docs extenda/structurizr-to-png \
+            --path c4-diagram.structurizr \
+            --output images
+      
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add docs/images/
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: update C4 diagrams [skip ci]"
+            git push
+          else
+            echo "No changes in generated diagrams"
+          fi
