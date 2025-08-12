@@ -26,7 +26,7 @@ services:
     image: hapiproject/hapi:latest
     container_name: hapi-fhir-server
     ports:
-      - "8080:8080"
+      - "7050:8080"
     depends_on:
       postgres:
         condition: service_healthy
