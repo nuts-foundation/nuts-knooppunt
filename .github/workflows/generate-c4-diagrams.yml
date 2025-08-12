@@ -17,15 +17,18 @@ on:
 jobs:
   generate-diagrams:
     runs-on: ubuntu-latest
+    # Only run for pushes or PRs from the same repository (no forks for security)
+    # This prevents untrusted DSL files from forks that could exploit parser vulnerabilities,
+    # consume excessive resources, or attempt container escapes via malformed diagram definitions
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          # For PRs from same repo, checkout the head branch to allow commits
-          # For PRs from forks, checkout base branch (no write access anyway)
-          ref: ${{ github.event.pull_request && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref || github.ref }}
+          # For PRs, checkout the head branch to allow commits
+          ref: ${{ github.event.pull_request.head.ref || github.ref }}
       
       - name: Generate C4 diagrams
         run: |
@@ -34,8 +37,6 @@ jobs:
             --output images
       
       - name: Commit and push changes
-        # Only attempt to commit if it's a push event or a PR from the same repository
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
@@ -46,12 +47,3 @@ jobs:
           else
             echo "No changes in generated diagrams"
           fi
-      
-      - name: Upload diagrams as artifacts
-        # Upload artifacts for PRs from forks (they can't push commits)
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
-        uses: actions/upload-artifact@v4
-        with:
-          name: c4-diagrams
-          path: docs/images/
-          retention-days: 7
