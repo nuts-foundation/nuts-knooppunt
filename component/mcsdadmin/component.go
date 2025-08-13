@@ -54,6 +54,8 @@ func RenderWithBase(w http.ResponseWriter, name string) {
 		log.Print(err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 // Route handling
