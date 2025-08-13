@@ -31,24 +31,17 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/hapi
-      SPRING_DATASOURCE_USERNAME: admin
-      SPRING_DATASOURCE_PASSWORD: admin
-      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
-      HAPI_FHIR_SERVER_ADDRESS: http://localhost:8080/fhir
-      HAPI_FHIR_ALLOW_EXTERNAL_REFERENCES: "true"
-      HAPI_FHIR_ALLOW_PLACEHOLDER_REFERENCES: "true"
-      HAPI_FHIR_REUSE_CACHED_SEARCH_RESULTS_MILLIS: "60000"
-      HAPI_FHIR_VALIDATION_FLAG: "false"
-      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect"
-    volumes:
-      - hapi-data:/data
+      # Previously, we had a hapi.application.yml file, but now we use environment variables to configure the HAPI FHIR server.
+      # If you're missing properties (e.g. teminology or CORS), refer to https://github.com/nuts-foundation/nuts-knooppunt/blob/8463b719caca0a3dd8623a36188a4e1423faa8bb/config/hapi.application.dev.yml
+      spring.datasource.url: jdbc:postgresql://postgres:5432/hapi
+      spring.datasource.username: admin
+      spring.datasource.password: admin
+      spring.datasource.driverClassName: org.postgresql.Driver
+      hapi.fhir.server_address: http://localhost:7050/fhir
+      spring.jpa.properties.hibernate.dialect: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect"
     restart: unless-stopped
     networks:
       - nuts-knooppunt
-    configs:
-      - source: hapi-config
-        target: /app/config/application.yaml
 
 volumes:
   postgres-data:
@@ -57,7 +50,3 @@ volumes:
 networks:
   nuts-knooppunt:
     driver: bridge
-
-configs:
-  hapi-config:
-    file: ./config/hapi.application.dev.yml
