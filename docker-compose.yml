@@ -32,7 +32,7 @@ services:
         condition: service_healthy
     environment:
       # Previously, we had a hapi.application.yml file, but now we use environment variables to configure the HAPI FHIR server.
-      # If you're missing properties (e.g. teminology or CORS), refer to https://github.com/nuts-foundation/nuts-knooppunt/blob/8463b719caca0a3dd8623a36188a4e1423faa8bb/config/hapi.application.dev.yml
+      # If you're missing properties (e.g. terminology or CORS), refer to https://github.com/nuts-foundation/nuts-knooppunt/blob/8463b719caca0a3dd8623a36188a4e1423faa8bb/config/hapi.application.dev.yml
       spring.datasource.url: jdbc:postgresql://postgres:5432/hapi
       spring.datasource.username: admin
       spring.datasource.password: admin
