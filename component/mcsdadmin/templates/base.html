@@ -1,0 +1,30 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Edit HealthCareService</title>
+  </head>
+  <style>
+    body {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      min-height: 100vh;
+      margin: 0;
+    }
+  </style>
+  <body>
+    <nav>
+      <ul>
+        <li><a href="/mcsdadmin/organizations">Organizations</a></li>
+        <li><a href="/mcsdadmin/healthcareservice">Health Care Services</a></li>
+        <li><a href="/mcsdadmin/endpoints">Endpoints</a></li>
+        <li><a href="/mcsdadmin/locations">Locations</a></li>
+      </ul>
+    </nav>
+    <main>
+      {{ template "main" . }}
+    </main>
+  </body>
+</html>
+{{end}}

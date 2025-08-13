@@ -1,0 +1,19 @@
+{{define "main"}}
+<form method="post" enctype="multipart/form-data">
+    <div class="form-example">
+        <label for="text">Enter some text: </label>
+        <input id="text" type="text" name="text" placeholder="plain text" required>
+    </div>
+    <div class="form-example">
+        <label for="radio">Choose an option: </label>
+        <fieldset id="radio">
+            <legend>Radio</legend>
+            <label><input type="radio" name="radio" value="x"> X</label>
+            <label><input type="radio" name="radio" value="y"> Y</label>
+        </fieldset>
+    </div>
+    <div class="form-example">
+        <button>Submit!</button>
+    </div>
+</form>
+{{end}}
