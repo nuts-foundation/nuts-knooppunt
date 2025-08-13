@@ -39,6 +39,30 @@ services:
       spring.datasource.driverClassName: org.postgresql.Driver
       hapi.fhir.server_address: http://localhost:7050/fhir
       spring.jpa.properties.hibernate.dialect: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect"
+
+      # Properties to be decided/commented on:
+      server.tomcat.relaxed-query-chars: "|"
+      hapi.fhir.allow_cascading_deletes: true
+      hapi.fhir.delete_expunge_enabled: true
+      # hapi.fhir.search_index_full_text_enabled: removed
+      hapi.fhir.client_id_strategy: ANY
+      hapi.fhir.server_id_strategy: UUID
+      hapi.fhir.partitioning.request_tenant_partitioning_mode: true
+
+      hapi.fhir.tester.local.name: Local Directory
+      hapi.fhir.tester.local.server_address: http://localhost:8080/fhir/local
+      hapi.fhir.tester.local.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.local.fhir_version: R4
+
+      hapi.fhir.tester.lrza.name: LRZA
+      hapi.fhir.tester.lrza.server_address: http://localhost:8080/fhir/LRZA
+      hapi.fhir.tester.lrza.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.lrza.fhir_version: R4
+
+      hapi.fhir.tester.orga.name: Org A Directory
+      hapi.fhir.tester.orga.server_address: http://localhost:8080/fhir/OrgA
+      hapi.fhir.tester.orga.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.orga.fhir_version: R4
     restart: unless-stopped
     networks:
       - nuts-knooppunt
