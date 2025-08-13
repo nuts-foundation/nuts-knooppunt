@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
+	"path"
 	"strconv"
 )
 
@@ -40,8 +41,12 @@ type Component struct {
 }
 
 func (c *Component) Start() error {
+	configDir := os.Getenv("KNPT_CONFIGDIR")
+	if configDir == "" {
+		configDir = "config"
+	}
 	envVars := map[string]string{
-		"NUTS_CONFIGFILE":            "config.nuts.yaml",
+		"NUTS_CONFIGFILE":            path.Join(configDir, "nuts.yaml"),
 		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr,
 		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr,
 		"NUTS_DATADIR":               "data/nuts",

@@ -44,6 +44,10 @@ Start the stack with:
 docker compose -f docker-compose.dev.yml up
 ```
 
+## Configuration
+
+- `KNPT_CONFIGDIR`: Directory where the configuration files are stored. Defaults to `./config`.
+
 ## Components
 
 This section lists the components of the application, commonly used endpoints and configuration options.
