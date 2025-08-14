@@ -295,7 +295,7 @@ hapi:
     tester:
       local:
         name: local Directory
-        server_address: "http://localhost:7050/fhir/local"
+        server_address: "http://localhost:7050/fhir/DEFAULT"
         refuse_to_fetch_third_party_urls: false
         fhir_version: R4
       lrza:
