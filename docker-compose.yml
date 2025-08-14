@@ -41,14 +41,21 @@ services:
       spring.jpa.properties.hibernate.dialect: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect"
 
       # Properties to be decided/commented on:
+      # Prevents encoding of the pipe char in queries
       server.tomcat.relaxed-query-chars: "|"
+      # should be a ADR? How does this behaves?
       hapi.fhir.allow_cascading_deletes: true
+      # Allows for expung operations, handy during development
       hapi.fhir.delete_expunge_enabled: true
       # hapi.fhir.search_index_full_text_enabled: removed
+      # Allows clients to set UUID on resources, is this needed?
       hapi.fhir.client_id_strategy: ANY
+      # Lets the server generate UUIDs for resources. ADR?
       hapi.fhir.server_id_strategy: UUID
+      # enables the partitioning feature
       hapi.fhir.partitioning.request_tenant_partitioning_mode: true
 
+      # Adds some default configs to the HAPI web UI for development
       hapi.fhir.tester.local.name: Local Directory
       hapi.fhir.tester.local.server_address: http://localhost:8080/fhir/local
       hapi.fhir.tester.local.refuse_to_fetch_third_party_urls: false
