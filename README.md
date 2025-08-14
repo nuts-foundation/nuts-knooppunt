@@ -41,7 +41,7 @@ A docker compose config is provided to run a set of services that are useful for
 Start the stack with:
 
 ```shell
-docker compose -f docker-compose.dev.yml up
+docker compose up
 ```
 
 ## Configuration
