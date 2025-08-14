@@ -45,11 +45,12 @@ func (c *Component) Start() error {
 	if configDir == "" {
 		configDir = "config"
 	}
+	const dataDir = "data/nuts"
 	envVars := map[string]string{
 		"NUTS_CONFIGFILE":            path.Join(configDir, "nuts.yaml"),
 		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr,
 		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr,
-		"NUTS_DATADIR":               "data/nuts",
+		"NUTS_DATADIR":               dataDir,
 		"NUTS_VERBOSITY":             zerolog.GlobalLevel().String(),
 	}
 	for key, value := range envVars {
