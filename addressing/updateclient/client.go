@@ -99,8 +99,12 @@ func (c *UpdateClient) GetHistoryBundle(basePath string, since *time.Time) (*fhi
 // orgsPerDirectory is a map that associates authoritative directories (URLs) with a list of their organization IDs.
 type orgsPerDirectory map[url.URL][]string
 
-// GetOrganisationsPerDirectory extracts the authoritative directories and their associated organization IDs from a FHIR Bundle.
-func (c *UpdateClient) GetOrganisationsPerDirectory(historyBundle *fhir.Bundle) (orgsPerDirectory, error) {
+// getOrganisationsPerDirectory extracts the authoritative directories and their associated organization IDs from a FHIR Bundle.
+func (c *UpdateClient) getOrganisationsPerDirectory(historyBundle *fhir.Bundle) (orgsPerDirectory, error) {
+	// Check if historyBundle is nil
+	if historyBundle == nil {
+		return nil, fmt.Errorf("history bundle cannot be nil")
+	}
 
 	dirOrgMap := make(orgsPerDirectory)
 
@@ -196,7 +200,7 @@ func (c *UpdateClient) GetHistoryBundleForAuthoritativeDirectories(dirOrgMap org
 			return nil, fmt.Errorf("failed to create request for %s: %w", dirUrl.String(), err)
 		}
 
-		dirBundle, err = ExcludeUnauthorizedEntries(dirBundle, orgIds)
+		dirBundle, err = excludeUnauthorizedEntries(dirBundle, orgIds)
 		if err != nil {
 			return nil, fmt.Errorf("failed to exclude unauthorized entries for %s: %w", dirUrl.String(), err)
 		}
@@ -207,9 +211,9 @@ func (c *UpdateClient) GetHistoryBundleForAuthoritativeDirectories(dirOrgMap org
 	return historyBundles, nil
 }
 
-// ExcludeUnauthorizedEntries filters a FHIR Bundle to keep only entries for authorized organizations
+// excludeUnauthorizedEntries filters a FHIR Bundle to keep only entries for authorized organizations
 // It returns a filtered Bundle and any error encountered during the process
-func ExcludeUnauthorizedEntries(bundle *fhir.Bundle, orgIds []string) (*fhir.Bundle, error) {
+func excludeUnauthorizedEntries(bundle *fhir.Bundle, orgIds []string) (*fhir.Bundle, error) {
 	if bundle == nil {
 		return nil, fmt.Errorf("bundle is nil")
 	}
