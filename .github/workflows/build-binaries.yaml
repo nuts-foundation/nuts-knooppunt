@@ -41,10 +41,10 @@ jobs:
 
       - name: Build
         run: |
-          GOOS=linux GOARCH=${{ matrix.arch }} go build -o nuts-linux-${{ matrix.arch }}  -ldflags="-w -s -X 'github.com/nuts-foundation/nuts-node/core.GitCommit=${GIT_COMMIT}' -X 'github.com/nuts-foundation/nuts-node/core.GitBranch=${GIT_BRANCH}' -X 'github.com/nuts-foundation/nuts-node/core.GitVersion=${GIT_VERSION}'" -o nuts-linux-${{ matrix.arch }}
+          GOOS=linux GOARCH=${{ matrix.arch }} go build -o nuts-linux-${{ matrix.arch }}  -ldflags="-w -s -X 'github.com/nuts-foundation/nuts-knooppunt/component/status.GitCommit=${GIT_COMMIT}' -X 'github.com/nuts-foundation/nuts-knooppunt/component/status.GitBranch=${GIT_BRANCH}' -X 'github.com/nuts-foundation/nuts-knooppunt/component/status.GitVersion=${GIT_VERSION}'" -o nuts-knooppunt-linux-${{ matrix.arch }}
       - name:  Upload binary
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.event.release.tag_name }} nuts-linux-${{ matrix.arch }}
+          gh release upload ${{ github.event.release.tag_name }} nuts-knooppunt-linux-${{ matrix.arch }}
           
