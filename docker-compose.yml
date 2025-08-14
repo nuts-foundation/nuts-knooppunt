@@ -1,0 +1,86 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14
+    container_name: hapi-postgres
+    environment:
+      POSTGRES_DB: hapi
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d hapi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - nuts-knooppunt
+
+  # HAPI FHIR Server
+  hapi-fhir:
+    image: hapiproject/hapi:v8.2.0-2
+    container_name: hapi-fhir-server
+    ports:
+      - "7050:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # For a full list of options, see https://github.com/nuts-foundation/nuts-knooppunt/blob/8463b719caca0a3dd8623a36188a4e1423faa8bb/config/hapi.application.dev.yml
+      #
+      # Properties that should be enabled when deploying to test/production/etc
+      #
+      spring.datasource.url: jdbc:postgresql://postgres:5432/hapi
+      spring.datasource.username: admin
+      spring.datasource.password: admin
+      spring.datasource.driverClassName: org.postgresql.Driver
+      spring.jpa.properties.hibernate.dialect: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect"
+      hapi.fhir.server_address: http://localhost:7050/fhir
+      # Prevents encoding of the pipe char in queries
+      server.tomcat.relaxed-query-chars: "|"
+      # should be an ADR? How does this behave?
+      hapi.fhir.allow_cascading_deletes: true
+      # Lets the server generate UUIDs for resources instead of integers
+      hapi.fhir.server_id_strategy: UUID
+      # enables the partitioning feature
+      hapi.fhir.partitioning.request_tenant_partitioning_mode: true
+
+      #
+      # Local development properties (not to be used when deploying to test/production)
+      #
+      # Allows clients to set UUID on resources, is this needed?
+      hapi.fhir.client_id_strategy: ANY
+      # Allows for expung operations, handy during development
+      hapi.fhir.delete_expunge_enabled: true
+      # hapi.fhir.allow_multiple_delete: true # to allow $expunge on system-level
+      # Adds some default configs to the HAPI web UI for development
+      hapi.fhir.tester.local.name: Local Directory
+      hapi.fhir.tester.local.server_address: http://localhost:8080/fhir/local
+      hapi.fhir.tester.local.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.local.fhir_version: R4
+
+      hapi.fhir.tester.lrza.name: LRZA
+      hapi.fhir.tester.lrza.server_address: http://localhost:8080/fhir/LRZA
+      hapi.fhir.tester.lrza.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.lrza.fhir_version: R4
+
+      hapi.fhir.tester.orga.name: Org A Directory
+      hapi.fhir.tester.orga.server_address: http://localhost:8080/fhir/OrgA
+      hapi.fhir.tester.orga.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.orga.fhir_version: R4
+    restart: unless-stopped
+    networks:
+      - nuts-knooppunt
+
+volumes:
+  postgres-data:
+  hapi-data:
+
+networks:
+  nuts-knooppunt:
+    driver: bridge
