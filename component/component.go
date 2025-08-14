@@ -13,5 +13,5 @@ type Lifecycle interface {
 	// Stop causes the component to release any resources it has acquired, e.g. timers.
 	Stop(ctx context.Context) error
 	// RegisterHttpHandlers registers the HTTP handlers for this component.
-	RegisterHttpHandlers(mux *http.ServeMux)
+	RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux)
 }

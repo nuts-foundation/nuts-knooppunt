@@ -26,8 +26,8 @@ func (c Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
-	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, _ *http.ServeMux) {
+	publicMux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
 	})
