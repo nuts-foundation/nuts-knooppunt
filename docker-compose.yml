@@ -23,7 +23,7 @@ services:
 
   # HAPI FHIR Server
   hapi-fhir:
-    image: hapiproject/hapi:latest
+    image: hapiproject/hapi:v8.2.0-2
     container_name: hapi-fhir-server
     ports:
       - "7050:8080"
@@ -31,30 +31,33 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      # Previously, we had a hapi.application.yml file, but now we use environment variables to configure the HAPI FHIR server.
-      # If you're missing properties (e.g. terminology or CORS), refer to https://github.com/nuts-foundation/nuts-knooppunt/blob/8463b719caca0a3dd8623a36188a4e1423faa8bb/config/hapi.application.dev.yml
+      # For a full list of options, see https://github.com/nuts-foundation/nuts-knooppunt/blob/8463b719caca0a3dd8623a36188a4e1423faa8bb/config/hapi.application.dev.yml
+      #
+      # Properties that should be enabled when deploying to test/production/etc
+      #
       spring.datasource.url: jdbc:postgresql://postgres:5432/hapi
       spring.datasource.username: admin
       spring.datasource.password: admin
       spring.datasource.driverClassName: org.postgresql.Driver
-      hapi.fhir.server_address: http://localhost:7050/fhir
       spring.jpa.properties.hibernate.dialect: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect"
-
-      # Properties to be decided/commented on:
+      hapi.fhir.server_address: http://localhost:7050/fhir
       # Prevents encoding of the pipe char in queries
       server.tomcat.relaxed-query-chars: "|"
-      # should be a ADR? How does this behaves?
+      # should be an ADR? How does this behave?
       hapi.fhir.allow_cascading_deletes: true
-      # Allows for expung operations, handy during development
-      hapi.fhir.delete_expunge_enabled: true
-      # hapi.fhir.search_index_full_text_enabled: removed
-      # Allows clients to set UUID on resources, is this needed?
-      hapi.fhir.client_id_strategy: ANY
-      # Lets the server generate UUIDs for resources. ADR?
+      # Lets the server generate UUIDs for resources instead of integers
       hapi.fhir.server_id_strategy: UUID
       # enables the partitioning feature
       hapi.fhir.partitioning.request_tenant_partitioning_mode: true
 
+      #
+      # Local development properties (not to be used when deploying to test/production)
+      #
+      # Allows clients to set UUID on resources, is this needed?
+      hapi.fhir.client_id_strategy: ANY
+      # Allows for expung operations, handy during development
+      hapi.fhir.delete_expunge_enabled: true
+      # hapi.fhir.allow_multiple_delete: true # to allow $expunge on system-level
       # Adds some default configs to the HAPI web UI for development
       hapi.fhir.tester.local.name: Local Directory
       hapi.fhir.tester.local.server_address: http://localhost:8080/fhir/local
