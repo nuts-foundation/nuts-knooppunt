@@ -2,8 +2,8 @@
 server:
   #  servlet:
   #    context-path: /example/path
-  port: 8080
-#Adds the option to go to eg. http://localhost:8080/actuator/health for seeing the running configuration
+  port: 7050
+#Adds the option to go to eg. http://localhost:7050/actuator/health for seeing the running configuration
 #see https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints
 management:
   #The following configuration will enable the actuator endpoints at /actuator/health, /actuator/info, /actuator/prometheus, /actuator/metrics. For security purposes, only /actuator/health is enabled by default.
@@ -295,17 +295,17 @@ hapi:
     tester:
       local:
         name: local Directory
-        server_address: "http://localhost:8080/fhir/local"
+        server_address: "http://localhost:7050/fhir/local"
         refuse_to_fetch_third_party_urls: false
         fhir_version: R4
       lrza:
         name: LRZA
-        server_address: "http://localhost:8080/fhir/LRZA"
+        server_address: "http://localhost:7050/fhir/LRZA"
         refuse_to_fetch_third_party_urls: false
         fhir_version: R4
       orga:
         name: Org A Directory
-        server_address: "http://localhost:8080/fhir/OrgA"
+        server_address: "http://localhost:7050/fhir/OrgA"
         refuse_to_fetch_third_party_urls: false
         fhir_version: R4
       global:

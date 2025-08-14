@@ -26,7 +26,7 @@ services:
     image: hapiproject/hapi:latest
     container_name: hapi-fhir-server
     ports:
-      - "7050:8080"
+      - "7050:7050"
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,7 +35,7 @@ services:
       SPRING_DATASOURCE_USERNAME: admin
       SPRING_DATASOURCE_PASSWORD: admin
       SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
-      HAPI_FHIR_SERVER_ADDRESS: http://localhost:8080/fhir
+      HAPI_FHIR_SERVER_ADDRESS: http://localhost:7050/fhir
       HAPI_FHIR_ALLOW_EXTERNAL_REFERENCES: "true"
       HAPI_FHIR_ALLOW_PLACEHOLDER_REFERENCES: "true"
       HAPI_FHIR_REUSE_CACHED_SEARCH_RESULTS_MILLIS: "60000"
