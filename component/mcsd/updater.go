@@ -1,0 +1,75 @@
+package mcsd
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"slices"
+
+	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
+)
+
+// buildUpdateTransaction constructs a FHIR Bundle transaction for updating resources.
+// It filters entries based on allowed resource types and sets the source in the resource meta.
+// The function takes a context, a Bundle to populate, a slice of Bundle entries, a map of local references,
+// and a slice of allowed resource types.
+//
+// The localRefMap is used to map local references to their full URLs, which is used for correlating resources in the transaction.
+// We don't want to copy the resource ID from remote mCSD Directory, as we can't guarantee IDs from external directories are unique.
+// This means, we let our local mCSD Directory assign new IDs to resources, but we have to make sure that updates are applied to the right local resources.
+func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entries []fhir.BundleEntry, localRefMap map[string]string, allowedResourceTypes []string) error {
+	for i, entry := range entries {
+		if entry.Resource == nil {
+			log.Ctx(ctx).Warn().Msgf("Skipping entry #%d: missing 'resource' field", i)
+			continue
+		}
+		if entry.FullUrl == nil {
+			log.Ctx(ctx).Warn().Msgf("Skipping entry #%d: missing 'fullUrl' field", i)
+			continue
+		}
+		if entry.Request == nil {
+			log.Ctx(ctx).Warn().Msgf("Skipping entry #%d: missing 'request' field", i)
+			continue
+		}
+
+		resource := make(map[string]any)
+		if err := json.Unmarshal(entry.Resource, &resource); err != nil {
+			return fmt.Errorf("failed to unmarshal resource in entry #%d (fullUrl=%v): %w", i, entry.FullUrl, err)
+		}
+		resourceType, ok := resource["resourceType"].(string)
+		if !ok {
+			return fmt.Errorf("entry #%d does not contain a valid resourceType (fullUrl=%v)", i, entry.FullUrl)
+		}
+		if !slices.Contains(allowedResourceTypes, resourceType) {
+			log.Ctx(ctx).Debug().Msgf("Skipping entry #%d: resource type %s not allowed", i, resourceType)
+			continue
+		}
+		log.Ctx(ctx).Debug().Msgf("Adding entry #%d to transaction: %s", i, resourceType)
+
+		setResourceMetaSource(resource, "")
+		// Get or create local reference
+		localResourceID := localRefMap[*entry.FullUrl]
+		if localResourceID == "" {
+			localResourceID = fmt.Sprintf("urn:uuid:%s", uuid.NewString())
+			localRefMap[*entry.FullUrl] = localResourceID
+		}
+		resource["id"] = localResourceID
+		resourceJSON, _ := json.Marshal(resource)
+		tx.Entry = append(tx.Entry, fhir.BundleEntry{
+			Resource: resourceJSON,
+			Request: &fhir.BundleEntryRequest{
+				Method: entry.Request.Method,
+			},
+		})
+	}
+}
+
+func setResourceMetaSource(resource map[string]any, source string) {
+	if meta, ok := resource["meta"].(map[string]any); ok {
+		meta["source"] = source
+	} else {
+		resource["meta"] = map[string]any{"source": source}
+	}
+}
