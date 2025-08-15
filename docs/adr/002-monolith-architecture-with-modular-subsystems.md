@@ -62,7 +62,7 @@ This is an intentional architectural decision:
 - **Testing isolation** - Components can be tested independently with HTTP mocks
 - **Consistent interface** - Same API whether component is embedded or remote
 
-**Trade-off acknowledged:** This adds HTTP overhead (latency, serialization) compared to direct function calls, but we accept this cost for the architectural benefits and future flexibility.
+**Trade-off acknowledged:** This adds HTTP overhead (latency, serialization) and more verbose tracing (each internal HTTP call creates additional spans) compared to direct function calls, but we accept this cost for the architectural benefits and future flexibility.
 
 ### Configuration Management
 
