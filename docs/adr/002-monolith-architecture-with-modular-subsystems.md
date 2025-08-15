@@ -67,7 +67,6 @@ This is an intentional architectural decision:
 ### Configuration Management
 
 - **Component toggles** - Each component can be enabled/disabled via configuration
-- **Observability** - OpenTelemetry integration across all components
 
 ## Key Trade-offs
 
