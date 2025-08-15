@@ -45,6 +45,7 @@ This hybrid approach gives us the simplicity of a monolith with the architectura
 - `host:8080/{component}/*` - Public component endpoints (e.g., `/auth/*`, `/addressing/*`)
 - `host:8081/health` - Health check endpoint
 - `host:8081/admin/*` - Administrative interfaces
+- `host:8081/nuts/internal/*` - Nuts node's internal endpoints
 
 ### Inter-subsystem Communication
 
