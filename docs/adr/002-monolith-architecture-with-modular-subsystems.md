@@ -2,7 +2,7 @@
 
 ## Context and Problem Statement
 
-The Nuts Knooppunt needs to integrate multiple subsystems including authentication (Nuts node), authorization (OPA), addressing (mCSD), localization, and consent management. Currently, these would require deploying and managing multiple containers, which adds operational complexity for parties deploying a Knooppunt. We need to decide on the overall architecture approach to favor simplicity and "plug and play" deployment while maintaining flexibility for future scaling.
+The Nuts Knooppunt needs to integrate multiple subsystems including authentication (Nuts node), authorization (OPA), addressing (mCSD), localization, and consent management. Currently, these would require deploying and managing multiple containers, which adds operational complexity for parties deploying a Knooppunt. We need to decide on the overall architecture approach to favor simplicity and "plug and play" deployment while maintaining flexibility for future scaling and supporting diverse target environments where parties may already have existing infrastructure (e.g., an existing Nuts node or OPA instance they want to reuse).
 
 ## Considered Options
 
