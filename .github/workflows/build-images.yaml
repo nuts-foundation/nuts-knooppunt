@@ -48,7 +48,8 @@ jobs:
         id: docker_meta
         uses: docker/metadata-action@v5
         with:
-          images: nutsfoundation/nuts-knooppunt
+          # Set the registry to GHCR here
+          images: ghcr.io/nutsfoundation/nuts-knooppunt
           tags: |
             # generate 'main' tag for the main branch
             type=ref,event=branch,enable={{is_default_branch}},prefix=
@@ -63,12 +64,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
+      - name: Login to Github container registry
         if: ${{ github.event_name != 'pull_request' }}
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          # Authenticate as the user who started the workflow
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
