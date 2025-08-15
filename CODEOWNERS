@@ -1,4 +1,4 @@
 # Documentation on this file format: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners#example-of-a-codeowners-file
 
 # Implementation team is global code owner for the repository, who will be automatically invited to review any PR.
-* @nuts-foundation/implementatie-gfs JorisHeadease
+* @nuts-foundation/implementatie-gfs @JorisHeadease
