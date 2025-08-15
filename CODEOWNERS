@@ -1,4 +1,5 @@
 # Documentation on this file format: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners#example-of-a-codeowners-file
 
 # Implementation team is global code owner for the repository, who will be automatically invited to review any PR.
+# TODO: This probably doesn't select any file, and never assign the devs. It can be specific paths, or just a `*` to select all files
 @nuts-foundation/implementatie-gfs
