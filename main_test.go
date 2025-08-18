@@ -2,12 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/stretchr/testify/require"
 	"net/http"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func Test_Main(t *testing.T) {
@@ -54,7 +55,7 @@ func Test_Main(t *testing.T) {
 func waitForUp(t *testing.T) bool {
 	// Wait for /status to be available on http://localhost:8080/status
 	for i := 0; i < 10; i++ {
-		resp, err := http.Get("http://localhost:8080/status")
+		resp, err := http.Get("http://localhost:8081/status")
 		if err == nil && resp.StatusCode == http.StatusOK {
 			break
 		}

@@ -1,8 +1,8 @@
 package nutsnode
 
 import (
-	"github.com/nuts-foundation/nuts-knooppunt/lib/must"
 	"net/http/httputil"
+	"net/url"
 	"strings"
 )
 
@@ -10,11 +10,10 @@ import (
 // It can do the following URL rewriting (in the following order):
 // - if removeRoutePrefix is set, it is stripped from the request URL path before forwarding
 // - if addRoutePrefix is set, it is prepended to the request URL path before forwarding (this can be useful for /.well-known routes)
-func createProxy(targetAddress string, rewriter ProxyRequestRewriter) *httputil.ReverseProxy {
-	targetURL := must.ParseURL("http://" + targetAddress)
+func createProxy(targetAddress *url.URL, rewriter ProxyRequestRewriter) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Rewrite: func(request *httputil.ProxyRequest) {
-			request.SetURL(targetURL)
+			request.SetURL(targetAddress)
 			request.Out.Host = request.In.Host
 			if rewriter != nil {
 				rewriter(request)

@@ -3,6 +3,13 @@ package nutsnode
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"os"
+	"path"
+	"strconv"
+
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/netutil"
 	"github.com/nuts-foundation/nuts-node/cmd"
@@ -12,32 +19,36 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
-	"net/http"
-	"net/http/httputil"
-	"os"
-	"path"
-	"strconv"
 )
 
 var _ component.Lifecycle = (*Component)(nil)
 
-func New() *Component {
+func New() (*Component, error) {
 	// Nuts node uses logrus, register a hook to convert logrus logs to zerolog.
 	logrus.AddHook(&logrusZerologBridgeHook{})
 	// set nil logger to avoid logrus output
 	logrus.StandardLogger().SetOutput(&devNullWriter{})
-	return &Component{
-		internalAddr: "127.0.0.1:" + strconv.Itoa(netutil.FreeTCPPort()),
-		publicAddr:   "127.0.0.1:" + strconv.Itoa(netutil.FreeTCPPort()),
+
+	internalAddr, err := url.Parse("http://127.0.0.1:" + strconv.Itoa(netutil.FreeTCPPort()))
+	if err != nil {
+		return nil, fmt.Errorf("parse internal address: %w", err)
 	}
+	publicAddr, err := url.Parse("http://127.0.0.1:" + strconv.Itoa(netutil.FreeTCPPort()))
+	if err != nil {
+		return nil, fmt.Errorf("parse public address: %w", err)
+	}
+	return &Component{
+		internalAddr: internalAddr,
+		publicAddr:   publicAddr,
+	}, nil
 }
 
 type Component struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
 	system       *core.System
-	internalAddr string
-	publicAddr   string
+	internalAddr *url.URL
+	publicAddr   *url.URL
 }
 
 func (c *Component) Start() error {
@@ -48,8 +59,8 @@ func (c *Component) Start() error {
 	const dataDir = "data/nuts"
 	envVars := map[string]string{
 		"NUTS_CONFIGFILE":            path.Join(configDir, "nuts.yaml"),
-		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr,
-		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr,
+		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr.Host,
+		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr.Host,
 		"NUTS_DATADIR":               dataDir,
 		"NUTS_VERBOSITY":             zerolog.GlobalLevel().String(),
 	}

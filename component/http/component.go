@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/nuts-foundation/nuts-knooppunt/component"
-	"github.com/rs/zerolog/log"
 	"net"
 	"net/http"
+
+	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/rs/zerolog/log"
 )
 
 var _ component.Lifecycle = (*Component)(nil)
@@ -25,9 +26,9 @@ type Component struct {
 func New(publicMux *http.ServeMux, internalMux *http.ServeMux) *Component {
 	return &Component{
 		publicMux:    publicMux,
-		publicAddr:   ":8080", // Default public address
+		publicAddr:   ":8080",
 		internalMux:  internalMux,
-		internalAddr: ":8081", // Default internal address
+		internalAddr: ":8081",
 	}
 }
 

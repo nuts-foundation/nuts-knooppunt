@@ -2,6 +2,11 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	httpComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
@@ -9,10 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 )
 
 func main() {
@@ -26,7 +27,11 @@ func main() {
 		httpComponent.New(publicMux, internalMux),
 	}
 	if os.Getenv("KNPT_NUTS_ENABLED") != "false" {
-		components = append(components, nutsnode.New())
+		nutsNode, err := nutsnode.New()
+		if err != nil {
+			panic(errors.Wrap(err, "failed to create nuts node component"))
+		}
+		components = append(components, nutsNode)
 	}
 
 	// Components: RegisterHandlers()
