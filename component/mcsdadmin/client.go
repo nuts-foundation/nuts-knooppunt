@@ -54,6 +54,7 @@ func findAll(resourceType string) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Add("Accept", accept)
+	req.Header.Add("Cache-Control", "no-cache")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
