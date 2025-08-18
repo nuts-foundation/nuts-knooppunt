@@ -1,7 +1,7 @@
 {{define "main"}}
 <div class="action-bar">
     <div>
-        <a href="healthcareservice/new">New Health Care Service</a>
+        <a href="/mcsdadmin/organization/new">New Organization</a>
     </div>
 </div>
 <div class="main-view">
@@ -11,6 +11,7 @@
             <th scope="col">Name</th>
             <th scope="col">Type</th>
             <th scope="col">Active</th>
+            <th scope="col">Purpose</th>
         </tr>
         </thead>
         <tbody>
@@ -18,6 +19,7 @@
         <tr>
             <th scope="row">{{ .Name }}</th>
             <td>...</td>
+            <td>{{ .Active }}</td>
             <td>...</td>
         </tr>
         {{end}}

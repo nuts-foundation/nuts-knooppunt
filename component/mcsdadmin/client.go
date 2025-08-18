@@ -44,23 +44,8 @@ func CreateResource(resourceType string, content []byte) (id string, err error) 
 	return fd.Id, nil
 }
 
-type HealthcareService struct {
-	Id   string
-	Name string
-}
-
-type ServiceBundle struct {
-	ResourceType string
-	Id           string
-	Total        int
-	Entry        []struct {
-		FullUrl  string
-		Resource HealthcareService
-	}
-}
-
-func FindAllServices() ([]HealthcareService, error) {
-	var url = baseURL + "HealthcareService"
+func findAll(resourceType string) ([]byte, error) {
+	var url = baseURL + resourceType
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -82,6 +67,30 @@ func FindAllServices() ([]HealthcareService, error) {
 		return nil, errors.New(desc)
 	}
 
+	return respBody, nil
+}
+
+type HealthcareService struct {
+	Id   string
+	Name string
+}
+
+type ServiceBundle struct {
+	ResourceType string
+	Id           string
+	Total        int
+	Entry        []struct {
+		FullUrl  string
+		Resource HealthcareService
+	}
+}
+
+func FindAllServices() ([]HealthcareService, error) {
+	respBody, err := findAll("HealthcareService")
+	if err != nil {
+		return nil, err
+	}
+
 	var sb ServiceBundle
 	err = json.Unmarshal(respBody, &sb)
 	if err != nil {
@@ -94,4 +103,38 @@ func FindAllServices() ([]HealthcareService, error) {
 	}
 
 	return services, nil
+}
+
+type Organization struct {
+	Id     string
+	Name   string
+	Active bool
+}
+
+type OrganizationBundle struct {
+	ResourceType string
+	Entry        []struct {
+		FullUrl  string
+		Resource Organization
+	}
+}
+
+func FindAllOrganizations() ([]Organization, error) {
+	respBody, err := findAll("Organization")
+	if err != nil {
+		return nil, err
+	}
+
+	var ob OrganizationBundle
+	err = json.Unmarshal(respBody, &ob)
+	if err != nil {
+		return nil, err
+	}
+
+	organizations := make([]Organization, len(ob.Entry))
+	for i, o := range ob.Entry {
+		organizations[i] = o.Resource
+	}
+
+	return organizations, nil
 }

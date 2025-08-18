@@ -62,8 +62,6 @@ func ServiceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Print(services)
-
 	w.WriteHeader(http.StatusOK)
 	RenderWithBase(w, "service_list.html", services)
 }
@@ -99,26 +97,76 @@ func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ServiceEditHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusNotImplemented)
 	RenderWithBase(w, "service_edit.html", nil)
+}
+
+func OrganizationHandler(w http.ResponseWriter, r *http.Request) {
+	organizations, err := FindAllOrganizations()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	RenderWithBase(w, "organization_list.html", organizations)
+}
+
+func OrganizationNewHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	RenderWithBase(w, "organization_edit.html", nil)
+}
+
+func OrganizationNewPostHandler(w http.ResponseWriter, r *http.Request) {
+	log.Debug().Msg("New post for organization resource")
+
+	r.ParseForm()
+	var data = map[string]string{}
+	data["resourceType"] = "Organization"
+	data["name"] = r.PostForm.Get("name")
+	data["active"] = r.PostForm.Get("active")
+
+	content, err := json.Marshal(data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	id, err := CreateResource("Organization", content)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Debug().Msg("New resource created " + id)
+	w.WriteHeader(http.StatusCreated)
+	RenderWithBase(w, "organization_list.html", nil)
 }
 
 func HomePageHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("Welcome to the homepage"))
+	RenderWithBase(w, "home.html", nil)
+}
+
+func NotImplementedHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+	RenderWithBase(w, "home.html", nil)
 }
 
 func NotFoundHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
-	_, _ = w.Write([]byte("Page not found"))
+	_, _ = w.Write([]byte("Path not implemented"))
 }
 
 func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/mcsdadmin/healthcareservice", ServiceHandler)
 	mux.HandleFunc("/mcsdadmin/healthcareservice/new", ServiceNewHandler)
 	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", ServiceNewPostHandler)
-	mux.HandleFunc("/mcsdadmin/healthcareservice/{id}/edit", ServiceEditHandler)
-	mux.HandleFunc("PUT /mcsdadmin/healthcareservice/{id}/edit", ServiceEditHandler)
+	mux.HandleFunc("/mcsdadmin/healthcareservice/{id}/edit", NotImplementedHandler)
+	mux.HandleFunc("PUT /mcsdadmin/healthcareservice/{id}/edit", NotImplementedHandler)
+	mux.HandleFunc("/mcsdadmin/organization", OrganizationHandler)
+	mux.HandleFunc("/mcsdadmin/organization/new", OrganizationNewHandler)
+	mux.HandleFunc("POST /mcsdadmin/organization/new", OrganizationNewPostHandler)
 	mux.HandleFunc("/mcsdadmin", HomePageHandler)
 	mux.HandleFunc("/mcsdadmin/", NotFoundHandler)
 }
