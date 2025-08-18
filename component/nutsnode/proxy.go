@@ -24,11 +24,19 @@ func createProxy(targetAddress *url.URL, rewriter ProxyRequestRewriter) *httputi
 
 func RemovePrefixRewriter(prefix string) ProxyRequestRewriter {
 	return func(request *httputil.ProxyRequest) {
-		if strings.HasPrefix(request.In.URL.Path, prefix) {
-			request.Out.URL.Path = strings.TrimPrefix(request.In.URL.Path, prefix)
+		inPath := request.In.URL.Path
+		if prefix == "/" {
+			// Special case: root always matches
+			request.Out.URL.Path = inPath
+			return
+		}
+		if inPath == prefix || (strings.HasPrefix(inPath, prefix) && (len(inPath) == len(prefix) || inPath[len(prefix)] == '/')) {
+			request.Out.URL.Path = strings.TrimPrefix(inPath, prefix)
 			if request.Out.URL.Path == "" || !strings.HasPrefix(request.Out.URL.Path, "/") {
 				request.Out.URL.Path = "/"
 			}
+		} else {
+			request.Out.URL.Path = inPath
 		}
 	}
 }
