@@ -53,6 +53,23 @@ func RenderWithBase(w http.ResponseWriter, name string, data any) {
 
 }
 
+// Helpers
+
+func ResourceFromMap(resourceType string, data map[string]string) (string, error) {
+	content, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+
+	id, err := CreateResource(resourceType, content)
+	if err != nil {
+		return "", err
+	}
+
+	log.Debug().Msg("New resource created " + id)
+	return id, nil
+}
+
 // Route handling
 
 func ServiceHandler(w http.ResponseWriter, r *http.Request) {
@@ -74,26 +91,27 @@ func ServiceNewHandler(w http.ResponseWriter, r *http.Request) {
 func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Msg("New post for HealthcareService resource")
 
+	resourceType := "HealthcareService"
+
 	r.ParseForm()
 	var data = map[string]string{}
-	data["resourceType"] = "HealthcareService"
+	data["resourceType"] = resourceType
 	data["name"] = r.PostForm.Get("name")
 
-	content, err := json.Marshal(data)
+	_, err := ResourceFromMap(resourceType, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	id, err := CreateResource("HealthcareService", content)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	log.Debug().Msg("New post created " + id)
 	w.WriteHeader(http.StatusCreated)
-	RenderWithBase(w, "service_list.html", nil)
+
+	services, err := FindAllServices()
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to find all services")
+	}
+
+	RenderWithBase(w, "service_list.html", services)
 }
 
 func ServiceEditHandler(w http.ResponseWriter, r *http.Request) {
