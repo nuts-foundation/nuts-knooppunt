@@ -21,6 +21,8 @@ func (a logrusZerologBridgeHook) Fire(entry *logrus.Entry) error {
 	fields := map[string]interface{}(entry.Data)
 	logger := zerolog.DefaultContextLogger
 	switch entry.Level {
+	case logrus.TraceLevel:
+		logger.Trace().Fields(fields).Msg(entry.Message)
 	case logrus.DebugLevel:
 		logger.Debug().Fields(fields).Msg(entry.Message)
 	case logrus.InfoLevel:
