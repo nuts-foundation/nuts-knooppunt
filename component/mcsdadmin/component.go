@@ -2,7 +2,7 @@ package mcsdadmin
 
 import (
 	"context"
-	"embed"
+	"encoding/json"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/rs/zerolog/log"
 	"html/template"
@@ -28,10 +28,6 @@ func (c Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-//go:embed templates/*.html
-var tplFs embed.FS
-var tpl = template.Must(template.ParseFS(tplFs, "templates/base.html"))
-
 // Template rendering
 
 const templateFolder = "./component/mcsdadmin/templates/"
@@ -55,30 +51,48 @@ func RenderWithBase(w http.ResponseWriter, name string) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-	w.WriteHeader(http.StatusOK)
 }
 
 // Route handling
 
 func ServiceHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
 	RenderWithBase(w, "service_list.html")
 }
 
 func ServiceNewHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
 	RenderWithBase(w, "service_edit.html")
 }
 
 func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Received new post request")
+
+	r.ParseForm()
+	var data = map[string]string{}
+	data["resourceType"] = "HealthcareService"
+	data["name"] = r.PostForm.Get("name")
+
+	content, err := json.Marshal(data)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	id, err := resourceCreate("HealthcareService", content)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Print("New post created " + id)
+
 	http.Redirect(w, r, "/mcsdadmin/healthcareservice", http.StatusFound)
 }
 
 func ServiceEditHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-
-	if err := tpl.ExecuteTemplate(w, "base.html", nil); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	RenderWithBase(w, "service_edit.html")
 }
 
 func HomePageHandler(w http.ResponseWriter, r *http.Request) {
