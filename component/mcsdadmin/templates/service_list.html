@@ -3,5 +3,31 @@
     <div>
         <a href="healthcareservice/new">New Health Care Service</a>
     </div>
+    <div>
+        <table>
+            <thead>
+            <tr>
+                <th scope="col">Id</th>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+            </tr>
+            </thead>
+            <tbody>
+            {{range .}}
+            <tr>
+                <th scope="row">{{ .Id }}</th>
+                <td>{{ .Name }} </td>
+                <td>...</td>
+            </tr>
+            {{end}}
+            </tbody>
+            <tfoot>
+            <tr>
+                <th scope="row" colspan="2">Total</th>
+                <td>...</td>
+            </tr>
+            </tfoot>
+        </table>
+    </div>
 </div>
 {{end}}

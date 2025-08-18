@@ -32,7 +32,7 @@ func (c Component) Stop(ctx context.Context) error {
 
 const templateFolder = "./component/mcsdadmin/templates/"
 
-func RenderWithBase(w http.ResponseWriter, name string) {
+func RenderWithBase(w http.ResponseWriter, name string, data any) {
 	files := []string{
 		templateFolder + "base.html",
 		templateFolder + name,
@@ -45,7 +45,7 @@ func RenderWithBase(w http.ResponseWriter, name string) {
 		return
 	}
 
-	err = ts.ExecuteTemplate(w, "base", nil)
+	err = ts.ExecuteTemplate(w, "base", data)
 	if err != nil {
 		log.Print(err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -56,17 +56,25 @@ func RenderWithBase(w http.ResponseWriter, name string) {
 // Route handling
 
 func ServiceHandler(w http.ResponseWriter, r *http.Request) {
+	services, err := FindAllServices()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Print(services)
+
 	w.WriteHeader(http.StatusOK)
-	RenderWithBase(w, "service_list.html")
+	RenderWithBase(w, "service_list.html", services)
 }
 
 func ServiceNewHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	RenderWithBase(w, "service_edit.html")
+	RenderWithBase(w, "service_edit.html", nil)
 }
 
 func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
-	log.Print("Received new post request")
+	log.Debug().Msg("New post for HealthcareService resource")
 
 	r.ParseForm()
 	var data = map[string]string{}
@@ -79,20 +87,20 @@ func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := resourceCreate("HealthcareService", content)
+	id, err := CreateResource("HealthcareService", content)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Print("New post created " + id)
-
-	http.Redirect(w, r, "/mcsdadmin/healthcareservice", http.StatusFound)
+	log.Debug().Msg("New post created " + id)
+	w.WriteHeader(http.StatusCreated)
+	RenderWithBase(w, "service_list.html", nil)
 }
 
 func ServiceEditHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	RenderWithBase(w, "service_edit.html")
+	RenderWithBase(w, "service_edit.html", nil)
 }
 
 func HomePageHandler(w http.ResponseWriter, r *http.Request) {
