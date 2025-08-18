@@ -10,6 +10,7 @@ import (
 	"strconv"
 )
 
+// TODO: Make this configurable
 const baseURL = "http://localhost:7050/fhir/DEFAULT/"
 const accept = "Accept: application/fhir+json;q=1.0, application/json+fhir;q=0.9"
 const contentType = "application/fhir+json; charset=UTF-8"
@@ -75,8 +76,10 @@ func findAll(resourceType string) ([]byte, error) {
 }
 
 type HealthcareService struct {
-	Id   string
-	Name string
+	Id         string
+	Name       string
+	Active     bool
+	ProvidedBy string
 }
 
 type ServiceBundle struct {
@@ -142,5 +145,7 @@ func FindAllOrganizations() ([]Organization, error) {
 		organizations[i] = o.Resource
 	}
 
+	count := strconv.Itoa(len(organizations))
+	log.Debug().Msg("Found " + count + " resources")
 	return organizations, nil
 }

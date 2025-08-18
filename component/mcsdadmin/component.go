@@ -84,8 +84,20 @@ func ServiceHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func ServiceNewHandler(w http.ResponseWriter, r *http.Request) {
+	organizations, err := FindAllOrganizations()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	props := struct {
+		Organizations []Organization
+	}{
+		Organizations: organizations,
+	}
+
 	w.WriteHeader(http.StatusOK)
-	RenderWithBase(w, "service_edit.html", nil)
+	RenderWithBase(w, "service_edit.html", props)
 }
 
 func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +109,8 @@ func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
 	var data = map[string]string{}
 	data["resourceType"] = resourceType
 	data["name"] = r.PostForm.Get("name")
+	data["active"] = r.PostForm.Get("active")
+	data["providedBy"] = r.PostForm.Get("providedBy")
 
 	_, err := ResourceFromMap(resourceType, data)
 	if err != nil {
