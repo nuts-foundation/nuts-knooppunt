@@ -4,15 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"github.com/rs/zerolog/log"
 	"io"
 	"net/http"
+	"strconv"
 )
 
 const baseURL = "http://localhost:7050/fhir/DEFAULT/"
 const accept = "Accept: application/fhir+json;q=1.0, application/json+fhir;q=0.9"
 const contentType = "application/fhir+json; charset=UTF-8"
 
-var client = &http.Client{}
+//
+//var client = &http.Client{}
 
 type FhirData struct {
 	Id string `json:"id"`
@@ -20,7 +23,7 @@ type FhirData struct {
 
 func CreateResource(resourceType string, content []byte) (id string, err error) {
 	var url = baseURL + resourceType + "?format=json"
-	resp, err := client.Post(url, contentType, bytes.NewReader(content))
+	resp, err := http.Post(url, contentType, bytes.NewReader(content))
 	if err != nil {
 		return "", err
 	}
@@ -52,7 +55,7 @@ func findAll(resourceType string) ([]byte, error) {
 	}
 	req.Header.Add("Accept", accept)
 
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +105,8 @@ func FindAllServices() ([]HealthcareService, error) {
 		services[i] = s.Resource
 	}
 
+	count := strconv.Itoa(len(services))
+	log.Debug().Msg("Found " + count + " resources")
 	return services, nil
 }
 
