@@ -138,27 +138,28 @@ func OrganizationNewHandler(w http.ResponseWriter, r *http.Request) {
 func OrganizationNewPostHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Msg("New post for organization resource")
 
+	resourceType := "Organization"
+
 	r.ParseForm()
 	var data = map[string]string{}
-	data["resourceType"] = "Organization"
+	data["resourceType"] = resourceType
 	data["name"] = r.PostForm.Get("name")
 	data["active"] = r.PostForm.Get("active")
 
-	content, err := json.Marshal(data)
+	_, err := ResourceFromMap(resourceType, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	id, err := CreateResource("Organization", content)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	log.Debug().Msg("New resource created " + id)
 	w.WriteHeader(http.StatusCreated)
-	RenderWithBase(w, "organization_list.html", nil)
+
+	organizations, err := FindAllOrganizations()
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to find all organizations")
+	}
+
+	RenderWithBase(w, "organization_list.html", organizations)
 }
 
 func HomePageHandler(w http.ResponseWriter, r *http.Request) {
