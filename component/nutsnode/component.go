@@ -29,11 +29,19 @@ func New() (*Component, error) {
 	// set nil logger to avoid logrus output
 	logrus.StandardLogger().SetOutput(&devNullWriter{})
 
-	internalAddr, err := url.Parse("http://127.0.0.1:" + strconv.Itoa(netutil.FreeTCPPort()))
+	internalPort, err := netutil.FreeTCPPort()
+	if err != nil {
+		return nil, err
+	}
+	internalAddr, err := url.Parse("http://127.0.0.1:" + strconv.Itoa(internalPort))
 	if err != nil {
 		return nil, fmt.Errorf("parse internal address: %w", err)
 	}
-	publicAddr, err := url.Parse("http://127.0.0.1:" + strconv.Itoa(netutil.FreeTCPPort()))
+	publicPort, err := netutil.FreeTCPPort()
+	if err != nil {
+		return nil, err
+	}
+	publicAddr, err := url.Parse("http://127.0.0.1:" + strconv.Itoa(publicPort))
 	if err != nil {
 		return nil, fmt.Errorf("parse public address: %w", err)
 	}
