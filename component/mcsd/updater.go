@@ -18,31 +18,32 @@ import (
 // TODO: The localRefMap is used to map local references to their full URLs, which is used for correlating resources in the transaction.
 // We don't want to copy the resource ID from remote mCSD Directory, as we can't guarantee IDs from external directories are unique.
 // This means, we let our local mCSD Directory assign new IDs to resources, but we have to make sure that updates are applied to the right local resources.
-func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entries []fhir.BundleEntry, allowedResourceTypes []string) error {
+func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entries []fhir.BundleEntry, allowedResourceTypes []string) ([]string, error) {
+	var warnings []string
 	for i, entry := range entries {
 		if entry.Resource == nil {
-			log.Ctx(ctx).Warn().Msgf("Skipping entry #%d: missing 'resource' field", i)
+			warnings = append(warnings, fmt.Sprintf("Skipping entry #%d: missing 'resource' field", i))
 			continue
 		}
 		if entry.FullUrl == nil {
-			log.Ctx(ctx).Warn().Msgf("Skipping entry #%d: missing 'fullUrl' field", i)
+			warnings = append(warnings, fmt.Sprintf("Skipping entry #%d: missing 'fullUrl' field", i))
 			continue
 		}
 		if entry.Request == nil {
-			log.Ctx(ctx).Warn().Msgf("Skipping entry #%d: missing 'request' field", i)
+			warnings = append(warnings, fmt.Sprintf("Skipping entry #%d: missing 'request' field", i))
 			continue
 		}
 
 		resource := make(map[string]any)
 		if err := json.Unmarshal(entry.Resource, &resource); err != nil {
-			return fmt.Errorf("failed to unmarshal resource in entry #%d (fullUrl=%v): %w", i, entry.FullUrl, err)
+			return nil, fmt.Errorf("failed to unmarshal resource in entry #%d (fullUrl=%v): %w", i, entry.FullUrl, err)
 		}
 		resourceType, ok := resource["resourceType"].(string)
 		if !ok {
-			return fmt.Errorf("entry #%d does not contain a valid resourceType (fullUrl=%v)", i, entry.FullUrl)
+			return nil, fmt.Errorf("entry #%d does not contain a valid resourceType (fullUrl=%v)", i, entry.FullUrl)
 		}
 		if !slices.Contains(allowedResourceTypes, resourceType) {
-			log.Ctx(ctx).Debug().Msgf("Skipping entry #%d: resource type %s not allowed", i, resourceType)
+			warnings = append(warnings, fmt.Sprintf("Skipping entry #%d: resource type %s not allowed", i, resourceType))
 			continue
 		}
 		log.Ctx(ctx).Debug().Msgf("Adding entry #%d to transaction: %s", i, resourceType)
@@ -64,7 +65,7 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entries []fhir
 			},
 		})
 	}
-	return nil
+	return warnings, nil
 }
 
 func setResourceMetaSource(resource map[string]any, source string) {

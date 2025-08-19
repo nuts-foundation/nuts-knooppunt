@@ -63,8 +63,7 @@ services:
       hapi.fhir.allow_cascading_deletes: true
       # Lets the server generate UUIDs for resources instead of integers
       hapi.fhir.server_id_strategy: UUID
-      # enables the partitioning feature
-      hapi.fhir.partitioning.request_tenant_partitioning_mode: true
+
 
       #
       # Local development properties (not to be used when deploying to test/production)
@@ -89,6 +88,11 @@ services:
       hapi.fhir.tester.orga.server_address: http://localhost:8080/fhir/OrgA
       hapi.fhir.tester.orga.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.orga.fhir_version: R4
+
+      # Enable partitioning and allow string tenant identifiers
+      hapi.fhir.partitioning.enabled: true
+      hapi.fhir.partitioning.mode: TENANT_ID
+      hapi.fhir.partitioning.tenant_id_type: STRING
     restart: unless-stopped
     networks:
       - nuts-knooppunt

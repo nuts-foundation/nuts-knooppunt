@@ -7,7 +7,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
-	"path"
 	"strconv"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
@@ -23,7 +22,7 @@ import (
 
 var _ component.Lifecycle = (*Component)(nil)
 
-func New() (*Component, error) {
+func New(config Config) (*Component, error) {
 	// Nuts node uses logrus, register a hook to convert logrus logs to zerolog.
 	logrus.AddHook(&logrusZerologBridgeHook{})
 	// set nil logger to avoid logrus output
@@ -46,12 +45,14 @@ func New() (*Component, error) {
 		return nil, fmt.Errorf("parse public address: %w", err)
 	}
 	return &Component{
+		config:       config,
 		internalAddr: internalAddr,
 		publicAddr:   publicAddr,
 	}, nil
 }
 
 type Component struct {
+	config       Config
 	ctx          context.Context
 	cancel       context.CancelFunc
 	system       *core.System
@@ -59,14 +60,19 @@ type Component struct {
 	publicAddr   *url.URL
 }
 
+type Config struct {
+	ConfigFile string
+	Enabled    bool
+}
+
 func (c *Component) Start() error {
-	configDir := os.Getenv("KNPT_CONFIGDIR")
-	if configDir == "" {
-		configDir = "config"
+	configFile := c.config.ConfigFile
+	if configFile == "" {
+		configFile = "config/nuts.yaml"
 	}
 	const dataDir = "data/nuts"
 	envVars := map[string]string{
-		"NUTS_CONFIGFILE":            path.Join(configDir, "nuts.yaml"),
+		"NUTS_CONFIGFILE":            configFile,
 		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr.Host,
 		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr.Host,
 		"NUTS_DATADIR":               dataDir,

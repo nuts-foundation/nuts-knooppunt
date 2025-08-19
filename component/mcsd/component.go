@@ -3,6 +3,7 @@ package mcsd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -17,7 +18,8 @@ import (
 var _ component.Lifecycle = &Component{}
 
 type Component struct {
-	config Config
+	config       Config
+	fhirClientFn func(baseURL *url.URL) fhirclient.Client
 }
 
 type Config struct {
@@ -39,8 +41,13 @@ type DirectoryUpdateReport struct {
 	Error        error    `json:"error,omitempty"`
 }
 
-func New(config Config) (*Component, error) {
-	return &Component{config: config}, nil
+func New(config Config) *Component {
+	return &Component{
+		config: config,
+		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
+			return fhirclient.New(baseURL, http.DefaultClient, nil)
+		},
+	}
 }
 
 func (c Component) Start() error {
@@ -69,30 +76,34 @@ func (c Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) {
 func (c Component) update(ctx context.Context) (UpdateReport, error) {
 	result := make(UpdateReport)
 	for _, root := range c.config.RootDirectories {
-		directoryUpdateReport, err := c.updateFromDirectory(ctx, root.FHIRBaseURL, []string{"Endpoint"})
+		report, err := c.updateFromDirectory(ctx, root.FHIRBaseURL, []string{"Organization", "Endpoint"})
 		if err != nil {
-			log.Ctx(ctx).Error().Str("directory", root.FHIRBaseURL).Msg("mCSD root directory update failed")
-			result[root.FHIRBaseURL] = DirectoryUpdateReport{
-				Error: err,
-			}
-		} else {
-			result[root.FHIRBaseURL] = directoryUpdateReport
+			log.Ctx(ctx).Err(err).Str("directory", root.FHIRBaseURL).Msg("mCSD root directory update failed")
+			report.Error = errors.Join(err, report.Error)
 		}
+		result[root.FHIRBaseURL] = report
 
 	}
 	return result, nil
 }
 
 func (c Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string) (DirectoryUpdateReport, error) {
-	fhirBaseURL, err := url.Parse(fhirBaseURLRaw)
+	remoteDirFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
 	}
+	remoteDirFHIRClient := c.fhirClientFn(remoteDirFHIRBaseURL)
+
+	localDirFHIRBaseURL, err := url.Parse(c.config.LocalDirectory.FHIRBaseURL)
+	if err != nil {
+		return DirectoryUpdateReport{}, err
+	}
+	localDirFHIRClient := c.fhirClientFn(localDirFHIRBaseURL)
+
 	// Query remote directory
-	fhirClient := fhirclient.New(fhirBaseURL, http.DefaultClient, nil)
 	var bundle fhir.Bundle
 	// TODO: Pagination
-	if err = fhirClient.SearchWithContext(ctx, "", nil, &bundle, fhirclient.AtPath("/_history")); err != nil {
+	if err = remoteDirFHIRClient.SearchWithContext(ctx, "", nil, &bundle, fhirclient.AtPath("/_history")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("_history search failed: %w", err)
 	}
 
@@ -101,16 +112,19 @@ func (c Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw strin
 		Type:  fhir.BundleTypeTransaction,
 		Entry: make([]fhir.BundleEntry, 0, len(bundle.Entry)),
 	}
-	if err = buildUpdateTransaction(ctx, &tx, bundle.Entry, allowedResourceTypes); err != nil {
+	warnings, err := buildUpdateTransaction(ctx, &tx, bundle.Entry, allowedResourceTypes)
+	if err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("failed to build update transaction: %w", err)
 	}
 	var txResult fhir.Bundle
-	if err := fhirClient.CreateWithContext(ctx, tx, &txResult, fhirclient.AtPath("/")); err != nil {
+	if err := localDirFHIRClient.CreateWithContext(ctx, tx, &txResult, fhirclient.AtPath("/")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("failed to apply mCSD update to local directory: %w", err)
 	}
 
 	// Process result
-	report := DirectoryUpdateReport{}
+	report := DirectoryUpdateReport{
+		Warnings: warnings,
+	}
 	for _, entry := range txResult.Entry {
 		if entry.Response == nil {
 			log.Ctx(ctx).Warn().Msgf("Skipping entry with no response: %v", entry)
