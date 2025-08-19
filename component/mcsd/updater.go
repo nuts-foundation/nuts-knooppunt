@@ -61,6 +61,7 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entries []fhir
 		tx.Entry = append(tx.Entry, fhir.BundleEntry{
 			Resource: resourceJSON,
 			Request: &fhir.BundleEntryRequest{
+				Url:    resourceType + "/" + resource["id"].(string),
 				Method: entry.Request.Method,
 			},
 		})

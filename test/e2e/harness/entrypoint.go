@@ -12,6 +12,9 @@ import (
 
 type Details struct {
 	KnooppuntInternalBaseURL *url.URL
+	MCSDCacheFHIRBaseURL     *url.URL
+	SunflowerURA             string
+	Care2CureURA             string
 }
 
 func Start(t *testing.T) Details {
@@ -38,5 +41,8 @@ func Start(t *testing.T) Details {
 	})
 	return Details{
 		KnooppuntInternalBaseURL: knooppuntInternalURL,
+		MCSDCacheFHIRBaseURL:     testData.Knooppunt.MCSD.CacheFHIRBaseURL,
+		SunflowerURA:             "00000020",
+		Care2CureURA:             "00000030",
 	}
 }

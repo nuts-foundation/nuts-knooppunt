@@ -9,5 +9,11 @@ func CareHomeSunflower() fhir.Organization {
 	return fhir.Organization{
 		Id:   to.Ptr("e5909595-767e-41c1-9b00-a23ddf33e5d1"),
 		Name: to.Ptr("Sunflower Care Home"),
+		Identifier: []fhir.Identifier{
+			{
+				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+				Value:  to.Ptr("00000020"),
+			},
+		},
 	}
 }

@@ -9,5 +9,11 @@ func Care2CureHospital() fhir.Organization {
 	return fhir.Organization{
 		Id:   to.Ptr("ef860868-b886-4459-aa87-216955c05289"),
 		Name: to.Ptr("Care2Cure Hospital"),
+		Identifier: []fhir.Identifier{
+			{
+				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+				Value:  to.Ptr("00000030"),
+			},
+		},
 	}
 }
