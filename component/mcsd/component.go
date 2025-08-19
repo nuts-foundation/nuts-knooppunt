@@ -52,6 +52,7 @@ func (c Component) Stop(ctx context.Context) error {
 }
 
 func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
+	// TODO: Change to internal API
 	mux.HandleFunc("POST /mcsd/update", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		result, err := c.update(ctx)
