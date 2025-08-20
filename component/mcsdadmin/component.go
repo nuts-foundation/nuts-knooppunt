@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/rs/zerolog/log"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 	"html/template"
 	"net/http"
 )
@@ -91,7 +92,7 @@ func ServiceNewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	props := struct {
-		Organizations []Organization
+		Organizations []fhir.Organization
 	}{
 		Organizations: organizations,
 	}

@@ -4,26 +4,33 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/rs/zerolog/log"
+	"fmt"
+	fhirClient "github.com/SanteonNL/go-fhir-client"
+	fhir "github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 	"io"
 	"net/http"
-	"strconv"
+	"net/url"
 )
 
 // TODO: Make this configurable
-const baseURL = "http://localhost:7050/fhir/DEFAULT/"
+var baseURL = url.URL{
+	Scheme: "HTTP",
+	Host:   "localhost:7050",
+	Path:   "/fhir/DEFAULT",
+}
+
 const accept = "Accept: application/fhir+json;q=1.0, application/json+fhir;q=0.9"
 const contentType = "application/fhir+json; charset=UTF-8"
 
-//
-//var client = &http.Client{}
+var httpClient = &http.Client{}
+var client = fhirClient.New(&baseURL, httpClient, nil)
 
 type FhirData struct {
 	Id string `json:"id"`
 }
 
 func CreateResource(resourceType string, content []byte) (id string, err error) {
-	var url = baseURL + resourceType + "?format=json"
+	var url = "http://localhost:750/fhir/DEFAULT/" + resourceType + "?format=json"
 	resp, err := http.Post(url, contentType, bytes.NewReader(content))
 	if err != nil {
 		return "", err
@@ -48,104 +55,58 @@ func CreateResource(resourceType string, content []byte) (id string, err error) 
 	return fd.Id, nil
 }
 
-func findAll(resourceType string) ([]byte, error) {
-	var url = baseURL + resourceType
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Add("Accept", accept)
-	req.Header.Add("Cache-Control", "no-cache")
+func findAll(resourceType string) (fhir.Bundle, error) {
+	var result fhir.Bundle
+	err := client.Search(resourceType, url.Values{}, &result, nil)
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	//req.Header.Add("Accept", accept)
+	//req.Header.Add("Cache-Control", "no-cache")
 
-	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != 200 {
-		desc := resp.Status + "\n" + string(respBody)
-		return nil, errors.New(desc)
+		return fhir.Bundle{}, err
 	}
 
-	return respBody, nil
+	return result, nil
 }
 
-type HealthcareService struct {
-	Id         string
-	Name       string
-	Active     bool
-	ProvidedBy string
-}
-
-type ServiceBundle struct {
-	ResourceType string
-	Id           string
-	Total        int
-	Entry        []struct {
-		FullUrl  string
-		Resource HealthcareService
-	}
-}
-
-func FindAllServices() ([]HealthcareService, error) {
-	respBody, err := findAll("HealthcareService")
+func FindAllServices() ([]fhir.HealthcareService, error) {
+	bundle, err := findAll("HealthcareService")
 	if err != nil {
 		return nil, err
 	}
 
-	var sb ServiceBundle
-	err = json.Unmarshal(respBody, &sb)
+	var hb []fhir.HealthcareService
+	for _, entry := range bundle.Entry {
+		var h fhir.HealthcareService
+		err := json.Unmarshal(entry.Resource, &h)
+		if err != nil {
+			return hb, err
+		}
+
+		fmt.Println(h)
+
+		hb = append(hb, h)
+	}
+
+	return hb, nil
+}
+
+func FindAllOrganizations() ([]fhir.Organization, error) {
+	bundle, err := findAll("Organization")
 	if err != nil {
 		return nil, err
 	}
 
-	services := make([]HealthcareService, len(sb.Entry))
-	for i, s := range sb.Entry {
-		services[i] = s.Resource
+	var ob []fhir.Organization
+	for _, entry := range bundle.Entry {
+		var o fhir.Organization
+		err := json.Unmarshal(entry.Resource, &o)
+		if err != nil {
+			return ob, err
+		}
+
+		ob = append(ob, o)
 	}
 
-	count := strconv.Itoa(len(services))
-	log.Debug().Msg("Found " + count + " resources")
-	return services, nil
-}
-
-type Organization struct {
-	Id     string
-	Name   string
-	Active bool
-}
-
-type OrganizationBundle struct {
-	ResourceType string
-	Entry        []struct {
-		FullUrl  string
-		Resource Organization
-	}
-}
-
-func FindAllOrganizations() ([]Organization, error) {
-	respBody, err := findAll("Organization")
-	if err != nil {
-		return nil, err
-	}
-
-	var ob OrganizationBundle
-	err = json.Unmarshal(respBody, &ob)
-	if err != nil {
-		return nil, err
-	}
-
-	organizations := make([]Organization, len(ob.Entry))
-	for i, o := range ob.Entry {
-		organizations[i] = o.Resource
-	}
-
-	count := strconv.Itoa(len(organizations))
-	log.Debug().Msg("Found " + count + " resources")
-	return organizations, nil
+	return ob, nil
 }

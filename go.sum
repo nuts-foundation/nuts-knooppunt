@@ -1,3 +1,5 @@
+github.com/SanteonNL/go-fhir-client v0.5.0 h1:3Lg/zpqQKvh193F3Hkgrqi1kCuNGBQ2S2UquwKgaPpI=
+github.com/SanteonNL/go-fhir-client v0.5.0/go.mod h1:CcU6J3vgxsdjTWry0s2BAJcV6SvdaRTsry9ixR7zqc4=
 github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -16,6 +18,8 @@ github.com/rs/zerolog v1.34.0 h1:k43nTLIwcTVQAncfCw4KZ2VY6ukYoZaBPNOE8txlOeY=
 github.com/rs/zerolog v1.34.0/go.mod h1:bJsvje4Z08ROH4Nhs5iH600c3IkWhwp44iRc54W6wYQ=
 github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOfJA=
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
+github.com/zorgbijjou/golang-fhir-models/fhir-models v0.0.0-20241004115431-5fbe087ad50c h1:uWJ5Pp+RWy5xY4KMMuLGBvwGGSgp0MbnR3SthrSZMGc=
+github.com/zorgbijjou/golang-fhir-models/fhir-models v0.0.0-20241004115431-5fbe087ad50c/go.mod h1:HaPwolHwUUf/6El6rie/+Rr9hRKVq4P3wDdQJv7QDMo=
 golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
 golang.org/x/sys v0.12.0 h1:CM0HF96J0hcLAwsHPJZjfdNzs0gftsLfgKt57wWHJ0o=
