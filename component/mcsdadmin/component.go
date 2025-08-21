@@ -145,18 +145,11 @@ func newOrganization(w http.ResponseWriter, r *http.Request) {
 func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Msg("New post for organization resource")
 
-	resourceType := "Organization"
-
 	err := r.ParseForm()
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to parse form input")
 		return
 	}
-
-	var data = map[string]string{}
-	data["resourceType"] = resourceType
-	data["name"] = r.PostForm.Get("name")
-	data["active"] = r.PostForm.Get("active")
 
 	var org fhir.Organization
 	name := r.PostForm.Get("name")
