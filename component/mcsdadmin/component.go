@@ -33,7 +33,7 @@ func (c Component) Stop(ctx context.Context) error {
 
 const templateFolder = "./component/mcsdadmin/templates/"
 
-func RenderWithBase(w http.ResponseWriter, name string, data any) {
+func renderWithBase(w http.ResponseWriter, name string, data any) {
 	files := []string{
 		templateFolder + "base.html",
 		templateFolder + name,
@@ -56,7 +56,7 @@ func RenderWithBase(w http.ResponseWriter, name string, data any) {
 
 // Route handling
 
-func ServiceHandler(w http.ResponseWriter, r *http.Request) {
+func listServices(w http.ResponseWriter, r *http.Request) {
 	services, err := FindAllServices()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -64,10 +64,10 @@ func ServiceHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	RenderWithBase(w, "service_list.html", services)
+	renderWithBase(w, "service_list.html", services)
 }
 
-func ServiceNewHandler(w http.ResponseWriter, r *http.Request) {
+func newService(w http.ResponseWriter, r *http.Request) {
 	organizations, err := FindAllOrganizations()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -81,10 +81,10 @@ func ServiceNewHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	RenderWithBase(w, "service_edit.html", props)
+	renderWithBase(w, "service_edit.html", props)
 }
 
-func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
+func newServicePost(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Msg("New post for HealthcareService resource")
 
 	err := r.ParseForm()
@@ -123,10 +123,10 @@ func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Err(err).Msg("Failed to find all services")
 	}
 
-	RenderWithBase(w, "service_list.html", services)
+	renderWithBase(w, "service_list.html", services)
 }
 
-func OrganizationHandler(w http.ResponseWriter, r *http.Request) {
+func listOrganizations(w http.ResponseWriter, r *http.Request) {
 	organizations, err := FindAllOrganizations()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -134,15 +134,15 @@ func OrganizationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	RenderWithBase(w, "organization_list.html", organizations)
+	renderWithBase(w, "organization_list.html", organizations)
 }
 
-func OrganizationNewHandler(w http.ResponseWriter, r *http.Request) {
+func newOrganization(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	RenderWithBase(w, "organization_edit.html", nil)
+	renderWithBase(w, "organization_edit.html", nil)
 }
 
-func OrganizationNewPostHandler(w http.ResponseWriter, r *http.Request) {
+func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Msg("New post for organization resource")
 
 	resourceType := "Organization"
@@ -173,33 +173,33 @@ func OrganizationNewPostHandler(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Err(err).Msg("Failed to find all organizations")
 	}
 
-	RenderWithBase(w, "organization_list.html", organizations)
+	renderWithBase(w, "organization_list.html", organizations)
 }
 
-func HomePageHandler(w http.ResponseWriter, r *http.Request) {
+func homePage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	RenderWithBase(w, "home.html", nil)
+	renderWithBase(w, "home.html", nil)
 }
 
-func NotImplementedHandler(w http.ResponseWriter, r *http.Request) {
+func notImplemented(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
-	RenderWithBase(w, "home.html", nil)
+	renderWithBase(w, "home.html", nil)
 }
 
-func NotFoundHandler(w http.ResponseWriter, r *http.Request) {
+func notFound(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	_, _ = w.Write([]byte("Path not implemented"))
 }
 
 func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
-	mux.HandleFunc("/mcsdadmin/healthcareservice", ServiceHandler)
-	mux.HandleFunc("/mcsdadmin/healthcareservice/new", ServiceNewHandler)
-	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", ServiceNewPostHandler)
-	mux.HandleFunc("/mcsdadmin/healthcareservice/{id}/edit", NotImplementedHandler)
-	mux.HandleFunc("PUT /mcsdadmin/healthcareservice/{id}/edit", NotImplementedHandler)
-	mux.HandleFunc("/mcsdadmin/organization", OrganizationHandler)
-	mux.HandleFunc("/mcsdadmin/organization/new", OrganizationNewHandler)
-	mux.HandleFunc("POST /mcsdadmin/organization/new", OrganizationNewPostHandler)
-	mux.HandleFunc("/mcsdadmin", HomePageHandler)
-	mux.HandleFunc("/mcsdadmin/", NotFoundHandler)
+	mux.HandleFunc("GET/mcsdadmin/healthcareservice", listServices)
+	mux.HandleFunc("GET /mcsdadmin/healthcareservice/new", newService)
+	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", newServicePost)
+	mux.HandleFunc("GET /mcsdadmin/healthcareservice/{id}/edit", notImplemented)
+	mux.HandleFunc("PUT /mcsdadmin/healthcareservice/{id}/edit", notImplemented)
+	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
+	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
+	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
+	mux.HandleFunc("GET /mcsdadmin", homePage)
+	mux.HandleFunc("GET /mcsdadmin/", notFound)
 }
