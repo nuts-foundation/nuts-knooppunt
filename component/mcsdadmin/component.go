@@ -111,12 +111,23 @@ func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
 	service.Name = &name
 	active := r.PostForm.Get("active") == "true"
 	service.Active = &active
-	providedBy := "Organization/" + r.PostForm.Get("providedBy")
+
+	reference := "Organization/" + r.PostForm.Get("providedById")
+	refType := "Organization"
 	service.ProvidedBy = &fhir.Reference{
-		Reference: &providedBy,
+		Reference: &reference,
+		Type:      &refType,
 	}
 
-	_, err := CreateHealthcareService(service)
+	var providedByOrg fhir.Organization
+	err := client.Read(reference, &providedByOrg)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to find referred organisation")
+		return
+	}
+	service.ProvidedBy.Display = providedByOrg.Name
+
+	_, err = CreateHealthcareService(service)
 
 	w.WriteHeader(http.StatusCreated)
 
