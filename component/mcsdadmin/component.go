@@ -196,7 +196,7 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
-	mux.HandleFunc("GET/mcsdadmin/healthcareservice", listServices)
+	mux.HandleFunc("GET /mcsdadmin/healthcareservice", listServices)
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice/new", newService)
 	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", newServicePost)
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice/{id}/edit", notImplemented)
