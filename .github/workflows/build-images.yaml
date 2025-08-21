@@ -49,7 +49,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           # Set the registry to GHCR here
-          images: ghcr.io/nutsfoundation/nuts-knooppunt
+          images: ghcr.io/nuts-foundation/nuts-knooppunt
           tags: |
             # generate 'main' tag for the main branch
             type=ref,event=branch,enable={{is_default_branch}},prefix=
@@ -93,4 +93,4 @@ jobs:
           context: development/dev-image
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: nutsfoundation/nuts-knooppunt:dev
+          tags: nuts-foundation/nuts-knooppunt:dev
