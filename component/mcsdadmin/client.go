@@ -93,3 +93,23 @@ func FindAllOrganizations() ([]fhir.Organization, error) {
 
 	return ob, nil
 }
+
+func FindAllEndpoints() ([]fhir.Endpoint, error) {
+	bundle, err := findAll("Organization")
+	if err != nil {
+		return nil, err
+	}
+
+	var es []fhir.Endpoint
+	for _, entry := range bundle.Entry {
+		var e fhir.Endpoint
+		err := json.Unmarshal(entry.Resource, &e)
+		if err != nil {
+			return es, err
+		}
+
+		es = append(es, e)
+	}
+
+	return es, nil
+}

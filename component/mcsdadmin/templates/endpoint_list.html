@@ -1,0 +1,33 @@
+{{define "main"}}
+<div class="action-bar">
+    <div>
+        <a href="/mcsdadmin/endpoint/new">New Endpoint</a>
+    </div>
+</div>
+<div class="main-view">
+    <table>
+        <thead>
+        <tr>
+            <th scope="col">Address</th>
+            <th scope="col">Payload Type</th>
+            <th scope="col">Period</th>
+            <th scope="col">Managing Organization</th>
+            <th scope="col">Connection Type</th>
+            <th scope="col">Status</th>
+        </tr>
+        </thead>
+        <tbody>
+        {{range .}}
+        <tr>
+            <th scope="row">{{ .Address }}</th>
+            <td>...</td>
+            <td>...</td>
+            <td>...</td>
+            <td>...</td>
+            <td>...</td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

@@ -176,6 +176,17 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	renderWithBase(w, "organization_list.html", organizations)
 }
 
+func listEndpoints(w http.ResponseWriter, r *http.Request) {
+	endpoints, err := FindAllEndpoints()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	renderWithBase(w, "endpoint_list.html", endpoints)
+}
+
 func homePage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	renderWithBase(w, "home.html", nil)
@@ -200,6 +211,9 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
 	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
+	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
+	mux.HandleFunc("GET /mcsdadmin/endpoint/new", notImplemented)
+	mux.HandleFunc("POST /mcsdadmin/endpoint/new", notImplemented)
 	mux.HandleFunc("GET /mcsdadmin", homePage)
 	mux.HandleFunc("GET /mcsdadmin/", notFound)
 }
