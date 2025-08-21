@@ -105,7 +105,12 @@ func ServiceNewHandler(w http.ResponseWriter, r *http.Request) {
 func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Msg("New post for HealthcareService resource")
 
-	r.ParseForm()
+	err := r.ParseForm()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to parse form input")
+		return
+	}
+
 	var service fhir.HealthcareService
 	name := r.PostForm.Get("name")
 	service.Name = &name
@@ -120,9 +125,9 @@ func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var providedByOrg fhir.Organization
-	err := client.Read(reference, &providedByOrg)
+	err = client.Read(reference, &providedByOrg)
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find referred organisation")
+		log.Error().Err(err).Msg("Failed to find referred organisation")
 		return
 	}
 	service.ProvidedBy.Display = providedByOrg.Name
@@ -160,13 +165,18 @@ func OrganizationNewPostHandler(w http.ResponseWriter, r *http.Request) {
 
 	resourceType := "Organization"
 
-	r.ParseForm()
+	err := r.ParseForm()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to parse form input")
+		return
+	}
+
 	var data = map[string]string{}
 	data["resourceType"] = resourceType
 	data["name"] = r.PostForm.Get("name")
 	data["active"] = r.PostForm.Get("active")
 
-	_, err := ResourceFromMap(resourceType, data)
+	_, err = ResourceFromMap(resourceType, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
