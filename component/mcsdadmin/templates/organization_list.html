@@ -11,7 +11,6 @@
             <th scope="col">Name</th>
             <th scope="col">Type</th>
             <th scope="col">Active</th>
-            <th scope="col">Purpose</th>
         </tr>
         </thead>
         <tbody>
@@ -19,8 +18,7 @@
         <tr>
             <th scope="row">{{ .Name }}</th>
             <td>...</td>
-            <td>{{ .Active }}</td>
-            <td>...</td>
+            <td>{{ if .Active }}{{ .Active }}{{end}}</td>
         </tr>
         {{end}}
         </tbody>

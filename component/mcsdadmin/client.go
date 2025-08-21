@@ -1,10 +1,7 @@
 package mcsdadmin
 
 import (
-	"bytes"
 	"encoding/json"
-	"errors"
-	"io"
 	"net/http"
 	"net/url"
 
@@ -29,34 +26,13 @@ type FhirData struct {
 	Id string `json:"id"`
 }
 
-func CreateResource(resourceType string, content []byte) (id string, err error) {
-	var url = "http://localhost:7050/fhir/DEFAULT/" + resourceType + "?format=json"
-	resp, err := http.Post(url, contentType, bytes.NewReader(content))
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode != 201 {
-		desc := resp.Status + "\n" + string(respBody)
-		return "", errors.New(desc)
-	}
-
-	var fd FhirData
-	err = json.Unmarshal(respBody, &fd)
-	if err != nil {
-		return "", err
-	}
-
-	return fd.Id, nil
-}
-
 func CreateHealthcareService(service fhir.HealthcareService) (out fhir.HealthcareService, err error) {
 	err = client.Create(service, out)
+	return out, err
+}
+
+func CreateOrganisation(organisation fhir.Organization) (out fhir.HealthcareService, err error) {
+	err = client.Create(organisation, out)
 	return out, err
 }
 

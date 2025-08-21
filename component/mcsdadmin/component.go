@@ -2,7 +2,6 @@ package mcsdadmin
 
 import (
 	"context"
-	"encoding/json"
 	"html/template"
 	"net/http"
 
@@ -53,23 +52,6 @@ func RenderWithBase(w http.ResponseWriter, name string, data any) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 
-}
-
-// Helpers
-
-func ResourceFromMap(resourceType string, data map[string]string) (string, error) {
-	content, err := json.Marshal(data)
-	if err != nil {
-		return "", err
-	}
-
-	id, err := CreateResource(resourceType, content)
-	if err != nil {
-		return "", err
-	}
-
-	log.Debug().Msg("New resource created " + id)
-	return id, nil
 }
 
 // Route handling
@@ -176,11 +158,13 @@ func OrganizationNewPostHandler(w http.ResponseWriter, r *http.Request) {
 	data["name"] = r.PostForm.Get("name")
 	data["active"] = r.PostForm.Get("active")
 
-	_, err = ResourceFromMap(resourceType, data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	var org fhir.Organization
+	name := r.PostForm.Get("name")
+	org.Name = &name
+	active := r.PostForm.Get("active") == "true"
+	org.Active = &active
+
+	_, err = CreateOrganisation(org)
 
 	w.WriteHeader(http.StatusCreated)
 
