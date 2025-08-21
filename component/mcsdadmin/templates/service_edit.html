@@ -21,11 +21,11 @@
         </select>
     </div>
     <div class="form-group">
-        <label for="providedBy">Provided by:</label>
-        <select name="providedBy" id="providedBy">
+        <label for="providedById">Provided by:</label>
+        <select name="providedById" id="providedById">
             <option value="">--Please choose an option--</option>
             {{range .Organizations}} }}
-            <option value="{{.Id}}">{{ .Name }}</option>
+            <option value="{{ .ID }}">{{ .Name }}</option>
             {{ end }}
         </select>
     </div>

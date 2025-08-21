@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
-	fhirClient "github.com/SanteonNL/go-fhir-client"
-	fhir "github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 	"io"
 	"net/http"
 	"net/url"
+
+	fhirClient "github.com/SanteonNL/go-fhir-client"
+	fhir "github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 // TODO: Make this configurable
@@ -30,7 +30,7 @@ type FhirData struct {
 }
 
 func CreateResource(resourceType string, content []byte) (id string, err error) {
-	var url = "http://localhost:750/fhir/DEFAULT/" + resourceType + "?format=json"
+	var url = "http://localhost:7050/fhir/DEFAULT/" + resourceType + "?format=json"
 	resp, err := http.Post(url, contentType, bytes.NewReader(content))
 	if err != nil {
 		return "", err
@@ -55,10 +55,19 @@ func CreateResource(resourceType string, content []byte) (id string, err error) 
 	return fd.Id, nil
 }
 
+func CreateHealthcareService(service fhir.HealthcareService) (out fhir.HealthcareService, err error) {
+	err = client.Create(service, out)
+	return out, err
+}
+
 func findAll(resourceType string) (fhir.Bundle, error) {
 	var result fhir.Bundle
 	err := client.Search(resourceType, url.Values{}, &result, nil)
 
+	// I don't think it is possible to set custom headers in the fhir client
+	// We need to set the no-cache header to read our own writes and make the app responsive
+	// TODO: Make it possible in the fhir client to pass headers
+	//
 	//req.Header.Add("Accept", accept)
 	//req.Header.Add("Cache-Control", "no-cache")
 
@@ -82,8 +91,6 @@ func FindAllServices() ([]fhir.HealthcareService, error) {
 		if err != nil {
 			return hb, err
 		}
-
-		fmt.Println(h)
 
 		hb = append(hb, h)
 	}

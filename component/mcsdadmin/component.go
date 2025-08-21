@@ -3,11 +3,12 @@ package mcsdadmin
 import (
 	"context"
 	"encoding/json"
+	"html/template"
+	"net/http"
+
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
-	"html/template"
-	"net/http"
 )
 
 var _ component.Lifecycle = (*Component)(nil)
@@ -104,20 +105,18 @@ func ServiceNewHandler(w http.ResponseWriter, r *http.Request) {
 func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Msg("New post for HealthcareService resource")
 
-	resourceType := "HealthcareService"
-
 	r.ParseForm()
-	var data = map[string]string{}
-	data["resourceType"] = resourceType
-	data["name"] = r.PostForm.Get("name")
-	data["active"] = r.PostForm.Get("active")
-	data["providedBy"] = r.PostForm.Get("providedBy")
-
-	_, err := ResourceFromMap(resourceType, data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	var service fhir.HealthcareService
+	name := r.PostForm.Get("name")
+	service.Name = &name
+	active := r.PostForm.Get("active") == "true"
+	service.Active = &active
+	providedBy := "Organization/" + r.PostForm.Get("providedBy")
+	service.ProvidedBy = &fhir.Reference{
+		Reference: &providedBy,
 	}
+
+	_, err := CreateHealthcareService(service)
 
 	w.WriteHeader(http.StatusCreated)
 
@@ -127,11 +126,6 @@ func ServiceNewPostHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	RenderWithBase(w, "service_list.html", services)
-}
-
-func ServiceEditHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-	RenderWithBase(w, "service_edit.html", nil)
 }
 
 func OrganizationHandler(w http.ResponseWriter, r *http.Request) {
