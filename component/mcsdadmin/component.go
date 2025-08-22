@@ -36,6 +36,7 @@ const templateFolder = "./component/mcsdadmin/templates/"
 func renderWithBase(w http.ResponseWriter, name string, data any) {
 	files := []string{
 		templateFolder + "base.html",
+		templateFolder + "_select_org.html",
 		templateFolder + name,
 	}
 
@@ -185,6 +186,23 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 	renderWithBase(w, "home.html", nil)
 }
 
+func newEndpoint(w http.ResponseWriter, r *http.Request) {
+	organizations, err := FindAllOrganizations()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	props := struct {
+		Organizations []fhir.Organization
+	}{
+		Organizations: organizations,
+	}
+
+	w.WriteHeader(http.StatusOK)
+	renderWithBase(w, "endpoint_edit.html", props)
+}
+
 func notImplemented(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 	renderWithBase(w, "home.html", nil)
@@ -205,7 +223,7 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
-	mux.HandleFunc("GET /mcsdadmin/endpoint/new", notImplemented)
+	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
 	mux.HandleFunc("POST /mcsdadmin/endpoint/new", notImplemented)
 	mux.HandleFunc("GET /mcsdadmin", homePage)
 	mux.HandleFunc("GET /mcsdadmin/", notFound)

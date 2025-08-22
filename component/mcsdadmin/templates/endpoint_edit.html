@@ -1,0 +1,25 @@
+{{define "main"}}
+<form method="post" enctype="application/x-www-form-urlencoded">
+    <div class="form-group">
+        <label for="address">Address:</label>
+        <input id="address" type="text" name="address" placeholder="https://" required>
+    </div>
+    <div class="form-group">
+        <fieldset>
+            <legend>Period:</legend>
+            <label for="period-start">From:</label>
+            <input id="period-start" type="date" name="period-start" />
+            <label for="period-end">To:</label>
+            <input id="period-end" type="date" name="period-end" />
+        </fieldset>
+    </div>
+    <div class="form-group">
+        <label for="contact">Contact:</label>
+        <input id="contact" type="text" name="contact" />
+    </div>
+    {{ template "selectOrg" . }}
+    <div class="form-group">
+        <button>Submit!</button>
+    </div>
+</form>
+{{end}}
