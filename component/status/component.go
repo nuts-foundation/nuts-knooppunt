@@ -2,8 +2,9 @@ package status
 
 import (
 	"context"
-	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"net/http"
+
+	"github.com/nuts-foundation/nuts-knooppunt/component"
 )
 
 var _ component.Lifecycle = (*Component)(nil)
@@ -26,12 +27,12 @@ func (c Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
-	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
+	internalMux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
 	})
-	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+	internalMux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(BuildInfo()))
 	})

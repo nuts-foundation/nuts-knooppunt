@@ -2,31 +2,41 @@ package main
 
 import (
 	"context"
-	"github.com/nuts-foundation/nuts-knooppunt/component"
-	httpComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
-	"github.com/nuts-foundation/nuts-knooppunt/component/status"
-	"github.com/pkg/errors"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/nuts-foundation/nuts-knooppunt/component"
+	httpComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
+	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
+	"github.com/nuts-foundation/nuts-knooppunt/component/status"
+	"github.com/pkg/errors"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	zerolog.DefaultContextLogger = &log.Logger
 
-	mux := http.NewServeMux()
+	publicMux := http.NewServeMux()
+	internalMux := http.NewServeMux()
 	components := []component.Lifecycle{
 		status.New(),
-		httpComponent.New(mux),
+		httpComponent.New(publicMux, internalMux),
+	}
+	if os.Getenv("KNPT_NUTS_ENABLED") != "false" {
+		nutsNode, err := nutsnode.New()
+		if err != nil {
+			panic(errors.Wrap(err, "failed to create nuts node component"))
+		}
+		components = append(components, nutsNode)
 	}
 
 	// Components: RegisterHandlers()
 	for _, cmp := range components {
-		cmp.RegisterHttpHandlers(mux)
+		cmp.RegisterHttpHandlers(publicMux, internalMux)
 	}
 
 	// Components: Start()

@@ -29,6 +29,7 @@ HEALTHCHECK --start-period=30s --timeout=5s --interval=10s \
   CMD curl -f http://localhost:8080/health || exit 1
 
 RUN adduser -D -H -u 18081 app-usr
+RUN chown -R 18081 /app
 USER 18081:18081
 
 WORKDIR /app
