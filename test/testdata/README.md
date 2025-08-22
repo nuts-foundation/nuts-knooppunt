@@ -16,7 +16,9 @@ A fictional hospital.
 ## mCSD Root Directory "LRZa"
 The Dutch Landelijk Register Zorgaanbieders, a national registry of care providers. It is the authentic source for organization names and URAs (primary identifier of care organizations).
 
-It contains the following test factors:
+It contains the following test vectors:
 
 - Registration for care org. "Care Home Sunflower" (URA: 00000020)
+  - FHIR endpoint for the organization's mCSD Directory
 - Registration for care org. "Care2Cure Hospital" (URA: 00000030)
+  - FHIR endpoint for the organization's mCSD Directory
