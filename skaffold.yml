@@ -1,0 +1,20 @@
+apiVersion: skaffold/v4beta13
+kind: Config
+build:
+  platforms:
+    - linux/amd64
+    - linux/arm64
+  artifacts:
+    - image: nuts-knooppunt
+      context: .
+      docker:
+        buildArgs:
+          GIT_VERSION: "${GIT_VERSION}"
+          GIT_COMMIT: "${GIT_COMMIT}"
+          GIT_BRANCH: "${GIT_BRANCH}"
+
+profiles:
+  - name: ci
+    patches:
+      - op: remove
+        path: /build/platforms
