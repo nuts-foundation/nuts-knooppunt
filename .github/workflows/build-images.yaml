@@ -1,0 +1,96 @@
+---
+name: 'Build Docker images'
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+# cancel build action if superseded by new commit on same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set version params
+        id: version
+        shell: bash
+        run: |
+          echo "git_commit=$(echo ${GITHUB_SHA})" >> $GITHUB_OUTPUT
+          echo "git_branch=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_OUTPUT
+          echo "git_version=$(git name-rev --tags --name-only $(git rev-parse HEAD))" >> $GITHUB_OUTPUT
+
+      - uses: actions-ecosystem/action-get-latest-tag@v1
+        id: get-latest-tag
+        with:
+          semver_only: true
+
+      - name: Print version params
+        run: |
+          echo "Commit: ${{ steps.version.outputs.git_commit }}"
+          echo "Branch: ${{ steps.version.outputs.git_branch }}"
+          echo "Version: ${{ steps.version.outputs.git_version }}"
+          echo "Latest tag: ${{ steps.get-latest-tag.outputs.tag }}"
+          echo "This tag: ${{ github.ref }}"
+
+      - name: Docker meta
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          # Set the registry to GHCR here
+          images: ghcr.io/nuts-foundation/nuts-knooppunt
+          tags: |
+            # generate 'main' tag for the main branch
+            type=ref,event=branch,enable={{is_default_branch}},prefix=
+            # generate 5.2.1 tag
+            type=semver,pattern={{version}}
+          flavor: |
+            latest=${{ steps.version.outputs.git_version == steps.get-latest-tag.outputs.tag }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Github container registry
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: docker/login-action@v3
+        with:
+          # Authenticate as the user who started the workflow
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          build-args: |
+            GIT_VERSION=${{ steps.version.outputs.git_version }}
+            GIT_COMMIT=${{ steps.version.outputs.git_commit }}
+            GIT_BRANCH=${{ steps.version.outputs.git_branch }}
+
+      - name: Build and push development image
+        if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main'}}
+        uses: docker/build-push-action@v6
+        with:
+          context: development/dev-image
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: nuts-foundation/nuts-knooppunt:dev
