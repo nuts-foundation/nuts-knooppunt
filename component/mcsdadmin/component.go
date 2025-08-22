@@ -182,6 +182,7 @@ func listEndpoints(w http.ResponseWriter, r *http.Request) {
 
 func newEndpoint(w http.ResponseWriter, r *http.Request) {
 	organizations, err := FindAllOrganizations()
+	status, err := CodingFromValueSet("endpoint-status")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -189,8 +190,10 @@ func newEndpoint(w http.ResponseWriter, r *http.Request) {
 
 	props := struct {
 		Organizations []fhir.Organization
+		Status        []fhir.Coding
 	}{
 		Organizations: organizations,
+		Status:        status,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -224,6 +227,10 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	endpoint.ManagingOrganization.Display = managingOrg.Name
+
+	// TODO: Doesn't make sense to me that this status field is an enum not a string
+	//status := r.PostForm.Get("status")
+	//endpoint.Status = &status
 
 	_, err = CreateEndpoint(endpoint)
 

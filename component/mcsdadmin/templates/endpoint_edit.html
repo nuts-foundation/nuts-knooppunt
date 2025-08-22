@@ -27,6 +27,15 @@
         </select>
     </div>
     <div class="form-group">
+        <label for="status">Status:</label>
+        <select name="status" id="status">
+            <option value="">--Please choose an option--</option>
+            {{range .Status}} }}
+            <option value="{{ .Code }}">{{ .Display }}</option>
+            {{ end }}
+        </select>
+    </div>
+    <div class="form-group">
         <button>Submit!</button>
     </div>
 </form>
