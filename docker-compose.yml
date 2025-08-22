@@ -14,8 +14,8 @@ services:
       hapi-fhir-healthcheck:
         condition: service_completed_successfully
     volumes:
-      - ./test/testdata/:/app/:ro
-    command: go run /app/main.go http://knooppunt:8081
+      - ./test/testdata:/app/:ro
+    command: /bin/sh -c "cd /app && go run main.go http://knooppunt:8081 http://hapi-fhir:8080/fhir"
 
   # PostgreSQL Database
   postgres:
