@@ -36,6 +36,11 @@ func CreateOrganisation(organisation fhir.Organization) (out fhir.HealthcareServ
 	return out, err
 }
 
+func CreateEndpoint(service fhir.Endpoint) (out fhir.Endpoint, err error) {
+	err = client.Create(service, out)
+	return out, err
+}
+
 func findAll(resourceType string) (fhir.Bundle, error) {
 	var result fhir.Bundle
 	err := client.Search(resourceType, url.Values{}, &result, nil)
@@ -95,7 +100,7 @@ func FindAllOrganizations() ([]fhir.Organization, error) {
 }
 
 func FindAllEndpoints() ([]fhir.Endpoint, error) {
-	bundle, err := findAll("Organization")
+	bundle, err := findAll("Endpoint")
 	if err != nil {
 		return nil, err
 	}

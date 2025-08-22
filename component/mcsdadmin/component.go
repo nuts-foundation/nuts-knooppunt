@@ -36,7 +36,6 @@ const templateFolder = "./component/mcsdadmin/templates/"
 func renderWithBase(w http.ResponseWriter, name string, data any) {
 	files := []string{
 		templateFolder + "base.html",
-		templateFolder + "_select_org.html",
 		templateFolder + name,
 	}
 
@@ -181,11 +180,6 @@ func listEndpoints(w http.ResponseWriter, r *http.Request) {
 	renderWithBase(w, "endpoint_list.html", endpoints)
 }
 
-func homePage(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	renderWithBase(w, "home.html", nil)
-}
-
 func newEndpoint(w http.ResponseWriter, r *http.Request) {
 	organizations, err := FindAllOrganizations()
 	if err != nil {
@@ -201,6 +195,51 @@ func newEndpoint(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	renderWithBase(w, "endpoint_edit.html", props)
+}
+
+func newEndpointPost(w http.ResponseWriter, r *http.Request) {
+	log.Debug().Msg("New post for Endpoint resource")
+
+	err := r.ParseForm()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to parse form input")
+		return
+	}
+
+	var endpoint fhir.Endpoint
+	address := r.PostForm.Get("address")
+	endpoint.Address = address
+
+	reference := "Organization/" + r.PostForm.Get("managingOrg")
+	refType := "Organization"
+	endpoint.ManagingOrganization = &fhir.Reference{
+		Reference: &reference,
+		Type:      &refType,
+	}
+
+	var managingOrg fhir.Organization
+	err = client.Read(reference, &managingOrg)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to find referred organisation")
+		return
+	}
+	endpoint.ManagingOrganization.Display = managingOrg.Name
+
+	_, err = CreateEndpoint(endpoint)
+
+	w.WriteHeader(http.StatusCreated)
+
+	endpoints, err := FindAllEndpoints()
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to find all endpoints")
+	}
+
+	renderWithBase(w, "endpoint_list.html", endpoints)
+}
+
+func homePage(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	renderWithBase(w, "home.html", nil)
 }
 
 func notImplemented(w http.ResponseWriter, r *http.Request) {
@@ -224,7 +263,7 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
 	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
-	mux.HandleFunc("POST /mcsdadmin/endpoint/new", notImplemented)
+	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
 	mux.HandleFunc("GET /mcsdadmin", homePage)
 	mux.HandleFunc("GET /mcsdadmin/", notFound)
 }

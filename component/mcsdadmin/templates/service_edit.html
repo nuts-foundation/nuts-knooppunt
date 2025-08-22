@@ -20,7 +20,15 @@
             <option value="goldfish">Goldfish</option>
         </select>
     </div>
-    {{ template "selectOrg" . }}
+    <div class="form-group">
+        <label for="providedById">Provided by:</label>
+        <select name="providedById" id="providedById">
+            <option value="">--Please choose an option--</option>
+            {{range .Organizations}} }}
+            <option value="{{ .ID }}">{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </div>
     <div class="form-group">
         <button>Submit!</button>
     </div>
