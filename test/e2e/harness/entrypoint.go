@@ -6,7 +6,7 @@ import (
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
-	"github.com/nuts-foundation/nuts-knooppunt/test/testdata"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,7 +24,7 @@ func Start(t *testing.T) Details {
 	require.NoError(t, err)
 	hapiBaseURL := startHAPI(t, dockerNetwork.Name)
 
-	testData, err := testdata.Load(hapiBaseURL)
+	testData, err := vectors.Load(hapiBaseURL)
 	require.NoError(t, err, "failed to load test data into HAPI FHIR server")
 
 	knooppuntInternalURL := startKnooppunt(t, cmd.Config{

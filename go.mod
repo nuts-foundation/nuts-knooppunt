@@ -2,6 +2,10 @@ module github.com/nuts-foundation/nuts-knooppunt
 
 go 1.24.4
 
+require github.com/nuts-foundation/nuts-knooppunt/test/testdata v0.5.0
+
+replace github.com/nuts-foundation/nuts-knooppunt/test/testdata => ./test/testdata
+
 require (
 	github.com/SanteonNL/go-fhir-client v0.5.0
 	github.com/google/uuid v1.6.0
