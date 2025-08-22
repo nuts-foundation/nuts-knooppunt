@@ -12,7 +12,7 @@ services:
       knooppunt:
         condition: service_healthy
     volumes:
-      - ./config/init/main.go:/app/main.go:ro
+      - ./config/init_tests/main.go:/app/main.go:ro
     command: go run /app/main.go http://knooppunt:8081
 
   # PostgreSQL Database

@@ -32,4 +32,8 @@ func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *h
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
 	})
+	internalMux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(BuildInfo()))
+	})
 }
