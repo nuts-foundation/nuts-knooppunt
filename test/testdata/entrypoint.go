@@ -52,9 +52,18 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	}
 
 	lrzaMCSDPublicFHIRClient := fhirclient.New(lrzaMCSDPublicHAPITenant.BaseURL(hapiBaseURL), http.DefaultClient, nil)
-	for _, org := range []fhir.Organization{Care2CureHospital(), CareHomeSunflower()} {
-		if err := lrzaMCSDPublicFHIRClient.CreateWithContext(ctx, org, &org); err != nil {
-			return nil, fmt.Errorf("create organization %s: %w", *org.Name, err)
+	// Create orgs
+	for _, resource := range append([]fhir.Organization{Care2CureHospital()}, CareHomeSunflower()) {
+		var response []byte
+		if err := lrzaMCSDPublicFHIRClient.UpdateWithContext(ctx, "Organization/"+*resource.Id, resource, &response); err != nil {
+			return nil, fmt.Errorf("create organization: %w", err)
+		}
+	}
+	// Create endpoints
+	for _, resource := range append(Care2CureHospitalRootEndpoints(), CareHomeSunflowerRootEndpoints()...) {
+		var response []byte
+		if err := lrzaMCSDPublicFHIRClient.UpdateWithContext(ctx, "Endpoint/"+*resource.Id, resource, &response); err != nil {
+			return nil, fmt.Errorf("create endpoint: %w", err)
 		}
 	}
 	return &Details{

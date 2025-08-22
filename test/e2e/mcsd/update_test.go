@@ -27,7 +27,7 @@ func Test_mCSDUpdateClient(t *testing.T) {
 
 		response := make(map[string]map[string]int)
 		require.NoError(t, json.Unmarshal(responseData, &response))
-		assert.Equalf(t, 2, mapEntrySuffix(response, "lrza-mcsd-public")["created"], "created=2 in %v", response)
+		assert.Equalf(t, 4, mapEntrySuffix(response, "lrza-mcsd-public")["created"], "created=4 in %v", response)
 
 		cacheFHIRClient := fhirclient.New(harnessDetail.MCSDCacheFHIRBaseURL, http.DefaultClient, nil)
 		t.Run("assert Sunflower organization resources", func(t *testing.T) {
