@@ -8,6 +8,15 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
+var codingSystemIndex = map[string]string{
+	"endpoint-status":          "http://hl7.org/fhir/endpoint-status",
+	"endpoint-payload-type":    "http://terminology.hl7.org/CodeSystem/endpoint-payload-type",
+	"endpoint-connection-type": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
+	"purpose-of-use":           "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+}
+
+var codingIndex = make(map[string]map[string]fhir.Coding)
+
 //go:embed *.json
 var setsFS embed.FS
 
@@ -26,5 +35,52 @@ func CodingsFrom(setId string) (out []fhir.Coding, err error) {
 		return out, err
 	}
 
+	// We add codings to and index here...
+	// ... so it's easy to retrieve without parsing the data again
+	for _, coding := range codings {
+		if coding.Code == nil {
+			log.Warn().Msg("Value in set is missing code")
+		} else {
+			code := *coding.Code
+			if codingIndex[setId] == nil {
+				codingIndex[setId] = make(map[string]fhir.Coding)
+			}
+			codingIndex[setId][code] = coding
+		}
+	}
+
 	return codings, nil
+}
+
+func CodingFrom(setId string, codeId string) (fhir.Coding, bool) {
+	codeMap, ok := codingIndex[setId]
+	if !ok {
+		return fhir.Coding{}, false
+	}
+	code, ok := codeMap[codeId]
+	if !ok {
+		return fhir.Coding{}, false
+	}
+	system, ok := codingSystemIndex[setId]
+	if !ok {
+		return fhir.Coding{}, false
+	}
+
+	code.System = &system
+
+	return code, true
+}
+
+func CodableFrom(setId string, codeId string) (out fhir.CodeableConcept, ok bool) {
+	coding, ok := CodingFrom(setId, codeId)
+	if !ok {
+		return out, false
+	}
+
+	out.Coding = []fhir.Coding{
+		coding,
+	}
+
+	out.Text = coding.Display
+	return out, true
 }

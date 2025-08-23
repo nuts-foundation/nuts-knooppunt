@@ -5,6 +5,15 @@
         <input id="address" type="text" name="address" placeholder="https://" required>
     </div>
     <div class="form-group">
+        <label for="payload-type">Payload Type:</label>
+        <select name="payload-type" id="payload-type">
+            <option value="">--Please choose an option--</option>
+            {{range .PayloadTypes }} }}
+            <option value="{{ .Code }}">{{ .Display }}</option>
+            {{ end }}
+        </select>
+    </div>
+    <div class="form-group">
         <fieldset>
             <legend>Period:</legend>
             <label for="period-start">From:</label>

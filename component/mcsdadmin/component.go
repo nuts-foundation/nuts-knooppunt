@@ -185,6 +185,7 @@ func listEndpoints(w http.ResponseWriter, r *http.Request) {
 func newEndpoint(w http.ResponseWriter, r *http.Request) {
 	organizations, err := FindAllOrganizations()
 	status, err := valuesets.CodingsFrom("endpoint-status")
+	payloadTypes, err := valuesets.CodingsFrom("endpoint-payload-type")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -192,9 +193,11 @@ func newEndpoint(w http.ResponseWriter, r *http.Request) {
 
 	props := struct {
 		Organizations []fhir.Organization
+		PayloadTypes  []fhir.Coding
 		Status        []fhir.Coding
 	}{
 		Organizations: organizations,
+		PayloadTypes:  payloadTypes,
 		Status:        status,
 	}
 
@@ -214,6 +217,14 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	var endpoint fhir.Endpoint
 	address := r.PostForm.Get("address")
 	endpoint.Address = address
+
+	var payloadType fhir.CodeableConcept
+	payloadTypeId := r.PostForm.Get("payload-type")
+	payloadType, ok := valuesets.CodableFrom("endpoint-payload-type", payloadTypeId)
+	if !ok {
+		log.Warn().Msg("Failed to find referred payload type")
+	}
+	endpoint.PayloadType = []fhir.CodeableConcept{payloadType}
 
 	reference := "Organization/" + r.PostForm.Get("managingOrg")
 	refType := "Organization"
