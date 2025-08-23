@@ -233,6 +233,12 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		End:   &periodEnd,
 	}
 
+	contactValue := r.PostForm.Get("contact")
+	contact := fhir.ContactPoint{
+		Value: &contactValue,
+	}
+	endpoint.Contact = []fhir.ContactPoint{contact}
+
 	reference := "Organization/" + r.PostForm.Get("managingOrg")
 	refType := "Organization"
 	endpoint.ManagingOrganization = &fhir.Reference{
