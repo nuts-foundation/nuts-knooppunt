@@ -1,0 +1,165 @@
+[
+  {
+    "code": "dicom-wado-rs",
+    "display": "DICOM WADO-RS",
+    "definition": "DICOMweb RESTful Image Retrieve - http://dicom.nema.org/medical/dicom/current/output/chtml/part18/sect_6.5.html",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "active"
+      }
+    ]
+  },
+  {
+    "code": "dicom-qido-rs",
+    "display": "DICOM QIDO-RS",
+    "definition": "DICOMweb RESTful Image query - http://dicom.nema.org/medical/dicom/current/output/chtml/part18/sect_6.7.html",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "active"
+      }
+    ]
+  },
+  {
+    "code": "dicom-stow-rs",
+    "display": "DICOM STOW-RS",
+    "definition": "DICOMweb RESTful image sending and storage - http://dicom.nema.org/medical/dicom/current/output/chtml/part18/sect_6.6.html",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "active"
+      }
+    ]
+  },
+  {
+    "code": "dicom-wado-uri",
+    "display": "DICOM WADO-URI",
+    "definition": "DICOMweb Image Retrieve - http://dicom.nema.org/dicom/2013/output/chtml/part18/sect_6.3.html",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "active"
+      }
+    ]
+  },
+  {
+    "code": "hl7-fhir-rest",
+    "display": "HL7 FHIR",
+    "definition": "Interact with the server interface using FHIR's RESTful interface. For details on its version/capabilities you should connect the value in Endpoint.address and retrieve the FHIR CapabilityStatement.",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "active"
+      }
+    ]
+  },
+  {
+    "code": "hl7-fhir-msg",
+    "display": "HL7 FHIR Messaging",
+    "definition": "Use the servers FHIR Messaging interface. Details can be found on the messaging.html page in the FHIR Specification. The FHIR server's base address is specified in the Endpoint.address property.",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "active"
+      }
+    ]
+  },
+  {
+    "code": "hl7v2-mllp",
+    "display": "HL7 v2 MLLP",
+    "definition": "HL7v2 messages over an LLP TCP connection",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "active"
+      }
+    ]
+  },
+  {
+    "code": "secure-email",
+    "display": "Secure email",
+    "definition": "Email delivery using a digital certificate to encrypt the content using the public key, receiver must have the private key to decrypt the content",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "active"
+      }
+    ]
+  },
+  {
+    "code": "direct-project",
+    "display": "Direct Project",
+    "definition": "Direct Project information - http://wiki.directproject.org/",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "active"
+      }
+    ]
+  },
+  {
+    "code": "cds-hooks-service",
+    "display": "CDS Hooks Service",
+    "definition": "A CDS Hooks Service connection. The address will be the base URL of the service as described in the CDS specification https://cds-hooks.hl7.org",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "active"
+      }
+    ]
+  },
+  {
+    "code": "ihe-xcpd",
+    "display": "IHE XCPD",
+    "definition": "IHE Cross Community Patient Discovery Profile (XCPD) - http://wiki.ihe.net/index.php/Cross-Community_Patient_Discovery",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "deprecated"
+      }
+    ]
+  },
+  {
+    "code": "ihe-xca",
+    "display": "IHE XCA",
+    "definition": "IHE Cross Community Access Profile (XCA) - http://wiki.ihe.net/index.php/Cross-Community_Access",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "deprecated"
+      }
+    ]
+  },
+  {
+    "code": "ihe-xdr",
+    "display": "IHE XDR",
+    "definition": "IHE Cross-Enterprise Document Reliable Exchange (XDR) - http://wiki.ihe.net/index.php/Cross-enterprise_Document_Reliable_Interchange",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "deprecated"
+      }
+    ]
+  },
+  {
+    "code": "ihe-xds",
+    "display": "IHE XDS",
+    "definition": "IHE Cross-Enterprise Document Sharing (XDS) - http://wiki.ihe.net/index.php/Cross-Enterprise_Document_Sharing",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "deprecated"
+      }
+    ]
+  },
+  {
+    "code": "ihe-iid",
+    "display": "IHE IID",
+    "definition": "IHE Invoke Image Display (IID) - http://wiki.ihe.net/index.php/Invoke_Image_Display",
+    "property": [
+      {
+        "code": "status",
+        "valueCode": "deprecated"
+      }
+    ]

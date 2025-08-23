@@ -5,6 +5,8 @@ import (
 	"html/template"
 	"net/http"
 
+	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
+
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -182,7 +184,7 @@ func listEndpoints(w http.ResponseWriter, r *http.Request) {
 
 func newEndpoint(w http.ResponseWriter, r *http.Request) {
 	organizations, err := FindAllOrganizations()
-	status, err := CodingFromValueSet("endpoint-status")
+	status, err := valuesets.CodingsFrom("endpoint-status")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

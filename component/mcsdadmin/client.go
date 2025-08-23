@@ -1,13 +1,11 @@
 package mcsdadmin
 
 import (
-	"embed"
 	"encoding/json"
 	"net/http"
 	"net/url"
 
 	fhirClient "github.com/SanteonNL/go-fhir-client"
-	"github.com/rs/zerolog/log"
 	fhir "github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -119,25 +117,4 @@ func FindAllEndpoints() ([]fhir.Endpoint, error) {
 	}
 
 	return es, nil
-}
-
-//go:embed valuesets/*
-var setsFS embed.FS
-
-func CodingFromValueSet(setId string) (out []fhir.Coding, err error) {
-	filename := "valuesets/" + setId + ".json"
-	bytes, err := setsFS.ReadFile(filename)
-	if err != nil {
-		log.Warn().Err(err).Msg("Could not load file with values in set")
-		return out, err
-	}
-
-	var codings []fhir.Coding
-	err = json.Unmarshal(bytes, &codings)
-	if err != nil {
-		log.Warn().Err(err).Msg("Invalid values in file")
-		return out, err
-	}
-
-	return codings, nil
 }
