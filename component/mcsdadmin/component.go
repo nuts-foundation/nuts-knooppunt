@@ -226,6 +226,13 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint.PayloadType = []fhir.CodeableConcept{payloadType}
 
+	periodStart := r.PostForm.Get("period-start")
+	periodEnd := r.PostForm.Get("period-end")
+	endpoint.Period = &fhir.Period{
+		Start: &periodStart,
+		End:   &periodEnd,
+	}
+
 	reference := "Organization/" + r.PostForm.Get("managingOrg")
 	refType := "Organization"
 	endpoint.ManagingOrganization = &fhir.Reference{
