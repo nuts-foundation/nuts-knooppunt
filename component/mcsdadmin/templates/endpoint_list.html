@@ -20,7 +20,7 @@
         {{range .}}
         <tr>
             <th scope="row">{{ .Address }}</th>
-            <td>...</td>
+            <td>{{ if .PayloadType }}{{ .PayloadType.Display }}{{end}}</td>
             <td>...</td>
             <td>{{ if .ManagingOrganization }}{{ .ManagingOrganization.Display }}{{end}}</td>
             <td>...</td>

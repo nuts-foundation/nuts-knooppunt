@@ -2,12 +2,11 @@ package mcsdadmin
 
 import (
 	"context"
-	"html/template"
 	"net/http"
 
-	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
-
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -31,31 +30,6 @@ func (c Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-// Template rendering
-
-const templateFolder = "./component/mcsdadmin/templates/"
-
-func renderWithBase(w http.ResponseWriter, name string, data any) {
-	files := []string{
-		templateFolder + "base.html",
-		templateFolder + name,
-	}
-
-	ts, err := template.ParseFiles(files...)
-	if err != nil {
-		log.Print(err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	err = ts.ExecuteTemplate(w, "base", data)
-	if err != nil {
-		log.Print(err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-
-}
-
 // Route handling
 
 func listServices(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +40,7 @@ func listServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	renderWithBase(w, "service_list.html", services)
+	templates.RenderWithBase(w, "service_list.html", services)
 }
 
 func newService(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +57,7 @@ func newService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	renderWithBase(w, "service_edit.html", props)
+	templates.RenderWithBase(w, "service_edit.html", props)
 }
 
 func newServicePost(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +99,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Err(err).Msg("Failed to find all services")
 	}
 
-	renderWithBase(w, "service_list.html", services)
+	templates.RenderWithBase(w, "service_list.html", services)
 }
 
 func listOrganizations(w http.ResponseWriter, r *http.Request) {
@@ -136,12 +110,12 @@ func listOrganizations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	renderWithBase(w, "organization_list.html", organizations)
+	templates.RenderWithBase(w, "organization_list.html", organizations)
 }
 
 func newOrganization(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	renderWithBase(w, "organization_edit.html", nil)
+	templates.RenderWithBase(w, "organization_edit.html", nil)
 }
 
 func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
@@ -168,7 +142,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Err(err).Msg("Failed to find all organizations")
 	}
 
-	renderWithBase(w, "organization_list.html", organizations)
+	templates.RenderWithBase(w, "organization_list.html", organizations)
 }
 
 func listEndpoints(w http.ResponseWriter, r *http.Request) {
@@ -179,7 +153,7 @@ func listEndpoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	renderWithBase(w, "endpoint_list.html", endpoints)
+	templates.RenderWithBase(w, "endpoint_list.html", endpoints)
 }
 
 func newEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -224,7 +198,7 @@ func newEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	renderWithBase(w, "endpoint_edit.html", props)
+	templates.RenderWithBase(w, "endpoint_edit.html", props)
 }
 
 func newEndpointPost(w http.ResponseWriter, r *http.Request) {
@@ -309,17 +283,17 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Err(err).Msg("Failed to find all endpoints")
 	}
 
-	renderWithBase(w, "endpoint_list.html", endpoints)
+	templates.RenderWithBase(w, "endpoint_list.html", endpoints)
 }
 
 func homePage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	renderWithBase(w, "home.html", nil)
+	templates.RenderWithBase(w, "home.html", nil)
 }
 
 func notImplemented(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
-	renderWithBase(w, "home.html", nil)
+	templates.RenderWithBase(w, "home.html", nil)
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {
