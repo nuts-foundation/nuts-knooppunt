@@ -203,16 +203,23 @@ func newEndpoint(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	purposeOfUse, err := valuesets.CodingsFrom("purpose-of-use")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	props := struct {
+		ConnectionTypes []fhir.Coding
 		Organizations   []fhir.Organization
 		PayloadTypes    []fhir.Coding
-		ConnectionTypes []fhir.Coding
+		PurposeOfUse    []fhir.Coding
 		Status          []fhir.Coding
 	}{
+		ConnectionTypes: connectionTypes,
 		Organizations:   organizations,
 		PayloadTypes:    payloadTypes,
-		ConnectionTypes: connectionTypes,
+		PurposeOfUse:    purposeOfUse,
 		Status:          status,
 	}
 
@@ -276,6 +283,18 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Msg("Failed to find referred connection type")
 	}
 	endpoint.ConnectionType = connectionType
+
+	var purposeOfUse fhir.CodeableConcept
+	purposeOfUseId := r.PostForm.Get("purpose-of-use")
+	purposeOfUse, ok = valuesets.CodableFrom("purpose-of-use", purposeOfUseId)
+	if !ok {
+		log.Warn().Msg("Failed to find referred purpose of use")
+	}
+	extension := fhir.Extension{
+		Url:                  "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.PurposeOfUse",
+		ValueCodeableConcept: &purposeOfUse,
+	}
+	endpoint.Extension = append(endpoint.Extension, extension)
 
 	// TODO: Doesn't make sense to me that this status field is an enum not a string
 	//status := r.PostForm.Get("status")
