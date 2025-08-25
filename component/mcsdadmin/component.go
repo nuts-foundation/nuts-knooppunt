@@ -152,8 +152,19 @@ func listEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var epProps []templates.EpListProps
+	for _, ep := range endpoints {
+		epProps = append(epProps, templates.MakeEpListProps(ep))
+	}
+
+	props := struct {
+		Endpoints []templates.EpListProps
+	}{
+		Endpoints: epProps,
+	}
+
 	w.WriteHeader(http.StatusOK)
-	templates.RenderWithBase(w, "endpoint_list.html", endpoints)
+	templates.RenderWithBase(w, "endpoint_list.html", props)
 }
 
 func newEndpoint(w http.ResponseWriter, r *http.Request) {

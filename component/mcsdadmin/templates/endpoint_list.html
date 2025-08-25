@@ -17,14 +17,14 @@
         </tr>
         </thead>
         <tbody>
-        {{range .}}
+        {{range .Endpoints}}
         <tr>
             <th scope="row">{{ .Address }}</th>
-            <td>{{ if .PayloadType }}{{ .PayloadType.Display }}{{end}}</td>
-            <td>...</td>
-            <td>{{ if .ManagingOrganization }}{{ .ManagingOrganization.Display }}{{end}}</td>
-            <td>...</td>
-            <td>...</td>
+            <td>{{ .PayloadType }}</td>
+            <td>{{ .Period }}</td>
+            <td>{{ .ManagingOrg }}</td>
+            <td>{{ .ConnectionType }}</td>
+            <td>{{ .Status }}</td>
         </tr>
         {{end}}
         </tbody>
