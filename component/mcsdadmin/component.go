@@ -184,21 +184,36 @@ func listEndpoints(w http.ResponseWriter, r *http.Request) {
 
 func newEndpoint(w http.ResponseWriter, r *http.Request) {
 	organizations, err := FindAllOrganizations()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	status, err := valuesets.CodingsFrom("endpoint-status")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	payloadTypes, err := valuesets.CodingsFrom("endpoint-payload-type")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	connectionTypes, err := valuesets.CodingsFrom("endpoint-connection-type")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	props := struct {
-		Organizations []fhir.Organization
-		PayloadTypes  []fhir.Coding
-		Status        []fhir.Coding
+		Organizations   []fhir.Organization
+		PayloadTypes    []fhir.Coding
+		ConnectionTypes []fhir.Coding
+		Status          []fhir.Coding
 	}{
-		Organizations: organizations,
-		PayloadTypes:  payloadTypes,
-		Status:        status,
+		Organizations:   organizations,
+		PayloadTypes:    payloadTypes,
+		ConnectionTypes: connectionTypes,
+		Status:          status,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -239,7 +254,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint.Contact = []fhir.ContactPoint{contact}
 
-	reference := "Organization/" + r.PostForm.Get("managingOrg")
+	reference := "Organization/" + r.PostForm.Get("managing-org")
 	refType := "Organization"
 	endpoint.ManagingOrganization = &fhir.Reference{
 		Reference: &reference,
@@ -253,6 +268,14 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	endpoint.ManagingOrganization.Display = managingOrg.Name
+
+	var connectionType fhir.Coding
+	connectionTypeId := r.PostForm.Get("connection-type")
+	connectionType, ok = valuesets.CodingFrom("endpoint-connection-type", connectionTypeId)
+	if !ok {
+		log.Warn().Msg("Failed to find referred connection type")
+	}
+	endpoint.ConnectionType = connectionType
 
 	// TODO: Doesn't make sense to me that this status field is an enum not a string
 	//status := r.PostForm.Get("status")

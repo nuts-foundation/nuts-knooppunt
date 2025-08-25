@@ -27,11 +27,20 @@
         <input id="contact" type="text" name="contact" />
     </div>
     <div class="form-group">
-        <label for="managingOrg">Managing organisation:</label>
-        <select name="managingOrg" id="managingOrg">
+        <label for="managing-org">Managing organisation:</label>
+        <select name="managing-org" id="managing-org">
             <option value="">--Please choose an option--</option>
             {{range .Organizations}} }}
             <option value="{{ .ID }}">{{ .Name }}</option>
+            {{ end }}
+        </select>
+    </div>
+    <div class="form-group">
+        <label for="connection-type">Connection Type:</label>
+        <select name="connection-type" id="connection-type">
+            <option value="">--Please choose an option--</option>
+            {{range .ConnectionTypes }} }}
+            <option value="{{ .Code }}">{{ .Display }}</option>
             {{ end }}
         </select>
     </div>
