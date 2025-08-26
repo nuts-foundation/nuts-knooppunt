@@ -14,20 +14,14 @@
         </tr>
         </thead>
         <tbody>
-        {{range .}}
+        {{range .Organizations}}
         <tr>
             <th scope="row">{{ .Name }}</th>
-            <td>...</td>
-            <td>{{ if .Active }}{{ .Active }}{{end}}</td>
+            <td>{{.Type}}</td>
+            <td>{{ .Active }}</td>
         </tr>
         {{end}}
         </tbody>
-        <tfoot>
-        <tr>
-            <th scope="row" colspan="2">Total</th>
-            <td>...</td>
-        </tr>
-        </tfoot>
     </table>
 </div>
 {{end}}

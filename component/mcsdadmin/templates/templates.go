@@ -43,7 +43,7 @@ type EpListProps struct {
 	Status         string
 }
 
-func FmtCodable(cc fhir.CodeableConcept) string {
+func fmtCodable(cc fhir.CodeableConcept) string {
 	if cc.Text != nil {
 		return *cc.Text
 	}
@@ -57,32 +57,25 @@ func FmtCodable(cc fhir.CodeableConcept) string {
 	return unknownStr
 }
 
-func FmtCoding(cd fhir.Coding) string {
+func fmtCoding(cd fhir.Coding) string {
 	if cd.Display != nil {
 		return *cd.Display
 	}
 	return unknownStr
 }
 
-func FmtPeriod(period fhir.Period) string {
+func fmtPeriod(period fhir.Period) string {
 	return *period.Start + " - " + *period.End
 }
 
-func FmtOrg(org fhir.Organization) string {
-	if org.Name != nil {
-		return *org.Name
-	}
-	return unknownStr
-}
-
-func FmtRef(ref fhir.Reference) string {
+func fmtRef(ref fhir.Reference) string {
 	if ref.Display != nil {
 		return *ref.Display
 	}
 	return unknownStr
 }
 
-func FmtStatus(status fhir.EndpointStatus) string {
+func fmtStatus(status fhir.EndpointStatus) string {
 	switch status {
 	case fhir.EndpointStatusActive:
 		return "Active"
@@ -106,27 +99,65 @@ func MakeEpListProps(ep fhir.Endpoint) (out EpListProps) {
 
 	hasPayload := len(ep.PayloadType) > 0
 	if hasPayload {
-		out.PayloadType = FmtCodable(ep.PayloadType[0])
+		out.PayloadType = fmtCodable(ep.PayloadType[0])
 	} else {
 		out.PayloadType = unknownStr
 	}
 
 	hasPeriod := ep.Period != nil
 	if hasPeriod {
-		out.Period = FmtPeriod(*ep.Period)
+		out.Period = fmtPeriod(*ep.Period)
 	} else {
 		out.Period = unknownStr
 	}
 
 	hasManagingOrg := ep.ManagingOrganization != nil
 	if hasManagingOrg {
-		out.ManagingOrg = FmtRef(*ep.ManagingOrganization)
+		out.ManagingOrg = fmtRef(*ep.ManagingOrganization)
 	} else {
 		out.ManagingOrg = unknownStr
 	}
 
-	out.ConnectionType = FmtCoding(ep.ConnectionType)
-	out.Status = FmtStatus(ep.Status)
+	out.ConnectionType = fmtCoding(ep.ConnectionType)
+	out.Status = fmtStatus(ep.Status)
+
+	return out
+}
+
+func MakeEpListXsProps(eps []fhir.Endpoint) []EpListProps {
+	out := make([]EpListProps, len(eps))
+	for idx, p := range eps {
+		out[idx] = MakeEpListProps(p)
+	}
+	return out
+}
+
+type OrgListProps struct {
+	Name   string
+	Type   string
+	Active string
+}
+
+func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
+	if org.Name != nil {
+		out.Name = *org.Name
+	} else {
+		out.Name = unknownStr
+	}
+
+	if len(org.Type) > 0 {
+		out.Type = fmtCodable(org.Type[0])
+	}
+
+	if org.Active != nil {
+		switch *org.Active {
+		case true:
+			out.Active = "True"
+			out.Active = "False"
+		}
+	} else {
+		out.Active = unknownStr
+	}
 
 	return out
 }

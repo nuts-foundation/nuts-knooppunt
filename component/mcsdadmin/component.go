@@ -103,14 +103,25 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func listOrganizations(w http.ResponseWriter, r *http.Request) {
-	organizations, err := FindAllOrganizations()
+	orgs, err := FindAllOrganizations()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	orgProps := make([]templates.OrgListProps, len(orgs))
+	for idx, org := range orgs {
+		orgProps[idx] = templates.MakeOrgListProps(org)
+	}
+
+	props := struct {
+		Organizations []templates.OrgListProps
+	}{
+		Organizations: orgProps,
+	}
+
 	w.WriteHeader(http.StatusOK)
-	templates.RenderWithBase(w, "organization_list.html", organizations)
+	templates.RenderWithBase(w, "organization_list.html", props)
 }
 
 func newOrganization(w http.ResponseWriter, r *http.Request) {
@@ -152,15 +163,10 @@ func listEndpoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var epProps []templates.EpListProps
-	for _, ep := range endpoints {
-		epProps = append(epProps, templates.MakeEpListProps(ep))
-	}
-
 	props := struct {
 		Endpoints []templates.EpListProps
 	}{
-		Endpoints: epProps,
+		Endpoints: templates.MakeEpListXsProps(endpoints),
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -294,7 +300,13 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Err(err).Msg("Failed to find all endpoints")
 	}
 
-	templates.RenderWithBase(w, "endpoint_list.html", endpoints)
+	props := struct {
+		Endpoints []templates.EpListProps
+	}{
+		Endpoints: templates.MakeEpListXsProps(endpoints),
+	}
+
+	templates.RenderWithBase(w, "endpoint_list.html", props)
 }
 
 func homePage(w http.ResponseWriter, r *http.Request) {
