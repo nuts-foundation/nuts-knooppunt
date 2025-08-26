@@ -84,3 +84,20 @@ func CodableFrom(setId string, codeId string) (out fhir.CodeableConcept, ok bool
 	out.Text = coding.Display
 	return out, true
 }
+
+func StatusFrom(code string) (out fhir.EndpointStatus, ok bool) {
+	switch code {
+	case "active":
+		return fhir.EndpointStatusActive, true
+	case "suspended":
+		return fhir.EndpointStatusSuspended, true
+	case "error":
+		return fhir.EndpointStatusError, true
+	case "off":
+		return fhir.EndpointStatusOff, true
+	case "entered-in-error":
+		return fhir.EndpointStatusEnteredInError, true
+	default:
+		return fhir.EndpointStatusActive, false
+	}
+}

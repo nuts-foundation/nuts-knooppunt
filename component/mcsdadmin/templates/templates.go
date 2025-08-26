@@ -147,6 +147,8 @@ func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
 
 	if len(org.Type) > 0 {
 		out.Type = fmtCodable(org.Type[0])
+	} else {
+		out.Type = unknownStr
 	}
 
 	if org.Active != nil {
@@ -159,5 +161,13 @@ func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
 		out.Active = unknownStr
 	}
 
+	return out
+}
+
+func MakeOrgListXsProps(orgs []fhir.Organization) []OrgListProps {
+	out := make([]OrgListProps, len(orgs))
+	for idx, op := range orgs {
+		out[idx] = MakeOrgListProps(op)
+	}
 	return out
 }

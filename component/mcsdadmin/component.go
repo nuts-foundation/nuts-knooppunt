@@ -109,15 +109,10 @@ func listOrganizations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgProps := make([]tmpls.OrgListProps, len(orgs))
-	for idx, org := range orgs {
-		orgProps[idx] = tmpls.MakeOrgListProps(org)
-	}
-
 	props := struct {
 		Organizations []tmpls.OrgListProps
 	}{
-		Organizations: orgProps,
+		Organizations: tmpls.MakeOrgListXsProps(orgs),
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -148,12 +143,18 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	organizations, err := FindAllOrganizations()
+	orgs, err := FindAllOrganizations()
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to find all organizations")
 	}
 
-	tmpls.RenderWithBase(w, "organization_list.html", organizations)
+	props := struct {
+		Organizations []tmpls.OrgListProps
+	}{
+		Organizations: tmpls.MakeOrgListXsProps(orgs),
+	}
+
+	tmpls.RenderWithBase(w, "organization_list.html", props)
 }
 
 func listEndpoints(w http.ResponseWriter, r *http.Request) {
@@ -234,62 +235,78 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	var payloadType fhir.CodeableConcept
 	payloadTypeId := r.PostForm.Get("payload-type")
 	payloadType, ok := valuesets.CodableFrom("endpoint-payload-type", payloadTypeId)
-	if !ok {
+	if ok {
+		endpoint.PayloadType = []fhir.CodeableConcept{payloadType}
+	} else {
 		log.Warn().Msg("Failed to find referred payload type")
 	}
-	endpoint.PayloadType = []fhir.CodeableConcept{payloadType}
 
 	periodStart := r.PostForm.Get("period-start")
 	periodEnd := r.PostForm.Get("period-end")
-	endpoint.Period = &fhir.Period{
-		Start: &periodStart,
-		End:   &periodEnd,
+	if (len(periodStart) > 0) && (len(periodEnd) > 0) {
+		endpoint.Period = &fhir.Period{
+			Start: &periodStart,
+			End:   &periodEnd,
+		}
+	} else {
+		log.Warn().Msg("Missing period")
 	}
 
 	contactValue := r.PostForm.Get("contact")
-	contact := fhir.ContactPoint{
-		Value: &contactValue,
-	}
-	endpoint.Contact = []fhir.ContactPoint{contact}
-
-	reference := "Organization/" + r.PostForm.Get("managing-org")
-	refType := "Organization"
-	endpoint.ManagingOrganization = &fhir.Reference{
-		Reference: &reference,
-		Type:      &refType,
+	if len(contactValue) > 0 {
+		contact := fhir.ContactPoint{
+			Value: &contactValue,
+		}
+		endpoint.Contact = []fhir.ContactPoint{contact}
+	} else {
+		log.Warn().Msg("Missing contact value")
 	}
 
-	var managingOrg fhir.Organization
-	err = client.Read(reference, &managingOrg)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to find referred organisation")
-		return
+	orgFormStr := r.PostForm.Get("managing-org")
+	if len(orgFormStr) > 0 {
+		var managingOrg fhir.Organization
+		reference := "Organization/" + orgFormStr
+		refType := "Organization"
+		endpoint.ManagingOrganization = &fhir.Reference{
+			Reference: &reference,
+			Type:      &refType,
+		}
+		err = client.Read(reference, &managingOrg)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to find referred organisation")
+			return
+		}
+		endpoint.ManagingOrganization.Display = managingOrg.Name
+	} else {
+		log.Warn().Msg("Missing organisation value")
 	}
-	endpoint.ManagingOrganization.Display = managingOrg.Name
 
 	var connectionType fhir.Coding
 	connectionTypeId := r.PostForm.Get("connection-type")
 	connectionType, ok = valuesets.CodingFrom("endpoint-connection-type", connectionTypeId)
-	if !ok {
+	if ok {
+		endpoint.ConnectionType = connectionType
+	} else {
 		log.Warn().Msg("Failed to find referred connection type")
 	}
-	endpoint.ConnectionType = connectionType
 
-	var purposeOfUse fhir.CodeableConcept
 	purposeOfUseId := r.PostForm.Get("purpose-of-use")
-	purposeOfUse, ok = valuesets.CodableFrom("purpose-of-use", purposeOfUseId)
-	if !ok {
+	purposeOfUse, ok := valuesets.CodableFrom("purpose-of-use", purposeOfUseId)
+	if ok {
+		extension := fhir.Extension{
+			Url:                  "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.PurposeOfUse",
+			ValueCodeableConcept: &purposeOfUse,
+		}
+		endpoint.Extension = append(endpoint.Extension, extension)
+	} else {
 		log.Warn().Msg("Failed to find referred purpose of use")
 	}
-	extension := fhir.Extension{
-		Url:                  "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.PurposeOfUse",
-		ValueCodeableConcept: &purposeOfUse,
-	}
-	endpoint.Extension = append(endpoint.Extension, extension)
 
-	// TODO: Doesn't make sense to me that this status field is an enum not a string
-	//status := r.PostForm.Get("status")
-	//endpoint.Status = &status
+	status := r.PostForm.Get("status")
+	endpoint.Status, ok = valuesets.StatusFrom(status)
+	if !ok {
+		log.Warn().Msg("Failed to determine status, default to active")
+	}
 
 	_, err = CreateEndpoint(endpoint)
 
