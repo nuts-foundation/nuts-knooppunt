@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
-	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
+	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -40,7 +40,7 @@ func listServices(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	templates.RenderWithBase(w, "service_list.html", services)
+	tmpls.RenderWithBase(w, "service_list.html", services)
 }
 
 func newService(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +57,7 @@ func newService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	templates.RenderWithBase(w, "service_edit.html", props)
+	tmpls.RenderWithBase(w, "service_edit.html", props)
 }
 
 func newServicePost(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +99,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Err(err).Msg("Failed to find all services")
 	}
 
-	templates.RenderWithBase(w, "service_list.html", services)
+	tmpls.RenderWithBase(w, "service_list.html", services)
 }
 
 func listOrganizations(w http.ResponseWriter, r *http.Request) {
@@ -109,24 +109,24 @@ func listOrganizations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orgProps := make([]templates.OrgListProps, len(orgs))
+	orgProps := make([]tmpls.OrgListProps, len(orgs))
 	for idx, org := range orgs {
-		orgProps[idx] = templates.MakeOrgListProps(org)
+		orgProps[idx] = tmpls.MakeOrgListProps(org)
 	}
 
 	props := struct {
-		Organizations []templates.OrgListProps
+		Organizations []tmpls.OrgListProps
 	}{
 		Organizations: orgProps,
 	}
 
 	w.WriteHeader(http.StatusOK)
-	templates.RenderWithBase(w, "organization_list.html", props)
+	tmpls.RenderWithBase(w, "organization_list.html", props)
 }
 
 func newOrganization(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	templates.RenderWithBase(w, "organization_edit.html", nil)
+	tmpls.RenderWithBase(w, "organization_edit.html", nil)
 }
 
 func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
@@ -153,7 +153,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Err(err).Msg("Failed to find all organizations")
 	}
 
-	templates.RenderWithBase(w, "organization_list.html", organizations)
+	tmpls.RenderWithBase(w, "organization_list.html", organizations)
 }
 
 func listEndpoints(w http.ResponseWriter, r *http.Request) {
@@ -164,13 +164,13 @@ func listEndpoints(w http.ResponseWriter, r *http.Request) {
 	}
 
 	props := struct {
-		Endpoints []templates.EpListProps
+		Endpoints []tmpls.EpListProps
 	}{
-		Endpoints: templates.MakeEpListXsProps(endpoints),
+		Endpoints: tmpls.MakeEpListXsProps(endpoints),
 	}
 
 	w.WriteHeader(http.StatusOK)
-	templates.RenderWithBase(w, "endpoint_list.html", props)
+	tmpls.RenderWithBase(w, "endpoint_list.html", props)
 }
 
 func newEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -215,7 +215,7 @@ func newEndpoint(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	templates.RenderWithBase(w, "endpoint_edit.html", props)
+	tmpls.RenderWithBase(w, "endpoint_edit.html", props)
 }
 
 func newEndpointPost(w http.ResponseWriter, r *http.Request) {
@@ -301,22 +301,22 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	props := struct {
-		Endpoints []templates.EpListProps
+		Endpoints []tmpls.EpListProps
 	}{
-		Endpoints: templates.MakeEpListXsProps(endpoints),
+		Endpoints: tmpls.MakeEpListXsProps(endpoints),
 	}
 
-	templates.RenderWithBase(w, "endpoint_list.html", props)
+	tmpls.RenderWithBase(w, "endpoint_list.html", props)
 }
 
 func homePage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	templates.RenderWithBase(w, "home.html", nil)
+	tmpls.RenderWithBase(w, "home.html", nil)
 }
 
 func notImplemented(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
-	templates.RenderWithBase(w, "home.html", nil)
+	tmpls.RenderWithBase(w, "home.html", nil)
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {
