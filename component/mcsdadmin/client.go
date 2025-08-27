@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	fhirClient "github.com/SanteonNL/go-fhir-client"
+	"github.com/rs/zerolog/log"
 	fhir "github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -16,11 +17,21 @@ var baseURL = url.URL{
 	Path:   "/fhir/DEFAULT",
 }
 
-const accept = "Accept: application/fhir+json;q=1.0, application/json+fhir;q=0.9"
-const contentType = "application/fhir+json; charset=UTF-8"
+func Config() *fhirClient.Config {
+	config := fhirClient.DefaultConfig()
+	config.DefaultOptions = []fhirClient.Option{
+		fhirClient.RequestHeaders(map[string][]string{
+			"Cache-Control": {"no-cache"},
+		}),
+	}
+	config.Non2xxStatusHandler = func(response *http.Response, responseBody []byte) {
+		log.Debug().Msgf("Non-2xx status code from FHIR server (%s %s, status=%d), content: %s", response.Request.Method, response.Request.URL, response.StatusCode, string(responseBody))
+	}
+	return &config
+}
 
 var httpClient = &http.Client{}
-var client = fhirClient.New(&baseURL, httpClient, nil)
+var client = fhirClient.New(&baseURL, httpClient, Config())
 
 type FhirData struct {
 	Id string `json:"id"`
@@ -44,13 +55,6 @@ func CreateEndpoint(service fhir.Endpoint) (out fhir.Endpoint, err error) {
 func findAll(resourceType string) (fhir.Bundle, error) {
 	var result fhir.Bundle
 	err := client.Search(resourceType, url.Values{}, &result, nil)
-
-	// I don't think it is possible to set custom headers in the fhir client
-	// We need to set the no-cache header to read our own writes and make the app responsive
-	// TODO: Make it possible in the fhir client to pass headers
-	//
-	//req.Header.Add("Accept", accept)
-	//req.Header.Add("Cache-Control", "no-cache")
 
 	if err != nil {
 		return fhir.Bundle{}, err
