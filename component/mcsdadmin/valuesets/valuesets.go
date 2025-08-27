@@ -12,6 +12,7 @@ var codingSystemIndex = map[string]string{
 	"endpoint-status":          "http://hl7.org/fhir/endpoint-status",
 	"endpoint-payload-type":    "http://terminology.hl7.org/CodeSystem/endpoint-payload-type",
 	"endpoint-connection-type": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
+	"organization-type":        "http://terminology.hl7.org/CodeSystem/organization-type",
 	"purpose-of-use":           "http://terminology.hl7.org/CodeSystem/v3-ActReason",
 }
 

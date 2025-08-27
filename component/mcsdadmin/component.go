@@ -121,7 +121,22 @@ func listOrganizations(w http.ResponseWriter, r *http.Request) {
 
 func newOrganization(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	tmpls.RenderWithBase(w, "organization_edit.html", nil)
+
+	types, err := valuesets.CodingsFrom("organization-type")
+	if err != nil {
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	props := struct {
+		Types []fhir.Coding
+	}{
+		Types: types,
+	}
+
+	tmpls.RenderWithBase(w, "organization_edit.html", props)
 }
 
 func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
