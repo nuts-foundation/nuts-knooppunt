@@ -151,6 +151,13 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	var org fhir.Organization
 	name := r.PostForm.Get("name")
 	org.Name = &name
+
+	orgTypeCode := r.PostForm.Get("type")
+	orgType, ok := valuesets.CodableFrom("organization-type", orgTypeCode)
+	if ok {
+		org.Type = []fhir.CodeableConcept{orgType}
+	}
+
 	active := r.PostForm.Get("active") == "true"
 	org.Active = &active
 
