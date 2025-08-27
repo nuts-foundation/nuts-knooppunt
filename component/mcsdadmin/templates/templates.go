@@ -155,6 +155,7 @@ func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
 		switch *org.Active {
 		case true:
 			out.Active = "True"
+		case false:
 			out.Active = "False"
 		}
 	} else {
