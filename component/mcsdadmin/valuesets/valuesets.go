@@ -14,6 +14,7 @@ var codingSystemIndex = map[string]string{
 	"endpoint-connection-type": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
 	"organization-type":        "http://terminology.hl7.org/CodeSystem/organization-type",
 	"purpose-of-use":           "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+	"service-type":             "http://terminology.hl7.org/CodeSystem/service-type",
 }
 
 var codingIndex = make(map[string]map[string]fhir.Coding)

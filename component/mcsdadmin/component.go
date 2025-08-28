@@ -39,8 +39,14 @@ func listServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	props := struct {
+		Services []tmpls.ServiceListProps
+	}{
+		Services: tmpls.MakeServiceListXsProps(services),
+	}
+
 	w.WriteHeader(http.StatusOK)
-	tmpls.RenderWithBase(w, "service_list.html", services)
+	tmpls.RenderWithBase(w, "service_list.html", props)
 }
 
 func newService(w http.ResponseWriter, r *http.Request) {
@@ -50,10 +56,17 @@ func newService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	types, err := valuesets.CodingsFrom("service-type")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+
 	props := struct {
+		Types         []fhir.Coding
 		Organizations []fhir.Organization
 	}{
 		Organizations: organizations,
+		Types:         types,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -74,6 +87,12 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	service.Name = &name
 	active := r.PostForm.Get("active") == "true"
 	service.Active = &active
+
+	typeCode := r.PostForm.Get("type")
+	serviceType, ok := valuesets.CodableFrom("service-type", typeCode)
+	if ok {
+		service.Type = []fhir.CodeableConcept{serviceType}
+	}
 
 	reference := "Organization/" + r.PostForm.Get("providedById")
 	refType := "Organization"
@@ -99,7 +118,13 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Err(err).Msg("Failed to find all services")
 	}
 
-	tmpls.RenderWithBase(w, "service_list.html", services)
+	props := struct {
+		Services []tmpls.ServiceListProps
+	}{
+		Services: tmpls.MakeServiceListXsProps(services),
+	}
+
+	tmpls.RenderWithBase(w, "service_list.html", props)
 }
 
 func listOrganizations(w http.ResponseWriter, r *http.Request) {

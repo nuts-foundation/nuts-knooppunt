@@ -15,12 +15,12 @@
         </tr>
         </thead>
         <tbody>
-        {{range .}}
+        {{range .Services }}
         <tr>
             <th scope="row">{{ .Name }}</th>
-            <td>...</td>
-            <td>{{ if .Active }}{{ .Active }}{{end}}</td>
-            <td>{{ if .ProvidedBy }}{{ .ProvidedBy.Display }}{{end}}</td>
+            <td>{{ .Type }}</td>
+            <td>{{ .Active }}</td>
+            <td>{{ .ProvidedBy }}</td>
         </tr>
         {{end}}
         </tbody>

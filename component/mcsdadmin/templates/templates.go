@@ -172,3 +172,56 @@ func MakeOrgListXsProps(orgs []fhir.Organization) []OrgListProps {
 	}
 	return out
 }
+
+type ServiceListProps struct {
+	Name       string
+	Type       string
+	Active     string
+	ProvidedBy string
+}
+
+func MakeServiceListProps(service fhir.HealthcareService) (out ServiceListProps) {
+	if service.Name != nil {
+		out.Name = *service.Name
+	} else {
+		out.Name = unknownStr
+	}
+
+	if len(service.Type) > 0 {
+		out.Type = fmtCodable(service.Type[0])
+	} else {
+		out.Type = unknownStr
+	}
+
+	if service.Active != nil {
+		switch *service.Active {
+		case true:
+			out.Active = "True"
+		case false:
+			out.Active = "False"
+		}
+	} else {
+		out.Active = unknownStr
+	}
+
+	if service.ProvidedBy != nil {
+		ref := *service.ProvidedBy
+		if ref.Display != nil {
+			out.ProvidedBy = *ref.Display
+		} else {
+			out.ProvidedBy = unknownStr
+		}
+	} else {
+		out.ProvidedBy = unknownStr
+	}
+
+	return out
+}
+
+func MakeServiceListXsProps(services []fhir.HealthcareService) []ServiceListProps {
+	out := make([]ServiceListProps, len(services))
+	for idx, ser := range services {
+		out[idx] = MakeServiceListProps(ser)
+	}
+	return out
+}
