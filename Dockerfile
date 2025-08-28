@@ -11,6 +11,8 @@ ENV GOPATH=/
 
 COPY go.mod .
 COPY go.sum .
+COPY ./test/testdata/go.mod test/testdata/
+COPY ./test/testdata/go.sum test/testdata/
 RUN go mod download && go mod verify
 COPY . .
 

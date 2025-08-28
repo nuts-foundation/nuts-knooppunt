@@ -24,6 +24,7 @@ func Test_Main(t *testing.T) {
 	}
 	publicURL := "http://localhost:8080"
 	privateURL := "http://localhost:8081"
+
 	t.Run("check if Nuts node is running", func(t *testing.T) {
 		subjectID, err := createNutsSubject(privateURL)
 		require.NoError(t, err)
@@ -53,13 +54,25 @@ func Test_Main(t *testing.T) {
 }
 
 func waitForUp(t *testing.T) bool {
-	// Wait for /status to be available on http://localhost:8080/status
+	// Wait for both knooppunt and the embedded nuts node to be up
 	for i := 0; i < 10; i++ {
-		resp, err := http.Get("http://localhost:8081/status")
-		if err == nil && resp.StatusCode == http.StatusOK {
+		retry := false
+
+		knpt_resp, knpt_err := http.Get("http://localhost:8081/status")
+		nuts_resp, nuts_err := http.Get("http://localhost:8081/nuts/status")
+
+		if knpt_err != nil || knpt_resp.StatusCode != http.StatusOK {
+			t.Logf("Waiting for knooppunt endpoint to be available (%d/10)", i+1)
+			retry = true
+		} else if nuts_err != nil || nuts_resp.StatusCode != http.StatusOK {
+			t.Logf("Waiting for nuts endpoint to be available (%d/10)", i+1)
+			retry = true
+		}
+
+		if !retry {
 			break
 		}
-		t.Logf("Waiting for status endpoint to be available (%d/10)", i+1)
+
 		if i < 9 {
 			time.Sleep(1 * time.Second)
 		} else {

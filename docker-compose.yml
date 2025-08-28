@@ -11,9 +11,11 @@ services:
     depends_on:
       knooppunt:
         condition: service_healthy
+      hapi-fhir-healthcheck:
+        condition: service_completed_successfully
     volumes:
-      - ./config/init_tests/main.go:/app/main.go:ro
-    command: go run /app/main.go http://knooppunt:8081
+      - ./test/testdata:/app/:ro
+    command: /bin/sh -c "cd /app && go run main.go http://knooppunt:8081 http://hapi-fhir:8080/fhir"
 
   # PostgreSQL Database
   postgres:
@@ -34,8 +36,6 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
-    networks:
-      - nuts-knooppunt
 
   # HAPI FHIR Server
   hapi-fhir:
@@ -57,14 +57,13 @@ services:
       spring.datasource.driverClassName: org.postgresql.Driver
       spring.jpa.properties.hibernate.dialect: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect"
       hapi.fhir.server_address: http://localhost:7050/fhir
+      hapi.fhir.version: R4
       # Prevents encoding of the pipe char in queries
       server.tomcat.relaxed-query-chars: "|"
       # should be an ADR? How does this behave?
       hapi.fhir.allow_cascading_deletes: true
       # Lets the server generate UUIDs for resources instead of integers
       hapi.fhir.server_id_strategy: UUID
-      # enables the partitioning feature
-      hapi.fhir.partitioning.request_tenant_partitioning_mode: true
 
       #
       # Local development properties (not to be used when deploying to test/production)
@@ -89,14 +88,19 @@ services:
       hapi.fhir.tester.orga.server_address: http://localhost:8080/fhir/OrgA
       hapi.fhir.tester.orga.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.orga.fhir_version: R4
+
+      # Enable partitioning and allow string tenant identifiers
+      hapi.fhir.partitioning.allow_references_across_partitions: false
     restart: unless-stopped
-    networks:
-      - nuts-knooppunt
+  hapi-fhir-healthcheck:
+    image: curlimages/curl:7.87.0
+    depends_on:
+      - hapi-fhir
+    entrypoint: [ "sh", "-c", "echo 'Starting fhirstore healthcheck...'; while ! curl -s -f http://hapi-fhir:8080/fhir/DEFAULT/Task > /dev/null; do echo 'Waiting for HAPI FHIR to be ready...'; sleep 5; done; echo 'HAPI FHIR is up and running.'" ]
+    # Ensure the container exits successfully after the check
+    restart: "no"
 
 volumes:
   postgres-data:
   hapi-data:
 
-networks:
-  nuts-knooppunt:
-    driver: bridge

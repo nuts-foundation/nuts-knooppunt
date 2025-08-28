@@ -5,20 +5,30 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		panic("Usage: " + os.Args[0] + " <internal API base path>")
+	if len(os.Args) < 3 {
+		panic("Usage: " + os.Args[0] + " <internal API base path> <HAPI FHIR multitenant base URL>")
 	}
 	internalAPI := os.Args[1]
+	hapiBaseURL, _ := url.Parse(os.Args[2])
 	tenantName := "orgA"
 	if err := createTenant(internalAPI, tenantName); err != nil {
 		panic("Unable to create tenant: " + err.Error())
 	}
 	println("Created tenant:", tenantName)
+
+	println("Loading FHIR testdata into HAPI...")
+	if _, err := vectors.Load(hapiBaseURL); err != nil {
+		panic("Unable to load testdata: " + err.Error())
+	}
+
 }
 
 func createTenant(internalAPI string, subjectID string) error {
