@@ -29,12 +29,12 @@ func Start(t *testing.T) Details {
 
 	knooppuntInternalURL := startKnooppunt(t, cmd.Config{
 		MCSD: mcsd.Config{
-			RootDirectories: map[string]mcsd.DirectoryConfig{
+			RootAdminDirectories: map[string]mcsd.DirectoryConfig{
 				"lrza": {
 					FHIRBaseURL: testData.LRZa.FHIRBaseURL.String(),
 				},
 			},
-			LocalDirectory: mcsd.DirectoryConfig{
+			QueryDirectory: mcsd.DirectoryConfig{
 				FHIRBaseURL: testData.Knooppunt.MCSD.CacheFHIRBaseURL.String(),
 			},
 		},

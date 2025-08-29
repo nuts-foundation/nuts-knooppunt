@@ -7,24 +7,44 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
+	"sync"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 var _ component.Lifecycle = &Component{}
 
+var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
+var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService"}
+
+// Component implements a mCSD Update Client, which synchronizes mCSD FHIR resources from remote mCSD Directories to a local mCSD Directory for querying.
+// It is configured with a root mCSD Directory, which is used to discover organizations and their mCSD Directory endpoints.
+// Organizations refer to Endpoints through Organization.endpoint references.
+// Synchronization is a 2-step process:
+// 1. Query the root mCSD Directory for Organization resources and their associated Endpoint resources of type 'mcsd-directory-endpoint'.
+// 2. For each discovered mCSD Directory Endpoint, query the remote mCSD Directory for its resources and copy them to the local mCSD Query Directory.
+//   - The following resource types are synchronized: Organization, Endpoint, Location, HealthcareService
+//   - An organization's mCSD Directory may only return Organization resources that:
+//   - exist in the root mCSD Directory (link by identifier, name must be the same)
+//   - have the same mcsd-directory-endpoint as the directory being queried
+//   - These are mitigating measures to prevent an attacker to spoof another care organization.
 type Component struct {
 	config       Config
 	fhirClientFn func(baseURL *url.URL) fhirclient.Client
+
+	adminDirectories    []administrationDirectory
+	adminDirectoriesMux *sync.RWMutex
 }
 
 type Config struct {
-	RootDirectories map[string]DirectoryConfig `json:"roots"`
-	LocalDirectory  DirectoryConfig            `json:"local"`
+	RootAdminDirectories map[string]DirectoryConfig `json:"roots"`
+	QueryDirectory       DirectoryConfig            `json:"query"`
 }
 
 type DirectoryConfig struct {
@@ -32,6 +52,12 @@ type DirectoryConfig struct {
 }
 
 type UpdateReport map[string]DirectoryUpdateReport
+
+type administrationDirectory struct {
+	fhirBaseURL   string
+	resourceTypes []string
+	discover      bool
+}
 
 type DirectoryUpdateReport struct {
 	CountCreated int      `json:"created"`
@@ -42,12 +68,17 @@ type DirectoryUpdateReport struct {
 }
 
 func New(config Config) *Component {
-	return &Component{
+	result := &Component{
 		config: config,
 		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
 			return fhirclient.New(baseURL, http.DefaultClient, nil)
 		},
+		adminDirectoriesMux: &sync.RWMutex{},
 	}
+	for _, rootDirectory := range config.RootAdminDirectories {
+		result.registerAdministrationDirectory(rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true)
+	}
+	return result
 }
 
 func (c Component) Start() error {
@@ -73,28 +104,44 @@ func (c Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) {
 	})
 }
 
+func (c Component) registerAdministrationDirectory(fhirBaseURL string, resourceTypes []string, discover bool) {
+	c.adminDirectoriesMux.Lock()
+	defer c.adminDirectoriesMux.Unlock()
+	exists := slices.ContainsFunc(c.adminDirectories, func(directory administrationDirectory) bool {
+		return directory.fhirBaseURL == fhirBaseURL
+	})
+	if exists {
+		return
+	}
+	c.adminDirectories = append(c.adminDirectories, administrationDirectory{
+		resourceTypes: resourceTypes,
+		fhirBaseURL:   fhirBaseURL,
+		discover:      discover,
+	})
+}
+
 func (c Component) update(ctx context.Context) (UpdateReport, error) {
 	result := make(UpdateReport)
-	for _, root := range c.config.RootDirectories {
-		report, err := c.updateFromDirectory(ctx, root.FHIRBaseURL, []string{"Organization", "Endpoint"})
+	for _, adminDirectory := range c.adminDirectories {
+		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover)
 		if err != nil {
-			log.Ctx(ctx).Err(err).Str("directory", root.FHIRBaseURL).Msg("mCSD root directory update failed")
+			log.Ctx(ctx).Err(err).Str("directory", adminDirectory.fhirBaseURL).Msg("mCSD Directory update failed")
 			report.Error = errors.Join(err, report.Error)
 		}
-		result[root.FHIRBaseURL] = report
+		result[adminDirectory.fhirBaseURL] = report
 
 	}
 	return result, nil
 }
 
-func (c Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string) (DirectoryUpdateReport, error) {
+func (c Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool) (DirectoryUpdateReport, error) {
 	remoteDirFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
 	}
 	remoteDirFHIRClient := c.fhirClientFn(remoteDirFHIRBaseURL)
 
-	localDirFHIRBaseURL, err := url.Parse(c.config.LocalDirectory.FHIRBaseURL)
+	localDirFHIRBaseURL, err := url.Parse(c.config.QueryDirectory.FHIRBaseURL)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
 	}
@@ -112,19 +159,38 @@ func (c Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw strin
 		Type:  fhir.BundleTypeTransaction,
 		Entry: make([]fhir.BundleEntry, 0, len(bundle.Entry)),
 	}
-	warnings, err := buildUpdateTransaction(ctx, &tx, bundle.Entry, allowedResourceTypes)
-	if err != nil {
-		return DirectoryUpdateReport{}, fmt.Errorf("failed to build update transaction: %w", err)
+	// Process result
+	var report DirectoryUpdateReport
+	for i, entry := range bundle.Entry {
+		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes)
+		if err != nil {
+			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
+			continue
+		}
+		if allowDiscovery && resourceType == "Endpoint" {
+			var endpoint fhir.Endpoint
+			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
+				report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to unmarshal Endpoint resource: %s", i, err.Error()))
+				continue
+			}
+			if coding.EqualsCode(endpoint.ConnectionType, coding.MCSDConnectionTypeSystem, coding.MCSDConnectionTypeDirectoryCode) {
+				if endpoint.Address == "" {
+					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: skipping mCSD Directory Endpoint with empty address (id=%s)", i, *endpoint.Id))
+				} else {
+					c.registerAdministrationDirectory(endpoint.Address, directoryResourceTypes, false)
+				}
+			}
+		}
 	}
+	if len(tx.Entry) == 0 {
+		return report, nil
+	}
+
 	var txResult fhir.Bundle
 	if err := localDirFHIRClient.CreateWithContext(ctx, tx, &txResult, fhirclient.AtPath("/")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("failed to apply mCSD update to local directory: %w", err)
 	}
 
-	// Process result
-	report := DirectoryUpdateReport{
-		Warnings: warnings,
-	}
 	for _, entry := range txResult.Entry {
 		if entry.Response == nil {
 			log.Ctx(ctx).Warn().Msgf("Skipping entry with no response: %v", entry)

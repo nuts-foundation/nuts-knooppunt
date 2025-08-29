@@ -29,26 +29,24 @@ func TestComponent_update(t *testing.T) {
 	rootDirServer := httptest.NewServer(rootDirMux)
 
 	localClient := &test.StubFHIRClient{}
-	component := Component{
-		config: Config{
-			RootDirectories: map[string]DirectoryConfig{
-				"rootDir": {
-					FHIRBaseURL: rootDirServer.URL,
-				},
-			},
-			LocalDirectory: DirectoryConfig{
-				FHIRBaseURL: "http://example.com/local/fhir",
+	component := New(Config{
+		RootAdminDirectories: map[string]DirectoryConfig{
+			"rootDir": {
+				FHIRBaseURL: rootDirServer.URL,
 			},
 		},
-		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
-			if baseURL.String() == rootDirServer.URL {
-				return fhirclient.New(baseURL, http.DefaultClient, nil)
-			}
-			if baseURL.String() == "http://example.com/local/fhir" {
-				return localClient
-			}
-			panic("unknown base URL: " + baseURL.String())
+		QueryDirectory: DirectoryConfig{
+			FHIRBaseURL: "http://example.com/local/fhir",
 		},
+	})
+	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+		if baseURL.String() == rootDirServer.URL {
+			return fhirclient.New(baseURL, http.DefaultClient, nil)
+		}
+		if baseURL.String() == "http://example.com/local/fhir" {
+			return localClient
+		}
+		panic("unknown base URL: " + baseURL.String())
 	}
 	ctx := context.Background()
 
