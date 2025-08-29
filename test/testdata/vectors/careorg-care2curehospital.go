@@ -40,3 +40,23 @@ func Care2CureHospitalRootEndpoints() []fhir.Endpoint {
 		},
 	}
 }
+
+func Care2CureHospitalAdminEndpoints() []fhir.Endpoint {
+	return []fhir.Endpoint{
+		{
+			Id:      toPtr("bce8a799-e6ba-4c06-8a1c-bc052f01a636"),
+			Address: "https://example.com/care2curehospital/fhir",
+			Meta: &fhir.Meta{
+				Profile: []string{"https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"},
+			},
+			Status: fhir.EndpointStatusActive,
+			ConnectionType: fhir.Coding{
+				System: toPtr("http://fhir.nl/fhir/NamingSystem/endpoint-connection-type"),
+				Code:   toPtr("fhir"),
+			},
+			Period: &fhir.Period{
+				Start: toPtr("2025-01-02T00:00:00Z"),
+			},
+		},
+	}
+}

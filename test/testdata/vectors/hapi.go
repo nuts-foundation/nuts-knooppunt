@@ -2,6 +2,7 @@ package vectors
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -16,6 +17,10 @@ type HAPITenant struct {
 
 func (h HAPITenant) BaseURL(hapiServerURL *url.URL) *url.URL {
 	return hapiServerURL.JoinPath(h.Name)
+}
+
+func (h HAPITenant) FHIRClient(hapiServerURL *url.URL) fhirclient.Client {
+	return fhirclient.New(h.BaseURL(hapiServerURL), http.DefaultClient, nil)
 }
 
 func CreateHAPITenant(ctx context.Context, details HAPITenant, fhirClient fhirclient.Client) error {

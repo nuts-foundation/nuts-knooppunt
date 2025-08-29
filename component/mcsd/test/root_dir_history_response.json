@@ -159,7 +159,7 @@
         "period": {
           "start": "2025-01-01"
         },
-        "address": "https://directory1.example.org"
+        "address": "{{ORG1_DIR_BASEURL}}"
       },
       "request": {
         "method": "POST",
