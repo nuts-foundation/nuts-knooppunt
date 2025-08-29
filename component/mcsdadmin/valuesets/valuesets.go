@@ -9,9 +9,12 @@ import (
 )
 
 var codingSystemIndex = map[string]string{
-	"endpoint-status":          "http://hl7.org/fhir/endpoint-status",
-	"endpoint-payload-type":    "http://terminology.hl7.org/CodeSystem/endpoint-payload-type",
 	"endpoint-connection-type": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
+	"endpoint-payload-type":    "http://terminology.hl7.org/CodeSystem/endpoint-payload-type",
+	"endpoint-status":          "http://hl7.org/fhir/endpoint-status",
+	"location-physical-type":   "http://terminology.hl7.org/CodeSystem/location-physical-type",
+	"location-status":          "http://hl7.org/fhir/location-status",
+	"location-type":            "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
 	"organization-type":        "http://terminology.hl7.org/CodeSystem/organization-type",
 	"purpose-of-use":           "http://terminology.hl7.org/CodeSystem/v3-ActReason",
 	"service-type":             "http://terminology.hl7.org/CodeSystem/service-type",

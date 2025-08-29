@@ -1,0 +1,17 @@
+[
+  {
+    "code": "active",
+    "display": "Active",
+    "definition": "The location is operational."
+  },
+  {
+    "code": "suspended",
+    "display": "Suspended",
+    "definition": "The location is temporarily closed."
+  },
+  {
+    "code": "inactive",
+    "display": "Inactive",
+    "definition": "The location is no longer used."
+  }
+]

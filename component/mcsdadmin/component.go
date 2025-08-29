@@ -373,6 +373,37 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	tmpls.RenderWithBase(w, "endpoint_list.html", props)
 }
 
+func newLocation(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+
+	locationTypes, err := valuesets.CodingsFrom("location-type")
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to find location types")
+	}
+
+	physicaltypes, err := valuesets.CodingsFrom("location-physical-type")
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to find physical location types")
+	}
+
+	status, err := valuesets.CodingsFrom("location-status")
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to find location status types")
+	}
+
+	props := struct {
+		PhysicalTypes []fhir.Coding
+		Status        []fhir.Coding
+		Types         []fhir.Coding
+	}{
+		PhysicalTypes: physicaltypes,
+		Status:        status,
+		Types:         locationTypes,
+	}
+
+	tmpls.RenderWithBase(w, "location_edit.html", props)
+}
+
 func homePage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	tmpls.RenderWithBase(w, "home.html", nil)
@@ -400,6 +431,9 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
 	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
 	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
+	mux.HandleFunc("GET /mcsdadmin/location", notImplemented)
+	mux.HandleFunc("GET /mcsdadmin/location/new", newLocation)
+	mux.HandleFunc("POST /mcsdadmin/location/new", notImplemented)
 	mux.HandleFunc("GET /mcsdadmin", homePage)
 	mux.HandleFunc("GET /mcsdadmin/", notFound)
 }
