@@ -350,7 +350,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	status := r.PostForm.Get("status")
-	endpoint.Status, ok = valuesets.StatusFrom(status)
+	endpoint.Status, ok = valuesets.EndpointStatusFrom(status)
 	if !ok {
 		log.Warn().Msg("Failed to determine status, default to active")
 	}
@@ -381,7 +381,7 @@ func newLocation(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Err(err).Msg("Failed to find location types")
 	}
 
-	physicaltypes, err := valuesets.CodingsFrom("location-physical-type")
+	physicalTypes, err := valuesets.CodingsFrom("location-physical-type")
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to find physical location types")
 	}
@@ -396,12 +396,61 @@ func newLocation(w http.ResponseWriter, r *http.Request) {
 		Status        []fhir.Coding
 		Types         []fhir.Coding
 	}{
-		PhysicalTypes: physicaltypes,
+		PhysicalTypes: physicalTypes,
 		Status:        status,
 		Types:         locationTypes,
 	}
 
 	tmpls.RenderWithBase(w, "location_edit.html", props)
+}
+
+func newLocationPost(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseForm()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to parse form input")
+		return
+	}
+
+	var location fhir.Location
+	name := r.PostForm.Get("name")
+	location.Name = &name
+
+	typeCode := r.PostForm.Get("type")
+	if len(typeCode) > 0 {
+		locType, ok := valuesets.CodableFrom("location-type", typeCode)
+		if !ok {
+			log.Warn().Msg("Could not find selected location type")
+		} else {
+			location.Type = []fhir.CodeableConcept{locType}
+		}
+	}
+
+	statusCode := r.PostForm.Get("status")
+	status, ok := valuesets.LocationStatusFrom(statusCode)
+	if ok {
+		location.Status = &status
+	} else {
+		log.Warn().Msg("Could not find location status")
+	}
+
+	physicalCode := r.PostForm.Get("physicalType")
+	if len(physicalCode) > 0 {
+		physical, ok := valuesets.CodableFrom("location-physical-type", physicalCode)
+		if !ok {
+			log.Warn().Msg("Could not find selected physical location type")
+		} else {
+			location.PhysicalType = &physical
+		}
+	}
+
+	_, err = CreateLocation(location)
+
+	tmpls.RenderWithBase(w, "location_list.html", nil)
+}
+
+func listLocations(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	tmpls.RenderWithBase(w, "location_list.html", nil)
 }
 
 func homePage(w http.ResponseWriter, r *http.Request) {
@@ -431,9 +480,9 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
 	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
 	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
-	mux.HandleFunc("GET /mcsdadmin/location", notImplemented)
+	mux.HandleFunc("GET /mcsdadmin/location", listLocations)
 	mux.HandleFunc("GET /mcsdadmin/location/new", newLocation)
-	mux.HandleFunc("POST /mcsdadmin/location/new", notImplemented)
+	mux.HandleFunc("POST /mcsdadmin/location/new", newLocationPost)
 	mux.HandleFunc("GET /mcsdadmin", homePage)
 	mux.HandleFunc("GET /mcsdadmin/", notFound)
 }

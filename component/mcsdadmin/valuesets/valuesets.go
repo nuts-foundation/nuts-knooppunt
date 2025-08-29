@@ -90,7 +90,7 @@ func CodableFrom(setId string, codeId string) (out fhir.CodeableConcept, ok bool
 	return out, true
 }
 
-func StatusFrom(code string) (out fhir.EndpointStatus, ok bool) {
+func EndpointStatusFrom(code string) (out fhir.EndpointStatus, ok bool) {
 	switch code {
 	case "active":
 		return fhir.EndpointStatusActive, true
@@ -104,5 +104,18 @@ func StatusFrom(code string) (out fhir.EndpointStatus, ok bool) {
 		return fhir.EndpointStatusEnteredInError, true
 	default:
 		return fhir.EndpointStatusActive, false
+	}
+}
+
+func LocationStatusFrom(code string) (out fhir.LocationStatus, ok bool) {
+	switch code {
+	case "active":
+		return fhir.LocationStatusActive, true
+	case "suspended":
+		return fhir.LocationStatusSuspended, true
+	case "inactive":
+		return fhir.LocationStatusInactive, true
+	default:
+		return fhir.LocationStatusActive, false
 	}
 }
