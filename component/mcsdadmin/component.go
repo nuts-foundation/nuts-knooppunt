@@ -450,7 +450,20 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 
 func listLocations(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	tmpls.RenderWithBase(w, "location_list.html", nil)
+
+	locs, err := FindAllLocations()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	props := struct {
+		Locations []tmpls.LocationListProps
+	}{
+		Locations: tmpls.MakeLocationListXsProps(locs),
+	}
+
+	tmpls.RenderWithBase(w, "location_list.html", props)
 }
 
 func homePage(w http.ResponseWriter, r *http.Request) {

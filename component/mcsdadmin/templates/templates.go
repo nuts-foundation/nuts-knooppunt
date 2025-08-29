@@ -75,7 +75,7 @@ func fmtRef(ref fhir.Reference) string {
 	return unknownStr
 }
 
-func fmtStatus(status fhir.EndpointStatus) string {
+func fmtEndpointStatus(status fhir.EndpointStatus) string {
 	switch status {
 	case fhir.EndpointStatusActive:
 		return "Active"
@@ -119,7 +119,7 @@ func MakeEpListProps(ep fhir.Endpoint) (out EpListProps) {
 	}
 
 	out.ConnectionType = fmtCoding(ep.ConnectionType)
-	out.Status = fmtStatus(ep.Status)
+	out.Status = fmtEndpointStatus(ep.Status)
 
 	return out
 }
@@ -222,6 +222,62 @@ func MakeServiceListXsProps(services []fhir.HealthcareService) []ServiceListProp
 	out := make([]ServiceListProps, len(services))
 	for idx, ser := range services {
 		out[idx] = MakeServiceListProps(ser)
+	}
+	return out
+}
+
+type LocationListProps struct {
+	Name         string
+	Type         string
+	Status       string
+	PhysicalType string
+}
+
+func fmtLocationStatus(status fhir.LocationStatus) string {
+	switch status {
+	case fhir.LocationStatusActive:
+		return "Active"
+	case fhir.LocationStatusSuspended:
+		return "Suspended"
+	case fhir.LocationStatusInactive:
+		return "Inactive"
+	default:
+		return unknownStr
+	}
+}
+
+func MakeLocationListProps(location fhir.Location) (out LocationListProps) {
+	if location.Name != nil {
+		out.Name = *location.Name
+	} else {
+		out.Name = unknownStr
+	}
+
+	if len(location.Type) > 0 {
+		out.Type = fmtCodable(location.Type[0])
+	} else {
+		out.Type = unknownStr
+	}
+
+	if location.Status != nil {
+		out.Status = fmtLocationStatus(*location.Status)
+	} else {
+		out.Status = unknownStr
+	}
+
+	if location.PhysicalType != nil {
+		out.PhysicalType = fmtCodable(*location.PhysicalType)
+	} else {
+		out.PhysicalType = unknownStr
+	}
+
+	return out
+}
+
+func MakeLocationListXsProps(locations []fhir.Location) []LocationListProps {
+	out := make([]LocationListProps, len(locations))
+	for idx, l := range locations {
+		out[idx] = MakeLocationListProps(l)
 	}
 	return out
 }

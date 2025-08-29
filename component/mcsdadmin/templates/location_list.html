@@ -10,19 +10,19 @@
         <tr>
             <th scope="col">Name</th>
             <th scope="col">Type</th>
-            <th scope="col">Active</th>
-            <th scope="col">ProvidedBy</th>
+            <th scope="col">Status</th>
+            <th scope="col">Physical Type</th>
         </tr>
         </thead>
         <tbody>
-<!--        {{range .Services }}-->
-<!--        <tr>-->
-<!--            <th scope="row">{{ .Name }}</th>-->
-<!--            <td>{{ .Type }}</td>-->
-<!--            <td>{{ .Active }}</td>-->
-<!--            <td>{{ .ProvidedBy }}</td>-->
-<!--        </tr>-->
-<!--        {{end}}-->
+        {{range .Locations }}
+        <tr>
+            <th scope="row">{{ .Name }}</th>
+            <td>{{ .Type }}</td>
+            <td>{{ .Status }}</td>
+            <td>{{ .PhysicalType }}</td>
+        </tr>
+        {{end}}
         </tbody>
     </table>
 </div>

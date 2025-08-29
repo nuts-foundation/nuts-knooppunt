@@ -127,3 +127,23 @@ func FindAllEndpoints() ([]fhir.Endpoint, error) {
 
 	return es, nil
 }
+
+func FindAllLocations() ([]fhir.Location, error) {
+	bundle, err := findAll("Location")
+	if err != nil {
+		return nil, err
+	}
+
+	var ls []fhir.Location
+	for _, entry := range bundle.Entry {
+		var e fhir.Location
+		err := json.Unmarshal(entry.Resource, &e)
+		if err != nil {
+			return ls, err
+		}
+
+		ls = append(ls, e)
+	}
+
+	return ls, nil
+}
