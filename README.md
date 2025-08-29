@@ -41,6 +41,20 @@ A docker compose config is provided to run a set of services that are useful for
 Start the stack with:
 
 ```shell
-docker compose -f docker-compose.dev.yml up
+docker compose up
 ```
 
+## Configuration
+
+- `KNPT_CONFIGDIR`: Directory where the configuration files are stored. Defaults to `./config`.
+
+## Components
+
+This section lists the components of the application, commonly used endpoints and configuration options.
+
+### Nuts node
+The embedded [Nuts node](https://github.com/nuts-foundation/nuts-node) can be configured through environment variables prefixed with `NUTS_`, or by using a configuration file called `config.nuts.yaml`.
+
+Endpoints:
+- Public status page: [http://localhost:8080/nuts/status](http://localhost:8080/nuts/status)
+- Internal diagnostics page: [http://localhost:8081/nuts/status/diagnostics](http://localhost:8081/nuts/status/diagnostics)
