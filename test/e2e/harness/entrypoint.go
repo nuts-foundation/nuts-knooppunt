@@ -35,13 +35,13 @@ func Start(t *testing.T) Details {
 				},
 			},
 			QueryDirectory: mcsd.DirectoryConfig{
-				FHIRBaseURL: testData.Knooppunt.MCSD.CacheFHIRBaseURL.String(),
+				FHIRBaseURL: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
 			},
 		},
 	})
 	return Details{
 		KnooppuntInternalBaseURL: knooppuntInternalURL,
-		MCSDCacheFHIRBaseURL:     testData.Knooppunt.MCSD.CacheFHIRBaseURL,
+		MCSDCacheFHIRBaseURL:     testData.Knooppunt.MCSD.QueryFHIRBaseURL,
 		SunflowerURA:             "00000020",
 		Care2CureURA:             "00000030",
 	}

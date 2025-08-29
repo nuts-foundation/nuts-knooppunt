@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
 	"github.com/stretchr/testify/assert"
@@ -24,10 +25,11 @@ func Test_mCSDUpdateClient(t *testing.T) {
 		require.Equal(t, http.StatusOK, httpResponse.StatusCode)
 		responseData, err := io.ReadAll(httpResponse.Body)
 		require.NoError(t, err)
+		println(string(responseData))
 
-		response := make(map[string]map[string]int)
+		var response mcsd.UpdateReport
 		require.NoError(t, json.Unmarshal(responseData, &response))
-		assert.Equalf(t, 4, mapEntrySuffix(response, "lrza-mcsd-public")["created"], "created=4 in %v", response)
+		assert.Equalf(t, 4, mapEntrySuffix(response, "lrza-mcsd-admin").CountCreated, "created=4 in %v", response)
 
 		cacheFHIRClient := fhirclient.New(harnessDetail.MCSDCacheFHIRBaseURL, http.DefaultClient, nil)
 		t.Run("assert Sunflower organization resources", func(t *testing.T) {
@@ -59,11 +61,11 @@ func searchOrg(client fhirclient.Client, ura string) (*fhir.Organization, error)
 	return &organization, nil
 }
 
-func mapEntrySuffix[T any](m map[string]T, suffix string) T {
-	for key, value := range m {
+func mapEntrySuffix(r mcsd.UpdateReport, suffix string) mcsd.DirectoryUpdateReport {
+	for key, value := range r {
 		if strings.HasSuffix(key, suffix) {
 			return value
 		}
 	}
-	return *new(T)
+	return mcsd.DirectoryUpdateReport{}
 }

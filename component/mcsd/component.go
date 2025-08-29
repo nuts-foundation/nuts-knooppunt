@@ -3,7 +3,6 @@ package mcsd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -63,8 +62,8 @@ type DirectoryUpdateReport struct {
 	CountCreated int      `json:"created"`
 	CountUpdated int      `json:"updated"`
 	CountDeleted int      `json:"deleted"`
-	Warnings     []string `json:"warnings,omitempty"`
-	Error        error    `json:"error,omitempty"`
+	Warnings     []string `json:"warnings"`
+	Errors       []string `json:"errors"`
 }
 
 func New(config Config) *Component {
@@ -81,15 +80,15 @@ func New(config Config) *Component {
 	return result
 }
 
-func (c Component) Start() error {
+func (c *Component) Start() error {
 	return nil
 }
 
-func (c Component) Stop(ctx context.Context) error {
+func (c *Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (c Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) {
+func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) {
 	internalMux.HandleFunc("POST /mcsd/update", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		result, err := c.update(ctx)
@@ -104,7 +103,7 @@ func (c Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) {
 	})
 }
 
-func (c Component) registerAdministrationDirectory(fhirBaseURL string, resourceTypes []string, discover bool) {
+func (c *Component) registerAdministrationDirectory(fhirBaseURL string, resourceTypes []string, discover bool) {
 	c.adminDirectoriesMux.Lock()
 	defer c.adminDirectoriesMux.Unlock()
 	exists := slices.ContainsFunc(c.adminDirectories, func(directory administrationDirectory) bool {
@@ -120,21 +119,21 @@ func (c Component) registerAdministrationDirectory(fhirBaseURL string, resourceT
 	})
 }
 
-func (c Component) update(ctx context.Context) (UpdateReport, error) {
+func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	result := make(UpdateReport)
-	for _, adminDirectory := range c.adminDirectories {
+	for i := 0; i < len(c.adminDirectories); i++ {
+		adminDirectory := c.adminDirectories[i]
 		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover)
 		if err != nil {
 			log.Ctx(ctx).Err(err).Str("directory", adminDirectory.fhirBaseURL).Msg("mCSD Directory update failed")
-			report.Error = errors.Join(err, report.Error)
+			report.Errors = append(report.Errors, err.Error())
 		}
 		result[adminDirectory.fhirBaseURL] = report
-
 	}
 	return result, nil
 }
 
-func (c Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool) (DirectoryUpdateReport, error) {
+func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool) (DirectoryUpdateReport, error) {
 	remoteDirFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
 		return DirectoryUpdateReport{}, err

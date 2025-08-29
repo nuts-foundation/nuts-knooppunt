@@ -19,8 +19,8 @@ type LRZaSystemDetails struct {
 }
 
 type KnooppuntMCSDDetails struct {
-	PublicFHIRBaseURL *url.URL
-	CacheFHIRBaseURL  *url.URL
+	AdminFHIRBaseURL *url.URL
+	QueryFHIRBaseURL *url.URL
 }
 
 type Details struct {
@@ -30,51 +30,63 @@ type Details struct {
 
 func Load(hapiBaseURL *url.URL) (*Details, error) {
 	ctx := context.Background()
-	knptMCSDPublicHAPITenant := HAPITenant{
-		Name: "knpt-mcsd-public",
+	knptMCSDAdminHAPITenant := HAPITenant{
+		Name: "knpt-mcsd-admin",
 		ID:   1,
 	}
-	knptMCSDCacheHAPITenant := HAPITenant{
-		Name: "knpt-mcsd-cache",
+	knptMCSDQueryHAPITenant := HAPITenant{
+		Name: "knpt-mcsd-query",
 		ID:   2,
 	}
-	lrzaMCSDPublicHAPITenant := HAPITenant{
-		Name: "lrza-mcsd-public",
+	lrzaMCSDAdminHAPITenant := HAPITenant{
+		Name: "lrza-mcsd-admin",
 		ID:   3,
+	}
+	care2CureAdminHAPITenant := HAPITenant{
+		Name: "care2cure-admin",
+		ID:   4,
 	}
 
 	hapiDefaultFHIRClient := fhirclient.New(hapiBaseURL, http.DefaultClient, nil)
 
-	for _, tenant := range []HAPITenant{knptMCSDCacheHAPITenant, knptMCSDPublicHAPITenant, lrzaMCSDPublicHAPITenant} {
+	for _, tenant := range []HAPITenant{knptMCSDQueryHAPITenant, knptMCSDAdminHAPITenant, lrzaMCSDAdminHAPITenant, care2CureAdminHAPITenant} {
 		if err := CreateHAPITenant(ctx, tenant, hapiDefaultFHIRClient); err != nil {
 			return nil, fmt.Errorf("create hapi tenant: %w", err)
 		}
 	}
 
-	lrzaMCSDPublicFHIRClient := fhirclient.New(lrzaMCSDPublicHAPITenant.BaseURL(hapiBaseURL), http.DefaultClient, nil)
+	lrzaMCSDAdminFHIRClient := lrzaMCSDAdminHAPITenant.FHIRClient(hapiBaseURL)
 	// Create orgs
 	for _, resource := range append([]fhir.Organization{Care2CureHospital()}, CareHomeSunflower()) {
 		var response []byte
-		if err := lrzaMCSDPublicFHIRClient.UpdateWithContext(ctx, "Organization/"+*resource.Id, resource, &response); err != nil {
+		if err := lrzaMCSDAdminFHIRClient.UpdateWithContext(ctx, "Organization/"+*resource.Id, resource, &response); err != nil {
 			return nil, fmt.Errorf("create organization: %w", err)
 		}
 	}
-	// Create endpoints
+	// Create root mCSD Directory endpoints
 	for _, resource := range append(Care2CureHospitalRootEndpoints(), CareHomeSunflowerRootEndpoints()...) {
 		var response []byte
-		if err := lrzaMCSDPublicFHIRClient.UpdateWithContext(ctx, "Endpoint/"+*resource.Id, resource, &response); err != nil {
+		if err := lrzaMCSDAdminFHIRClient.UpdateWithContext(ctx, "Endpoint/"+*resource.Id, resource, &response); err != nil {
+			return nil, fmt.Errorf("create endpoint: %w", err)
+		}
+	}
+	// Create mCSD Admin Directory resources of Care2Cure Hospital
+	care2CureMCSDAdminFHIRClient := care2CureAdminHAPITenant.FHIRClient(hapiBaseURL)
+	for _, resource := range Care2CureHospitalAdminEndpoints() {
+		var response []byte
+		if err := care2CureMCSDAdminFHIRClient.UpdateWithContext(ctx, "Endpoint/"+*resource.Id, resource, &response); err != nil {
 			return nil, fmt.Errorf("create endpoint: %w", err)
 		}
 	}
 	return &Details{
 		Knooppunt: KnooppuntSystemDetails{
 			MCSD: KnooppuntMCSDDetails{
-				PublicFHIRBaseURL: knptMCSDPublicHAPITenant.BaseURL(hapiBaseURL),
-				CacheFHIRBaseURL:  knptMCSDCacheHAPITenant.BaseURL(hapiBaseURL),
+				AdminFHIRBaseURL: knptMCSDAdminHAPITenant.BaseURL(hapiBaseURL),
+				QueryFHIRBaseURL: knptMCSDQueryHAPITenant.BaseURL(hapiBaseURL),
 			},
 		},
 		LRZa: LRZaSystemDetails{
-			FHIRBaseURL: lrzaMCSDPublicHAPITenant.BaseURL(hapiBaseURL),
+			FHIRBaseURL: lrzaMCSDAdminHAPITenant.BaseURL(hapiBaseURL),
 		},
 	}, nil
 }
