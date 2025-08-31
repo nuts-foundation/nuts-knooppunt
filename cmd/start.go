@@ -7,6 +7,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	httpComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
 	"github.com/pkg/errors"
@@ -22,9 +23,11 @@ func Start(ctx context.Context, config Config) error {
 	internalMux := http.NewServeMux()
 	components := []component.Lifecycle{
 		mcsd.New(config.MCSD),
+		mcsdadmin.New(config.MCSDAdmin),
 		status.New(),
 		httpComponent.New(publicMux, internalMux),
 	}
+
 	if config.Nuts.Enabled {
 		nutsNode, err := nutsnode.New(config.Nuts)
 		if err != nil {

@@ -75,7 +75,7 @@ services:
       # hapi.fhir.allow_multiple_delete: true # to allow $expunge on system-level
       # Adds some default configs to the HAPI web UI for development
       hapi.fhir.tester.local.name: Local Directory
-      hapi.fhir.tester.local.server_address: http://localhost:8080/fhir/local
+      hapi.fhir.tester.local.server_address: http://localhost:8080/fhir/DEFAULT
       hapi.fhir.tester.local.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.local.fhir_version: R4
 

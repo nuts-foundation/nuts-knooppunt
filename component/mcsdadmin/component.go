@@ -3,7 +3,9 @@ package mcsdadmin
 import (
 	"context"
 	"net/http"
+	"net/url"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
@@ -11,13 +13,32 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
+type Config struct {
+	FHIRBaseURL string
+}
+
 var _ component.Lifecycle = (*Component)(nil)
 
 type Component struct {
+	config     Config
+	fhirClient fhirclient.Client
 }
 
-func New() *Component {
-	return &Component{}
+// TODO: Make higher order handlers instead of having this globally
+var client fhirclient.Client
+
+func New(config Config) *Component {
+	baseURL, err := url.Parse(config.FHIRBaseURL)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to start MCSD admin component, invalid FHIRBaseURL")
+	}
+
+	client = fhirclient.New(baseURL, http.DefaultClient, fhirClientConfig())
+
+	return &Component{
+		config:     config,
+		fhirClient: client,
+	}
 }
 
 func (c Component) Start() error {
@@ -481,7 +502,7 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Path not implemented"))
 }
 
-func (c Component) RegisterHttpHandlers(mux *http.ServeMux) {
+func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice", listServices)
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice/new", newService)
 	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", newServicePost)

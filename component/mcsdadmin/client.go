@@ -10,14 +10,7 @@ import (
 	fhir "github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-// TODO: Make this configurable
-var baseURL = url.URL{
-	Scheme: "HTTP",
-	Host:   "localhost:7050",
-	Path:   "/fhir/DEFAULT",
-}
-
-func Config() *fhirClient.Config {
+func fhirClientConfig() *fhirClient.Config {
 	config := fhirClient.DefaultConfig()
 	config.DefaultOptions = []fhirClient.Option{
 		fhirClient.RequestHeaders(map[string][]string{
@@ -28,13 +21,6 @@ func Config() *fhirClient.Config {
 		log.Debug().Msgf("Non-2xx status code from FHIR server (%s %s, status=%d), content: %s", response.Request.Method, response.Request.URL, response.StatusCode, string(responseBody))
 	}
 	return &config
-}
-
-var httpClient = &http.Client{}
-var client = fhirClient.New(&baseURL, httpClient, Config())
-
-type FhirData struct {
-	Id string `json:"id"`
 }
 
 func CreateHealthcareService(service fhir.HealthcareService) (out fhir.HealthcareService, err error) {
