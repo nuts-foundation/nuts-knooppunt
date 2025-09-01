@@ -4,6 +4,8 @@ services:
     ports:
       - "8080:8080"
       - "8081:8081"
+    environment:
+      MCSDADMIN_FHIRBaseURL: http://localhost:7050/fhir/DEFAULT 
     volumes:
       - ./config:/app/config:ro
   init:

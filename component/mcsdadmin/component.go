@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
@@ -27,13 +28,17 @@ type Component struct {
 	fhirClient fhirclient.Client
 }
 
-// TODO: Make higher order handlers instead of having this globally
 var client fhirclient.Client
 
 func New(config Config) *Component {
+	if config.FHIRBaseURL == "" {
+		config.FHIRBaseURL = os.Getenv("MCSDADMIN_FHIRBaseURL")
+	}
+
 	baseURL, err := url.Parse(config.FHIRBaseURL)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start MCSD admin component, invalid FHIRBaseURL")
+		return nil
 	}
 
 	client = fhirclient.New(baseURL, http.DefaultClient, fhirClientConfig())
