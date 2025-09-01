@@ -36,7 +36,7 @@ func Test_mCSDUpdateClient(t *testing.T) {
 			assert.Equalf(t, 2, mapEntrySuffix(response, "lrza-mcsd-admin").CountCreated, "created=2 in %v", response)
 		})
 
-		queryFHIRClient := fhirclient.New(harnessDetail.MCSDCacheFHIRBaseURL, http.DefaultClient, nil)
+		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
 		t.Run("assert Sunflower organization resources", func(t *testing.T) {
 			expectedOrg := lrza.Care2Cure()
 			org, err := searchOrg(queryFHIRClient, harnessDetail.SunflowerURA)
