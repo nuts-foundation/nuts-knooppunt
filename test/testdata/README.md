@@ -5,20 +5,31 @@ This package provides scripts for injecting test data, for:
 - end-to-end tests
 - local docker compose setups
 
-It creates the following test data.
+It creates the following test data structure with multiple mCSD directories.
 
-## Care Organization "Care Home Sunflower"
+## Care Organizations
+
+### Care Home Sunflower
 A fictional care organization providing elderly care.
+- URA: 00000020
 
-## Care Organization "Care2Cure Hospital"
-A fictional hospital.
+### Care2Cure Hospital
+A fictional hospital organization.
+- URA: 00000030
 
-## mCSD Root Directory "LRZa"
+## mCSD Directory Structure
+
+### Root Directory (LRZa)
 The Dutch Landelijk Register Zorgaanbieders, a national registry of care providers. It is the authentic source for organization names and URAs (primary identifier of care organizations).
 
-It contains the following test vectors:
+**Contains:**
+- Organization registrations for both care organizations
+- mCSD-directory endpoints pointing to each organization's admin directory
 
-- Registration for care org. "Care Home Sunflower" (URA: 00000020)
-  - FHIR endpoint for the organization's mCSD Directory
-- Registration for care org. "Care2Cure Hospital" (URA: 00000030)
-  - FHIR endpoint for the organization's mCSD Directory
+### Admin Directories
+Each care organization maintains its own admin directory containing:
+- Organization resource with detailed information
+- FHIR endpoints for accessing the organization's services
+
+### Query Directory
+The aggregated directory that contains all resources from both root and admin directories after the mCSD update process runs.

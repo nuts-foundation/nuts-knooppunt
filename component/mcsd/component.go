@@ -158,10 +158,10 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		Type:  fhir.BundleTypeTransaction,
 		Entry: make([]fhir.BundleEntry, 0, len(bundle.Entry)),
 	}
-	// Process result
+	localRefMap := make(map[string]string)
 	var report DirectoryUpdateReport
 	for i, entry := range bundle.Entry {
-		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery)
+		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, localRefMap)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
@@ -173,11 +173,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 				continue
 			}
 			if coding.EqualsCode(endpoint.ConnectionType, coding.MCSDConnectionTypeSystem, coding.MCSDConnectionTypeDirectoryCode) {
-				if endpoint.Address == "" {
-					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: skipping mCSD Directory Endpoint with empty address (id=%s)", i, *endpoint.Id))
-				} else {
-					c.registerAdministrationDirectory(endpoint.Address, directoryResourceTypes, false)
-				}
+				c.registerAdministrationDirectory(endpoint.Address, directoryResourceTypes, false)
 			}
 		}
 	}
@@ -190,6 +186,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		return DirectoryUpdateReport{}, fmt.Errorf("failed to apply mCSD update to local directory: %w", err)
 	}
 
+	// Process result
 	for _, entry := range txResult.Entry {
 		if entry.Response == nil {
 			log.Ctx(ctx).Warn().Msgf("Skipping entry with no response: %v", entry)

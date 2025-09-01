@@ -6,8 +6,12 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
+github.com/zorgbijjou/golang-fhir-models/fhir-models v0.0.0-20241004115431-5fbe087ad50c h1:uWJ5Pp+RWy5xY4KMMuLGBvwGGSgp0MbnR3SthrSZMGc=
+github.com/zorgbijjou/golang-fhir-models/fhir-models v0.0.0-20241004115431-5fbe087ad50c/go.mod h1:HaPwolHwUUf/6El6rie/+Rr9hRKVq4P3wDdQJv7QDMo=
 github.com/zorgbijjou/golang-fhir-models/fhir-models v0.0.0-20250508174153-3ca2640a22ea h1:bCoBMDpl539eaEoOTkQPnRTelZxr9STHhEoCFg7cTMU=
 github.com/zorgbijjou/golang-fhir-models/fhir-models v0.0.0-20250508174153-3ca2640a22ea/go.mod h1:HaPwolHwUUf/6El6rie/+Rr9hRKVq4P3wDdQJv7QDMo=
+github.com/zorgbijjou/golang-fhir-models/fhir-models v0.0.0-20250901091002-777673f2b656 h1:09yvUG05Gq/jczg6AKfd/9rC7oA9RvMH7C9VlrbpV/k=
+github.com/zorgbijjou/golang-fhir-models/fhir-models v0.0.0-20250901091002-777673f2b656/go.mod h1:HaPwolHwUUf/6El6rie/+Rr9hRKVq4P3wDdQJv7QDMo=
 go.uber.org/mock v0.4.0 h1:VcM4ZOtdbR4f6VXfiOpwpVJDL6lCReaZ6mw31wqh7KU=
 go.uber.org/mock v0.4.0/go.mod h1:a6FSlNadKUHUa9IP5Vyt1zh4fC7uAwxMutEAscFbkZc=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
