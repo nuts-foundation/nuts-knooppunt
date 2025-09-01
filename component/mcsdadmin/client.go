@@ -2,11 +2,13 @@ package mcsdadmin
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 
 	fhirClient "github.com/SanteonNL/go-fhir-client"
 	"github.com/rs/zerolog/log"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
 	fhir "github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -23,93 +25,25 @@ func fhirClientConfig() *fhirClient.Config {
 	return &config
 }
 
-func findAll(resourceType string) (fhir.Bundle, error) {
-	var result fhir.Bundle
-	err := client.Search(resourceType, url.Values{}, &result, nil)
+func FindAll[T any](fhirClient fhirClient.Client) ([]T, error) {
+	var prototype T
+	resourceType := caramel.ResourceType(prototype)
 
+	var searchResponse fhir.Bundle
+	err := fhirClient.Search(resourceType, url.Values{}, &searchResponse, nil)
 	if err != nil {
-		return fhir.Bundle{}, err
+		return nil, fmt.Errorf("search for resource type %s failed: %w", resourceType, err)
+	}
+
+	var result []T
+	for i, entry := range searchResponse.Entry {
+		var item T
+		err := json.Unmarshal(entry.Resource, &item)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshal of entry %d for resource type %s failed: %w", i, resourceType, err)
+		}
+		result = append(result, item)
 	}
 
 	return result, nil
-}
-
-func FindAllServices() ([]fhir.HealthcareService, error) {
-	bundle, err := findAll("HealthcareService")
-	if err != nil {
-		return nil, err
-	}
-
-	var hb []fhir.HealthcareService
-	for _, entry := range bundle.Entry {
-		var h fhir.HealthcareService
-		err := json.Unmarshal(entry.Resource, &h)
-		if err != nil {
-			return hb, err
-		}
-
-		hb = append(hb, h)
-	}
-
-	return hb, nil
-}
-
-func FindAllOrganizations() ([]fhir.Organization, error) {
-	bundle, err := findAll("Organization")
-	if err != nil {
-		return nil, err
-	}
-
-	var ob []fhir.Organization
-	for _, entry := range bundle.Entry {
-		var o fhir.Organization
-		err := json.Unmarshal(entry.Resource, &o)
-		if err != nil {
-			return ob, err
-		}
-
-		ob = append(ob, o)
-	}
-
-	return ob, nil
-}
-
-func FindAllEndpoints() ([]fhir.Endpoint, error) {
-	bundle, err := findAll("Endpoint")
-	if err != nil {
-		return nil, err
-	}
-
-	var es []fhir.Endpoint
-	for _, entry := range bundle.Entry {
-		var e fhir.Endpoint
-		err := json.Unmarshal(entry.Resource, &e)
-		if err != nil {
-			return es, err
-		}
-
-		es = append(es, e)
-	}
-
-	return es, nil
-}
-
-func FindAllLocations() ([]fhir.Location, error) {
-	bundle, err := findAll("Location")
-	if err != nil {
-		return nil, err
-	}
-
-	var ls []fhir.Location
-	for _, entry := range bundle.Entry {
-		var e fhir.Location
-		err := json.Unmarshal(entry.Resource, &e)
-		if err != nil {
-			return ls, err
-		}
-
-		ls = append(ls, e)
-	}
-
-	return ls, nil
 }

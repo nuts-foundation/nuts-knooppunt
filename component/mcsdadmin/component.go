@@ -54,7 +54,7 @@ func (c Component) Stop(ctx context.Context) error {
 // Route handling
 
 func listServices(w http.ResponseWriter, r *http.Request) {
-	services, err := FindAllServices()
+	services, err := FindAll[fhir.HealthcareService](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -71,7 +71,7 @@ func listServices(w http.ResponseWriter, r *http.Request) {
 }
 
 func newService(w http.ResponseWriter, r *http.Request) {
-	organizations, err := FindAllOrganizations()
+	organizations, err := FindAll[fhir.Organization](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -139,7 +139,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	services, err := FindAllServices()
+	services, err := FindAll[fhir.HealthcareService](client)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to find all services")
 	}
@@ -154,7 +154,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func listOrganizations(w http.ResponseWriter, r *http.Request) {
-	orgs, err := FindAllOrganizations()
+	orgs, err := FindAll[fhir.Organization](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -221,7 +221,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	orgs, err := FindAllOrganizations()
+	orgs, err := FindAll[fhir.Organization](client)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to find all organizations")
 	}
@@ -236,7 +236,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func listEndpoints(w http.ResponseWriter, r *http.Request) {
-	endpoints, err := FindAllEndpoints()
+	endpoints, err := FindAll[fhir.Endpoint](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -253,7 +253,7 @@ func listEndpoints(w http.ResponseWriter, r *http.Request) {
 }
 
 func newEndpoint(w http.ResponseWriter, r *http.Request) {
-	organizations, err := FindAllOrganizations()
+	organizations, err := FindAll[fhir.Organization](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -395,7 +395,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	endpoints, err := FindAllEndpoints()
+	endpoints, err := FindAll[fhir.Endpoint](client)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to find all endpoints")
 	}
@@ -492,7 +492,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 func listLocations(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
-	locs, err := FindAllLocations()
+	locs, err := FindAll[fhir.Location](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
