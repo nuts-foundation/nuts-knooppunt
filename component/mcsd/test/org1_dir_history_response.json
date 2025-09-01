@@ -6,6 +6,42 @@
   "type": "history",
   "entry": [
     {
+      "fullUrl": "{{ORG1_DIR_BASEURL}}/Organization/org-1",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "org-1",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-01T14:29:31.987+00:00",
+          "profile": [
+            "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Organization"
+          ]
+        },
+        "identifier": [
+          {
+            "use": "official",
+            "system": "http://fhir.nl/fhir/NamingSystem/ura",
+            "value": "111"
+          }
+        ],
+        "active": true,
+        "name": "Organization 1",
+        "endpoint": [
+          {
+            "reference": "Endpoint/1"
+          }
+        ]
+      },
+      "request": {
+        "method": "POST",
+        "url": "Organization/org-1"
+      },
+      "response": {
+        "status": "201 Created",
+        "etag": "W/\"1\""
+      }
+    },
+    {
       "fullUrl": "{{ORG1_DIR_BASEURL}}/Endpoint/1",
       "resource": {
         "resourceType": "Endpoint",
@@ -42,4 +78,3 @@
     }
   ]
 }
-

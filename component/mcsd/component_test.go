@@ -80,8 +80,9 @@ func TestComponent_update(t *testing.T) {
 	t.Run("assert sync report from root directory", func(t *testing.T) {
 		thisReport := report[rootDirServer.URL]
 		require.Empty(t, thisReport.Errors)
-		require.Empty(t, thisReport.Warnings)
-		require.Equal(t, 9, thisReport.CountCreated)
+		// Root directory: only mCSD directory endpoints should be synced, other resources should be filtered out
+		require.Len(t, thisReport.Warnings, 5)       // 4 organizations + 1 non-mCSD endpoint should be filtered out
+		require.Equal(t, 4, thisReport.CountCreated) // 4 mCSD directory endpoints should be created
 		require.Equal(t, 0, thisReport.CountUpdated)
 		require.Equal(t, 0, thisReport.CountDeleted)
 	})
@@ -89,7 +90,7 @@ func TestComponent_update(t *testing.T) {
 		thisReport := report[orgDir1BaseURL]
 		require.Empty(t, thisReport.Errors)
 		require.Empty(t, thisReport.Warnings)
-		require.Equal(t, 1, thisReport.CountCreated)
+		require.Equal(t, 2, thisReport.CountCreated) // Now 2 resources: Organization + Endpoint
 		require.Equal(t, 0, thisReport.CountUpdated)
 		require.Equal(t, 0, thisReport.CountDeleted)
 	})
@@ -111,8 +112,9 @@ func TestComponent_update(t *testing.T) {
 	})
 
 	t.Run("check created resources", func(t *testing.T) {
-		require.Len(t, localClient.CreatedResources["Organization"], 4)
-		require.Len(t, localClient.CreatedResources["Endpoint"], 6)
+		// Only mCSD directory endpoints from discoverable directories + all resources from non-discoverable directories
+		require.Len(t, localClient.CreatedResources["Organization"], 1) // 1 organization from org1 directory
+		require.Len(t, localClient.CreatedResources["Endpoint"], 5)     // 4 mCSD directory endpoints from root + 1 from org1 directory
 	})
 }
 

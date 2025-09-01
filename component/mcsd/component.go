@@ -161,7 +161,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// Process result
 	var report DirectoryUpdateReport
 	for i, entry := range bundle.Entry {
-		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes)
+		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
