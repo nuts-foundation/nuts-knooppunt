@@ -31,14 +31,14 @@ func Test_mCSDUpdateClient(t *testing.T) {
 		require.NoError(t, json.Unmarshal(responseData, &response))
 		assert.Equalf(t, 4, mapEntrySuffix(response, "lrza-mcsd-admin").CountCreated, "created=4 in %v", response)
 
-		cacheFHIRClient := fhirclient.New(harnessDetail.MCSDCacheFHIRBaseURL, http.DefaultClient, nil)
+		queryFHIRClient := fhirclient.New(harnessDetail.MCSDCacheFHIRBaseURL, http.DefaultClient, nil)
 		t.Run("assert Sunflower organization resources", func(t *testing.T) {
-			org, err := searchOrg(cacheFHIRClient, harnessDetail.SunflowerURA)
+			org, err := searchOrg(queryFHIRClient, harnessDetail.SunflowerURA)
 			require.NoError(t, err)
 			assert.Equal(t, "Sunflower Care Home", *org.Name)
 		})
 		t.Run("assert Care2Cure organization resources", func(t *testing.T) {
-			org, err := searchOrg(cacheFHIRClient, harnessDetail.Care2CureURA)
+			org, err := searchOrg(queryFHIRClient, harnessDetail.Care2CureURA)
 			require.NoError(t, err)
 			assert.Equal(t, "Care2Cure Hospital", *org.Name)
 		})
