@@ -8,7 +8,7 @@
         <label for="payload-type">Payload Type:</label>
         <select name="payload-type" id="payload-type">
             <option value="">--Please choose an option--</option>
-            {{range .PayloadTypes }} }}
+            {{range .PayloadTypes }}
             <option value="{{ .Code }}">{{ .Display }}</option>
             {{ end }}
         </select>
@@ -30,7 +30,7 @@
         <label for="managing-org">Managing organisation:</label>
         <select name="managing-org" id="managing-org">
             <option value="">--Please choose an option--</option>
-            {{range .Organizations}} }}
+            {{range .Organizations}}
             <option value="{{ .ID }}">{{ .Name }}</option>
             {{ end }}
         </select>
@@ -39,7 +39,7 @@
         <label for="connection-type">Connection Type:</label>
         <select name="connection-type" id="connection-type">
             <option value="">--Please choose an option--</option>
-            {{range .ConnectionTypes }} }}
+            {{range .ConnectionTypes }}
             <option value="{{ .Code }}">{{ .Display }}</option>
             {{ end }}
         </select>
@@ -48,7 +48,7 @@
         <label for="purpose-of-use">Purpose of use:</label>
         <select name="purpose-of-use" id="purpose-of-use">
             <option value="">--Please choose an option--</option>
-            {{range .PurposeOfUse }} }}
+            {{range .PurposeOfUse }}
             <option value="{{ .Code }}">{{ .Display }}</option>
             {{ end }}
         </select>
@@ -57,7 +57,7 @@
         <label for="status">Status:</label>
         <select name="status" id="status">
             <option value="">--Please choose an option--</option>
-            {{range .Status}} }}
+            {{range .Status}}
             <option value="{{ .Code }}">{{ .Display }}</option>
             {{ end }}
         </select>

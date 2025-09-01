@@ -21,7 +21,7 @@
         <label for="providedById">Provided by:</label>
         <select name="providedById" id="providedById">
             <option value="">--Please choose an option--</option>
-            {{range .Organizations}} }}
+            {{range .Organizations}}
             <option value="{{ .ID }}">{{ .Name }}</option>
             {{ end }}
         </select>
