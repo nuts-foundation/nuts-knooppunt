@@ -1,0 +1,27 @@
+{{define "main"}}
+<div class="action-bar">
+    <div>
+        <a href="/mcsdadmin/organization/new">New Organization</a>
+    </div>
+</div>
+<div class="main-view">
+    <table>
+        <thead>
+        <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Type</th>
+            <th scope="col">Active</th>
+        </tr>
+        </thead>
+        <tbody>
+        {{range .Organizations}}
+        <tr>
+            <th scope="row">{{ .Name }}</th>
+            <td>{{.Type}}</td>
+            <td>{{ .Active }}</td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

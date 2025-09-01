@@ -1,0 +1,29 @@
+{{define "main"}}
+<div class="action-bar">
+    <div>
+        <a href="/mcsdadmin/location/new">New Location</a>
+    </div>
+</div>
+<div class="main-view">
+    <table>
+        <thead>
+        <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Type</th>
+            <th scope="col">Status</th>
+            <th scope="col">Physical Type</th>
+        </tr>
+        </thead>
+        <tbody>
+        {{range .Locations }}
+        <tr>
+            <th scope="row">{{ .Name }}</th>
+            <td>{{ .Type }}</td>
+            <td>{{ .Status }}</td>
+            <td>{{ .PhysicalType }}</td>
+        </tr>
+        {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}
