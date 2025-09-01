@@ -74,25 +74,6 @@ func fmtRef(ref fhir.Reference) string {
 	return unknownStr
 }
 
-func fmtEndpointStatus(status fhir.EndpointStatus) string {
-	switch status {
-	case fhir.EndpointStatusActive:
-		return "Active"
-	case fhir.EndpointStatusSuspended:
-		return "Suspended"
-	case fhir.EndpointStatusError:
-		return "Error"
-	case fhir.EndpointStatusOff:
-		return "Off"
-	case fhir.EndpointStatusEnteredInError:
-		return "Error"
-	case fhir.EndpointStatusTest:
-		return "Test"
-	default:
-		return unknownStr
-	}
-}
-
 func MakeEpListProps(ep fhir.Endpoint) (out EpListProps) {
 	out.Address = ep.Address
 
@@ -118,7 +99,7 @@ func MakeEpListProps(ep fhir.Endpoint) (out EpListProps) {
 	}
 
 	out.ConnectionType = fmtCoding(ep.ConnectionType)
-	out.Status = fmtEndpointStatus(ep.Status)
+	out.Status = ep.Status.Display()
 
 	return out
 }
@@ -232,19 +213,6 @@ type LocationListProps struct {
 	PhysicalType string
 }
 
-func fmtLocationStatus(status fhir.LocationStatus) string {
-	switch status {
-	case fhir.LocationStatusActive:
-		return "Active"
-	case fhir.LocationStatusSuspended:
-		return "Suspended"
-	case fhir.LocationStatusInactive:
-		return "Inactive"
-	default:
-		return unknownStr
-	}
-}
-
 func MakeLocationListProps(location fhir.Location) (out LocationListProps) {
 	if location.Name != nil {
 		out.Name = *location.Name
@@ -259,7 +227,8 @@ func MakeLocationListProps(location fhir.Location) (out LocationListProps) {
 	}
 
 	if location.Status != nil {
-		out.Status = fmtLocationStatus(*location.Status)
+		status := *location.Status
+		out.Status = status.Display()
 	} else {
 		out.Status = unknownStr
 	}
