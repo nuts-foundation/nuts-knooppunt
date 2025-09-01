@@ -92,7 +92,6 @@ func normalizeReferencesRecursive(obj any, remoteRefToLocalRefMap map[string]str
 				// Doesn't exist yet, create a new local reference
 				// TODO: When incremental updating, we should look up if the resource already exists and use that ID instead of generating a new one
 				localRef = generateLocalID()
-				log.Info().Msgf("Creating new local reference for remote reference %s: %s", ref, localRef)
 				remoteRefToLocalRefMap[ref] = localRef
 			}
 			v["reference"] = localRef
