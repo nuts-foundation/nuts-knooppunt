@@ -3,16 +3,16 @@ package templates
 import (
 	"embed"
 	"html/template"
-	"log"
-	"net/http"
+	"io"
 
+	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 //go:embed *.html
 var tmplFS embed.FS
 
-func RenderWithBase(w http.ResponseWriter, name string, data any) {
+func RenderWithBase(w io.Writer, name string, data any) {
 	files := []string{
 		"base.html",
 		name,
@@ -20,15 +20,14 @@ func RenderWithBase(w http.ResponseWriter, name string, data any) {
 
 	ts, err := template.ParseFS(tmplFS, files...)
 	if err != nil {
-		log.Print(err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Error().Err(err).Msg("Failed to parse template")
 		return
 	}
 
 	err = ts.ExecuteTemplate(w, "base", data)
 	if err != nil {
-		log.Print(err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Error().Err(err).Msg("Failed to execute template")
+		return
 	}
 }
 
