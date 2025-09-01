@@ -2,6 +2,8 @@ package mcsdadmin
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -10,6 +12,7 @@ import (
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
 	"github.com/rs/zerolog/log"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -53,8 +56,27 @@ func (c Component) Stop(ctx context.Context) error {
 
 // Route handling
 
+func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
+	mux.HandleFunc("GET /mcsdadmin/healthcareservice", listServices)
+	mux.HandleFunc("GET /mcsdadmin/healthcareservice/new", newService)
+	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", newServicePost)
+	mux.HandleFunc("GET /mcsdadmin/healthcareservice/{id}/edit", notImplemented)
+	mux.HandleFunc("PUT /mcsdadmin/healthcareservice/{id}/edit", notImplemented)
+	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
+	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
+	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
+	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
+	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
+	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
+	mux.HandleFunc("GET /mcsdadmin/location", listLocations)
+	mux.HandleFunc("GET /mcsdadmin/location/new", newLocation)
+	mux.HandleFunc("POST /mcsdadmin/location/new", newLocationPost)
+	mux.HandleFunc("GET /mcsdadmin", homePage)
+	mux.HandleFunc("GET /mcsdadmin/", notFound)
+}
+
 func listServices(w http.ResponseWriter, r *http.Request) {
-	services, err := FindAll[fhir.HealthcareService](client)
+	services, err := findAll[fhir.HealthcareService](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -71,7 +93,7 @@ func listServices(w http.ResponseWriter, r *http.Request) {
 }
 
 func newService(w http.ResponseWriter, r *http.Request) {
-	organizations, err := FindAll[fhir.Organization](client)
+	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -139,7 +161,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	services, err := FindAll[fhir.HealthcareService](client)
+	services, err := findAll[fhir.HealthcareService](client)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to find all services")
 	}
@@ -154,7 +176,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func listOrganizations(w http.ResponseWriter, r *http.Request) {
-	orgs, err := FindAll[fhir.Organization](client)
+	orgs, err := findAll[fhir.Organization](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -221,7 +243,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	orgs, err := FindAll[fhir.Organization](client)
+	orgs, err := findAll[fhir.Organization](client)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to find all organizations")
 	}
@@ -236,7 +258,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func listEndpoints(w http.ResponseWriter, r *http.Request) {
-	endpoints, err := FindAll[fhir.Endpoint](client)
+	endpoints, err := findAll[fhir.Endpoint](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -253,7 +275,7 @@ func listEndpoints(w http.ResponseWriter, r *http.Request) {
 }
 
 func newEndpoint(w http.ResponseWriter, r *http.Request) {
-	organizations, err := FindAll[fhir.Organization](client)
+	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -395,7 +417,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	endpoints, err := FindAll[fhir.Endpoint](client)
+	endpoints, err := findAll[fhir.Endpoint](client)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to find all endpoints")
 	}
@@ -492,7 +514,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 func listLocations(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
-	locs, err := FindAll[fhir.Location](client)
+	locs, err := findAll[fhir.Location](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -522,21 +544,40 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Path not implemented"))
 }
 
-func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
-	mux.HandleFunc("GET /mcsdadmin/healthcareservice", listServices)
-	mux.HandleFunc("GET /mcsdadmin/healthcareservice/new", newService)
-	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", newServicePost)
-	mux.HandleFunc("GET /mcsdadmin/healthcareservice/{id}/edit", notImplemented)
-	mux.HandleFunc("PUT /mcsdadmin/healthcareservice/{id}/edit", notImplemented)
-	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
-	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
-	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
-	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
-	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
-	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
-	mux.HandleFunc("GET /mcsdadmin/location", listLocations)
-	mux.HandleFunc("GET /mcsdadmin/location/new", newLocation)
-	mux.HandleFunc("POST /mcsdadmin/location/new", newLocationPost)
-	mux.HandleFunc("GET /mcsdadmin", homePage)
-	mux.HandleFunc("GET /mcsdadmin/", notFound)
+// Fhir client helpers
+
+func fhirClientConfig() *fhirclient.Config {
+	config := fhirclient.DefaultConfig()
+	config.DefaultOptions = []fhirclient.Option{
+		fhirclient.RequestHeaders(map[string][]string{
+			"Cache-Control": {"no-cache"},
+		}),
+	}
+	config.Non2xxStatusHandler = func(response *http.Response, responseBody []byte) {
+		log.Debug().Msgf("Non-2xx status code from FHIR server (%s %s, status=%d), content: %s", response.Request.Method, response.Request.URL, response.StatusCode, string(responseBody))
+	}
+	return &config
+}
+
+func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {
+	var prototype T
+	resourceType := caramel.ResourceType(prototype)
+
+	var searchResponse fhir.Bundle
+	err := fhirClient.Search(resourceType, url.Values{}, &searchResponse, nil)
+	if err != nil {
+		return nil, fmt.Errorf("search for resource type %s failed: %w", resourceType, err)
+	}
+
+	var result []T
+	for i, entry := range searchResponse.Entry {
+		var item T
+		err := json.Unmarshal(entry.Resource, &item)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshal of entry %d for resource type %s failed: %w", i, resourceType, err)
+		}
+		result = append(result, item)
+	}
+
+	return result, nil
 }
