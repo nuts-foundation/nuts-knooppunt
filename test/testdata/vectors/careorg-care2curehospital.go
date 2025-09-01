@@ -42,6 +42,9 @@ func Care2CureHospitalRootEndpoints() []fhir.Endpoint {
 }
 
 func Care2CureHospitalAdminEndpoints() []fhir.Endpoint {
+
+	var a fhir.EndpointStatus
+	a.Display()
 	return []fhir.Endpoint{
 		{
 			Id:      toPtr("bce8a799-e6ba-4c06-8a1c-bc052f01a636"),
