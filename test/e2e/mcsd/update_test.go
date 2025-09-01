@@ -27,7 +27,7 @@ func Test_mCSDUpdateClient(t *testing.T) {
 		require.Equal(t, http.StatusOK, httpResponse.StatusCode)
 		responseData, err := io.ReadAll(httpResponse.Body)
 		require.NoError(t, err)
-		println(string(responseData))
+		t.Log(string(responseData))
 
 		t.Run("assert resource sync'd from LRZa Admin Directory", func(t *testing.T) {
 			// This is the root/discovery directory, so only mCSD Directory endpoints should be present
