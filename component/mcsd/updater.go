@@ -65,7 +65,10 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entries []fhir
 			return nil, fmt.Errorf("failed to normalize references in entry #%d: %w", i, err)
 		}
 
-		resourceJSON, _ := json.Marshal(resource)
+		resourceJSON, err := json.Marshal(resource)
+		if err != nil {
+			return nil, err
+		}
 		tx.Entry = append(tx.Entry, fhir.BundleEntry{
 			Resource: resourceJSON,
 			Request: &fhir.BundleEntryRequest{
