@@ -17,8 +17,6 @@ func DefaultConfig() Config {
 		Nuts: nutsnode.Config{
 			Enabled: true,
 		},
-		MCSDAdmin: mcsdadmin.Config{
-			FHIRBaseURL: "http://localhost:7050/fhir/DEFAULT",
-		},
+		MCSDAdmin: mcsdadmin.Config{},
 	}
 }

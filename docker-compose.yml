@@ -5,7 +5,7 @@ services:
       - "8080:8080"
       - "8081:8081"
     environment:
-      MCSDADMIN_FHIRBaseURL: http://localhost:7050/fhir/DEFAULT 
+      MCSDADMIN_FHIRBaseURL: http://hapi-fhir:7050/fhir/DEFAULT
     volumes:
       - ./config:/app/config:ro
   init:
@@ -17,7 +17,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./test/testdata:/app/:ro
-    command: /bin/sh -c "cd /app && go run main.go http://knooppunt:8081 http://hapi-fhir:8080/fhir"
+    command: /bin/sh -c "cd /app && go run main.go http://knooppunt:8081 http://hapi-fhir:7050/fhir"
 
   # PostgreSQL Database
   postgres:
@@ -44,7 +44,7 @@ services:
     image: hapiproject/hapi:v8.2.0-2
     container_name: hapi-fhir-server
     ports:
-      - "7050:8080"
+      - "7050:7050"
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,6 +62,7 @@ services:
       hapi.fhir.version: R4
       # Prevents encoding of the pipe char in queries
       server.tomcat.relaxed-query-chars: "|"
+      server.port: 7050
       # should be an ADR? How does this behave?
       hapi.fhir.allow_cascading_deletes: true
       # Lets the server generate UUIDs for resources instead of integers
@@ -77,17 +78,17 @@ services:
       # hapi.fhir.allow_multiple_delete: true # to allow $expunge on system-level
       # Adds some default configs to the HAPI web UI for development
       hapi.fhir.tester.local.name: Local Directory
-      hapi.fhir.tester.local.server_address: http://localhost:8080/fhir/DEFAULT
+      hapi.fhir.tester.local.server_address: http://localhost:7050/fhir/DEFAULT
       hapi.fhir.tester.local.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.local.fhir_version: R4
 
       hapi.fhir.tester.lrza.name: LRZA
-      hapi.fhir.tester.lrza.server_address: http://localhost:8080/fhir/LRZA
+      hapi.fhir.tester.lrza.server_address: http://localhost:7050/fhir/LRZA
       hapi.fhir.tester.lrza.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.lrza.fhir_version: R4
 
       hapi.fhir.tester.orga.name: Org A Directory
-      hapi.fhir.tester.orga.server_address: http://localhost:8080/fhir/OrgA
+      hapi.fhir.tester.orga.server_address: http://localhost:7050/fhir/OrgA
       hapi.fhir.tester.orga.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.orga.fhir_version: R4
 
@@ -98,7 +99,7 @@ services:
     image: curlimages/curl:7.87.0
     depends_on:
       - hapi-fhir
-    entrypoint: [ "sh", "-c", "echo 'Starting fhirstore healthcheck...'; while ! curl -s -f http://hapi-fhir:8080/fhir/DEFAULT/Task > /dev/null; do echo 'Waiting for HAPI FHIR to be ready...'; sleep 5; done; echo 'HAPI FHIR is up and running.'" ]
+    entrypoint: [ "sh", "-c", "echo 'Starting fhirstore healthcheck...'; while ! curl -s -f http://hapi-fhir:7050/fhir/DEFAULT/Task > /dev/null; do echo 'Waiting for HAPI FHIR to be ready...'; sleep 5; done; echo 'HAPI FHIR is up and running.'" ]
     # Ensure the container exits successfully after the check
     restart: "no"
 
