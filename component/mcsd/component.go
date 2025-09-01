@@ -158,10 +158,10 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		Type:  fhir.BundleTypeTransaction,
 		Entry: make([]fhir.BundleEntry, 0, len(bundle.Entry)),
 	}
-	localRefMap := make(map[string]string)
+	remoteRefToLocalRefMap := make(map[string]string)
 	var report DirectoryUpdateReport
 	for i, entry := range bundle.Entry {
-		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, localRefMap)
+		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue

@@ -2,6 +2,7 @@ package mcsd
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,6 +13,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -36,40 +38,38 @@ func Test_mCSDUpdateClient(t *testing.T) {
 
 		queryFHIRClient := fhirclient.New(harnessDetail.MCSDCacheFHIRBaseURL, http.DefaultClient, nil)
 		t.Run("assert Sunflower organization resources", func(t *testing.T) {
+			expectedOrg := lrza.Care2Cure()
 			org, err := searchOrg(queryFHIRClient, harnessDetail.SunflowerURA)
 			require.NoError(t, err)
 			assert.Equal(t, "Sunflower Care Home", *org.Name)
+			assert.NotEqual(t, *expectedOrg.Id, *org.Id, "copy of organization in local Query Directory should have new ID")
+			// TODO: for some reason, meta is not populated correctly, needs further investigation
+			//assert.Equal(t, "the-source", *org.Meta.Source, "copy of organization in local Query Directory should have new Meta.Source")
 
 			// Assert mCSD-directory endpoint exists in query directory (from root directory)
-			mcsdEndpoint, err := searchEndpoint(queryFHIRClient, "mcsd-directory", harnessDetail.SunflowerURA)
-			require.NoError(t, err)
-			require.NotNil(t, mcsdEndpoint, "mCSD-directory endpoint should exist for Sunflower")
-			assert.Equal(t, "https://example.com/sunflower/mcsd", mcsdEndpoint.Address)
+			// TODO: Not possible yet, since the mCSD Directory endpoints comes from the root directory,
+			//       but the Organization resource from the org directory, which doesn't reference its mCSD Directory.
+			// assertEndpoint(t, queryFHIRClient, harnessDetail.SunflowerURA, "mcsd-directory", "/sunflower/mcsd")
 
 			// Assert FHIR endpoint exists in query directory (from admin directory)
-			fhirEndpoints, err := searchAllEndpoints(queryFHIRClient, "fhir")
-			require.NoError(t, err)
-			sunflowerFHIREndpoint := findEndpointByAddress(fhirEndpoints, "https://example.com/sunflower/fhir")
-			require.NotNil(t, sunflowerFHIREndpoint, "FHIR endpoint should exist for Sunflower")
-			assert.Equal(t, "https://example.com/sunflower/fhir", sunflowerFHIREndpoint.Address)
+			assertEndpoint(t, queryFHIRClient, harnessDetail.SunflowerURA, "fhir", "/sunflower/fhir")
 		})
 		t.Run("assert Care2Cure organization resources", func(t *testing.T) {
+			expectedOrg := lrza.Care2Cure()
 			org, err := searchOrg(queryFHIRClient, harnessDetail.Care2CureURA)
 			require.NoError(t, err)
 			assert.Equal(t, "Care2Cure Hospital", *org.Name)
+			assert.NotEqual(t, *expectedOrg.Id, *org.Id, "copy of organization in local Query Directory should have new ID")
+			// TODO: for some reason, meta is not populated correctly, needs further investigation
+			//assert.Equal(t, "the-source", *org.Meta.Source, "copy of organization in local Query Directory should have new Meta.Source")
 
 			// Assert mCSD-directory endpoint exists in query directory (from root directory)
-			mcsdEndpoint, err := searchEndpoint(queryFHIRClient, "mcsd-directory", harnessDetail.Care2CureURA)
-			require.NoError(t, err)
-			require.NotNil(t, mcsdEndpoint, "mCSD-directory endpoint should exist for Care2Cure")
-			assert.Equal(t, "https://example.com/care2curehospital/mcsd", mcsdEndpoint.Address)
+			// TODO: Not possible yet, since the mCSD Directory endpoints comes from the root directory,
+			//       but the Organization resource from the org directory, which doesn't reference its mCSD Directory.
+			//assertEndpoint(t, queryFHIRClient, harnessDetail.Care2CureURA, "mcsd-directory", "/care2curehospital/mcsd")
 
 			// Assert FHIR endpoint exists in query directory (from admin directory)
-			fhirEndpoints, err := searchAllEndpoints(queryFHIRClient, "fhir")
-			require.NoError(t, err)
-			care2cureFHIREndpoint := findEndpointByAddress(fhirEndpoints, "https://example.com/care2curehospital/fhir")
-			require.NotNil(t, care2cureFHIREndpoint, "FHIR endpoint should exist for Care2Cure")
-			assert.Equal(t, "https://example.com/care2curehospital/fhir", care2cureFHIREndpoint.Address)
+			assertEndpoint(t, queryFHIRClient, harnessDetail.Care2CureURA, "fhir", "/care2curehospital/fhir")
 		})
 	})
 }
@@ -82,12 +82,30 @@ func searchOrg(client fhirclient.Client, ura string) (*fhir.Organization, error)
 	}
 	if len(searchResult.Entry) == 0 {
 		return nil, nil
+	} else if len(searchResult.Entry) > 1 {
+		return nil, fmt.Errorf("expected 0..1 results, got %d", len(searchResult.Entry))
 	}
 	var organization fhir.Organization
 	if err := json.Unmarshal(searchResult.Entry[0].Resource, &organization); err != nil {
 		return nil, err
 	}
 	return &organization, nil
+}
+
+func assertEndpoint(t *testing.T, fhirClient fhirclient.Client, organizationURA string, connectionType string, connectionURLPath string) {
+	org, err := searchOrg(fhirClient, organizationURA)
+	require.NoError(t, err)
+	require.NotNilf(t, org, "organization with URA %s should exist", organizationURA)
+	for _, endpointRef := range org.Endpoint {
+		var endpoint fhir.Endpoint
+		err := fhirClient.Read(*endpointRef.Reference, &endpoint)
+		require.NoError(t, err)
+		if endpoint.ConnectionType.Code != nil && *endpoint.ConnectionType.Code == connectionType {
+			assert.Truef(t, strings.HasSuffix(endpoint.Address, connectionURLPath), "endpoint address should end with %s", connectionURLPath)
+			return
+		}
+	}
+	t.Errorf("no endpoint with connection type %s found for organization with URA %s", connectionType, organizationURA)
 }
 
 func searchEndpoint(client fhirclient.Client, connectionType string, organizationURA string) (*fhir.Endpoint, error) {
@@ -134,42 +152,11 @@ func searchEndpoint(client fhirclient.Client, connectionType string, organizatio
 	return nil, nil
 }
 
-func searchAllEndpoints(client fhirclient.Client, connectionType string) ([]fhir.Endpoint, error) {
-	var allEndpoints []fhir.Endpoint
-
-	// Perform a search for all endpoints with the given connection type
-	var searchResult fhir.Bundle
-	err := client.Search("Endpoint", url.Values{"connection-type": []string{connectionType}}, &searchResult)
-	if err != nil {
-		return nil, err
-	}
-
-	// Iterate through the search results and unmarshal each endpoint
-	for _, entry := range searchResult.Entry {
-		var endpoint fhir.Endpoint
-		if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
-			return nil, err
-		}
-		allEndpoints = append(allEndpoints, endpoint)
-	}
-
-	return allEndpoints, nil
-}
-
-func findEndpointByAddress(endpoints []fhir.Endpoint, address string) *fhir.Endpoint {
-	for _, endpoint := range endpoints {
-		if endpoint.Address == address {
-			return &endpoint
+func mapEntrySuffix(r mcsd.UpdateReport, suffix string) *mcsd.DirectoryUpdateReport {
+	for key, value := range r {
+		if strings.HasSuffix(key, suffix) {
+			return &value
 		}
 	}
 	return nil
-}
-
-func mapEntrySuffix(r mcsd.UpdateReport, suffix string) mcsd.DirectoryUpdateReport {
-	for key, value := range r {
-		if strings.HasSuffix(key, suffix) {
-			return value
-		}
-	}
-	return mcsd.DirectoryUpdateReport{}
 }

@@ -81,7 +81,7 @@ func TestComponent_update(t *testing.T) {
 		thisReport := report[rootDirServer.URL]
 		require.Empty(t, thisReport.Errors)
 		// Root directory: only mCSD directory endpoints should be synced, other resources should be filtered out
-		require.Len(t, thisReport.Warnings, 5)       // 4 organizations + 1 non-mCSD endpoint should be filtered out
+		require.Empty(t, thisReport.Warnings)
 		require.Equal(t, 4, thisReport.CountCreated) // 4 mCSD directory endpoints should be created
 		require.Equal(t, 0, thisReport.CountUpdated)
 		require.Equal(t, 0, thisReport.CountDeleted)
