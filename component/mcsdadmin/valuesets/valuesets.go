@@ -9,15 +9,24 @@ import (
 )
 
 var codingSystemIndex = map[string]string{
+	// Values taken from: https://hl7.org/fhir/R4/valueset-endpoint-connection-type.html
 	"endpoint-connection-type": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
-	"endpoint-payload-type":    "http://terminology.hl7.org/CodeSystem/endpoint-payload-type",
-	"endpoint-status":          "http://hl7.org/fhir/endpoint-status",
-	"location-physical-type":   "http://terminology.hl7.org/CodeSystem/location-physical-type",
-	"location-status":          "http://hl7.org/fhir/location-status",
-	"location-type":            "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
-	"organization-type":        "http://terminology.hl7.org/CodeSystem/organization-type",
-	"purpose-of-use":           "http://terminology.hl7.org/CodeSystem/v3-ActReason",
-	"service-type":             "http://terminology.hl7.org/CodeSystem/service-type",
+	// Values taken from: https://hl7.org/fhir/R4/valueset-service-type.html
+	"endpoint-payload-type": "http://terminology.hl7.org/CodeSystem/endpoint-payload-type",
+	// Values taken from: https://hl7.org/fhir/R4/valueset-endpoint-status.html
+	"endpoint-status": "http://hl7.org/fhir/endpoint-status",
+	// Values taken from: https://terminology.hl7.org/6.3.0/ValueSet-v3-ServiceDeliveryLocationRoleType.html
+	"location-physical-type": "http://terminology.hl7.org/CodeSystem/location-physical-type",
+	// Values taken from: https://hl7.org/fhir/R4/valueset-location-status.html
+	"location-status": "http://hl7.org/fhir/location-status",
+	// Values taken from: https://terminology.hl7.org/6.3.0/ValueSet-v3-ServiceDeliveryLocationRoleType.html
+	"location-type": "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
+	// Values taken from: https://hl7.org/fhir/R4/valueset-organization-type.html
+	"organization-type": "http://terminology.hl7.org/CodeSystem/organization-type",
+	// Values taken from: https://terminology.hl7.org/6.3.0/ValueSet-v3-PurposeOfUse.html
+	"purpose-of-use": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
+	// Values taken from: https://hl7.org/fhir/R4/valueset-service-type.html
+	"service-type": "http://terminology.hl7.org/CodeSystem/service-type",
 }
 
 var codingIndex = make(map[string]map[string]fhir.Coding)
