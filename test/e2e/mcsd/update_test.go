@@ -2,6 +2,7 @@ package mcsd
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -9,8 +10,10 @@ import (
 	"testing"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -25,20 +28,26 @@ func Test_mCSDUpdateClient(t *testing.T) {
 		responseData, err := io.ReadAll(httpResponse.Body)
 		require.NoError(t, err)
 
-		response := make(map[string]map[string]int)
+		var response mcsd.UpdateReport
 		require.NoError(t, json.Unmarshal(responseData, &response))
-		assert.Equalf(t, 4, mapEntrySuffix(response, "lrza-mcsd-public")["created"], "created=4 in %v", response)
+		assert.Equalf(t, 4, mapEntrySuffix(response, "lrza-mcsd-public").CountCreated, "created=4 in %v", response)
 
-		cacheFHIRClient := fhirclient.New(harnessDetail.MCSDCacheFHIRBaseURL, http.DefaultClient, nil)
+		queryFHIRClient := fhirclient.New(harnessDetail.MCSDCacheFHIRBaseURL, http.DefaultClient, nil)
 		t.Run("assert Sunflower organization resources", func(t *testing.T) {
-			org, err := searchOrg(cacheFHIRClient, harnessDetail.SunflowerURA)
+			org, err := searchOrg(queryFHIRClient, harnessDetail.SunflowerURA)
 			require.NoError(t, err)
 			assert.Equal(t, "Sunflower Care Home", *org.Name)
+			assert.NotEqual(t, *vectors.CareHomeSunflower().Id, *org.Id, "copy of organization in local Query Directory should have new ID")
+			// TODO: for some reason, meta is not populated correctly, needs further investigation
+			//assert.Equal(t, "the-source", *org.Meta.Source, "copy of organization in local Query Directory should have new Meta.Source")
 		})
 		t.Run("assert Care2Cure organization resources", func(t *testing.T) {
-			org, err := searchOrg(cacheFHIRClient, harnessDetail.Care2CureURA)
+			org, err := searchOrg(queryFHIRClient, harnessDetail.Care2CureURA)
 			require.NoError(t, err)
 			assert.Equal(t, "Care2Cure Hospital", *org.Name)
+			assert.NotEqual(t, *vectors.Care2CureHospital().Id, *org.Id, "copy of organization in local Query Directory should have new ID")
+			// TODO: for some reason, meta is not populated correctly, needs further investigation
+			//assert.Equal(t, "the-source", *org.Meta.Source, "copy of organization in local Query Directory should have new Meta.Source")
 		})
 	})
 }
@@ -51,6 +60,8 @@ func searchOrg(client fhirclient.Client, ura string) (*fhir.Organization, error)
 	}
 	if len(searchResult.Entry) == 0 {
 		return nil, nil
+	} else if len(searchResult.Entry) > 1 {
+		return nil, fmt.Errorf("expected 0..1 results, got %d", len(searchResult.Entry))
 	}
 	var organization fhir.Organization
 	if err := json.Unmarshal(searchResult.Entry[0].Resource, &organization); err != nil {
@@ -59,11 +70,11 @@ func searchOrg(client fhirclient.Client, ura string) (*fhir.Organization, error)
 	return &organization, nil
 }
 
-func mapEntrySuffix[T any](m map[string]T, suffix string) T {
+func mapEntrySuffix(m mcsd.UpdateReport, suffix string) *mcsd.DirectoryUpdateReport {
 	for key, value := range m {
 		if strings.HasSuffix(key, suffix) {
-			return value
+			return &value
 		}
 	}
-	return *new(T)
+	return nil
 }
