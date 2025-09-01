@@ -58,7 +58,7 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 
 	for _, tenant := range []HAPITenant{knptMCSDQueryHAPITenant, knptMCSDAdminHAPITenant, lrzaMCSDAdminHAPITenant, care2CureAdminHAPITenant, sunflowerAdminHAPITenant} {
 		if err := CreateHAPITenant(ctx, tenant, hapiDefaultFHIRClient); err != nil {
-			return nil, fmt.Errorf("create HAPI FHIR tenant: %w", err)
+			return nil, fmt.Errorf("create HAPI tenant: %w", err)
 		}
 	}
 
