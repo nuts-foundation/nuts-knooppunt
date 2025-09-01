@@ -46,6 +46,22 @@ docker compose up
 
 ## Configuration
 
+The application supports configuration through YAML files and environment variables. See [CONFIGURATION.md](CONFIGURATION.md) for detailed configuration options.
+
+Quick start:
+
+```shell
+# Configuration is automatically read from config/knooppunt.yml or config/knooppunt.yaml
+./nuts-knooppunt
+
+# Using environment variables to override config
+export KNPT_NUTS_ENABLED=false
+export KNPT_MCSDADMIN_FHIRBASEURL=http://localhost:8080/fhir
+./nuts-knooppunt
+```
+
+### Legacy Configuration
+
 - `KNPT_CONFIGDIR`: Directory where the configuration files are stored. Defaults to `./config`.
 
 ## Components

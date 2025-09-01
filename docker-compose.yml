@@ -5,7 +5,9 @@ services:
       - "8080:8080"
       - "8081:8081"
     environment:
-      MCSDADMIN_FHIRBaseURL: http://hapi-fhir:7050/fhir/DEFAULT
+      KNPT_MCSDADMIN_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-cache
+      KNPT_MCSD_LOCALDIRECTORY_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-cache
+      KNPT_MCSD_ROOTDIRECTORIES_LRZA_FHIRBASEURL: http://hapi-fhir:7050/fhir/lrza-mcsd-public
     volumes:
       - ./config:/app/config:ro
   init:

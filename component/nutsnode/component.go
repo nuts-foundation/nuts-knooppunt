@@ -61,8 +61,8 @@ type Component struct {
 }
 
 type Config struct {
-	ConfigFile string
-	Enabled    bool
+	ConfigFile string `koanf:"configfile"`
+	Enabled    bool   `koanf:"enabled"`
 }
 
 func (c *Component) Start() error {

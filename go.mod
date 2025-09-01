@@ -9,6 +9,11 @@ replace github.com/nuts-foundation/nuts-knooppunt/test/testdata => ./test/testda
 require (
 	github.com/SanteonNL/go-fhir-client v0.5.0
 	github.com/google/uuid v1.6.0
+	github.com/knadh/koanf/parsers/yaml v1.1.0
+	github.com/knadh/koanf/providers/env v1.1.0
+	github.com/knadh/koanf/providers/file v1.2.0
+	github.com/knadh/koanf/providers/structs v1.0.0
+	github.com/knadh/koanf/v2 v2.2.2
 	github.com/nuts-foundation/nuts-node v1.0.1-0.20250730220338-25f40d3afc95
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.34.0
@@ -68,6 +73,7 @@ require (
 	github.com/eko/gocache/store/go_cache/v4 v4.2.2 // indirect
 	github.com/eko/gocache/store/memcache/v4 v4.2.2 // indirect
 	github.com/eko/gocache/store/redis/v4 v4.2.2 // indirect
+	github.com/fatih/structs v1.1.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor v1.5.1 // indirect
@@ -111,11 +117,7 @@ require (
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.5 // indirect
 	github.com/knadh/koanf/maps v0.1.2 // indirect
-	github.com/knadh/koanf/parsers/yaml v1.1.0 // indirect
-	github.com/knadh/koanf/providers/env v1.1.0 // indirect
-	github.com/knadh/koanf/providers/file v1.2.0 // indirect
 	github.com/knadh/koanf/providers/posflag v1.0.1 // indirect
-	github.com/knadh/koanf/v2 v2.2.2 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/labstack/echo/v4 v4.13.4 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
