@@ -81,7 +81,7 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 
 	resourceJSON, err := json.Marshal(resource)
 	if err != nil {
-		return resourceType, err
+		return "", err
 	}
 	tx.Entry = append(tx.Entry, fhir.BundleEntry{
 		Resource: resourceJSON,
