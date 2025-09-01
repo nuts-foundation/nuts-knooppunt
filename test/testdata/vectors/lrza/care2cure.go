@@ -19,7 +19,7 @@ func Care2Cure() fhir.Organization {
 		},
 		Endpoint: []fhir.Reference{
 			{
-				Reference: to.Ptr("Endpoint/099177e6-5523-4e49-a1c2-0fd8955853d"),
+				Reference: to.Ptr("Endpoint/08e9e83b-5c3b-43ce-be6f-e0ede8975615"),
 				Type:      to.Ptr("Endpoint"),
 			},
 		},
@@ -29,7 +29,7 @@ func Care2Cure() fhir.Organization {
 func Care2CureEndpoints(hapiBaseURL *url.URL) []fhir.Endpoint {
 	return []fhir.Endpoint{
 		{
-			Id:      to.Ptr("099177e6-5523-4e49-a1c2-0fd8955853d"),
+			Id:      to.Ptr("08e9e83b-5c3b-43ce-be6f-e0ede8975615"),
 			Address: hapiBaseURL.JoinPath("care2cure-admin").String(),
 			Meta: &fhir.Meta{
 				Profile: []string{"https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"},
