@@ -23,26 +23,6 @@ func fhirClientConfig() *fhirClient.Config {
 	return &config
 }
 
-func CreateHealthcareService(service fhir.HealthcareService) (out fhir.HealthcareService, err error) {
-	err = client.Create(service, out)
-	return out, err
-}
-
-func CreateOrganisation(organisation fhir.Organization) (out fhir.HealthcareService, err error) {
-	err = client.Create(organisation, out)
-	return out, err
-}
-
-func CreateEndpoint(service fhir.Endpoint) (out fhir.Endpoint, err error) {
-	err = client.Create(service, out)
-	return out, err
-}
-
-func CreateLocation(location fhir.Location) (out fhir.Location, err error) {
-	err = client.Create(location, out)
-	return out, err
-}
-
 func findAll(resourceType string) (fhir.Bundle, error) {
 	var result fhir.Bundle
 	err := client.Search(resourceType, url.Values{}, &result, nil)

@@ -130,7 +130,12 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	}
 	service.ProvidedBy.Display = providedByOrg.Name
 
-	_, err = CreateHealthcareService(service)
+	var resSer fhir.HealthcareService
+	err = client.Create(service, &resSer)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 
@@ -207,7 +212,12 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	active := r.PostForm.Get("active") == "true"
 	org.Active = &active
 
-	_, err = CreateOrganisation(org)
+	var resOrg fhir.Organization
+	err = client.Create(org, &resOrg)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 
@@ -376,7 +386,12 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Msg("Failed to determine status, default to active")
 	}
 
-	_, err = CreateEndpoint(endpoint)
+	var resEp fhir.Endpoint
+	err = client.Create(endpoint, &resEp)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
 
@@ -464,7 +479,12 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_, err = CreateLocation(location)
+	var resLoc fhir.Location
+	err = client.Create(location, &resLoc)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	tmpls.RenderWithBase(w, "location_list.html", nil)
 }
