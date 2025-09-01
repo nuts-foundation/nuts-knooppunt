@@ -56,7 +56,7 @@ func TestComponent_update(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, report)
-	require.Nil(t, report[rootDirServer.URL].Error)
+	require.NoError(t, report[rootDirServer.URL].Error)
 	require.Empty(t, report[rootDirServer.URL].Warnings)
 
 	t.Run("check created resources", func(t *testing.T) {
