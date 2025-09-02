@@ -60,11 +60,8 @@ func (c *Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, _ *http.ServeMux) {
+func (c *Component) RegisterHttpHandlers(_ *http.ServeMux, _ *http.ServeMux) {
 	// Nothing to do here
-	publicMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("Hello, World!"))
-	})
 }
 
 func createServer(addr string, handler http.Handler) (*http.Server, error) {
