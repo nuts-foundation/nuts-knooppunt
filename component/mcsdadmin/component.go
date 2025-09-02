@@ -10,6 +10,7 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/static"
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
 	"github.com/rs/zerolog/log"
@@ -62,6 +63,10 @@ func (c Component) Stop(ctx context.Context) error {
 // Route handling
 
 func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
+	// Static file serving for CSS and fonts
+	mux.Handle("GET /mcsdadmin/css/", http.StripPrefix("/mcsdadmin/", http.FileServer(http.FS(static.FS))))
+	mux.Handle("GET /mcsdadmin/webfonts/", http.StripPrefix("/mcsdadmin/", http.FileServer(http.FS(static.FS))))
+
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice", listServices)
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice/new", newService)
 	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", newServicePost)
