@@ -42,11 +42,8 @@ func LoadConfig() (Config, error) {
 	}
 
 	// Try config files in config directory only
-	configFiles := []string{
-		"config/knooppunt.yaml",
-		"config/knooppunt.yml",
-	}
-	
+	configFiles := []string{"config/knooppunt.yml"}
+
 	for _, cf := range configFiles {
 		if _, err := os.Stat(cf); err == nil {
 			if err := k.Load(file.Provider(cf), yaml.Parser()); err != nil {
@@ -62,7 +59,7 @@ func LoadConfig() (Config, error) {
 		// First remove the prefix and convert to lowercase
 		key := strings.TrimPrefix(s, "KNPT_")
 		parts := strings.Split(key, "_")
-		
+
 		// Convert to lowercase path
 		result := make([]string, len(parts))
 		for i, part := range parts {

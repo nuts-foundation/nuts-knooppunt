@@ -23,6 +23,3 @@ mcsdadmin:
 nuts:
   # Whether to enable the Nuts node component
   enabled: true
-  
-  # Path to Nuts node configuration file (optional)
-  configfile: "config/nuts.yaml"

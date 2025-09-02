@@ -2,19 +2,20 @@ package main
 
 import (
 	"context"
-	"log"
+
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
 	// Load configuration
 	config, err := cmd.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		log.Fatal().Err(err).Msg("Failed to load configuration")
 	}
 
 	// Listen for interrupt signals (CTRL/CMD+C, OS instructing the process to stop) to cancel context.

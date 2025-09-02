@@ -61,18 +61,13 @@ type Component struct {
 }
 
 type Config struct {
-	ConfigFile string `koanf:"configfile"`
-	Enabled    bool   `koanf:"enabled"`
+	Enabled bool `koanf:"enabled"`
 }
 
 func (c *Component) Start() error {
-	configFile := c.config.ConfigFile
-	if configFile == "" {
-		configFile = "config/nuts.yaml"
-	}
 	const dataDir = "data/nuts"
 	envVars := map[string]string{
-		"NUTS_CONFIGFILE":            configFile,
+		"NUTS_CONFIGFILE":            "config/nuts.yml",
 		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr.Host,
 		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr.Host,
 		"NUTS_DATADIR":               dataDir,
