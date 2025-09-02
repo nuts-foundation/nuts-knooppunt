@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
@@ -18,7 +17,7 @@ import (
 )
 
 type Config struct {
-	FHIRBaseURL string
+	FHIRBaseURL string `koanf:"fhirbaseurl"`
 }
 
 var _ component.Lifecycle = (*Component)(nil)
@@ -31,10 +30,6 @@ type Component struct {
 var client fhirclient.Client
 
 func New(config Config) *Component {
-	if config.FHIRBaseURL == "" {
-		config.FHIRBaseURL = os.Getenv("MCSDADMIN_FHIRBaseURL")
-	}
-
 	baseURL, err := url.Parse(config.FHIRBaseURL)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to start MCSD admin component, invalid FHIRBaseURL")
