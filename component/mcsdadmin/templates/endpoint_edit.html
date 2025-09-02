@@ -1,69 +1,82 @@
 {{define "main"}}
-<form method="post" enctype="application/x-www-form-urlencoded">
-    <div class="form-group">
-        <label for="address">Address:</label>
-        <input id="address" type="text" name="address" placeholder="https://" required>
-    </div>
-    <div class="form-group">
-        <label for="payload-type">Payload Type:</label>
-        <select name="payload-type" id="payload-type">
-            <option value="">--Please choose an option--</option>
-            {{range .PayloadTypes }}
-            <option value="{{ .Code }}">{{ .Display }}</option>
-            {{ end }}
-        </select>
-    </div>
-    <div class="form-group">
-        <fieldset>
-            <legend>Period:</legend>
-            <label for="period-start">From:</label>
-            <input id="period-start" type="date" name="period-start" />
-            <label for="period-end">To:</label>
-            <input id="period-end" type="date" name="period-end" />
-        </fieldset>
-    </div>
-    <div class="form-group">
-        <label for="contact">Contact:</label>
-        <input id="contact" type="text" name="contact" />
-    </div>
-    <div class="form-group">
-        <label for="managing-org">Managing organisation:</label>
-        <select name="managing-org" id="managing-org">
-            <option value="">--Please choose an option--</option>
-            {{range .Organizations}}
-            <option value="{{ .Id }}">{{ .Name }}</option>
-            {{ end }}
-        </select>
-    </div>
-    <div class="form-group">
-        <label for="connection-type">Connection Type:</label>
-        <select name="connection-type" id="connection-type">
-            <option value="">--Please choose an option--</option>
-            {{range .ConnectionTypes }}
-            <option value="{{ .Code }}">{{ .Display }}</option>
-            {{ end }}
-        </select>
-    </div>
-    <div class="form-group">
-        <label for="purpose-of-use">Purpose of use:</label>
-        <select name="purpose-of-use" id="purpose-of-use">
-            <option value="">--Please choose an option--</option>
-            {{range .PurposeOfUse }}
-            <option value="{{ .Code }}">{{ .Display }}</option>
-            {{ end }}
-        </select>
-    </div>
-    <div class="form-group">
-        <label for="status">Status:</label>
-        <select name="status" id="status">
-            <option value="">--Please choose an option--</option>
-            {{range .Status}}
-            <option value="{{ .Code }}">{{ .Display }}</option>
-            {{ end }}
-        </select>
-    </div>
-    <div class="form-group">
-        <button>Submit!</button>
-    </div>
-</form>
+<div class="card">
+  <div class="card-header">
+    <h4>Edit Endpoint</h4>
+  </div>
+  <div class="card-body">
+    <form method="post" enctype="application/x-www-form-urlencoded">
+        <div class="form-group">
+            <label for="address">Address:</label>
+            <input id="address" type="text" name="address" class="form-control" placeholder="https://" required>
+        </div>
+        <div class="form-group">
+            <label for="payload-type">Payload Type:</label>
+            <select name="payload-type" id="payload-type" class="form-control">
+                <option value="">--Please choose an option--</option>
+                {{range .PayloadTypes }}
+                <option value="{{ .Code }}">{{ .Display }}</option>
+                {{ end }}
+            </select>
+        </div>
+        <div class="form-group">
+            <fieldset class="border p-3 rounded">
+                <legend class="w-auto px-2" style="font-size: 1rem;">Period:</legend>
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="period-start">From:</label>
+                        <input id="period-start" type="date" name="period-start" class="form-control" />
+                    </div>
+                    <div class="col-md-6">
+                        <label for="period-end">To:</label>
+                        <input id="period-end" type="date" name="period-end" class="form-control" />
+                    </div>
+                </div>
+            </fieldset>
+        </div>
+        <div class="form-group">
+            <label for="contact">Contact:</label>
+            <input id="contact" type="text" name="contact" class="form-control" />
+        </div>
+        <div class="form-group">
+            <label for="managing-org">Managing organisation:</label>
+            <select name="managing-org" id="managing-org" class="form-control">
+                <option value="">--Please choose an option--</option>
+                {{range .Organizations}}
+                <option value="{{ .Id }}">{{ .Name }}</option>
+                {{ end }}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="connection-type">Connection Type:</label>
+            <select name="connection-type" id="connection-type" class="form-control">
+                <option value="">--Please choose an option--</option>
+                {{range .ConnectionTypes }}
+                <option value="{{ .Code }}">{{ .Display }}</option>
+                {{ end }}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="purpose-of-use">Purpose of use:</label>
+            <select name="purpose-of-use" id="purpose-of-use" class="form-control">
+                <option value="">--Please choose an option--</option>
+                {{range .PurposeOfUse }}
+                <option value="{{ .Code }}">{{ .Display }}</option>
+                {{ end }}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="status">Status:</label>
+            <select name="status" id="status" class="form-control">
+                <option value="">--Please choose an option--</option>
+                {{range .Status}}
+                <option value="{{ .Code }}">{{ .Display }}</option>
+                {{ end }}
+            </select>
+        </div>
+        <div class="form-group">
+            <button type="submit" class="btn btn-primary">Submit</button>
+        </div>
+    </form>
+  </div>
+</div>
 {{end}}

@@ -1,33 +1,38 @@
 {{define "main"}}
-<div class="action-bar">
-    <div>
-        <a href="/mcsdadmin/endpoint/new">New Endpoint</a>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Endpoints</h2>
+    <a href="/mcsdadmin/endpoint/new" class="btn btn-primary">New Endpoint</a>
 </div>
-<div class="main-view">
-    <table>
-        <thead>
-        <tr>
-            <th scope="col">Address</th>
-            <th scope="col">Payload Type</th>
-            <th scope="col">Period</th>
-            <th scope="col">Managing Organization</th>
-            <th scope="col">Connection Type</th>
-            <th scope="col">Status</th>
-        </tr>
-        </thead>
-        <tbody>
-        {{range .Endpoints}}
-        <tr>
-            <th scope="row">{{ .Address }}</th>
-            <td>{{ .PayloadType }}</td>
-            <td>{{ .Period }}</td>
-            <td>{{ .ManagingOrg }}</td>
-            <td>{{ .ConnectionType }}</td>
-            <td>{{ .Status }}</td>
-        </tr>
-        {{end}}
-        </tbody>
-    </table>
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="thead-light">
+                <tr>
+                    <th scope="col">Address</th>
+                    <th scope="col">Payload Type</th>
+                    <th scope="col">Period</th>
+                    <th scope="col">Managing Organization</th>
+                    <th scope="col">Connection Type</th>
+                    <th scope="col">Status</th>
+                </tr>
+                </thead>
+                <tbody>
+                {{range .Endpoints}}
+                <tr>
+                    <th scope="row">{{ .Address }}</th>
+                    <td>{{ .PayloadType }}</td>
+                    <td>{{ .Period }}</td>
+                    <td>{{ .ManagingOrg }}</td>
+                    <td>{{ .ConnectionType }}</td>
+                    <td>
+                        <span class="badge badge-info">{{ .Status }}</span>
+                    </td>
+                </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 {{end}}
