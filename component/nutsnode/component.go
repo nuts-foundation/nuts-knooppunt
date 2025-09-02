@@ -66,12 +66,16 @@ type Config struct {
 
 func (c *Component) Start() error {
 	const dataDir = "data/nuts"
+	const configFile = "config/nuts.yml"
 	envVars := map[string]string{
-		"NUTS_CONFIGFILE":            "config/nuts.yml",
 		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr.Host,
 		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr.Host,
 		"NUTS_DATADIR":               dataDir,
 		"NUTS_VERBOSITY":             zerolog.GlobalLevel().String(),
+	}
+	// Only set NUTS_CONFIGFILE if the config file exists
+	if _, err := os.Stat(configFile); err == nil {
+		envVars["NUTS_CONFIGFILE"] = configFile
 	}
 	for key, value := range envVars {
 		if err := os.Setenv(key, value); err != nil {
