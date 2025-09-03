@@ -69,7 +69,7 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", newServicePost)
 	mux.HandleFunc("DELETE /mcsdadmin/healthcareservice/{id}", deleteHandler("HealthcareService"))
 	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
-	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}", deleteHandler("Organisation"))
+	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}", deleteHandler("Organization"))
 	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
@@ -79,7 +79,7 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/location", listLocations)
 	mux.HandleFunc("GET /mcsdadmin/location/new", newLocation)
 	mux.HandleFunc("POST /mcsdadmin/location/new", newLocationPost)
-	mux.HandleFunc("DELETE /mcsdadmin/location/{id}", deleteHandler("Endpoint"))
+	mux.HandleFunc("DELETE /mcsdadmin/location/{id}", deleteHandler("Location"))
 	mux.HandleFunc("GET /mcsdadmin", homePage)
 	mux.HandleFunc("GET /mcsdadmin/", notFound)
 }
