@@ -25,7 +25,8 @@
                 </td>
                 <td>{{ .PhysicalType }}</td>
                 <td>
-                    <button hx-delete="/mcsdadmin/location/{{ .Id }}"
+                    <button class="btn btn-outline-dark btn-sm"
+                            hx-delete="/mcsdadmin/location/{{ .Id }}"
                             hx-target="#row-{{.Id}}"
                             hx-swap="delete"
                     >

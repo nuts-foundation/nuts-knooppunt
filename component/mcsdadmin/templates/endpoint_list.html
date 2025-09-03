@@ -30,7 +30,8 @@
                         <span class="badge badge-info">{{ .Status }}</span>
                     </td>
                     <td>
-                        <button hx-delete="/mcsdadmin/endpoint/{{.Id}}"
+                        <button class="btn btn-outline-dark btn-sm"
+                                hx-delete="/mcsdadmin/endpoint/{{.Id}}"
                                 hx-target="#row-{{.Id}}"
                                 hx-swap="delete"
                         >

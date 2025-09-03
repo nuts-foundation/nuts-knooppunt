@@ -29,7 +29,8 @@
                 </td>
                 <td>{{ .ProvidedBy }}</td>
                 <td>
-                    <button hx-delete="/mcsdadmin/healthcareservice/{{ .Id }}"
+                    <button class="btn btn-outline-dark btn-sm"
+                            hx-delete="/mcsdadmin/healthcareservice/{{ .Id }}"
                             hx-target="#row-{{.Id}}"
                             hx-swap="delete"
                     >
