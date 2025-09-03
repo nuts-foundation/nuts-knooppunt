@@ -23,12 +23,12 @@ type Component struct {
 }
 
 type Config struct {
-	RootDirectories map[string]DirectoryConfig `json:"roots"`
-	LocalDirectory  DirectoryConfig            `json:"local"`
+	RootDirectories map[string]DirectoryConfig `koanf:"rootdirectories"`
+	LocalDirectory  DirectoryConfig            `koanf:"localdirectory"`
 }
 
 type DirectoryConfig struct {
-	FHIRBaseURL string `json:"url"`
+	FHIRBaseURL string `koanf:"fhirbaseurl"`
 }
 
 type UpdateReport map[string]DirectoryUpdateReport
