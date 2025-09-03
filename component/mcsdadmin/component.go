@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
@@ -76,20 +77,8 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 }
 
 func listServices(w http.ResponseWriter, r *http.Request) {
-	services, err := findAll[fhir.HealthcareService](client)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	props := struct {
-		Services []tmpls.ServiceListProps
-	}{
-		Services: tmpls.MakeServiceListXsProps(services),
-	}
-
 	w.WriteHeader(http.StatusOK)
-	tmpls.RenderWithBase(w, "service_list.html", props)
+	renderList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, tmpls.MakeServiceListXsProps)
 }
 
 func newService(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +102,7 @@ func newService(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	tmpls.RenderWithBase(w, "service_edit.html", props)
+	tmpls.RenderWithBase(w, "healthcareservice_edit.html", props)
 }
 
 func newServicePost(w http.ResponseWriter, r *http.Request) {
@@ -161,35 +150,12 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	services, err := findAll[fhir.HealthcareService](client)
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find all services")
-	}
-
-	props := struct {
-		Services []tmpls.ServiceListProps
-	}{
-		Services: tmpls.MakeServiceListXsProps(services),
-	}
-
-	tmpls.RenderWithBase(w, "service_list.html", props)
+	renderList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, tmpls.MakeServiceListXsProps)
 }
 
 func listOrganizations(w http.ResponseWriter, r *http.Request) {
-	orgs, err := findAll[fhir.Organization](client)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	props := struct {
-		Organizations []tmpls.OrgListProps
-	}{
-		Organizations: tmpls.MakeOrgListXsProps(orgs),
-	}
-
 	w.WriteHeader(http.StatusOK)
-	tmpls.RenderWithBase(w, "organization_list.html", props)
+	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
 }
 
 func newOrganization(w http.ResponseWriter, r *http.Request) {
@@ -197,10 +163,8 @@ func newOrganization(w http.ResponseWriter, r *http.Request) {
 
 	types, err := valuesets.CodingsFrom("organization-type")
 	if err != nil {
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	props := struct {
@@ -242,36 +206,12 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-
-	orgs, err := findAll[fhir.Organization](client)
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find all organizations")
-	}
-
-	props := struct {
-		Organizations []tmpls.OrgListProps
-	}{
-		Organizations: tmpls.MakeOrgListXsProps(orgs),
-	}
-
-	tmpls.RenderWithBase(w, "organization_list.html", props)
+	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
 }
 
 func listEndpoints(w http.ResponseWriter, r *http.Request) {
-	endpoints, err := findAll[fhir.Endpoint](client)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	props := struct {
-		Endpoints []tmpls.EpListProps
-	}{
-		Endpoints: tmpls.MakeEpListXsProps(endpoints),
-	}
-
 	w.WriteHeader(http.StatusOK)
-	tmpls.RenderWithBase(w, "endpoint_list.html", props)
+	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
 }
 
 func newEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -416,19 +356,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-
-	endpoints, err := findAll[fhir.Endpoint](client)
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find all endpoints")
-	}
-
-	props := struct {
-		Endpoints []tmpls.EpListProps
-	}{
-		Endpoints: tmpls.MakeEpListXsProps(endpoints),
-	}
-
-	tmpls.RenderWithBase(w, "endpoint_list.html", props)
+	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
 }
 
 func newLocation(w http.ResponseWriter, r *http.Request) {
@@ -507,26 +435,12 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	tmpls.RenderWithBase(w, "location_list.html", nil)
+	renderList[fhir.Location, tmpls.LocationListProps](client, w, tmpls.MakeLocationListXsProps)
 }
 
 func listLocations(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-
-	locs, err := findAll[fhir.Location](client)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	props := struct {
-		Locations []tmpls.LocationListProps
-	}{
-		Locations: tmpls.MakeLocationListXsProps(locs),
-	}
-
-	tmpls.RenderWithBase(w, "location_list.html", props)
+	renderList[fhir.Location, tmpls.LocationListProps](client, w, tmpls.MakeLocationListXsProps)
 }
 
 func homePage(w http.ResponseWriter, r *http.Request) {
@@ -544,8 +458,6 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Path not implemented"))
 }
 
-// Fhir client helpers
-
 func fhirClientConfig() *fhirclient.Config {
 	config := fhirclient.DefaultConfig()
 	config.DefaultOptions = []fhirclient.Option{
@@ -558,6 +470,8 @@ func fhirClientConfig() *fhirclient.Config {
 	}
 	return &config
 }
+
+// Fhir client helpers
 
 func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {
 	var prototype T
@@ -580,4 +494,18 @@ func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {
 	}
 
 	return result, nil
+}
+
+func renderList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.ResponseWriter, dtoFunc func([]R) []DTO) {
+	resourceType := caramel.ResourceType(new(R))
+	items, err := findAll[R](fhirClient)
+	if err != nil {
+		http.Error(httpResponse, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	tmpls.RenderWithBase(httpResponse, strings.ToLower(resourceType)+"_list.html", struct {
+		Items []DTO
+	}{
+		Items: dtoFunc(items),
+	})
 }
