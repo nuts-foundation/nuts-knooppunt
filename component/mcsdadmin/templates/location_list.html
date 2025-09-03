@@ -12,17 +12,26 @@
                 <th scope="col">Type</th>
                 <th scope="col">Status</th>
                 <th scope="col">Physical Type</th>
+                <th scope="col">Actions</th>
             </tr>
             </thead>
             <tbody>
             {{range .Items }}
-            <tr>
+            <tr id="row-{{.Id}}">
                 <th scope="row">{{ .Name }}</th>
                 <td>{{ .Type }}</td>
                 <td>
                     <span class="badge badge-info">{{ .Status }}</span>
                 </td>
                 <td>{{ .PhysicalType }}</td>
+                <td>
+                    <button hx-delete="/mcsdadmin/location/{{ .Id }}"
+                            hx-target="#row-{{.Id}}"
+                            hx-swap="delete"
+                    >
+                        Delete
+                    </button>
+                </td>
             </tr>
             {{end}}
             </tbody>

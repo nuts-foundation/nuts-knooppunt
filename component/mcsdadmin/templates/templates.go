@@ -216,6 +216,7 @@ func MakeServiceListXsProps(services []fhir.HealthcareService) []ServiceListProp
 }
 
 type LocationListProps struct {
+	Id           string
 	Name         string
 	Type         string
 	Status       string
@@ -223,6 +224,10 @@ type LocationListProps struct {
 }
 
 func MakeLocationListProps(location fhir.Location) (out LocationListProps) {
+	if location.Id != nil {
+		out.Id = *location.Id
+	}
+
 	if location.Name != nil {
 		out.Name = *location.Name
 	} else {

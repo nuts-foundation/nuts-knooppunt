@@ -79,6 +79,7 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/location", listLocations)
 	mux.HandleFunc("GET /mcsdadmin/location/new", newLocation)
 	mux.HandleFunc("POST /mcsdadmin/location/new", newLocationPost)
+	mux.HandleFunc("DELETE /mcsdadmin/location/{id}", deleteHandler("Endpoint"))
 	mux.HandleFunc("GET /mcsdadmin", homePage)
 	mux.HandleFunc("GET /mcsdadmin/", notFound)
 }
