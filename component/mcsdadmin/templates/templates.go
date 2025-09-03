@@ -34,6 +34,7 @@ func RenderWithBase(w io.Writer, name string, data any) {
 const unknownStr = "N/A"
 
 type EpListProps struct {
+	Id             string
 	Address        string
 	PayloadType    string
 	Period         string
@@ -75,6 +76,10 @@ func fmtRef(ref fhir.Reference) string {
 }
 
 func MakeEpListProps(ep fhir.Endpoint) (out EpListProps) {
+	if ep.Id != nil {
+		out.Id = *ep.Id
+	}
+
 	out.Address = ep.Address
 
 	hasPayload := len(ep.PayloadType) > 0

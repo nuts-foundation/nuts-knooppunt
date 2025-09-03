@@ -15,11 +15,12 @@
                     <th scope="col">Managing Organization</th>
                     <th scope="col">Connection Type</th>
                     <th scope="col">Status</th>
+                    <th scope="col">Actions</th>
                 </tr>
                 </thead>
                 <tbody>
                 {{range .Items}}
-                <tr>
+                <tr id="row-{{.Id}}">
                     <th scope="row">{{ .Address }}</th>
                     <td>{{ .PayloadType }}</td>
                     <td>{{ .Period }}</td>
@@ -27,6 +28,14 @@
                     <td>{{ .ConnectionType }}</td>
                     <td>
                         <span class="badge badge-info">{{ .Status }}</span>
+                    </td>
+                    <td>
+                        <button hx-delete="/mcsdadmin/endpoint/{{.Id}}"
+                                hx-target="#row-{{.Id}}"
+                                hx-swap="delete"
+                        >
+                            Delete
+                        </button>
                     </td>
                 </tr>
                 {{end}}
