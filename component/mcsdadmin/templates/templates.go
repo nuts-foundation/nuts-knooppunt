@@ -156,6 +156,7 @@ func MakeOrgListXsProps(orgs []fhir.Organization) []OrgListProps {
 }
 
 type ServiceListProps struct {
+	Id         string
 	Name       string
 	Type       string
 	Active     bool
@@ -163,6 +164,10 @@ type ServiceListProps struct {
 }
 
 func MakeServiceListProps(service fhir.HealthcareService) (out ServiceListProps) {
+	if service.Id != nil {
+		out.Id = *service.Id
+	}
+
 	if service.Name != nil {
 		out.Name = *service.Name
 	} else {

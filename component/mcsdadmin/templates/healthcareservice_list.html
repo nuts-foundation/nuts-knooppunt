@@ -12,11 +12,12 @@
                 <th scope="col">Type</th>
                 <th scope="col">Active</th>
                 <th scope="col">Provided By</th>
+                <th scope="col">Actions</th>
             </tr>
             </thead>
             <tbody>
             {{range .Items }}
-            <tr>
+            <tr id="row-{{.Id}}">
                 <th scope="row">{{ .Name }}</th>
                 <td>{{ .Type }}</td>
                 <td>
@@ -27,6 +28,14 @@
                     {{end}}
                 </td>
                 <td>{{ .ProvidedBy }}</td>
+                <td>
+                    <button hx-delete="/mcsdadmin/healthcareservice/{{ .Id }}"
+                            hx-target="#row-{{.Id}}"
+                            hx-swap="delete"
+                    >
+                        Delete
+                    </button>
+                </td>
             </tr>
             {{end}}
             </tbody>

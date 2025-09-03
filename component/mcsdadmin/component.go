@@ -67,10 +67,9 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice", listServices)
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice/new", newService)
 	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", newServicePost)
-	mux.HandleFunc("GET /mcsdadmin/healthcareservice/{id}/edit", notImplemented)
-	mux.HandleFunc("PUT /mcsdadmin/healthcareservice/{id}/edit", notImplemented)
+	mux.HandleFunc("DELETE /mcsdadmin/healthcareservice/{id}", deleteHandler("HealthcareService"))
 	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
-	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}", deleteOrganization)
+	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}", deleteHandler("Organisation"))
 	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
@@ -219,20 +218,6 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 func listEndpoints(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
-}
-
-func deleteOrganization(w http.ResponseWriter, r *http.Request) {
-	orgId := r.PathValue("id")
-	path := fmt.Sprintf("Organization/%s", orgId)
-
-	err := client.Delete(path)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	return
 }
 
 func newEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -479,6 +464,22 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Path not implemented"))
 }
 
+func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		orgId := r.PathValue("id")
+		path := fmt.Sprintf("%s/%s", resourceType, orgId)
+
+		err := client.Delete(path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+}
+
 func fhirClientConfig() *fhirclient.Config {
 	config := fhirclient.DefaultConfig()
 	config.DefaultOptions = []fhirclient.Option{
@@ -491,8 +492,6 @@ func fhirClientConfig() *fhirclient.Config {
 	}
 	return &config
 }
-
-// Fhir client helpers
 
 func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {
 	var prototype T
