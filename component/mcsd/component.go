@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
@@ -18,8 +20,10 @@ import (
 var _ component.Lifecycle = &Component{}
 
 type Component struct {
-	config       Config
-	fhirClientFn func(baseURL *url.URL) fhirclient.Client
+	config             Config
+	fhirClientFn       func(baseURL *url.URL) fhirclient.Client
+	lastUpdateTimes    map[string]time.Time
+	lastUpdateTimesMux *sync.RWMutex
 }
 
 type Config struct {
@@ -47,18 +51,20 @@ func New(config Config) *Component {
 		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
 			return fhirclient.New(baseURL, http.DefaultClient, nil)
 		},
+		lastUpdateTimes:    make(map[string]time.Time),
+		lastUpdateTimesMux: &sync.RWMutex{},
 	}
 }
 
-func (c Component) Start() error {
+func (c *Component) Start() error {
 	return nil
 }
 
-func (c Component) Stop(ctx context.Context) error {
+func (c *Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (c Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) {
+func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) {
 	internalMux.HandleFunc("POST /mcsd/update", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		result, err := c.update(ctx)
@@ -73,7 +79,7 @@ func (c Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) {
 	})
 }
 
-func (c Component) update(ctx context.Context) (UpdateReport, error) {
+func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	result := make(UpdateReport)
 	for _, root := range c.config.RootDirectories {
 		report, err := c.updateFromDirectory(ctx, root.FHIRBaseURL, []string{"Organization", "Endpoint"})
@@ -87,7 +93,7 @@ func (c Component) update(ctx context.Context) (UpdateReport, error) {
 	return result, nil
 }
 
-func (c Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string) (DirectoryUpdateReport, error) {
+func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string) (DirectoryUpdateReport, error) {
 	remoteDirFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
@@ -103,7 +109,18 @@ func (c Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw strin
 	// Query remote directory
 	var bundle fhir.Bundle
 	// TODO: Pagination
-	if err = remoteDirFHIRClient.SearchWithContext(ctx, "", nil, &bundle, fhirclient.AtPath("/_history")); err != nil {
+
+	// Get last update time for incremental sync
+	c.lastUpdateTimesMux.RLock()
+	lastUpdate, hasLastUpdate := c.lastUpdateTimes[fhirBaseURLRaw]
+	c.lastUpdateTimesMux.RUnlock()
+
+	searchParams := url.Values{}
+	if hasLastUpdate {
+		searchParams.Set("_since", lastUpdate.Format(time.RFC3339))
+	}
+
+	if err = remoteDirFHIRClient.SearchWithContext(ctx, "", searchParams, &bundle, fhirclient.AtPath("/_history")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("_history search failed: %w", err)
 	}
 
@@ -146,5 +163,14 @@ func (c Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw strin
 			report.Warnings = append(report.Warnings, msg)
 		}
 	}
+
+	// Update last sync timestamp on successful completion
+	c.lastUpdateTimesMux.Lock()
+	if c.lastUpdateTimes == nil {
+		c.lastUpdateTimes = make(map[string]time.Time)
+	}
+	c.lastUpdateTimes[fhirBaseURLRaw] = time.Now()
+	c.lastUpdateTimesMux.Unlock()
+
 	return report, nil
 }
