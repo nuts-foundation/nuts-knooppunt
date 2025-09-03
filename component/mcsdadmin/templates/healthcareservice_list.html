@@ -1,29 +1,36 @@
 {{define "main"}}
-<div class="action-bar">
-    <div>
-        <a href="/mcsdadmin/healthcareservice/new">New Health Care Service</a>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Healthcare Services</h2>
+    <a href="/mcsdadmin/healthcareservice/new" class="btn btn-primary">New Healthcare Service</a>
 </div>
-<div class="main-view">
-    <table>
-        <thead>
-        <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Type</th>
-            <th scope="col">Active</th>
-            <th scope="col">ProvidedBy</th>
-        </tr>
-        </thead>
-        <tbody>
-        {{range .Items }}
-        <tr>
-            <th scope="row">{{ .Name }}</th>
-            <td>{{ .Type }}</td>
-            <td>{{ .Active }}</td>
-            <td>{{ .ProvidedBy }}</td>
-        </tr>
-        {{end}}
-        </tbody>
-    </table>
+<div class="card">
+    <div class="card-body">
+        <table class="table table-striped table-hover">
+            <thead class="thead-light">
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+                <th scope="col">Active</th>
+                <th scope="col">Provided By</th>
+            </tr>
+            </thead>
+            <tbody>
+            {{range .Items }}
+            <tr>
+                <th scope="row">{{ .Name }}</th>
+                <td>{{ .Type }}</td>
+                <td>
+                    {{if .Active}}
+                        <span class="badge badge-success">Active</span>
+                    {{else}}
+                        <span class="badge badge-secondary">Inactive</span>
+                    {{end}}
+                </td>
+                <td>{{ .ProvidedBy }}</td>
+            </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
 </div>
 {{end}}
