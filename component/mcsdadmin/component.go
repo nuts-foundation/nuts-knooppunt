@@ -61,6 +61,7 @@ func (c Component) Stop(ctx context.Context) error {
 func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	// Static file serving for CSS and fonts
 	mux.Handle("GET /mcsdadmin/css/", http.StripPrefix("/mcsdadmin/", http.FileServer(http.FS(static.FS))))
+	mux.Handle("GET /mcsdadmin/js/", http.StripPrefix("/mcsdadmin/", http.FileServer(http.FS(static.FS))))
 	mux.Handle("GET /mcsdadmin/webfonts/", http.StripPrefix("/mcsdadmin/", http.FileServer(http.FS(static.FS))))
 
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice", listServices)
@@ -69,6 +70,7 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice/{id}/edit", notImplemented)
 	mux.HandleFunc("PUT /mcsdadmin/healthcareservice/{id}/edit", notImplemented)
 	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
+	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}", deleteOrganization)
 	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
@@ -217,6 +219,20 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 func listEndpoints(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
+}
+
+func deleteOrganization(w http.ResponseWriter, r *http.Request) {
+	orgId := r.PathValue("id")
+	path := fmt.Sprintf("Organization/%s", orgId)
+
+	err := client.Delete(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	return
 }
 
 func newEndpoint(w http.ResponseWriter, r *http.Request) {

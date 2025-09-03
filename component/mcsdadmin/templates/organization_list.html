@@ -11,19 +11,28 @@
                 <th scope="col">Name</th>
                 <th scope="col">Type</th>
                 <th scope="col">Active</th>
+                <th scope="col">Actions</th>
             </tr>
             </thead>
             <tbody>
             {{range .Items}}
-            <tr>
+            <tr id="row-{{.Id}}">
                 <th scope="row">{{ .Name }}</th>
                 <td>{{.Type}}</td>
                 <td>
                     {{if .Active }}
-                        <span class="badge badge-success">Active</span>
+                    <span class="badge badge-success">Active</span>
                     {{else}}
-                        <span class="badge badge-secondary">Inactive</span>
+                    <span class="badge badge-secondary">Inactive</span>
                     {{end}}
+                </td>
+                <td>
+                    <button hx-delete="/mcsdadmin/organization/{{ .Id }}"
+                            hx-target="#row-{{.Id}}"
+                            hx-swap="delete"
+                    >
+                        Delete
+                    </button>
                 </td>
             </tr>
             {{end}}

@@ -113,12 +113,17 @@ func MakeEpListXsProps(eps []fhir.Endpoint) []EpListProps {
 }
 
 type OrgListProps struct {
+	Id     string
 	Name   string
 	Type   string
 	Active bool
 }
 
 func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
+	if org.Id != nil {
+		out.Id = *org.Id
+	}
+
 	if org.Name != nil {
 		out.Name = *org.Name
 	} else {
