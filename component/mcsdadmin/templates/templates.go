@@ -115,7 +115,7 @@ func MakeEpListXsProps(eps []fhir.Endpoint) []EpListProps {
 type OrgListProps struct {
 	Name   string
 	Type   string
-	Active string
+	Active bool
 }
 
 func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
@@ -132,14 +132,11 @@ func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
 	}
 
 	if org.Active != nil {
-		switch *org.Active {
-		case true:
-			out.Active = "True"
-		case false:
-			out.Active = "False"
+		if *org.Active {
+			out.Active = true
 		}
 	} else {
-		out.Active = unknownStr
+		out.Active = false
 	}
 
 	return out
@@ -156,7 +153,7 @@ func MakeOrgListXsProps(orgs []fhir.Organization) []OrgListProps {
 type ServiceListProps struct {
 	Name       string
 	Type       string
-	Active     string
+	Active     bool
 	ProvidedBy string
 }
 
@@ -174,14 +171,11 @@ func MakeServiceListProps(service fhir.HealthcareService) (out ServiceListProps)
 	}
 
 	if service.Active != nil {
-		switch *service.Active {
-		case true:
-			out.Active = "True"
-		case false:
-			out.Active = "False"
+		if *service.Active {
+			out.Active = true
 		}
 	} else {
-		out.Active = unknownStr
+		out.Active = false
 	}
 
 	if service.ProvidedBy != nil {
