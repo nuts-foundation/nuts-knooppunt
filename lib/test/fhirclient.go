@@ -1,6 +1,7 @@
 package test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -317,9 +318,42 @@ func (s *StubFHIRClient) CreateWithContext(_ context.Context, resource any, resu
 	unmarshalInto(resource, &baseResource)
 	resourceType := baseResource.Type
 
+	// Apply opts
+	const fhirBaseURL = "http://example.com/fhir"
+	request, _ := http.NewRequest("POST", fhirBaseURL, bytes.NewReader(baseResource.Data))
+	for _, opt := range opts {
+		switch o := opt.(type) {
+		case fhirclient.PreRequestOption:
+			o(s, request)
+		}
+	}
+
+	if resourceType == "Bundle" && request.URL.Path == "/fhir" || request.URL.Path == "/fhir/" {
+		// Try to execute as transaction
+		var tx fhir.Bundle
+		unmarshalInto(resource, &tx)
+		if tx.Type != fhir.BundleTypeTransaction {
+			return errors.New("only transaction bundles are supported")
+		}
+		txResult, err := s.handleTransaction(tx)
+		if err != nil {
+			return fmt.Errorf("stub transaction failed: %w", err)
+		}
+		unmarshalInto(txResult, result)
+		return nil
+	}
+
 	if resourceType == "" {
 		return fmt.Errorf("can't defer resource type of %T", resource)
 	}
+	if err := s.createResource(resource, resourceType); err != nil {
+		return err
+	}
+	unmarshalInto(resource, result)
+	return nil
+}
+
+func (s *StubFHIRClient) createResource(resource any, resourceType string) error {
 	var resourceAsMap = make(map[string]interface{})
 	unmarshalInto(resource, resourceAsMap)
 	if resourceAsMap["id"] == nil {
@@ -339,7 +373,6 @@ func (s *StubFHIRClient) CreateWithContext(_ context.Context, resource any, resu
 		s.CreatedResources = make(map[string][]any)
 	}
 	s.CreatedResources[resourceType] = append(s.CreatedResources[resourceType], resource)
-	unmarshalInto(resource, result)
 	return nil
 }
 
@@ -372,8 +405,39 @@ func (s StubFHIRClient) DeleteWithContext(ctx context.Context, path string, opts
 }
 
 func (s StubFHIRClient) Path(path ...string) *url.URL {
-	r, _ := url.Parse("stub:" + strings.Join(path, "/"))
-	return r
+	r, _ := url.Parse("https://example.com/fhir")
+	return r.JoinPath(path...)
+}
+
+func (s *StubFHIRClient) handleTransaction(tx fhir.Bundle) (*fhir.Bundle, error) {
+	txResult := fhir.Bundle{
+		Type: fhir.BundleTypeTransactionResponse,
+	}
+	for _, entry := range tx.Entry {
+		var resource any
+		unmarshalInto(entry.Resource, &resource)
+		switch entry.Request.Method {
+		case fhir.HTTPVerbPOST:
+			var result any
+			if err := s.CreateWithContext(nil, entry.Resource, &result); err != nil {
+				return nil, err
+			}
+			location := fmt.Sprintf("%s/%s", entry.Request.Url, resource.(map[string]interface{})["id"])
+			eTag := `W/"1"`
+			resultJSON, _ := json.Marshal(result)
+			txResult.Entry = append(txResult.Entry, fhir.BundleEntry{
+				Response: &fhir.BundleEntryResponse{
+					Status:   "201 Created",
+					Location: &location,
+					Etag:     &eTag,
+				},
+				Resource: resultJSON,
+			})
+		default:
+			return nil, fmt.Errorf("unsupported http verb for FHIR transaction bundle: %s", entry.Request.Method)
+		}
+	}
+	return &txResult, nil
 }
 
 func unmarshalInto(resource interface{}, target interface{}) {

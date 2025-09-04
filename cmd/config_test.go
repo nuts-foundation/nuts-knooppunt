@@ -27,10 +27,10 @@ func TestLoadConfig_FromYAML(t *testing.T) {
 
 	yamlContent := `
 mcsd:
-  rootdirectories:
+  admin:
     "test-org":
       fhirbaseurl: "https://test.example.org/fhir"
-  localdirectory:
+  query:
     fhirbaseurl: "http://localhost:9090/fhir"
 
 mcsdadmin:
@@ -58,11 +58,11 @@ nuts:
 	// Check loaded values
 	assert.False(t, config.Nuts.Enabled)
 	assert.Equal(t, "http://localhost:9090/fhir", config.MCSDAdmin.FHIRBaseURL)
-	assert.Equal(t, "http://localhost:9090/fhir", config.MCSD.LocalDirectory.FHIRBaseURL)
+	assert.Equal(t, "http://localhost:9090/fhir", config.MCSD.QueryDirectory.FHIRBaseURL)
 
 	// Check map values
-	require.Contains(t, config.MCSD.RootDirectories, "test-org")
-	assert.Equal(t, "https://test.example.org/fhir", config.MCSD.RootDirectories["test-org"].FHIRBaseURL)
+	require.Contains(t, config.MCSD.AdministrationDirectories, "test-org")
+	assert.Equal(t, "https://test.example.org/fhir", config.MCSD.AdministrationDirectories["test-org"].FHIRBaseURL)
 }
 
 func TestLoadConfig_FromEnvironmentVariables(t *testing.T) {

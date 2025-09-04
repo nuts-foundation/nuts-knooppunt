@@ -4,14 +4,14 @@
 # mCSD (Mobile Care Services Discovery) configuration
 mcsd:
   # Root directories to synchronize from
-  rootdirectories:
+  admin:
     "example-org":
       fhirbaseurl: "https://fhir.example.org/fhir"
     "another-org":
       fhirbaseurl: "https://fhir.another-org.com/fhir"
   
   # Local FHIR directory configuration
-  localdirectory:
+  query:
     fhirbaseurl: "http://localhost:8080/fhir"
 
 # mCSD Admin configuration
