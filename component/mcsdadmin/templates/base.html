@@ -1,75 +1,76 @@
 {{define "base"}}
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>mCSD Admin</title>
     <link rel="stylesheet" href="/mcsdadmin/css/bootstrap.min.css">
     <link rel="stylesheet" href="/mcsdadmin/css/fontawesome.min.css">
     <style>
-      .sidebar {
-        background-color: #f8f9fa;
-        border-right: 1px solid #dee2e6;
-        min-height: calc(100vh - 56px);
-        padding-top: 1rem;
-      }
+        .sidebar {
+            background-color: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+            min-height: calc(100vh - 56px);
+            padding-top: 1rem;
+        }
 
-      .sidebar .nav-link {
-        color: #495057;
-        border-radius: 0.25rem;
-        margin-bottom: 0.25rem;
-      }
+        .sidebar .nav-link {
+            color: #495057;
+            border-radius: 0.25rem;
+            margin-bottom: 0.25rem;
+        }
 
-      .sidebar .nav-link:hover {
-        background-color: #e9ecef;
-        color: #495057;
-      }
+        .sidebar .nav-link:hover {
+            background-color: #e9ecef;
+            color: #495057;
+        }
 
-      .sidebar .nav-link.active {
-        background-color: #007bff;
-        color: #fff;
-      }
+        .sidebar .nav-link.active {
+            background-color: #007bff;
+            color: #fff;
+        }
 
-      .main-content {
-        padding: 20px;
-      }
+        .main-content {
+            padding: 20px;
+        }
 
-      .navbar-brand {
-        font-weight: bold;
-      }
+        .navbar-brand {
+            font-weight: bold;
+        }
     </style>
-  </head>
-  <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-      <a class="navbar-brand" href="/mcsdadmin">
+    <script src="/mcsdadmin/js/htmx.min.js"></script>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <a class="navbar-brand" href="/mcsdadmin">
         <i class="fas fa-hospital-alt"></i> mCSD Admin
-      </a>
-    </nav>
+    </a>
+</nav>
 
-    <div class="container-fluid">
-      <div class="row">
+<div class="container-fluid">
+    <div class="row">
         <nav class="col-md-3 col-lg-2 sidebar">
-          <div class="nav flex-column">
-            <a class="nav-link" href="/mcsdadmin/organization">
-              <i class="fas fa-building"></i> Organizations
-            </a>
-            <a class="nav-link" href="/mcsdadmin/healthcareservice">
-              <i class="fas fa-heartbeat"></i> Health Care Services
-            </a>
-            <a class="nav-link" href="/mcsdadmin/endpoint">
-              <i class="fas fa-plug"></i> Endpoints
-            </a>
-            <a class="nav-link" href="/mcsdadmin/location">
-              <i class="fas fa-map-marker-alt"></i> Locations
-            </a>
-          </div>
+            <div class="nav flex-column">
+                <a class="nav-link" href="/mcsdadmin/organization">
+                    <i class="fas fa-building"></i> Organizations
+                </a>
+                <a class="nav-link" href="/mcsdadmin/healthcareservice">
+                    <i class="fas fa-heartbeat"></i> Health Care Services
+                </a>
+                <a class="nav-link" href="/mcsdadmin/endpoint">
+                    <i class="fas fa-plug"></i> Endpoints
+                </a>
+                <a class="nav-link" href="/mcsdadmin/location">
+                    <i class="fas fa-map-marker-alt"></i> Locations
+                </a>
+            </div>
         </nav>
         <main class="col-md-9 col-lg-10 main-content">
-          {{ template "main" . }}
+            {{ template "main" . }}
         </main>
-      </div>
     </div>
-  </body>
+</div>
+</body>
 </html>
 {{end}}
