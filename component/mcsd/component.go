@@ -37,8 +37,8 @@ type Component struct {
 	config       Config
 	fhirClientFn func(baseURL *url.URL) fhirclient.Client
 
-	adminDirectories    []administrationDirectory
-	adminDirectoriesMux *sync.RWMutex
+	administrationDirectories []administrationDirectory
+	updateMux                 *sync.RWMutex
 }
 
 type Config struct {
@@ -72,7 +72,7 @@ func New(config Config) *Component {
 		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
 			return fhirclient.New(baseURL, http.DefaultClient, nil)
 		},
-		adminDirectoriesMux: &sync.RWMutex{},
+		updateMux: &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.RootAdminDirectories {
 		result.registerAdministrationDirectory(rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true)
@@ -103,26 +103,38 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 	})
 }
 
-func (c *Component) registerAdministrationDirectory(fhirBaseURL string, resourceTypes []string, discover bool) {
-	c.adminDirectoriesMux.Lock()
-	defer c.adminDirectoriesMux.Unlock()
-	exists := slices.ContainsFunc(c.adminDirectories, func(directory administrationDirectory) bool {
+func (c *Component) registerAdministrationDirectory(fhirBaseURL string, resourceTypes []string, discover bool) error {
+	// Must be a valid http or https URL
+	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid FHIR base URL (url=%s): %w", fhirBaseURL, err)
+	}
+	parsedFHIRBaseURL.Scheme = strings.ToLower(parsedFHIRBaseURL.Scheme)
+	if (parsedFHIRBaseURL.Scheme != "https" && parsedFHIRBaseURL.Scheme != "http") || parsedFHIRBaseURL.Host == "" {
+		return fmt.Errorf("invalid FHIR base URL (url=%s)", fhirBaseURL)
+	}
+
+	exists := slices.ContainsFunc(c.administrationDirectories, func(directory administrationDirectory) bool {
 		return directory.fhirBaseURL == fhirBaseURL
 	})
 	if exists {
-		return
+		return nil
 	}
-	c.adminDirectories = append(c.adminDirectories, administrationDirectory{
+	c.administrationDirectories = append(c.administrationDirectories, administrationDirectory{
 		resourceTypes: resourceTypes,
 		fhirBaseURL:   fhirBaseURL,
 		discover:      discover,
 	})
+	return nil
 }
 
 func (c *Component) update(ctx context.Context) (UpdateReport, error) {
+	c.updateMux.Lock()
+	defer c.updateMux.Unlock()
+
 	result := make(UpdateReport)
-	for i := 0; i < len(c.adminDirectories); i++ {
-		adminDirectory := c.adminDirectories[i]
+	for i := 0; i < len(c.administrationDirectories); i++ {
+		adminDirectory := c.administrationDirectories[i]
 		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover)
 		if err != nil {
 			log.Ctx(ctx).Err(err).Str("directory", adminDirectory.fhirBaseURL).Msg("mCSD Directory update failed")
@@ -173,7 +185,12 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 				continue
 			}
 			if coding.EqualsCode(endpoint.ConnectionType, coding.MCSDConnectionTypeSystem, coding.MCSDConnectionTypeDirectoryCode) {
-				c.registerAdministrationDirectory(endpoint.Address, directoryResourceTypes, false)
+				err := c.registerAdministrationDirectory(endpoint.Address, directoryResourceTypes, false)
+				if err != nil {
+					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
+				} else {
+					log.Ctx(ctx).Info().Msgf("Discovered and registered new mCSD Directory at %s", endpoint.Address)
+				}
 			}
 		}
 	}

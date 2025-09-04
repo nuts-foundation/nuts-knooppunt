@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -35,11 +36,11 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 
 	resource := make(map[string]any)
 	if err := json.Unmarshal(entry.Resource, &resource); err != nil {
-		return "", fmt.Errorf("failed to unmarshal resource (fullUrl=%v): %w", entry.FullUrl, err)
+		return "", fmt.Errorf("failed to unmarshal resource (fullUrl=%s): %w", to.EmptyString(entry.FullUrl), err)
 	}
 	resourceType, ok := resource["resourceType"].(string)
 	if !ok {
-		return "", fmt.Errorf("not a valid resourceType (fullUrl=%v)", entry.FullUrl)
+		return "", fmt.Errorf("not a valid resourceType (fullUrl=%s)", to.EmptyString(entry.FullUrl))
 	}
 	if !slices.Contains(allowedResourceTypes, resourceType) {
 		return "", fmt.Errorf("resource type %s not allowed", resourceType)
