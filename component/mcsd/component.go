@@ -43,7 +43,7 @@ type Component struct {
 
 type Config struct {
 	RootAdminDirectories map[string]DirectoryConfig `koanf:"admin"`
-	QueryDirectory       DirectoryConfig            `json:"query"`
+	QueryDirectory       DirectoryConfig            `koanf:"query"`
 }
 
 type DirectoryConfig struct {
