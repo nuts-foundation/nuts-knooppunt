@@ -5,38 +5,38 @@
   </div>
   <div class="card-body">
     <form method="post" enctype="application/x-www-form-urlencoded">
-        <div class="form-group">
-            <label for="name">Name:</label>
+        <div class="mb-3">
+            <label for="name" class="form-label">Name:</label>
             <input id="name" type="text" name="name" class="form-control" placeholder="Enter name here" required>
         </div>
-        <div class="form-group">
-            <label for="type">Choose a type:</label>
-            <select name="type" id="type" class="form-control">
+        <div class="mb-3">
+            <label for="type" class="form-label">Choose a type:</label>
+            <select name="type" id="type" class="form-select">
                 <option value="">--Please choose an option--</option>
                 {{ range .Types }}
                 <option value="{{ .Code }}">{{ .Display }}</option>
                 {{ end }}
             </select>
         </div>
-        <div class="form-group">
-            <label for="status">Status:</label>
-            <select name="status" id="status" class="form-control">
+        <div class="mb-3">
+            <label for="status" class="form-label">Status:</label>
+            <select name="status" id="status" class="form-select">
                 <option value="">--Please choose an option--</option>
                 {{range .Status}}
                 <option value="{{ .Code }}">{{ .Display }}</option>
                 {{ end }}
             </select>
         </div>
-        <div class="form-group">
-            <label for="physicalType">Physical Type:</label>
-            <select name="physicalType" id="physicalType" class="form-control">
+        <div class="mb-3">
+            <label for="physicalType" class="form-label">Physical Type:</label>
+            <select name="physicalType" id="physicalType" class="form-select">
                 <option value="">--Please choose an option--</option>
                 {{range .PhysicalTypes}}
                 <option value="{{ .Code }}">{{ .Display }}</option>
                 {{ end }}
             </select>
         </div>
-        <div class="form-group">
+        <div class="mb-3">
             <button type="submit" class="btn btn-primary">Submit</button>
         </div>
     </form>
