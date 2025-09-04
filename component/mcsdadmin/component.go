@@ -58,11 +58,13 @@ func (c Component) Stop(ctx context.Context) error {
 
 // Route handling
 
+var fileServer = http.FileServer(http.FS(static.FS))
+
 func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	// Static file serving for CSS and fonts
-	mux.Handle("GET /mcsdadmin/css/", http.StripPrefix("/mcsdadmin/", http.FileServer(http.FS(static.FS))))
-	mux.Handle("GET /mcsdadmin/js/", http.StripPrefix("/mcsdadmin/", http.FileServer(http.FS(static.FS))))
-	mux.Handle("GET /mcsdadmin/webfonts/", http.StripPrefix("/mcsdadmin/", http.FileServer(http.FS(static.FS))))
+	mux.Handle("GET /mcsdadmin/css/", http.StripPrefix("/mcsdadmin/", fileServer))
+	mux.Handle("GET /mcsdadmin/js/", http.StripPrefix("/mcsdadmin/", fileServer))
+	mux.Handle("GET /mcsdadmin/webfonts/", http.StripPrefix("/mcsdadmin/", fileServer))
 
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice", listServices)
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice/new", newService)
