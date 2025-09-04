@@ -51,7 +51,7 @@ func (c Component) Start() error {
 	return nil
 }
 
-func (c Component) Stop(ctx context.Context) error {
+func (c Component) Stop(_ context.Context) error {
 	// Nothing to do
 	return nil
 }
@@ -86,12 +86,12 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/", notFound)
 }
 
-func listServices(w http.ResponseWriter, r *http.Request) {
+func listServices(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	renderList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, tmpls.MakeServiceListXsProps)
 }
 
-func newService(w http.ResponseWriter, r *http.Request) {
+func newService(w http.ResponseWriter, _ *http.Request) {
 	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -163,12 +163,12 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	renderList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, tmpls.MakeServiceListXsProps)
 }
 
-func listOrganizations(w http.ResponseWriter, r *http.Request) {
+func listOrganizations(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
 }
 
-func newOrganization(w http.ResponseWriter, r *http.Request) {
+func newOrganization(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	types, err := valuesets.CodingsFrom("organization-type")
@@ -219,12 +219,12 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
 }
 
-func listEndpoints(w http.ResponseWriter, r *http.Request) {
+func listEndpoints(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
 }
 
-func newEndpoint(w http.ResponseWriter, r *http.Request) {
+func newEndpoint(w http.ResponseWriter, _ *http.Request) {
 	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -369,7 +369,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
 }
 
-func newLocation(w http.ResponseWriter, r *http.Request) {
+func newLocation(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	locationTypes, err := valuesets.CodingsFrom("location-type")
@@ -448,22 +448,17 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	renderList[fhir.Location, tmpls.LocationListProps](client, w, tmpls.MakeLocationListXsProps)
 }
 
-func listLocations(w http.ResponseWriter, r *http.Request) {
+func listLocations(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	renderList[fhir.Location, tmpls.LocationListProps](client, w, tmpls.MakeLocationListXsProps)
 }
 
-func homePage(w http.ResponseWriter, r *http.Request) {
+func homePage(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	tmpls.RenderWithBase(w, "home.html", nil)
 }
 
-func notImplemented(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusNotImplemented)
-	tmpls.RenderWithBase(w, "home.html", nil)
-}
-
-func notFound(w http.ResponseWriter, r *http.Request) {
+func notFound(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	_, _ = w.Write([]byte("Path not implemented"))
 }
