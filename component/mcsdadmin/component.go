@@ -16,8 +16,6 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 type Config struct {
@@ -80,7 +78,10 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/location", listLocations)
 	mux.HandleFunc("GET /mcsdadmin/location/new", newLocation)
 	mux.HandleFunc("POST /mcsdadmin/location/new", newLocationPost)
-	mux.HandleFunc("DELETE /mcsdadmin/{resourceType}/{id}", deleteHandler)
+	mux.HandleFunc("DELETE /mcsdadmin/endpoint/{id}", deleteHandler("Endpoint"))
+	mux.HandleFunc("DELETE /mcsdadmin/location/{id}", deleteHandler("Location"))
+	mux.HandleFunc("DELETE /mcsdadmin/healthcareservice/{id}", deleteHandler("HealthcareService"))
+	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}", deleteHandler("Organization"))
 	mux.HandleFunc("GET /mcsdadmin", homePage)
 	mux.HandleFunc("GET /mcsdadmin/", notFound)
 }
@@ -462,21 +463,20 @@ func notFound(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("Path not implemented"))
 }
 
-func deleteHandler(w http.ResponseWriter, r *http.Request) {
-	orgId := r.PathValue("id")
-	pathResType := r.PathValue("resourceType")
-	resourceType := cases.Title(language.English, cases.Compact).String(pathResType)
+func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resourceId := r.PathValue("id")
+		path := fmt.Sprintf("%s/%s", resourceType, resourceId)
 
-	path := fmt.Sprintf("%s/%s", resourceType, orgId)
+		err := client.Delete(path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 
-	err := client.Delete(path)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		w.WriteHeader(http.StatusOK)
 		return
 	}
-
-	w.WriteHeader(http.StatusOK)
-	return
 }
 
 func fhirClientConfig() *fhirclient.Config {
