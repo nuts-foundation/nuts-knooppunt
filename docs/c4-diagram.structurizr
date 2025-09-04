@@ -9,7 +9,7 @@ workspace "Nuts Knooppunt" "Description"
                 tags "external"
             }
             
-            mcsdDirectory = softwareSystem "Organization mCSD Directory" "Authority of Organization Endpoints, HealthcareServices and PractitionerRoles" "external"
+            mcsdDirectory = softwareSystem "Organization mCSD Directory" "Authority of Organization Endpoints, HealthcareServices and PractitionerRoles" "external,addressing"
             
             externalViewer = softwareSystem "External Viewer" "Request healthcare data from other Care Providers" "external"
         }
@@ -24,7 +24,7 @@ workspace "Nuts Knooppunt" "Description"
         group "Local Care Provider Systems" {
             xis = softwareSystem "XIS" "The XIS implementing the knooppunt" {
                 viewer = container "Viewer" {
-                    mcsdClient = component "mCSD Client" "queries the mcsd Directory"
+                    mcsdClient = component "mCSD Client" "queries the mcsd Directory" "addressing"
                     localisationClient = component "Localisation Client" "Localise patient data"
                 }
                 
@@ -39,12 +39,14 @@ workspace "Nuts Knooppunt" "Description"
                         nuts = component "Nuts Node"
                     }
                     group "Addressing" {
-                        mcsdSyncer = component "mCSD Update client" "Syncing data from remote mCSD directory and consolidate into a local Directory"
+                        mcsdSyncer = component "mCSD Update client" "Syncing data from remote mCSD directory and consolidate into a local Directory"{ 
+                            tags "addressing" 
+                        }
                         mcsdQueryClient = component "mCSD Query client" "Webapp to search the local mCSD directory, can be used for demo purposes and development"{
-                            tags "demo,webapp"
+                            tags "demo,webapp,addressing"
                         }
                         mcsdDataEntry = component "Addressing Admin" "Administering Organization mCSD resources" {
-                            tags "webapp"
+                            tags "webapp,addressing"
                         }
                     }
                     
@@ -65,7 +67,7 @@ workspace "Nuts Knooppunt" "Description"
                 }
                 
                 fhir = container "FHIR Server" "Contains mCSD Directories" {
-                    tags "database"
+                    tags "database,addressing"
                     local = component "Local mCSD Cache for query client"
                     orgDir = component "mCSD directory for the organization"
                 }
@@ -126,6 +128,11 @@ workspace "Nuts Knooppunt" "Description"
         
         component kpSystem.kp "knooppunt" {
             include *
+            autolayout lr
+        }
+        
+        component kpSystem.kp "addressing" {
+            include element.tag==addressing
         }
 
         styles {
