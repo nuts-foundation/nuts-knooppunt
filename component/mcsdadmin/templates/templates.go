@@ -34,6 +34,7 @@ func RenderWithBase(w io.Writer, name string, data any) {
 const unknownStr = "N/A"
 
 type EpListProps struct {
+	Id             string
 	Address        string
 	PayloadType    string
 	Period         string
@@ -75,6 +76,10 @@ func fmtRef(ref fhir.Reference) string {
 }
 
 func MakeEpListProps(ep fhir.Endpoint) (out EpListProps) {
+	if ep.Id != nil {
+		out.Id = *ep.Id
+	}
+
 	out.Address = ep.Address
 
 	hasPayload := len(ep.PayloadType) > 0
@@ -113,12 +118,17 @@ func MakeEpListXsProps(eps []fhir.Endpoint) []EpListProps {
 }
 
 type OrgListProps struct {
+	Id     string
 	Name   string
 	Type   string
 	Active bool
 }
 
 func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
+	if org.Id != nil {
+		out.Id = *org.Id
+	}
+
 	if org.Name != nil {
 		out.Name = *org.Name
 	} else {
@@ -151,6 +161,7 @@ func MakeOrgListXsProps(orgs []fhir.Organization) []OrgListProps {
 }
 
 type ServiceListProps struct {
+	Id         string
 	Name       string
 	Type       string
 	Active     bool
@@ -158,6 +169,10 @@ type ServiceListProps struct {
 }
 
 func MakeServiceListProps(service fhir.HealthcareService) (out ServiceListProps) {
+	if service.Id != nil {
+		out.Id = *service.Id
+	}
+
 	if service.Name != nil {
 		out.Name = *service.Name
 	} else {
@@ -201,6 +216,7 @@ func MakeServiceListXsProps(services []fhir.HealthcareService) []ServiceListProp
 }
 
 type LocationListProps struct {
+	Id           string
 	Name         string
 	Type         string
 	Status       string
@@ -208,6 +224,10 @@ type LocationListProps struct {
 }
 
 func MakeLocationListProps(location fhir.Location) (out LocationListProps) {
+	if location.Id != nil {
+		out.Id = *location.Id
+	}
+
 	if location.Name != nil {
 		out.Name = *location.Name
 	} else {

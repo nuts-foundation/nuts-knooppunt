@@ -7,7 +7,10 @@ import (
 	"net/url"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
-	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
 )
 
 type KnooppuntSystemDetails struct {
@@ -19,8 +22,8 @@ type LRZaSystemDetails struct {
 }
 
 type KnooppuntMCSDDetails struct {
-	PublicFHIRBaseURL *url.URL
-	CacheFHIRBaseURL  *url.URL
+	AdminFHIRBaseURL *url.URL
+	QueryFHIRBaseURL *url.URL
 }
 
 type Details struct {
@@ -30,51 +33,74 @@ type Details struct {
 
 func Load(hapiBaseURL *url.URL) (*Details, error) {
 	ctx := context.Background()
-	knptMCSDPublicHAPITenant := HAPITenant{
-		Name: "knpt-mcsd-public",
+	knptMCSDAdminHAPITenant := HAPITenant{
+		Name: "knpt-mcsd-admin",
 		ID:   1,
 	}
-	knptMCSDCacheHAPITenant := HAPITenant{
-		Name: "knpt-mcsd-cache",
+	knptMCSDQueryHAPITenant := HAPITenant{
+		Name: "knpt-mcsd-query",
 		ID:   2,
 	}
-	lrzaMCSDPublicHAPITenant := HAPITenant{
-		Name: "lrza-mcsd-public",
+	lrzaMCSDAdminHAPITenant := HAPITenant{
+		Name: "lrza-mcsd-admin",
 		ID:   3,
+	}
+	care2CureAdminHAPITenant := HAPITenant{
+		Name: "care2cure-admin",
+		ID:   4,
+	}
+	sunflowerAdminHAPITenant := HAPITenant{
+		Name: "sunflower-admin",
+		ID:   5,
 	}
 
 	hapiDefaultFHIRClient := fhirclient.New(hapiBaseURL, http.DefaultClient, nil)
 
-	for _, tenant := range []HAPITenant{knptMCSDCacheHAPITenant, knptMCSDPublicHAPITenant, lrzaMCSDPublicHAPITenant} {
+	for _, tenant := range []HAPITenant{knptMCSDQueryHAPITenant, knptMCSDAdminHAPITenant, lrzaMCSDAdminHAPITenant, care2CureAdminHAPITenant, sunflowerAdminHAPITenant} {
 		if err := CreateHAPITenant(ctx, tenant, hapiDefaultFHIRClient); err != nil {
-			return nil, fmt.Errorf("create hapi tenant: %w", err)
+			return nil, fmt.Errorf("create HAPI tenant: %w", err)
 		}
 	}
 
-	lrzaMCSDPublicFHIRClient := fhirclient.New(lrzaMCSDPublicHAPITenant.BaseURL(hapiBaseURL), http.DefaultClient, nil)
-	// Create orgs
-	for _, resource := range append([]fhir.Organization{Care2CureHospital()}, CareHomeSunflower()) {
-		var response []byte
-		if err := lrzaMCSDPublicFHIRClient.UpdateWithContext(ctx, "Organization/"+*resource.Id, resource, &response); err != nil {
-			return nil, fmt.Errorf("create organization: %w", err)
+	//
+	// Knooppunt mCSD Admin
+	//
+	lrzaMCSDAdminFHIRClient := lrzaMCSDAdminHAPITenant.FHIRClient(hapiBaseURL)
+	for _, resource := range lrza.Resources(hapiBaseURL) {
+		if err := lrzaMCSDAdminFHIRClient.UpdateWithContext(ctx, caramel.ResourceType(resource)+"/"+*resource.GetId(), resource, nil); err != nil {
+			return nil, fmt.Errorf("create root resource: %w", err)
 		}
 	}
-	// Create endpoints
-	for _, resource := range append(Care2CureHospitalRootEndpoints(), CareHomeSunflowerRootEndpoints()...) {
-		var response []byte
-		if err := lrzaMCSDPublicFHIRClient.UpdateWithContext(ctx, "Endpoint/"+*resource.Id, resource, &response); err != nil {
-			return nil, fmt.Errorf("create endpoint: %w", err)
+
+	//
+	// Care2Cure Hospital
+	//
+	care2CureMCSDAdminFHIRClient := care2CureAdminHAPITenant.FHIRClient(hapiBaseURL)
+	for _, resource := range care2cure.Resources() {
+		if err := care2CureMCSDAdminFHIRClient.UpdateWithContext(ctx, caramel.ResourceType(resource)+"/"+*resource.GetId(), resource, nil); err != nil {
+			return nil, fmt.Errorf("create care2cure resource: %w", err)
 		}
 	}
+
+	//
+	// Sunflower Care Home
+	//
+	sunflowerMCSDAdminFHIRClient := sunflowerAdminHAPITenant.FHIRClient(hapiBaseURL)
+	for _, resource := range sunflower.Resources() {
+		if err := sunflowerMCSDAdminFHIRClient.UpdateWithContext(ctx, caramel.ResourceType(resource)+"/"+*resource.GetId(), resource, nil); err != nil {
+			return nil, fmt.Errorf("create sunflower resource: %w", err)
+		}
+	}
+
 	return &Details{
 		Knooppunt: KnooppuntSystemDetails{
 			MCSD: KnooppuntMCSDDetails{
-				PublicFHIRBaseURL: knptMCSDPublicHAPITenant.BaseURL(hapiBaseURL),
-				CacheFHIRBaseURL:  knptMCSDCacheHAPITenant.BaseURL(hapiBaseURL),
+				AdminFHIRBaseURL: knptMCSDAdminHAPITenant.BaseURL(hapiBaseURL),
+				QueryFHIRBaseURL: knptMCSDQueryHAPITenant.BaseURL(hapiBaseURL),
 			},
 		},
 		LRZa: LRZaSystemDetails{
-			FHIRBaseURL: lrzaMCSDPublicHAPITenant.BaseURL(hapiBaseURL),
+			FHIRBaseURL: lrzaMCSDAdminHAPITenant.BaseURL(hapiBaseURL),
 		},
 	}, nil
 }

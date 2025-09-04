@@ -1,83 +1,97 @@
 package mcsd
 
 import (
-	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/google/uuid"
-	"github.com/rs/zerolog/log"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 // buildUpdateTransaction constructs a FHIR Bundle transaction for updating resources.
 // It filters entries based on allowed resource types and sets the source in the resource meta.
-// The function takes a context, a Bundle to populate, a slice of Bundle entries, a map of local references,
-// and a slice of allowed resource types.
+// The function takes a context, a Bundle to populate, a Bundle entry, a map of local references,
+// a slice of allowed resource types, and a flag indicating if this is from a discoverable directory.
 //
-// TODO: The localRefMap is used to map local references to their full URLs, which is used for correlating resources in the transaction.
-// We don't want to copy the resource ID from remote mCSD Directory, as we can't guarantee IDs from external directories are unique.
-// This means, we let our local mCSD Directory assign new IDs to resources, but we have to make sure that updates are applied to the right local resources.
-func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entries []fhir.BundleEntry, allowedResourceTypes []string) ([]string, error) {
-	var remoteRefToLocalRefMap = make(map[string]string) // map of references of remote Admin Directories (e.g. "Organization/123") to local references.
-	var warnings []string
-	for i, entry := range entries {
-		if entry.Resource == nil {
-			warnings = append(warnings, fmt.Sprintf("Skipping entry #%d: missing 'resource' field", i))
-			continue
-		}
-		if entry.FullUrl == nil {
-			warnings = append(warnings, fmt.Sprintf("Skipping entry #%d: missing 'fullUrl' field", i))
-			continue
-		}
-		if entry.Request == nil {
-			warnings = append(warnings, fmt.Sprintf("Skipping entry #%d: missing 'request' field", i))
-			continue
-		}
-
-		resource := make(map[string]any)
-		if err := json.Unmarshal(entry.Resource, &resource); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal resource in entry #%d (fullUrl=%v): %w", i, entry.FullUrl, err)
-		}
-		resourceType, ok := resource["resourceType"].(string)
-		if !ok {
-			return nil, fmt.Errorf("entry #%d does not contain a valid resourceType (fullUrl=%v)", i, entry.FullUrl)
-		}
-		if !slices.Contains(allowedResourceTypes, resourceType) {
-			warnings = append(warnings, fmt.Sprintf("Skipping entry #%d: resource type %s not allowed", i, resourceType))
-			continue
-		}
-		log.Ctx(ctx).Debug().Msgf("Adding entry #%d to transaction: %s", i, resourceType)
-
-		updateResourceMeta(resource, *entry.FullUrl)
-		// Get or create local reference
-		// TODO: If the resource already exists, we should look up the existing resource's ID
-		// TODO: We should scope resource IDs to the source (e.g. by prefixing with the source URL or a hash thereof), because when syncing from multiple sources, IDs may collide.
-		remoteLocalRef := resourceType + "/" + resource["id"].(string)
-		localResourceID := remoteRefToLocalRefMap[remoteLocalRef]
-		if localResourceID == "" {
-			localResourceID = generateLocalID()
-			remoteRefToLocalRefMap[remoteLocalRef] = localResourceID
-		}
-		resource["id"] = localResourceID
-		if err := normalizeReferences(resource, remoteRefToLocalRefMap); err != nil {
-			return nil, fmt.Errorf("failed to normalize references in entry #%d: %w", i, err)
-		}
-
-		resourceJSON, err := json.Marshal(resource)
-		if err != nil {
-			return nil, err
-		}
-		tx.Entry = append(tx.Entry, fhir.BundleEntry{
-			Resource: resourceJSON,
-			Request: &fhir.BundleEntryRequest{
-				Url:    resourceType,
-				Method: entry.Request.Method,
-			},
-		})
+// Resources are only synced to the query directory if they come from non-discoverable directories.
+// Discoverable directories are for discovery only and their resources should not be synced.
+//
+// The localRefMap a map of references of remote Admin Directories (e.g. "Organization/123") to local references.
+// We don't want to copy the resource ID from remote Administration mCSD Directory, as we can't guarantee IDs from external directories are unique.
+// This means, we let our Query Directory assign new IDs to resources, but we have to make sure that updates are applied to the right local resources.
+func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, remoteRefToLocalRefMap map[string]string) (string, error) {
+	if entry.Resource == nil {
+		return "", errors.New("missing 'resource' field")
 	}
-	return warnings, nil
+	if entry.FullUrl == nil {
+		return "", errors.New("missing 'fullUrl' field")
+	}
+	if entry.Request == nil {
+		return "", errors.New("missing 'request' field")
+	}
+
+	resource := make(map[string]any)
+	if err := json.Unmarshal(entry.Resource, &resource); err != nil {
+		return "", fmt.Errorf("failed to unmarshal resource (fullUrl=%s): %w", to.EmptyString(entry.FullUrl), err)
+	}
+	resourceType, ok := resource["resourceType"].(string)
+	if !ok {
+		return "", fmt.Errorf("not a valid resourceType (fullUrl=%s)", to.EmptyString(entry.FullUrl))
+	}
+	if !slices.Contains(allowedResourceTypes, resourceType) {
+		return "", fmt.Errorf("resource type %s not allowed", resourceType)
+	}
+
+	// Only sync resources from non-discoverable directories to the query directory
+	// Exception: mCSD directory endpoints are synced even from discoverable directories for resilience (e.g. if the root directory is down)
+	var doSync = true
+	if isDiscoverableDirectory {
+		doSync = false
+		if resourceType == "Endpoint" {
+			// Check if this is an mCSD directory endpoint
+			var endpoint fhir.Endpoint
+			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
+				return "", fmt.Errorf("failed to unmarshal Endpoint resource: %w", err)
+			}
+			// Import mCSD directory endpoints even from discoverable directories
+			doSync = coding.EqualsCode(endpoint.ConnectionType, coding.MCSDConnectionTypeSystem, coding.MCSDConnectionTypeDirectoryCode)
+		}
+	}
+	if !doSync {
+		return resourceType, nil
+	}
+
+	updateResourceMeta(resource, *entry.FullUrl)
+	// Get or create local reference
+	// TODO: If the resource already exists, we should look up the existing resource's ID
+	// TODO: We should scope resource IDs to the source (e.g. by prefixing with the source URL or a hash thereof), because when syncing from multiple sources, IDs may collide.
+	remoteLocalRef := resourceType + "/" + resource["id"].(string)
+	localResourceID := remoteRefToLocalRefMap[remoteLocalRef]
+	if localResourceID == "" {
+		localResourceID = generateLocalID()
+		remoteRefToLocalRefMap[remoteLocalRef] = localResourceID
+	}
+	resource["id"] = localResourceID
+	if err := normalizeReferences(resource, remoteRefToLocalRefMap); err != nil {
+		return "", fmt.Errorf("failed to normalize references: %w", err)
+	}
+
+	resourceJSON, err := json.Marshal(resource)
+	if err != nil {
+		return "", err
+	}
+	tx.Entry = append(tx.Entry, fhir.BundleEntry{
+		Resource: resourceJSON,
+		Request: &fhir.BundleEntryRequest{
+			Url:    resourceType,
+			Method: entry.Request.Method,
+		},
+	})
+	return resourceType, nil
 }
 
 func normalizeReferences(resource map[string]any, remoteRefToLocalRefMap map[string]string) error {

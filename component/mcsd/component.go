@@ -3,32 +3,49 @@ package mcsd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 var _ component.Lifecycle = &Component{}
 
+var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
+var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService"}
+
+// Component implements a mCSD Update Client, which synchronizes mCSD FHIR resources from remote mCSD Directories to a local mCSD Directory for querying.
+// It is configured with a root mCSD Directory, which is used to discover organizations and their mCSD Directory endpoints.
+// Organizations refer to Endpoints through Organization.endpoint references.
+// Synchronization is a 2-step process:
+// 1. Query the root mCSD Directory for Organization resources and their associated Endpoint resources of type 'mcsd-directory-endpoint'.
+// 2. For each discovered mCSD Directory Endpoint, query the remote mCSD Directory for its resources and copy them to the local mCSD Query Directory.
+//   - The following resource types are synchronized: Organization, Endpoint, Location, HealthcareService
+//   - An organization's mCSD Directory may only return Organization resources that:
+//   - exist in the root mCSD Directory (link by identifier, name must be the same)
+//   - have the same mcsd-directory-endpoint as the directory being queried
+//   - These are mitigating measures to prevent an attacker to spoof another care organization.
 type Component struct {
-	config             Config
-	fhirClientFn       func(baseURL *url.URL) fhirclient.Client
-	lastUpdateTimes    map[string]time.Time
-	lastUpdateTimesMux *sync.RWMutex
+	config       Config
+	fhirClientFn func(baseURL *url.URL) fhirclient.Client
+
+	administrationDirectories []administrationDirectory
+	lastUpdateTimes           map[string]time.Time
+	updateMux                 *sync.RWMutex
 }
 
 type Config struct {
-	RootDirectories map[string]DirectoryConfig `koanf:"rootdirectories"`
-	LocalDirectory  DirectoryConfig            `koanf:"localdirectory"`
+	AdministrationDirectories map[string]DirectoryConfig `koanf:"admin"`
+	QueryDirectory            DirectoryConfig            `koanf:"query"`
 }
 
 type DirectoryConfig struct {
@@ -37,23 +54,33 @@ type DirectoryConfig struct {
 
 type UpdateReport map[string]DirectoryUpdateReport
 
+type administrationDirectory struct {
+	fhirBaseURL   string
+	resourceTypes []string
+	discover      bool
+}
+
 type DirectoryUpdateReport struct {
 	CountCreated int      `json:"created"`
 	CountUpdated int      `json:"updated"`
 	CountDeleted int      `json:"deleted"`
-	Warnings     []string `json:"warnings,omitempty"`
-	Error        error    `json:"error,omitempty"`
+	Warnings     []string `json:"warnings"`
+	Errors       []string `json:"errors"`
 }
 
 func New(config Config) *Component {
-	return &Component{
+	result := &Component{
 		config: config,
 		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
 			return fhirclient.New(baseURL, http.DefaultClient, nil)
 		},
-		lastUpdateTimes:    make(map[string]time.Time),
-		lastUpdateTimesMux: &sync.RWMutex{},
+		lastUpdateTimes: make(map[string]time.Time),
+		updateMux:       &sync.RWMutex{},
 	}
+	for _, rootDirectory := range config.AdministrationDirectories {
+		result.registerAdministrationDirectory(rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true)
+	}
+	return result
 }
 
 func (c *Component) Start() error {
@@ -79,48 +106,74 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 	})
 }
 
-func (c *Component) update(ctx context.Context) (UpdateReport, error) {
-	result := make(UpdateReport)
-	for _, root := range c.config.RootDirectories {
-		report, err := c.updateFromDirectory(ctx, root.FHIRBaseURL, []string{"Organization", "Endpoint"})
-		if err != nil {
-			log.Ctx(ctx).Err(err).Str("directory", root.FHIRBaseURL).Msg("mCSD root directory update failed")
-			report.Error = errors.Join(err, report.Error)
-		}
-		result[root.FHIRBaseURL] = report
+func (c *Component) registerAdministrationDirectory(fhirBaseURL string, resourceTypes []string, discover bool) error {
+	// Must be a valid http or https URL
+	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid FHIR base URL (url=%s): %w", fhirBaseURL, err)
+	}
+	parsedFHIRBaseURL.Scheme = strings.ToLower(parsedFHIRBaseURL.Scheme)
+	if (parsedFHIRBaseURL.Scheme != "https" && parsedFHIRBaseURL.Scheme != "http") || parsedFHIRBaseURL.Host == "" {
+		return fmt.Errorf("invalid FHIR base URL (url=%s)", fhirBaseURL)
+	}
 
+	exists := slices.ContainsFunc(c.administrationDirectories, func(directory administrationDirectory) bool {
+		return directory.fhirBaseURL == fhirBaseURL
+	})
+	if exists {
+		return nil
+	}
+	c.administrationDirectories = append(c.administrationDirectories, administrationDirectory{
+		resourceTypes: resourceTypes,
+		fhirBaseURL:   fhirBaseURL,
+		discover:      discover,
+	})
+	return nil
+}
+
+func (c *Component) update(ctx context.Context) (UpdateReport, error) {
+	c.updateMux.Lock()
+	defer c.updateMux.Unlock()
+
+	result := make(UpdateReport)
+	for i := 0; i < len(c.administrationDirectories); i++ {
+		adminDirectory := c.administrationDirectories[i]
+		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover)
+		if err != nil {
+			log.Ctx(ctx).Err(err).Str("directory", adminDirectory.fhirBaseURL).Msg("mCSD Directory update failed")
+			report.Errors = append(report.Errors, err.Error())
+		}
+		result[adminDirectory.fhirBaseURL] = report
 	}
 	return result, nil
 }
 
-func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string) (DirectoryUpdateReport, error) {
-	remoteDirFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
+func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool) (DirectoryUpdateReport, error) {
+	remoteAdminDirectoryFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
 	}
-	remoteDirFHIRClient := c.fhirClientFn(remoteDirFHIRBaseURL)
+	remoteAdminDirectoryFHIRClient := c.fhirClientFn(remoteAdminDirectoryFHIRBaseURL)
 
-	localDirFHIRBaseURL, err := url.Parse(c.config.LocalDirectory.FHIRBaseURL)
+	queryDirectoryFHIRBaseURL, err := url.Parse(c.config.QueryDirectory.FHIRBaseURL)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
 	}
-	localDirFHIRClient := c.fhirClientFn(localDirFHIRBaseURL)
+	queryDirectoryFHIRClient := c.fhirClientFn(queryDirectoryFHIRBaseURL)
 
 	// Query remote directory
 	var bundle fhir.Bundle
 	// TODO: Pagination
 
 	// Get last update time for incremental sync
-	c.lastUpdateTimesMux.RLock()
 	lastUpdate, hasLastUpdate := c.lastUpdateTimes[fhirBaseURLRaw]
-	c.lastUpdateTimesMux.RUnlock()
 
 	searchParams := url.Values{}
 	if hasLastUpdate {
 		searchParams.Set("_since", lastUpdate.Format(time.RFC3339))
 	}
 
-	if err = remoteDirFHIRClient.SearchWithContext(ctx, "", searchParams, &bundle, fhirclient.AtPath("/_history")); err != nil {
+	if err = remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", searchParams, &bundle, fhirclient.AtPath("/_history")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("_history search failed: %w", err)
 	}
 
@@ -129,19 +182,40 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		Type:  fhir.BundleTypeTransaction,
 		Entry: make([]fhir.BundleEntry, 0, len(bundle.Entry)),
 	}
-	warnings, err := buildUpdateTransaction(ctx, &tx, bundle.Entry, allowedResourceTypes)
-	if err != nil {
-		return DirectoryUpdateReport{}, fmt.Errorf("failed to build update transaction: %w", err)
+	remoteRefToLocalRefMap := make(map[string]string)
+	var report DirectoryUpdateReport
+	for i, entry := range bundle.Entry {
+		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
+		if err != nil {
+			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
+			continue
+		}
+		if allowDiscovery && resourceType == "Endpoint" {
+			var endpoint fhir.Endpoint
+			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
+				report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to unmarshal Endpoint resource: %s", i, err.Error()))
+				continue
+			}
+			if coding.EqualsCode(endpoint.ConnectionType, coding.MCSDConnectionTypeSystem, coding.MCSDConnectionTypeDirectoryCode) {
+				err := c.registerAdministrationDirectory(endpoint.Address, directoryResourceTypes, false)
+				if err != nil {
+					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
+				} else {
+					log.Ctx(ctx).Info().Msgf("Discovered and registered new mCSD Directory at %s", endpoint.Address)
+				}
+			}
+		}
 	}
+	if len(tx.Entry) == 0 {
+		return report, nil
+	}
+
 	var txResult fhir.Bundle
-	if err := localDirFHIRClient.CreateWithContext(ctx, tx, &txResult, fhirclient.AtPath("/")); err != nil {
-		return DirectoryUpdateReport{}, fmt.Errorf("failed to apply mCSD update to local directory: %w", err)
+	if err := queryDirectoryFHIRClient.CreateWithContext(ctx, tx, &txResult, fhirclient.AtPath("/")); err != nil {
+		return DirectoryUpdateReport{}, fmt.Errorf("failed to apply mCSD update to query directory: %w", err)
 	}
 
 	// Process result
-	report := DirectoryUpdateReport{
-		Warnings: warnings,
-	}
 	for _, entry := range txResult.Entry {
 		if entry.Response == nil {
 			log.Ctx(ctx).Warn().Msgf("Skipping entry with no response: %v", entry)
@@ -165,12 +239,10 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 
 	// Update last sync timestamp on successful completion
-	c.lastUpdateTimesMux.Lock()
 	if c.lastUpdateTimes == nil {
 		c.lastUpdateTimes = make(map[string]time.Time)
 	}
 	c.lastUpdateTimes[fhirBaseURLRaw] = time.Now()
-	c.lastUpdateTimesMux.Unlock()
 
 	return report, nil
 }

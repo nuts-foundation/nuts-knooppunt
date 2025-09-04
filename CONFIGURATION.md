@@ -13,23 +13,25 @@ Configuration is loaded in the following order (later sources override earlier o
 ## YAML Configuration
 
 The application loads the following configuration files:
+
 - `config/knooppunt.yml`: Knooppunt-specific configuration
-- `config/nuts.yml`: Nuts-specific configuration, see [Nuts documentation](https://nuts-node.readthedocs.io/en/stable/pages/deployment/configuration.html)
+- `config/nuts.yml`: Nuts-specific configuration,
+  see [Nuts documentation](https://nuts-node.readthedocs.io/en/stable/pages/deployment/configuration.html)
 
 ### Example YAML Configuration
 
 ```yaml
 # mCSD (Mobile Care Services Discovery) configuration
 mcsd:
-  # Root directories to synchronize from
-  rootdirectories:
+  # Root Admin Directories to synchronize from
+  admin:
     "example-org":
       fhirbaseurl: "https://fhir.example.org/fhir"
     "another-org":
       fhirbaseurl: "https://fhir.another-org.com/fhir"
 
-  # Local FHIR directory configuration
-  localdirectory:
+  # Local Query Directory to sync to
+  query:
     fhirbaseurl: "http://localhost:8080/fhir"
 
 # mCSD Admin configuration
@@ -47,11 +49,12 @@ nuts:
 
 Environment variables use the prefix `KNPT_` followed by the configuration path in uppercase with underscores:
 
-| Environment Variable                   | YAML Path                         | Description                       |
-|----------------------------------------|-----------------------------------|-----------------------------------|
-| `KNPT_NUTS_ENABLED`                    | `nuts.enabled`                    | Enable embedded Nuts node         |
-| `KNPT_MCSDADMIN_FHIRBASEURL`           | `mcsdadmin.fhirbaseurl`           | FHIR base URL for admin interface |
-| `KNPT_MCSD_LOCALDIRECTORY_FHIRBASEURL` | `mcsd.localdirectory.fhirbaseurl` | Local FHIR directory URL          |
+| Environment Variable                | YAML Path                      | Description                               |
+|-------------------------------------|--------------------------------|-------------------------------------------|
+| `KNPT_NUTS_ENABLED`                 | `nuts.enabled`                 | Enable embedded Nuts node                 |
+| `KNPT_MCSDADMIN_FHIRBASEURL`        | `mcsdadmin.fhirbaseurl`        | FHIR base URL for admin interface         |
+| `KNPT_MCSD_QUERY_FHIRBASEURL`       | `mcsd.query.fhirbaseurl`       | Local Query Directory FHIR base URL       |
+| `KNPT_MCSD_ADMIN_<KEY>_FHIRBASEURL` | `mcsd.admin.<key>.fhirbaseurl` | Remote mCSD Admin Directory FHIR base URL |
 
 ### Example Environment Variable Usage
 
@@ -73,9 +76,9 @@ export KNPT_MCSDADMIN_FHIRBASEURL=http://fhir.example.com:8080/fhir
 The mCSD (Mobile Care Services Discovery) component synchronizes healthcare service information from external
 directories.
 
-- `mcsd.rootdirectories`: Map of root directories to synchronize from
+- `mcsd.admin`: Map of root directories to synchronize from
     - Each entry has a `fhirbaseurl` pointing to the external FHIR server
-- `mcsd.localdirectory.fhirbaseurl`: URL of the local FHIR directory to store synchronized data
+- `mcsd.query.fhirbaseurl`: URL of the local FHIR directory to store synchronized data
 
 ### mCSD Admin Configuration
 
