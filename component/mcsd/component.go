@@ -42,8 +42,8 @@ type Component struct {
 }
 
 type Config struct {
-	RootAdminDirectories map[string]DirectoryConfig `koanf:"admin"`
-	QueryDirectory       DirectoryConfig            `koanf:"query"`
+	AdministrationDirectories map[string]DirectoryConfig `koanf:"admin"`
+	QueryDirectory            DirectoryConfig            `koanf:"query"`
 }
 
 type DirectoryConfig struct {
@@ -74,7 +74,7 @@ func New(config Config) *Component {
 		},
 		updateMux: &sync.RWMutex{},
 	}
-	for _, rootDirectory := range config.RootAdminDirectories {
+	for _, rootDirectory := range config.AdministrationDirectories {
 		result.registerAdministrationDirectory(rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true)
 	}
 	return result

@@ -48,7 +48,7 @@ func TestComponent_update(t *testing.T) {
 
 	localClient := &test.StubFHIRClient{}
 	component := New(Config{
-		RootAdminDirectories: map[string]DirectoryConfig{
+		AdministrationDirectories: map[string]DirectoryConfig{
 			"rootDir": {
 				FHIRBaseURL: rootDirServer.URL,
 			},

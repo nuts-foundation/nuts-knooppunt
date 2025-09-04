@@ -61,8 +61,8 @@ nuts:
 	assert.Equal(t, "http://localhost:9090/fhir", config.MCSD.QueryDirectory.FHIRBaseURL)
 
 	// Check map values
-	require.Contains(t, config.MCSD.RootAdminDirectories, "test-org")
-	assert.Equal(t, "https://test.example.org/fhir", config.MCSD.RootAdminDirectories["test-org"].FHIRBaseURL)
+	require.Contains(t, config.MCSD.AdministrationDirectories, "test-org")
+	assert.Equal(t, "https://test.example.org/fhir", config.MCSD.AdministrationDirectories["test-org"].FHIRBaseURL)
 }
 
 func TestLoadConfig_FromEnvironmentVariables(t *testing.T) {
