@@ -1,0 +1,27 @@
+[
+  {
+    "code": "active",
+    "display": "Active",
+    "definition": "This endpoint is expected to be active and can be used."
+  },
+  {
+    "code": "suspended",
+    "display": "Suspended",
+    "definition": "This endpoint is temporarily unavailable."
+  },
+  {
+    "code": "error",
+    "display": "Error",
+    "definition": "This endpoint has exceeded connectivity thresholds and is considered in an error state and should no longer be attempted to connect to until corrective action is taken."
+  },
+  {
+    "code": "off",
+    "display": "Off",
+    "definition": "This endpoint is no longer to be used."
+  },
+  {
+    "code": "entered-in-error",
+    "display": "Entered in error",
+    "definition": "This instance should not have been part of this patient's medical record."
+  }
+]

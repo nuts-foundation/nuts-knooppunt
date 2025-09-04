@@ -36,9 +36,16 @@ func CreateHAPITenant(ctx context.Context, details HAPITenant, fhirClient fhircl
 		},
 	}
 	err := fhirClient.CreateWithContext(ctx, tenant, &tenant, fhirclient.AtPath("/$partition-management-create-partition"))
-	if err != nil && strings.Contains(err.Error(), "status=400") {
-		// assume it's OK (maybe it already exists)
+	if err != nil && shouldIgnorePartitionError(err.Error()) {
+		// assume it's OK (partition already exists)
 		return nil
 	}
 	return err
+}
+
+// shouldIgnorePartitionError determines if a partition creation error should be ignored
+// because it indicates the partition already exists
+func shouldIgnorePartitionError(errorStr string) bool {
+	// Handle various error formats that indicate the partition already exists
+	return strings.Contains(errorStr, "HAPI-1309")
 }

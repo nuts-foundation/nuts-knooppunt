@@ -21,8 +21,8 @@ import (
 // Discoverable directories are for discovery only and their resources should not be synced.
 //
 // The localRefMap a map of references of remote Admin Directories (e.g. "Organization/123") to local references.
-// We don't want to copy the resource ID from remote mCSD Directory, as we can't guarantee IDs from external directories are unique.
-// This means, we let our local mCSD Directory assign new IDs to resources, but we have to make sure that updates are applied to the right local resources.
+// We don't want to copy the resource ID from remote Administration mCSD Directory, as we can't guarantee IDs from external directories are unique.
+// This means, we let our Query Directory assign new IDs to resources, but we have to make sure that updates are applied to the right local resources.
 func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, remoteRefToLocalRefMap map[string]string) (string, error) {
 	if entry.Resource == nil {
 		return "", errors.New("missing 'resource' field")

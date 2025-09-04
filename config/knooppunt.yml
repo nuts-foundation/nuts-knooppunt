@@ -1,0 +1,25 @@
+# Nuts Knooppunt Configuration
+# This file demonstrates the configuration options available
+
+# mCSD (Mobile Care Services Discovery) configuration
+mcsd:
+  # Root directories to synchronize from
+  admin:
+    "example-org":
+      fhirbaseurl: "https://fhir.example.org/fhir"
+    "another-org":
+      fhirbaseurl: "https://fhir.another-org.com/fhir"
+  
+  # Local FHIR directory configuration
+  query:
+    fhirbaseurl: "http://localhost:8080/fhir"
+
+# mCSD Admin configuration
+mcsdadmin:
+  # Base URL for FHIR server used by admin interface
+  fhirbaseurl: "http://localhost:8080/fhir"
+
+# Nuts node configuration  
+nuts:
+  # Whether to enable the Nuts node component
+  enabled: true

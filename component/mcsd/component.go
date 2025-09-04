@@ -42,12 +42,12 @@ type Component struct {
 }
 
 type Config struct {
-	RootAdminDirectories map[string]DirectoryConfig `json:"roots"`
+	RootAdminDirectories map[string]DirectoryConfig `koanf:"admin"`
 	QueryDirectory       DirectoryConfig            `json:"query"`
 }
 
 type DirectoryConfig struct {
-	FHIRBaseURL string `json:"url"`
+	FHIRBaseURL string `koanf:"fhirbaseurl"`
 }
 
 type UpdateReport map[string]DirectoryUpdateReport
@@ -146,22 +146,22 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 }
 
 func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool) (DirectoryUpdateReport, error) {
-	remoteDirFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
+	remoteAdminDirectoryFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
 	}
-	remoteDirFHIRClient := c.fhirClientFn(remoteDirFHIRBaseURL)
+	remoteAdminDirectoryFHIRClient := c.fhirClientFn(remoteAdminDirectoryFHIRBaseURL)
 
-	localDirFHIRBaseURL, err := url.Parse(c.config.QueryDirectory.FHIRBaseURL)
+	queryDirectoryFHIRBaseURL, err := url.Parse(c.config.QueryDirectory.FHIRBaseURL)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
 	}
-	localDirFHIRClient := c.fhirClientFn(localDirFHIRBaseURL)
+	queryDirectoryFHIRClient := c.fhirClientFn(queryDirectoryFHIRBaseURL)
 
 	// Query remote directory
 	var bundle fhir.Bundle
 	// TODO: Pagination
-	if err = remoteDirFHIRClient.SearchWithContext(ctx, "", nil, &bundle, fhirclient.AtPath("/_history")); err != nil {
+	if err = remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", nil, &bundle, fhirclient.AtPath("/_history")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("_history search failed: %w", err)
 	}
 
@@ -199,8 +199,8 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 
 	var txResult fhir.Bundle
-	if err := localDirFHIRClient.CreateWithContext(ctx, tx, &txResult, fhirclient.AtPath("/")); err != nil {
-		return DirectoryUpdateReport{}, fmt.Errorf("failed to apply mCSD update to local directory: %w", err)
+	if err := queryDirectoryFHIRClient.CreateWithContext(ctx, tx, &txResult, fhirclient.AtPath("/")); err != nil {
+		return DirectoryUpdateReport{}, fmt.Errorf("failed to apply mCSD update to query directory: %w", err)
 	}
 
 	// Process result
