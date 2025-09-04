@@ -7,6 +7,8 @@ Knooppunt is available from the Github Container Registry.
 
 https://github.com/nuts-foundation/nuts-knooppunt/pkgs/container/nuts-knooppunt
 
+Knooppunt embeds a Nuts Node which is disabled by default.
+
 ## Addressing
 
 To participate in the addressing generic function Knooppunt will need to connect to three different FHIR services
@@ -20,7 +22,8 @@ A multi tenant HAPI server can be used for hosting both the admin and query dire
 separate, but you can choose to combine the data in a single tenant if so desired.
 
 The root directory will be the LRZA directory provided by the ministry of health (VWS). During testing Nuts will provide
-an example root directory.
+an example root directory. Please notify Nuts if you would like to make a directory discoverable through our example
+root directory.
 
 For testing purposes your admin directory should be reachable through the public internet. The production scenario aims
 to utilise mTLS for trusted communication.
