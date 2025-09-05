@@ -63,7 +63,9 @@ func TestComponent_update(t *testing.T) {
 	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
 		if baseURL.String() == rootDirServer.URL ||
 			baseURL.String() == orgDir1BaseURL {
-			return fhirclient.New(baseURL, http.DefaultClient, nil)
+			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{
+				UsePostSearch: false,
+			})
 		}
 		if baseURL.String() == "http://example.com/local/fhir" {
 			return localClient
@@ -128,9 +130,8 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	var sinceParams []string
 	rootDirMux := http.NewServeMux()
 	rootDirMux.HandleFunc("/_history", func(w http.ResponseWriter, r *http.Request) {
-		// FHIR client uses POST by default, parameters are in form data
-		r.ParseForm()
-		since := r.Form.Get("_since")
+		// FHIR client configured to use GET, parameters are in query string
+		since := r.URL.Query().Get("_since")
 		sinceParams = append(sinceParams, since)
 		w.Header().Set("Content-Type", "application/fhir+json")
 		w.WriteHeader(http.StatusOK)
@@ -151,7 +152,9 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	})
 	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
 		if baseURL.String() == rootDirServer.URL {
-			return fhirclient.New(baseURL, http.DefaultClient, nil)
+			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{
+				UsePostSearch: false,
+			})
 		}
 		if baseURL.String() == "http://example.com/local/fhir" {
 			return localClient

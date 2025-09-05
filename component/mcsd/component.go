@@ -72,7 +72,9 @@ func New(config Config) *Component {
 	result := &Component{
 		config: config,
 		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
-			return fhirclient.New(baseURL, http.DefaultClient, nil)
+			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{
+				UsePostSearch: false,
+			})
 		},
 		lastUpdateTimes: make(map[string]time.Time),
 		updateMux:       &sync.RWMutex{},
