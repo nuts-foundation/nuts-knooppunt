@@ -39,7 +39,7 @@ type Component struct {
 	fhirClientFn func(baseURL *url.URL) fhirclient.Client
 
 	administrationDirectories []administrationDirectory
-	lastUpdateTimes           map[string]time.Time
+	lastUpdateTimes           map[string]string
 	updateMux                 *sync.RWMutex
 }
 
@@ -76,7 +76,7 @@ func New(config Config) *Component {
 				UsePostSearch: false,
 			})
 		},
-		lastUpdateTimes: make(map[string]time.Time),
+		lastUpdateTimes: make(map[string]string),
 		updateMux:       &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.AdministrationDirectories {
@@ -170,9 +170,15 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// Get last update time for incremental sync
 	lastUpdate, hasLastUpdate := c.lastUpdateTimes[fhirBaseURLRaw]
 
+	// Capture query start time as fallback for servers that don't provide Bundle meta.lastUpdated.
+	queryStartTime := time.Now()
+
 	searchParams := url.Values{}
 	if hasLastUpdate {
-		searchParams.Set("_since", lastUpdate.Format(time.RFC3339))
+		searchParams.Set("_since", lastUpdate)
+		log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Str("_since", lastUpdate).Msg("Using _since parameter for incremental sync from FHIR server")
+	} else {
+		log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURLRaw).Msg("No last update time, doing full sync from FHIR server")
 	}
 
 	if err = remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", searchParams, &bundle, fhirclient.AtPath("/_history")); err != nil {
@@ -240,8 +246,18 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		}
 	}
 
-	// Update last sync timestamp on successful completion
-	c.lastUpdateTimes[fhirBaseURLRaw] = time.Now()
+	// Update last sync timestamp on successful completion.
+	// Use the search result Bundle's meta.lastUpdated if available, otherwise fall back to query start time.
+	// This uses the FHIR server's own timestamp string, eliminating clock skew issues.
+	var nextSyncTime string
+	if bundle.Meta != nil && bundle.Meta.LastUpdated != nil {
+		nextSyncTime = *bundle.Meta.LastUpdated
+	} else {
+		// Fallback to local time with buffer to account for potential clock skew
+		nextSyncTime = queryStartTime.Add(-2 * time.Second).Format(time.RFC3339)
+		log.Ctx(ctx).Warn().Str("directory", fhirBaseURLRaw).Msg("Bundle meta.lastUpdated not available, using local time with 2s buffer - may cause clock skew issues")
+	}
+	c.lastUpdateTimes[fhirBaseURLRaw] = nextSyncTime
 
 	return report, nil
 }
