@@ -105,8 +105,9 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
 			UsePostSearch: false,
 		})
+		testOrgName := "Test Organization for Incremental Sync"
 		newOrg := fhir.Organization{
-			Name: &[]string{"Test Organization for Incremental Sync"}[0],
+			Name: &testOrgName,
 			Identifier: []fhir.Identifier{
 				{
 					Use:    &[]fhir.IdentifierUse{fhir.IdentifierUseOfficial}[0],
