@@ -11,12 +11,16 @@ Knooppunt embeds a Nuts Node which is disabled by default.
 
 ## Addressing
 
-To participate in the addressing generic function Knooppunt will need to connect to three different FHIR services
-providing data according to the mCSD profile.
+To participate in the addressing generic function Knooppunt will connect to several FHIR APIs to synchronize data, according to the mCSD profile:
+- a Root Administration Directory, authoratitive on care organizations and their Administration Directory endpoints,
+- Administration Directories of care organizations, discovered through the Root Administration Directory.
+- a local Query Directory where the synchronisation process will put data received from other organisations
 
-1. A root directory keeping authoritative references to a set of admin directories
-2. An admin directory used to publish data such as endpoints
-3. A query directory where the synchronisation process will place data received from other organisations
+For your own Knooppunt, you need to:
+- provide a FHIR API for the Query Directory
+- provide a FHIR API for the Administration Directory, containing your care organization registrations, that other Knooppunt instances can query.
+  - You can use the embedded mCSD Admin Editor web application (`/mcsdadmin`) to maintain this directory.
+- configure the Root Administration Directory
 
 A multi tenant HAPI server can be used for hosting both the admin and query directory. We recommend to keep this data
 separate, but you can choose to combine the data in a single tenant if so desired.
