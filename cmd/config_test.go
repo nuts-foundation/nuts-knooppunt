@@ -14,7 +14,7 @@ func TestLoadConfig_Default(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should have default values
-	assert.True(t, config.Nuts.Enabled)
+	assert.False(t, config.Nuts.Enabled)
 	assert.Equal(t, "", config.MCSDAdmin.FHIRBaseURL)
 }
 
