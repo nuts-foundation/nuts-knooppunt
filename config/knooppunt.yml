@@ -22,4 +22,4 @@ mcsdadmin:
 # Nuts node configuration  
 nuts:
   # Whether to enable the Nuts node component
-  enabled: false
+  enabled: true
