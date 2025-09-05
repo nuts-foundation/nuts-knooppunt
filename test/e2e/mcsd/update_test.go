@@ -105,14 +105,17 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
 			UsePostSearch: false,
 		})
-		testOrgName := "Test Organization for Incremental Sync"
+		orgName := "Test Organization for Incremental Sync"
+		identifierUseOfficial := fhir.IdentifierUseOfficial
+		identifierSystem := "http://fhir.nl/fhir/NamingSystem/ura"
+		identifierValue := "99999999"
 		newOrg := fhir.Organization{
-			Name: &testOrgName,
+			Name: &orgName,
 			Identifier: []fhir.Identifier{
 				{
-					Use:    &[]fhir.IdentifierUse{fhir.IdentifierUseOfficial}[0],
-					System: &[]string{"http://fhir.nl/fhir/NamingSystem/ura"}[0],
-					Value:  &[]string{"99999999"}[0],
+					Use:    &identifierUseOfficial,
+					System: &identifierSystem,
+					Value:  &identifierValue,
 				},
 			},
 		}
@@ -125,7 +128,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		var readBackOrg fhir.Organization
 		err = care2CureFHIRClient.ReadWithContext(context.Background(), "Organization/"+*createdOrg.Id, &readBackOrg)
 		require.NoError(t, err, "Failed to read back created organization")
-		require.Equal(t, "Test Organization for Incremental Sync", *readBackOrg.Name, "Organization name should match")
+		require.Equal(t, orgName, *readBackOrg.Name, "Organization name should match")
 
 		// Second sync - should use _since and only find new resources (our test organization)
 		httpResponse2, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
