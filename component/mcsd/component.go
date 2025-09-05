@@ -23,6 +23,10 @@ var _ component.Lifecycle = &Component{}
 var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
 var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService"}
 
+// clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
+// to account for potential clock differences between client and FHIR server
+const clockSkewBuffer = 2 * time.Second
+
 // Component implements a mCSD Update Client, which synchronizes mCSD FHIR resources from remote mCSD Directories to a local mCSD Directory for querying.
 // It is configured with a root mCSD Directory, which is used to discover organizations and their mCSD Directory endpoints.
 // Organizations refer to Endpoints through Organization.endpoint references.
@@ -254,8 +258,8 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		nextSyncTime = *bundle.Meta.LastUpdated
 	} else {
 		// Fallback to local time with buffer to account for potential clock skew
-		nextSyncTime = queryStartTime.Add(-2 * time.Second).Format(time.RFC3339)
-		log.Ctx(ctx).Warn().Str("directory", fhirBaseURLRaw).Msg("Bundle meta.lastUpdated not available, using local time with 2s buffer - may cause clock skew issues")
+		nextSyncTime = queryStartTime.Add(-clockSkewBuffer).Format(time.RFC3339)
+		log.Ctx(ctx).Warn().Str("fhir_server", fhirBaseURLRaw).Msg("Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues")
 	}
 	c.lastUpdateTimes[fhirBaseURLRaw] = nextSyncTime
 
