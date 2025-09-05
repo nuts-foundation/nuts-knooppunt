@@ -1,6 +1,6 @@
 # Deployment
 
-Nuts Knooppunt is provided as a single docker image that should be deployed within a participating organisations
+Nuts Knooppunt is provided as a single docker image that should be deployed within a participating organisation's
 network. We will update this guide as we implement the different generic functions.
 
 Knooppunt is available from the Github Container Registry.
