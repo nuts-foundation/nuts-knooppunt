@@ -13,6 +13,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/static"
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -198,6 +199,10 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	var org fhir.Organization
 	name := r.PostForm.Get("name")
 	org.Name = &name
+	uraString := r.PostForm.Get("identifier")
+	org.Identifier = []fhir.Identifier{
+		uraIdentfier(uraString),
+	}
 
 	orgTypeCode := r.PostForm.Get("type")
 	orgType, ok := valuesets.CodableFrom("organization-type", orgTypeCode)
@@ -550,4 +555,12 @@ func renderList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.
 	}{
 		Items: dtoFunc(items),
 	})
+}
+
+func uraIdentfier(uraString string) fhir.Identifier {
+	var identifier fhir.Identifier
+	identifier.Value = &uraString
+	uraSystem := coding.URANamingSystem
+	identifier.System = &uraSystem
+	return identifier
 }
