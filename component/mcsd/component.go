@@ -159,41 +159,48 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	queryDirectoryFHIRClient := c.fhirClientFn(queryDirectoryFHIRBaseURL)
 
 	// Query remote directory
-	var bundle fhir.Bundle
+	var searchSet fhir.Bundle
 	// TODO: Pagination
-	if err = remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", nil, &bundle, fhirclient.AtPath("/_history")); err != nil {
+	if err = remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", nil, &searchSet, fhirclient.AtPath("/_history")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("_history search failed: %w", err)
 	}
 
 	// Update local directory
 	tx := fhir.Bundle{
 		Type:  fhir.BundleTypeTransaction,
-		Entry: make([]fhir.BundleEntry, 0, len(bundle.Entry)),
+		Entry: make([]fhir.BundleEntry, 0, len(searchSet.Entry)),
 	}
 	remoteRefToLocalRefMap := make(map[string]string)
 	var report DirectoryUpdateReport
-	for i, entry := range bundle.Entry {
-		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
-		if err != nil {
-			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
-			continue
-		}
-		if allowDiscovery && resourceType == "Endpoint" {
-			var endpoint fhir.Endpoint
-			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
-				report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to unmarshal Endpoint resource: %s", i, err.Error()))
+	err = fhirclient.Paginate(ctx, remoteAdminDirectoryFHIRClient, searchSet, func(searchSet *fhir.Bundle) (bool, error) {
+		for i, entry := range searchSet.Entry {
+			resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
+			if err != nil {
+				report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 				continue
 			}
-			if coding.EqualsCode(endpoint.ConnectionType, coding.MCSDConnectionTypeSystem, coding.MCSDConnectionTypeDirectoryCode) {
-				err := c.registerAdministrationDirectory(endpoint.Address, directoryResourceTypes, false)
-				if err != nil {
-					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
-				} else {
-					log.Ctx(ctx).Info().Msgf("Discovered and registered new mCSD Directory at %s", endpoint.Address)
+			if allowDiscovery && resourceType == "Endpoint" {
+				var endpoint fhir.Endpoint
+				if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
+					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to unmarshal Endpoint resource: %s", i, err.Error()))
+					continue
+				}
+				if coding.EqualsCode(endpoint.ConnectionType, coding.MCSDConnectionTypeSystem, coding.MCSDConnectionTypeDirectoryCode) {
+					err := c.registerAdministrationDirectory(endpoint.Address, directoryResourceTypes, false)
+					if err != nil {
+						report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
+					} else {
+						log.Ctx(ctx).Info().Msgf("Discovered and registered new mCSD Directory at %s", endpoint.Address)
+					}
 				}
 			}
 		}
+		return true, nil
+	})
+	if err != nil {
+		return report, fmt.Errorf("pagination of _history search failed: %w", err)
 	}
+
 	if len(tx.Entry) == 0 {
 		return report, nil
 	}
