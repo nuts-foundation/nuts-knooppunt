@@ -21,12 +21,11 @@ providing data according to the mCSD profile.
 A multi tenant HAPI server can be used for hosting both the admin and query directory. We recommend to keep this data
 separate, but you can choose to combine the data in a single tenant if so desired.
 
-The root directory will be the LRZA directory provided by the ministry of health (VWS). During testing Nuts will provide
-an example root directory which is available on this URL:
+The root directory will be the LRZA directory provided by the ministry of health (VWS). During preliminary testing, an example root directory is available on this URL:
 
 https://knooppunt-test.nuts-services.nl/lrza/mcsd
 
-Please notify Nuts if you would like to make a directory discoverable through our example
+Please get in contact if you would like to make your Administration Directory discoverable through our example
 root directory.
 
 For testing purposes your admin directory should be reachable through the public internet. The production scenario aims
