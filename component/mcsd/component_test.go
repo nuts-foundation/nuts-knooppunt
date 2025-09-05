@@ -2,7 +2,6 @@ package mcsd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -30,21 +29,32 @@ func TestComponent_update(t *testing.T) {
 	})
 	rootDirServer := httptest.NewServer(rootDirMux)
 
-	org1DirHistoryResponseBytes, err := os.ReadFile("test/org1_dir_history_response.json")
+	// page 1
+	org1DirHistoryResponsePage1Bytes, err := os.ReadFile("test/org1_dir_history_response-page1.json")
 	require.NoError(t, err)
-	org1DirHistoryResponse := string(org1DirHistoryResponseBytes)
+	org1DirHistoryPage1Response := string(org1DirHistoryResponsePage1Bytes)
+	// page 2
+	org1DirHistoryResponsePage2Bytes, err := os.ReadFile("test/org1_dir_history_response-page2.json")
+	require.NoError(t, err)
+	org1DirHistoryPage2Response := string(org1DirHistoryResponsePage2Bytes)
 
 	org1DirMux := http.NewServeMux()
 	org1DirMux.HandleFunc("/fhir/_history", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/fhir+json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(org1DirHistoryResponse))
+		_, _ = w.Write([]byte(org1DirHistoryPage1Response))
+	})
+	org1DirMux.HandleFunc("/fhir/_history_page2", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(org1DirHistoryPage2Response))
 	})
 	org1DirServer := httptest.NewServer(org1DirMux)
 
 	orgDir1BaseURL := org1DirServer.URL + "/fhir"
 	rootDirHistoryResponse = strings.ReplaceAll(rootDirHistoryResponse, "{{ORG1_DIR_BASEURL}}", orgDir1BaseURL)
-	org1DirHistoryResponse = strings.ReplaceAll(org1DirHistoryResponse, "{{ORG1_DIR_BASEURL}}", orgDir1BaseURL)
+	org1DirHistoryPage1Response = strings.ReplaceAll(org1DirHistoryPage1Response, "{{ORG1_DIR_BASEURL}}", orgDir1BaseURL)
+	org1DirHistoryPage2Response = strings.ReplaceAll(org1DirHistoryPage2Response, "{{ORG1_DIR_BASEURL}}", orgDir1BaseURL)
 
 	localClient := &test.StubFHIRClient{}
 	component := New(Config{
@@ -93,7 +103,7 @@ func TestComponent_update(t *testing.T) {
 		thisReport := report[orgDir1BaseURL]
 		require.Empty(t, thisReport.Errors)
 		require.Empty(t, thisReport.Warnings)
-		require.Equal(t, 2, thisReport.CountCreated) // Now 2 resources: Organization + Endpoint
+		require.Equal(t, 3, thisReport.CountCreated) // Now 2 resources: Organization + Endpoint
 		require.Equal(t, 0, thisReport.CountUpdated)
 		require.Equal(t, 0, thisReport.CountDeleted)
 	})
@@ -117,14 +127,6 @@ func TestComponent_update(t *testing.T) {
 	t.Run("check created resources", func(t *testing.T) {
 		// Only mCSD directory endpoints from discoverable directories + all resources from non-discoverable directories
 		require.Len(t, localClient.CreatedResources["Organization"], 1) // 1 organization from org1 directory
-		require.Len(t, localClient.CreatedResources["Endpoint"], 5)     // 4 mCSD directory endpoints from root + 1 from org1 directory
+		require.Len(t, localClient.CreatedResources["Endpoint"], 6)     // 4 mCSD directory endpoints from root + 2 from org1 directory
 	})
-}
-
-func parseJSON[T any](data []byte) (*T, error) {
-	var v T
-	if err := json.Unmarshal(data, &v); err != nil {
-		return nil, err
-	}
-	return &v, nil
 }

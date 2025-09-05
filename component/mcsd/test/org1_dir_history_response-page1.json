@@ -28,7 +28,10 @@
         "name": "Organization 1",
         "endpoint": [
           {
-            "reference": "Endpoint/1"
+            "reference": "Endpoint/ep-1"
+          },
+          {
+            "reference": "Endpoint/ep-2"
           }
         ]
       },
@@ -42,7 +45,7 @@
       }
     },
     {
-      "fullUrl": "{{ORG1_DIR_BASEURL}}/Endpoint/1",
+      "fullUrl": "{{ORG1_DIR_BASEURL}}/Endpoint/ep-1",
       "resource": {
         "resourceType": "Endpoint",
         "id": "1",
@@ -75,6 +78,16 @@
         "status": "201 Created",
         "etag": "W/\"1\""
       }
+    }
+  ],
+  "link": [
+    {
+      "relation": "self",
+      "url": "{{ORG1_DIR_BASEURL}}/_history"
+    },
+    {
+      "relation": "next",
+      "url": "{{ORG1_DIR_BASEURL}}/_history_page2"
     }
   ]
 }
