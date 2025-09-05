@@ -67,6 +67,7 @@ nuts:
 
 func TestLoadConfig_FromEnvironmentVariables(t *testing.T) {
 	// Set environment variables
+
 	t.Setenv("KNPT_NUTS_ENABLED", "false")
 	t.Setenv("KNPT_MCSDADMIN_FHIRBASEURL", "http://env-test:8080/fhir")
 
