@@ -103,7 +103,7 @@ func TestComponent_update(t *testing.T) {
 		thisReport := report[orgDir1BaseURL]
 		require.Empty(t, thisReport.Errors)
 		require.Empty(t, thisReport.Warnings)
-		require.Equal(t, 3, thisReport.CountCreated) // Now 2 resources: Organization + Endpoint
+		require.Equal(t, 3, thisReport.CountCreated) // 3 resources: Organization + 2 Endpoints
 		require.Equal(t, 0, thisReport.CountUpdated)
 		require.Equal(t, 0, thisReport.CountDeleted)
 	})
