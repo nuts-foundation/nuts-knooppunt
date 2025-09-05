@@ -239,9 +239,6 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 
 	// Update last sync timestamp on successful completion
-	if c.lastUpdateTimes == nil {
-		c.lastUpdateTimes = make(map[string]time.Time)
-	}
 	c.lastUpdateTimes[fhirBaseURLRaw] = time.Now()
 
 	return report, nil
