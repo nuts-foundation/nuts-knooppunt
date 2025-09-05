@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"sync"
 	"syscall"
 	"testing"
@@ -15,6 +16,9 @@ func Test_Main(t *testing.T) {
 	t.Log("This tests the application lifecycle, making sure it stops gracefully on SIGINT.")
 	wg := sync.WaitGroup{}
 	wg.Add(1)
+
+	os.Setenv("KNPT_NUTS_ENABLED", "true")
+
 	go func() {
 		defer wg.Done()
 		main()
