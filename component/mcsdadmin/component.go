@@ -280,6 +280,10 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	var endpoint fhir.Endpoint
 	address := r.PostForm.Get("address")
+	if address == "" {
+		http.Error(w, "bad request: missing address", http.StatusBadRequest)
+		return
+	}
 	endpoint.Address = address
 
 	var payloadType fhir.CodeableConcept
@@ -288,7 +292,8 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		endpoint.PayloadType = []fhir.CodeableConcept{payloadType}
 	} else {
-		log.Warn().Msg("Failed to find referred payload type")
+		http.Error(w, "bad request: missing payload type", http.StatusBadRequest)
+		return
 	}
 
 	periodStart := r.PostForm.Get("period-start")
@@ -298,8 +303,6 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 			Start: &periodStart,
 			End:   &periodEnd,
 		}
-	} else {
-		log.Warn().Msg("Missing period")
 	}
 
 	contactValue := r.PostForm.Get("contact")
@@ -308,8 +311,6 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 			Value: &contactValue,
 		}
 		endpoint.Contact = []fhir.ContactPoint{contact}
-	} else {
-		log.Warn().Msg("Missing contact value")
 	}
 
 	orgFormStr := r.PostForm.Get("managing-org")
@@ -323,12 +324,13 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		}
 		err = client.Read(reference, &managingOrg)
 		if err != nil {
-			log.Error().Err(err).Msg("Failed to find referred organisation")
+			http.Error(w, "internal error: could not find organization", http.StatusInternalServerError)
 			return
 		}
 		endpoint.ManagingOrganization.Display = managingOrg.Name
 	} else {
-		log.Warn().Msg("Missing organisation value")
+		http.Error(w, "bad request: missing managing organization", http.StatusBadRequest)
+		return
 	}
 
 	var connectionType fhir.Coding
@@ -337,7 +339,8 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		endpoint.ConnectionType = connectionType
 	} else {
-		log.Warn().Msg("Failed to find referred connection type")
+		http.Error(w, "bad request: missing connection type", http.StatusBadRequest)
+		return
 	}
 
 	purposeOfUseId := r.PostForm.Get("purpose-of-use")
@@ -348,14 +351,23 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 			ValueCodeableConcept: &purposeOfUse,
 		}
 		endpoint.Extension = append(endpoint.Extension, extension)
-	} else {
-		log.Warn().Msg("Failed to find referred purpose of use")
 	}
 
 	status := r.PostForm.Get("status")
 	endpoint.Status, ok = valuesets.EndpointStatusFrom(status)
 	if !ok {
-		log.Warn().Msg("Failed to determine status, default to active")
+		http.Error(w, "bad request: missing status", http.StatusBadRequest)
+		return
+	}
+
+	forOrgStr := r.PostForm.Get("endpoint-for")
+	var owningOrg fhir.Organization
+	if len(orgFormStr) > 0 {
+		err = client.Read("Organization/"+forOrgStr, &owningOrg)
+		if err != nil {
+			http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
+			return
+		}
 	}
 
 	var resEp fhir.Endpoint
@@ -364,6 +376,17 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	var epRef fhir.Reference
+	epRefType := "Endpoint"
+	epRef.Type = &epRefType
+	epRefReference := "Endpoint/" + *resEp.Id
+	epRef.Reference = &epRefReference
+
+	owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
+
+	var updatedOrg fhir.Organization
+	err = client.Update("Organization/"+*owningOrg.Id, owningOrg, updatedOrg)
 
 	w.WriteHeader(http.StatusCreated)
 	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
