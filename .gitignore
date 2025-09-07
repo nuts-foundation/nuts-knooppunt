@@ -2,7 +2,7 @@
 .idea
 
 # Binaries
-nuts-knooppunt
+/nuts-knooppunt
 
 # Runtime files
 data

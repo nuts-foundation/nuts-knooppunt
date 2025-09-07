@@ -1,0 +1,10 @@
+{{- if .Values.nuts.enabled }}
+apiVersion: postgresql.cnpg.io/v1 
+kind: Cluster
+metadata:
+  name: {{ include "nuts-knooppunt.fullname" . }}-nuts-db
+spec:
+  instances: 1
+  storage:
+    size: 5Gi
+{{- end }}

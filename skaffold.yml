@@ -1,9 +1,6 @@
 apiVersion: skaffold/v4beta13
 kind: Config
 build:
-  platforms:
-    - linux/amd64
-    - linux/arm64
   artifacts:
     - image: nuts-knooppunt
       context: .
@@ -12,9 +9,30 @@ build:
           GIT_VERSION: "${GIT_VERSION}"
           GIT_COMMIT: "${GIT_COMMIT}"
           GIT_BRANCH: "${GIT_BRANCH}"
+deploy:
+  helm:
+    releases:
+      - name: nuts-knooppunt
+        chartPath: helm/nuts-knooppunt
+        createNamespace: true
+        namespace: nuts-knooppunt
+        skipBuildDependencies: true
+        setValueTemplates:
+          image.repository: "{{.IMAGE_REPO_nuts_knooppunt}}"
+          image.tag: "{{.IMAGE_TAG_nuts_knooppunt}}@{{.IMAGE_DIGEST_nuts_knooppunt}}"
 
 profiles:
-  - name: ci
+  - name: push
     patches:
-      - op: remove
+      - op: replace
         path: /build/platforms
+        value:
+          - linux/amd64
+          - linux/arm64
+
+  - name: local
+    patches:
+      - op: add
+        path: /deploy/helm/releases/0/valuesFiles
+        value:
+          - helm/nuts-knooppunt/values-local.yaml
