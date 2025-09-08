@@ -397,6 +397,9 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	var updatedOrg fhir.Organization
 	err = client.Update("Organization/"+*owningOrg.Id, owningOrg, updatedOrg)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 
 	w.WriteHeader(http.StatusCreated)
 	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
