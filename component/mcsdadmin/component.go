@@ -372,7 +372,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	forOrgStr := r.PostForm.Get("endpoint-for")
 	var owningOrg fhir.Organization
-	if len(orgFormStr) > 0 {
+	if len(forOrgStr) > 0 {
 		err = client.Read("Organization/"+forOrgStr, &owningOrg)
 		if err != nil {
 			http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
