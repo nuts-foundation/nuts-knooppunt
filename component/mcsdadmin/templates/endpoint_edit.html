@@ -74,6 +74,15 @@
             </select>
         </div>
         <div class="mb-3">
+            <label for="endpoint-for" class="form-label">Endpoint of:</label>
+            <select name="endpoint-for" id="endpoint-for" class="form-select">
+                <option value="">--Please choose an option--</option>
+                {{range .Organizations}}
+                <option value="{{ .Id }}">{{ .Name }}</option>
+                {{ end }}
+            </select>
+        </div>
+        <div class="mb-3">
             <button type="submit" class="btn btn-primary">Submit</button>
         </div>
     </form>

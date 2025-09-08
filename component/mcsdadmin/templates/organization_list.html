@@ -9,6 +9,7 @@
             <thead class="table-light">
             <tr>
                 <th scope="col">Name</th>
+                <th scope="col">URA</th>
                 <th scope="col">Type</th>
                 <th scope="col">Active</th>
                 <th scope="col">Actions</th>
@@ -18,6 +19,7 @@
             {{range .Items}}
             <tr id="row-{{.Id}}">
                 <th scope="row">{{ .Name }}</th>
+                <th scope="row">{{ .Ura }}</th>
                 <td>{{.Type}}</td>
                 <td>
                     {{if .Active }}
