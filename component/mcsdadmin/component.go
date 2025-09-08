@@ -388,10 +388,8 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var epRef fhir.Reference
-	epRefType := "Endpoint"
-	epRef.Type = &epRefType
-	epRefReference := "Endpoint/" + *resEp.Id
-	epRef.Reference = &epRefReference
+	epRef.Type = to.Ptr("Endpoint")
+	epRef.Reference = to.Ptr("Endpoint/" + *resEp.Id)
 
 	owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
 
