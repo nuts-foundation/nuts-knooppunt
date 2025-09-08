@@ -35,9 +35,15 @@ spec:
             {{- end }}
             backend:
               service:
+                {{- if .backend }}
+                name: {{ .backend.service.name }}
+                port:
+                  number: {{ .backend.service.port.number }}
+                {{- else }}
                 name: {{ include "nuts-knooppunt.fullname" $ }}
                 port:
                   number: {{ $.Values.service.port }}
+                {{- end }}
           {{- end }}
     {{- end }}
 {{- end }}
