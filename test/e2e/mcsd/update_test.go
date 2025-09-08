@@ -1,6 +1,7 @@
 package mcsd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -74,6 +75,93 @@ func Test_mCSDUpdateClient(t *testing.T) {
 	})
 }
 
+func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
+	harnessDetail := harness.Start(t)
+
+	t.Run("Test incremental updates with _since parameter", func(t *testing.T) {
+		// Test verifies _since parameter correctly enables incremental sync by:
+		// 1. Doing baseline sync to establish timestamps
+		// 2. Creating new organization after sync completes  
+		// 3. Verifying next sync finds the new organization via _since parameter
+		// 4. Confirming subsequent sync finds nothing (no new changes)
+
+		// First sync to establish baseline timestamps
+		httpResponse1, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, httpResponse1.StatusCode)
+		responseData1, err := io.ReadAll(httpResponse1.Body)
+		require.NoError(t, err)
+
+		var response1 mcsd.UpdateReport
+		require.NoError(t, json.Unmarshal(responseData1, &response1))
+
+		// First sync should behave like Test_mCSDUpdateClient - LRZa should create 2 resources
+		lrzaReport1 := mapEntrySuffix(response1, "lrza-mcsd-admin")
+		require.NotNil(t, lrzaReport1, "LRZa report should exist in first sync")
+		assert.Equal(t, 2, lrzaReport1.CountCreated, "LRZa should create 2 resources in first sync")
+
+		// Create new organization after first sync - should be found by next incremental sync  
+		// Use discovered directory (care2cure-admin) since they sync all resource types including Organizations
+		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
+			UsePostSearch: false,
+		})
+		orgName := "Test Organization for Incremental Sync"
+		identifierUseOfficial := fhir.IdentifierUseOfficial
+		identifierSystem := "http://fhir.nl/fhir/NamingSystem/ura"
+		identifierValue := "99999999"
+		newOrg := fhir.Organization{
+			Name: &orgName,
+			Identifier: []fhir.Identifier{
+				{
+					Use:    &identifierUseOfficial,
+					System: &identifierSystem,
+					Value:  &identifierValue,
+				},
+			},
+		}
+
+		var createdOrg fhir.Organization
+		err = care2CureFHIRClient.CreateWithContext(context.Background(), newOrg, &createdOrg)
+		require.NoError(t, err, "Failed to create new organization for incremental test")
+
+		// Verify the organization was actually created by reading it back
+		var readBackOrg fhir.Organization
+		err = care2CureFHIRClient.ReadWithContext(context.Background(), "Organization/"+*createdOrg.Id, &readBackOrg)
+		require.NoError(t, err, "Failed to read back created organization")
+		require.Equal(t, orgName, *readBackOrg.Name, "Organization name should match")
+
+		// Second sync - should use _since and only find new resources (our test organization)
+		httpResponse2, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, httpResponse2.StatusCode)
+		responseData2, err := io.ReadAll(httpResponse2.Body)
+		require.NoError(t, err)
+
+		var response2 mcsd.UpdateReport
+		require.NoError(t, json.Unmarshal(responseData2, &response2))
+
+		// Second sync should find our test organization via _since parameter  
+		care2CureReport2 := mapEntrySuffix(response2, "care2cure-admin")
+		require.NotNil(t, care2CureReport2, "Care2Cure report should exist in second sync")
+		assert.Equal(t, 1, care2CureReport2.CountCreated, "Care2Cure should find exactly 1 resource (our test organization) via _since parameter")
+
+		// Third sync - should find nothing (no new resources since second sync)
+		httpResponse3, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, httpResponse3.StatusCode)
+		responseData3, err := io.ReadAll(httpResponse3.Body)
+		require.NoError(t, err)
+
+		var response3 mcsd.UpdateReport
+		require.NoError(t, json.Unmarshal(responseData3, &response3))
+
+		// Third sync should find 0 resources (nothing new since second sync)
+		care2CureReport3 := mapEntrySuffix(response3, "care2cure-admin")
+		require.NotNil(t, care2CureReport3, "Care2Cure report should exist in third sync")
+		assert.Equal(t, 0, care2CureReport3.CountCreated, "Care2Cure should find 0 resources in third sync (nothing new)")
+	})
+}
+
 func searchOrg(client fhirclient.Client, ura string) (*fhir.Organization, error) {
 	var searchResult fhir.Bundle
 	err := client.Search("Organization", url.Values{"identifier": []string{coding.URANamingSystem + "|" + ura}}, &searchResult)
@@ -106,50 +194,6 @@ func assertEndpoint(t *testing.T, fhirClient fhirclient.Client, organizationURA 
 		}
 	}
 	t.Errorf("no endpoint with connection type %s found for organization with URA %s", connectionType, organizationURA)
-}
-
-func searchEndpoint(client fhirclient.Client, connectionType string, organizationURA string) (*fhir.Endpoint, error) {
-	// First find the organization to get its endpoint references
-	org, err := searchOrg(client, organizationURA)
-	if err != nil {
-		return nil, err
-	}
-	if org == nil {
-		return nil, nil
-	}
-
-	// Check if organization has endpoint references
-	if org.Endpoint == nil || len(org.Endpoint) == 0 {
-		return nil, nil
-	}
-
-	// For each endpoint reference in the organization, fetch and check the connection type
-	for _, endpointRef := range org.Endpoint {
-		if endpointRef.Reference == nil {
-			continue
-		}
-
-		// Extract endpoint ID from reference (assuming format "Endpoint/id")
-		refParts := strings.Split(*endpointRef.Reference, "/")
-		if len(refParts) != 2 || refParts[0] != "Endpoint" {
-			continue
-		}
-		endpointID := refParts[1]
-
-		// Fetch the endpoint by ID
-		var endpoint fhir.Endpoint
-		err = client.Read("Endpoint/"+endpointID, &endpoint)
-		if err != nil {
-			continue // Skip if endpoint not found or error
-		}
-
-		// Check if this endpoint has the required connection type
-		if endpoint.ConnectionType.Code != nil && *endpoint.ConnectionType.Code == connectionType {
-			return &endpoint, nil
-		}
-	}
-
-	return nil, nil
 }
 
 func mapEntrySuffix(r mcsd.UpdateReport, suffix string) *mcsd.DirectoryUpdateReport {

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
@@ -21,6 +22,10 @@ var _ component.Lifecycle = &Component{}
 
 var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
 var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService"}
+
+// clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
+// to account for potential clock differences between client and FHIR server
+const clockSkewBuffer = 2 * time.Second
 
 // Component implements a mCSD Update Client, which synchronizes mCSD FHIR resources from remote mCSD Directories to a local mCSD Directory for querying.
 // It is configured with a root mCSD Directory, which is used to discover organizations and their mCSD Directory endpoints.
@@ -38,6 +43,7 @@ type Component struct {
 	fhirClientFn func(baseURL *url.URL) fhirclient.Client
 
 	administrationDirectories []administrationDirectory
+	lastUpdateTimes           map[string]string
 	updateMux                 *sync.RWMutex
 }
 
@@ -70,9 +76,12 @@ func New(config Config) *Component {
 	result := &Component{
 		config: config,
 		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
-			return fhirclient.New(baseURL, http.DefaultClient, nil)
+			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{
+				UsePostSearch: false,
+			})
 		},
-		updateMux: &sync.RWMutex{},
+		lastUpdateTimes: make(map[string]string),
+		updateMux:       &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.AdministrationDirectories {
 		result.registerAdministrationDirectory(rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true)
@@ -161,7 +170,22 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// Query remote directory
 	var bundle fhir.Bundle
 	// TODO: Pagination
-	if err = remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", nil, &bundle, fhirclient.AtPath("/_history")); err != nil {
+
+	// Get last update time for incremental sync
+	lastUpdate, hasLastUpdate := c.lastUpdateTimes[fhirBaseURLRaw]
+
+	// Capture query start time as fallback for servers that don't provide Bundle meta.lastUpdated.
+	queryStartTime := time.Now()
+
+	searchParams := url.Values{}
+	if hasLastUpdate {
+		searchParams.Set("_since", lastUpdate)
+		log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Str("_since", lastUpdate).Msg("Using _since parameter for incremental sync from FHIR server")
+	} else {
+		log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURLRaw).Msg("No last update time, doing full sync from FHIR server")
+	}
+
+	if err = remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", searchParams, &bundle, fhirclient.AtPath("/_history")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("_history search failed: %w", err)
 	}
 
@@ -225,5 +249,19 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			report.Warnings = append(report.Warnings, msg)
 		}
 	}
+
+	// Update last sync timestamp on successful completion.
+	// Use the search result Bundle's meta.lastUpdated if available, otherwise fall back to query start time.
+	// This uses the FHIR server's own timestamp string, eliminating clock skew issues.
+	var nextSyncTime string
+	if bundle.Meta != nil && bundle.Meta.LastUpdated != nil {
+		nextSyncTime = *bundle.Meta.LastUpdated
+	} else {
+		// Fallback to local time with buffer to account for potential clock skew
+		nextSyncTime = queryStartTime.Add(-clockSkewBuffer).Format(time.RFC3339)
+		log.Ctx(ctx).Warn().Str("fhir_server", fhirBaseURLRaw).Msg("Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues")
+	}
+	c.lastUpdateTimes[fhirBaseURLRaw] = nextSyncTime
+
 	return report, nil
 }

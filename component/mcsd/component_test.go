@@ -2,7 +2,6 @@ package mcsd
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
@@ -63,7 +63,9 @@ func TestComponent_update(t *testing.T) {
 	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
 		if baseURL.String() == rootDirServer.URL ||
 			baseURL.String() == orgDir1BaseURL {
-			return fhirclient.New(baseURL, http.DefaultClient, nil)
+			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{
+				UsePostSearch: false,
+			})
 		}
 		if baseURL.String() == "http://example.com/local/fhir" {
 			return localClient
@@ -121,10 +123,67 @@ func TestComponent_update(t *testing.T) {
 	})
 }
 
-func parseJSON[T any](data []byte) (*T, error) {
-	var v T
-	if err := json.Unmarshal(data, &v); err != nil {
-		return nil, err
+func TestComponent_incrementalUpdates(t *testing.T) {
+	testDataJSON, err := os.ReadFile("test/root_dir_history_response.json")
+	require.NoError(t, err)
+
+	var sinceParams []string
+	rootDirMux := http.NewServeMux()
+	rootDirMux.HandleFunc("/_history", func(w http.ResponseWriter, r *http.Request) {
+		// FHIR client configured to use GET, parameters are in query string
+		since := r.URL.Query().Get("_since")
+		sinceParams = append(sinceParams, since)
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(testDataJSON)
+	})
+	rootDirServer := httptest.NewServer(rootDirMux)
+
+	localClient := &test.StubFHIRClient{}
+	component := New(Config{
+		AdministrationDirectories: map[string]DirectoryConfig{
+			"rootDir": {
+				FHIRBaseURL: rootDirServer.URL,
+			},
+		},
+		QueryDirectory: DirectoryConfig{
+			FHIRBaseURL: "http://example.com/local/fhir",
+		},
+	})
+	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+		if baseURL.String() == rootDirServer.URL {
+			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{
+				UsePostSearch: false,
+			})
+		}
+		if baseURL.String() == "http://example.com/local/fhir" {
+			return localClient
+		}
+		return &test.StubFHIRClient{Error: errors.New("unknown URL")}
 	}
-	return &v, nil
+	ctx := context.Background()
+
+	// First update - should have no _since parameter
+	_, err = component.update(ctx)
+	require.NoError(t, err)
+	require.Len(t, sinceParams, 1, "Should have one request")
+	require.Empty(t, sinceParams[0], "First update should not have _since parameter")
+	
+	// Verify timestamp was stored
+	lastUpdate, exists := component.lastUpdateTimes[rootDirServer.URL]
+	require.True(t, exists, "Last update time should be stored")
+	require.NotEmpty(t, lastUpdate, "Last update time should not be empty")
+
+	// Second update - should include _since parameter
+	_, err = component.update(ctx)
+	require.NoError(t, err)
+	require.Len(t, sinceParams, 2, "Should have two requests total")
+	require.NotEmpty(t, sinceParams[1], "Second update should include _since parameter")
+	
+	// Verify _since parameter is a valid RFC3339 timestamp
+	_, err = time.Parse(time.RFC3339, sinceParams[1])
+	require.NoError(t, err, "_since parameter should be valid RFC3339 timestamp")
+	
+	// Verify _since parameter matches the stored timestamp
+	require.Equal(t, lastUpdate, sinceParams[1], "_since parameter should match the stored lastUpdate timestamp")
 }
