@@ -7,6 +7,11 @@ on:
       - main
     tags:
       - "v*"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - Dockerfile
 
 # cancel build action if superseded by new commit on same branch
 concurrency:
