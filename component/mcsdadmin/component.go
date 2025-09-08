@@ -201,6 +201,10 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	name := r.PostForm.Get("name")
 	org.Name = &name
 	uraString := r.PostForm.Get("identifier")
+	if uraString == "" {
+		http.Error(w, "Bad request: missing URA identifier", http.StatusBadRequest)
+		return
+	}
 	org.Identifier = []fhir.Identifier{
 		uraIdentifier(uraString),
 	}
