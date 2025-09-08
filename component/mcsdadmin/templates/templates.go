@@ -121,7 +121,7 @@ func MakeEpListXsProps(eps []fhir.Endpoint) []EpListProps {
 type OrgListProps struct {
 	Id     string
 	Name   string
-	Ura    string
+	URA    string
 	Type   string
 	Active bool
 }
@@ -140,7 +140,7 @@ func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
 	for _, idn := range org.Identifier {
 		if idn.System != nil && idn.Value != nil {
 			if *idn.System == coding.URANamingSystem {
-				out.Ura = *idn.Value
+				out.URA = *idn.Value
 			}
 		}
 	}
