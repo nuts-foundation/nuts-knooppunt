@@ -286,5 +286,13 @@
   {
     "code": "urn:hl7-org:sdwg:ccda-nonXMLBody:1.1",
     "display": "For documents following C-CDA constraints using a non structured body. "
+  },
+  {
+    "code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client",
+    "display": "Care Services Directory for Update Client"
+  },
+  {
+    "code": "http://nictiz.nl/fhir/CapabilityStatement/eOverdracht-servercapabilities",
+    "display": "Transfer of Care - eOverdracht Server"
   }
 ]
