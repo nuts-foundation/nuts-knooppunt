@@ -13,6 +13,9 @@ import (
 type Details struct {
 	KnooppuntInternalBaseURL *url.URL
 	MCSDQueryFHIRBaseURL     *url.URL
+	LRZaFHIRBaseURL          *url.URL
+	Care2CureFHIRBaseURL     *url.URL
+	SunflowerFHIRBaseURL     *url.URL
 	SunflowerURA             string
 	Care2CureURA             string
 }
@@ -39,9 +42,14 @@ func Start(t *testing.T) Details {
 			},
 		},
 	})
+	care2CureTenant := vectors.HAPITenant{Name: "care2cure-admin", ID: 4}
+	sunflowerTenant := vectors.HAPITenant{Name: "sunflower-admin", ID: 5}
 	return Details{
 		KnooppuntInternalBaseURL: knooppuntInternalURL,
 		MCSDQueryFHIRBaseURL:     testData.Knooppunt.MCSD.QueryFHIRBaseURL,
+		LRZaFHIRBaseURL:          testData.LRZa.FHIRBaseURL,
+		Care2CureFHIRBaseURL:     care2CureTenant.BaseURL(hapiBaseURL),
+		SunflowerFHIRBaseURL:     sunflowerTenant.BaseURL(hapiBaseURL),
 		SunflowerURA:             "00000020",
 		Care2CureURA:             "00000030",
 	}

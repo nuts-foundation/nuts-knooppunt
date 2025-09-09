@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io"
 
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -120,6 +121,7 @@ func MakeEpListXsProps(eps []fhir.Endpoint) []EpListProps {
 type OrgListProps struct {
 	Id     string
 	Name   string
+	URA    string
 	Type   string
 	Active bool
 }
@@ -133,6 +135,14 @@ func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
 		out.Name = *org.Name
 	} else {
 		out.Name = unknownStr
+	}
+
+	for _, idn := range org.Identifier {
+		if idn.System != nil && idn.Value != nil {
+			if *idn.System == coding.URANamingSystem {
+				out.URA = *idn.Value
+			}
+		}
 	}
 
 	if len(org.Type) > 0 {

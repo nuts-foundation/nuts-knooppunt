@@ -14,7 +14,7 @@ func TestLoadConfig_Default(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should have default values
-	assert.True(t, config.Nuts.Enabled)
+	assert.False(t, config.Nuts.Enabled)
 	assert.Equal(t, "", config.MCSDAdmin.FHIRBaseURL)
 }
 
@@ -37,7 +37,7 @@ mcsdadmin:
   fhirbaseurl: "http://localhost:9090/fhir"
 
 nuts:
-  enabled: false
+  enabled: true
 `
 
 	configFile := filepath.Join(configDir, "knooppunt.yml")
@@ -56,7 +56,7 @@ nuts:
 	require.NoError(t, err)
 
 	// Check loaded values
-	assert.False(t, config.Nuts.Enabled)
+	assert.True(t, config.Nuts.Enabled)
 	assert.Equal(t, "http://localhost:9090/fhir", config.MCSDAdmin.FHIRBaseURL)
 	assert.Equal(t, "http://localhost:9090/fhir", config.MCSD.QueryDirectory.FHIRBaseURL)
 
@@ -67,6 +67,7 @@ nuts:
 
 func TestLoadConfig_FromEnvironmentVariables(t *testing.T) {
 	// Set environment variables
+
 	t.Setenv("KNPT_NUTS_ENABLED", "false")
 	t.Setenv("KNPT_MCSDADMIN_FHIRBASEURL", "http://env-test:8080/fhir")
 

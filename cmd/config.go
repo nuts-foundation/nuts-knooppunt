@@ -24,7 +24,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Nuts: nutsnode.Config{
-			Enabled: true,
+			Enabled: false,
 		},
 		MCSDAdmin: mcsdadmin.Config{},
 	}

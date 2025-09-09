@@ -5,24 +5,28 @@
   </div>
   <div class="card-body">
     <form method="post" enctype="application/x-www-form-urlencoded">
-        <div class="form-group">
-            <label for="name">Name of the organization:</label>
+        <div class="mb-3">
+            <label for="name" class="form-label">Name of the organization:</label>
             <input id="name" type="text" name="name" class="form-control" placeholder="Enter name here" required>
         </div>
-        <div class="form-group">
-            <label for="type-select">Choose a type:</label>
-            <select name="type" id="type-select" class="form-control">
+        <div class="mb-3">
+            <label for="identifier" class="form-label">URA identifier:</label>
+            <input id="identifier" type="text" name="identifier" class="form-control" placeholder="Enter identifier here" required>
+        </div>
+        <div class="mb-3">
+            <label for="type-select" class="form-label">Choose a type:</label>
+            <select name="type" id="type-select" class="form-select">
                 <option value="">--Please choose an option--</option>
                 {{ range .Types }}
                 <option value="{{ .Code }}">{{ .Display }}</option>
                 {{ end }}
             </select>
         </div>
-        <div class="form-group form-check">
+        <div class="mb-3 form-check">
             <input type="checkbox" name="active" id="active" value="true" class="form-check-input">
             <label class="form-check-label" for="active">Active</label>
         </div>
-        <div class="form-group">
+        <div class="mb-3">
             <button type="submit" class="btn btn-primary">Submit</button>
         </div>
     </form>
