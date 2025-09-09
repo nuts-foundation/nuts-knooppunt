@@ -12,6 +12,7 @@
                 <th scope="col">URA</th>
                 <th scope="col">Type</th>
                 <th scope="col">Active</th>
+                <th scope="col">Endpoints</th>
                 <th scope="col">Actions</th>
             </tr>
             </thead>
@@ -28,6 +29,7 @@
                     <span class="badge bg-secondary">Inactive</span>
                     {{end}}
                 </td>
+                <th scope="row">{{ .EndpointCount }}</th>
                 <td>
                     <button class="btn btn-outline-dark btn-sm"
                             hx-delete="/mcsdadmin/organization/{{.Id}}"
