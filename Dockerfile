@@ -28,7 +28,7 @@ RUN apk update \
 COPY --from=builder /app/bin /app/bin
 
 HEALTHCHECK --start-period=30s --timeout=5s --interval=10s \
-  CMD curl -f http://localhost:8080/health || exit 1
+  CMD curl -f http://localhost:8081/status || exit 1
 
 RUN adduser -D -H -u 18081 app-usr
 RUN chown -R 18081 /app
