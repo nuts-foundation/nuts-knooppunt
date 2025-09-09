@@ -28,6 +28,21 @@ func Endpoints() []fhir.Endpoint {
 	return []fhir.Endpoint{
 		{
 			Id:      to.Ptr("f8a9c2d1-4567-489a-bcde-123456789abc"),
+			Address: "https://example.com/sunflower/fhir-old",
+			Meta: &fhir.Meta{
+				Profile: []string{"https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"},
+			},
+			Status: fhir.EndpointStatusActive,
+			ConnectionType: fhir.Coding{
+				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/endpoint-connection-type"),
+				Code:   to.Ptr("fhir"),
+			},
+			Period: &fhir.Period{
+				Start: to.Ptr("2025-01-01T00:00:00Z"),
+			},
+		},
+		{
+			Id:      to.Ptr("f8a9c2d1-4567-489a-bcde-123456789abc"),
 			Address: "https://example.com/sunflower/fhir",
 			Meta: &fhir.Meta{
 				Profile: []string{"https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"},

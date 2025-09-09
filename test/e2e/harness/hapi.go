@@ -23,6 +23,8 @@ func startHAPI(t *testing.T, dockerNetworkName string) *url.URL {
 			"hapi.fhir.partitioning.allow_references_across_partitions": "false",
 			"hapi.fhir.server_id_strategy":                              "UUID",
 			"hapi.fhir.client_id_strategy":                              "ANY",
+			// enable usage of _source parameter
+			"hapi.fhir.store_meta_source_information": "SOURCE_URI",
 		},
 		WaitingFor: wait.ForHTTP("/fhir/DEFAULT/Account"),
 		LogConsumerCfg: &testcontainers.LogConsumerConfig{

@@ -417,6 +417,8 @@ func (s *StubFHIRClient) handleTransaction(tx fhir.Bundle) (*fhir.Bundle, error)
 		var resource any
 		unmarshalInto(entry.Resource, &resource)
 		switch entry.Request.Method {
+		case fhir.HTTPVerbPUT:
+			fallthrough
 		case fhir.HTTPVerbPOST:
 			var result any
 			if err := s.CreateWithContext(nil, entry.Resource, &result); err != nil {

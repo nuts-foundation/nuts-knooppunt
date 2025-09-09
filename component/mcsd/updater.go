@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 
 	"github.com/google/uuid"
@@ -87,8 +88,11 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 	tx.Entry = append(tx.Entry, fhir.BundleEntry{
 		Resource: resourceJSON,
 		Request: &fhir.BundleEntryRequest{
-			Url:    resourceType,
-			Method: entry.Request.Method,
+			// Use _source for idempotent updates
+			Url: resourceType + "?" + url.Values{
+				"_source": []string{*entry.FullUrl},
+			}.Encode(),
+			Method: fhir.HTTPVerbPUT,
 		},
 	})
 	return resourceType, nil
