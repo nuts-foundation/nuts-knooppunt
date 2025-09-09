@@ -2,6 +2,7 @@ package templates
 
 import (
 	"embed"
+	"fmt"
 	"html/template"
 	"io"
 
@@ -119,11 +120,12 @@ func MakeEpListXsProps(eps []fhir.Endpoint) []EpListProps {
 }
 
 type OrgListProps struct {
-	Id     string
-	Name   string
-	URA    string
-	Type   string
-	Active bool
+	Id            string
+	Name          string
+	URA           string
+	EndpointCount string
+	Type          string
+	Active        bool
 }
 
 func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
@@ -158,6 +160,9 @@ func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
 	} else {
 		out.Active = false
 	}
+
+	epCount := len(org.Endpoint)
+	out.EndpointCount = fmt.Sprint(epCount)
 
 	return out
 }

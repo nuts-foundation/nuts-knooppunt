@@ -394,9 +394,10 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
 
 	var updatedOrg fhir.Organization
-	err = client.Update("Organization/"+*owningOrg.Id, owningOrg, updatedOrg)
+	err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
