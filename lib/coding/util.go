@@ -9,20 +9,26 @@ func EqualsCode(coding fhir.Coding, system string, value string) bool {
 		coding.Code != nil && *coding.Code == value
 }
 
-func CodableIncludesCode(codable fhir.CodeableConcept, coding fhir.Coding) bool {
+func CodableIncludesCode(codable fhir.CodeableConcept, code fhir.Coding) bool {
 	for _, c := range codable.Coding {
-		if *c.System == *coding.System && *c.Code == *coding.Code {
+		if *c.System == *code.System && *c.Code == *code.Code {
 			return true
 		}
 	}
 	return false
 }
 
-func CodablesIncludesCode(codables []fhir.CodeableConcept, coding fhir.Coding) bool {
+func CodablesIncludesCode(codables []fhir.CodeableConcept, code fhir.Coding) bool {
 	for _, codable := range codables {
-		if CodableIncludesCode(codable, coding) {
+		if CodableIncludesCode(codable, code) {
 			return true
 		}
 	}
 	return false
+}
+
+func CodeToCodable(code fhir.Coding) fhir.CodeableConcept {
+	return fhir.CodeableConcept{
+		Coding: []fhir.Coding{code},
+	}
 }
