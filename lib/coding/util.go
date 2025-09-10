@@ -26,9 +26,3 @@ func CodablesIncludesCode(codables []fhir.CodeableConcept, code fhir.Coding) boo
 	}
 	return false
 }
-
-func CodeToCodable(code fhir.Coding) fhir.CodeableConcept {
-	return fhir.CodeableConcept{
-		Coding: []fhir.Coding{code},
-	}
-}
