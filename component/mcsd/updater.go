@@ -35,8 +35,8 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 	// Handle DELETE operations (no resource body)
 	if entry.Request.Method == fhir.HTTPVerbDELETE {
 		// TODO: DELETE operations require conditional updates or search-then-delete using _source parameter
-		// For now, skip DELETE operations on main branch since StubFHIRClient doesn't support them
-		// This will be implemented properly when _source conditional updates are available
+		// For now, skip ALL DELETE operations since StubFHIRClient doesn't support them in unit tests
+		// DELETE operations with proper FHIR IDs are tested in E2E tests with real HAPI FHIR
 		resourceType := strings.Split(entry.Request.Url, "/")[0]
 		return resourceType, nil
 	}
@@ -93,11 +93,32 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 	if err != nil {
 		return "", err
 	}
+	// Determine HTTP method and URL based on resource ID format
+	resourceID := resource["id"].(string)
+	var requestURL string
+	var requestMethod fhir.HTTPVerb
+
+	if strings.HasPrefix(resourceID, "urn:uuid:") {
+		// HAPI FHIR accepts urn:uuid IDs only with POST, not PUT/DELETE operations
+		// DELETE operations with urn:uuid are already handled above
+		// When we deduplicate, and the bundle contains a POST and PUT, we don't have a `id` yet, so we take the PUT body and POST it
+		requestURL = resourceType
+		requestMethod = fhir.HTTPVerbPOST
+	} else {
+		// Use original method with proper URL for non-UUID IDs
+		if entry.Request.Method == fhir.HTTPVerbPOST {
+			requestURL = resourceType
+		} else {
+			requestURL = resourceType + "/" + resourceID
+		}
+		requestMethod = entry.Request.Method
+	}
+
 	tx.Entry = append(tx.Entry, fhir.BundleEntry{
 		Resource: resourceJSON,
 		Request: &fhir.BundleEntryRequest{
-			Url:    resourceType,
-			Method: entry.Request.Method,
+			Url:    requestURL,
+			Method: requestMethod,
 		},
 	})
 	return resourceType, nil
