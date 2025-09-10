@@ -57,8 +57,13 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
 				return "", fmt.Errorf("failed to unmarshal Endpoint resource: %w", err)
 			}
+
 			// Import mCSD directory endpoints even from discoverable directories
-			doSync = coding.EqualsCode(endpoint.ConnectionType, coding.MCSDConnectionTypeSystem, coding.MCSDConnectionTypeDirectoryCode)
+			var payloadCoding = fhir.Coding{
+				System: to.Ptr(coding.MCSDPayloadTypeSystem),
+				Code:   to.Ptr(coding.MCSDPayloadTypeDirectoryCode),
+			}
+			doSync = coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding)
 		}
 	}
 	if !doSync {
