@@ -59,11 +59,7 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 			}
 
 			// Import mCSD directory endpoints even from discoverable directories
-			var payloadCoding = fhir.Coding{
-				System: to.Ptr(coding.MCSDPayloadTypeSystem),
-				Code:   to.Ptr(coding.MCSDPayloadTypeDirectoryCode),
-			}
-			doSync = coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding)
+			doSync = coding.CodablesIncludesCode(endpoint.PayloadType, coding.PayloadCoding)
 		}
 	}
 	if !doSync {
