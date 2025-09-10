@@ -7,19 +7,9 @@
   "entry": [
     {
       "fullUrl": "http://example.org/fhir/Organization/fd3524f9-705e-453c-8130-71cdf51cfcb9",
-      "resource": {
-        "resourceType": "Organization",
-        "id": "fd3524f9-705e-453c-8130-71cdf51cfcb9",
-        "meta": {
-          "versionId": "1",
-          "lastUpdated": "2025-08-01T10:00:00.000+00:00"
-        },
-        "identifier": [{"system": "http://fhir.nl/fhir/NamingSystem/ura", "value": "12345"}],
-        "name": "Test Organization"
-      },
       "request": {
-        "method": "POST",
-        "url": "Organization"
+        "method": "DELETE",
+        "url": "Organization/fd3524f9-705e-453c-8130-71cdf51cfcb9"
       }
     },
     {
@@ -41,9 +31,19 @@
     },
     {
       "fullUrl": "http://example.org/fhir/Organization/fd3524f9-705e-453c-8130-71cdf51cfcb9",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "fd3524f9-705e-453c-8130-71cdf51cfcb9",
+        "meta": {
+          "versionId": "1",
+          "lastUpdated": "2025-08-01T10:00:00.000+00:00"
+        },
+        "identifier": [{"system": "http://fhir.nl/fhir/NamingSystem/ura", "value": "12345"}],
+        "name": "Test Organization"
+      },
       "request": {
-        "method": "DELETE",
-        "url": "Organization/fd3524f9-705e-453c-8130-71cdf51cfcb9"
+        "method": "POST",
+        "url": "Organization"
       }
     }
   ]
