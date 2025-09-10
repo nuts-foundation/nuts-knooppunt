@@ -85,7 +85,10 @@ func TestComponent_update(t *testing.T) {
 		// Root directory: only mCSD directory endpoints should be synced, other resources should be filtered out
 		t.Run("warnings", func(t *testing.T) {
 			require.Len(t, thisReport.Warnings, 2)
-			require.Contains(t, thisReport.Warnings[0], "failed to register discovered mCSD Directory at file:///etc/passwd: invalid FHIR base URL (url=file:///etc/passwd)")
+			// Check that both expected warnings are present (order may vary due to deduplication)
+			warnings := strings.Join(thisReport.Warnings, " ")
+			require.Contains(t, warnings, "failed to register discovered mCSD Directory at file:///etc/passwd: invalid FHIR base URL (url=file:///etc/passwd)")
+			require.Contains(t, warnings, "resource type Something-else not allowed")
 		})
 		require.Equal(t, 4, thisReport.CountCreated) // 4 mCSD directory endpoints should be created
 		require.Equal(t, 0, thisReport.CountUpdated)
@@ -168,7 +171,7 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, sinceParams, 1, "Should have one request")
 	require.Empty(t, sinceParams[0], "First update should not have _since parameter")
-	
+
 	// Verify timestamp was stored
 	lastUpdate, exists := component.lastUpdateTimes[rootDirServer.URL]
 	require.True(t, exists, "Last update time should be stored")
@@ -179,11 +182,58 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, sinceParams, 2, "Should have two requests total")
 	require.NotEmpty(t, sinceParams[1], "Second update should include _since parameter")
-	
+
 	// Verify _since parameter is a valid RFC3339 timestamp
 	_, err = time.Parse(time.RFC3339, sinceParams[1])
 	require.NoError(t, err, "_since parameter should be valid RFC3339 timestamp")
-	
+
 	// Verify _since parameter matches the stored timestamp
 	require.Equal(t, lastUpdate, sinceParams[1], "_since parameter should match the stored lastUpdate timestamp")
+}
+
+func TestComponent_noDuplicateResourcesInTransactionBundle(t *testing.T) {
+	// This test verifies that when _history returns multiple versions of the same resource,
+	// the transaction bundle sent to the query directory contains no duplicates.
+	// This addresses the HAPI error: "Transaction bundle contains multiple resources with ID: urn:uuid:..."
+
+	historyWithDuplicatesBytes, err := os.ReadFile("test/history_with_duplicates.json")
+	require.NoError(t, err)
+
+	mockMux := http.NewServeMux()
+	mockMux.HandleFunc("/_history", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(historyWithDuplicatesBytes)
+	})
+	mockServer := httptest.NewServer(mockMux)
+	defer mockServer.Close()
+
+	capturingClient := &test.StubFHIRClient{}
+	component := New(Config{
+		QueryDirectory: DirectoryConfig{FHIRBaseURL: "http://example.com/local/fhir"},
+	})
+
+	// Register as discovered directory to avoid Organization filtering
+	err = component.registerAdministrationDirectory(mockServer.URL, []string{"Organization", "Endpoint"}, false)
+	require.NoError(t, err)
+
+	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+		if baseURL.String() == mockServer.URL {
+			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
+		}
+		if baseURL.String() == "http://example.com/local/fhir" {
+			return capturingClient
+		}
+		return &test.StubFHIRClient{Error: errors.New("unknown URL")}
+	}
+
+	ctx := context.Background()
+	report, err := component.update(ctx)
+
+	require.NoError(t, err)
+	require.Empty(t, report[mockServer.URL].Errors, "Should not have errors after deduplication")
+
+	// Should have 0 Organizations because the DELETE operation is the most recent
+	orgs := capturingClient.CreatedResources["Organization"]
+	require.Len(t, orgs, 0, "Should have 0 Organizations after deduplication (DELETE is most recent operation)")
 }
