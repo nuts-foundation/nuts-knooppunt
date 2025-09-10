@@ -138,9 +138,8 @@ func normalizeReferencesRecursive(obj any, remoteRefToLocalRefMap map[string]str
 			if !exists {
 				// Referenced resource is not in this transaction bundle - this violates referential integrity
 				return fmt.Errorf("broken reference to '%s' - referenced resource not found in transaction bundle", ref)
-			} else {
-				v["reference"] = localRef
 			}
+			v["reference"] = localRef
 		}
 		// Recursively process all map values
 		for _, value := range v {

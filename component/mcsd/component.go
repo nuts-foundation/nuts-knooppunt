@@ -338,8 +338,8 @@ func isMoreRecent(entry1, entry2 fhir.BundleEntry) bool {
 	if !time1.IsZero() && !time2.IsZero() {
 		return time1.After(time2)
 	}
-	// Fallback: assume later in array is more recent
-	return true
+	// Fallback: cannot determine which is more recent, do not overwrite
+	return false
 }
 
 // getLastUpdated extracts lastUpdated timestamp from an entry
