@@ -32,13 +32,14 @@ func TestComponent_update_regression(t *testing.T) {
 	server := httptest.NewServer(mux)
 
 	localClient := &test.StubFHIRClient{}
-	component := New(Config{
+	component, err := New(Config{
 		AdministrationDirectories: map[string]DirectoryConfig{
 			"lrza": {
 				FHIRBaseURL: server.URL,
 			},
 		},
 	})
+	require.NoError(t, err)
 	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
 		if baseURL.String() == server.URL {
 			return fhirclient.New(baseURL, http.DefaultClient, nil)
@@ -87,7 +88,7 @@ func TestComponent_update(t *testing.T) {
 	org1DirHistoryResponse = strings.ReplaceAll(org1DirHistoryResponse, "{{ORG1_DIR_BASEURL}}", orgDir1BaseURL)
 
 	localClient := &test.StubFHIRClient{}
-	component := New(Config{
+	component, err := New(Config{
 		AdministrationDirectories: map[string]DirectoryConfig{
 			"rootDir": {
 				FHIRBaseURL: rootDirServer.URL,
@@ -97,6 +98,8 @@ func TestComponent_update(t *testing.T) {
 			FHIRBaseURL: "http://example.com/local/fhir",
 		},
 	})
+	require.NoError(t, err)
+
 	unknownFHIRServerClient := &test.StubFHIRClient{
 		Error: errors.New("404 Not Found"),
 	}
@@ -183,7 +186,7 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	rootDirServer := httptest.NewServer(rootDirMux)
 
 	localClient := &test.StubFHIRClient{}
-	component := New(Config{
+	component, err := New(Config{
 		AdministrationDirectories: map[string]DirectoryConfig{
 			"rootDir": {
 				FHIRBaseURL: rootDirServer.URL,
@@ -193,6 +196,8 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 			FHIRBaseURL: "http://example.com/local/fhir",
 		},
 	})
+	require.NoError(t, err)
+
 	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
 		if baseURL.String() == rootDirServer.URL {
 			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{
@@ -249,12 +254,13 @@ func TestComponent_noDuplicateResourcesInTransactionBundle(t *testing.T) {
 	defer mockServer.Close()
 
 	capturingClient := &test.StubFHIRClient{}
-	component := New(Config{
+	component, err := New(Config{
 		QueryDirectory: DirectoryConfig{FHIRBaseURL: "http://example.com/local/fhir"},
 	})
+	require.NoError(t, err)
 
 	// Register as discovered directory to avoid Organization filtering
-	err = component.registerAdministrationDirectory(mockServer.URL, []string{"Organization", "Endpoint"}, false)
+	err = component.registerAdministrationDirectory(context.Background(), mockServer.URL, []string{"Organization", "Endpoint"}, false)
 	require.NoError(t, err)
 
 	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {

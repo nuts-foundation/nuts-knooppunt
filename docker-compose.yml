@@ -5,9 +5,9 @@ services:
       - "8080:8080"
       - "8081:8081"
     environment:
-      KNPT_MCSDADMIN_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-cache
-      KNPT_MCSD_QUERY_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-cache
-      KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL: http://hapi-fhir:7050/fhir/lrza-mcsd-public
+      KNPT_MCSDADMIN_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-admin
+      KNPT_MCSD_QUERY_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-admin
+      KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL: https://knooppunt-test.nuts-services.nl/lrza/mcsd
     volumes:
       - ./config:/app/config:ro
   init:
@@ -47,9 +47,9 @@ services:
     container_name: hapi-fhir-server
     ports:
       - "7050:7050"
-    depends_on:
-      postgres:
-        condition: service_healthy
+#    depends_on:
+#      postgres:
+#        condition: service_healthy
     environment:
       # For a full list of options, see https://github.com/nuts-foundation/nuts-knooppunt/blob/8463b719caca0a3dd8623a36188a4e1423faa8bb/config/hapi.application.dev.yml
       #

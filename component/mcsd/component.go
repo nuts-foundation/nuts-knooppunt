@@ -74,7 +74,7 @@ type DirectoryUpdateReport struct {
 	Errors       []string `json:"errors"`
 }
 
-func New(config Config) *Component {
+func New(config Config) (*Component, error) {
 	result := &Component{
 		config: config,
 		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
@@ -86,9 +86,11 @@ func New(config Config) *Component {
 		updateMux:       &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.AdministrationDirectories {
-		result.registerAdministrationDirectory(rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true)
+		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true); err != nil {
+			return nil, fmt.Errorf("register root administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
+		}
 	}
-	return result
+	return result, nil
 }
 
 func (c *Component) Start() error {
@@ -114,7 +116,7 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 	})
 }
 
-func (c *Component) registerAdministrationDirectory(fhirBaseURL string, resourceTypes []string, discover bool) error {
+func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool) error {
 	// Must be a valid http or https URL
 	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
 	if err != nil {
@@ -136,6 +138,7 @@ func (c *Component) registerAdministrationDirectory(fhirBaseURL string, resource
 		fhirBaseURL:   fhirBaseURL,
 		discover:      discover,
 	})
+	log.Ctx(ctx).Info().Msgf("Registered mCSD Directory: %s", fhirBaseURL)
 	return nil
 }
 
@@ -157,6 +160,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 }
 
 func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool) (DirectoryUpdateReport, error) {
+	log.Ctx(ctx).Info().Msgf("Updating mCSD Directory: %s", fhirBaseURLRaw)
 	remoteAdminDirectoryFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
@@ -222,6 +226,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 	var report DirectoryUpdateReport
 	for i, entry := range deduplicatedEntries {
+		log.Ctx(ctx).Trace().Msgf("Processing entry (url=%s, entity=%s)", fhirBaseURLRaw, entry.Request.Url)
 		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
@@ -240,15 +245,15 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			}
 
 			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
-				err := c.registerAdministrationDirectory(endpoint.Address, directoryResourceTypes, false)
+				log.Ctx(ctx).Debug().Msgf("Discovered mCSD Directory: %s", endpoint.Address)
+				err := c.registerAdministrationDirectory(ctx, endpoint.Address, directoryResourceTypes, false)
 				if err != nil {
 					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
-				} else {
-					log.Ctx(ctx).Info().Msgf("Discovered and registered new mCSD Directory at %s", endpoint.Address)
 				}
 			}
 		}
 	}
+	log.Ctx(ctx).Debug().Msgf("Got %d mCSD entries from: %s", len(deduplicatedEntries), fhirBaseURLRaw)
 	if len(tx.Entry) == 0 {
 		return report, nil
 	}
@@ -259,13 +264,10 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 
 	// Process result
-	for _, entry := range txResult.Entry {
+	for i, entry := range txResult.Entry {
 		if entry.Response == nil {
-			log.Ctx(ctx).Warn().Msgf("Skipping entry with no response: %v", entry)
-			continue
-		}
-		if entry.Response.Status == "" {
-			log.Ctx(ctx).Warn().Msgf("Skipping entry with empty response status: %v", entry)
+			msg := fmt.Sprintf("Skipping entry with no response: #%d", i)
+			report.Warnings = append(report.Warnings, msg)
 			continue
 		}
 		switch {
