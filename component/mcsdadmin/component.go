@@ -304,14 +304,18 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint.Address = address
 
-	var payloadType fhir.CodeableConcept
-	payloadTypeId := r.PostForm.Get("payload-type")
-	payloadType, ok := valuesets.CodableFrom("endpoint-payload-type", payloadTypeId)
-	if ok {
-		endpoint.PayloadType = []fhir.CodeableConcept{payloadType}
-	} else {
-		http.Error(w, "bad request: missing payload type", http.StatusBadRequest)
-		return
+	typeCodes := r.PostForm["payload-type"]
+	typeCodesCount := len(typeCodes)
+	if typeCodesCount > 0 {
+		endpoint.PayloadType = make([]fhir.CodeableConcept, typeCodesCount)
+		for i, t := range typeCodes {
+			serviceType, ok := valuesets.CodableFrom("endpoint-payload-type", t)
+			if ok {
+				endpoint.PayloadType[i] = serviceType
+			} else {
+				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
+			}
+		}
 	}
 
 	periodStart := r.PostForm.Get("period-start")
@@ -353,7 +357,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	var connectionType fhir.Coding
 	connectionTypeId := r.PostForm.Get("connection-type")
-	connectionType, ok = valuesets.CodingFrom("endpoint-connection-type", connectionTypeId)
+	connectionType, ok := valuesets.CodingFrom("endpoint-connection-type", connectionTypeId)
 	if ok {
 		endpoint.ConnectionType = connectionType
 	} else {
