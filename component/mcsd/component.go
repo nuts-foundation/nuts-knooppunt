@@ -14,6 +14,7 @@ import (
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhir"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -203,14 +204,11 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			// TODO: Handle DELETE operations properly when FHIR server supports _source conditional updates
 			continue
 		}
-		var resource map[string]any
-		if json.Unmarshal(entry.Resource, &resource) == nil {
-			if resourceType, ok := resource["resourceType"].(string); ok {
-				if slices.Contains(allowedResourceTypes, resourceType) {
-					if resourceID, ok := resource["id"].(string); ok && resourceID != "" {
-						remoteLocalRef := resourceType + "/" + resourceID
-						remoteRefToLocalRefMap[remoteLocalRef] = generateLocalID()
-					}
+		if info, err := libfhir.ExtractResourceInfo(entry.Resource); err == nil {
+			if slices.Contains(allowedResourceTypes, info.ResourceType) {
+				if info.ID != "" {
+					remoteLocalRef := info.ResourceType + "/" + info.ID
+					remoteRefToLocalRefMap[remoteLocalRef] = generateLocalID()
 				}
 			}
 		}
@@ -305,11 +303,8 @@ func deduplicateHistoryEntries(entries []fhir.BundleEntry) []fhir.BundleEntry {
 				resourceID = extractResourceIDFromURL(entry)
 			}
 		} else {
-			var resource map[string]any
-			if json.Unmarshal(entry.Resource, &resource) == nil {
-				if id, ok := resource["id"].(string); ok {
-					resourceID = id
-				}
+			if info, err := libfhir.ExtractResourceInfo(entry.Resource); err == nil {
+				resourceID = info.ID
 			}
 		}
 
@@ -347,18 +342,11 @@ func getLastUpdated(entry fhir.BundleEntry) time.Time {
 	if entry.Resource == nil {
 		return time.Time{}
 	}
-	var resource map[string]any
-	if json.Unmarshal(entry.Resource, &resource) != nil {
+	info, err := libfhir.ExtractResourceInfo(entry.Resource)
+	if err != nil || info.LastUpdated == nil {
 		return time.Time{}
 	}
-	if meta, ok := resource["meta"].(map[string]any); ok {
-		if lastUpdatedStr, ok := meta["lastUpdated"].(string); ok {
-			if t, err := time.Parse(time.RFC3339, lastUpdatedStr); err == nil {
-				return t
-			}
-		}
-	}
-	return time.Time{}
+	return *info.LastUpdated
 }
 
 // extractResourceIDFromURL extracts the resource ID from a DELETE operation's URL

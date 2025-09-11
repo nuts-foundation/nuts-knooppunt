@@ -240,6 +240,7 @@ func TestComponent_noDuplicateResourcesInTransactionBundle(t *testing.T) {
 	require.Len(t, orgs, 0, "Should have 0 Organizations after deduplication (DELETE is most recent operation)")
 }
 
+
 func TestExtractResourceIDFromURL(t *testing.T) {
 	tests := []struct {
 		name     string
