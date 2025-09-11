@@ -52,7 +52,7 @@ func TestComponent_update_regression(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, report)
-	assert.Empty(t, report[server.URL].Errors)
+	assert.Empty(t, report[server.URL].Warnings)
 	assert.Empty(t, report[server.URL].Errors)
 }
 

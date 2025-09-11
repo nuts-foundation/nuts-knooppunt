@@ -227,7 +227,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
 		}
-		if allowDiscovery && resourceType == "Endpoint" {
+		if allowDiscovery && resourceType == "Endpoint" && entry.Resource != nil {
 			var endpoint fhir.Endpoint
 			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
 				report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to unmarshal Endpoint resource: %s", i, err.Error()))
