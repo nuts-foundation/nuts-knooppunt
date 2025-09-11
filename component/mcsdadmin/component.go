@@ -132,10 +132,18 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	active := r.PostForm.Get("active") == "true"
 	service.Active = &active
 
-	typeCode := r.PostForm.Get("type")
-	serviceType, ok := valuesets.CodableFrom("service-type", typeCode)
-	if ok {
-		service.Type = []fhir.CodeableConcept{serviceType}
+	typeCodes := r.PostForm["type"]
+	typeCodesCount := len(typeCodes)
+	if typeCodesCount > 0 {
+		service.Type = make([]fhir.CodeableConcept, typeCodesCount)
+		for i, t := range typeCodes {
+			serviceType, ok := valuesets.CodableFrom("service-type", t)
+			if ok {
+				service.Type[i] = serviceType
+			} else {
+				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
+			}
+		}
 	}
 
 	reference := "Organization/" + r.PostForm.Get("providedById")
