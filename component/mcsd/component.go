@@ -15,6 +15,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/rs/zerolog/log"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -208,7 +209,13 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 				report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to unmarshal Endpoint resource: %s", i, err.Error()))
 				continue
 			}
-			if coding.EqualsCode(endpoint.ConnectionType, coding.MCSDConnectionTypeSystem, coding.MCSDConnectionTypeDirectoryCode) {
+
+			var payloadCoding = fhir.Coding{
+				System: to.Ptr(coding.MCSDPayloadTypeSystem),
+				Code:   to.Ptr(coding.MCSDPayloadTypeDirectoryCode),
+			}
+
+			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
 				err := c.registerAdministrationDirectory(endpoint.Address, directoryResourceTypes, false)
 				if err != nil {
 					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))

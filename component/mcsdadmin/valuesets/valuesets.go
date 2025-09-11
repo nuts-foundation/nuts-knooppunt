@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -11,8 +12,9 @@ import (
 var codingSystemIndex = map[string]string{
 	// Values taken from: https://hl7.org/fhir/R4/valueset-endpoint-connection-type.html
 	"endpoint-connection-type": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
-	// Values taken from: https://hl7.org/fhir/R4/valueset-service-type.html
-	"endpoint-payload-type": "http://terminology.hl7.org/CodeSystem/endpoint-payload-type",
+	// Values taken from: https://hl7.org/fhir/R4/valueset-service-type.html ...
+	// ... && http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities
+	"endpoint-payload-type": coding.MCSDPayloadTypeSystem,
 	// Values taken from: https://hl7.org/fhir/R4/valueset-endpoint-status.html
 	"endpoint-status": "http://hl7.org/fhir/endpoint-status",
 	// Values taken from: https://terminology.hl7.org/6.3.0/ValueSet-v3-ServiceDeliveryLocationRoleType.html
