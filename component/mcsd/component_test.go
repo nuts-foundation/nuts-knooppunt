@@ -41,9 +41,7 @@ func TestComponent_update_regression(t *testing.T) {
 	})
 	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
 		if baseURL.String() == server.URL {
-			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{
-				UsePostSearch: false,
-			})
+			return fhirclient.New(baseURL, http.DefaultClient, nil)
 		} else {
 			return localClient
 		}
