@@ -316,6 +316,8 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
 			}
 		}
+	} else {
+		http.Error(w, "missing payload type", http.StatusBadRequest)
 	}
 
 	periodStart := r.PostForm.Get("period-start")
@@ -335,24 +337,15 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		endpoint.Contact = []fhir.ContactPoint{contact}
 	}
 
-	orgFormStr := r.PostForm.Get("managing-org")
-	if len(orgFormStr) > 0 {
-		var managingOrg fhir.Organization
-		reference := "Organization/" + orgFormStr
-		refType := "Organization"
-		endpoint.ManagingOrganization = &fhir.Reference{
-			Reference: &reference,
-			Type:      &refType,
+	kvkStr := r.PostForm.Get("managing-org")
+	if len(kvkStr) > 0 {
+		ref := fhir.Reference{
+			Identifier: to.Ptr(fhir.Identifier{
+				System: to.Ptr("http://www.kvk.nl"),
+				Value:  to.Ptr(kvkStr),
+			}),
 		}
-		err = client.Read(reference, &managingOrg)
-		if err != nil {
-			http.Error(w, "internal error: could not find organization", http.StatusInternalServerError)
-			return
-		}
-		endpoint.ManagingOrganization.Display = managingOrg.Name
-	} else {
-		http.Error(w, "bad request: missing managing organization", http.StatusBadRequest)
-		return
+		endpoint.ManagingOrganization = to.Ptr(ref)
 	}
 
 	var connectionType fhir.Coding

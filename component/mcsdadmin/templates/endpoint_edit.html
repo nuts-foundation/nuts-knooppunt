@@ -12,7 +12,7 @@
             <div class="mb-3">
                 <div id="option-type" class="option">
                     <label for="payload-type" class="form-label">Payload Type:</label>
-                    <select name="payload-type" id="payload-type" class="form-select">
+                    <select name="payload-type" id="payload-type" class="form-select" required>
                         <option value="" disabled selected>--Please choose an option--</option>
                         {{range .PayloadTypes }}
                         <option value="{{ .Code }}">{{ .Display }}</option>
@@ -47,8 +47,8 @@
             </div>
             <div class="mb-3">
                 <label for="connection-type" class="form-label">Connection Type:</label>
-                <select name="connection-type" id="connection-type" class="form-select">
-                    <option value="">--Please choose an option--</option>
+                <select name="connection-type" id="connection-type" class="form-select" required>
+                    <option value="" disabled selected>--Please choose an option--</option>
                     {{range .ConnectionTypes }}
                     <option value="{{ .Code }}">{{ .Display }}</option>
                     {{ end }}
@@ -57,7 +57,7 @@
             <div class="mb-3">
                 <label for="purpose-of-use" class="form-label">Purpose of use:</label>
                 <select name="purpose-of-use" id="purpose-of-use" class="form-select">
-                    <option value="">--Please choose an option--</option>
+                    <option value="" disabled selected>--Please choose an option--</option>
                     {{range .PurposeOfUse }}
                     <option value="{{ .Code }}">{{ .Display }}</option>
                     {{ end }}
@@ -65,8 +65,8 @@
             </div>
             <div class="mb-3">
                 <label for="status" class="form-label">Status:</label>
-                <select name="status" id="status" class="form-select">
-                    <option value="">--Please choose an option--</option>
+                <select name="status" id="status" class="form-select" required>
+                    <option value="" disabled selected>--Please choose an option--</option>
                     {{range .Status}}
                     <option value="{{ .Code }}">{{ .Display }}</option>
                     {{ end }}
@@ -75,7 +75,7 @@
             <div class="mb-3">
                 <label for="endpoint-for" class="form-label">Endpoint of:</label>
                 <select name="endpoint-for" id="endpoint-for" class="form-select">
-                    <option value="">--Please choose an option--</option>
+                    <option value="" disabled selected>--Please choose an option--</option>
                     {{range .Organizations}}
                     <option value="{{ .Id }}">{{ .Name }}</option>
                     {{ end }}
