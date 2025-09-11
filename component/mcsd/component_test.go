@@ -14,9 +14,47 @@ import (
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
+
+func TestComponent_update_regression(t *testing.T) {
+	historyResponse, err := os.ReadFile("test/regression_lrza_history_response.json")
+	require.NoError(t, err)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/_history", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(historyResponse)
+	})
+	server := httptest.NewServer(mux)
+
+	localClient := &test.StubFHIRClient{}
+	component := New(Config{
+		AdministrationDirectories: map[string]DirectoryConfig{
+			"lrza": {
+				FHIRBaseURL: server.URL,
+			},
+		},
+	})
+	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+		if baseURL.String() == server.URL {
+			return fhirclient.New(baseURL, http.DefaultClient, nil)
+		} else {
+			return localClient
+		}
+	}
+	ctx := context.Background()
+
+	report, err := component.update(ctx)
+
+	require.NoError(t, err)
+	require.NotNil(t, report)
+	assert.Empty(t, report[server.URL].Warnings)
+	assert.Empty(t, report[server.URL].Errors)
+}
 
 func TestComponent_update(t *testing.T) {
 	t.Log("mCSD Component is tested limited here, as it requires running FHIR servers and a lot of data. The main logic is tested in the integration tests.")
@@ -239,7 +277,6 @@ func TestComponent_noDuplicateResourcesInTransactionBundle(t *testing.T) {
 	orgs := capturingClient.CreatedResources["Organization"]
 	require.Len(t, orgs, 0, "Should have 0 Organizations after deduplication (DELETE is most recent operation)")
 }
-
 
 func TestExtractResourceIDFromURL(t *testing.T) {
 	tests := []struct {
