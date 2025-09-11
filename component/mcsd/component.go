@@ -14,6 +14,7 @@ import (
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhir"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -190,14 +191,37 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		return DirectoryUpdateReport{}, fmt.Errorf("_history search failed: %w", err)
 	}
 
-	// Update local directory
+	// Deduplicate resources from _history query - keep only the most recent version
+	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
+	deduplicatedEntries := deduplicateHistoryEntries(bundle.Entry)
+
+	// Build reference map and transaction in two passes to resolve inter-resource references
+	remoteRefToLocalRefMap := make(map[string]string)
+
+	// First pass: build reference map for all resources that will be synced
+	// This requires a separate iteration since resources may cross-reference each other
+	for _, entry := range deduplicatedEntries {
+		if entry.Resource == nil || entry.Request == nil || entry.Request.Method == fhir.HTTPVerbDELETE {
+			// TODO: Handle DELETE operations properly when FHIR server supports _source conditional updates
+			continue
+		}
+		if info, err := libfhir.ExtractResourceInfo(entry.Resource); err == nil {
+			if slices.Contains(allowedResourceTypes, info.ResourceType) {
+				if info.ID != "" {
+					remoteLocalRef := info.ResourceType + "/" + info.ID
+					remoteRefToLocalRefMap[remoteLocalRef] = generateLocalID()
+				}
+			}
+		}
+	}
+
+	// Second pass: build transaction with resolved references
 	tx := fhir.Bundle{
 		Type:  fhir.BundleTypeTransaction,
-		Entry: make([]fhir.BundleEntry, 0, len(bundle.Entry)),
+		Entry: make([]fhir.BundleEntry, 0, len(deduplicatedEntries)),
 	}
-	remoteRefToLocalRefMap := make(map[string]string)
 	var report DirectoryUpdateReport
-	for i, entry := range bundle.Entry {
+	for i, entry := range deduplicatedEntries {
 		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
@@ -271,4 +295,84 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	c.lastUpdateTimes[fhirBaseURLRaw] = nextSyncTime
 
 	return report, nil
+}
+
+// deduplicateHistoryEntries keeps only the most recent version of each resource
+func deduplicateHistoryEntries(entries []fhir.BundleEntry) []fhir.BundleEntry {
+	resourceMap := make(map[string]fhir.BundleEntry)
+	var entriesWithoutID []fhir.BundleEntry
+
+	for _, entry := range entries {
+		var resourceID string
+
+		if entry.Resource == nil {
+			if entry.Request != nil && entry.Request.Method == fhir.HTTPVerbDELETE {
+				resourceID = extractResourceIDFromURL(entry)
+			}
+		} else {
+			if info, err := libfhir.ExtractResourceInfo(entry.Resource); err == nil {
+				resourceID = info.ID
+			}
+		}
+
+		if resourceID != "" {
+			existing, exists := resourceMap[resourceID]
+			if !exists || isMoreRecent(entry, existing) {
+				resourceMap[resourceID] = entry
+			}
+		} else {
+			entriesWithoutID = append(entriesWithoutID, entry)
+		}
+	}
+
+	var result []fhir.BundleEntry
+	for _, entry := range resourceMap {
+		result = append(result, entry)
+	}
+	result = append(result, entriesWithoutID...)
+	return result
+}
+
+// isMoreRecent compares two entries, returns true if first is more recent
+func isMoreRecent(entry1, entry2 fhir.BundleEntry) bool {
+	time1 := getLastUpdated(entry1)
+	time2 := getLastUpdated(entry2)
+	if !time1.IsZero() && !time2.IsZero() {
+		return time1.After(time2)
+	}
+	// Fallback: cannot determine which is more recent, do not overwrite
+	return false
+}
+
+// getLastUpdated extracts lastUpdated timestamp from an entry
+func getLastUpdated(entry fhir.BundleEntry) time.Time {
+	if entry.Resource == nil {
+		return time.Time{}
+	}
+	info, err := libfhir.ExtractResourceInfo(entry.Resource)
+	if err != nil || info.LastUpdated == nil {
+		return time.Time{}
+	}
+	return *info.LastUpdated
+}
+
+// extractResourceIDFromURL extracts the resource ID from a DELETE operation's URL
+func extractResourceIDFromURL(entry fhir.BundleEntry) string {
+	// First try to extract from Request.Url (e.g., "Organization/123")
+	if entry.Request != nil && entry.Request.Url != "" {
+		parts := strings.Split(entry.Request.Url, "/")
+		if len(parts) >= 2 {
+			return parts[1] // Return the ID part
+		}
+	}
+
+	// Fallback: extract from fullUrl (e.g., "http://example.org/fhir/Organization/123")
+	if entry.FullUrl != nil {
+		parts := strings.Split(*entry.FullUrl, "/")
+		if len(parts) >= 1 {
+			return parts[len(parts)-1] // Return the last part (ID)
+		}
+	}
+
+	return ""
 }

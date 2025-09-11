@@ -81,7 +81,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 	t.Run("Test incremental updates with _since parameter", func(t *testing.T) {
 		// Test verifies _since parameter correctly enables incremental sync by:
 		// 1. Doing baseline sync to establish timestamps
-		// 2. Creating new organization after sync completes  
+		// 2. Creating new organization after sync completes
 		// 3. Verifying next sync finds the new organization via _since parameter
 		// 4. Confirming subsequent sync finds nothing (no new changes)
 
@@ -100,7 +100,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		require.NotNil(t, lrzaReport1, "LRZa report should exist in first sync")
 		assert.Equal(t, 2, lrzaReport1.CountCreated, "LRZa should create 2 resources in first sync")
 
-		// Create new organization after first sync - should be found by next incremental sync  
+		// Create new organization after first sync - should be found by next incremental sync
 		// Use discovered directory (care2cure-admin) since they sync all resource types including Organizations
 		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
 			UsePostSearch: false,
@@ -140,7 +140,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		var response2 mcsd.UpdateReport
 		require.NoError(t, json.Unmarshal(responseData2, &response2))
 
-		// Second sync should find our test organization via _since parameter  
+		// Second sync should find our test organization via _since parameter
 		care2CureReport2 := mapEntrySuffix(response2, "care2cure-admin")
 		require.NotNil(t, care2CureReport2, "Care2Cure report should exist in second sync")
 		assert.Equal(t, 1, care2CureReport2.CountCreated, "Care2Cure should find exactly 1 resource (our test organization) via _since parameter")
@@ -203,4 +203,187 @@ func mapEntrySuffix(r mcsd.UpdateReport, suffix string) *mcsd.DirectoryUpdateRep
 		}
 	}
 	return nil
+}
+
+func Test_DuplicateResourceHandling(t *testing.T) {
+	// This test verifies that when _history returns multiple versions of the same resource,
+	// the conditional _source updates work correctly and don't create duplicate resources
+
+	harnessDetail := harness.Start(t)
+
+	t.Run("POST+PUT+PUT scenario with same resource", func(t *testing.T) {
+		// Use care2cure FHIR server as the source (discovered directory)
+		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
+			UsePostSearch: false,
+		})
+
+		// 1. Create standalone organization (POST) - no references to avoid UUID resolution issues
+		orgName := "Test Duplicate Organization"
+		identifierUseOfficial := fhir.IdentifierUseOfficial
+		identifierSystem := "http://fhir.nl/fhir/NamingSystem/ura"
+		identifierValue := "duplicate-test-123"
+		active := true
+
+		newOrg := fhir.Organization{
+			Name:   &orgName,
+			Active: &active,
+			Identifier: []fhir.Identifier{
+				{
+					Use:    &identifierUseOfficial,
+					System: &identifierSystem,
+					Value:  &identifierValue,
+				},
+			},
+			// Don't add endpoint references to avoid UUID resolution issues
+		}
+
+		var createdOrg fhir.Organization
+		err := care2CureFHIRClient.CreateWithContext(context.Background(), newOrg, &createdOrg)
+		require.NoError(t, err, "Failed to create organization")
+
+		// 2. Update organization (first PUT)
+		updatedName1 := "Test Duplicate Organization - Updated 1"
+		createdOrg.Name = &updatedName1
+
+		var updatedOrg1 fhir.Organization
+		err = care2CureFHIRClient.UpdateWithContext(context.Background(), "Organization/"+*createdOrg.Id, createdOrg, &updatedOrg1)
+		require.NoError(t, err, "Failed to update organization (first time)")
+
+		// 3. Update organization again (second PUT)
+		updatedName2 := "Test Duplicate Organization - Updated 2"
+		updatedOrg1.Name = &updatedName2
+
+		var updatedOrg2 fhir.Organization
+		err = care2CureFHIRClient.UpdateWithContext(context.Background(), "Organization/"+*updatedOrg1.Id, updatedOrg1, &updatedOrg2)
+		require.NoError(t, err, "Failed to update organization (second time)")
+		
+		// Verify the source organization now has version 3 after POST(v1) + PUT(v2) + PUT(v3)
+		require.NotNil(t, updatedOrg2.Meta, "Updated organization should have meta")
+		require.NotNil(t, updatedOrg2.Meta.VersionId, "Updated organization should have version ID")
+		assert.Equal(t, "3", *updatedOrg2.Meta.VersionId, "Source server should assign version 3 after POST+PUT+PUT sequence")
+
+		// 4. Now run mCSD sync to see how it handles the POST+PUT+PUT history
+		httpResponse, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, httpResponse.StatusCode)
+
+		responseData, err := io.ReadAll(httpResponse.Body)
+		require.NoError(t, err)
+		t.Logf("mCSD sync response: %s", string(responseData))
+
+		var updateReport mcsd.UpdateReport
+		require.NoError(t, json.Unmarshal(responseData, &updateReport))
+
+		// Check that no errors occurred during sync
+		care2CureReport := mapEntrySuffix(updateReport, "care2cure-admin")
+		require.NotNil(t, care2CureReport, "Care2Cure report should exist")
+		require.Empty(t, care2CureReport.Errors, "Should not have errors with conditional _source updates")
+
+		// 5. Verify only ONE organization exists in query directory with the latest name
+		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
+
+		// Search for organizations with our test identifier
+		searchResults := fhir.Bundle{}
+		err = queryFHIRClient.SearchWithContext(context.Background(), "Organization", url.Values{
+			"identifier": []string{identifierSystem + "|" + identifierValue},
+		}, &searchResults)
+		require.NoError(t, err, "Failed to search for organizations in query directory")
+
+		// Should find exactly ONE organization (not duplicates) after deduplication
+		require.Len(t, searchResults.Entry, 1, "Should have exactly 1 organization in query directory after POST+PUT+PUT deduplication")
+
+		// Verify it has the latest name (from the second update)
+		var foundOrg fhir.Organization
+		require.NoError(t, json.Unmarshal(searchResults.Entry[0].Resource, &foundOrg))
+		assert.Equal(t, "Test Duplicate Organization - Updated 2", *foundOrg.Name, "Should have the latest version of the organization")
+
+		// Verify it has the expected version ID
+		// Source server: POST(v1) + PUT(v2) + PUT(v3) = version 3
+		// Query server: receives deduped resource and creates it as version 1
+		require.NotNil(t, foundOrg.Meta, "Organization should have meta")
+		require.NotNil(t, foundOrg.Meta.VersionId, "Organization should have version ID")
+		assert.Equal(t, "1", *foundOrg.Meta.VersionId, "Query server should assign version 1 to the synchronized resource")
+		t.Logf("Found organization with expected version: %s", *foundOrg.Meta.VersionId)
+
+		t.Logf("Successfully handled POST+PUT+PUT scenario - found 1 organization with latest name: %s", *foundOrg.Name)
+	})
+
+	t.Run("CREATE+DELETE scenario", func(t *testing.T) {
+		// Use care2cure FHIR server as the source (discovered directory)
+		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
+			UsePostSearch: false,
+		})
+
+		// 1. Create organization (POST)
+		orgName := "Test Organization for Deletion"
+		identifierUseOfficial := fhir.IdentifierUseOfficial
+		identifierSystem := "http://fhir.nl/fhir/NamingSystem/ura"
+		identifierValue := "delete-test-456"
+		active := true
+
+		newOrg := fhir.Organization{
+			Name:   &orgName,
+			Active: &active,
+			Identifier: []fhir.Identifier{
+				{
+					Use:    &identifierUseOfficial,
+					System: &identifierSystem,
+					Value:  &identifierValue,
+				},
+			},
+		}
+
+		var createdOrg fhir.Organization
+		err := care2CureFHIRClient.CreateWithContext(context.Background(), newOrg, &createdOrg)
+		require.NoError(t, err, "Failed to create organization for deletion test")
+
+		// 2. First sync - should create the organization in query directory
+		httpResponse1, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, httpResponse1.StatusCode)
+
+		// Verify organization exists in query directory
+		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
+		searchResults1 := fhir.Bundle{}
+		err = queryFHIRClient.SearchWithContext(context.Background(), "Organization", url.Values{
+			"identifier": []string{identifierSystem + "|" + identifierValue},
+		}, &searchResults1)
+		require.NoError(t, err, "Failed to search for organizations in query directory")
+		require.Len(t, searchResults1.Entry, 1, "Should have 1 organization in query directory before deletion")
+
+		// 3. Delete the organization from source
+		err = care2CureFHIRClient.DeleteWithContext(context.Background(), "Organization/"+*createdOrg.Id)
+		require.NoError(t, err, "Failed to delete organization from source")
+
+		// 4. Second sync - should process the deletion
+		httpResponse2, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, httpResponse2.StatusCode)
+
+		responseData2, err := io.ReadAll(httpResponse2.Body)
+		require.NoError(t, err)
+		t.Logf("mCSD sync response after deletion: %s", string(responseData2))
+
+		var response2 mcsd.UpdateReport
+		require.NoError(t, json.Unmarshal(responseData2, &response2))
+
+		care2CureReport2 := mapEntrySuffix(response2, "care2cure-admin")
+		require.NotNil(t, care2CureReport2, "Care2Cure report should exist after deletion")
+
+		// 5. Verify organization is deleted from query directory
+		searchResults2 := fhir.Bundle{}
+		err = queryFHIRClient.SearchWithContext(context.Background(), "Organization", url.Values{
+			"identifier": []string{identifierSystem + "|" + identifierValue},
+		}, &searchResults2)
+		require.NoError(t, err, "Failed to search for organizations in query directory after deletion")
+
+		// On main branch, DELETE operations are skipped for safety (until _source conditional updates are implemented)
+		// So the organization should still exist in the query directory
+		require.Len(t, searchResults2.Entry, 1, "Should still have 1 organization in query directory (DELETE operations are skipped on main branch)")
+
+		// Verify the DeleteCount is 0 in the sync report (confirming DELETE was skipped)
+		require.Equal(t, 0, care2CureReport2.CountDeleted, "DELETE operations should be skipped on main branch")
+
+		t.Logf("Successfully handled CREATE+DELETE scenario - DELETE operation was skipped as expected on main branch")
+	})
 }
