@@ -141,7 +141,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 			if ok {
 				service.Type[i] = serviceType
 			} else {
-				log.Warn().Msg("Could not find type code")
+				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
 			}
 		}
 	}
