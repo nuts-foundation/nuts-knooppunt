@@ -19,15 +19,18 @@ func TestCodableIncludesCode(t *testing.T) {
 	}
 
 	partialCode := fhir.Coding{
-		System: to.Ptr("foo"),
+		Code: to.Ptr("bar"),
 	}
-	assert.False(t, CodableIncludesCode(codable, partialCode))
-
-	partialCode.Code = to.Ptr("baz")
-	assert.False(t, CodableIncludesCode(codable, partialCode))
-
-	partialCode.Code = to.Ptr("bar")
 	assert.True(t, CodableIncludesCode(codable, partialCode))
+
+	partialCode.System = to.Ptr("baz")
+	assert.False(t, CodableIncludesCode(codable, partialCode))
+
+	partialCode.System = to.Ptr("foo")
+	assert.True(t, CodableIncludesCode(codable, partialCode))
+
+	partialCode.Code = to.Ptr("quz")
+	assert.False(t, CodableIncludesCode(codable, partialCode))
 }
 
 func TestCodablesIncludesCode(t *testing.T) {

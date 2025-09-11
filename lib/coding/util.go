@@ -4,28 +4,28 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-func EqualsCode(coding fhir.Coding, system string, value string) bool {
-	return coding.System != nil && *coding.System == system &&
-		coding.Code != nil && *coding.Code == value
-}
-
-func isCompleteCode(c fhir.Coding) bool {
-	if c.System == nil || c.Code == nil {
-		return false
+func EqualsCoding(leftCoding fhir.Coding, rightCoding fhir.Coding) bool {
+	var systemValid bool
+	if leftCoding.System != nil && rightCoding.System != nil {
+		systemValid = *leftCoding.System == *rightCoding.System
+	} else {
+		// If either or both systems are missing assume they are the same system
+		systemValid = true
 	}
-	return true
+
+	var codeValid bool
+	if leftCoding.Code != nil && rightCoding.Code != nil {
+		codeValid = *leftCoding.Code == *rightCoding.Code
+	} else {
+		codeValid = false
+	}
+
+	return systemValid && codeValid
 }
 
 func CodableIncludesCode(codable fhir.CodeableConcept, code fhir.Coding) bool {
-	if !isCompleteCode(code) {
-		return false
-	}
-
 	for _, c := range codable.Coding {
-		if !isCompleteCode(c) {
-			continue
-		}
-		if *c.System == *code.System && *c.Code == *code.Code {
+		if EqualsCoding(c, code) {
 			return true
 		}
 	}
