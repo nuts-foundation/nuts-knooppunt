@@ -14,6 +14,10 @@
                 <input id="identifier" type="text" name="identifier" class="form-control"
                        placeholder="Enter identifier here" required>
             </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" name="active" id="active" value="true" class="form-check-input">
+                <label class="form-check-label" for="active">Active</label>
+            </div>
             <div class="mb-3">
                 <label for="type-select" class="form-label">Choose a type:</label>
                 <div id="type-options" class="options">
@@ -25,14 +29,25 @@
                     </select>
                 </div>
                 <div>
-                    <button onclick='addOption("type-select");' type="button" class="btn btn-secondary btn-sm">Add type</button>
-                    <button onclick='removeOption("type-options");' type="button" class="btn btn-secondary btn-sm">Remove type</button>
+                    <button onclick='addOption("type-select");' type="button" class="btn btn-secondary btn-sm">Add
+                        type
+                    </button>
+                    <button onclick='removeOption("type-options");' type="button" class="btn btn-secondary btn-sm">
+                        Remove type
+                    </button>
                 </div>
             </div>
-            <div class="mb-3 form-check">
-                <input type="checkbox" name="active" id="active" value="true" class="form-check-input">
-                <label class="form-check-label" for="active">Active</label>
+            {{ if .OrgsExist }}
+            <div class="mb-3">
+                <label for="part-of" class="form-label">Part of Organization:</label>
+                <select name="part-of" id="part-of" class="form-select" required>
+                    <option value="">--Please choose an option--</option>
+                    {{range .Organizations}}
+                    <option value="{{ .Id }}">{{ .Name }}</option>
+                    {{ end }}
+                </select>
             </div>
+            {{ end }}
             <div class="mb-3">
                 <button type="submit" class="btn btn-primary">Submit</button>
             </div>

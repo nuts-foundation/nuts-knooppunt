@@ -180,6 +180,13 @@ func listOrganizations(w http.ResponseWriter, _ *http.Request) {
 }
 
 func newOrganization(w http.ResponseWriter, _ *http.Request) {
+	organizations, err := findAll[fhir.Organization](client)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	orgsExists := len(organizations) > 0
+
 	w.WriteHeader(http.StatusOK)
 
 	types, err := valuesets.CodingsFrom("organization-type")
@@ -189,9 +196,13 @@ func newOrganization(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	props := struct {
-		Types []fhir.Coding
+		Types         []fhir.Coding
+		Organizations []fhir.Organization
+		OrgsExist     bool
 	}{
-		Types: types,
+		Types:         types,
+		Organizations: organizations,
+		OrgsExist:     orgsExists,
 	}
 
 	tmpls.RenderWithBase(w, "organization_edit.html", props)
