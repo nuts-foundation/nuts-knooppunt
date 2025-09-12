@@ -32,15 +32,12 @@
                     <button onclick='addOption("type-select");' type="button" class="btn btn-secondary btn-sm">
                         Add type
                     </button>
-                    <button onclick='removeOption("type-options");' type="button" class="btn btn-secondary btn-sm">
-                        Remove type
-                    </button>
                 </div>
             </div>
             {{ if .OrgsExist }}
             <div class="mb-3">
                 <label for="part-of" class="form-label">Part of Organization:</label>
-                <select name="part-of" id="part-of" class="form-select" required>
+                <select name="part-of" id="part-of" class="form-select">
                     <option value="">--Please choose an option--</option>
                     {{range .Organizations}}
                     <option value="{{ .Id }}">{{ .Name }}</option>

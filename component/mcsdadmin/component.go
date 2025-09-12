@@ -234,6 +234,9 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	if typeCodesCount > 0 {
 		org.Type = make([]fhir.CodeableConcept, typeCodesCount)
 		for i, t := range orgTypeCodes {
+			if t == "" {
+				continue
+			}
 			orgType, ok := valuesets.CodableFrom("organization-type", t)
 			if ok {
 				org.Type[i] = orgType
