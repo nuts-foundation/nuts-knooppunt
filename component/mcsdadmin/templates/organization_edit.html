@@ -15,8 +15,8 @@
                        placeholder="Enter identifier here" required>
             </div>
             <div class="mb-3">
-                <div class="options">
-                    <label for="type-select" class="form-label">Choose a type:</label>
+                <label for="type-select" class="form-label">Choose a type:</label>
+                <div id="type-options" class="options">
                     <select name="type" id="type-select" class="form-select" required>
                         <option value="">--Please choose an option--</option>
                         {{ range .Types }}
@@ -24,7 +24,10 @@
                         {{ end }}
                     </select>
                 </div>
-                <button onclick='addOption("type-select");' type="button" class="btn btn-secondary btn-sm">Add type</button>
+                <div>
+                    <button onclick='addOption("type-select");' type="button" class="btn btn-secondary btn-sm">Add type</button>
+                    <button onclick='removeOption("type-options");' type="button" class="btn btn-secondary btn-sm">Remove type</button>
+                </div>
             </div>
             <div class="mb-3 form-check">
                 <input type="checkbox" name="active" id="active" value="true" class="form-check-input">
