@@ -5,19 +5,19 @@
 mcsd:
   # Root directories to synchronize from
   admin:
-    "lrza":
-      fhirbaseurl: "https://knooppunt-test.nuts-services.nl/lrza/mcsd"
-#    "another-org":
-#      fhirbaseurl: "https://fhir.another-org.com/fhir"
+    "example-org":
+      fhirbaseurl: "https://fhir.example.org/fhir"
+    "another-org":
+      fhirbaseurl: "https://fhir.another-org.com/fhir"
   
   # Local FHIR directory configuration
   query:
-    fhirbaseurl: "http://hapi-fhir:7050/fhir/knpt-mcsd-query"
+    fhirbaseurl: "http://localhost:8080/fhir"
 
 # mCSD Admin configuration
 mcsdadmin:
   # Base URL for FHIR server used by admin interface
-  fhirbaseurl: "http://hapi-fhir:7050/fhir/knpt-mcsd-admin"
+  fhirbaseurl: "http://localhost:8080/fhir"
 
 # Nuts node configuration  
 nuts:
