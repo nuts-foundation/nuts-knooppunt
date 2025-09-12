@@ -151,7 +151,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		adminDirectory := c.administrationDirectories[i]
 		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover)
 		if err != nil {
-			log.Ctx(ctx).Err(err).Str("directory", adminDirectory.fhirBaseURL).Msg("mCSD Directory update failed")
+			log.Ctx(ctx).Err(err).Str("fhir_server", adminDirectory.fhirBaseURL).Msg("mCSD Directory update failed")
 			report.Errors = append(report.Errors, err.Error())
 		}
 		result[adminDirectory.fhirBaseURL] = report
@@ -160,7 +160,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 }
 
 func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool) (DirectoryUpdateReport, error) {
-	log.Ctx(ctx).Info().Msgf("Updating mCSD Directory: %s", fhirBaseURLRaw)
+	log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURLRaw).Msg("Updating from mCSD Directory (discover=" + fmt.Sprint(allowDiscovery) + ", resourceTypes=" + strings.Join(allowedResourceTypes, ",") + ")")
 	remoteAdminDirectoryFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
@@ -226,7 +226,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 	var report DirectoryUpdateReport
 	for i, entry := range deduplicatedEntries {
-		log.Ctx(ctx).Trace().Msgf("Processing entry (url=%s, entity=%s)", fhirBaseURLRaw, entry.Request.Url)
+		log.Ctx(ctx).Trace().Str("fhir_server", fhirBaseURLRaw).Msgf("Processing entry: %s", entry.Request.Url)
 		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
@@ -253,7 +253,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			}
 		}
 	}
-	log.Ctx(ctx).Debug().Msgf("Got %d mCSD entries from: %s", len(deduplicatedEntries), fhirBaseURLRaw)
+	log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Msgf("Got %d mCSD entries", len(tx.Entry))
 	if len(tx.Entry) == 0 {
 		return report, nil
 	}
