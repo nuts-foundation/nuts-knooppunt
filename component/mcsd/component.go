@@ -138,7 +138,7 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 		fhirBaseURL:   fhirBaseURL,
 		discover:      discover,
 	})
-	log.Ctx(ctx).Info().Msgf("Registered mCSD Directory: %s", fhirBaseURL)
+	log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURL).Msgf("Registered mCSD Directory (discover=%v)", discover)
 	return nil
 }
 
