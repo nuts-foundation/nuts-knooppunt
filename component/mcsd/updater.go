@@ -72,9 +72,6 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 
 			// Import mCSD directory endpoints even from discoverable directories
 			doSync = coding.CodablesIncludesCode(endpoint.PayloadType, coding.PayloadCoding)
-			// TODO: This is a root admin directory endpoint, from which we only import endpoints, not organizations.
-			//       Leaving it in would break referential integrity, so we remove the managing organization reference.
-			endpoint.ManagingOrganization = nil
 		}
 	}
 	if !doSync {
