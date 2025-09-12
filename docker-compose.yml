@@ -70,7 +70,7 @@ services:
       # Lets the server generate UUIDs for resources instead of integers
       hapi.fhir.server_id_strategy: UUID
       # Allow storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
-      store_meta_source_information: SOURCE_URI
+      hapi.fhir.store_meta_source_information: SOURCE_URI
 
       #
       # Local development properties (not to be used when deploying to test/production)
