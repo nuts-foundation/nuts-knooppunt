@@ -1,20 +1,12 @@
 # nuts-knooppunt
 
-Implementation of the Nuts Knooppunt specifications
-
-## Running
-
-Using Docker:
-
-```shell
-docker build . --tag nutsfoundation/nuts-knooppunt:local
-docker run -p 8080:8080 nutsfoundation/nuts-knooppunt:local
-```
+Implementation of the Nuts Knooppunt specifications.
 
 ## Endpoints
 
 - Health check endpoint: [http://localhost:8081/status](http://localhost:8081/status)
 - mCSD Admin Application: [http://localhost:8080/mcsdadmin](http://localhost:8080/mcsdadmin)
+- mCSD Update Client force update: [POST http://localhost:8081/mcsd/update](http://localhost:8081/mcsd/update)
 
 ## Go toolchain
 
@@ -41,7 +33,7 @@ A docker compose config is provided to run a set of services that are useful for
 Start the stack with:
 
 ```shell
-docker compose up
+docker compose up --build
 ```
 
 ## Configuration

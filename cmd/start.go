@@ -21,8 +21,12 @@ func Start(ctx context.Context, config Config) error {
 
 	publicMux := http.NewServeMux()
 	internalMux := http.NewServeMux()
+	mcsdUpdateClient, err := mcsd.New(config.MCSD)
+	if err != nil {
+		return errors.Wrap(err, "failed to create mCSD Update Client")
+	}
 	components := []component.Lifecycle{
-		mcsd.New(config.MCSD),
+		mcsdUpdateClient,
 		mcsdadmin.New(config.MCSDAdmin),
 		status.New(),
 		httpComponent.New(publicMux, internalMux),
