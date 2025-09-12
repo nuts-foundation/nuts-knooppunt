@@ -14,7 +14,9 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -28,7 +30,6 @@ func Test_mCSDUpdateClient(t *testing.T) {
 		require.Equal(t, http.StatusOK, httpResponse.StatusCode)
 		responseData, err := io.ReadAll(httpResponse.Body)
 		require.NoError(t, err)
-		t.Log(string(responseData))
 
 		t.Run("assert resource sync'd from LRZa Admin Directory", func(t *testing.T) {
 			// This is the root/discovery directory, so only mCSD Directory endpoints should be present
@@ -44,9 +45,10 @@ func Test_mCSDUpdateClient(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "Sunflower Care Home", *org.Name)
 			assert.NotEqual(t, *expectedOrg.Id, *org.Id, "copy of organization in local Query Directory should have new ID")
-			// TODO: for some reason, meta is not populated correctly, needs further investigation
-			//assert.Equal(t, "the-source", *org.Meta.Source, "copy of organization in local Query Directory should have new Meta.Source")
-
+			t.Run("meta", func(t *testing.T) {
+				expectedSource := harnessDetail.SunflowerFHIRBaseURL.JoinPath("Organization", *sunflower.Organization().Id)
+				assert.Equal(t, expectedSource.String(), *org.Meta.Source, "copy of organization in local Query Directory should have Meta.Source set to original resource")
+			})
 			// Assert mCSD-directory endpoint exists in query directory (from root directory)
 			// TODO: Not possible yet, since the mCSD Directory endpoints comes from the root directory,
 			//       but the Organization resource from the org directory, which doesn't reference its mCSD Directory.
@@ -61,8 +63,10 @@ func Test_mCSDUpdateClient(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "Care2Cure Hospital", *org.Name)
 			assert.NotEqual(t, *expectedOrg.Id, *org.Id, "copy of organization in local Query Directory should have new ID")
-			// TODO: for some reason, meta is not populated correctly, needs further investigation
-			//assert.Equal(t, "the-source", *org.Meta.Source, "copy of organization in local Query Directory should have new Meta.Source")
+			t.Run("meta", func(t *testing.T) {
+				expectedSource := harnessDetail.Care2CureFHIRBaseURL.JoinPath("Organization", *care2cure.Organization().Id)
+				assert.Equal(t, expectedSource.String(), *org.Meta.Source, "copy of organization in local Query Directory should have Meta.Source set to original resource")
+			})
 
 			// Assert mCSD-directory endpoint exists in query directory (from root directory)
 			// TODO: Not possible yet, since the mCSD Directory endpoints comes from the root directory,
@@ -256,7 +260,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		var updatedOrg2 fhir.Organization
 		err = care2CureFHIRClient.UpdateWithContext(context.Background(), "Organization/"+*updatedOrg1.Id, updatedOrg1, &updatedOrg2)
 		require.NoError(t, err, "Failed to update organization (second time)")
-		
+
 		// Verify the source organization now has version 3 after POST(v1) + PUT(v2) + PUT(v3)
 		require.NotNil(t, updatedOrg2.Meta, "Updated organization should have meta")
 		require.NotNil(t, updatedOrg2.Meta.VersionId, "Updated organization should have version ID")
