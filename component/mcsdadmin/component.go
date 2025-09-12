@@ -427,14 +427,22 @@ func newLocation(w http.ResponseWriter, _ *http.Request) {
 		log.Warn().Err(err).Msg("Failed to find location status types")
 	}
 
+	organizations, err := findAll[fhir.Organization](client)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	props := struct {
 		PhysicalTypes []fhir.Coding
 		Status        []fhir.Coding
 		Types         []fhir.Coding
+		Organizations []fhir.Organization
 	}{
 		PhysicalTypes: physicalTypes,
 		Status:        status,
 		Types:         locationTypes,
+		Organizations: organizations,
 	}
 
 	tmpls.RenderWithBase(w, "location_edit.html", props)
@@ -507,6 +515,23 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		} else {
 			location.PhysicalType = &physical
 		}
+	}
+
+	orgStr := r.PostForm.Get("managing-org")
+	if orgStr != "" {
+		reference := "Organization/" + orgStr
+		refType := "Organization"
+		location.ManagingOrganization = &fhir.Reference{
+			Reference: &reference,
+			Type:      &refType,
+		}
+		var managingOrg fhir.Organization
+		err = client.Read(reference, &managingOrg)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to find referred organisation")
+			return
+		}
+		location.ManagingOrganization.Display = managingOrg.Name
 	}
 
 	var resLoc fhir.Location

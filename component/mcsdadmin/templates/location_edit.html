@@ -54,6 +54,15 @@
             </select>
         </div>
         <div class="mb-3">
+            <label for="managing-org" class="form-label">Managing Organization:</label>
+            <select name="managing-org" id="managing-org" class="form-select" required>
+                <option value="" disabled selected>--Please choose an option--</option>
+                {{range .Organizations}}
+                <option value="{{ .Id }}">{{ .Name }}</option>
+                {{ end }}
+            </select>
+        </div>
+        <div class="mb-3">
             <button type="submit" class="btn btn-primary">Submit</button>
         </div>
     </form>
