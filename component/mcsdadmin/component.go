@@ -247,6 +247,22 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	active := r.PostForm.Get("active") == "true"
 	org.Active = &active
 
+	partOf := r.PostForm.Get("part-of")
+	if len(partOf) > 0 {
+		reference := "Organization/" + partOf
+		org.PartOf = &fhir.Reference{
+			Reference: &reference,
+			Type:      to.Ptr("Organization"),
+		}
+		var parentOrg fhir.Organization
+		err = client.Read(reference, &parentOrg)
+		if err != nil {
+			http.Error(w, "internal error: could not find organization", http.StatusInternalServerError)
+			return
+		}
+		org.PartOf.Display = parentOrg.Name
+	}
+
 	var resOrg fhir.Organization
 	err = client.Create(org, &resOrg)
 	if err != nil {
