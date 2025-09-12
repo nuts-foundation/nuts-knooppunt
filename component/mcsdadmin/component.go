@@ -469,6 +469,36 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Msg("Could not find location status")
 	}
 
+	var address fhir.Address
+	addressLine := r.PostForm.Get("address-line")
+	if addressLine == "" {
+		http.Error(w, "missing address line", http.StatusBadRequest)
+		return
+	}
+	address.Line = []string{addressLine}
+
+	addressCity := r.PostForm.Get("address-city")
+	if addressCity != "" {
+		address.City = to.Ptr(addressCity)
+	}
+	addressDistrict := r.PostForm.Get("address-district")
+	if addressDistrict != "" {
+		address.District = to.Ptr(addressDistrict)
+	}
+	addressState := r.PostForm.Get("address-State")
+	if addressState != "" {
+		address.State = to.Ptr(addressState)
+	}
+	addressPostalCode := r.PostForm.Get("address-postal-code")
+	if addressPostalCode != "" {
+		address.PostalCode = to.Ptr(addressPostalCode)
+	}
+	addressCountry := r.PostForm.Get("address-country")
+	if addressCountry != "" {
+		address.Country = to.Ptr(addressCountry)
+	}
+	location.Address = to.Ptr(address)
+
 	physicalCode := r.PostForm.Get("physicalType")
 	if len(physicalCode) > 0 {
 		physical, ok := valuesets.CodableFrom("location-physical-type", physicalCode)
