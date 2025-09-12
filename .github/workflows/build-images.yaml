@@ -84,15 +84,6 @@ jobs:
         uses: hiberbee/github-action-skaffold@1.27.0
         if: ${{ github.event_name == 'pull_request' }}
         with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.docker_meta.outputs.tags }}
-          build-args: |
-            GIT_VERSION=${{ steps.version.outputs.git_version }}
-            GIT_COMMIT=${{ steps.version.outputs.git_commit }}
-            GIT_BRANCH=${{ steps.version.outputs.git_branch }}
           command: build
           skaffold-version: 2.16.1
           profile: ci
@@ -106,7 +97,6 @@ jobs:
           skaffold-version: 2.16.1
           push: true
           tag: ${{ steps.docker_meta.outputs.tags }}
-          repository: ghcr.io/nuts-foundation/nuts-knooppunt
           file-output: artifacts.json
 
       - uses: actions/upload-artifact@v4
