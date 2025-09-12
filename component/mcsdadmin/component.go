@@ -142,6 +142,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 				service.Type[i] = serviceType
 			} else {
 				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
+				return
 			}
 		}
 	}
@@ -217,10 +218,19 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 		uraIdentifier(uraString),
 	}
 
-	orgTypeCode := r.PostForm.Get("type")
-	orgType, ok := valuesets.CodableFrom("organization-type", orgTypeCode)
-	if ok {
-		org.Type = []fhir.CodeableConcept{orgType}
+	orgTypeCodes := r.PostForm["type"]
+	typeCodesCount := len(orgTypeCodes)
+	if typeCodesCount > 0 {
+		org.Type = make([]fhir.CodeableConcept, typeCodesCount)
+		for i, t := range orgTypeCodes {
+			orgType, ok := valuesets.CodableFrom("organization-type", t)
+			if ok {
+				org.Type[i] = orgType
+			} else {
+				http.Error(w, fmt.Sprintf("could not find type code %s", t), http.StatusBadRequest)
+				return
+			}
+		}
 	}
 
 	active := r.PostForm.Get("active") == "true"
