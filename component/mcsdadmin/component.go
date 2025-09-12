@@ -341,7 +341,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	if len(kvkStr) > 0 {
 		ref := fhir.Reference{
 			Identifier: to.Ptr(fhir.Identifier{
-				System: to.Ptr("http://www.kvk.nl"),
+				System: to.Ptr(coding.KVKNamingSystem),
 				Value:  to.Ptr(kvkStr),
 			}),
 		}
