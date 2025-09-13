@@ -54,7 +54,9 @@ func TestComponent_update_regression(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, report)
 	assert.Empty(t, report[server.URL].Warnings)
+	assert.NotNil(t, report[server.URL].Warnings, "expected an empty slice")
 	assert.Empty(t, report[server.URL].Errors)
+	assert.NotNil(t, report[server.URL].Errors, "expected an empty slice")
 }
 
 func TestComponent_update(t *testing.T) {
