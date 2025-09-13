@@ -35,9 +35,15 @@ func Care2CureEndpoints(hapiBaseURL *url.URL) []fhir.Endpoint {
 				Profile: []string{"https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"},
 			},
 			Status: fhir.EndpointStatusActive,
-			ConnectionType: fhir.Coding{
-				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/endpoint-connection-type"),
-				Code:   to.Ptr("mcsd-directory"),
+			PayloadType: []fhir.CodeableConcept{
+				{
+					Coding: []fhir.Coding{
+						{
+							System: to.Ptr("http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities"),
+							Code:   to.Ptr("http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"),
+						},
+					},
+				},
 			},
 			Period: &fhir.Period{
 				Start: to.Ptr("2025-01-01T00:00:00Z"),

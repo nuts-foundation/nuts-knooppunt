@@ -148,10 +148,16 @@
           ]
         },
         "status": "active",
-        "connectionType": {
-          "system": "http://fhir.nl/fhir/NamingSystem/endpoint-connection-type",
-          "code": "mcsd-directory"
-        },
+        "payloadType" : [
+          {
+            "Coding": [
+              {
+                "system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities",
+                "code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"
+              }
+            ]
+          }
+        ],
         "name": "Directory 1",
         "managingOrganization": {
           "reference": "Organization/org-1"
@@ -183,10 +189,16 @@
           ]
         },
         "status": "active",
-        "connectionType": {
-          "system": "http://fhir.nl/fhir/NamingSystem/endpoint-connection-type",
-          "code": "mcsd-directory"
-        },
+        "payloadType" : [
+          {
+            "Coding": [
+              {
+                "system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities",
+                "code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"
+              }
+            ]
+          }
+        ],
         "name": "Directory 2",
         "managingOrganization": {
           "reference": "Organization/org-3"
@@ -261,10 +273,16 @@
           ]
         },
         "status": "active",
-        "connectionType": {
-          "system": "http://fhir.nl/fhir/NamingSystem/endpoint-connection-type",
-          "code": "mcsd-directory"
-        },
+        "payloadType" : [
+          {
+            "Coding": [
+              {
+                "system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities",
+                "code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"
+              }
+            ]
+          }
+        ],
         "name": "Directory 1 - Org 2 Association",
         "managingOrganization": {
           "reference": "Organization/org-2"
@@ -296,10 +314,16 @@
           ]
         },
         "status": "active",
-        "connectionType": {
-          "system": "http://fhir.nl/fhir/NamingSystem/endpoint-connection-type",
-          "code": "mcsd-directory"
-        },
+        "payloadType" : [
+          {
+            "Coding": [
+              {
+                "system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities",
+                "code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"
+              }
+            ]
+          }
+        ],
         "name": "Directory 2 - Org 4 Association",
         "managingOrganization": {
           "reference": "Organization/org-4"

@@ -1,5 +1,13 @@
 [
   {
+    "code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client",
+    "display": "Care Services Directory for Update Client"
+  },
+  {
+    "code": "http://nictiz.nl/fhir/CapabilityStatement/eOverdracht-servercapabilities",
+    "display": "Transfer of Care - eOverdracht Server"
+  },
+  {
     "code": "urn:ihe:pcc:handp:2008",
     "display": "History and Physical Specification"
   },
