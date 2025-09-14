@@ -8,9 +8,12 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 type KnooppuntSystemDetails struct {
@@ -33,31 +36,33 @@ type Details struct {
 
 func Load(hapiBaseURL *url.URL) (*Details, error) {
 	ctx := context.Background()
-	knptMCSDAdminHAPITenant := HAPITenant{
+	knptMCSDAdminHAPITenant := hapi.Tenant{
 		Name: "knpt-mcsd-admin",
 		ID:   1,
 	}
-	knptMCSDQueryHAPITenant := HAPITenant{
+	knptMCSDQueryHAPITenant := hapi.Tenant{
 		Name: "knpt-mcsd-query",
 		ID:   2,
 	}
-	lrzaMCSDAdminHAPITenant := HAPITenant{
-		Name: "lrza-mcsd-admin",
-		ID:   3,
-	}
-	care2CureAdminHAPITenant := HAPITenant{
-		Name: "care2cure-admin",
-		ID:   4,
-	}
-	sunflowerAdminHAPITenant := HAPITenant{
-		Name: "sunflower-admin",
-		ID:   5,
-	}
+	lrzaMCSDAdminHAPITenant := lrza.HAPITenant()
+	care2CureAdminHAPITenant := care2cure.HAPITenant()
+	sunflowerAdminHAPITenant := sunflower.HAPITenant()
 
 	hapiDefaultFHIRClient := fhirclient.New(hapiBaseURL, http.DefaultClient, nil)
 
-	for _, tenant := range []HAPITenant{knptMCSDQueryHAPITenant, knptMCSDAdminHAPITenant, lrzaMCSDAdminHAPITenant, care2CureAdminHAPITenant, sunflowerAdminHAPITenant} {
-		if err := CreateHAPITenant(ctx, tenant, hapiDefaultFHIRClient); err != nil {
+	// Delete all data first
+	_ = hapiDefaultFHIRClient.CreateWithContext(ctx, fhir.Parameters{
+		Parameter: []fhir.ParametersParameter{
+			{
+				Name:         "expungeEverything",
+				ValueBoolean: to.Ptr(true),
+			},
+		},
+	}, nil, fhirclient.AtPath("/$expunge"))
+
+	// Create tenants
+	for _, tenant := range []hapi.Tenant{knptMCSDQueryHAPITenant, knptMCSDAdminHAPITenant, lrzaMCSDAdminHAPITenant, care2CureAdminHAPITenant, sunflowerAdminHAPITenant} {
+		if err := hapi.CreateTenant(ctx, tenant, hapiDefaultFHIRClient); err != nil {
 			return nil, fmt.Errorf("create HAPI tenant: %w", err)
 		}
 	}
