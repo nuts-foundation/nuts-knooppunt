@@ -2,11 +2,14 @@ package harness
 
 import (
 	"net/url"
+	"os"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,6 +25,10 @@ type Details struct {
 
 func Start(t *testing.T) Details {
 	t.Helper()
+
+	// Delay container shutdown to improve container reusability
+	os.Setenv("TESTCONTAINERS_RYUK_RECONNECTION_TIMEOUT", "5m")
+	os.Setenv("TESTCONTAINERS_RYUK_CONNECTION_TIMEOUT", "5m")
 
 	dockerNetwork, err := createDockerNetwork(t)
 	require.NoError(t, err)
@@ -42,15 +49,13 @@ func Start(t *testing.T) Details {
 			},
 		},
 	})
-	care2CureTenant := vectors.HAPITenant{Name: "care2cure-admin", ID: 4}
-	sunflowerTenant := vectors.HAPITenant{Name: "sunflower-admin", ID: 5}
 	return Details{
 		KnooppuntInternalBaseURL: knooppuntInternalURL,
 		MCSDQueryFHIRBaseURL:     testData.Knooppunt.MCSD.QueryFHIRBaseURL,
 		LRZaFHIRBaseURL:          testData.LRZa.FHIRBaseURL,
-		Care2CureFHIRBaseURL:     care2CureTenant.BaseURL(hapiBaseURL),
-		SunflowerFHIRBaseURL:     sunflowerTenant.BaseURL(hapiBaseURL),
-		SunflowerURA:             "00000020",
-		Care2CureURA:             "00000030",
+		SunflowerFHIRBaseURL:     sunflower.HAPITenant().BaseURL(hapiBaseURL),
+		SunflowerURA:             *sunflower.Organization().Identifier[0].Value,
+		Care2CureFHIRBaseURL:     care2cure.HAPITenant().BaseURL(hapiBaseURL),
+		Care2CureURA:             *care2cure.Organization().Identifier[0].Value,
 	}
 }
