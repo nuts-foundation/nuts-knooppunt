@@ -95,26 +95,6 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 	if err != nil {
 		return "", err
 	}
-	// Determine HTTP method and URL based on resource ID format
-	resourceID := resource["id"].(string)
-	var requestURL string
-	var requestMethod fhir.HTTPVerb
-
-	if strings.HasPrefix(resourceID, "urn:uuid:") {
-		// HAPI FHIR accepts urn:uuid IDs only with POST, not PUT/DELETE operations
-		// DELETE operations with urn:uuid are already handled above
-		// When we deduplicate, and the bundle contains a POST and PUT, we don't have a `id` yet, so we take the PUT body and POST it
-		requestURL = resourceType
-		requestMethod = fhir.HTTPVerbPOST
-	} else {
-		// Use original method with proper URL for non-UUID IDs
-		if entry.Request.Method == fhir.HTTPVerbPOST {
-			requestURL = resourceType
-		} else {
-			requestURL = resourceType + "/" + resourceID
-		}
-		requestMethod = entry.Request.Method
-	}
 
 	tx.Entry = append(tx.Entry, fhir.BundleEntry{
 		Resource: resourceJSON,
