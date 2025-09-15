@@ -100,8 +100,6 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		})
 	})
 	t.Run("updated organization in care provider Administration Directory", func(t *testing.T) {
-		t.Skip("Need to implement reference resolution for existing resources first")
-
 		t.Log("This test verifies that the mCSD update client resolves references to existing resources when updating a resource.")
 		harnessDetail := harness.Start(t)
 		t.Log("Initial sync")

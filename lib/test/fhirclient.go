@@ -23,6 +23,7 @@ type BaseResource struct {
 	Type       string            `json:"resourceType"`
 	Data       []byte            `json:"-"`
 	URL        string            `json:"url"`
+	Meta       *fhir.Meta        `json:"meta,omitempty"`
 }
 
 var _ fhirclient.Client = &StubFHIRClient{}
@@ -263,6 +264,10 @@ func (s *StubFHIRClient) SearchWithContext(ctx context.Context, resourceType str
 			if err != nil {
 				return fmt.Errorf("invalid _count parameter value: %s", value)
 			}
+		case "_source":
+			filterCandidates(func(candidate BaseResource) bool {
+				return candidate.Meta != nil && candidate.Meta.Source != nil && *candidate.Meta.Source == value
+			})
 		default:
 			return fmt.Errorf("unsupported query parameter: %s", name)
 		}

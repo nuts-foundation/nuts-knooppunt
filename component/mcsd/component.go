@@ -224,10 +224,19 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		Type:  fhir.BundleTypeTransaction,
 		Entry: make([]fhir.BundleEntry, 0, len(deduplicatedEntries)),
 	}
+
+	localIDResolver := chainedResourceIDResolver{
+		mapResourceIDResolver(remoteRefToLocalRefMap),
+		metaSourceResourceIDResolver{
+			sourceFHIRBaseURL: remoteAdminDirectoryFHIRBaseURL,
+			localFHIRClient:   queryDirectoryFHIRClient,
+		},
+	}
+
 	var report DirectoryUpdateReport
 	for i, entry := range deduplicatedEntries {
 		log.Ctx(ctx).Trace().Str("fhir_server", fhirBaseURLRaw).Msgf("Processing entry: %s", entry.Request.Url)
-		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
+		resourceType, err := buildUpdateTransaction(ctx, &tx, entry, allowedResourceTypes, allowDiscovery, localIDResolver)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
