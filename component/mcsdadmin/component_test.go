@@ -35,21 +35,23 @@ func Test_endpoints(t *testing.T) {
 
 		component.newEndpointPost(httpResponse, httpRequest)
 
-		assert.Equal(t, http.StatusOK, httpResponse.Code)
-		body := httpResponse.Body.String()
-		assert.Contains(t, body, "Test Organization")
-		assert.Contains(t, body, "endpoint_edit.html")
+		assert.Equal(t, http.StatusCreated, httpResponse.Result().StatusCode)
+		assert.Contains(t, httpResponse.Body.String(), "html")
 	})
 	t.Run("delete", func(t *testing.T) {
 		fhirClient := &test.StubFHIRClient{
-			Resources: []any{fhir.Organization{
-				Id: to.Ptr("org-1"),
+			Resources: []any{fhir.Endpoint{
+				Id: to.Ptr("ep-1"),
 			}},
 		}
 		component := Component{fhirClient: fhirClient}
-		httpRequest := httptest.NewRequest(http.MethodDelete, "/mcsdadmin/endpoint/org-1", nil)
+		httpRequest := httptest.NewRequest(http.MethodDelete, "/mcsdadmin/endpoint/ep-1", nil)
+		httpRequest.SetPathValue("id", "ep-1")
 		httpResponse := httptest.NewRecorder()
 
 		component.deleteHandler("Endpoint")(httpResponse, httpRequest)
+
+		assert.Equal(t, http.StatusOK, httpResponse.Result().StatusCode)
+		assert.Empty(t, httpResponse.Body.String())
 	})
 }

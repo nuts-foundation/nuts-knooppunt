@@ -346,14 +346,16 @@ func (s *StubFHIRClient) CreateWithContext(_ context.Context, resource any, resu
 	if resourceType == "" {
 		return fmt.Errorf("can't defer resource type of %T", resource)
 	}
-	if err := s.createResource(resource, resourceType); err != nil {
+	if resourceAsMap, err := s.createResource(resource, resourceType); err != nil {
 		return err
+	} else {
+		resource = resourceAsMap
 	}
 	unmarshalInto(resource, result)
 	return nil
 }
 
-func (s *StubFHIRClient) createResource(resource any, resourceType string) error {
+func (s *StubFHIRClient) createResource(resource any, resourceType string) (any, error) {
 	var resourceAsMap = make(map[string]interface{})
 	unmarshalInto(resource, resourceAsMap)
 	if resourceAsMap["id"] == nil {
@@ -364,44 +366,106 @@ func (s *StubFHIRClient) createResource(resource any, resourceType string) error
 			var existingResourceBase BaseResource
 			unmarshalInto(existingResource, &existingResourceBase)
 			if resourceType == existingResourceBase.Type && existingResourceBase.Id == resourceAsMap["id"] {
-				return errors.New("resource already exists")
+				return nil, errors.New("resource already exists")
 			}
 		}
 	}
-	s.Resources = append(s.Resources, resource)
+	s.Resources = append(s.Resources, resourceAsMap)
 	if s.CreatedResources == nil {
 		s.CreatedResources = make(map[string][]any)
 	}
-	s.CreatedResources[resourceType] = append(s.CreatedResources[resourceType], resource)
-	return nil
+	s.CreatedResources[resourceType] = append(s.CreatedResources[resourceType], resourceAsMap)
+	return resourceAsMap, nil
 }
 
 func (s StubFHIRClient) Update(path string, resource any, result any, opts ...fhirclient.Option) error {
 	if s.Error != nil {
 		return s.Error
 	}
-	panic("implement me")
+	return s.UpdateWithContext(context.Background(), path, resource, result, opts...)
 }
 
 func (s StubFHIRClient) UpdateWithContext(ctx context.Context, path string, resource any, result any, opts ...fhirclient.Option) error {
 	if s.Error != nil {
 		return s.Error
 	}
-	panic("implement me")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid path: %s", path)
+	}
+	resourceType := parts[0]
+	resourceID := parts[1]
+
+	var baseResource BaseResource
+	unmarshalInto(resource, &baseResource)
+	if baseResource.Id != resourceID {
+		return fmt.Errorf("resource ID mismatch: path ID is %s but resource ID is %s", resourceID, baseResource.Id)
+	}
+	if baseResource.Type != resourceType {
+		return fmt.Errorf("resource type mismatch: path type is %s but resource type is %s", resourceType, baseResource.Type)
+	}
+
+	// Check if it exists
+	for i, existingResource := range s.Resources {
+		var existingResourceBase BaseResource
+		unmarshalInto(existingResource, &existingResourceBase)
+		if resourceType == existingResourceBase.Type && existingResourceBase.Id == resourceID {
+			s.Resources[i] = resource
+			if result != nil {
+				unmarshalInto(existingResource, result)
+				return nil
+			}
+		}
+	}
+	return fhirclient.OperationOutcomeError{
+		HttpStatusCode: http.StatusNotFound,
+		OperationOutcome: fhir.OperationOutcome{
+			Issue: []fhir.OperationOutcomeIssue{
+				{
+					Severity: fhir.IssueSeverityError,
+					Code:     fhir.IssueTypeNotFound,
+				},
+			},
+		},
+	}
 }
 
 func (s StubFHIRClient) Delete(path string, opts ...fhirclient.Option) error {
 	if s.Error != nil {
 		return s.Error
 	}
-	panic("implement me")
+	return s.DeleteWithContext(context.Background(), path, opts...)
 }
 
 func (s StubFHIRClient) DeleteWithContext(ctx context.Context, path string, opts ...fhirclient.Option) error {
 	if s.Error != nil {
 		return s.Error
 	}
-	panic("implement me")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid path: %s", path)
+	}
+	resourceType := parts[0]
+	resourceID := parts[1]
+	for i, resource := range s.Resources {
+		var baseResource BaseResource
+		unmarshalInto(resource, &baseResource)
+		if resourceType == baseResource.Type && resourceID == baseResource.Id {
+			s.Resources = append(s.Resources[:i], s.Resources[i+1:]...)
+			return nil
+		}
+	}
+	return fhirclient.OperationOutcomeError{
+		HttpStatusCode: http.StatusNotFound,
+		OperationOutcome: fhir.OperationOutcome{
+			Issue: []fhir.OperationOutcomeIssue{
+				{
+					Severity: fhir.IssueSeverityError,
+					Code:     fhir.IssueTypeNotFound,
+				},
+			},
+		},
+	}
 }
 
 func (s StubFHIRClient) Path(path ...string) *url.URL {
