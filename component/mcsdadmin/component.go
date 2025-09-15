@@ -14,6 +14,7 @@ import (
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
@@ -31,8 +32,6 @@ type Component struct {
 	fhirClient fhirclient.Client
 }
 
-var client fhirclient.Client
-
 func New(config Config) *Component {
 	baseURL, err := url.Parse(config.FHIRBaseURL)
 	if err != nil {
@@ -40,61 +39,56 @@ func New(config Config) *Component {
 		return nil
 	}
 
-	client = fhirclient.New(baseURL, http.DefaultClient, fhirClientConfig())
-
 	return &Component{
 		config:     config,
-		fhirClient: client,
+		fhirClient: fhirclient.New(baseURL, http.DefaultClient, fhirClientConfig()),
 	}
 }
 
-func (c Component) Start() error {
+func (c *Component) Start() error {
 	// Nothing to do
 	return nil
 }
 
-func (c Component) Stop(_ context.Context) error {
+func (c *Component) Stop(_ context.Context) error {
 	// Nothing to do
 	return nil
 }
 
-// Route handling
-
-var fileServer = http.FileServer(http.FS(static.FS))
-
-func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
+func (c *Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	// Static file serving for CSS and fonts
-	mux.Handle("GET /mcsdadmin/css/", http.StripPrefix("/mcsdadmin/", fileServer))
-	mux.Handle("GET /mcsdadmin/js/", http.StripPrefix("/mcsdadmin/", fileServer))
-	mux.Handle("GET /mcsdadmin/webfonts/", http.StripPrefix("/mcsdadmin/", fileServer))
+	var assetHandler = http.StripPrefix("/mcsdadmin/", http.FileServer(http.FS(static.FS)))
+	mux.Handle("GET /mcsdadmin/css/", assetHandler)
+	mux.Handle("GET /mcsdadmin/js/", assetHandler)
+	mux.Handle("GET /mcsdadmin/webfonts/", assetHandler)
 
-	mux.HandleFunc("GET /mcsdadmin/healthcareservice", listServices)
-	mux.HandleFunc("GET /mcsdadmin/healthcareservice/new", newService)
-	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", newServicePost)
-	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
-	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
-	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
-	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
-	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
-	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
-	mux.HandleFunc("GET /mcsdadmin/location", listLocations)
-	mux.HandleFunc("GET /mcsdadmin/location/new", newLocation)
-	mux.HandleFunc("POST /mcsdadmin/location/new", newLocationPost)
-	mux.HandleFunc("DELETE /mcsdadmin/endpoint/{id}", deleteHandler("Endpoint"))
-	mux.HandleFunc("DELETE /mcsdadmin/location/{id}", deleteHandler("Location"))
-	mux.HandleFunc("DELETE /mcsdadmin/healthcareservice/{id}", deleteHandler("HealthcareService"))
-	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}", deleteHandler("Organization"))
-	mux.HandleFunc("GET /mcsdadmin", homePage)
-	mux.HandleFunc("GET /mcsdadmin/", notFound)
+	mux.HandleFunc("GET /mcsdadmin/healthcareservice", c.listServices)
+	mux.HandleFunc("GET /mcsdadmin/healthcareservice/new", c.newService)
+	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", c.newServicePost)
+	mux.HandleFunc("GET /mcsdadmin/organization", c.listOrganizations)
+	mux.HandleFunc("GET /mcsdadmin/organization/new", c.newOrganization)
+	mux.HandleFunc("POST /mcsdadmin/organization/new", c.newOrganizationPost)
+	mux.HandleFunc("GET /mcsdadmin/endpoint", c.listEndpoints)
+	mux.HandleFunc("GET /mcsdadmin/endpoint/new", c.newEndpoint)
+	mux.HandleFunc("POST /mcsdadmin/endpoint/new", c.newEndpointPost)
+	mux.HandleFunc("GET /mcsdadmin/location", c.listLocations)
+	mux.HandleFunc("GET /mcsdadmin/location/new", c.newLocation)
+	mux.HandleFunc("POST /mcsdadmin/location/new", c.newLocationPost)
+	mux.HandleFunc("DELETE /mcsdadmin/endpoint/{id}", c.deleteHandler("Endpoint"))
+	mux.HandleFunc("DELETE /mcsdadmin/location/{id}", c.deleteHandler("Location"))
+	mux.HandleFunc("DELETE /mcsdadmin/healthcareservice/{id}", c.deleteHandler("HealthcareService"))
+	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}", c.deleteHandler("Organization"))
+	mux.HandleFunc("GET /mcsdadmin", c.homePage)
+	mux.HandleFunc("GET /mcsdadmin/", c.notFound)
 }
 
-func listServices(w http.ResponseWriter, _ *http.Request) {
+func (c *Component) listServices(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	renderList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, tmpls.MakeServiceListXsProps)
+	renderList[fhir.HealthcareService, tmpls.ServiceListProps](c.fhirClient, w, tmpls.MakeServiceListXsProps)
 }
 
-func newService(w http.ResponseWriter, _ *http.Request) {
-	organizations, err := findAll[fhir.Organization](client)
+func (c *Component) newService(w http.ResponseWriter, _ *http.Request) {
+	organizations, err := findAll[fhir.Organization](c.fhirClient)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -117,7 +111,7 @@ func newService(w http.ResponseWriter, _ *http.Request) {
 	tmpls.RenderWithBase(w, "healthcareservice_edit.html", props)
 }
 
-func newServicePost(w http.ResponseWriter, r *http.Request) {
+func (c *Component) newServicePost(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Msg("New post for HealthcareService resource")
 
 	err := r.ParseForm()
@@ -154,7 +148,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var providedByOrg fhir.Organization
-	err = client.Read(reference, &providedByOrg)
+	err = c.fhirClient.Read(reference, &providedByOrg)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to find referred organisation")
 		return
@@ -162,7 +156,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	service.ProvidedBy.Display = providedByOrg.Name
 
 	var resSer fhir.HealthcareService
-	err = client.Create(service, &resSer)
+	err = c.fhirClient.Create(service, &resSer)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -170,15 +164,15 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	renderList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, tmpls.MakeServiceListXsProps)
+	renderList[fhir.HealthcareService, tmpls.ServiceListProps](c.fhirClient, w, tmpls.MakeServiceListXsProps)
 }
 
-func listOrganizations(w http.ResponseWriter, _ *http.Request) {
+func (c *Component) listOrganizations(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
+	renderList[fhir.Organization, tmpls.OrgListProps](c.fhirClient, w, tmpls.MakeOrgListXsProps)
 }
 
-func newOrganization(w http.ResponseWriter, _ *http.Request) {
+func (c *Component) newOrganization(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	types, err := valuesets.CodingsFrom("organization-type")
@@ -196,7 +190,7 @@ func newOrganization(w http.ResponseWriter, _ *http.Request) {
 	tmpls.RenderWithBase(w, "organization_edit.html", props)
 }
 
-func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
+func (c *Component) newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Msg("New post for organization resource")
 
 	err := r.ParseForm()
@@ -205,7 +199,11 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var org fhir.Organization
+	org := fhir.Organization{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionOrganization},
+		},
+	}
 	name := r.PostForm.Get("name")
 	org.Name = &name
 	uraString := r.PostForm.Get("identifier")
@@ -227,23 +225,23 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	org.Active = &active
 
 	var resOrg fhir.Organization
-	err = client.Create(org, &resOrg)
+	err = c.fhirClient.Create(org, &resOrg)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
+	renderList[fhir.Organization, tmpls.OrgListProps](c.fhirClient, w, tmpls.MakeOrgListXsProps)
 }
 
-func listEndpoints(w http.ResponseWriter, _ *http.Request) {
+func (c *Component) listEndpoints(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
+	renderList[fhir.Endpoint, tmpls.EpListProps](c.fhirClient, w, tmpls.MakeEpListXsProps)
 }
 
-func newEndpoint(w http.ResponseWriter, _ *http.Request) {
-	organizations, err := findAll[fhir.Organization](client)
+func (c *Component) newEndpoint(w http.ResponseWriter, _ *http.Request) {
+	organizations, err := findAll[fhir.Organization](c.fhirClient)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -287,7 +285,7 @@ func newEndpoint(w http.ResponseWriter, _ *http.Request) {
 	tmpls.RenderWithBase(w, "endpoint_edit.html", props)
 }
 
-func newEndpointPost(w http.ResponseWriter, r *http.Request) {
+func (c *Component) newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	log.Debug().Msg("New post for Endpoint resource")
 
 	err := r.ParseForm()
@@ -296,7 +294,11 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var endpoint fhir.Endpoint
+	endpoint := fhir.Endpoint{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionEndpoint},
+		},
+	}
 	address := r.PostForm.Get("address")
 	if address == "" {
 		http.Error(w, "bad request: missing address", http.StatusBadRequest)
@@ -354,7 +356,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		endpoint.ConnectionType = connectionType
 	} else {
-		http.Error(w, "bad request: missing connection type", http.StatusBadRequest)
+		http.Error(w, "bad request: missing/invalid connection type", http.StatusBadRequest)
 		return
 	}
 
@@ -378,7 +380,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	forOrgStr := r.PostForm.Get("endpoint-for")
 	var owningOrg fhir.Organization
 	if len(forOrgStr) > 0 {
-		err = client.Read("Organization/"+forOrgStr, &owningOrg)
+		err = c.fhirClient.Read("Organization/"+forOrgStr, &owningOrg)
 		if err != nil {
 			http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
 			return
@@ -386,7 +388,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var resEp fhir.Endpoint
-	err = client.Create(endpoint, &resEp)
+	err = c.fhirClient.Create(endpoint, &resEp)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -399,17 +401,17 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
 
 	var updatedOrg fhir.Organization
-	err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
+	err = c.fhirClient.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
+	renderList[fhir.Endpoint, tmpls.EpListProps](c.fhirClient, w, tmpls.MakeEpListXsProps)
 }
 
-func newLocation(w http.ResponseWriter, _ *http.Request) {
+func (c *Component) newLocation(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	locationTypes, err := valuesets.CodingsFrom("location-type")
@@ -440,7 +442,7 @@ func newLocation(w http.ResponseWriter, _ *http.Request) {
 	tmpls.RenderWithBase(w, "location_edit.html", props)
 }
 
-func newLocationPost(w http.ResponseWriter, r *http.Request) {
+func (c *Component) newLocationPost(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to parse form input")
@@ -480,35 +482,35 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var resLoc fhir.Location
-	err = client.Create(location, &resLoc)
+	err = c.fhirClient.Create(location, &resLoc)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	renderList[fhir.Location, tmpls.LocationListProps](client, w, tmpls.MakeLocationListXsProps)
+	renderList[fhir.Location, tmpls.LocationListProps](c.fhirClient, w, tmpls.MakeLocationListXsProps)
 }
 
-func listLocations(w http.ResponseWriter, _ *http.Request) {
+func (c *Component) listLocations(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	renderList[fhir.Location, tmpls.LocationListProps](client, w, tmpls.MakeLocationListXsProps)
+	renderList[fhir.Location, tmpls.LocationListProps](c.fhirClient, w, tmpls.MakeLocationListXsProps)
 }
 
-func homePage(w http.ResponseWriter, _ *http.Request) {
+func (c *Component) homePage(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	tmpls.RenderWithBase(w, "home.html", nil)
 }
 
-func notFound(w http.ResponseWriter, _ *http.Request) {
+func (c *Component) notFound(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusNotFound)
 	_, _ = w.Write([]byte("Path not implemented"))
 }
 
-func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Request) {
+func (c *Component) deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		resourceId := r.PathValue("id")
 		path := fmt.Sprintf("%s/%s", resourceType, resourceId)
 
-		err := client.Delete(path)
+		err := c.fhirClient.Delete(path)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

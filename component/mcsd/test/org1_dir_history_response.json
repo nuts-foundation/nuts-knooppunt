@@ -50,7 +50,7 @@
           "versionId": "1",
           "lastUpdated": "2025-08-01T14:29:31.987+00:00",
           "profile": [
-            "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"
+            "http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"
           ]
         },
         "status": "active",
