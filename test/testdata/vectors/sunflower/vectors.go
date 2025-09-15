@@ -1,9 +1,17 @@
 package sunflower
 
 import (
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
+
+func HAPITenant() hapi.Tenant {
+	return hapi.Tenant{
+		Name: "sunflower-admin",
+		ID:   5,
+	}
+}
 
 func Organization() fhir.Organization {
 	return fhir.Organization{
