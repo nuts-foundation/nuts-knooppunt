@@ -175,7 +175,6 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 
 	// Query remote directory
 	var searchSet fhir.Bundle
-	// TODO: Pagination
 
 	// Get last update time for incremental sync
 	lastUpdate, hasLastUpdate := c.lastUpdateTimes[fhirBaseURLRaw]
