@@ -70,7 +70,7 @@ services:
       # Lets the server generate UUIDs for resources instead of integers
       hapi.fhir.server_id_strategy: UUID
       # Allow storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
-      store_meta_source_information: SOURCE_URI
+      hapi.fhir.store_meta_source_information: SOURCE_URI
 
       #
       # Local development properties (not to be used when deploying to test/production)
@@ -79,7 +79,7 @@ services:
       hapi.fhir.client_id_strategy: ANY
       # Allows for expung operations, handy during development
       hapi.fhir.delete_expunge_enabled: true
-      # hapi.fhir.allow_multiple_delete: true # to allow $expunge on system-level
+      hapi.fhir.allow_multiple_delete: true # to allow $expunge on system-level
       # Adds some default configs to the HAPI web UI for development
       hapi.fhir.tester.local.name: Local Directory
       hapi.fhir.tester.local.server_address: http://localhost:7050/fhir/DEFAULT
