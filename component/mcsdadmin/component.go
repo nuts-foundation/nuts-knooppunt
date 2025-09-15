@@ -14,6 +14,7 @@ import (
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
@@ -121,7 +122,11 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var service fhir.HealthcareService
+	service := fhir.HealthcareService{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionHealthcareService},
+		},
+	}
 	name := r.PostForm.Get("name")
 	service.Name = &name
 	active := r.PostForm.Get("active") == "true"
@@ -206,7 +211,11 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var org fhir.Organization
+	org := fhir.Organization{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionOrganization},
+		},
+	}
 	name := r.PostForm.Get("name")
 	org.Name = &name
 	uraString := r.PostForm.Get("identifier")
@@ -305,7 +314,11 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var endpoint fhir.Endpoint
+	endpoint := fhir.Endpoint{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionEndpoint},
+		},
+	}
 	address := r.PostForm.Get("address")
 	if address == "" {
 		http.Error(w, "bad request: missing address", http.StatusBadRequest)
@@ -441,7 +454,11 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var location fhir.Location
+	location := fhir.Location{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionLocation},
+		},
+	}
 	name := r.PostForm.Get("name")
 	location.Name = &name
 
