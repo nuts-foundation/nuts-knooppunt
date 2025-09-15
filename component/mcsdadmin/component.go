@@ -148,10 +148,9 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reference := "Organization/" + r.PostForm.Get("providedById")
-	refType := "Organization"
 	service.ProvidedBy = &fhir.Reference{
 		Reference: &reference,
-		Type:      &refType,
+		Type:      to.Ptr("Organization"),
 	}
 
 	var providedByOrg fhir.Organization
@@ -568,7 +567,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		var managingOrg fhir.Organization
 		err = client.Read(reference, &managingOrg)
 		if err != nil {
-			log.Error().Err(err).Msg("Failed to find referred organisation")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		location.ManagingOrganization.Display = managingOrg.Name
