@@ -87,6 +87,9 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 	// Use pre-generated local ID
 	remoteResourceRef := resourceType + "/" + resource["id"].(string)
 	localResourceID, err := localIDResolver.resolve(ctx, remoteResourceRef)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve local resource ID: %w", err)
+	}
 	resource["id"] = localResourceID
 	if err := normalizeReferences(ctx, resource, localIDResolver); err != nil {
 		return "", fmt.Errorf("failed to normalize references: %w", err)
