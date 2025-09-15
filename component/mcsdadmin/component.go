@@ -132,10 +132,18 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	active := r.PostForm.Get("active") == "true"
 	service.Active = &active
 
-	typeCode := r.PostForm.Get("type")
-	serviceType, ok := valuesets.CodableFrom("service-type", typeCode)
-	if ok {
-		service.Type = []fhir.CodeableConcept{serviceType}
+	typeCodes := r.PostForm["type"]
+	typeCodesCount := len(typeCodes)
+	if typeCodesCount > 0 {
+		service.Type = make([]fhir.CodeableConcept, typeCodesCount)
+		for i, t := range typeCodes {
+			serviceType, ok := valuesets.CodableFrom("service-type", t)
+			if ok {
+				service.Type[i] = serviceType
+			} else {
+				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
+			}
+		}
 	}
 
 	reference := "Organization/" + r.PostForm.Get("providedById")
@@ -296,14 +304,20 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint.Address = address
 
-	var payloadType fhir.CodeableConcept
-	payloadTypeId := r.PostForm.Get("payload-type")
-	payloadType, ok := valuesets.CodableFrom("endpoint-payload-type", payloadTypeId)
-	if ok {
-		endpoint.PayloadType = []fhir.CodeableConcept{payloadType}
+	typeCodes := r.PostForm["payload-type"]
+	typeCodesCount := len(typeCodes)
+	if typeCodesCount > 0 {
+		endpoint.PayloadType = make([]fhir.CodeableConcept, typeCodesCount)
+		for i, t := range typeCodes {
+			serviceType, ok := valuesets.CodableFrom("endpoint-payload-type", t)
+			if ok {
+				endpoint.PayloadType[i] = serviceType
+			} else {
+				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
+			}
+		}
 	} else {
-		http.Error(w, "bad request: missing payload type", http.StatusBadRequest)
-		return
+		http.Error(w, "missing payload type", http.StatusBadRequest)
 	}
 
 	periodStart := r.PostForm.Get("period-start")
@@ -323,29 +337,20 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		endpoint.Contact = []fhir.ContactPoint{contact}
 	}
 
-	orgFormStr := r.PostForm.Get("managing-org")
-	if len(orgFormStr) > 0 {
-		var managingOrg fhir.Organization
-		reference := "Organization/" + orgFormStr
-		refType := "Organization"
-		endpoint.ManagingOrganization = &fhir.Reference{
-			Reference: &reference,
-			Type:      &refType,
+	kvkStr := r.PostForm.Get("managing-org")
+	if len(kvkStr) > 0 {
+		ref := fhir.Reference{
+			Identifier: to.Ptr(fhir.Identifier{
+				System: to.Ptr(coding.KVKNamingSystem),
+				Value:  to.Ptr(kvkStr),
+			}),
 		}
-		err = client.Read(reference, &managingOrg)
-		if err != nil {
-			http.Error(w, "internal error: could not find organization", http.StatusInternalServerError)
-			return
-		}
-		endpoint.ManagingOrganization.Display = managingOrg.Name
-	} else {
-		http.Error(w, "bad request: missing managing organization", http.StatusBadRequest)
-		return
+		endpoint.ManagingOrganization = to.Ptr(ref)
 	}
 
 	var connectionType fhir.Coding
 	connectionTypeId := r.PostForm.Get("connection-type")
-	connectionType, ok = valuesets.CodingFrom("endpoint-connection-type", connectionTypeId)
+	connectionType, ok := valuesets.CodingFrom("endpoint-connection-type", connectionTypeId)
 	if ok {
 		endpoint.ConnectionType = connectionType
 	} else {
@@ -394,9 +399,10 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
 
 	var updatedOrg fhir.Organization
-	err = client.Update("Organization/"+*owningOrg.Id, owningOrg, updatedOrg)
+	err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.WriteHeader(http.StatusCreated)

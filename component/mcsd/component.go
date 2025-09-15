@@ -14,7 +14,9 @@ import (
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhir"
 	"github.com/rs/zerolog/log"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -72,7 +74,7 @@ type DirectoryUpdateReport struct {
 	Errors       []string `json:"errors"`
 }
 
-func New(config Config) *Component {
+func New(config Config) (*Component, error) {
 	result := &Component{
 		config: config,
 		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
@@ -84,9 +86,11 @@ func New(config Config) *Component {
 		updateMux:       &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.AdministrationDirectories {
-		result.registerAdministrationDirectory(rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true)
+		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true); err != nil {
+			return nil, fmt.Errorf("register root administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
+		}
 	}
-	return result
+	return result, nil
 }
 
 func (c *Component) Start() error {
@@ -112,7 +116,7 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 	})
 }
 
-func (c *Component) registerAdministrationDirectory(fhirBaseURL string, resourceTypes []string, discover bool) error {
+func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool) error {
 	// Must be a valid http or https URL
 	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
 	if err != nil {
@@ -134,6 +138,7 @@ func (c *Component) registerAdministrationDirectory(fhirBaseURL string, resource
 		fhirBaseURL:   fhirBaseURL,
 		discover:      discover,
 	})
+	log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURL).Msgf("Registered mCSD Directory (discover=%v)", discover)
 	return nil
 }
 
@@ -146,7 +151,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		adminDirectory := c.administrationDirectories[i]
 		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover)
 		if err != nil {
-			log.Ctx(ctx).Err(err).Str("directory", adminDirectory.fhirBaseURL).Msg("mCSD Directory update failed")
+			log.Ctx(ctx).Err(err).Str("fhir_server", adminDirectory.fhirBaseURL).Msg("mCSD Directory update failed")
 			report.Errors = append(report.Errors, err.Error())
 		}
 		result[adminDirectory.fhirBaseURL] = report
@@ -155,6 +160,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 }
 
 func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool) (DirectoryUpdateReport, error) {
+	log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURLRaw).Msg("Updating from mCSD Directory (discover=" + fmt.Sprint(allowDiscovery) + ", resourceTypes=" + strings.Join(allowedResourceTypes, ",") + ")")
 	remoteAdminDirectoryFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
@@ -185,46 +191,80 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURLRaw).Msg("No last update time, doing full sync from FHIR server")
 	}
 
+	// First, collect all resources from _history
+	var entries []fhir.BundleEntry
 	if err = remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath("/_history")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("_history search failed: %w", err)
 	}
-
-	// Update local directory
-	tx := fhir.Bundle{
-		Type:  fhir.BundleTypeTransaction,
-		Entry: make([]fhir.BundleEntry, 0, len(searchSet.Entry)),
-	}
-	remoteRefToLocalRefMap := make(map[string]string)
-	var report DirectoryUpdateReport
+	entries = searchSet.Entry
 	err = fhirclient.Paginate(ctx, remoteAdminDirectoryFHIRClient, searchSet, func(searchSet *fhir.Bundle) (bool, error) {
-		for i, entry := range searchSet.Entry {
-			resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
-			if err != nil {
-				report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
-				continue
-			}
-			if allowDiscovery && resourceType == "Endpoint" {
-				var endpoint fhir.Endpoint
-				if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
-					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to unmarshal Endpoint resource: %s", i, err.Error()))
-					continue
-				}
-				if coding.EqualsCode(endpoint.ConnectionType, coding.MCSDConnectionTypeSystem, coding.MCSDConnectionTypeDirectoryCode) {
-					err := c.registerAdministrationDirectory(endpoint.Address, directoryResourceTypes, false)
-					if err != nil {
-						report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
-					} else {
-						log.Ctx(ctx).Info().Msgf("Discovered and registered new mCSD Directory at %s", endpoint.Address)
-					}
-				}
-			}
-		}
+		entries = append(entries, searchSet.Entry...)
 		return true, nil
 	})
 	if err != nil {
-		return report, fmt.Errorf("pagination of _history search failed: %w", err)
+		return DirectoryUpdateReport{}, fmt.Errorf("pagination of _history search failed: %w", err)
 	}
 
+	// Deduplicate resources from _history query - keep only the most recent version
+	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
+	deduplicatedEntries := deduplicateHistoryEntries(entries)
+
+	// Build reference map and transaction in two passes to resolve inter-resource references
+	remoteRefToLocalRefMap := make(map[string]string)
+
+	// First pass: build reference map for all resources that will be synced
+	// This requires a separate iteration since resources may cross-reference each other
+	for _, entry := range deduplicatedEntries {
+		if entry.Resource == nil || entry.Request == nil || entry.Request.Method == fhir.HTTPVerbDELETE {
+			// TODO: Handle DELETE operations properly when FHIR server supports _source conditional updates
+			continue
+		}
+		if info, err := libfhir.ExtractResourceInfo(entry.Resource); err == nil {
+			if slices.Contains(allowedResourceTypes, info.ResourceType) {
+				if info.ID != "" {
+					remoteLocalRef := info.ResourceType + "/" + info.ID
+					remoteRefToLocalRefMap[remoteLocalRef] = generateLocalID()
+				}
+			}
+		}
+	}
+
+	// Second pass: build transaction with resolved references
+	tx := fhir.Bundle{
+		Type:  fhir.BundleTypeTransaction,
+		Entry: make([]fhir.BundleEntry, 0, len(deduplicatedEntries)),
+	}
+	var report DirectoryUpdateReport
+	for i, entry := range deduplicatedEntries {
+		log.Ctx(ctx).Trace().Str("fhir_server", fhirBaseURLRaw).Msgf("Processing entry: %s", entry.Request.Url)
+		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
+		if err != nil {
+			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
+			continue
+		}
+		if allowDiscovery && resourceType == "Endpoint" && entry.Resource != nil {
+			var endpoint fhir.Endpoint
+			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
+				report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to unmarshal Endpoint resource: %s", i, err.Error()))
+				continue
+			}
+
+			var payloadCoding = fhir.Coding{
+				System: to.Ptr(coding.MCSDPayloadTypeSystem),
+				Code:   to.Ptr(coding.MCSDPayloadTypeDirectoryCode),
+			}
+
+			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
+				log.Ctx(ctx).Debug().Msgf("Discovered mCSD Directory: %s", endpoint.Address)
+				err := c.registerAdministrationDirectory(ctx, endpoint.Address, directoryResourceTypes, false)
+				if err != nil {
+					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
+				}
+			}
+		}
+	}
+
+	log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Msgf("Got %d mCSD entries", len(tx.Entry))
 	if len(tx.Entry) == 0 {
 		return report, nil
 	}
@@ -235,13 +275,10 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 
 	// Process result
-	for _, entry := range txResult.Entry {
+	for i, entry := range txResult.Entry {
 		if entry.Response == nil {
-			log.Ctx(ctx).Warn().Msgf("Skipping entry with no response: %v", entry)
-			continue
-		}
-		if entry.Response.Status == "" {
-			log.Ctx(ctx).Warn().Msgf("Skipping entry with empty response status: %v", entry)
+			msg := fmt.Sprintf("Skipping entry with no response: #%d", i)
+			report.Warnings = append(report.Warnings, msg)
 			continue
 		}
 		switch {
@@ -271,4 +308,84 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	c.lastUpdateTimes[fhirBaseURLRaw] = nextSyncTime
 
 	return report, nil
+}
+
+// deduplicateHistoryEntries keeps only the most recent version of each resource
+func deduplicateHistoryEntries(entries []fhir.BundleEntry) []fhir.BundleEntry {
+	resourceMap := make(map[string]fhir.BundleEntry)
+	var entriesWithoutID []fhir.BundleEntry
+
+	for _, entry := range entries {
+		var resourceID string
+
+		if entry.Resource == nil {
+			if entry.Request != nil && entry.Request.Method == fhir.HTTPVerbDELETE {
+				resourceID = extractResourceIDFromURL(entry)
+			}
+		} else {
+			if info, err := libfhir.ExtractResourceInfo(entry.Resource); err == nil {
+				resourceID = info.ID
+			}
+		}
+
+		if resourceID != "" {
+			existing, exists := resourceMap[resourceID]
+			if !exists || isMoreRecent(entry, existing) {
+				resourceMap[resourceID] = entry
+			}
+		} else {
+			entriesWithoutID = append(entriesWithoutID, entry)
+		}
+	}
+
+	var result []fhir.BundleEntry
+	for _, entry := range resourceMap {
+		result = append(result, entry)
+	}
+	result = append(result, entriesWithoutID...)
+	return result
+}
+
+// isMoreRecent compares two entries, returns true if first is more recent
+func isMoreRecent(entry1, entry2 fhir.BundleEntry) bool {
+	time1 := getLastUpdated(entry1)
+	time2 := getLastUpdated(entry2)
+	if !time1.IsZero() && !time2.IsZero() {
+		return time1.After(time2)
+	}
+	// Fallback: cannot determine which is more recent, do not overwrite
+	return false
+}
+
+// getLastUpdated extracts lastUpdated timestamp from an entry
+func getLastUpdated(entry fhir.BundleEntry) time.Time {
+	if entry.Resource == nil {
+		return time.Time{}
+	}
+	info, err := libfhir.ExtractResourceInfo(entry.Resource)
+	if err != nil || info.LastUpdated == nil {
+		return time.Time{}
+	}
+	return *info.LastUpdated
+}
+
+// extractResourceIDFromURL extracts the resource ID from a DELETE operation's URL
+func extractResourceIDFromURL(entry fhir.BundleEntry) string {
+	// First try to extract from Request.Url (e.g., "Organization/123")
+	if entry.Request != nil && entry.Request.Url != "" {
+		parts := strings.Split(entry.Request.Url, "/")
+		if len(parts) >= 2 {
+			return parts[1] // Return the ID part
+		}
+	}
+
+	// Fallback: extract from fullUrl (e.g., "http://example.org/fhir/Organization/123")
+	if entry.FullUrl != nil {
+		parts := strings.Split(*entry.FullUrl, "/")
+		if len(parts) >= 1 {
+			return parts[len(parts)-1] // Return the last part (ID)
+		}
+	}
+
+	return ""
 }
