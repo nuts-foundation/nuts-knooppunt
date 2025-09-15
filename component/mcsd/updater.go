@@ -88,7 +88,10 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 	remoteResourceRef := resourceType + "/" + resource["id"].(string)
 	localResourceID, err := localIDResolver.resolve(ctx, remoteResourceRef)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve local resource ID: %w", err)
+		return "", fmt.Errorf("local resource ID resolution error (ref=%s): %w", remoteResourceRef, err)
+	}
+	if localResourceID == nil {
+		return "", fmt.Errorf("no local resource ID found for remote reference (ref=%s)", remoteResourceRef)
 	}
 	resource["id"] = localResourceID
 	if err := normalizeReferences(ctx, resource, localIDResolver); err != nil {
