@@ -192,11 +192,10 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 
 	// First, collect all resources from _history
-	var entries []fhir.BundleEntry
 	if err = remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath("/_history")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("_history search failed: %w", err)
 	}
-	entries = searchSet.Entry
+	var entries []fhir.BundleEntry
 	err = fhirclient.Paginate(ctx, remoteAdminDirectoryFHIRClient, searchSet, func(searchSet *fhir.Bundle) (bool, error) {
 		entries = append(entries, searchSet.Entry...)
 		return true, nil

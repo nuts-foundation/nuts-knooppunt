@@ -48,7 +48,7 @@
       "fullUrl": "{{ORG1_DIR_BASEURL}}/Endpoint/ep-1",
       "resource": {
         "resourceType": "Endpoint",
-        "id": "1",
+        "id": "ep-1",
         "meta": {
           "versionId": "1",
           "lastUpdated": "2025-08-01T14:29:31.987+00:00",
@@ -72,7 +72,7 @@
       },
       "request": {
         "method": "POST",
-        "url": "Endpoint/1"
+        "url": "Endpoint/ep-1"
       },
       "response": {
         "status": "201 Created",
