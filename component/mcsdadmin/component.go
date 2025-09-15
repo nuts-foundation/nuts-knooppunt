@@ -136,6 +136,7 @@ func (c *Component) newServicePost(w http.ResponseWriter, r *http.Request) {
 				service.Type[i] = serviceType
 			} else {
 				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
+				return
 			}
 		}
 	}
@@ -173,6 +174,13 @@ func (c *Component) listOrganizations(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (c *Component) newOrganization(w http.ResponseWriter, _ *http.Request) {
+	organizations, err := findAll[fhir.Organization](c.fhirClient)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	orgsExists := len(organizations) > 0
+
 	w.WriteHeader(http.StatusOK)
 
 	types, err := valuesets.CodingsFrom("organization-type")
@@ -182,9 +190,13 @@ func (c *Component) newOrganization(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	props := struct {
-		Types []fhir.Coding
+		Types         []fhir.Coding
+		Organizations []fhir.Organization
+		OrgsExist     bool
 	}{
-		Types: types,
+		Types:         types,
+		Organizations: organizations,
+		OrgsExist:     orgsExists,
 	}
 
 	tmpls.RenderWithBase(w, "organization_edit.html", props)
@@ -215,14 +227,42 @@ func (c *Component) newOrganizationPost(w http.ResponseWriter, r *http.Request) 
 		uraIdentifier(uraString),
 	}
 
-	orgTypeCode := r.PostForm.Get("type")
-	orgType, ok := valuesets.CodableFrom("organization-type", orgTypeCode)
-	if ok {
-		org.Type = []fhir.CodeableConcept{orgType}
+	orgTypeCodes := r.PostForm["type"]
+	typeCodesCount := len(orgTypeCodes)
+	if typeCodesCount > 0 {
+		org.Type = make([]fhir.CodeableConcept, 0, typeCodesCount)
+		for _, t := range orgTypeCodes {
+			if t == "" {
+				continue
+			}
+			orgType, ok := valuesets.CodableFrom("organization-type", t)
+			if ok {
+				org.Type = append(org.Type, orgType)
+			} else {
+				http.Error(w, fmt.Sprintf("could not find type code %s", t), http.StatusBadRequest)
+				return
+			}
+		}
 	}
 
 	active := r.PostForm.Get("active") == "true"
 	org.Active = &active
+
+	partOf := r.PostForm.Get("part-of")
+	if len(partOf) > 0 {
+		reference := "Organization/" + partOf
+		org.PartOf = &fhir.Reference{
+			Reference: &reference,
+			Type:      to.Ptr("Organization"),
+		}
+		var parentOrg fhir.Organization
+		err = c.fhirClient.Read(reference, &parentOrg)
+		if err != nil {
+			http.Error(w, "internal error: could not find organization", http.StatusInternalServerError)
+			return
+		}
+		org.PartOf.Display = parentOrg.Name
+	}
 
 	var resOrg fhir.Organization
 	err = c.fhirClient.Create(org, &resOrg)
