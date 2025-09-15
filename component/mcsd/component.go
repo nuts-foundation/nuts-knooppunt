@@ -30,8 +30,8 @@ var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "H
 // to account for potential clock differences between client and FHIR server
 const clockSkewBuffer = 2 * time.Second
 
-// maxUpdateEntries limits the number of entries processed in a single update operation to prevent excessive memory usage.
-const maxUpdateEntries = 10000
+// maxUpdateEntries limits the number of entries processed in a single FHIR transaction to prevent excessive load on the FHIR server
+const maxUpdateEntries = 1000
 
 // searchPageSize is an arbitrary FHIR search result limit (per page), so we have deterministic behavior across FHIR servers,
 // and don't rely on server defaults (which may be very high or very low (Azure FHIR's default is 10)).
