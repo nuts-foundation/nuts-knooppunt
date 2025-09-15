@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,13 @@ var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "H
 // clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
 // to account for potential clock differences between client and FHIR server
 const clockSkewBuffer = 2 * time.Second
+
+// maxUpdateEntries limits the number of entries processed in a single update operation to prevent excessive memory usage.
+const maxUpdateEntries = 10000
+
+// searchPageSize is an arbitrary FHIR search result limit (per page), so we have deterministic behavior across FHIR servers,
+// and don't rely on server defaults (which may be very high or very low (Azure FHIR's default is 10)).
+const searchPageSize = 100
 
 // Component implements a mCSD Update Client, which synchronizes mCSD FHIR resources from remote mCSD Directories to a local mCSD Directory for querying.
 // It is configured with a root mCSD Directory, which is used to discover organizations and their mCSD Directory endpoints.
@@ -182,7 +190,9 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// Capture query start time as fallback for servers that don't provide Bundle meta.lastUpdated.
 	queryStartTime := time.Now()
 
-	searchParams := url.Values{}
+	searchParams := url.Values{
+		"_count": []string{strconv.Itoa(searchPageSize)},
+	}
 	if hasLastUpdate {
 		searchParams.Set("_since", lastUpdate)
 		log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Str("_since", lastUpdate).Msg("Using _since parameter for incremental sync from FHIR server")
@@ -197,6 +207,9 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	var entries []fhir.BundleEntry
 	err = fhirclient.Paginate(ctx, remoteAdminDirectoryFHIRClient, searchSet, func(searchSet *fhir.Bundle) (bool, error) {
 		entries = append(entries, searchSet.Entry...)
+		if len(entries) >= maxUpdateEntries {
+			return false, fmt.Errorf("too many entries (%d), aborting update to prevent excessive memory usage", len(entries))
+		}
 		return true, nil
 	})
 	if err != nil {
