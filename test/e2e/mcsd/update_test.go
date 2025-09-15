@@ -1,10 +1,8 @@
 package mcsd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,6 +11,7 @@ import (
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/from"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
@@ -25,16 +24,10 @@ import (
 func Test_mCSDUpdateClient(t *testing.T) {
 	harnessDetail := harness.Start(t)
 	t.Run("Force update mCSD Client", func(t *testing.T) {
-		httpResponse, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, httpResponse.StatusCode)
-		responseData, err := io.ReadAll(httpResponse.Body)
-		require.NoError(t, err)
+		response := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		t.Run("assert resource sync'd from LRZa Admin Directory", func(t *testing.T) {
 			// This is the root/discovery directory, so only mCSD Directory endpoints should be present
-			var response mcsd.UpdateReport
-			require.NoError(t, json.Unmarshal(responseData, &response))
 			assert.Equalf(t, 2, mapEntrySuffix(response, "lrza-mcsd-admin").CountCreated, "created=2 in %v", response)
 		})
 
@@ -80,9 +73,34 @@ func Test_mCSDUpdateClient(t *testing.T) {
 }
 
 func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
-	harnessDetail := harness.Start(t)
+	t.Log("This test verifies that the mCSD update client correctly uses the _since parameter for incremental updates.")
 
-	t.Run("Test incremental updates with _since parameter", func(t *testing.T) {
+	t.Run("updated endpoint in care provider Administration Directory", func(t *testing.T) {
+		harnessDetail := harness.Start(t)
+		t.Log("Initial sync")
+		_ = invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
+		t.Log("Update endpoint in Care2Cure Admin Directory")
+		// Update the FHIR endpoint in the Care2Cure Admin Directory to simulate a change
+		newEndpoint := care2cure.Endpoints()[0]
+		newEndpoint.Address = "https://example.com/updated/care2curehospital/fhir"
+		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, nil)
+		err := care2CureFHIRClient.Update("Endpoint/"+*newEndpoint.Id, newEndpoint, nil)
+		require.NoError(t, err, "Failed to update Care2Cure endpoint")
+
+		t.Log("Second sync - should pick up updated endpoint via _since parameter")
+		updateReport := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
+
+		care2CureReport := mapEntrySuffix(updateReport, "care2cure-admin")
+		require.Equal(t, 0, care2CureReport.CountCreated)
+		require.Equal(t, 1, care2CureReport.CountUpdated)
+
+		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
+		t.Run("assert updated endpoint in query directory", func(t *testing.T) {
+			assertEndpoint(t, queryFHIRClient, harnessDetail.Care2CureURA, "fhir", "/updated/care2curehospital/fhir")
+		})
+	})
+	t.Run("new organization in care provider Administration Directory", func(t *testing.T) {
+		harnessDetail := harness.Start(t)
 		// Test verifies _since parameter correctly enables incremental sync by:
 		// 1. Doing baseline sync to establish timestamps
 		// 2. Creating new organization after sync completes
@@ -90,14 +108,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		// 4. Confirming subsequent sync finds nothing (no new changes)
 
 		// First sync to establish baseline timestamps
-		httpResponse1, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, httpResponse1.StatusCode)
-		responseData1, err := io.ReadAll(httpResponse1.Body)
-		require.NoError(t, err)
-
-		var response1 mcsd.UpdateReport
-		require.NoError(t, json.Unmarshal(responseData1, &response1))
+		response1 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		// First sync should behave like Test_mCSDUpdateClient - LRZa should create 2 resources
 		lrzaReport1 := mapEntrySuffix(response1, "lrza-mcsd-admin")
@@ -125,24 +136,17 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		}
 
 		var createdOrg fhir.Organization
-		err = care2CureFHIRClient.CreateWithContext(context.Background(), newOrg, &createdOrg)
+		err := care2CureFHIRClient.CreateWithContext(t.Context(), newOrg, &createdOrg)
 		require.NoError(t, err, "Failed to create new organization for incremental test")
 
 		// Verify the organization was actually created by reading it back
 		var readBackOrg fhir.Organization
-		err = care2CureFHIRClient.ReadWithContext(context.Background(), "Organization/"+*createdOrg.Id, &readBackOrg)
+		err = care2CureFHIRClient.ReadWithContext(t.Context(), "Organization/"+*createdOrg.Id, &readBackOrg)
 		require.NoError(t, err, "Failed to read back created organization")
 		require.Equal(t, orgName, *readBackOrg.Name, "Organization name should match")
 
 		// Second sync - should use _since and only find new resources (our test organization)
-		httpResponse2, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, httpResponse2.StatusCode)
-		responseData2, err := io.ReadAll(httpResponse2.Body)
-		require.NoError(t, err)
-
-		var response2 mcsd.UpdateReport
-		require.NoError(t, json.Unmarshal(responseData2, &response2))
+		response2 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		// Second sync should find our test organization via _since parameter
 		care2CureReport2 := mapEntrySuffix(response2, "care2cure-admin")
@@ -150,14 +154,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		assert.Equal(t, 1, care2CureReport2.CountCreated, "Care2Cure should find exactly 1 resource (our test organization) via _since parameter")
 
 		// Third sync - should find nothing (no new resources since second sync)
-		httpResponse3, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, httpResponse3.StatusCode)
-		responseData3, err := io.ReadAll(httpResponse3.Body)
-		require.NoError(t, err)
-
-		var response3 mcsd.UpdateReport
-		require.NoError(t, json.Unmarshal(responseData3, &response3))
+		response3 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		// Third sync should find 0 resources (nothing new since second sync)
 		care2CureReport3 := mapEntrySuffix(response3, "care2cure-admin")
@@ -242,7 +239,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		}
 
 		var createdOrg fhir.Organization
-		err := care2CureFHIRClient.CreateWithContext(context.Background(), newOrg, &createdOrg)
+		err := care2CureFHIRClient.CreateWithContext(t.Context(), newOrg, &createdOrg)
 		require.NoError(t, err, "Failed to create organization")
 
 		// 2. Update organization (first PUT)
@@ -250,7 +247,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		createdOrg.Name = &updatedName1
 
 		var updatedOrg1 fhir.Organization
-		err = care2CureFHIRClient.UpdateWithContext(context.Background(), "Organization/"+*createdOrg.Id, createdOrg, &updatedOrg1)
+		err = care2CureFHIRClient.UpdateWithContext(t.Context(), "Organization/"+*createdOrg.Id, createdOrg, &updatedOrg1)
 		require.NoError(t, err, "Failed to update organization (first time)")
 
 		// 3. Update organization again (second PUT)
@@ -258,7 +255,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		updatedOrg1.Name = &updatedName2
 
 		var updatedOrg2 fhir.Organization
-		err = care2CureFHIRClient.UpdateWithContext(context.Background(), "Organization/"+*updatedOrg1.Id, updatedOrg1, &updatedOrg2)
+		err = care2CureFHIRClient.UpdateWithContext(t.Context(), "Organization/"+*updatedOrg1.Id, updatedOrg1, &updatedOrg2)
 		require.NoError(t, err, "Failed to update organization (second time)")
 
 		// Verify the source organization now has version 3 after POST(v1) + PUT(v2) + PUT(v3)
@@ -267,16 +264,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		assert.Equal(t, "3", *updatedOrg2.Meta.VersionId, "Source server should assign version 3 after POST+PUT+PUT sequence")
 
 		// 4. Now run mCSD sync to see how it handles the POST+PUT+PUT history
-		httpResponse, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, httpResponse.StatusCode)
-
-		responseData, err := io.ReadAll(httpResponse.Body)
-		require.NoError(t, err)
-		t.Logf("mCSD sync response: %s", string(responseData))
-
-		var updateReport mcsd.UpdateReport
-		require.NoError(t, json.Unmarshal(responseData, &updateReport))
+		updateReport := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		// Check that no errors occurred during sync
 		care2CureReport := mapEntrySuffix(updateReport, "care2cure-admin")
@@ -288,7 +276,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 
 		// Search for organizations with our test identifier
 		searchResults := fhir.Bundle{}
-		err = queryFHIRClient.SearchWithContext(context.Background(), "Organization", url.Values{
+		err = queryFHIRClient.SearchWithContext(t.Context(), "Organization", url.Values{
 			"identifier": []string{identifierSystem + "|" + identifierValue},
 		}, &searchResults)
 		require.NoError(t, err, "Failed to search for organizations in query directory")
@@ -338,45 +326,34 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		}
 
 		var createdOrg fhir.Organization
-		err := care2CureFHIRClient.CreateWithContext(context.Background(), newOrg, &createdOrg)
+		err := care2CureFHIRClient.CreateWithContext(t.Context(), newOrg, &createdOrg)
 		require.NoError(t, err, "Failed to create organization for deletion test")
 
 		// 2. First sync - should create the organization in query directory
-		httpResponse1, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, httpResponse1.StatusCode)
+		_ = invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		// Verify organization exists in query directory
 		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
 		searchResults1 := fhir.Bundle{}
-		err = queryFHIRClient.SearchWithContext(context.Background(), "Organization", url.Values{
+		err = queryFHIRClient.SearchWithContext(t.Context(), "Organization", url.Values{
 			"identifier": []string{identifierSystem + "|" + identifierValue},
 		}, &searchResults1)
 		require.NoError(t, err, "Failed to search for organizations in query directory")
 		require.Len(t, searchResults1.Entry, 1, "Should have 1 organization in query directory before deletion")
 
 		// 3. Delete the organization from source
-		err = care2CureFHIRClient.DeleteWithContext(context.Background(), "Organization/"+*createdOrg.Id)
+		err = care2CureFHIRClient.DeleteWithContext(t.Context(), "Organization/"+*createdOrg.Id)
 		require.NoError(t, err, "Failed to delete organization from source")
 
 		// 4. Second sync - should process the deletion
-		httpResponse2, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, httpResponse2.StatusCode)
+		updateReport := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-		responseData2, err := io.ReadAll(httpResponse2.Body)
-		require.NoError(t, err)
-		t.Logf("mCSD sync response after deletion: %s", string(responseData2))
-
-		var response2 mcsd.UpdateReport
-		require.NoError(t, json.Unmarshal(responseData2, &response2))
-
-		care2CureReport2 := mapEntrySuffix(response2, "care2cure-admin")
+		care2CureReport2 := mapEntrySuffix(updateReport, "care2cure-admin")
 		require.NotNil(t, care2CureReport2, "Care2Cure report should exist after deletion")
 
 		// 5. Verify organization is deleted from query directory
 		searchResults2 := fhir.Bundle{}
-		err = queryFHIRClient.SearchWithContext(context.Background(), "Organization", url.Values{
+		err = queryFHIRClient.SearchWithContext(t.Context(), "Organization", url.Values{
 			"identifier": []string{identifierSystem + "|" + identifierValue},
 		}, &searchResults2)
 		require.NoError(t, err, "Failed to search for organizations in query directory after deletion")
@@ -390,4 +367,12 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 
 		t.Logf("Successfully handled CREATE+DELETE scenario - DELETE operation was skipped as expected on main branch")
 	})
+}
+
+func invokeUpdate(t *testing.T, baseURL *url.URL) mcsd.UpdateReport {
+	httpResponse, err := http.Post(baseURL.JoinPath("mcsd/update").String(), "application/json", nil)
+	require.NoError(t, err)
+	updateReport, err := from.JSONResponse[mcsd.UpdateReport](httpResponse)
+	require.NoError(t, err)
+	return updateReport
 }

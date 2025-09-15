@@ -1,13 +1,13 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/nuts-foundation/nuts-knooppunt/lib/from"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,18 +88,9 @@ func createNutsSubject(privateURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	response, err := readJSONResponse[map[string]any](httpResponse)
+	response, err := from.JSONResponse[map[string]any](httpResponse)
 	if err != nil {
 		return "", err
 	}
 	return response["subject"].(string), nil
-}
-
-func readJSONResponse[T any](resp *http.Response) (T, error) {
-	defer resp.Body.Close()
-	var result T
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return result, err
-	}
-	return result, nil
 }
