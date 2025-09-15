@@ -183,12 +183,6 @@ func newOrganization(w http.ResponseWriter, _ *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 
-	types, err := valuesets.CodingsFrom("organization-type")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	props := struct {
 		Types         []fhir.Coding
 		Organizations []fhir.Organization
@@ -431,7 +425,7 @@ func newLocation(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
+
 	props := struct {
 		PhysicalTypes []fhir.Coding
 		Status        []fhir.Coding
