@@ -493,7 +493,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	if addressDistrict != "" {
 		address.District = to.Ptr(addressDistrict)
 	}
-	addressState := r.PostForm.Get("address-State")
+	addressState := r.PostForm.Get("address-state")
 	if addressState != "" {
 		address.State = to.Ptr(addressState)
 	}
