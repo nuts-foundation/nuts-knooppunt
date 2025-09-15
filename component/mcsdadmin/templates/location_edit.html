@@ -28,11 +28,37 @@
             </select>
         </div>
         <div class="mb-3">
+            <fieldset class="border p-2">
+                <legend>Address</legend>
+                <label for="address-line" class="form-label" >Line:</label>
+                <input id="address-line" type="text" name="address-line" class="form-control" required>
+                <label for="address-city" class="form-label">City:</label>
+                <input id="address-city" type="text" name="address-city" class="form-control">
+                <label for="address-district" class="form-label">District:</label>
+                <input id="address-district" type="text" name="address-district" class="form-control">
+                <label for="address-state" class="form-label">State:</label>
+                <input id="address-state" type="text" name="address-state" class="form-control">
+                <label for="address-postal-code" class="form-label">Postal code:</label>
+                <input id="address-postal-code" type="text" name="address-postal-code" class="form-control">
+                <label for="address-country" class="form-label">Country:</label>
+                <input id="address-country" type="text" name="address-country" class="form-control">
+            </fieldset>
+        </div>
+        <div class="mb-3">
             <label for="physicalType" class="form-label">Physical Type:</label>
             <select name="physicalType" id="physicalType" class="form-select">
                 <option value="">--Please choose an option--</option>
                 {{range .PhysicalTypes}}
                 <option value="{{ .Code }}">{{ .Display }}</option>
+                {{ end }}
+            </select>
+        </div>
+        <div class="mb-3">
+            <label for="managing-org" class="form-label">Managing Organization:</label>
+            <select name="managing-org" id="managing-org" class="form-select" required>
+                <option value="" disabled selected>--Please choose an option--</option>
+                {{range .Organizations}}
+                <option value="{{ .Id }}">{{ .Name }}</option>
                 {{ end }}
             </select>
         </div>

@@ -143,10 +143,9 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reference := "Organization/" + r.PostForm.Get("providedById")
-	refType := "Organization"
 	service.ProvidedBy = &fhir.Reference{
 		Reference: &reference,
-		Type:      &refType,
+		Type:      to.Ptr("Organization"),
 	}
 
 	var providedByOrg fhir.Organization
@@ -421,14 +420,22 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 func newLocation(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
+	organizations, err := findAll[fhir.Organization](client)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	props := struct {
 		PhysicalTypes []fhir.Coding
 		Status        []fhir.Coding
 		Types         []fhir.Coding
+		Organizations []fhir.Organization
 	}{
 		PhysicalTypes: valuesets.LocationPhysicalTypeCodings,
 		Status:        valuesets.LocationStatusCodings,
 		Types:         valuesets.LocationTypeCodings,
+		Organizations: organizations,
 	}
 
 	tmpls.RenderWithBase(w, "location_edit.html", props)
@@ -463,6 +470,36 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Msg("Could not find location status")
 	}
 
+	var address fhir.Address
+	addressLine := r.PostForm.Get("address-line")
+	if addressLine == "" {
+		http.Error(w, "missing address line", http.StatusBadRequest)
+		return
+	}
+	address.Line = []string{addressLine}
+
+	addressCity := r.PostForm.Get("address-city")
+	if addressCity != "" {
+		address.City = to.Ptr(addressCity)
+	}
+	addressDistrict := r.PostForm.Get("address-district")
+	if addressDistrict != "" {
+		address.District = to.Ptr(addressDistrict)
+	}
+	addressState := r.PostForm.Get("address-state")
+	if addressState != "" {
+		address.State = to.Ptr(addressState)
+	}
+	addressPostalCode := r.PostForm.Get("address-postal-code")
+	if addressPostalCode != "" {
+		address.PostalCode = to.Ptr(addressPostalCode)
+	}
+	addressCountry := r.PostForm.Get("address-country")
+	if addressCountry != "" {
+		address.Country = to.Ptr(addressCountry)
+	}
+	location.Address = to.Ptr(address)
+
 	physicalCode := r.PostForm.Get("physicalType")
 	if len(physicalCode) > 0 {
 		physical, ok := valuesets.CodableFrom(valuesets.LocationPhysicalTypeCodings, physicalCode)
@@ -471,6 +508,23 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		} else {
 			location.PhysicalType = &physical
 		}
+	}
+
+	orgStr := r.PostForm.Get("managing-org")
+	if orgStr != "" {
+		reference := "Organization/" + orgStr
+		refType := "Organization"
+		location.ManagingOrganization = &fhir.Reference{
+			Reference: &reference,
+			Type:      &refType,
+		}
+		var managingOrg fhir.Organization
+		err = client.Read(reference, &managingOrg)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		location.ManagingOrganization.Display = managingOrg.Name
 	}
 
 	var resLoc fhir.Location
