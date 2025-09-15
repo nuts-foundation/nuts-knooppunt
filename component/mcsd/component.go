@@ -225,6 +225,12 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		Entry: make([]fhir.BundleEntry, 0, len(deduplicatedEntries)),
 	}
 
+	// Resource can either reference another resource in the same transaction (using temporary UUIDs),
+	// or reference an existing resource in the local FHIR server (using meta.source search).
+	// This covers the following situations:
+	// - 2 resources are created or updated, that refer to one another (uses temporary UUIDs)
+	// - a resource is updated or created that refers to an existing resource in the local FHIR server (uses meta.source search)
+	// - a combination of the 2
 	localIDResolver := chainedResourceIDResolver{
 		mapResourceIDResolver(remoteRefToLocalRefMap),
 		metaSourceResourceIDResolver{
