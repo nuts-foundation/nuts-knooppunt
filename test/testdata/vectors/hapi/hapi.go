@@ -1,4 +1,4 @@
-package vectors
+package hapi
 
 import (
 	"context"
@@ -10,20 +10,20 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-type HAPITenant struct {
+type Tenant struct {
 	Name string
 	ID   int
 }
 
-func (h HAPITenant) BaseURL(hapiServerURL *url.URL) *url.URL {
+func (h Tenant) BaseURL(hapiServerURL *url.URL) *url.URL {
 	return hapiServerURL.JoinPath(h.Name)
 }
 
-func (h HAPITenant) FHIRClient(hapiServerURL *url.URL) fhirclient.Client {
+func (h Tenant) FHIRClient(hapiServerURL *url.URL) fhirclient.Client {
 	return fhirclient.New(h.BaseURL(hapiServerURL), http.DefaultClient, nil)
 }
 
-func CreateHAPITenant(ctx context.Context, details HAPITenant, fhirClient fhirclient.Client) error {
+func CreateTenant(ctx context.Context, details Tenant, fhirClient fhirclient.Client) error {
 	var tenant fhir.Parameters
 	tenant.Parameter = []fhir.ParametersParameter{
 		{
