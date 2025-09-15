@@ -40,4 +40,16 @@ func Test_endpoints(t *testing.T) {
 		assert.Contains(t, body, "Test Organization")
 		assert.Contains(t, body, "endpoint_edit.html")
 	})
+	t.Run("delete", func(t *testing.T) {
+		fhirClient := &test.StubFHIRClient{
+			Resources: []any{fhir.Organization{
+				Id: to.Ptr("org-1"),
+			}},
+		}
+		component := Component{fhirClient: fhirClient}
+		httpRequest := httptest.NewRequest(http.MethodDelete, "/mcsdadmin/endpoint/org-1", nil)
+		httpResponse := httptest.NewRecorder()
+
+		component.deleteHandler("Endpoint")(httpResponse, httpRequest)
+	})
 }

@@ -9,10 +9,7 @@ import (
 
 func Care2Cure() fhir.Organization {
 	return fhir.Organization{
-		Id: to.Ptr("ef860868-b886-4459-aa87-216955c05289"),
-		Meta: &fhir.Meta{
-			Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization"},
-		},
+		Id:   to.Ptr("ef860868-b886-4459-aa87-216955c05289"),
 		Name: to.Ptr("Care2Cure Hospital"),
 		Identifier: []fhir.Identifier{
 			{
@@ -35,7 +32,7 @@ func Care2CureEndpoints(hapiBaseURL *url.URL) []fhir.Endpoint {
 			Id:      to.Ptr("08e9e83b-5c3b-43ce-be6f-e0ede8975615"),
 			Address: hapiBaseURL.JoinPath("care2cure-admin").String(),
 			Meta: &fhir.Meta{
-				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
+				Profile: []string{"https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"},
 			},
 			Status: fhir.EndpointStatusActive,
 			PayloadType: []fhir.CodeableConcept{

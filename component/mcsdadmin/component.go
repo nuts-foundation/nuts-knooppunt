@@ -14,7 +14,6 @@ import (
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
@@ -211,11 +210,7 @@ func (c *Component) newOrganizationPost(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	org := fhir.Organization{
-		Meta: &fhir.Meta{
-			Profile: []string{profile.NLGenericFunctionOrganization},
-		},
-	}
+	var org fhir.Organization
 	name := r.PostForm.Get("name")
 	org.Name = &name
 	uraString := r.PostForm.Get("identifier")
@@ -334,11 +329,7 @@ func (c *Component) newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endpoint := fhir.Endpoint{
-		Meta: &fhir.Meta{
-			Profile: []string{profile.NLGenericFunctionEndpoint},
-		},
-	}
+	var endpoint fhir.Endpoint
 	address := r.PostForm.Get("address")
 	if address == "" {
 		http.Error(w, "bad request: missing address", http.StatusBadRequest)

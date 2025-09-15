@@ -9,10 +9,7 @@ import (
 
 func CareHomeSunflower() fhir.Organization {
 	return fhir.Organization{
-		Id: to.Ptr("fce3bc5d-0cca-41ed-8072-4734fbac9dcf"),
-		Meta: &fhir.Meta{
-			Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization"},
-		},
+		Id:   to.Ptr("fce3bc5d-0cca-41ed-8072-4734fbac9dcf"),
 		Name: to.Ptr("Sunflower Care Home"),
 		Identifier: []fhir.Identifier{
 			{
@@ -35,7 +32,7 @@ func CareHomeSunflowerEndpoints(hapiBaseURL *url.URL) []fhir.Endpoint {
 			Id:      to.Ptr("cadbb0ba-0cf0-4f4e-8ee2-5a48a9fae724"),
 			Address: hapiBaseURL.JoinPath("sunflower-admin").String(),
 			Meta: &fhir.Meta{
-				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
+				Profile: []string{"https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"},
 			},
 			Status: fhir.EndpointStatusActive,
 			PayloadType: []fhir.CodeableConcept{
