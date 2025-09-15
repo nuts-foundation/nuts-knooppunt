@@ -232,14 +232,14 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	orgTypeCodes := r.PostForm["type"]
 	typeCodesCount := len(orgTypeCodes)
 	if typeCodesCount > 0 {
-		org.Type = make([]fhir.CodeableConcept, typeCodesCount)
-		for i, t := range orgTypeCodes {
+		org.Type = make([]fhir.CodeableConcept, 0, typeCodesCount)
+		for _, t := range orgTypeCodes {
 			if t == "" {
 				continue
 			}
 			orgType, ok := valuesets.CodableFrom("organization-type", t)
 			if ok {
-				org.Type[i] = orgType
+				org.Type = append(org.Type, orgType)
 			} else {
 				http.Error(w, fmt.Sprintf("could not find type code %s", t), http.StatusBadRequest)
 				return
