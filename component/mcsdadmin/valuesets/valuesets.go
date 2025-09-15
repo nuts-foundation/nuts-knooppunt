@@ -3,102 +3,113 @@ package valuesets
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
+	"strings"
 
-	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
-	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-var codingSystemIndex = map[string]string{
-	// Values taken from: https://hl7.org/fhir/R4/valueset-endpoint-connection-type.html
-	"endpoint-connection-type": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
-	// Values taken from: https://hl7.org/fhir/R4/valueset-service-type.html ...
-	// ... && http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities
-	"endpoint-payload-type": coding.MCSDPayloadTypeSystem,
-	// Values taken from: https://hl7.org/fhir/R4/valueset-endpoint-status.html
-	"endpoint-status": "http://hl7.org/fhir/endpoint-status",
-	// Values taken from: https://terminology.hl7.org/6.3.0/ValueSet-v3-ServiceDeliveryLocationRoleType.html
-	"location-physical-type": "http://terminology.hl7.org/CodeSystem/location-physical-type",
-	// Values taken from: https://hl7.org/fhir/R4/valueset-location-status.html
-	"location-status": "http://hl7.org/fhir/location-status",
-	// Values taken from: https://terminology.hl7.org/6.3.0/ValueSet-v3-ServiceDeliveryLocationRoleType.html
-	"location-type": "http://terminology.hl7.org/CodeSystem/v3-RoleCode",
-	// Values taken from: https://hl7.org/fhir/R4/valueset-organization-type.html
-	"organization-type": "http://terminology.hl7.org/CodeSystem/organization-type",
-	// Values taken from: https://terminology.hl7.org/6.3.0/ValueSet-v3-PurposeOfUse.html
-	"purpose-of-use": "http://terminology.hl7.org/CodeSystem/v3-ActReason",
-	// Values taken from: https://hl7.org/fhir/R4/valueset-service-type.html
-	"service-type": "http://terminology.hl7.org/CodeSystem/service-type",
+// EndpointConnectionTypeCodings contains the codings from https://hl7.org/fhir/R4/valueset-endpoint-connection-type.html
+var EndpointConnectionTypeCodings = mustGetValueSet("endpoint-connection-type")
+
+// EndpointPayloadTypeCodings contains the codings from:
+// - http://hl7.org/fhir/R4/ValueSet/endpoint-payload-type
+// - http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities
+var EndpointPayloadTypeCodings = mustGetValueSet("endpoint-payload-type")
+
+// EndpointStatusCodings contains the codings from https://hl7.org/fhir/R4/valueset-endpoint-status.html
+var EndpointStatusCodings = mustGetValueSet("endpoint-status")
+
+// LocationPhysicalTypeCodings contains the codings from  https://terminology.hl7.org/6.3.0/ValueSet-v3-ServiceDeliveryLocationRoleType.html
+var LocationPhysicalTypeCodings = mustGetValueSet("location-physical-type")
+
+// LocationStatusCodings contains the codings from https://hl7.org/fhir/R4/valueset-location-status.html
+var LocationStatusCodings = mustGetValueSet("location-status")
+
+// LocationTypeCodings contains the codings from https://terminology.hl7.org/6.3.0/ValueSet-v3-ServiceDeliveryLocationRoleType.html
+var LocationTypeCodings = mustGetValueSet("location-type")
+
+// OrganizationTypeCodings contains the codings from https://hl7.org/fhir/R4/valueset-organization-type.html
+var OrganizationTypeCodings = mustGetValueSet("organization-type")
+
+// PurposeOfUseCodings contains the codings from https://terminology.hl7.org/6.3.0/ValueSet-v3-PurposeOfUse.html
+var PurposeOfUseCodings = mustGetValueSet("purpose-of-use")
+
+// ServiceTypeCodings contains the codings from https://hl7.org/fhir/R4/valueset-service-type.html
+var ServiceTypeCodings = mustGetValueSet("service-type")
+
+func mustGetValueSet(name string) []fhir.Coding {
+	result := getValueSets()[name]
+	if result == nil {
+		panic("Value set " + name + " not found")
+	}
+	return result
 }
 
-var codingIndex = make(map[string]map[string]fhir.Coding)
+var codings = make(map[string][]fhir.Coding)
 
 //go:embed *.json
 var setsFS embed.FS
 
-func CodingsFrom(setId string) (out []fhir.Coding, err error) {
-	filename := setId + ".json"
-	bytes, err := setsFS.ReadFile(filename)
-	if err != nil {
-		log.Warn().Err(err).Msg("Could not load file with values in set")
-		return out, err
+func getValueSets() map[string][]fhir.Coding {
+	if len(codings) > 0 {
+		return codings
 	}
-
-	var codings []fhir.Coding
-	err = json.Unmarshal(bytes, &codings)
+	var err error
+	codings, err = readValueSets()
 	if err != nil {
-		log.Warn().Err(err).Msg("Invalid values in file")
-		return out, err
+		panic("Unable to read value sets: " + err.Error())
 	}
+	return codings
+}
 
-	// We add codings to and index here...
-	// ... so it's easy to retrieve without parsing the data again
-	for _, coding := range codings {
-		if coding.Code == nil {
-			log.Warn().Msg("Value in set is missing code")
-		} else {
-			code := *coding.Code
-			if codingIndex[setId] == nil {
-				codingIndex[setId] = make(map[string]fhir.Coding)
-			}
-			codingIndex[setId][code] = coding
+func readValueSets() (map[string][]fhir.Coding, error) {
+	// Read all JSON files as codings
+	dirEntries, err := setsFS.ReadDir(".")
+	if err != nil {
+		return nil, err
+	}
+	var result = make(map[string][]fhir.Coding)
+	for _, entry := range dirEntries {
+		if entry.IsDir() {
+			continue
+		}
+		fileName := entry.Name()
+		if !strings.HasSuffix(fileName, ".json") {
+			continue
+		}
+		data, err := setsFS.ReadFile(fileName)
+		if err != nil {
+			return nil, err
+		}
+		var currCodings []fhir.Coding
+		if err := json.Unmarshal(data, &currCodings); err != nil {
+			return nil, fmt.Errorf("invalid JSON in %s: %w", fileName, err)
+		}
+		setId := strings.TrimSuffix(fileName, ".json")
+		result[setId] = currCodings
+	}
+	return result, nil
+}
+
+func CodingFrom(set []fhir.Coding, codeId string) (fhir.Coding, bool) {
+	for _, c := range set {
+		if c.Code != nil && *c.Code == codeId {
+			return c, true
 		}
 	}
-
-	return codings, nil
+	return fhir.Coding{}, false
 }
 
-func CodingFrom(setId string, codeId string) (fhir.Coding, bool) {
-	codeMap, ok := codingIndex[setId]
-	if !ok {
-		return fhir.Coding{}, false
+func CodableFrom(set []fhir.Coding, codeId string) (out fhir.CodeableConcept, ok bool) {
+	for _, c := range set {
+		if c.Code != nil && *c.Code == codeId {
+			out.Coding = []fhir.Coding{c}
+			out.Text = c.Display
+			return out, true
+		}
 	}
-	code, ok := codeMap[codeId]
-	if !ok {
-		return fhir.Coding{}, false
-	}
-	system, ok := codingSystemIndex[setId]
-	if !ok {
-		return fhir.Coding{}, false
-	}
-
-	code.System = &system
-
-	return code, true
-}
-
-func CodableFrom(setId string, codeId string) (out fhir.CodeableConcept, ok bool) {
-	coding, ok := CodingFrom(setId, codeId)
-	if !ok {
-		return out, false
-	}
-
-	out.Coding = []fhir.Coding{
-		coding,
-	}
-
-	out.Text = coding.Display
-	return out, true
+	return out, false
 }
 
 func EndpointStatusFrom(code string) (out fhir.EndpointStatus, ok bool) {
