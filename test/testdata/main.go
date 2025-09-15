@@ -20,7 +20,7 @@ func main() {
 	hapiBaseURL, _ := url.Parse(os.Args[2])
 	tenantName := "orgA"
 	if err := createTenant(internalAPI, tenantName); err != nil {
-		panic("Unable to create tenant: " + err.Error())
+		println("Unable to create tenant: " + err.Error())
 	}
 	println("Created tenant:", tenantName)
 
