@@ -1,4 +1,3 @@
-//go:generate go run ./codegen/main.go
 package valuesets
 
 import (
@@ -10,9 +9,46 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
+// EndpointConnectionTypeCodings contains the codings from https://hl7.org/fhir/R4/valueset-endpoint-connection-type.html
+var EndpointConnectionTypeCodings = mustGetValueSet("endpoint-connection-type")
+
+// EndpointPayloadTypeCodings contains the codings from:
+// - http://hl7.org/fhir/R4/ValueSet/endpoint-payload-type
+// - http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities
+var EndpointPayloadTypeCodings = mustGetValueSet("endpoint-payload-type")
+
+// EndpointStatusCodings contains the codings from https://hl7.org/fhir/R4/valueset-endpoint-status.html
+var EndpointStatusCodings = mustGetValueSet("endpoint-status")
+
+// LocationPhysicalTypeCodings contains the codings from  https://terminology.hl7.org/6.3.0/ValueSet-v3-ServiceDeliveryLocationRoleType.html
+var LocationPhysicalTypeCodings = mustGetValueSet("location-physical-type")
+
+// LocationStatusCodings contains the codings from https://hl7.org/fhir/R4/valueset-location-status.html
+var LocationStatusCodings = mustGetValueSet("location-status")
+
+// LocationTypeCodings contains the codings from https://terminology.hl7.org/6.3.0/ValueSet-v3-ServiceDeliveryLocationRoleType.html
+var LocationTypeCodings = mustGetValueSet("location-type")
+
+// OrganizationTypeCodings contains the codings from https://hl7.org/fhir/R4/valueset-organization-type.html
+var OrganizationTypeCodings = mustGetValueSet("organization-type")
+
+// PurposeOfUseCodings contains the codings from https://terminology.hl7.org/6.3.0/ValueSet-v3-PurposeOfUse.html
+var PurposeOfUseCodings = mustGetValueSet("purpose-of-use")
+
+// ServiceTypeCodings contains the codings from https://hl7.org/fhir/R4/valueset-service-type.html
+var ServiceTypeCodings = mustGetValueSet("service-type")
+
+func mustGetValueSet(name string) []fhir.Coding {
+	result := getValueSets()[name]
+	if result == nil {
+		panic("Value set " + name + " not found")
+	}
+	return result
+}
+
 var codings = make(map[string][]fhir.Coding)
 
-//go:embed codegen/*.json
+//go:embed *.json
 var setsFS embed.FS
 
 func getValueSets() map[string][]fhir.Coding {
@@ -29,7 +65,7 @@ func getValueSets() map[string][]fhir.Coding {
 
 func readValueSets() (map[string][]fhir.Coding, error) {
 	// Read all JSON files as codings
-	dirEntries, err := setsFS.ReadDir("codegen")
+	dirEntries, err := setsFS.ReadDir(".")
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +78,7 @@ func readValueSets() (map[string][]fhir.Coding, error) {
 		if !strings.HasSuffix(fileName, ".json") {
 			continue
 		}
-		data, err := setsFS.ReadFile("codegen/" + fileName)
+		data, err := setsFS.ReadFile(fileName)
 		if err != nil {
 			return nil, err
 		}
