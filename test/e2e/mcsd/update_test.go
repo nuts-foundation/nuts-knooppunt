@@ -75,7 +75,7 @@ func Test_mCSDUpdateClient(t *testing.T) {
 func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 	t.Log("This test verifies that the mCSD update client correctly uses the _since parameter for incremental updates.")
 
-	t.Run("updated endpoint in care provider Administration Directory", func(t *testing.T) {
+	t.Run("updated endpoint in care provider Administration Directory (no references to other resources)", func(t *testing.T) {
 		harnessDetail := harness.Start(t)
 		t.Log("Initial sync")
 		_ = invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
@@ -97,6 +97,37 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
 		t.Run("assert updated endpoint in query directory", func(t *testing.T) {
 			assertEndpoint(t, queryFHIRClient, harnessDetail.Care2CureURA, "fhir", "/updated/care2curehospital/fhir")
+		})
+	})
+	t.Run("updated organization in care provider Administration Directory", func(t *testing.T) {
+		t.Skip("Need to implement reference resolution for existing resources first")
+
+		t.Log("This test verifies that the mCSD update client resolves references to existing resources when updating a resource.")
+		harnessDetail := harness.Start(t)
+		t.Log("Initial sync")
+		_ = invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
+		t.Log("Update organization in Care2Cure Admin Directory")
+		// Update the FHIR endpoint in the Care2Cure Admin Directory to simulate a change
+		updatedOrganization := care2cure.Organization()
+		updatedOrganization.Alias = []string{"Updated Alias"}
+		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, nil)
+		err := care2CureFHIRClient.Update("Organization/"+*updatedOrganization.Id, updatedOrganization, nil)
+		require.NoError(t, err)
+
+		updateReport := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
+
+		care2CureReport := mapEntrySuffix(updateReport, "care2cure-admin")
+		assert.Empty(t, care2CureReport.Warnings)
+		assert.Empty(t, care2CureReport.Errors)
+		assert.Equal(t, 0, care2CureReport.CountCreated)
+		assert.Equal(t, 1, care2CureReport.CountUpdated)
+
+		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
+		t.Run("assert updated organization in query directory", func(t *testing.T) {
+			org, err := searchOrg(queryFHIRClient, harnessDetail.Care2CureURA)
+			require.NoError(t, err)
+			require.NotNil(t, org)
+			assert.Contains(t, org.Alias, "Updated Alias", "Organization alias should be updated")
 		})
 	})
 	t.Run("new organization in care provider Administration Directory", func(t *testing.T) {
