@@ -54,7 +54,7 @@ import "github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 		output += "\t\tpanic(\"Value set " + item.typeName + " not found\")\n"
 		output += "\t}\n"
 	}
-	output += "\t}\n"
+	output += "}\n"
 
 	err = os.WriteFile("constants.gen.go", []byte(output), 0644)
 	if err != nil {
