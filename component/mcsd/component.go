@@ -154,6 +154,13 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 			log.Ctx(ctx).Err(err).Str("fhir_server", adminDirectory.fhirBaseURL).Msg("mCSD Directory update failed")
 			report.Errors = append(report.Errors, err.Error())
 		}
+		// Return empty slices instead of null ones, makes a nicer REST API
+		if report.Warnings == nil {
+			report.Warnings = []string{}
+		}
+		if report.Errors == nil {
+			report.Errors = []string{}
+		}
 		result[adminDirectory.fhirBaseURL] = report
 	}
 	return result, nil

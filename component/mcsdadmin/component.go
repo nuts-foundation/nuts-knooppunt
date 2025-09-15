@@ -100,17 +100,12 @@ func newService(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
-	types, err := valuesets.CodingsFrom("service-type")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-
 	props := struct {
 		Types         []fhir.Coding
 		Organizations []fhir.Organization
 	}{
 		Organizations: organizations,
-		Types:         types,
+		Types:         valuesets.ServiceTypeCodings,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -137,7 +132,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	if typeCodesCount > 0 {
 		service.Type = make([]fhir.CodeableConcept, typeCodesCount)
 		for i, t := range typeCodes {
-			serviceType, ok := valuesets.CodableFrom("service-type", t)
+			serviceType, ok := valuesets.CodableFrom(valuesets.ServiceTypeCodings, t)
 			if ok {
 				service.Type[i] = serviceType
 			} else {
@@ -199,7 +194,7 @@ func newOrganization(w http.ResponseWriter, _ *http.Request) {
 		Organizations []fhir.Organization
 		OrgsExist     bool
 	}{
-		Types:         types,
+		Types:         valuesets.OrganizationTypeCodings,
 		Organizations: organizations,
 		OrgsExist:     orgsExists,
 	}
@@ -236,7 +231,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 			if t == "" {
 				continue
 			}
-			orgType, ok := valuesets.CodableFrom("organization-type", t)
+			orgType, ok := valuesets.CodableFrom(valuesets.OrganizationTypeCodings, t)
 			if ok {
 				org.Type = append(org.Type, orgType)
 			} else {
@@ -287,26 +282,6 @@ func newEndpoint(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	status, err := valuesets.CodingsFrom("endpoint-status")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	payloadTypes, err := valuesets.CodingsFrom("endpoint-payload-type")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	connectionTypes, err := valuesets.CodingsFrom("endpoint-connection-type")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	purposeOfUse, err := valuesets.CodingsFrom("purpose-of-use")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
 	props := struct {
 		ConnectionTypes []fhir.Coding
@@ -315,11 +290,11 @@ func newEndpoint(w http.ResponseWriter, _ *http.Request) {
 		PurposeOfUse    []fhir.Coding
 		Status          []fhir.Coding
 	}{
-		ConnectionTypes: connectionTypes,
+		ConnectionTypes: valuesets.EndpointConnectionTypeCodings,
 		Organizations:   organizations,
-		PayloadTypes:    payloadTypes,
-		PurposeOfUse:    purposeOfUse,
-		Status:          status,
+		PayloadTypes:    valuesets.EndpointPayloadTypeCodings,
+		PurposeOfUse:    valuesets.PurposeOfUseCodings,
+		Status:          valuesets.EndpointStatusCodings,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -348,7 +323,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	if typeCodesCount > 0 {
 		endpoint.PayloadType = make([]fhir.CodeableConcept, typeCodesCount)
 		for i, t := range typeCodes {
-			serviceType, ok := valuesets.CodableFrom("endpoint-payload-type", t)
+			serviceType, ok := valuesets.CodableFrom(valuesets.EndpointPayloadTypeCodings, t)
 			if ok {
 				endpoint.PayloadType[i] = serviceType
 			} else {
@@ -389,7 +364,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	var connectionType fhir.Coding
 	connectionTypeId := r.PostForm.Get("connection-type")
-	connectionType, ok := valuesets.CodingFrom("endpoint-connection-type", connectionTypeId)
+	connectionType, ok := valuesets.CodingFrom(valuesets.EndpointConnectionTypeCodings, connectionTypeId)
 	if ok {
 		endpoint.ConnectionType = connectionType
 	} else {
@@ -398,7 +373,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	purposeOfUseId := r.PostForm.Get("purpose-of-use")
-	purposeOfUse, ok := valuesets.CodableFrom("purpose-of-use", purposeOfUseId)
+	purposeOfUse, ok := valuesets.CodableFrom(valuesets.PurposeOfUseCodings, purposeOfUseId)
 	if ok {
 		extension := fhir.Extension{
 			Url:                  "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.PurposeOfUse",
@@ -451,36 +426,21 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 func newLocation(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
-	locationTypes, err := valuesets.CodingsFrom("location-type")
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find location types")
-	}
-
-	physicalTypes, err := valuesets.CodingsFrom("location-physical-type")
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find physical location types")
-	}
-
-	status, err := valuesets.CodingsFrom("location-status")
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find location status types")
-	}
-
 	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
+	
 	props := struct {
 		PhysicalTypes []fhir.Coding
 		Status        []fhir.Coding
 		Types         []fhir.Coding
 		Organizations []fhir.Organization
 	}{
-		PhysicalTypes: physicalTypes,
-		Status:        status,
-		Types:         locationTypes,
+		PhysicalTypes: valuesets.LocationPhysicalTypeCodings,
+		Status:        valuesets.LocationStatusCodings,
+		Types:         valuesets.LocationTypeCodings,
 		Organizations: organizations,
 	}
 
@@ -500,7 +460,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 
 	typeCode := r.PostForm.Get("type")
 	if len(typeCode) > 0 {
-		locType, ok := valuesets.CodableFrom("location-type", typeCode)
+		locType, ok := valuesets.CodableFrom(valuesets.LocationTypeCodings, typeCode)
 		if !ok {
 			log.Warn().Msg("Could not find selected location type")
 		} else {
@@ -548,7 +508,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 
 	physicalCode := r.PostForm.Get("physicalType")
 	if len(physicalCode) > 0 {
-		physical, ok := valuesets.CodableFrom("location-physical-type", physicalCode)
+		physical, ok := valuesets.CodableFrom(valuesets.LocationPhysicalTypeCodings, physicalCode)
 		if !ok {
 			log.Warn().Msg("Could not find selected physical location type")
 		} else {
