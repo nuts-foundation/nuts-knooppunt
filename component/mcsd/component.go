@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,13 @@ var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "H
 // clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
 // to account for potential clock differences between client and FHIR server
 const clockSkewBuffer = 2 * time.Second
+
+// maxUpdateEntries limits the number of entries processed in a single FHIR transaction to prevent excessive load on the FHIR server
+const maxUpdateEntries = 1000
+
+// searchPageSize is an arbitrary FHIR search result limit (per page), so we have deterministic behavior across FHIR servers,
+// and don't rely on server defaults (which may be very high or very low (Azure FHIR's default is 10)).
+const searchPageSize = 100
 
 // Component implements a mCSD Update Client, which synchronizes mCSD FHIR resources from remote mCSD Directories to a local mCSD Directory for querying.
 // It is configured with a root mCSD Directory, which is used to discover organizations and their mCSD Directory endpoints.
@@ -181,8 +189,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	queryDirectoryFHIRClient := c.fhirClientFn(queryDirectoryFHIRBaseURL)
 
 	// Query remote directory
-	var bundle fhir.Bundle
-	// TODO: Pagination
+	var searchSet fhir.Bundle
 
 	// Get last update time for incremental sync
 	lastUpdate, hasLastUpdate := c.lastUpdateTimes[fhirBaseURLRaw]
@@ -190,7 +197,9 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// Capture query start time as fallback for servers that don't provide Bundle meta.lastUpdated.
 	queryStartTime := time.Now()
 
-	searchParams := url.Values{}
+	searchParams := url.Values{
+		"_count": []string{strconv.Itoa(searchPageSize)},
+	}
 	if hasLastUpdate {
 		searchParams.Set("_since", lastUpdate)
 		log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Str("_since", lastUpdate).Msg("Using _since parameter for incremental sync from FHIR server")
@@ -198,13 +207,25 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURLRaw).Msg("No last update time, doing full sync from FHIR server")
 	}
 
-	if err = remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", searchParams, &bundle, fhirclient.AtPath("/_history")); err != nil {
+	// First, collect all resources from _history
+	if err = remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath("/_history")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("_history search failed: %w", err)
+	}
+	var entries []fhir.BundleEntry
+	err = fhirclient.Paginate(ctx, remoteAdminDirectoryFHIRClient, searchSet, func(searchSet *fhir.Bundle) (bool, error) {
+		entries = append(entries, searchSet.Entry...)
+		if len(entries) >= maxUpdateEntries {
+			return false, fmt.Errorf("too many entries (%d), aborting update to prevent excessive memory usage", len(entries))
+		}
+		return true, nil
+	})
+	if err != nil {
+		return DirectoryUpdateReport{}, fmt.Errorf("pagination of _history search failed: %w", err)
 	}
 
 	// Deduplicate resources from _history query - keep only the most recent version
 	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
-	deduplicatedEntries := deduplicateHistoryEntries(bundle.Entry)
+	deduplicatedEntries := deduplicateHistoryEntries(entries)
 
 	// Build reference map and transaction in two passes to resolve inter-resource references
 	remoteRefToLocalRefMap := make(map[string]string)
@@ -260,6 +281,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			}
 		}
 	}
+
 	log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Msgf("Got %d mCSD entries", len(tx.Entry))
 	if len(tx.Entry) == 0 {
 		return report, nil
@@ -294,8 +316,8 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// Use the search result Bundle's meta.lastUpdated if available, otherwise fall back to query start time.
 	// This uses the FHIR server's own timestamp string, eliminating clock skew issues.
 	var nextSyncTime string
-	if bundle.Meta != nil && bundle.Meta.LastUpdated != nil {
-		nextSyncTime = *bundle.Meta.LastUpdated
+	if searchSet.Meta != nil && searchSet.Meta.LastUpdated != nil {
+		nextSyncTime = *searchSet.Meta.LastUpdated
 	} else {
 		// Fallback to local time with buffer to account for potential clock skew
 		nextSyncTime = queryStartTime.Add(-clockSkewBuffer).Format(time.RFC3339)

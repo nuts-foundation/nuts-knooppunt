@@ -28,7 +28,10 @@
         "name": "Organization 1",
         "endpoint": [
           {
-            "reference": "Endpoint/1"
+            "reference": "Endpoint/ep-1"
+          },
+          {
+            "reference": "Endpoint/ep-2"
           }
         ]
       },
@@ -42,10 +45,10 @@
       }
     },
     {
-      "fullUrl": "{{ORG1_DIR_BASEURL}}/Endpoint/1",
+      "fullUrl": "{{ORG1_DIR_BASEURL}}/Endpoint/ep-1",
       "resource": {
         "resourceType": "Endpoint",
-        "id": "1",
+        "id": "ep-1",
         "meta": {
           "versionId": "1",
           "lastUpdated": "2025-08-01T14:29:31.987+00:00",
@@ -69,12 +72,22 @@
       },
       "request": {
         "method": "POST",
-        "url": "Endpoint/1"
+        "url": "Endpoint/ep-1"
       },
       "response": {
         "status": "201 Created",
         "etag": "W/\"1\""
       }
+    }
+  ],
+  "link": [
+    {
+      "relation": "self",
+      "url": "{{ORG1_DIR_BASEURL}}/_history"
+    },
+    {
+      "relation": "next",
+      "url": "{{ORG1_DIR_BASEURL}}/_history_page2"
     }
   ]
 }
