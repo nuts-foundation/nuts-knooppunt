@@ -2,6 +2,7 @@ package mcsd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -157,6 +158,17 @@ func TestComponent_update(t *testing.T) {
 		require.Equal(t, 3, thisReport.CountCreated) // 3 resources: Organization + 2 Endpoints
 		require.Equal(t, 0, thisReport.CountUpdated)
 		require.Equal(t, 0, thisReport.CountDeleted)
+		t.Run("assert meta.source", func(t *testing.T) {
+			var endpoint fhir.Endpoint
+			for _, resource := range localClient.CreatedResources["Endpoint"] {
+				err := json.Unmarshal(resource.(json.RawMessage), &endpoint)
+				require.NoError(t, err)
+				if *endpoint.Name == "FHIR-2" {
+					break
+				}
+			}
+			assert.Equal(t, orgDir1BaseURL+"/Endpoint/ep-2", *endpoint.Meta.Source)
+		})
 	})
 	t.Run("assert sync report from non-existing FHIR server #1", func(t *testing.T) {
 		thisReport := report["https://directory1.example.org"]

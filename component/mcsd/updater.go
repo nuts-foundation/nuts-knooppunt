@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -24,7 +25,7 @@ import (
 // The localRefMap a map of references of remote Admin Directories (e.g. "Organization/123") to local references.
 // We don't want to copy the resource ID from remote Administration mCSD Directory, as we can't guarantee IDs from external directories are unique.
 // This means, we let our Query Directory assign new IDs to resources, but we have to make sure that updates are applied to the right local resources.
-func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, remoteRefToLocalRefMap map[string]string) (string, error) {
+func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, fhirBaseURL *url.URL, allowedResourceTypes []string, isDiscoverableDirectory bool, remoteRefToLocalRefMap map[string]string) (string, error) {
 	if entry.FullUrl == nil {
 		return "", errors.New("missing 'fullUrl' field")
 	}
@@ -78,12 +79,16 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 		return resourceType, nil
 	}
 
-	updateResourceMeta(resource, *entry.FullUrl)
+	originalResourceID, ok := resource["id"].(string)
+	if !ok {
+		return "", fmt.Errorf("not a valid ID (fullUrl=%s)", to.EmptyString(entry.FullUrl))
+	}
+	updateResourceMeta(resource, fhirBaseURL.JoinPath(resourceType, originalResourceID).String())
 	// TODO: If the resource already exists, we should look up the existing resource's ID
 	// TODO: We should scope resource IDs to the source (e.g. by prefixing with the source URL or a hash thereof), because when syncing from multiple sources, IDs may collide.
 
 	// Use pre-generated local ID
-	remoteLocalRef := resourceType + "/" + resource["id"].(string)
+	remoteLocalRef := resourceType + "/" + originalResourceID
 	localResourceID := remoteRefToLocalRefMap[remoteLocalRef]
 	resource["id"] = localResourceID
 	if err := normalizeReferences(resource, remoteRefToLocalRefMap); err != nil {
@@ -95,11 +100,10 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 		return "", err
 	}
 	// Determine HTTP method and URL based on resource ID format
-	resourceID := resource["id"].(string)
 	var requestURL string
 	var requestMethod fhir.HTTPVerb
 
-	if strings.HasPrefix(resourceID, "urn:uuid:") {
+	if strings.HasPrefix(localResourceID, "urn:uuid:") {
 		// HAPI FHIR accepts urn:uuid IDs only with POST, not PUT/DELETE operations
 		// DELETE operations with urn:uuid are already handled above
 		// When we deduplicate, and the bundle contains a POST and PUT, we don't have a `id` yet, so we take the PUT body and POST it
@@ -110,7 +114,7 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 		if entry.Request.Method == fhir.HTTPVerbPOST {
 			requestURL = resourceType
 		} else {
-			requestURL = resourceType + "/" + resourceID
+			requestURL = resourceType + "/" + originalResourceID
 		}
 		requestMethod = entry.Request.Method
 	}

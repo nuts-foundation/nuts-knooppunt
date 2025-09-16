@@ -6,7 +6,7 @@
   "type": "history",
   "entry": [
     {
-      "fullUrl": "{{ORG1_DIR_BASEURL}}/Endpoint/ep-2",
+      "fullUrl": "Endpoint/ep-2",
       "resource": {
         "resourceType": "Endpoint",
         "id": "ep-2",
