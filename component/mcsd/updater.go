@@ -24,7 +24,7 @@ import (
 // The localRefMap a map of references of remote Admin Directories (e.g. "Organization/123") to local references.
 // We don't want to copy the resource ID from remote Administration mCSD Directory, as we can't guarantee IDs from external directories are unique.
 // This means, we let our Query Directory assign new IDs to resources, but we have to make sure that updates are applied to the right local resources.
-func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, remoteRefToLocalRefMap map[string]string) (string, error) {
+func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, resource map[string]any, allowedResourceTypes []string, isDiscoverableDirectory bool, remoteRefToLocalRefMap map[string]string) (string, error) {
 	if entry.FullUrl == nil {
 		return "", errors.New("missing 'fullUrl' field")
 	}
@@ -45,11 +45,7 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 	if entry.Resource == nil {
 		return "", errors.New("missing 'resource' field for non-DELETE operation")
 	}
-
-	resource := make(map[string]any)
-	if err := json.Unmarshal(entry.Resource, &resource); err != nil {
-		return "", fmt.Errorf("failed to unmarshal resource (fullUrl=%s): %w", to.EmptyString(entry.FullUrl), err)
-	}
+	
 	resourceType, ok := resource["resourceType"].(string)
 	if !ok {
 		return "", fmt.Errorf("not a valid resourceType (fullUrl=%s)", to.EmptyString(entry.FullUrl))

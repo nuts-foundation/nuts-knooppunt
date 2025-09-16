@@ -3,6 +3,7 @@ package mcsd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhir"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -44,6 +46,7 @@ type Component struct {
 	config       Config
 	fhirClientFn func(baseURL *url.URL) fhirclient.Client
 
+	queryDirectoryFHIRClient  fhirclient.Client
 	administrationDirectories []administrationDirectory
 	lastUpdateTimes           map[string]string
 	updateMux                 *sync.RWMutex
@@ -55,6 +58,11 @@ type Config struct {
 }
 
 type DirectoryConfig struct {
+	FHIRAPIConfig
+	Definitions FHIRAPIConfig `koanf:"definitions"`
+}
+
+type FHIRAPIConfig struct {
 	FHIRBaseURL string `koanf:"fhirbaseurl"`
 }
 
@@ -90,6 +98,11 @@ func New(config Config) (*Component, error) {
 			return nil, fmt.Errorf("register root administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
 		}
 	}
+	queryDirectoryFHIRBaseURL, err := url.Parse(config.QueryDirectory.FHIRBaseURL)
+	if err != nil {
+		return nil, err
+	}
+	result.queryDirectoryFHIRClient = result.fhirClientFn(queryDirectoryFHIRBaseURL)
 	return result, nil
 }
 
@@ -146,6 +159,10 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
 
+	if err := c.loadProfiles(ctx); err != nil {
+		return nil, err
+	}
+
 	result := make(UpdateReport)
 	for i := 0; i < len(c.administrationDirectories); i++ {
 		adminDirectory := c.administrationDirectories[i]
@@ -173,12 +190,6 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		return DirectoryUpdateReport{}, err
 	}
 	remoteAdminDirectoryFHIRClient := c.fhirClientFn(remoteAdminDirectoryFHIRBaseURL)
-
-	queryDirectoryFHIRBaseURL, err := url.Parse(c.config.QueryDirectory.FHIRBaseURL)
-	if err != nil {
-		return DirectoryUpdateReport{}, err
-	}
-	queryDirectoryFHIRClient := c.fhirClientFn(queryDirectoryFHIRBaseURL)
 
 	// Query remote directory
 	var bundle fhir.Bundle
@@ -234,7 +245,22 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	var report DirectoryUpdateReport
 	for i, entry := range deduplicatedEntries {
 		log.Ctx(ctx).Trace().Str("fhir_server", fhirBaseURLRaw).Msgf("Processing entry: %s", entry.Request.Url)
-		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
+		resource := make(map[string]any)
+		if err := json.Unmarshal(entry.Resource, &resource); err != nil {
+			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: invalid resource JSON", i))
+			continue
+		}
+		isValid, validationFault, err := c.validateResource(ctx, resource)
+		if err != nil {
+			log.Ctx(ctx).Err(err).Msg("Resource validation failed")
+			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: resource validation failed", i))
+			continue
+		} else if !isValid {
+			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: resource not valid: %s", i, validationFault))
+			continue
+		}
+
+		resourceType, err := buildUpdateTransaction(&tx, entry, resource, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
@@ -266,7 +292,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 
 	var txResult fhir.Bundle
-	if err := queryDirectoryFHIRClient.CreateWithContext(ctx, tx, &txResult, fhirclient.AtPath("/")); err != nil {
+	if err := c.queryDirectoryFHIRClient.CreateWithContext(ctx, tx, &txResult, fhirclient.AtPath("/")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("failed to apply mCSD update to query directory: %w", err)
 	}
 
@@ -306,6 +332,30 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	return report, nil
 }
 
+func (c *Component) validateResource(ctx context.Context, resource map[string]any) (bool, string, error) {
+	resourceType, _ := resource["resourceType"].(string)
+	profileURL := profile.ForResourceType(resourceType)
+
+	opts := []fhirclient.Option{
+		fhirclient.AtPath(resourceType + "/$validate"),
+	}
+	if profileURL != nil {
+		opts = append(opts, fhirclient.QueryParam("profile", *profileURL))
+	}
+
+	var validationResult fhir.OperationOutcome
+	err := c.queryDirectoryFHIRClient.CreateWithContext(ctx, resource, &validationResult, opts...)
+	// Can either be transport error (FHIR client returns error) or error returned by FHIR server (OperationOutcome)
+	var validationResultErr fhirclient.OperationOutcomeError
+	if errors.As(err, &validationResultErr) && validationResultErr.HttpStatusCode != http.StatusOK {
+		err = validationResultErr
+	}
+	if err != nil {
+		return false, "", fmt.Errorf("resource validation failed: %w", err)
+	}
+	return false, "", nil
+}
+
 // deduplicateHistoryEntries keeps only the most recent version of each resource
 func deduplicateHistoryEntries(entries []fhir.BundleEntry) []fhir.BundleEntry {
 	resourceMap := make(map[string]fhir.BundleEntry)
@@ -340,6 +390,23 @@ func deduplicateHistoryEntries(entries []fhir.BundleEntry) []fhir.BundleEntry {
 	}
 	result = append(result, entriesWithoutID...)
 	return result
+}
+
+func (c *Component) loadProfiles(ctx context.Context) error {
+	profiles := []string{
+		profile.NLGenericFunctionOrganization,
+	}
+	for _, profileDefinition := range profiles {
+		structureDefinition, err := profile.GetStructureDefinition(profileDefinition)
+		if err != nil {
+			return fmt.Errorf("failed to load profile %s: %w", profileDefinition, err)
+		}
+		err = c.queryDirectoryFHIRClient.CreateWithContext(ctx, structureDefinition, nil)
+		if err != nil {
+			return fmt.Errorf("failed to upload profile %s: %w", profileDefinition, err)
+		}
+	}
+	return nil
 }
 
 // isMoreRecent compares two entries, returns true if first is more recent
