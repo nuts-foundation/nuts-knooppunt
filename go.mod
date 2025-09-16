@@ -7,7 +7,7 @@ require github.com/nuts-foundation/nuts-knooppunt/test/testdata v0.5.0
 replace github.com/nuts-foundation/nuts-knooppunt/test/testdata => ./test/testdata
 
 require (
-	github.com/SanteonNL/go-fhir-client v0.6.0
+	github.com/SanteonNL/go-fhir-client v0.6.1
 	github.com/google/uuid v1.6.0
 	github.com/knadh/koanf/parsers/yaml v1.1.0
 	github.com/knadh/koanf/providers/env v1.1.0
