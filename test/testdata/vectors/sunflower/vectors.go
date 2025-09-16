@@ -15,7 +15,10 @@ func HAPITenant() hapi.Tenant {
 
 func Organization() fhir.Organization {
 	return fhir.Organization{
-		Id:   to.Ptr("e5909595-767e-41c1-9b00-a23ddf33e5d1"),
+		Id: to.Ptr("e5909595-767e-41c1-9b00-a23ddf33e5d1"),
+		Meta: &fhir.Meta{
+			Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization"},
+		},
 		Name: to.Ptr("Sunflower Care Home"),
 		Identifier: []fhir.Identifier{
 			{
@@ -38,7 +41,7 @@ func Endpoints() []fhir.Endpoint {
 			Id:      to.Ptr("f8a9c2d1-4567-489a-bcde-123456789abc"),
 			Address: "https://example.com/sunflower/fhir",
 			Meta: &fhir.Meta{
-				Profile: []string{"https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"},
+				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
 			},
 			Status: fhir.EndpointStatusActive,
 			ConnectionType: fhir.Coding{
