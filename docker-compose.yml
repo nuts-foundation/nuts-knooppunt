@@ -13,8 +13,6 @@ services:
   init:
     image: golang:1.24.4-alpine
     depends_on:
-      knooppunt:
-        condition: service_healthy
       hapi-fhir-healthcheck:
         condition: service_completed_successfully
     volumes:
