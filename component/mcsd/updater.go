@@ -1,9 +1,11 @@
 package mcsd
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -24,7 +26,7 @@ import (
 // The localRefMap a map of references of remote Admin Directories (e.g. "Organization/123") to local references.
 // We don't want to copy the resource ID from remote Administration mCSD Directory, as we can't guarantee IDs from external directories are unique.
 // This means, we let our Query Directory assign new IDs to resources, but we have to make sure that updates are applied to the right local resources.
-func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, remoteRefToLocalRefMap map[string]string) (string, error) {
+func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, localIDResolver resourceIDResolver) (string, error) {
 	if entry.FullUrl == nil {
 		return "", errors.New("missing 'fullUrl' field")
 	}
@@ -83,10 +85,16 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 	// TODO: We should scope resource IDs to the source (e.g. by prefixing with the source URL or a hash thereof), because when syncing from multiple sources, IDs may collide.
 
 	// Use pre-generated local ID
-	remoteLocalRef := resourceType + "/" + resource["id"].(string)
-	localResourceID := remoteRefToLocalRefMap[remoteLocalRef]
+	remoteResourceRef := resourceType + "/" + resource["id"].(string)
+	localResourceID, err := localIDResolver.resolve(ctx, remoteResourceRef)
+	if err != nil {
+		return "", fmt.Errorf("local resource ID resolution error (ref=%s): %w", remoteResourceRef, err)
+	}
+	if localResourceID == nil {
+		return "", fmt.Errorf("no local resource ID found for remote reference (ref=%s)", remoteResourceRef)
+	}
 	resource["id"] = localResourceID
-	if err := normalizeReferences(resource, remoteRefToLocalRefMap); err != nil {
+	if err := normalizeReferences(ctx, resource, localIDResolver); err != nil {
 		return "", fmt.Errorf("failed to normalize references: %w", err)
 	}
 
@@ -94,64 +102,50 @@ func buildUpdateTransaction(tx *fhir.Bundle, entry fhir.BundleEntry, allowedReso
 	if err != nil {
 		return "", err
 	}
-	// Determine HTTP method and URL based on resource ID format
-	resourceID := resource["id"].(string)
-	var requestURL string
-	var requestMethod fhir.HTTPVerb
-
-	if strings.HasPrefix(resourceID, "urn:uuid:") {
-		// HAPI FHIR accepts urn:uuid IDs only with POST, not PUT/DELETE operations
-		// DELETE operations with urn:uuid are already handled above
-		// When we deduplicate, and the bundle contains a POST and PUT, we don't have a `id` yet, so we take the PUT body and POST it
-		requestURL = resourceType
-		requestMethod = fhir.HTTPVerbPOST
-	} else {
-		// Use original method with proper URL for non-UUID IDs
-		if entry.Request.Method == fhir.HTTPVerbPOST {
-			requestURL = resourceType
-		} else {
-			requestURL = resourceType + "/" + resourceID
-		}
-		requestMethod = entry.Request.Method
-	}
 
 	tx.Entry = append(tx.Entry, fhir.BundleEntry{
 		Resource: resourceJSON,
 		Request: &fhir.BundleEntryRequest{
-			Url:    requestURL,
-			Method: requestMethod,
+			// Use _source for idempotent updates
+			Url: resourceType + "?" + url.Values{
+				"_source": []string{*entry.FullUrl},
+			}.Encode(),
+			Method: fhir.HTTPVerbPUT,
 		},
 	})
 	return resourceType, nil
 }
 
-func normalizeReferences(resource map[string]any, remoteRefToLocalRefMap map[string]string) error {
+func normalizeReferences(ctx context.Context, resource map[string]any, localIDResolver resourceIDResolver) error {
 	// TODO: Support fully qualified URL references (e.g. "https://example.com/fhir/Organization/123")
-	return normalizeReferencesRecursive(resource, remoteRefToLocalRefMap)
+	return normalizeReferencesRecursive(ctx, resource, localIDResolver)
 }
 
-func normalizeReferencesRecursive(obj any, remoteRefToLocalRefMap map[string]string) error {
+func normalizeReferencesRecursive(ctx context.Context, obj any, localIDResolver resourceIDResolver) error {
 	switch v := obj.(type) {
 	case map[string]any:
 		// Check if this is a reference object
 		if ref, ok := v["reference"].(string); ok {
-			localRef, exists := remoteRefToLocalRefMap[ref]
-			if !exists {
-				// Referenced resource is not in this transaction bundle - this violates referential integrity
-				return fmt.Errorf("broken reference to '%s' - referenced resource not found in transaction bundle", ref)
+			localResourceID, err := localIDResolver.resolve(ctx, ref)
+			if err != nil {
+				return fmt.Errorf("failed to resolve reference '%s': %w", ref, err)
 			}
-			v["reference"] = localRef
+			if localResourceID == nil {
+				// This would violate referential integrity
+				return fmt.Errorf("broken reference to '%s' - can't find resource in transaction bundle or local FHIR server", ref)
+			}
+			v["reference"] = strings.Split(ref, "/")[0] + "/" + *localResourceID
 		}
 		// Recursively process all map values
 		for _, value := range v {
-			if err := normalizeReferencesRecursive(value, remoteRefToLocalRefMap); err != nil {
+			if err := normalizeReferencesRecursive(ctx, value, localIDResolver); err != nil {
 				return err
 			}
 		}
 	case []any:
 		// Recursively process all array elements
 		for _, item := range v {
-			if err := normalizeReferencesRecursive(item, remoteRefToLocalRefMap); err != nil {
+			if err := normalizeReferencesRecursive(ctx, item, localIDResolver); err != nil {
 				return err
 			}
 		}

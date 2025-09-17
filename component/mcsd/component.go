@@ -252,10 +252,25 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		Type:  fhir.BundleTypeTransaction,
 		Entry: make([]fhir.BundleEntry, 0, len(deduplicatedEntries)),
 	}
+
+	// Resource can either reference another resource in the same transaction (using temporary UUIDs),
+	// or reference an existing resource in the local FHIR server (using meta.source search).
+	// This covers the following situations:
+	// - 2 resources are created or updated, that refer to one another (uses temporary UUIDs)
+	// - a resource is updated or created that refers to an existing resource in the local FHIR server (uses meta.source search)
+	// - a combination of the 2
+	localIDResolver := chainedResourceIDResolver{
+		mapResourceIDResolver(remoteRefToLocalRefMap),
+		metaSourceResourceIDResolver{
+			sourceFHIRBaseURL: remoteAdminDirectoryFHIRBaseURL,
+			localFHIRClient:   queryDirectoryFHIRClient,
+		},
+	}
+
 	var report DirectoryUpdateReport
 	for i, entry := range deduplicatedEntries {
 		log.Ctx(ctx).Trace().Str("fhir_server", fhirBaseURLRaw).Msgf("Processing entry: %s", entry.Request.Url)
-		resourceType, err := buildUpdateTransaction(&tx, entry, allowedResourceTypes, allowDiscovery, remoteRefToLocalRefMap)
+		resourceType, err := buildUpdateTransaction(ctx, &tx, entry, allowedResourceTypes, allowDiscovery, localIDResolver)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
