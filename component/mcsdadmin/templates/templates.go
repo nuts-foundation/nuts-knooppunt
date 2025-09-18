@@ -278,3 +278,55 @@ func MakeLocationListXsProps(locations []fhir.Location) []LocationListProps {
 	}
 	return out
 }
+
+type EpConnectProps struct {
+	OrderedOrgs   []fhir.Organization
+	OrderedEpRefs []fhir.Reference
+	RowData       [][]bool
+}
+
+func MakeEpConnectProps(orgs []fhir.Organization) EpConnectProps {
+	out := EpConnectProps{}
+	out.OrderedOrgs = orgs
+	out.OrderedEpRefs = make([]fhir.Reference, 0, len(orgs))
+	out.RowData = make([][]bool, len(orgs))
+
+	// Keeps track of the column numbers for each endpoint
+	epClmnIidx := map[string]int{}
+	knownClmnLen := 0
+
+	for idxOrg, org := range orgs {
+		row := make([]bool, knownClmnLen, knownClmnLen)
+
+		for _, ref := range org.Endpoint {
+			if ref.Id == nil {
+				// It's going to be pretty hard to reconcile ref's without ID's
+				log.Warn().Msg("skipping ref without id")
+			} else {
+				refId := *ref.Id
+				c, ok := epClmnIidx[refId]
+				if ok {
+					// We have seen this endpoint before, let's mark it in the row data
+					row[c] = true
+				} else {
+					// We have not seen this endpoint before, let's add a column
+					out.OrderedEpRefs = append(out.OrderedEpRefs, ref)
+					epClmnIidx[*ref.Id] = knownClmnLen
+					knownClmnLen += 1
+
+					// lengthen existing rows
+					for i, r := range out.RowData {
+						r = append(r, false)
+						out.RowData[i] = r
+					}
+
+					row = append(row, true)
+				}
+			}
+		}
+
+		out.RowData[idxOrg] = row
+	}
+
+	return out
+}
