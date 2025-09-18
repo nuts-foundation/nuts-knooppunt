@@ -299,19 +299,18 @@ func MakeEpConnectProps(orgs []fhir.Organization) EpConnectProps {
 		row := make([]bool, knownClmnLen, knownClmnLen)
 
 		for _, ref := range org.Endpoint {
-			if ref.Id == nil {
-				// It's going to be pretty hard to reconcile ref's without ID's
-				log.Warn().Msg("skipping ref without id")
+			refKey := keyForRef(ref)
+			if refKey == nil {
+				log.Warn().Msg("could not determine unique identity for ref, skipping")
 			} else {
-				refId := *ref.Id
-				c, ok := epClmnIidx[refId]
+				c, ok := epClmnIidx[*refKey]
 				if ok {
 					// We have seen this endpoint before, let's mark it in the row data
 					row[c] = true
 				} else {
 					// We have not seen this endpoint before, let's add a column
 					out.OrderedEpRefs = append(out.OrderedEpRefs, ref)
-					epClmnIidx[*ref.Id] = knownClmnLen
+					epClmnIidx[*refKey] = knownClmnLen
 					knownClmnLen += 1
 
 					// lengthen existing rows
@@ -329,4 +328,23 @@ func MakeEpConnectProps(orgs []fhir.Organization) EpConnectProps {
 	}
 
 	return out
+}
+
+func keyForRef(ref fhir.Reference) *string {
+	if ref.Id != nil {
+		return ref.Id
+	}
+
+	if ref.Reference != nil {
+		return ref.Reference
+	}
+
+	if ref.Identifier != nil {
+		idf := *ref.Identifier
+		if idf.Value != nil {
+			return idf.Value
+		}
+	}
+
+	return nil
 }

@@ -78,6 +78,7 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
 	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
 	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
+	mux.HandleFunc("GET /mcsdadmin/endpoint/connect", connectEndpoint)
 	mux.HandleFunc("GET /mcsdadmin/location", listLocations)
 	mux.HandleFunc("GET /mcsdadmin/location/new", newLocation)
 	mux.HandleFunc("POST /mcsdadmin/location/new", newLocationPost)
@@ -416,6 +417,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	var epRef fhir.Reference
 	epRef.Type = to.Ptr("Endpoint")
 	epRef.Reference = to.Ptr("Endpoint/" + *resEp.Id)
+	epRef.Display = to.Ptr(endpoint.Address)
 
 	owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
 
@@ -428,6 +430,23 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
+}
+
+func connectEndpoint(w http.ResponseWriter, _ *http.Request) {
+	organizations, err := findAll[fhir.Organization](client)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	props := struct {
+		ConnectData tmpls.EpConnectProps
+	}{
+		ConnectData: tmpls.MakeEpConnectProps(organizations),
+	}
+
+	w.WriteHeader(http.StatusOK)
+	tmpls.RenderWithBase(w, "endpoint_connect.html", props)
 }
 
 func newLocation(w http.ResponseWriter, _ *http.Request) {
