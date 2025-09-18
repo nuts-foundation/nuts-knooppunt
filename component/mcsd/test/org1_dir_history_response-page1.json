@@ -6,7 +6,7 @@
   "type": "history",
   "entry": [
     {
-      "fullUrl": "{{ORG1_DIR_BASEURL}}/Organization/org-1",
+      "fullUrl": "Organization/org-1",
       "resource": {
         "resourceType": "Organization",
         "id": "org-1",
