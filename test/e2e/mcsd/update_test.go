@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
@@ -124,6 +125,8 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 			},
 		}
 
+		time.Sleep(time.Second) // Server timestamps are in seconds
+
 		var createdOrg fhir.Organization
 		err = care2CureFHIRClient.CreateWithContext(context.Background(), newOrg, &createdOrg)
 		require.NoError(t, err, "Failed to create new organization for incremental test")
@@ -133,7 +136,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		err = care2CureFHIRClient.ReadWithContext(context.Background(), "Organization/"+*createdOrg.Id, &readBackOrg)
 		require.NoError(t, err, "Failed to read back created organization")
 		require.Equal(t, orgName, *readBackOrg.Name, "Organization name should match")
-
+		time.Sleep(time.Second) // Server timestamps are in seconds
 		// Second sync - should use _since and only find new resources (our test organization)
 		httpResponse2, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
 		require.NoError(t, err)
@@ -150,6 +153,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		assert.Equal(t, 1, care2CureReport2.CountCreated, "Care2Cure should find exactly 1 resource (our test organization) via _since parameter")
 
 		// Third sync - should find nothing (no new resources since second sync)
+		time.Sleep(time.Second) // Server timestamps are in seconds
 		httpResponse3, err := http.Post(harnessDetail.KnooppuntInternalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, httpResponse3.StatusCode)

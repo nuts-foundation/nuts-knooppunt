@@ -7,10 +7,13 @@ import (
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/test"
 )
 
 func startKnooppunt(t *testing.T, config cmd.Config) *url.URL {
+	mcsd.ClockSkewBuffer = 0 // Disable clock skew buffer for tests for easier assertions (since we control all systems)
+
 	t.Helper()
 	wg := sync.WaitGroup{}
 	wg.Add(1)
