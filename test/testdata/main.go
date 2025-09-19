@@ -16,14 +16,16 @@ func main() {
 	if len(os.Args) < 3 {
 		panic("Usage: " + os.Args[0] + " <internal API base path> <HAPI FHIR multitenant base URL>")
 	}
-	internalAPI := os.Args[1]
 	hapiBaseURL, _ := url.Parse(os.Args[2])
-	tenantName := "orgA"
-	if err := createTenant(internalAPI, tenantName); err != nil {
-		println("Warn: Unable to create tenant: " + err.Error())
-	} else {
-		println("Created tenant:", tenantName)
-	}
+
+	// We need another solution for this so we can just load the test data for HAPI FHIR during development
+	//internalAPI := os.Args[1]
+	//tenantName := "orgA"
+	//if err := createTenant(internalAPI, tenantName); err != nil {
+	//	println("Warn: Unable to create tenant: " + err.Error())
+	//} else {
+	//	println("Created tenant:", tenantName)
+	//}
 
 	println("Loading FHIR testdata into HAPI...")
 	if _, err := vectors.Load(hapiBaseURL); err != nil {

@@ -14,6 +14,7 @@ import (
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
@@ -100,17 +101,12 @@ func newService(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
-	types, err := valuesets.CodingsFrom("service-type")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-
 	props := struct {
 		Types         []fhir.Coding
 		Organizations []fhir.Organization
 	}{
 		Organizations: organizations,
-		Types:         types,
+		Types:         valuesets.ServiceTypeCodings,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -126,7 +122,11 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var service fhir.HealthcareService
+	service := fhir.HealthcareService{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionHealthcareService},
+		},
+	}
 	name := r.PostForm.Get("name")
 	service.Name = &name
 	active := r.PostForm.Get("active") == "true"
@@ -137,20 +137,20 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	if typeCodesCount > 0 {
 		service.Type = make([]fhir.CodeableConcept, typeCodesCount)
 		for i, t := range typeCodes {
-			serviceType, ok := valuesets.CodableFrom("service-type", t)
+			serviceType, ok := valuesets.CodableFrom(valuesets.ServiceTypeCodings, t)
 			if ok {
 				service.Type[i] = serviceType
 			} else {
 				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
+				return
 			}
 		}
 	}
 
 	reference := "Organization/" + r.PostForm.Get("providedById")
-	refType := "Organization"
 	service.ProvidedBy = &fhir.Reference{
 		Reference: &reference,
-		Type:      &refType,
+		Type:      to.Ptr("Organization"),
 	}
 
 	var providedByOrg fhir.Organization
@@ -179,18 +179,23 @@ func listOrganizations(w http.ResponseWriter, _ *http.Request) {
 }
 
 func newOrganization(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-
-	types, err := valuesets.CodingsFrom("organization-type")
+	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	orgsExists := len(organizations) > 0
+
+	w.WriteHeader(http.StatusOK)
 
 	props := struct {
-		Types []fhir.Coding
+		Types         []fhir.Coding
+		Organizations []fhir.Organization
+		OrgsExist     bool
 	}{
-		Types: types,
+		Types:         valuesets.OrganizationTypeCodings,
+		Organizations: organizations,
+		OrgsExist:     orgsExists,
 	}
 
 	tmpls.RenderWithBase(w, "organization_edit.html", props)
@@ -205,7 +210,11 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var org fhir.Organization
+	org := fhir.Organization{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionOrganization},
+		},
+	}
 	name := r.PostForm.Get("name")
 	org.Name = &name
 	uraString := r.PostForm.Get("identifier")
@@ -217,14 +226,42 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 		uraIdentifier(uraString),
 	}
 
-	orgTypeCode := r.PostForm.Get("type")
-	orgType, ok := valuesets.CodableFrom("organization-type", orgTypeCode)
-	if ok {
-		org.Type = []fhir.CodeableConcept{orgType}
+	orgTypeCodes := r.PostForm["type"]
+	typeCodesCount := len(orgTypeCodes)
+	if typeCodesCount > 0 {
+		org.Type = make([]fhir.CodeableConcept, 0, typeCodesCount)
+		for _, t := range orgTypeCodes {
+			if t == "" {
+				continue
+			}
+			orgType, ok := valuesets.CodableFrom(valuesets.OrganizationTypeCodings, t)
+			if ok {
+				org.Type = append(org.Type, orgType)
+			} else {
+				http.Error(w, fmt.Sprintf("could not find type code %s", t), http.StatusBadRequest)
+				return
+			}
+		}
 	}
 
 	active := r.PostForm.Get("active") == "true"
 	org.Active = &active
+
+	partOf := r.PostForm.Get("part-of")
+	if len(partOf) > 0 {
+		reference := "Organization/" + partOf
+		org.PartOf = &fhir.Reference{
+			Reference: &reference,
+			Type:      to.Ptr("Organization"),
+		}
+		var parentOrg fhir.Organization
+		err = client.Read(reference, &parentOrg)
+		if err != nil {
+			http.Error(w, "internal error: could not find organization", http.StatusInternalServerError)
+			return
+		}
+		org.PartOf.Display = parentOrg.Name
+	}
 
 	var resOrg fhir.Organization
 	err = client.Create(org, &resOrg)
@@ -248,26 +285,6 @@ func newEndpoint(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	status, err := valuesets.CodingsFrom("endpoint-status")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	payloadTypes, err := valuesets.CodingsFrom("endpoint-payload-type")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	connectionTypes, err := valuesets.CodingsFrom("endpoint-connection-type")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	purposeOfUse, err := valuesets.CodingsFrom("purpose-of-use")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
 	props := struct {
 		ConnectionTypes []fhir.Coding
@@ -276,11 +293,11 @@ func newEndpoint(w http.ResponseWriter, _ *http.Request) {
 		PurposeOfUse    []fhir.Coding
 		Status          []fhir.Coding
 	}{
-		ConnectionTypes: connectionTypes,
+		ConnectionTypes: valuesets.EndpointConnectionTypeCodings,
 		Organizations:   organizations,
-		PayloadTypes:    payloadTypes,
-		PurposeOfUse:    purposeOfUse,
-		Status:          status,
+		PayloadTypes:    valuesets.EndpointPayloadTypeCodings,
+		PurposeOfUse:    valuesets.PurposeOfUseCodings,
+		Status:          valuesets.EndpointStatusCodings,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -296,7 +313,11 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var endpoint fhir.Endpoint
+	endpoint := fhir.Endpoint{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionEndpoint},
+		},
+	}
 	address := r.PostForm.Get("address")
 	if address == "" {
 		http.Error(w, "bad request: missing address", http.StatusBadRequest)
@@ -309,7 +330,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	if typeCodesCount > 0 {
 		endpoint.PayloadType = make([]fhir.CodeableConcept, typeCodesCount)
 		for i, t := range typeCodes {
-			serviceType, ok := valuesets.CodableFrom("endpoint-payload-type", t)
+			serviceType, ok := valuesets.CodableFrom(valuesets.EndpointPayloadTypeCodings, t)
 			if ok {
 				endpoint.PayloadType[i] = serviceType
 			} else {
@@ -350,7 +371,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	var connectionType fhir.Coding
 	connectionTypeId := r.PostForm.Get("connection-type")
-	connectionType, ok := valuesets.CodingFrom("endpoint-connection-type", connectionTypeId)
+	connectionType, ok := valuesets.CodingFrom(valuesets.EndpointConnectionTypeCodings, connectionTypeId)
 	if ok {
 		endpoint.ConnectionType = connectionType
 	} else {
@@ -359,7 +380,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	purposeOfUseId := r.PostForm.Get("purpose-of-use")
-	purposeOfUse, ok := valuesets.CodableFrom("purpose-of-use", purposeOfUseId)
+	purposeOfUse, ok := valuesets.CodableFrom(valuesets.PurposeOfUseCodings, purposeOfUseId)
 	if ok {
 		extension := fhir.Extension{
 			Url:                  "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.PurposeOfUse",
@@ -412,29 +433,22 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 func newLocation(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
-	locationTypes, err := valuesets.CodingsFrom("location-type")
+	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find location types")
-	}
-
-	physicalTypes, err := valuesets.CodingsFrom("location-physical-type")
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find physical location types")
-	}
-
-	status, err := valuesets.CodingsFrom("location-status")
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find location status types")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	props := struct {
 		PhysicalTypes []fhir.Coding
 		Status        []fhir.Coding
 		Types         []fhir.Coding
+		Organizations []fhir.Organization
 	}{
-		PhysicalTypes: physicalTypes,
-		Status:        status,
-		Types:         locationTypes,
+		PhysicalTypes: valuesets.LocationPhysicalTypeCodings,
+		Status:        valuesets.LocationStatusCodings,
+		Types:         valuesets.LocationTypeCodings,
+		Organizations: organizations,
 	}
 
 	tmpls.RenderWithBase(w, "location_edit.html", props)
@@ -447,13 +461,17 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var location fhir.Location
+	location := fhir.Location{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionLocation},
+		},
+	}
 	name := r.PostForm.Get("name")
 	location.Name = &name
 
 	typeCode := r.PostForm.Get("type")
 	if len(typeCode) > 0 {
-		locType, ok := valuesets.CodableFrom("location-type", typeCode)
+		locType, ok := valuesets.CodableFrom(valuesets.LocationTypeCodings, typeCode)
 		if !ok {
 			log.Warn().Msg("Could not find selected location type")
 		} else {
@@ -469,14 +487,61 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Msg("Could not find location status")
 	}
 
+	var address fhir.Address
+	addressLine := r.PostForm.Get("address-line")
+	if addressLine == "" {
+		http.Error(w, "missing address line", http.StatusBadRequest)
+		return
+	}
+	address.Line = []string{addressLine}
+
+	addressCity := r.PostForm.Get("address-city")
+	if addressCity != "" {
+		address.City = to.Ptr(addressCity)
+	}
+	addressDistrict := r.PostForm.Get("address-district")
+	if addressDistrict != "" {
+		address.District = to.Ptr(addressDistrict)
+	}
+	addressState := r.PostForm.Get("address-state")
+	if addressState != "" {
+		address.State = to.Ptr(addressState)
+	}
+	addressPostalCode := r.PostForm.Get("address-postal-code")
+	if addressPostalCode != "" {
+		address.PostalCode = to.Ptr(addressPostalCode)
+	}
+	addressCountry := r.PostForm.Get("address-country")
+	if addressCountry != "" {
+		address.Country = to.Ptr(addressCountry)
+	}
+	location.Address = to.Ptr(address)
+
 	physicalCode := r.PostForm.Get("physicalType")
 	if len(physicalCode) > 0 {
-		physical, ok := valuesets.CodableFrom("location-physical-type", physicalCode)
+		physical, ok := valuesets.CodableFrom(valuesets.LocationPhysicalTypeCodings, physicalCode)
 		if !ok {
 			log.Warn().Msg("Could not find selected physical location type")
 		} else {
 			location.PhysicalType = &physical
 		}
+	}
+
+	orgStr := r.PostForm.Get("managing-org")
+	if orgStr != "" {
+		reference := "Organization/" + orgStr
+		refType := "Organization"
+		location.ManagingOrganization = &fhir.Reference{
+			Reference: &reference,
+			Type:      &refType,
+		}
+		var managingOrg fhir.Organization
+		err = client.Read(reference, &managingOrg)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		location.ManagingOrganization.Display = managingOrg.Name
 	}
 
 	var resLoc fhir.Location
