@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
@@ -164,6 +165,8 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 			},
 		}
 
+		time.Sleep(time.Second) // Server timestamps are in seconds
+
 		var createdOrg fhir.Organization
 		err := care2CureFHIRClient.CreateWithContext(t.Context(), newOrg, &createdOrg)
 		require.NoError(t, err, "Failed to create new organization for incremental test")
@@ -173,7 +176,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		err = care2CureFHIRClient.ReadWithContext(t.Context(), "Organization/"+*createdOrg.Id, &readBackOrg)
 		require.NoError(t, err, "Failed to read back created organization")
 		require.Equal(t, orgName, *readBackOrg.Name, "Organization name should match")
-
+		time.Sleep(time.Second) // Server timestamps are in seconds
 		// Second sync - should use _since and only find new resources (our test organization)
 		response2 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 

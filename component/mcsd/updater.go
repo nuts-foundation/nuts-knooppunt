@@ -12,6 +12,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
+	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -101,6 +102,7 @@ func buildUpdateTransaction(_ context.Context, tx *fhir.Bundle, entry fhir.Bundl
 		return "", err
 	}
 
+	log.Info().Msgf("Updating resource %s", *entry.FullUrl)
 	tx.Entry = append(tx.Entry, fhir.BundleEntry{
 		Resource: resourceJSON,
 		Request: &fhir.BundleEntryRequest{
