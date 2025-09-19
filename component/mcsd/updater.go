@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -26,7 +25,7 @@ import (
 // The localRefMap a map of references of remote Admin Directories (e.g. "Organization/123") to local references.
 // We don't want to copy the resource ID from remote Administration mCSD Directory, as we can't guarantee IDs from external directories are unique.
 // This means, we let our Query Directory assign new IDs to resources, but we have to make sure that updates are applied to the right local resources.
-func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, localIDResolver resourceIDResolver) (string, error) {
+func buildUpdateTransaction(_ context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, sourceBaseURL string) (string, error) {
 	if entry.FullUrl == nil {
 		return "", errors.New("missing 'fullUrl' field")
 	}
@@ -81,21 +80,13 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 	}
 
 	updateResourceMeta(resource, *entry.FullUrl)
-	// TODO: If the resource already exists, we should look up the existing resource's ID
-	// TODO: We should scope resource IDs to the source (e.g. by prefixing with the source URL or a hash thereof), because when syncing from multiple sources, IDs may collide.
 
-	// Use pre-generated local ID
-	remoteResourceRef := resourceType + "/" + resource["id"].(string)
-	localResourceID, err := localIDResolver.resolve(ctx, remoteResourceRef)
-	if err != nil {
-		return "", fmt.Errorf("local resource ID resolution error (ref=%s): %w", remoteResourceRef, err)
-	}
-	if localResourceID == nil {
-		return "", fmt.Errorf("no local resource ID found for remote reference (ref=%s)", remoteResourceRef)
-	}
-	resource["id"] = localResourceID
-	if err := normalizeReferences(ctx, resource, localIDResolver); err != nil {
-		return "", fmt.Errorf("failed to normalize references: %w", err)
+	// Remove resource ID - let FHIR server assign new IDs via conditional operations
+	delete(resource, "id")
+
+	// Convert ALL references to deterministic conditional references with _source
+	if err := convertReferencesRecursive(resource, sourceBaseURL); err != nil {
+		return "", fmt.Errorf("failed to convert references: %w", err)
 	}
 
 	resourceJSON, err := json.Marshal(resource)
@@ -116,45 +107,37 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 	return resourceType, nil
 }
 
-func normalizeReferences(ctx context.Context, resource map[string]any, localIDResolver resourceIDResolver) error {
-	// TODO: Support fully qualified URL references (e.g. "https://example.com/fhir/Organization/123")
-	return normalizeReferencesRecursive(ctx, resource, localIDResolver)
-}
-
-func normalizeReferencesRecursive(ctx context.Context, obj any, localIDResolver resourceIDResolver) error {
+func convertReferencesRecursive(obj any, sourceBaseURL string) error {
 	switch v := obj.(type) {
 	case map[string]any:
 		// Check if this is a reference object
 		if ref, ok := v["reference"].(string); ok {
-			localResourceID, err := localIDResolver.resolve(ctx, ref)
-			if err != nil {
-				return fmt.Errorf("failed to resolve reference '%s': %w", ref, err)
+			// Convert ALL references to conditional references with deterministic _source
+			if strings.Contains(ref, "/") {
+				parts := strings.Split(ref, "/")
+				if len(parts) == 2 {
+					resourceType := parts[0]
+					// Construct the _source URL deterministically: baseURL + "/" + reference
+					sourceURL := strings.TrimSuffix(sourceBaseURL, "/") + "/" + ref
+					v["reference"] = resourceType + "?_source=" + url.QueryEscape(sourceURL)
+				}
 			}
-			if localResourceID == nil {
-				// This would violate referential integrity
-				return fmt.Errorf("broken reference to '%s' - can't find resource in transaction bundle or local FHIR server", ref)
-			}
-			v["reference"] = strings.Split(ref, "/")[0] + "/" + *localResourceID
 		}
 		// Recursively process all map values
 		for _, value := range v {
-			if err := normalizeReferencesRecursive(ctx, value, localIDResolver); err != nil {
+			if err := convertReferencesRecursive(value, sourceBaseURL); err != nil {
 				return err
 			}
 		}
 	case []any:
 		// Recursively process all array elements
 		for _, item := range v {
-			if err := normalizeReferencesRecursive(ctx, item, localIDResolver); err != nil {
+			if err := convertReferencesRecursive(item, sourceBaseURL); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
-}
-
-func generateLocalID() string {
-	return fmt.Sprintf("urn:uuid:%s", uuid.NewString())
 }
 
 func updateResourceMeta(resource map[string]any, source string) {
