@@ -199,50 +199,16 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
 	deduplicatedEntries := deduplicateHistoryEntries(bundle.Entry)
 
-	// Build reference map and transaction in two passes to resolve inter-resource references
-	remoteRefToLocalRefMap := make(map[string]string)
-
-	// First pass: build reference map for all resources that will be synced
-	// This requires a separate iteration since resources may cross-reference each other
-	for _, entry := range deduplicatedEntries {
-		if entry.Resource == nil || entry.Request == nil || entry.Request.Method == fhir.HTTPVerbDELETE {
-			// TODO: Handle DELETE operations properly when FHIR server supports _source conditional updates
-			continue
-		}
-		if info, err := libfhir.ExtractResourceInfo(entry.Resource); err == nil {
-			if slices.Contains(allowedResourceTypes, info.ResourceType) {
-				if info.ID != "" {
-					remoteLocalRef := info.ResourceType + "/" + info.ID
-					remoteRefToLocalRefMap[remoteLocalRef] = generateLocalID()
-				}
-			}
-		}
-	}
-
-	// Second pass: build transaction with resolved references
+	// Build transaction with deterministic conditional references
 	tx := fhir.Bundle{
 		Type:  fhir.BundleTypeTransaction,
 		Entry: make([]fhir.BundleEntry, 0, len(deduplicatedEntries)),
 	}
 
-	// Resource can either reference another resource in the same transaction (using temporary UUIDs),
-	// or reference an existing resource in the local FHIR server (using meta.source search).
-	// This covers the following situations:
-	// - 2 resources are created or updated, that refer to one another (uses temporary UUIDs)
-	// - a resource is updated or created that refers to an existing resource in the local FHIR server (uses meta.source search)
-	// - a combination of the 2
-	localIDResolver := chainedResourceIDResolver{
-		mapResourceIDResolver(remoteRefToLocalRefMap),
-		metaSourceResourceIDResolver{
-			sourceFHIRBaseURL: remoteAdminDirectoryFHIRBaseURL,
-			localFHIRClient:   queryDirectoryFHIRClient,
-		},
-	}
-
 	var report DirectoryUpdateReport
 	for i, entry := range deduplicatedEntries {
 		log.Ctx(ctx).Trace().Str("fhir_server", fhirBaseURLRaw).Msgf("Processing entry: %s", entry.Request.Url)
-		resourceType, err := buildUpdateTransaction(ctx, &tx, entry, allowedResourceTypes, allowDiscovery, localIDResolver)
+		resourceType, err := buildUpdateTransaction(ctx, &tx, entry, allowedResourceTypes, allowDiscovery, fhirBaseURLRaw)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
