@@ -1,4 +1,4 @@
-package fhir
+package fhirutil
 
 import (
 	"testing"

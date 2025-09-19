@@ -7,6 +7,7 @@ Implementation of the Nuts Knooppunt specifications.
 - Health check endpoint: [http://localhost:8081/status](http://localhost:8081/status)
 - mCSD Admin Application: [http://localhost:8080/mcsdadmin](http://localhost:8080/mcsdadmin)
 - mCSD Update Client force update: [POST http://localhost:8081/mcsd/update](http://localhost:8081/mcsd/update)
+- NVI registration endpoint: [POST http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
 
 ## Go toolchain
 
