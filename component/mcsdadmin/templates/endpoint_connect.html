@@ -16,7 +16,7 @@
     <tr>
         <th scope="row">{{ .Organization.Name }}</th>
         {{ range .Cells }}
-        <td><input type="checkbox" {{if . }}checked{{end}}></td>
+        <td><input type="checkbox" {{if .Enabled  }}checked{{end}}></td>
         {{ end }}
     </tr>
     {{ end }}
