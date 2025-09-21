@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/rs/zerolog/log"
@@ -279,72 +280,61 @@ func MakeLocationListXsProps(locations []fhir.Location) []LocationListProps {
 	return out
 }
 
-type EpConnectProps struct {
-	OrderedOrgs   []fhir.Organization
-	OrderedEpRefs []fhir.Reference
-	RowData       [][]bool
+type EpConnProps struct {
+	Endpoints []fhir.Endpoint
+	Rows      []EpConnRow
 }
 
-func MakeEpConnectProps(orgs []fhir.Organization) EpConnectProps {
-	out := EpConnectProps{}
-	out.OrderedOrgs = orgs
-	out.OrderedEpRefs = make([]fhir.Reference, 0, len(orgs))
-	out.RowData = make([][]bool, len(orgs))
+type EpConnRow struct {
+	Organization fhir.Organization
+	Cells        []EpConnCell
+}
 
-	// Keeps track of the column numbers for each endpoint
-	epClmnIidx := map[string]int{}
-	knownClmnLen := 0
+type EpConnCell struct {
+	Organization fhir.Organization
+	Endpoint     fhir.Endpoint
+	Enabled      bool
+}
+
+func MakeEpConnectProps(orgs []fhir.Organization, eps []fhir.Endpoint) EpConnProps {
+	out := EpConnProps{}
+	out.Endpoints = eps
+	out.Rows = make([]EpConnRow, len(orgs))
+	ClmnLen := len(eps)
 
 	for idxOrg, org := range orgs {
-		row := make([]bool, knownClmnLen, knownClmnLen)
+		// Initialise a new row for this organization
+		cells := make([]EpConnCell, ClmnLen)
 
-		for _, ref := range org.Endpoint {
-			refKey := keyForRef(ref)
-			if refKey == nil {
-				log.Warn().Msg("could not determine unique identity for ref, skipping")
-			} else {
-				c, ok := epClmnIidx[*refKey]
-				if ok {
-					// We have seen this endpoint before, let's mark it in the row data
-					row[c] = true
-				} else {
-					// We have not seen this endpoint before, let's add a column
-					out.OrderedEpRefs = append(out.OrderedEpRefs, ref)
-					epClmnIidx[*refKey] = knownClmnLen
-					knownClmnLen += 1
-
-					// lengthen existing rows
-					for i, r := range out.RowData {
-						r = append(r, false)
-						out.RowData[i] = r
-					}
-
-					row = append(row, true)
+		for idxEp, ep := range eps {
+			isEnabled := false
+			for _, ref := range org.Endpoint {
+				if refMatchesEp(ref, ep) {
+					isEnabled = true
 				}
+			}
+			cells[idxEp] = EpConnCell{
+				Organization: org,
+				Endpoint:     ep,
+				Enabled:      isEnabled,
 			}
 		}
 
-		out.RowData[idxOrg] = row
+		out.Rows[idxOrg] = EpConnRow{
+			Organization: org,
+			Cells:        cells,
+		}
 	}
 
 	return out
 }
 
-func keyForRef(ref fhir.Reference) *string {
-	if ref.Id != nil {
-		return ref.Id
+func refMatchesEp(ref fhir.Reference, res fhir.Endpoint) bool {
+	if ref.Reference == nil || res.Id == nil {
+		return false
 	}
-
-	if ref.Reference != nil {
-		return ref.Reference
-	}
-
-	if ref.Identifier != nil {
-		idf := *ref.Identifier
-		if idf.Value != nil {
-			return idf.Value
-		}
-	}
-
-	return nil
+	parts := strings.Split(*ref.Reference, "/")
+	refId := parts[1]
+	resId := *res.Id
+	return refId == resId
 }

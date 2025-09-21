@@ -14,10 +14,10 @@ func TestTemplates_connect_props(t *testing.T) {
 			Name: to.Ptr("Example Organisation One"),
 			Endpoint: []fhir.Reference{
 				{
-					Id: to.Ptr("IdOne"),
+					Reference: to.Ptr("Endpoint/1111"),
 				},
 				{
-					Id: to.Ptr("IdTwo"),
+					Reference: to.Ptr("Endpoint/2222"),
 				},
 			},
 		},
@@ -25,7 +25,7 @@ func TestTemplates_connect_props(t *testing.T) {
 			Name: to.Ptr("Example Organisation Two"),
 			Endpoint: []fhir.Reference{
 				{
-					Id: to.Ptr("IdOne"),
+					Reference: to.Ptr("Endpoint/1111"),
 				},
 			},
 		},
@@ -33,7 +33,7 @@ func TestTemplates_connect_props(t *testing.T) {
 			Name: to.Ptr("Example Organisation Three"),
 			Endpoint: []fhir.Reference{
 				{
-					Id: to.Ptr("IdThree"),
+					Reference: to.Ptr("Endpoint/3333"),
 				},
 			},
 		},
@@ -41,23 +41,35 @@ func TestTemplates_connect_props(t *testing.T) {
 			Name: to.Ptr("Example Organisation Three"),
 			Endpoint: []fhir.Reference{
 				{
-					Id: to.Ptr("IdFour"),
+					Reference: to.Ptr("Endpoint/4444"),
 				},
 				{
-					Id: to.Ptr("IdOne"),
+					Reference: to.Ptr("Endpoint/1111"),
 				},
 			},
 		},
 	}
 
-	props := MakeEpConnectProps(orgs)
-	matrix := props.RowData
-	assert.True(t, matrix[0][1])
-	assert.False(t, matrix[0][2])
-	assert.True(t, matrix[1][0])
-	assert.False(t, matrix[1][1])
-	assert.False(t, matrix[2][0])
-	assert.True(t, matrix[2][2])
-	assert.True(t, matrix[3][0])
-	assert.False(t, matrix[3][1])
+	eps := []fhir.Endpoint{
+		{
+			Id: to.Ptr("1111"),
+		},
+		{
+			Id: to.Ptr("2222"),
+		},
+		{
+			Id: to.Ptr("3333"),
+		},
+	}
+
+	props := MakeEpConnectProps(orgs, eps)
+	rows := props.Rows
+	assert.True(t, rows[0].Cells[1].Enabled)
+	assert.False(t, rows[0].Cells[2].Enabled)
+	assert.True(t, rows[1].Cells[0].Enabled)
+	assert.False(t, rows[1].Cells[1].Enabled)
+	assert.False(t, rows[2].Cells[0].Enabled)
+	assert.True(t, rows[2].Cells[2].Enabled)
+	assert.True(t, rows[3].Cells[0].Enabled)
+	assert.False(t, rows[3].Cells[1].Enabled)
 }
