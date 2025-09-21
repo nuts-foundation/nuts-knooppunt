@@ -439,10 +439,16 @@ func connectEndpoint(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
+	endpoints, err := findAll[fhir.Endpoint](client)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	props := struct {
-		ConnectData tmpls.EpConnectProps
+		ConnectData tmpls.EpConnProps
 	}{
-		ConnectData: tmpls.MakeEpConnectProps(organizations),
+		ConnectData: tmpls.MakeEpConnectProps(organizations, endpoints),
 	}
 
 	w.WriteHeader(http.StatusOK)

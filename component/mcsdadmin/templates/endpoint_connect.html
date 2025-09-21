@@ -6,15 +6,18 @@
 <table>
     <thead>
     <tr>
-        {{ range .OrderedEpRefs }}
-        <th scope="col">{{ .Display }}</th>
+        {{ range .Endpoints }}
+        <th scope="col">{{ .Address }}</th>
         {{ end }}
     </tr>
     </thead>
     <tbody>
-    {{ range .RowData }}
+    {{ range .Rows }}
     <tr>
-        <p>{{ . }}</p>
+        <th scope="row">{{ .Organization.Name }}</th>
+        {{ range .Cells }}
+        <td><input type="checkbox" {{if . }}checked{{end}}></td>
+        {{ end }}
     </tr>
     {{ end }}
     </tbody>
