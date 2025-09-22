@@ -17,12 +17,13 @@
         <th scope="row">{{ .Organization.Name }}</th>
         {{ range .Cells }}
         <td>
-            <input type="text" name="organization_id" value="{{ .Organization.Id }}">
-            <input type="text" name="endpoint_id" value="{{ .Endpoint.Id }}">
+            <input type="hidden" name="organization_id" value="{{ .Organization.Id }}">
+            <input type="hidden" name="endpoint_id" value="{{ .Endpoint.Id }}">
             <input
                     type="checkbox"
                     {{if .Enabled}}checked{{end}}
-                    hx-vals='{"myVal:" "My Value"}'>
+                    hx-put="/mcsdadmin/endpoint/connect"
+                    hx-include="[name='organization_id'], [name='endpoint_id']">
         </td>
         {{ end }}
     </tr>

@@ -80,6 +80,7 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
 	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
 	mux.HandleFunc("GET /mcsdadmin/endpoint/connect", connectEndpoint)
+	mux.HandleFunc("PUT /mcsdadmin/endpoint/connect", connectEndpointPut)
 	mux.HandleFunc("GET /mcsdadmin/location", listLocations)
 	mux.HandleFunc("GET /mcsdadmin/location/new", newLocation)
 	mux.HandleFunc("POST /mcsdadmin/location/new", newLocationPost)
@@ -484,7 +485,7 @@ func connectEndpointPut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var org fhir.Organization
-	orgStrRef := fmt.Sprintf("Organization/{%s}", orgId)
+	orgStrRef := fmt.Sprintf("Organization/%s", orgId)
 	err = client.Read(orgStrRef, org)
 	if err != nil {
 		http.Error(w, "unknown organization_id", http.StatusBadRequest)
@@ -492,7 +493,7 @@ func connectEndpointPut(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var endp fhir.Endpoint
-	epStrRef := fmt.Sprintf("Endpoint/{%s}", endpId)
+	epStrRef := fmt.Sprintf("Endpoint/%s", endpId)
 	err = client.Read(epStrRef, endp)
 	if err != nil {
 		http.Error(w, "unknown endpoint_id", http.StatusBadRequest)
