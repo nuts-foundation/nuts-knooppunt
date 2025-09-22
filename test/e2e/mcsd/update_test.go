@@ -242,6 +242,9 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 	harnessDetail := harness.Start(t)
 
 	t.Run("POST+PUT+PUT scenario with same resource", func(t *testing.T) {
+		// First, do an initial sync to handle any existing testdata
+		_ = invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
+
 		// Use care2cure FHIR server as the source (discovered directory)
 		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
 			UsePostSearch: false,
@@ -324,9 +327,6 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		require.NotNil(t, foundOrg.Meta, "Organization should have meta")
 		require.NotNil(t, foundOrg.Meta.VersionId, "Organization should have version ID")
 		assert.Equal(t, "1", *foundOrg.Meta.VersionId, "Query server should assign version 1 to the synchronized resource")
-		t.Logf("Found organization with expected version: %s", *foundOrg.Meta.VersionId)
-
-		t.Logf("Successfully handled POST+PUT+PUT scenario - found 1 organization with latest name: %s", *foundOrg.Name)
 	})
 
 	t.Run("CREATE+DELETE scenario", func(t *testing.T) {
@@ -393,8 +393,6 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 
 		// Verify the DeleteCount is 0 in the sync report (confirming DELETE was skipped)
 		require.Equal(t, 0, care2CureReport2.CountDeleted, "DELETE operations should be skipped on main branch")
-
-		t.Logf("Successfully handled CREATE+DELETE scenario - DELETE operation was skipped as expected on main branch")
 	})
 }
 
