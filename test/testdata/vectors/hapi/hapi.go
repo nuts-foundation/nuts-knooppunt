@@ -47,5 +47,5 @@ func CreateTenant(ctx context.Context, details Tenant, fhirClient fhirclient.Cli
 // because it indicates the partition already exists
 func shouldIgnorePartitionError(errorStr string) bool {
 	// Handle various error formats that indicate the partition already exists
-	return strings.Contains(errorStr, "HAPI-1309")
+	return strings.Contains(errorStr, "HAPI-1309") || strings.Contains(errorStr, "HAPI-0389")
 }
