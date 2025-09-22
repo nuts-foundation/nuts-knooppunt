@@ -28,7 +28,7 @@ var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "H
 
 // ClockSkewBuffer is subtracted from local time to account for potential clock differences between client and FHIR server.
 // To be on the safe side, it is set relatively high. This isn't an issue because the update process is idempotent.
-var ClockSkewBuffer = 5 * time.Minute
+var ClockSkewBuffer = 2 * time.Second
 
 // maxUpdateEntries limits the number of entries processed in a single FHIR transaction to prevent excessive load on the FHIR server
 const maxUpdateEntries = 1000
@@ -191,7 +191,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// Get last update time for incremental sync
 	lastUpdate, hasLastUpdate := c.lastUpdateTimes[fhirBaseURLRaw]
 
-	// Capture query start time for setting last update time later
+	// Capture query start time as fallback for servers that don't provide Bundle meta.lastUpdated.
 	queryStartTime := time.Now()
 
 	searchParams := url.Values{
@@ -205,12 +205,16 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 
 	var entries []fhir.BundleEntry
-	for _, resourceType := range directoryResourceTypes {
-		currEntries, err := c.queryHistory(ctx, remoteAdminDirectoryFHIRClient, resourceType, searchParams)
+	var firstSearchSet fhir.Bundle
+	for i, resourceType := range directoryResourceTypes {
+		currEntries, currSearchSet, err := c.queryHistory(ctx, remoteAdminDirectoryFHIRClient, resourceType, searchParams)
 		if err != nil {
 			return DirectoryUpdateReport{}, err
 		}
 		entries = append(entries, currEntries...)
+		if i == 0 {
+			firstSearchSet = currSearchSet
+		}
 	}
 
 	// Deduplicate resources from _history query - keep only the most recent version
@@ -284,17 +288,27 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 
 	// Update last sync timestamp on successful completion.
-	c.lastUpdateTimes[fhirBaseURLRaw] = queryStartTime.Add(-ClockSkewBuffer).Format(time.RFC3339)
+	// Use the search result Bundle's meta.lastUpdated if available, otherwise fall back to query start time.
+	// This uses the FHIR server's own timestamp string, eliminating clock skew issues.
+	var nextSyncTime string
+	if firstSearchSet.Meta != nil && firstSearchSet.Meta.LastUpdated != nil {
+		nextSyncTime = *firstSearchSet.Meta.LastUpdated
+	} else {
+		// Fallback to local time with buffer to account for potential clock skew
+		nextSyncTime = queryStartTime.Add(-ClockSkewBuffer).Format(time.RFC3339)
+		log.Ctx(ctx).Warn().Str("fhir_server", fhirBaseURLRaw).Msg("Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues")
+	}
+	c.lastUpdateTimes[fhirBaseURLRaw] = nextSyncTime
 
 	return report, nil
 }
 
-func (c *Component) queryHistory(ctx context.Context, remoteAdminDirectoryFHIRClient fhirclient.Client, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, error) {
+func (c *Component) queryHistory(ctx context.Context, remoteAdminDirectoryFHIRClient fhirclient.Client, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
 	var searchSet fhir.Bundle
 	// First, collect all resources from _history
 	err := remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath(resourceType+"/_history"))
 	if err != nil {
-		return nil, fmt.Errorf("_history search failed: %w", err)
+		return nil, fhir.Bundle{}, fmt.Errorf("_history search failed: %w", err)
 	}
 	var entries []fhir.BundleEntry
 	err = fhirclient.Paginate(ctx, remoteAdminDirectoryFHIRClient, searchSet, func(searchSet *fhir.Bundle) (bool, error) {
@@ -305,9 +319,9 @@ func (c *Component) queryHistory(ctx context.Context, remoteAdminDirectoryFHIRCl
 		return true, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("pagination of _history search failed: %w", err)
+		return nil, fhir.Bundle{}, fmt.Errorf("pagination of _history search failed: %w", err)
 	}
-	return entries, nil
+	return entries, searchSet, nil
 }
 
 // deduplicateHistoryEntries keeps only the most recent version of each resource
