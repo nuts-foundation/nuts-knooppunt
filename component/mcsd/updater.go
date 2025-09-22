@@ -16,15 +16,12 @@ import (
 
 // buildUpdateTransaction constructs a FHIR Bundle transaction for updating resources.
 // It filters entries based on allowed resource types and sets the source in the resource meta.
-// The function takes a context, a Bundle to populate, a Bundle entry, a map of local references,
-// a slice of allowed resource types, and a flag indicating if this is from a discoverable directory.
+// The function takes a context, a Bundle to populate, a Bundle entry,
+// a slice of allowed resource types, and a flag indicating if this is from a discoverable directory,
+// and the source base URL for conditional references.
 //
 // Resources are only synced to the query directory if they come from non-discoverable directories.
 // Discoverable directories are for discovery only and their resources should not be synced.
-//
-// The localRefMap a map of references of remote Admin Directories (e.g. "Organization/123") to local references.
-// We don't want to copy the resource ID from remote Administration mCSD Directory, as we can't guarantee IDs from external directories are unique.
-// This means, we let our Query Directory assign new IDs to resources, but we have to make sure that updates are applied to the right local resources.
 func buildUpdateTransaction(_ context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, sourceBaseURL string) (string, error) {
 	if entry.FullUrl == nil {
 		return "", errors.New("missing 'fullUrl' field")
@@ -79,7 +76,15 @@ func buildUpdateTransaction(_ context.Context, tx *fhir.Bundle, entry fhir.Bundl
 		return resourceType, nil
 	}
 
-	updateResourceMeta(resource, *entry.FullUrl)
+	// Extract resource type and ID for constructing source URL
+	resourceID := ""
+	if id, ok := resource["id"].(string); ok {
+		resourceID = id
+	} else {
+		resourceID = extractResourceIDFromURL(entry)
+	}
+	sourceURL := strings.TrimSuffix(sourceBaseURL, "/") + "/" + resourceType + "/" + resourceID
+	updateResourceMeta(resource, sourceURL)
 
 	// Remove resource ID - let FHIR server assign new IDs via conditional operations
 	delete(resource, "id")
