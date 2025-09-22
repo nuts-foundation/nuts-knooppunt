@@ -21,7 +21,7 @@ type KnooppuntSystemDetails struct {
 	MCSD KnooppuntMCSDDetails
 }
 
-type LRZaSystemDetails struct {
+type FHIRAPIDetails struct {
 	FHIRBaseURL *url.URL
 }
 
@@ -32,7 +32,8 @@ type KnooppuntMCSDDetails struct {
 
 type Details struct {
 	Knooppunt KnooppuntSystemDetails
-	LRZa      LRZaSystemDetails
+	LRZa      FHIRAPIDetails
+	NVI       FHIRAPIDetails
 }
 
 func Load(hapiBaseURL *url.URL) (*Details, error) {
@@ -106,8 +107,11 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 				QueryFHIRBaseURL: knptMCSDQueryHAPITenant.BaseURL(hapiBaseURL),
 			},
 		},
-		LRZa: LRZaSystemDetails{
+		LRZa: FHIRAPIDetails{
 			FHIRBaseURL: lrzaMCSDAdminHAPITenant.BaseURL(hapiBaseURL),
+		},
+		NVI: FHIRAPIDetails{
+			FHIRBaseURL: nviTenant.BaseURL(hapiBaseURL),
 		},
 	}, nil
 }
