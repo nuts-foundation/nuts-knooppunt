@@ -26,8 +26,8 @@ var _ component.Lifecycle = &Component{}
 var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
 var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService"}
 
-// ClockSkewBuffer is subtracted from local time to account for potential clock differences between client and FHIR server.
-// To be on the safe side, it is set relatively high. This isn't an issue because the update process is idempotent.
+// ClockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
+// to account for potential clock differences between client and FHIR server
 var ClockSkewBuffer = 2 * time.Second
 
 // maxUpdateEntries limits the number of entries processed in a single FHIR transaction to prevent excessive load on the FHIR server
