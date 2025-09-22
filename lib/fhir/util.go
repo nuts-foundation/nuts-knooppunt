@@ -3,6 +3,7 @@ package fhir
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -44,4 +45,19 @@ func ExtractResourceInfo(resourceJSON []byte) (*ResourceInfo, error) {
 	}
 
 	return info, nil
+}
+
+// BuildSourceURL constructs a consistent FHIR source URL from a base URL and resource reference.
+// This ensures all _source URL construction follows the same pattern throughout the application.
+// Examples:
+//   - BuildSourceURL("https://example.com/fhir", "Organization/123") -> "https://example.com/fhir/Organization/123"
+//   - BuildSourceURL("https://example.com/fhir/", "Patient", "456") -> "https://example.com/fhir/Patient/456"
+func BuildSourceURL(baseURL string, parts ...string) string {
+	result := strings.TrimSuffix(baseURL, "/")
+	for _, part := range parts {
+		if part != "" {
+			result += "/" + part
+		}
+	}
+	return result
 }

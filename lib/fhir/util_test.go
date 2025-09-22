@@ -88,3 +88,62 @@ func parseTime(timeStr string) *time.Time {
 	}
 	return &t
 }
+
+func TestBuildSourceURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		baseURL  string
+		parts    []string
+		expected string
+	}{
+		{
+			name:     "simple resource reference",
+			baseURL:  "https://example.com/fhir",
+			parts:    []string{"Organization/123"},
+			expected: "https://example.com/fhir/Organization/123",
+		},
+		{
+			name:     "base URL with trailing slash",
+			baseURL:  "https://example.com/fhir/",
+			parts:    []string{"Organization/123"},
+			expected: "https://example.com/fhir/Organization/123",
+		},
+		{
+			name:     "separate resource type and ID",
+			baseURL:  "https://example.com/fhir",
+			parts:    []string{"Patient", "456"},
+			expected: "https://example.com/fhir/Patient/456",
+		},
+		{
+			name:     "multiple parts",
+			baseURL:  "https://example.com/fhir",
+			parts:    []string{"Organization", "123", "_history", "2"},
+			expected: "https://example.com/fhir/Organization/123/_history/2",
+		},
+		{
+			name:     "empty parts are skipped",
+			baseURL:  "https://example.com/fhir",
+			parts:    []string{"Organization", "", "123"},
+			expected: "https://example.com/fhir/Organization/123",
+		},
+		{
+			name:     "no parts",
+			baseURL:  "https://example.com/fhir",
+			parts:    []string{},
+			expected: "https://example.com/fhir",
+		},
+		{
+			name:     "base URL without path",
+			baseURL:  "https://example.com",
+			parts:    []string{"fhir", "Organization", "123"},
+			expected: "https://example.com/fhir/Organization/123",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := BuildSourceURL(tt.baseURL, tt.parts...)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}

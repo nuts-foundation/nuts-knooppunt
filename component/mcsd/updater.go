@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhir"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -83,7 +84,7 @@ func buildUpdateTransaction(_ context.Context, tx *fhir.Bundle, entry fhir.Bundl
 	} else {
 		resourceID = extractResourceIDFromURL(entry)
 	}
-	sourceURL := strings.TrimSuffix(sourceBaseURL, "/") + "/" + resourceType + "/" + resourceID
+	sourceURL := libfhir.BuildSourceURL(sourceBaseURL, resourceType, resourceID)
 	updateResourceMeta(resource, sourceURL)
 
 	// Remove resource ID - let FHIR server assign new IDs via conditional operations
@@ -117,15 +118,13 @@ func convertReferencesRecursive(obj any, sourceBaseURL string) error {
 	case map[string]any:
 		// Check if this is a reference object
 		if ref, ok := v["reference"].(string); ok {
-			// Convert ALL references to conditional references with deterministic _source
-			if strings.Contains(ref, "/") {
-				parts := strings.Split(ref, "/")
-				if len(parts) == 2 {
-					resourceType := parts[0]
-					// Construct the _source URL deterministically: baseURL + "/" + reference
-					sourceURL := strings.TrimSuffix(sourceBaseURL, "/") + "/" + ref
-					v["reference"] = resourceType + "?_source=" + url.QueryEscape(sourceURL)
-				}
+			// Convert relative references to conditional references with deterministic _source
+			parts := strings.Split(ref, "/")
+			if len(parts) == 2 {
+				resourceType := parts[0]
+				// Construct the _source URL deterministically using utility function
+				sourceURL := libfhir.BuildSourceURL(sourceBaseURL, ref)
+				v["reference"] = resourceType + "?_source=" + url.QueryEscape(sourceURL)
 			}
 		}
 		// Recursively process all map values
