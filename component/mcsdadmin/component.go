@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -453,6 +454,92 @@ func connectEndpoint(w http.ResponseWriter, _ *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	tmpls.RenderWithBase(w, "endpoint_connect.html", props)
+}
+
+func connectEndpointPut(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseForm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	orgId := r.PostForm.Get("organization_id")
+	if orgId == "" {
+		http.Error(w, "unknown organization_id", http.StatusBadRequest)
+		return
+	}
+
+	endpId := r.PostForm.Get("endpoint_id")
+	if endpId == "" {
+		http.Error(w, "unknown endpoint_id", http.StatusBadRequest)
+		return
+	}
+
+	checkedStr := r.PostForm.Get("checked")
+	var checked bool
+	if checkedStr == "on" {
+		checked = true
+	} else {
+		checked = false
+	}
+
+	var org fhir.Organization
+	orgStrRef := fmt.Sprintf("Organization/{%s}", orgId)
+	err = client.Read(orgStrRef, org)
+	if err != nil {
+		http.Error(w, "unknown organization_id", http.StatusBadRequest)
+		return
+	}
+
+	var endp fhir.Endpoint
+	epStrRef := fmt.Sprintf("Endpoint/{%s}", endpId)
+	err = client.Read(epStrRef, endp)
+	if err != nil {
+		http.Error(w, "unknown endpoint_id", http.StatusBadRequest)
+		return
+	}
+
+	// Check if endpoint is already connected to org
+	hasRef := false
+	hasRefIdx := 0
+	for idx, epRef := range org.Endpoint {
+		if epRef.Reference != nil {
+			if *epRef.Reference == epStrRef {
+				hasRef = true
+				hasRefIdx = idx
+			}
+		}
+	}
+
+	if checked {
+		// If endpoint is not connected do so now
+		if hasRef == false {
+			ref := fhir.Reference{
+				Reference: &epStrRef,
+				Type:      to.Ptr("Endpoint"),
+			}
+			org.Endpoint = append(org.Endpoint, ref)
+			var resOrg fhir.Organization
+			err = client.Update(orgStrRef, org, resOrg)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+	} else {
+		// If endpoint is connected, remove connection
+		if hasRef == true {
+			org.Endpoint = slices.Delete(org.Endpoint, hasRefIdx, hasRefIdx+1)
+			var resOrg fhir.Organization
+			err = client.Update(epStrRef, org, resOrg)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func newLocation(w http.ResponseWriter, _ *http.Request) {

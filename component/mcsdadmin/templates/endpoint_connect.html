@@ -16,7 +16,14 @@
     <tr>
         <th scope="row">{{ .Organization.Name }}</th>
         {{ range .Cells }}
-        <td><input type="checkbox" {{if .Enabled  }}checked{{end}}></td>
+        <td>
+            <input type="text" name="organization_id" value="{{ .Organization.Id }}">
+            <input type="text" name="endpoint_id" value="{{ .Endpoint.Id }}">
+            <input
+                    type="checkbox"
+                    {{if .Enabled}}checked{{end}}
+                    hx-vals='{"myVal:" "My Value"}'>
+        </td>
         {{ end }}
     </tr>
     {{ end }}
