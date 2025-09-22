@@ -14,6 +14,7 @@ import (
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/rs/zerolog/log"
@@ -41,7 +42,7 @@ func New(config Config) *Component {
 		return nil
 	}
 
-	client = fhirclient.New(baseURL, http.DefaultClient, fhirClientConfig())
+	client = fhirclient.New(baseURL, http.DefaultClient, fhirutil.ClientConfig())
 
 	return &Component{
 		config:     config,
@@ -582,19 +583,6 @@ func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Requ
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-}
-
-func fhirClientConfig() *fhirclient.Config {
-	config := fhirclient.DefaultConfig()
-	config.DefaultOptions = []fhirclient.Option{
-		fhirclient.RequestHeaders(map[string][]string{
-			"Cache-Control": {"no-cache"},
-		}),
-	}
-	config.Non2xxStatusHandler = func(response *http.Response, responseBody []byte) {
-		log.Debug().Msgf("Non-2xx status code from FHIR server (%s %s, status=%d), content: %s", response.Request.Method, response.Request.URL, response.StatusCode, string(responseBody))
-	}
-	return &config
 }
 
 func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {

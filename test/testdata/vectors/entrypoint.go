@@ -10,6 +10,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
@@ -20,7 +21,7 @@ type KnooppuntSystemDetails struct {
 	MCSD KnooppuntMCSDDetails
 }
 
-type LRZaSystemDetails struct {
+type FHIRAPIDetails struct {
 	FHIRBaseURL *url.URL
 }
 
@@ -31,7 +32,8 @@ type KnooppuntMCSDDetails struct {
 
 type Details struct {
 	Knooppunt KnooppuntSystemDetails
-	LRZa      LRZaSystemDetails
+	LRZa      FHIRAPIDetails
+	NVI       FHIRAPIDetails
 }
 
 func Load(hapiBaseURL *url.URL) (*Details, error) {
@@ -47,6 +49,7 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	lrzaMCSDAdminHAPITenant := lrza.HAPITenant()
 	care2CureAdminHAPITenant := care2cure.HAPITenant()
 	sunflowerAdminHAPITenant := sunflower.HAPITenant()
+	nviTenant := nvi.HAPITenant()
 
 	hapiDefaultFHIRClient := fhirclient.New(hapiBaseURL, http.DefaultClient, nil)
 
@@ -61,7 +64,7 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	}, nil, fhirclient.AtPath("/$expunge"))
 
 	// Create tenants
-	for _, tenant := range []hapi.Tenant{knptMCSDQueryHAPITenant, knptMCSDAdminHAPITenant, lrzaMCSDAdminHAPITenant, care2CureAdminHAPITenant, sunflowerAdminHAPITenant} {
+	for _, tenant := range []hapi.Tenant{knptMCSDQueryHAPITenant, knptMCSDAdminHAPITenant, lrzaMCSDAdminHAPITenant, care2CureAdminHAPITenant, sunflowerAdminHAPITenant, nviTenant} {
 		if err := hapi.CreateTenant(ctx, tenant, hapiDefaultFHIRClient); err != nil {
 			return nil, fmt.Errorf("create HAPI tenant: %w", err)
 		}
@@ -104,8 +107,11 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 				QueryFHIRBaseURL: knptMCSDQueryHAPITenant.BaseURL(hapiBaseURL),
 			},
 		},
-		LRZa: LRZaSystemDetails{
+		LRZa: FHIRAPIDetails{
 			FHIRBaseURL: lrzaMCSDAdminHAPITenant.BaseURL(hapiBaseURL),
+		},
+		NVI: FHIRAPIDetails{
+			FHIRBaseURL: nviTenant.BaseURL(hapiBaseURL),
 		},
 	}, nil
 }
