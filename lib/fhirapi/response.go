@@ -20,9 +20,19 @@ func SendErrorResponse(ctx context.Context, httpResponse http.ResponseWriter, er
 	var fhirError *Error
 	if ok := errors.As(err, &fhirError); ok {
 		// Might want to support more later, not required now
-		if fhirError.IssueType >= fhir.IssueTypeInvalid && fhirError.IssueType <= fhir.IssueTypeInvariant {
+		switch fhirError.IssueType {
+		case fhir.IssueTypeInvalid,
+			fhir.IssueTypeStructure,
+			fhir.IssueTypeRequired,
+			fhir.IssueTypeValue,
+			fhir.IssueTypeInvariant:
 			statusCode = http.StatusBadRequest
-		} else if fhirError.IssueType >= fhir.IssueTypeTransient && fhirError.IssueType <= fhir.IssueTypeInformational {
+		case fhir.IssueTypeTransient,
+			fhir.IssueTypeLockError,
+			fhir.IssueTypeNoStore,
+			fhir.IssueTypeException,
+			fhir.IssueTypeTimeout,
+			fhir.IssueTypeThrottled:
 			statusCode = http.StatusServiceUnavailable
 		}
 		responseResource = fhirError.OperationOutcome()
