@@ -6,13 +6,13 @@
   "type": "history",
   "entry": [
     {
-      "fullUrl": "Organization/org-1",
+      "fullUrl": "{{ORG1_DIR_BASEURL}}/Organization/org-1/_history/3",
       "resource": {
         "resourceType": "Organization",
         "id": "org-1",
         "meta": {
-          "versionId": "1",
-          "lastUpdated": "2025-08-01T14:29:31.987+00:00",
+          "versionId": "3",
+          "lastUpdated": "2025-08-02T15:30:45.123+00:00",
           "profile": [
             "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Organization"
           ]
@@ -25,7 +25,7 @@
           }
         ],
         "active": true,
-        "name": "Organization 1",
+        "name": "Organization 1 Updated",
         "endpoint": [
           {
             "reference": "Endpoint/ep-1"
@@ -36,23 +36,13 @@
         ]
       },
       "request": {
-        "method": "POST",
+        "method": "PUT",
         "url": "Organization/org-1"
       },
       "response": {
-        "status": "201 Created",
-        "etag": "W/\"1\""
+        "status": "200 OK",
+        "etag": "W/\"3\""
       }
-    }
-  ],
-  "link": [
-    {
-      "relation": "self",
-      "url": "{{ORG1_DIR_BASEURL}}/Organization/_history"
-    },
-    {
-      "relation": "next",
-      "url": "{{ORG1_DIR_BASEURL}}/Organization/_history_page2"
     }
   ]
 }

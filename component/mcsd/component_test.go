@@ -120,10 +120,14 @@ func TestComponent_update(t *testing.T) {
 	org1DirOrganizationHistoryResponsePage1Bytes, err := os.ReadFile("test/org1_dir_organization_history_response-page1.json")
 	require.NoError(t, err)
 	org1DirOrganizationHistoryPage1Response := string(org1DirOrganizationHistoryResponsePage1Bytes)
+
 	// page 2
-	org1DirHistoryResponsePage2Bytes, err := os.ReadFile("test/org1_dir_endpoint_history_response-page2.json")
+	org1DirEndpointHistoryResponsePage2Bytes, err := os.ReadFile("test/org1_dir_endpoint_history_response-page2.json")
 	require.NoError(t, err)
-	org1DirHistoryPage2Response := string(org1DirHistoryResponsePage2Bytes)
+	org1DirEndpointHistoryPage2Response := string(org1DirEndpointHistoryResponsePage2Bytes)
+	org1DirOrganizationHistoryResponsePage2Bytes, err := os.ReadFile("test/org1_dir_organization_history_response-page2.json")
+	require.NoError(t, err)
+	org1DirOrganizationHistoryPage2Response := string(org1DirOrganizationHistoryResponsePage2Bytes)
 
 	org1DirMux := http.NewServeMux()
 	org1DirMux.HandleFunc("/fhir/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +143,12 @@ func TestComponent_update(t *testing.T) {
 	org1DirMux.HandleFunc("/fhir/Endpoint/_history_page2", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/fhir+json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(org1DirHistoryPage2Response))
+		_, _ = w.Write([]byte(org1DirEndpointHistoryPage2Response))
+	})
+	org1DirMux.HandleFunc("/fhir/Organization/_history_page2", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(org1DirOrganizationHistoryPage2Response))
 	})
 	org1DirMux.HandleFunc("/fhir/Location/_history", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/fhir+json")
@@ -156,7 +165,9 @@ func TestComponent_update(t *testing.T) {
 	orgDir1BaseURL := org1DirServer.URL + "/fhir"
 	rootDirEndpointHistoryResponse = strings.ReplaceAll(rootDirEndpointHistoryResponse, "{{ORG1_DIR_BASEURL}}", orgDir1BaseURL)
 	org1DirEndpointHistoryPage1Response = strings.ReplaceAll(org1DirEndpointHistoryPage1Response, "{{ORG1_DIR_BASEURL}}", orgDir1BaseURL)
-	org1DirHistoryPage2Response = strings.ReplaceAll(org1DirHistoryPage2Response, "{{ORG1_DIR_BASEURL}}", orgDir1BaseURL)
+
+	rootDirOrganizationHistoryResponse = strings.ReplaceAll(rootDirOrganizationHistoryResponse, "{{ORG1_DIR_BASEURL}}", orgDir1BaseURL)
+	org1DirOrganizationHistoryPage1Response = strings.ReplaceAll(org1DirOrganizationHistoryPage1Response, "{{ORG1_DIR_BASEURL}}", orgDir1BaseURL)
 
 	localClient := &test.StubFHIRClient{}
 	component, err := New(Config{
