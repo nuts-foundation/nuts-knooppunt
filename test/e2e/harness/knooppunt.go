@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd"
-	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/test"
 )
 
