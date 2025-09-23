@@ -24,7 +24,7 @@ import (
 //
 // Resources are only synced to the query directory if they come from non-discoverable directories.
 // Discoverable directories are for discovery only and their resources should not be synced.
-func buildUpdateTransaction(_ context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, sourceBaseURL string) (string, error) {
+func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, sourceBaseURL string) (string, error) {
 	if entry.FullUrl == nil {
 		return "", errors.New("missing 'fullUrl' field")
 	}
