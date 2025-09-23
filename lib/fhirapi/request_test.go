@@ -28,7 +28,7 @@ func TestReadRequest(t *testing.T) {
 
 		fhirRequest, err := ReadRequest[fhir.Task](httpRequest)
 
-		require.EqualError(t, err, "invalid content type, expected application/fhir+json")
+		require.EqualError(t, err, "invalid content type")
 		require.Nil(t, fhirRequest)
 	})
 	t.Run("Content-Type with parameters", func(t *testing.T) {

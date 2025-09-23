@@ -26,6 +26,14 @@ type BaseResource struct {
 	Meta       *fhir.Meta        `json:"meta,omitempty"`
 }
 
+func (b BaseResource) asMap() map[string]any {
+	var m map[string]any
+	if err := json.Unmarshal(b.Data, &m); err != nil {
+		panic(err)
+	}
+	return m
+}
+
 var _ fhirclient.Client = &StubFHIRClient{}
 
 type StubFHIRClient struct {
@@ -267,6 +275,10 @@ func (s *StubFHIRClient) SearchWithContext(ctx context.Context, resourceType str
 		case "_source":
 			filterCandidates(func(candidate BaseResource) bool {
 				return candidate.Meta != nil && candidate.Meta.Source != nil && *candidate.Meta.Source == value
+			})
+		case "status":
+			filterCandidates(func(candidate BaseResource) bool {
+				return candidate.asMap()["status"] == value
 			})
 		default:
 			return fmt.Errorf("unsupported query parameter: %s", name)

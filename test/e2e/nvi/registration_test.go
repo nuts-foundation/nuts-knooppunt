@@ -2,6 +2,7 @@ package nvi
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -31,10 +32,23 @@ func Test_Registration(t *testing.T) {
 	err := nviGatewayClient.Create(expected, &actual)
 	require.NoError(t, err)
 
+	// Create a second one to ensure multiple registrations work
+	var second fhir.DocumentReference
+	err = nviGatewayClient.Create(expected, &second)
+	require.NoError(t, err)
+
 	t.Run("assert created document reference", func(t *testing.T) {
 		require.NotNil(t, actual.Id)
 		require.Equal(t, expected.Status, actual.Status)
 
+		t.Run("search through NVI Gateway", func(t *testing.T) {
+			var searchSet fhir.Bundle
+			err := nviGatewayClient.Search("DocumentReference", url.Values{
+				"_id": []string{*actual.Id},
+			}, &searchSet)
+			require.NoError(t, err)
+			require.Len(t, searchSet.Entry, 1)
+		})
 		t.Run("read DocumentReference directly from NVI", func(t *testing.T) {
 			nviClient := fhirclient.New(harnessDetail.Vectors.NVI.FHIRBaseURL, http.DefaultClient, nil)
 			var fetched fhir.DocumentReference
