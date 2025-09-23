@@ -102,7 +102,7 @@ func buildUpdateTransaction(_ context.Context, tx *fhir.Bundle, entry fhir.Bundl
 		return "", err
 	}
 
-	log.Info().Msgf("Updating resource %s", *entry.FullUrl)
+	log.Debug().Msgf("Updating resource %s", *entry.FullUrl)
 	tx.Entry = append(tx.Entry, fhir.BundleEntry{
 		Resource: resourceJSON,
 		Request: &fhir.BundleEntryRequest{
