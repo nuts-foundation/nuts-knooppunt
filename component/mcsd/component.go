@@ -209,7 +209,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	for i, resourceType := range directoryResourceTypes {
 		currEntries, currSearchSet, err := c.queryHistory(ctx, remoteAdminDirectoryFHIRClient, resourceType, searchParams)
 		if err != nil {
-			return DirectoryUpdateReport{}, err
+			return DirectoryUpdateReport{}, fmt.Errorf("failed to query %s history: %w", resourceType, err)
 		}
 		entries = append(entries, currEntries...)
 		if i == 0 {

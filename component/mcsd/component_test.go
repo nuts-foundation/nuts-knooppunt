@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -20,33 +21,39 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
+func mockHistoryEndpoints(mux *http.ServeMux, responses map[string]*string) {
+	for resourceType, responsePtr := range responses {
+		responsePtr := responsePtr // Capture the pointer in the loop scope
+		mux.HandleFunc(fmt.Sprintf("/%s/_history", resourceType), func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/fhir+json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(*responsePtr))
+		})
+	}
+}
+
 func TestComponent_update_regression(t *testing.T) {
 	organizationHistoryResponse, err := os.ReadFile("test/regression_lrza_organization_history_response.json")
+	require.NoError(t, err)
 	endpointHistoryResponse, err := os.ReadFile("test/regression_lrza_endpoint_history_response.json")
+	require.NoError(t, err)
 	locationHistoryResponse, err := os.ReadFile("test/regression_lrza_location_history_response.json")
+	require.NoError(t, err)
 	emptyResponse, err := os.ReadFile("test/regression_lrza_empty_history_response.json")
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(endpointHistoryResponse)
-	})
-	mux.HandleFunc("/Location/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(locationHistoryResponse)
-	})
-	mux.HandleFunc("/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(organizationHistoryResponse)
-	})
-	mux.HandleFunc("/HealthcareService/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(emptyResponse)
+	// Convert []byte responses to strings for pointer approach
+	endpointHistoryResponseStr := string(endpointHistoryResponse)
+	locationHistoryResponseStr := string(locationHistoryResponse)
+	organizationHistoryResponseStr := string(organizationHistoryResponse)
+	emptyResponseStr := string(emptyResponse)
+
+	mockHistoryEndpoints(mux, map[string]*string{
+		"Endpoint":          &endpointHistoryResponseStr,
+		"Location":          &locationHistoryResponseStr,
+		"Organization":      &organizationHistoryResponseStr,
+		"HealthcareService": &emptyResponseStr,
 	})
 	server := httptest.NewServer(mux)
 
@@ -82,34 +89,28 @@ func TestComponent_update(t *testing.T) {
 	t.Log("mCSD Component is tested limited here, as it requires running FHIR servers and a lot of data. The main logic is tested in the integration tests.")
 
 	rootDirEndpointHistoryResponseBytes, err := os.ReadFile("test/root_dir_endpoint_history_response.json")
+	require.NoError(t, err)
 	rootDirOrganizationHistoryResponseBytes, err := os.ReadFile("test/root_dir_organization_history_response.json")
+	require.NoError(t, err)
 	emptyResponse, err := os.ReadFile("test/regression_lrza_empty_history_response.json")
+	require.NoError(t, err)
 
 	require.NoError(t, err)
 	rootDirEndpointHistoryResponse := string(rootDirEndpointHistoryResponseBytes)
 	rootDirOrganizationHistoryResponse := string(rootDirOrganizationHistoryResponseBytes)
 
 	rootDirMux := http.NewServeMux()
-	rootDirMux.HandleFunc("/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(rootDirEndpointHistoryResponse))
+
+	// Convert []byte responses to strings for pointer approach
+	emptyResponseStr := string(emptyResponse)
+
+	mockHistoryEndpoints(rootDirMux, map[string]*string{
+		"Endpoint":          &rootDirEndpointHistoryResponse,
+		"Organization":      &rootDirOrganizationHistoryResponse,
+		"HealthcareService": &emptyResponseStr,
+		"Location":          &emptyResponseStr,
 	})
-	rootDirMux.HandleFunc("/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(rootDirOrganizationHistoryResponse))
-	})
-	rootDirMux.HandleFunc("/HealthcareService/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(emptyResponse)
-	})
-	rootDirMux.HandleFunc("/Location/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(emptyResponse)
-	})
+
 	rootDirServer := httptest.NewServer(rootDirMux)
 
 	// page 1
@@ -240,7 +241,7 @@ func TestComponent_update(t *testing.T) {
 	})
 	t.Run("assert sync report from non-existing FHIR server #1", func(t *testing.T) {
 		thisReport := report["https://directory1.example.org"]
-		require.Equal(t, "_history search failed: 404 Not Found", strings.Join(thisReport.Errors, ""))
+		require.Equal(t, "failed to query Organization history: _history search failed: 404 Not Found", strings.Join(thisReport.Errors, ""))
 		require.Empty(t, thisReport.Warnings)
 		require.Equal(t, 0, thisReport.CountCreated)
 		require.Equal(t, 0, thisReport.CountUpdated)
@@ -248,7 +249,7 @@ func TestComponent_update(t *testing.T) {
 	})
 	t.Run("assert sync report from non-existing FHIR server #2", func(t *testing.T) {
 		thisReport := report["https://directory2.example.org"]
-		require.Equal(t, "_history search failed: 404 Not Found", strings.Join(thisReport.Errors, ""))
+		require.Equal(t, "failed to query Organization history: _history search failed: 404 Not Found", strings.Join(thisReport.Errors, ""))
 		require.Empty(t, thisReport.Warnings)
 		require.Equal(t, 0, thisReport.CountCreated)
 		require.Equal(t, 0, thisReport.CountUpdated)
@@ -264,13 +265,17 @@ func TestComponent_update(t *testing.T) {
 
 func TestComponent_incrementalUpdates(t *testing.T) {
 	testDataJSONOrg, err := os.ReadFile("test/root_dir_organization_history_response.json")
+	require.NoError(t, err)
 	testDataJSONEndpoint, err := os.ReadFile("test/root_dir_endpoint_history_response.json")
+	require.NoError(t, err)
 	emptyResponse, err := os.ReadFile("test/regression_lrza_empty_history_response.json")
+	require.NoError(t, err)
 
 	require.NoError(t, err)
 
 	var sinceParams []string
 	rootDirMux := http.NewServeMux()
+	// For incremental updates test, we need custom handlers to capture _since parameters
 	rootDirMux.HandleFunc("/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
 		// FHIR client configured to use GET, parameters are in query string
 		since := r.URL.Query().Get("_since")
@@ -288,15 +293,12 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 		_, _ = w.Write(testDataJSONEndpoint)
 	})
 
-	rootDirMux.HandleFunc("/Location/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(emptyResponse)
-	})
-	rootDirMux.HandleFunc("/HealthcareService/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(emptyResponse)
+	// Convert []byte responses to strings for pointer approach
+	emptyResponseStr2 := string(emptyResponse)
+
+	mockHistoryEndpoints(rootDirMux, map[string]*string{
+		"Location":          &emptyResponseStr2,
+		"HealthcareService": &emptyResponseStr2,
 	})
 
 	rootDirServer := httptest.NewServer(rootDirMux)
@@ -341,7 +343,7 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	// Second update - should include _since parameter
 	_, err = component.update(ctx)
 	require.NoError(t, err)
-	require.Len(t, sinceParams, 4, "Should have two requests total")
+	require.Len(t, sinceParams, 4, "Should have four requests total")
 	require.NotEmpty(t, sinceParams[2], "Third update should include _since parameter")
 	require.NotEmpty(t, sinceParams[3], "Fourth update should include _since parameter")
 
@@ -360,29 +362,20 @@ func TestComponent_noDuplicateResourcesInTransactionBundle(t *testing.T) {
 	// the transaction bundle sent to the query directory contains no duplicates.
 	// This addresses the HAPI error: "Transaction bundle contains multiple resources with ID: urn:uuid:..."
 	emptyResponse, err := os.ReadFile("test/regression_lrza_empty_history_response.json")
+	require.NoError(t, err)
 	historyWithDuplicatesBytes, err := os.ReadFile("test/history_with_duplicates.json")
 	require.NoError(t, err)
 
 	mockMux := http.NewServeMux()
-	mockMux.HandleFunc("/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(historyWithDuplicatesBytes)
-	})
-	mockMux.HandleFunc("/Location/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(emptyResponse)
-	})
-	mockMux.HandleFunc("/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(emptyResponse)
-	})
-	mockMux.HandleFunc("/HealthcareService/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(emptyResponse)
+	// Convert []byte responses to strings for pointer approach
+	historyWithDuplicatesStr := string(historyWithDuplicatesBytes)
+	emptyResponseStr3 := string(emptyResponse)
+
+	mockHistoryEndpoints(mockMux, map[string]*string{
+		"Organization":      &historyWithDuplicatesStr,
+		"Location":          &emptyResponseStr3,
+		"Endpoint":          &emptyResponseStr3,
+		"HealthcareService": &emptyResponseStr3,
 	})
 	mockServer := httptest.NewServer(mockMux)
 	defer mockServer.Close()
