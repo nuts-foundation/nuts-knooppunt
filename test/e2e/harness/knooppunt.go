@@ -12,7 +12,6 @@ import (
 )
 
 func startKnooppunt(t *testing.T, config cmd.Config) *url.URL {
-	mcsd.ClockSkewBuffer = 0 // Disable clock skew buffer for tests for easier assertions (since we control all systems)
 
 	t.Helper()
 	wg := sync.WaitGroup{}
