@@ -3,7 +3,7 @@ package fhirutil
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
+	"net/url"
 	"time"
 )
 
@@ -52,12 +52,6 @@ func ExtractResourceInfo(resourceJSON []byte) (*ResourceInfo, error) {
 // Examples:
 //   - BuildSourceURL("https://example.com/fhir", "Organization/123") -> "https://example.com/fhir/Organization/123"
 //   - BuildSourceURL("https://example.com/fhir/", "Patient", "456") -> "https://example.com/fhir/Patient/456"
-func BuildSourceURL(baseURL string, parts ...string) string {
-	result := strings.TrimSuffix(baseURL, "/")
-	for _, part := range parts {
-		if part != "" {
-			result += "/" + part
-		}
-	}
-	return result
+func BuildSourceURL(baseURL string, parts ...string) (string, error) {
+	return url.JoinPath(baseURL, parts...)
 }

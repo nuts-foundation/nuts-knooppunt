@@ -77,14 +77,15 @@ func buildUpdateTransaction(_ context.Context, tx *fhir.Bundle, entry fhir.Bundl
 		return resourceType, nil
 	}
 
-	// Extract resource type and ID for constructing source URL
-	resourceID := ""
-	if id, ok := resource["id"].(string); ok {
-		resourceID = id
-	} else {
-		resourceID = extractResourceIDFromURL(entry)
+	// Extract resource ID for constructing source URL (searchset resources always have IDs)
+	resourceID, ok := resource["id"].(string)
+	if !ok {
+		return "", fmt.Errorf("resource missing ID field (fullUrl=%s)", to.EmptyString(entry.FullUrl))
 	}
-	sourceURL := libfhir.BuildSourceURL(sourceBaseURL, resourceType, resourceID)
+	sourceURL, err := libfhir.BuildSourceURL(sourceBaseURL, resourceType, resourceID)
+	if err != nil {
+		return "", fmt.Errorf("failed to build source URL: %w", err)
+	}
 	updateResourceMeta(resource, sourceURL)
 
 	// Remove resource ID - let FHIR server assign new IDs via conditional operations
@@ -123,7 +124,10 @@ func convertReferencesRecursive(obj any, sourceBaseURL string) error {
 			if len(parts) == 2 {
 				resourceType := parts[0]
 				// Construct the _source URL deterministically using utility function
-				sourceURL := libfhir.BuildSourceURL(sourceBaseURL, ref)
+				sourceURL, err := libfhir.BuildSourceURL(sourceBaseURL, ref)
+				if err != nil {
+					return fmt.Errorf("failed to build source URL for reference: %w", err)
+				}
 				v["reference"] = resourceType + "?_source=" + url.QueryEscape(sourceURL)
 			}
 		}

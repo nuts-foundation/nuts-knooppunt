@@ -142,7 +142,8 @@ func TestBuildSourceURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := BuildSourceURL(tt.baseURL, tt.parts...)
+			result, err := BuildSourceURL(tt.baseURL, tt.parts...)
+			require.NoError(t, err)
 			require.Equal(t, tt.expected, result)
 		})
 	}
