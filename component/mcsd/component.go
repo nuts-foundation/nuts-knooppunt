@@ -230,7 +230,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	var report DirectoryUpdateReport
 	for i, entry := range deduplicatedEntries {
 		log.Ctx(ctx).Trace().Str("fhir_server", fhirBaseURLRaw).Msgf("Processing entry: %s", entry.Request.Url)
-		resourceType, err := buildUpdateTransaction(ctx, &tx, entry, allowedResourceTypes, allowDiscovery, fhirBaseURLRaw)
+		resourceType, err := buildUpdateTransaction(ctx, &tx, entry, remoteAdminDirectoryFHIRBaseURL, allowedResourceTypes, allowDiscovery, fhirBaseURLRaw)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
