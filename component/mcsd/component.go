@@ -295,7 +295,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		nextSyncTime = *firstSearchSet.Meta.LastUpdated
 	} else {
 		// Fallback to local time with buffer to account for potential clock skew
-		nextSyncTime = queryStartTime.Add(-ClockSkewBuffer).Format(time.RFC3339)
+		nextSyncTime = queryStartTime.Add(-ClockSkewBuffer).Format(time.RFC3339Nano)
 		log.Ctx(ctx).Warn().Str("fhir_server", fhirBaseURLRaw).Msg("Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues")
 	}
 	c.lastUpdateTimes[fhirBaseURLRaw] = nextSyncTime
