@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
-	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhir"
+	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
