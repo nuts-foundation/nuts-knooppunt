@@ -26,9 +26,9 @@ var _ component.Lifecycle = &Component{}
 var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
 var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService"}
 
-// ClockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
+// clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
 // to account for potential clock differences between client and FHIR server
-var ClockSkewBuffer = 2 * time.Second
+var clockSkewBuffer = 2 * time.Second
 
 // maxUpdateEntries limits the number of entries processed in a single FHIR transaction to prevent excessive load on the FHIR server
 const maxUpdateEntries = 1000
@@ -295,7 +295,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		nextSyncTime = *firstSearchSet.Meta.LastUpdated
 	} else {
 		// Fallback to local time with buffer to account for potential clock skew
-		nextSyncTime = queryStartTime.Add(-ClockSkewBuffer).Format(time.RFC3339Nano)
+		nextSyncTime = queryStartTime.Add(-clockSkewBuffer).Format(time.RFC3339Nano)
 		log.Ctx(ctx).Warn().Str("fhir_server", fhirBaseURLRaw).Msg("Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues")
 	}
 	c.lastUpdateTimes[fhirBaseURLRaw] = nextSyncTime

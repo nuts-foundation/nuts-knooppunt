@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -22,9 +21,9 @@ import (
 )
 
 func mockHistoryEndpoints(mux *http.ServeMux, responses map[string]*string) {
-	for resourceType, responsePtr := range responses {
+	for endpoint, responsePtr := range responses {
 		responsePtr := responsePtr // Capture the pointer in the loop scope
-		mux.HandleFunc(fmt.Sprintf("/%s/_history", resourceType), func(w http.ResponseWriter, r *http.Request) {
+		mux.HandleFunc(endpoint, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/fhir+json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(*responsePtr))
@@ -50,10 +49,10 @@ func TestComponent_update_regression(t *testing.T) {
 	emptyResponseStr := string(emptyResponse)
 
 	mockHistoryEndpoints(mux, map[string]*string{
-		"Endpoint":          &endpointHistoryResponseStr,
-		"Location":          &locationHistoryResponseStr,
-		"Organization":      &organizationHistoryResponseStr,
-		"HealthcareService": &emptyResponseStr,
+		"/Endpoint/_history":          &endpointHistoryResponseStr,
+		"/Location/_history":          &locationHistoryResponseStr,
+		"/Organization/_history":      &organizationHistoryResponseStr,
+		"/HealthcareService/_history": &emptyResponseStr,
 	})
 	server := httptest.NewServer(mux)
 
@@ -105,10 +104,10 @@ func TestComponent_update(t *testing.T) {
 	emptyResponseStr := string(emptyResponse)
 
 	mockHistoryEndpoints(rootDirMux, map[string]*string{
-		"Endpoint":          &rootDirEndpointHistoryResponse,
-		"Organization":      &rootDirOrganizationHistoryResponse,
-		"HealthcareService": &emptyResponseStr,
-		"Location":          &emptyResponseStr,
+		"/Endpoint/_history":          &rootDirEndpointHistoryResponse,
+		"/Organization/_history":      &rootDirOrganizationHistoryResponse,
+		"/HealthcareService/_history": &emptyResponseStr,
+		"/Location/_history":          &emptyResponseStr,
 	})
 
 	rootDirServer := httptest.NewServer(rootDirMux)
@@ -131,36 +130,16 @@ func TestComponent_update(t *testing.T) {
 	org1DirOrganizationHistoryPage2Response := string(org1DirOrganizationHistoryResponsePage2Bytes)
 
 	org1DirMux := http.NewServeMux()
-	org1DirMux.HandleFunc("/fhir/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(org1DirEndpointHistoryPage1Response))
+
+	mockHistoryEndpoints(org1DirMux, map[string]*string{
+		"/fhir/Endpoint/_history":           &org1DirEndpointHistoryPage1Response,
+		"/fhir/Organization/_history":       &org1DirOrganizationHistoryPage1Response,
+		"/fhir/Endpoint/_history_page2":     &org1DirEndpointHistoryPage2Response,
+		"/fhir/Organization/_history_page2": &org1DirOrganizationHistoryPage2Response,
+		"/fhir/Location/_history":           &emptyResponseStr,
+		"/fhir/HealthcareService/_history":  &emptyResponseStr,
 	})
-	org1DirMux.HandleFunc("/fhir/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(org1DirOrganizationHistoryPage1Response))
-	})
-	org1DirMux.HandleFunc("/fhir/Endpoint/_history_page2", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(org1DirEndpointHistoryPage2Response))
-	})
-	org1DirMux.HandleFunc("/fhir/Organization/_history_page2", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(org1DirOrganizationHistoryPage2Response))
-	})
-	org1DirMux.HandleFunc("/fhir/Location/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(emptyResponse))
-	})
-	org1DirMux.HandleFunc("/fhir/HealthcareService/_history", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(emptyResponse))
-	})
+
 	org1DirServer := httptest.NewServer(org1DirMux)
 
 	orgDir1BaseURL := org1DirServer.URL + "/fhir"
@@ -297,8 +276,8 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	emptyResponseStr2 := string(emptyResponse)
 
 	mockHistoryEndpoints(rootDirMux, map[string]*string{
-		"Location":          &emptyResponseStr2,
-		"HealthcareService": &emptyResponseStr2,
+		"/Location/_history":          &emptyResponseStr2,
+		"/HealthcareService/_history": &emptyResponseStr2,
 	})
 
 	rootDirServer := httptest.NewServer(rootDirMux)
@@ -350,8 +329,12 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	// Verify _since parameter is a valid RFC3339 timestamp
 	_, err = time.Parse(time.RFC3339, sinceParams[2])
 	require.NoError(t, err, "_since parameter should be valid RFC3339 timestamp")
+	_, err = time.Parse(time.RFC3339Nano, sinceParams[2])
+	require.NoError(t, err, "_since parameter should be valid RFC3339Nano timestamp")
 	_, err = time.Parse(time.RFC3339, sinceParams[3])
 	require.NoError(t, err, "_since parameter should be valid RFC3339 timestamp")
+	_, err = time.Parse(time.RFC3339Nano, sinceParams[3])
+	require.NoError(t, err, "_since parameter should be valid RFC3339Nano timestamp")
 
 	// Verify _since parameter matches the stored timestamp
 	require.Equal(t, lastUpdate, sinceParams[2], "_since parameter should match the stored lastUpdate timestamp")
@@ -372,10 +355,10 @@ func TestComponent_noDuplicateResourcesInTransactionBundle(t *testing.T) {
 	emptyResponseStr3 := string(emptyResponse)
 
 	mockHistoryEndpoints(mockMux, map[string]*string{
-		"Organization":      &historyWithDuplicatesStr,
-		"Location":          &emptyResponseStr3,
-		"Endpoint":          &emptyResponseStr3,
-		"HealthcareService": &emptyResponseStr3,
+		"/Organization/_history":      &historyWithDuplicatesStr,
+		"/Location/_history":          &emptyResponseStr3,
+		"/Endpoint/_history":          &emptyResponseStr3,
+		"/HealthcareService/_history": &emptyResponseStr3,
 	})
 	mockServer := httptest.NewServer(mockMux)
 	defer mockServer.Close()
