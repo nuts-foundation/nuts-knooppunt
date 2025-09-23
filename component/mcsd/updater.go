@@ -12,6 +12,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
+	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -23,7 +24,7 @@ import (
 //
 // Resources are only synced to the query directory if they come from non-discoverable directories.
 // Discoverable directories are for discovery only and their resources should not be synced.
-func buildUpdateTransaction(_ context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, sourceBaseURL string) (string, error) {
+func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, sourceBaseURL string) (string, error) {
 	if entry.FullUrl == nil {
 		return "", errors.New("missing 'fullUrl' field")
 	}
@@ -101,6 +102,7 @@ func buildUpdateTransaction(_ context.Context, tx *fhir.Bundle, entry fhir.Bundl
 		return "", err
 	}
 
+	log.Ctx(ctx).Debug().Msgf("Updating resource %s", *entry.FullUrl)
 	tx.Entry = append(tx.Entry, fhir.BundleEntry{
 		Resource: resourceJSON,
 		Request: &fhir.BundleEntryRequest{

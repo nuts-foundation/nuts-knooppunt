@@ -5,136 +5,14 @@
     "lastUpdated": "2025-08-14T10:00:00.000+00:00"
   },
   "type": "history",
-  "total": 9,
+  "total": 5,
   "link": [
     {
       "relation": "self",
-      "url": "http://test.example.org/fhir/test/_history"
+      "url": "http://test.example.org/fhir/test/Endpoint/_history"
     }
   ],
   "entry": [
-    {
-      "fullUrl": "http://test.example.org/fhir/Organization/org-1",
-      "resource": {
-        "resourceType": "Organization",
-        "id": "org-1",
-        "meta": {
-          "versionId": "1",
-          "lastUpdated": "2025-08-01T14:29:31.987+00:00"
-        },
-        "identifier": [
-          {
-            "use": "official",
-            "system": "http://fhir.nl/fhir/NamingSystem/ura",
-            "value": "111"
-          }
-        ],
-        "active": true,
-        "name": "Organization 1",
-        "endpoint": [
-          {
-            "reference": "Endpoint/dir1-endpoint"
-          }
-        ]
-      },
-      "request": {
-        "method": "POST",
-        "url": "Organization/org-1"
-      },
-      "response": {
-        "status": "201 Created",
-        "etag": "W/\"1\""
-      }
-    },
-    {
-      "fullUrl": "http://test.example.org/fhir/Organization/org-2",
-      "resource": {
-        "resourceType": "Organization",
-        "id": "org-2",
-        "meta": {
-          "versionId": "1",
-          "lastUpdated": "2025-08-01T14:29:31.987+00:00"
-        },
-        "identifier": [
-          {
-            "use": "official",
-            "system": "http://fhir.nl/fhir/NamingSystem/ura",
-            "value": "222"
-          }
-        ],
-        "active": true,
-        "name": "Organization 2"
-      },
-      "request": {
-        "method": "POST",
-        "url": "Organization/org-2"
-      },
-      "response": {
-        "status": "201 Created",
-        "etag": "W/\"1\""
-      }
-    },
-    {
-      "fullUrl": "http://test.example.org/fhir/Organization/org-3",
-      "resource": {
-        "resourceType": "Organization",
-        "id": "org-3",
-        "meta": {
-          "versionId": "1",
-          "lastUpdated": "2025-08-01T14:30:31.987+00:00"
-        },
-        "identifier": [
-          {
-            "use": "official",
-            "system": "http://fhir.nl/fhir/NamingSystem/ura",
-            "value": "333"
-          }
-        ],
-        "active": true,
-        "name": "Organization 3",
-        "endpoint": [
-          {
-            "reference": "Endpoint/invalid-endpoint-address"
-          }
-        ]
-      },
-      "request": {
-        "method": "POST",
-        "url": "Organization/org-3"
-      },
-      "response": {
-        "status": "201 Created",
-        "etag": "W/\"1\""
-      }
-    },
-    {
-      "fullUrl": "http://test.example.org/fhir/Organization/org-4",
-      "resource": {
-        "resourceType": "Organization",
-        "id": "org-4",
-        "meta": {
-          "versionId": "1",
-          "lastUpdated": "2025-08-01T14:31:31.987+00:00"
-        },
-        "identifier": [
-          {
-            "use": "official",
-            "system": "http://fhir.nl/fhir/NamingSystem/ura",
-            "value": "444"
-          }
-        ],
-        "active": true,
-        "name": "Organization 4"
-      },
-      "request": {
-        "method": "POST",
-        "url": "Organization/org-4"
-      },
-      "response": {
-        "status": "201 Created",
-        "etag": "W/\"1\""
-      }
-    },
     {
       "fullUrl": "http://test.example.org/fhir/Endpoint/dir1-endpoint",
       "resource": {
@@ -344,4 +222,3 @@
     }
   ]
 }
-

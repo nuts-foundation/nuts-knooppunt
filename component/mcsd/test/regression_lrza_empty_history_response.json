@@ -1,0 +1,16 @@
+{
+  "resourceType": "Bundle",
+  "id": "84b66851-14f9-4c9d-b79d-1d20620ceaa7",
+  "meta": {
+    "lastUpdated": "2025-09-11T13:21:12.499+00:00"
+  },
+  "type": "history",
+  "total": 0,
+  "link": [
+    {
+      "relation": "self",
+      "url": "http://localhost:7050/lrza-admin//_history"
+    }
+  ],
+  "entry": []
+}

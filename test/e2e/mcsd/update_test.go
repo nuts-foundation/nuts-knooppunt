@@ -173,7 +173,6 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		err = care2CureFHIRClient.ReadWithContext(t.Context(), "Organization/"+*createdOrg.Id, &readBackOrg)
 		require.NoError(t, err, "Failed to read back created organization")
 		require.Equal(t, orgName, *readBackOrg.Name, "Organization name should match")
-
 		// Second sync - should use _since and only find new resources (our test organization)
 		response2 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 

@@ -28,7 +28,7 @@ var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "H
 
 // clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
 // to account for potential clock differences between client and FHIR server
-const clockSkewBuffer = 2 * time.Second
+var clockSkewBuffer = 2 * time.Second
 
 // maxUpdateEntries limits the number of entries processed in a single FHIR transaction to prevent excessive load on the FHIR server
 const maxUpdateEntries = 1000
@@ -188,9 +188,6 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 	queryDirectoryFHIRClient := c.fhirClientFn(queryDirectoryFHIRBaseURL)
 
-	// Query remote directory
-	var searchSet fhir.Bundle
-
 	// Get last update time for incremental sync
 	lastUpdate, hasLastUpdate := c.lastUpdateTimes[fhirBaseURLRaw]
 
@@ -207,20 +204,17 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURLRaw).Msg("No last update time, doing full sync from FHIR server")
 	}
 
-	// First, collect all resources from _history
-	if err = remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath("/_history")); err != nil {
-		return DirectoryUpdateReport{}, fmt.Errorf("_history search failed: %w", err)
-	}
 	var entries []fhir.BundleEntry
-	err = fhirclient.Paginate(ctx, remoteAdminDirectoryFHIRClient, searchSet, func(searchSet *fhir.Bundle) (bool, error) {
-		entries = append(entries, searchSet.Entry...)
-		if len(entries) >= maxUpdateEntries {
-			return false, fmt.Errorf("too many entries (%d), aborting update to prevent excessive memory usage", len(entries))
+	var firstSearchSet fhir.Bundle
+	for i, resourceType := range directoryResourceTypes {
+		currEntries, currSearchSet, err := c.queryHistory(ctx, remoteAdminDirectoryFHIRClient, resourceType, searchParams)
+		if err != nil {
+			return DirectoryUpdateReport{}, fmt.Errorf("failed to query %s history: %w", resourceType, err)
 		}
-		return true, nil
-	})
-	if err != nil {
-		return DirectoryUpdateReport{}, fmt.Errorf("pagination of _history search failed: %w", err)
+		entries = append(entries, currEntries...)
+		if i == 0 {
+			firstSearchSet = currSearchSet
+		}
 	}
 
 	// Deduplicate resources from _history query - keep only the most recent version
@@ -297,16 +291,37 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// Use the search result Bundle's meta.lastUpdated if available, otherwise fall back to query start time.
 	// This uses the FHIR server's own timestamp string, eliminating clock skew issues.
 	var nextSyncTime string
-	if searchSet.Meta != nil && searchSet.Meta.LastUpdated != nil {
-		nextSyncTime = *searchSet.Meta.LastUpdated
+	if firstSearchSet.Meta != nil && firstSearchSet.Meta.LastUpdated != nil {
+		nextSyncTime = *firstSearchSet.Meta.LastUpdated
 	} else {
 		// Fallback to local time with buffer to account for potential clock skew
-		nextSyncTime = queryStartTime.Add(-clockSkewBuffer).Format(time.RFC3339)
+		nextSyncTime = queryStartTime.Add(-clockSkewBuffer).Format(time.RFC3339Nano)
 		log.Ctx(ctx).Warn().Str("fhir_server", fhirBaseURLRaw).Msg("Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues")
 	}
 	c.lastUpdateTimes[fhirBaseURLRaw] = nextSyncTime
 
 	return report, nil
+}
+
+func (c *Component) queryHistory(ctx context.Context, remoteAdminDirectoryFHIRClient fhirclient.Client, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
+	var searchSet fhir.Bundle
+	// First, collect all resources from _history
+	err := remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath(resourceType+"/_history"))
+	if err != nil {
+		return nil, fhir.Bundle{}, fmt.Errorf("_history search failed: %w", err)
+	}
+	var entries []fhir.BundleEntry
+	err = fhirclient.Paginate(ctx, remoteAdminDirectoryFHIRClient, searchSet, func(searchSet *fhir.Bundle) (bool, error) {
+		entries = append(entries, searchSet.Entry...)
+		if len(entries) >= maxUpdateEntries {
+			return false, fmt.Errorf("too many entries (%d), aborting update to prevent excessive memory usage", len(entries))
+		}
+		return true, nil
+	})
+	if err != nil {
+		return nil, fhir.Bundle{}, fmt.Errorf("pagination of _history search failed: %w", err)
+	}
+	return entries, searchSet, nil
 }
 
 // deduplicateHistoryEntries keeps only the most recent version of each resource
