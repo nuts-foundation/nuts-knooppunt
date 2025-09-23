@@ -105,7 +105,7 @@ func buildUpdateTransaction(_ context.Context, tx *fhir.Bundle, entry fhir.Bundl
 		Request: &fhir.BundleEntryRequest{
 			// Use _source for idempotent updates
 			Url: resourceType + "?" + url.Values{
-				"_source": []string{*entry.FullUrl},
+				"_source": []string{sourceURL},
 			}.Encode(),
 			Method: fhir.HTTPVerbPUT,
 		},
