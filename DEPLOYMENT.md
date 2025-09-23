@@ -27,7 +27,9 @@ separate, but you can choose to combine the data in a single tenant if so desire
 
 The root directory will be the LRZA directory provided by the ministry of health (VWS). During preliminary testing, an example root directory is available on this URL:
 
+```
 https://knooppunt-test.nuts-services.nl/lrza/mcsd
+```
 
 Please get in contact if you would like to make your Administration Directory discoverable through our example
 root directory.
@@ -36,3 +38,13 @@ For testing purposes your admin directory should be reachable through the public
 to utilise mTLS for trusted communication.
 
 For full configuration options see our [Configuration Guide](./CONFIGURATION.md)
+
+## Localization
+
+To enable the NVI-endpoint of the Knooppunt, you need to provide a base URL for the NVI service.
+
+The NVI will be provided by the ministry of health (VWS). During preliminary testing, an example NVI is available on this URL:
+
+```
+https://knooppunt-test.nuts-services.nl/nvi
+```

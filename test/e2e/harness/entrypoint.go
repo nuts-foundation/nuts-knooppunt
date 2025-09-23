@@ -7,6 +7,7 @@ import (
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
+	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
@@ -14,6 +15,7 @@ import (
 )
 
 type Details struct {
+	Vectors                  vectors.Details
 	KnooppuntInternalBaseURL *url.URL
 	MCSDQueryFHIRBaseURL     *url.URL
 	LRZaFHIRBaseURL          *url.URL
@@ -48,6 +50,9 @@ func Start(t *testing.T) Details {
 				FHIRBaseURL: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
 			},
 		},
+		NVI: nvi.Config{
+			FHIRBaseURL: testData.NVI.FHIRBaseURL.String(),
+		},
 	})
 	return Details{
 		KnooppuntInternalBaseURL: knooppuntInternalURL,
@@ -57,5 +62,6 @@ func Start(t *testing.T) Details {
 		SunflowerURA:             *sunflower.Organization().Identifier[0].Value,
 		Care2CureFHIRBaseURL:     care2cure.HAPITenant().BaseURL(hapiBaseURL),
 		Care2CureURA:             *care2cure.Organization().Identifier[0].Value,
+		Vectors:                  *testData,
 	}
 }
