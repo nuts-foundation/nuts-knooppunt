@@ -12,12 +12,5 @@ public class GetTokenRequest {
         this.scope = scope;
         this.sender = sender;
     }
-
-    public String toJson() {
-        return String.format(
-            "{\"identifier\":%s,\"receiver\":\"%s\",\"scope\":\"%s\",\"sender\":\"%s\"}",
-            identifier.toJson(), receiver, scope, sender
-        );
-    }
 }
 

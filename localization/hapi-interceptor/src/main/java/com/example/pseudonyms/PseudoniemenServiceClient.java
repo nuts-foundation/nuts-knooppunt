@@ -19,10 +19,11 @@ public class PseudoniemenServiceClient {
     }
 
     public GetTokenResponse getToken(GetTokenRequest request) throws Exception {
+        String requestBody = objectMapper.writeValueAsString(request);
         HttpRequest httpRequest = HttpRequest.newBuilder()
             .uri(URI.create(baseUrl + "/getToken"))
             .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(request.toJson()))
+            .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 
         HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
@@ -30,10 +31,11 @@ public class PseudoniemenServiceClient {
     }
 
     public ExchangeTokenResponse exchangeToken(ExchangeTokenRequest request) throws Exception {
+        String requestBody = objectMapper.writeValueAsString(request);
         HttpRequest httpRequest = HttpRequest.newBuilder()
             .uri(URI.create(baseUrl + "/exchangeToken"))
             .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(request.toJson()))
+            .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 
         HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
@@ -41,10 +43,11 @@ public class PseudoniemenServiceClient {
     }
 
     public String exchangeIdentifier(ExchangeIdentifierRequest request) throws Exception {
+        String requestBody = objectMapper.writeValueAsString(request);
         HttpRequest httpRequest = HttpRequest.newBuilder()
             .uri(URI.create(baseUrl + "/exchangeIdentifier"))
             .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(request.toJson()))
+            .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
 
         HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());

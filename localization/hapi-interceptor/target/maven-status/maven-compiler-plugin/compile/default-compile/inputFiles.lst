@@ -1,8 +1,8 @@
-/Users/stevenvandervegt/code/tmp/hapi-interceptor-test/src/main/java/com/example/pseudonyms/Identifier.java
-/Users/stevenvandervegt/code/tmp/hapi-interceptor-test/src/main/java/com/example/pseudonyms/ExchangeTokenRequest.java
-/Users/stevenvandervegt/code/tmp/hapi-interceptor-test/src/main/java/com/example/pseudonyms/ExchangeTokenResponse.java
-/Users/stevenvandervegt/code/tmp/hapi-interceptor-test/src/main/java/com/example/pseudonyms/GetTokenResponse.java
-/Users/stevenvandervegt/code/tmp/hapi-interceptor-test/src/main/java/com/example/pseudonyms/GetTokenRequest.java
-/Users/stevenvandervegt/code/tmp/hapi-interceptor-test/src/main/java/com/example/interceptor/CustomInterceptor.java
-/Users/stevenvandervegt/code/tmp/hapi-interceptor-test/src/main/java/com/example/pseudonyms/ExchangeIdentifierRequest.java
-/Users/stevenvandervegt/code/tmp/hapi-interceptor-test/src/main/java/com/example/pseudonyms/PseudoniemenServiceClient.java
+/Users/stevenvandervegt/code/nuts/nuts-knooppunt/localization/hapi-interceptor/src/main/java/com/example/pseudonyms/GetTokenRequest.java
+/Users/stevenvandervegt/code/nuts/nuts-knooppunt/localization/hapi-interceptor/src/main/java/com/example/pseudonyms/ExchangeIdentifierRequest.java
+/Users/stevenvandervegt/code/nuts/nuts-knooppunt/localization/hapi-interceptor/src/main/java/com/example/pseudonyms/PseudoniemenServiceClient.java
+/Users/stevenvandervegt/code/nuts/nuts-knooppunt/localization/hapi-interceptor/src/main/java/com/example/interceptor/PseudonymInterceptor.java
+/Users/stevenvandervegt/code/nuts/nuts-knooppunt/localization/hapi-interceptor/src/main/java/com/example/pseudonyms/ExchangeTokenRequest.java
+/Users/stevenvandervegt/code/nuts/nuts-knooppunt/localization/hapi-interceptor/src/main/java/com/example/pseudonyms/ExchangeTokenResponse.java
+/Users/stevenvandervegt/code/nuts/nuts-knooppunt/localization/hapi-interceptor/src/main/java/com/example/pseudonyms/Identifier.java
+/Users/stevenvandervegt/code/nuts/nuts-knooppunt/localization/hapi-interceptor/src/main/java/com/example/pseudonyms/GetTokenResponse.java
