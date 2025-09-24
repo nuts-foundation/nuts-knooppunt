@@ -42,4 +42,14 @@ func TestReadRequest(t *testing.T) {
 		require.NotNil(t, fhirRequest)
 		require.Equal(t, "123", *fhirRequest.Resource.Id)
 	})
+	t.Run("GET request with query params", func(t *testing.T) {
+		httpRequest, err := http.NewRequest(http.MethodGet, "http://localhost?status=completed", nil)
+		require.NoError(t, err)
+
+		fhirRequest, err := ParseRequest[fhir.Task](httpRequest)
+
+		require.NoError(t, err)
+		require.NotNil(t, fhirRequest)
+		require.Equal(t, "completed", fhirRequest.Parameters.Get("status"))
+	})
 }

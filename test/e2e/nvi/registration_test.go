@@ -41,11 +41,20 @@ func Test_Registration(t *testing.T) {
 		require.NotNil(t, actual.Id)
 		require.Equal(t, expected.Status, actual.Status)
 
-		t.Run("search through NVI Gateway", func(t *testing.T) {
+		t.Run("search through NVI Gateway with POST", func(t *testing.T) {
 			var searchSet fhir.Bundle
 			err := nviGatewayClient.Search("DocumentReference", url.Values{
 				"_id": []string{*actual.Id},
 			}, &searchSet)
+			require.NoError(t, err)
+			require.Len(t, searchSet.Entry, 1)
+		})
+		t.Run("search through NVI Gateway with GET", func(t *testing.T) {
+			nviGatewayClient := fhirclient.New(harnessDetail.KnooppuntInternalBaseURL.JoinPath("nvi"), http.DefaultClient, &fhirclient.Config{
+				UsePostSearch: false,
+			})
+			var searchSet fhir.Bundle
+			err := nviGatewayClient.Search("DocumentReference", url.Values{"_id": []string{*actual.Id}}, &searchSet)
 			require.NoError(t, err)
 			require.Len(t, searchSet.Entry, 1)
 		})

@@ -39,6 +39,7 @@ func New(config Config) (*Component, error) {
 
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.Handle("POST /nvi/DocumentReference", http.HandlerFunc(c.handleRegister))
+	internalMux.Handle("GET /nvi/DocumentReference", http.HandlerFunc(c.handleSearch))
 	internalMux.Handle("POST /nvi/DocumentReference/_search", http.HandlerFunc(c.handleSearch))
 }
 

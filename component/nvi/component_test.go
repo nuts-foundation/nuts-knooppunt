@@ -99,12 +99,21 @@ func TestComponent_handleSearch(t *testing.T) {
 		expectedStatus           int
 		expectedEntries          int
 		expectedOperationOutcome *fhir.OperationOutcome
+		httpMethod               string
 	}{
 		{
-			name:            "searches at NVI",
+			name:            "searches at NVI with POST",
 			nviResources:    []any{ref},
 			expectedStatus:  http.StatusOK,
 			expectedEntries: 1,
+			searchParams:    "status=current",
+		},
+		{
+			name:            "searches at NVI with GET",
+			nviResources:    []any{ref},
+			expectedStatus:  http.StatusOK,
+			expectedEntries: 1,
+			httpMethod:      "GET",
 			searchParams:    "status=current",
 		},
 		{
@@ -163,8 +172,13 @@ func TestComponent_handleSearch(t *testing.T) {
 				client: nvi,
 			}
 
-			httpRequest := httptest.NewRequest("POST", "/nvi/DocumentReference/_search", bytes.NewReader([]byte(testCase.searchParams)))
-			httpRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+			var httpRequest *http.Request
+			if testCase.httpMethod == "GET" {
+				httpRequest = httptest.NewRequest("GET", "/nvi/DocumentReference?"+testCase.searchParams, nil)
+			} else {
+				httpRequest = httptest.NewRequest("POST", "/nvi/DocumentReference/_search", bytes.NewReader([]byte(testCase.searchParams)))
+				httpRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+			}
 			httpResponse := httptest.NewRecorder()
 			component.handleSearch(httpResponse, httpRequest)
 
