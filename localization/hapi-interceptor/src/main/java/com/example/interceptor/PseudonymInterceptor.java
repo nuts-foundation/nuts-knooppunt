@@ -6,7 +6,6 @@ import org.springframework.stereotype.Component;
 import ca.uhn.fhir.interceptor.api.Hook;
 import ca.uhn.fhir.interceptor.api.Interceptor;
 import ca.uhn.fhir.interceptor.api.Pointcut;
-import org.hl7.fhir.instance.model.api.IBaseResource;
 import ca.uhn.fhir.rest.server.servlet.ServletRequestDetails;
 
 import org.hl7.fhir.r4.model.*;
@@ -15,14 +14,16 @@ import com.example.fhirserver.pseudonyms.*;
 
 @Component
 @Interceptor
-public class CustomInterceptor
+public class PseudonymInterceptor
 {
+  private static final String PSEUDONYM_SERVICE_URL = "http://host.docker.internal:8082";
+
   @Hook(Pointcut.STORAGE_PRESTORAGE_RESOURCE_CREATED)
   public void resourceCreated(ServletRequestDetails requestDetails, IBaseResource newResource)
   {
     System.out.println("YourInterceptor.resourceCreated");
     if (newResource instanceof DomainResource) {
-      deTokenizePsuedonym((DomainResource) newResource);
+      deTokenizePseudonym((DomainResource) newResource);
     }
   }
 
@@ -31,19 +32,19 @@ public class CustomInterceptor
     String requestorURA = requestDetails.getHeader("X-Requestor-URA");
 
     if (resource instanceof DomainResource) {
-      tokenizePsuedonym((DomainResource) resource, requestorURA);
+      tokenizePseudonym((DomainResource) resource, requestorURA);
     } else if (resource instanceof Bundle) {
       Bundle bundle = (Bundle) resource;
       for (Bundle.BundleEntryComponent entry : bundle.getEntry()) {
         if (entry.getResource() instanceof DomainResource) {
-          tokenizePsuedonym((DomainResource) entry.getResource(), requestorURA);
+          tokenizePseudonym((DomainResource) entry.getResource(), requestorURA);
         }
       }
     }
   }
 
   // Tokenize resources before sending them out so externally we communicate BSN-tokens specifically created for the requestor
-  public void tokenizePsuedonym(DomainResource resource, String requestorURA) {
+  public void tokenizePseudonym(DomainResource resource, String requestorURA) {
     org.hl7.fhir.r4.model.Identifier identifier = null;
     if (resource instanceof DocumentReference) {
       System.out.println("tokenizePs: DocumentReference found, checking subject identifier.");
@@ -64,7 +65,7 @@ public class CustomInterceptor
   }
 
   // De-tokenize resources before storing them so internally we have the local pseudoBSN
-  public void deTokenizePsuedonym(DomainResource resource) {
+  public void deTokenizePseudonym(DomainResource resource) {
     org.hl7.fhir.r4.model.Identifier identifier = null;
     if (resource instanceof DocumentReference) {
       System.out.println("deTokenizePs: DocumentReference found, checking subject identifier.");
@@ -77,7 +78,7 @@ public class CustomInterceptor
       if ("http://example.com/BSNToken".equals(identifier.getSystem())) {
         System.out.println("Updating identifier system from BSN to pseudoBSN.");
         identifier.setSystem("http://example.com/pseudoBSN");
-        String psuedonym = tokenToPsuedonym(identifier.getValue());
+        String psuedonym = tokenToPseudonym(identifier.getValue());
         identifier.setValue(psuedonym);
       } else {
         System.out.println("Identifier is of type: " + identifier.getSystem() + " - no changes made.");
@@ -85,8 +86,8 @@ public class CustomInterceptor
     }
   }
 
-  public String tokenToPsuedonym(String token) {
-    PseudoniemenServiceClient client = new PseudoniemenServiceClient("http://host.docker.internal:8082");;
+  public String tokenToPseudonym(String token) {
+    PseudoniemenServiceClient client = new PseudoniemenServiceClient(PSEUDONYM_SERVICE_URL);
 
     ExchangeTokenRequest request = new ExchangeTokenRequest(
         token,
@@ -105,7 +106,7 @@ public class CustomInterceptor
   }
 
   public String psuedonymToToken(String psuedonym, String requestorURA) {
-    PseudoniemenServiceClient client = new PseudoniemenServiceClient("http://host.docker.internal:8082");;
+    PseudoniemenServiceClient client = new PseudoniemenServiceClient(PSEUDONYM_SERVICE_URL);
 
     GetTokenRequest request = new GetTokenRequest(
         new com.example.fhirserver.pseudonyms.Identifier(psuedonym, "ORGANISATION_PSEUDO"),

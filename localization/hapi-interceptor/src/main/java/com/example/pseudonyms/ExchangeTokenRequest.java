@@ -12,12 +12,5 @@ public class ExchangeTokenRequest {
         this.scope = scope;
         this.organisation = organisation;
     }
-
-    public String toJson() {
-        return String.format(
-            "{\"token\":\"%s\",\"identifierType\":\"%s\",\"scope\":\"%s\",\"organisation\":\"%s\"}",
-            token, identifierType, scope, organisation
-        );
-    }
 }
 

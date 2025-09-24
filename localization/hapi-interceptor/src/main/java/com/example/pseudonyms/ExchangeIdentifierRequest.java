@@ -12,12 +12,5 @@ public class ExchangeIdentifierRequest {
         this.scope = scope;
         this.organisation = organisation;
     }
-
-    public String toJson() {
-        return String.format(
-            "{\"identifier\":%s,\"recipientIdentifierType\":\"%s\",\"scope\":\"%s\",\"organisation\":\"%s\"}",
-            identifier.toJson(), recipientIdentifierType, scope, organisation
-        );
-    }
 }
 

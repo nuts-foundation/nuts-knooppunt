@@ -101,7 +101,7 @@ services:
       hapi.fhir.partitioning.allow_references_across_partitions: false
 
       hapi.fhir.custom-bean-packages: com.example.fhirserver.interceptor
-      hapi.fhir.custom-interceptor-classes: com.example.fhirserver.interceptor.CustomInterceptor
+      hapi.fhir.custom-interceptor-classes: com.example.fhirserver.interceptor.PseudonymInterceptor
     restart: unless-stopped
   hapi-fhir-healthcheck:
     image: curlimages/curl:7.87.0

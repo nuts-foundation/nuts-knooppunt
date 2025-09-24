@@ -1,8 +1,8 @@
+com/example/fhirserver/interceptor/PseudonymInterceptor.class
 com/example/fhirserver/pseudonyms/GetTokenResponse.class
 com/example/fhirserver/pseudonyms/Identifier.class
 com/example/fhirserver/pseudonyms/GetTokenRequest.class
 com/example/fhirserver/pseudonyms/ExchangeIdentifierRequest.class
 com/example/fhirserver/pseudonyms/PseudoniemenServiceClient.class
 com/example/fhirserver/pseudonyms/ExchangeTokenRequest.class
-com/example/fhirserver/interceptor/CustomInterceptor.class
 com/example/fhirserver/pseudonyms/ExchangeTokenResponse.class
