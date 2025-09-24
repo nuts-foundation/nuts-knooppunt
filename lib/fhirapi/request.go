@@ -39,7 +39,7 @@ func ReadRequest[T any](httpRequest *http.Request) (*Request[T], error) {
 		}
 		request = &Request[T]{Parameters: httpRequest.Form}
 	default:
-		return nil, BadRequestError("invalid content type", nil)
+		return nil, BadRequestError("invalid content type: "+mediaType, nil)
 	}
 	return request, nil
 }
