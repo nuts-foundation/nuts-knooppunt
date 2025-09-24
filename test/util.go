@@ -1,6 +1,8 @@
 package test
 
 import (
+	"encoding/json"
+	"io/fs"
 	"net/http"
 	"os"
 	"testing"
@@ -8,6 +10,21 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func ReadJSON(t *testing.T, fs fs.ReadFileFS, fileName string) []byte {
+	t.Helper()
+	data, err := fs.ReadFile(fileName)
+	require.NoError(t, err)
+	return data
+}
+
+func ParseJSON[T any](t *testing.T, fs fs.ReadFileFS, fileName string) T {
+	data := ReadJSON(t, fs, fileName)
+	var result T
+	err := json.Unmarshal(data, &result)
+	require.NoError(t, err)
+	return result
+}
 
 func WaitForHTTPStatus(testURL string, statusCode int) (chan struct{}, chan error) {
 	done := make(chan struct{})
