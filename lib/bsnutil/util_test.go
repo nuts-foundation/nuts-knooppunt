@@ -1,0 +1,267 @@
+package bsnutil
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestCreateTransportToken(t *testing.T) {
+	tests := []struct {
+		name   string
+		bsn    int
+		audience string
+	}{
+		{
+			name:   "basic token creation",
+			bsn:    123456789,
+			audience: "nvi",
+		},
+		{
+			name:   "different audience with hyphens",
+			bsn:    987654321,
+			audience: "org-with-hyphens",
+		},
+		{
+			name:   "minimum valid BSN",
+			bsn:    100000000,
+			audience: "test",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			token, err := CreateTransportToken(tt.bsn, tt.audience)
+		if err != nil {
+			t.Fatalf("CreateTransportToken() failed: %v", err)
+		}
+
+			// Check that the token has the correct format (starts with "token-{audience}-")
+			expectedPrefix := "token-" + tt.audience + "-"
+			if !strings.HasPrefix(token, expectedPrefix) {
+				t.Errorf("CreateTransportToken() = %v, expected to start with %v", token, expectedPrefix)
+			}
+
+			// Check that token has the expected number of parts (audience, transformedBSN, nonce)
+			parts := strings.Split(token[6:], "-") // Skip "token-"
+			if len(parts) < 2 {
+				t.Errorf("CreateTransportToken() = %v, expected at least 2 parts after 'token-'", token)
+			}
+
+			// Verify we can extract the original BSN back
+			extractedBSN, err := BSNFromTransportToken(token)
+			if err != nil {
+				t.Errorf("BSNFromTransportToken() failed: %v", err)
+			}
+			if extractedBSN != tt.bsn {
+				t.Errorf("Round trip failed: original BSN %d, extracted BSN %d", tt.bsn, extractedBSN)
+			}
+		})
+	}
+}
+
+func TestBSNFromTransportToken_InvalidFormats(t *testing.T) {
+	tests := []struct {
+		name  string
+		token string
+	}{
+		{
+			name:  "invalid format - no prefix",
+			token: "nvi-123-abc123",
+		},
+		{
+			name:  "invalid format - wrong prefix",
+			token: "invalid-nvi-123-abc123",
+		},
+		{
+			name:  "invalid format - missing parts",
+			token: "token-nvi",
+		},
+		{
+			name:  "invalid format - non-numeric BSN",
+			token: "token-nvi-abc-def123",
+		},
+		{
+			name:  "empty string",
+			token: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := BSNFromTransportToken(tt.token)
+
+			if err == nil {
+				t.Errorf("BSNFromTransportToken() expected error for invalid token %q, but got none", tt.token)
+			}
+		})
+	}
+}
+
+func TestTransportTokenUniqueness(t *testing.T) {
+	bsn := 123456789
+	audience := "test-org"
+
+	// Generate multiple transport tokens for same BSN + audience and check uniqueness
+	tokens := make(map[string]bool)
+	for range 5 {
+		token, err := CreateTransportToken(bsn, audience)
+		if err != nil {
+			t.Fatalf("CreateTransportToken() failed: %v", err)
+		}
+		if tokens[token] {
+			t.Errorf("Transport token %s was generated twice - tokens should be unique", token)
+		}
+		tokens[token] = true
+
+		// Verify token resolves back to the same BSN
+		extractedBSN, err := BSNFromTransportToken(token)
+		if err != nil {
+			t.Errorf("Failed to extract BSN from token: %v", err)
+		}
+		if extractedBSN != bsn {
+			t.Errorf("Token resolved to BSN %d, want %d", extractedBSN, bsn)
+		}
+	}
+
+}
+
+func TestPseudonymConsistency(t *testing.T) {
+	bsn := 987654321
+	audience := "nvi"
+
+	// Create multiple transport tokens and convert to pseudonyms
+	var expectedPseudonym string
+	for i := range 3 {
+		token, err := CreateTransportToken(bsn, audience)
+		if err != nil {
+			t.Fatalf("CreateTransportToken() failed: %v", err)
+		}
+		pseudonym, err := TransportTokenToPseudonym(token)
+		if err != nil {
+			t.Fatalf("Failed to create pseudonym: %v", err)
+		}
+
+		if i == 0 {
+			expectedPseudonym = pseudonym
+		} else if pseudonym != expectedPseudonym {
+			t.Errorf("Pseudonyms should be consistent: got %s, want %s", pseudonym, expectedPseudonym)
+		}
+	}
+
+}
+
+func TestDifferentHoldersDifferentPseudonyms(t *testing.T) {
+	bsn := 555666777
+	audiences := []string{"nvi", "org-a", "org-b", "hospital-with-long-name"}
+
+	// Same BSN, different audiences should produce different pseudonyms
+	pseudonyms := make(map[string]string)
+	for _, audience := range audiences {
+		token, err := CreateTransportToken(bsn, audience)
+		if err != nil {
+			t.Fatalf("CreateTransportToken() failed: %v", err)
+		}
+		pseudonym, err := TransportTokenToPseudonym(token)
+		if err != nil {
+			t.Fatalf("Failed to create pseudonym for audience %s: %v", audience, err)
+		}
+		pseudonyms[audience] = pseudonym
+	}
+
+	// All pseudonyms should be different
+	seen := make(map[string]string)
+	for audience, pseudonym := range pseudonyms {
+		if prevHolder, exists := seen[pseudonym]; exists {
+			t.Errorf("Different audiences produced same pseudonym: %s (audiences: %s and %s)", pseudonym, prevHolder, audience)
+		}
+		seen[pseudonym] = audience
+	}
+
+}
+
+func TestCompleteWorkflow(t *testing.T) {
+	// Test the complete federated health workflow from the architecture diagram
+	bsn := 123456789
+
+	// LOCALIZATION: Knooppunt A registers DocumentReference
+	// Step 1: Knooppunt A creates transport token with audience="nvi"
+	tokenFromA, err := CreateTransportToken(bsn, "nvi")
+	if err != nil {
+		t.Fatalf("CreateTransportToken() failed: %v", err)
+	}
+
+	// Step 2: NVI converts to pseudonym for storage (shared across orgs)
+	sharedPseudonym, err := TransportTokenToPseudonym(tokenFromA)
+	if err != nil {
+		t.Fatalf("Failed to create pseudonym: %v", err)
+	}
+
+	// SEARCH: Knooppunt B queries for same BSN
+	// Step 3: Knooppunt B creates transport token with audience="nvi" (same as A)
+	tokenFromB, err := CreateTransportToken(bsn, "nvi")
+	if err != nil {
+		t.Fatalf("CreateTransportToken() failed: %v", err)
+	}
+
+	// Step 4: NVI converts B's token to pseudonym (should match stored one)
+	searchPseudonym, err := TransportTokenToPseudonym(tokenFromB)
+	if err != nil {
+		t.Fatalf("Failed to convert search token: %v", err)
+	}
+	if searchPseudonym != sharedPseudonym {
+		t.Errorf("Search pseudonym mismatch: got %s, want %s", searchPseudonym, sharedPseudonym)
+	}
+
+	// Step 5: NVI creates org-specific token for Knooppunt B
+	tokenForB, err := PseudonymToTransportToken(sharedPseudonym, "knooppunt-b")
+	if err != nil {
+		t.Fatalf("Failed to create token for Knooppunt B: %v", err)
+	}
+
+	// Step 6: Knooppunt B extracts BSN from their org-specific token
+	extractedBSN, err := BSNFromTransportToken(tokenForB)
+	if err != nil {
+		t.Fatalf("Failed to extract BSN: %v", err)
+	}
+
+	// Verify complete round-trip works
+	if extractedBSN != bsn {
+		t.Errorf("Complete workflow failed: got BSN %d, want %d", extractedBSN, bsn)
+	}
+}
+
+func TestGenerateSimpleKey(t *testing.T) {
+	tests := []string{"nvi", "org-b", "hospital-with-long-name", ""}
+
+	for _, audience := range tests {
+		t.Run("audience_"+audience, func(t *testing.T) {
+			key1 := generateSimpleKey(audience)
+			key2 := generateSimpleKey(audience)
+
+			// Same input should produce same key (deterministic)
+			if key1 != key2 {
+				t.Errorf("generateSimpleKey() is not deterministic: got %d and %d", key1, key2)
+			}
+
+			// Key should be positive (bit shift ensures this)
+			if key1 < 0 {
+				t.Errorf("generateSimpleKey() returned negative key: %d", key1)
+			}
+
+			// Key should fit in 31-bit range (bit shift guarantees this)
+			maxValue := (1 << 31) - 1 // 2^31 - 1 = 2,147,483,647
+			if key1 > maxValue {
+				t.Errorf("generateSimpleKey() returned key too large: %d > %d", key1, maxValue)
+			}
+		})
+	}
+
+	// Different audiences should produce different keys
+	key1 := generateSimpleKey("nvi")
+	key2 := generateSimpleKey("org-b")
+
+	if key1 == key2 {
+		t.Errorf("generateSimpleKey() produced same key for different audiences")
+	}
+}
+
