@@ -43,7 +43,7 @@ func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *h
 }
 
 func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest *http.Request) {
-	fhirRequest, err := fhirapi.ReadRequest[fhir.DocumentReference](httpRequest)
+	fhirRequest, err := fhirapi.ParseRequest[fhir.DocumentReference](httpRequest)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
@@ -68,7 +68,7 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 }
 
 func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *http.Request) {
-	fhirRequest, err := fhirapi.ReadRequest[fhir.DocumentReference](httpRequest)
+	fhirRequest, err := fhirapi.ParseRequest[fhir.DocumentReference](httpRequest)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return

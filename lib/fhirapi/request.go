@@ -15,9 +15,9 @@ type Request[T any] struct {
 	Parameters url.Values
 }
 
-// ReadRequest reads an HTTP request as FHIR request.
+// ParseRequest reads an HTTP request as FHIR request.
 // If it fails, the returned error can be sent to the client as OperationOutcome.
-func ReadRequest[T any](httpRequest *http.Request) (*Request[T], error) {
+func ParseRequest[T any](httpRequest *http.Request) (*Request[T], error) {
 	mediaType, _, err := mime.ParseMediaType(httpRequest.Header.Get("Content-Type"))
 	if err != nil {
 		return nil, BadRequestError("invalid content type", err)

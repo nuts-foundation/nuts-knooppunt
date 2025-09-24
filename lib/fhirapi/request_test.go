@@ -15,7 +15,7 @@ func TestReadRequest(t *testing.T) {
 		require.NoError(t, err)
 		httpRequest.Header.Set("Content-Type", "application/fhir+json")
 
-		fhirRequest, err := ReadRequest[fhir.Task](httpRequest)
+		fhirRequest, err := ParseRequest[fhir.Task](httpRequest)
 
 		require.NoError(t, err)
 		require.NotNil(t, fhirRequest)
@@ -26,7 +26,7 @@ func TestReadRequest(t *testing.T) {
 		require.NoError(t, err)
 		httpRequest.Header.Set("Content-Type", "application/json")
 
-		fhirRequest, err := ReadRequest[fhir.Task](httpRequest)
+		fhirRequest, err := ParseRequest[fhir.Task](httpRequest)
 
 		require.EqualError(t, err, "invalid content type: application/json")
 		require.Nil(t, fhirRequest)
@@ -36,7 +36,7 @@ func TestReadRequest(t *testing.T) {
 		require.NoError(t, err)
 		httpRequest.Header.Set("Content-Type", "application/fhir+json; charset=utf-8")
 
-		fhirRequest, err := ReadRequest[fhir.Task](httpRequest)
+		fhirRequest, err := ParseRequest[fhir.Task](httpRequest)
 
 		require.NoError(t, err)
 		require.NotNil(t, fhirRequest)

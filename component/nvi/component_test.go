@@ -144,7 +144,7 @@ func TestComponent_handleSearch(t *testing.T) {
 
 		component.handleSearch(httpResponse, httpRequest)
 
-		require.Equal(t, http.StatusBadRequest, httpResponse.Code)
+		require.Equal(t, http.StatusUnprocessableEntity, httpResponse.Code)
 		responseData, _ := io.ReadAll(httpResponse.Body)
 		var operationOutcome fhir.OperationOutcome
 		err := json.Unmarshal(responseData, &operationOutcome)
