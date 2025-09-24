@@ -39,10 +39,12 @@ func New(config Config) (*Component, error) {
 
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.Handle("POST /nvi/DocumentReference", http.HandlerFunc(c.handleRegister))
+	internalMux.Handle("GET /nvi/DocumentReference", http.HandlerFunc(c.handleSearch))
+	internalMux.Handle("POST /nvi/DocumentReference/_search", http.HandlerFunc(c.handleSearch))
 }
 
 func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest *http.Request) {
-	fhirRequest, err := fhirapi.ReadRequest[fhir.DocumentReference](httpRequest)
+	fhirRequest, err := fhirapi.ParseRequest[fhir.DocumentReference](httpRequest)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
@@ -66,10 +68,54 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusCreated, created)
 }
 
+func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *http.Request) {
+	fhirRequest, err := fhirapi.ParseRequest[fhir.DocumentReference](httpRequest)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	var searchSet fhir.Bundle
+	err = c.client.SearchWithContext(httpRequest.Context(), "DocumentReference", fhirRequest.Parameters, &searchSet)
+	if err != nil {
+		err = &fhirapi.Error{
+			Message:   "Failed to search for DocumentReferences at NVI",
+			Cause:     err,
+			IssueType: fhir.IssueTypeTransient,
+		}
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	if hasNextLink(&searchSet) {
+		// Otherwise must paginate, not supported for now.
+		err = &fhirapi.Error{
+			Message:   "NVI returned more results than can be handled. Please refine your search, or increase _count.",
+			IssueType: fhir.IssueTypeTooCostly,
+		}
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusOK, searchSet)
+}
+
 func (c Component) Start() error {
 	return nil
 }
 
 func (c Component) Stop(ctx context.Context) error {
 	return nil
+}
+
+func hasNextLink(bundle *fhir.Bundle) bool {
+	if bundle.Link == nil {
+		return false
+	}
+	for _, link := range bundle.Link {
+		if link.Relation == "next" {
+			return true
+		}
+	}
+	return false
 }

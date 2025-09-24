@@ -34,6 +34,8 @@ func SendErrorResponse(ctx context.Context, httpResponse http.ResponseWriter, er
 			fhir.IssueTypeTimeout,
 			fhir.IssueTypeThrottled:
 			statusCode = http.StatusServiceUnavailable
+		case fhir.IssueTypeTooCostly:
+			statusCode = http.StatusUnprocessableEntity
 		}
 		responseResource = fhirError.OperationOutcome()
 	} else {
