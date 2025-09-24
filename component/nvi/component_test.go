@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi/testdata"
@@ -96,7 +95,7 @@ func TestComponent_handleSearch(t *testing.T) {
 		name                     string
 		nviResources             []any
 		nviTransportError        error
-		searchParams             url.Values
+		searchParams             string
 		expectedStatus           int
 		expectedEntries          int
 		expectedOperationOutcome *fhir.OperationOutcome
@@ -106,14 +105,12 @@ func TestComponent_handleSearch(t *testing.T) {
 			nviResources:    []any{ref},
 			expectedStatus:  http.StatusOK,
 			expectedEntries: 1,
-			searchParams: url.Values{
-				"status": {"current"},
-			},
+			searchParams:    "status=current",
 		},
 		{
 			name:           "invalid search request",
 			nviResources:   nil,
-			searchParams:   url.Values{";": []string{}},
+			searchParams:   ";",
 			expectedStatus: http.StatusBadRequest,
 			expectedOperationOutcome: &fhir.OperationOutcome{
 				Issue: []fhir.OperationOutcomeIssue{
@@ -128,7 +125,7 @@ func TestComponent_handleSearch(t *testing.T) {
 		{
 			name:           "NVI returns next page",
 			nviResources:   []any{ref, ref},
-			searchParams:   url.Values{"_count": {"1"}},
+			searchParams:   "_count=1",
 			expectedStatus: http.StatusUnprocessableEntity,
 			expectedOperationOutcome: &fhir.OperationOutcome{
 				Issue: []fhir.OperationOutcomeIssue{
@@ -166,7 +163,7 @@ func TestComponent_handleSearch(t *testing.T) {
 				client: nvi,
 			}
 
-			httpRequest := httptest.NewRequest("POST", "/nvi/DocumentReference/_search", bytes.NewReader([]byte(testCase.searchParams.Encode())))
+			httpRequest := httptest.NewRequest("POST", "/nvi/DocumentReference/_search", bytes.NewReader([]byte(testCase.searchParams)))
 			httpRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 			httpResponse := httptest.NewRecorder()
 			component.handleSearch(httpResponse, httpRequest)
