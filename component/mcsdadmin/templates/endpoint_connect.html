@@ -12,18 +12,19 @@
     </tr>
     </thead>
     <tbody>
-    {{ range .Rows }}
+    {{ range $ri, $r := .Rows }}
     <tr>
         <th scope="row">{{ .Organization.Name }}</th>
-        {{ range .Cells }}
+        {{ range $ci, $c := .Cells }}
         <td>
-            <input type="hidden" name="organization_id" value="{{ .Organization.Id }}">
-            <input type="hidden" name="endpoint_id" value="{{ .Endpoint.Id }}">
+            <input id="org_id_{{$ri}}_{{$ci}}" type="hidden" name="organization_id" value="{{ $c.Organization.Id }}">
+            <input id="ep_id_{{$ri}}_{{$ci}}" type="hidden" name="endpoint_id" value="{{ $c.Endpoint.Id }}">
             <input
                     type="checkbox"
+                    name="status"
                     {{if .Enabled}}checked{{end}}
                     hx-put="/mcsdadmin/endpoint/connect"
-                    hx-include="[name='organization_id'], [name='endpoint_id']">
+                    hx-include="#org_id_{{$ri}}_{{$ci}}, #ep_id_{{$ri}}_{{$ci}}">
         </td>
         {{ end }}
     </tr>

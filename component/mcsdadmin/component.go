@@ -476,7 +476,7 @@ func connectEndpointPut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	checkedStr := r.PostForm.Get("checked")
+	checkedStr := r.PostForm.Get("status")
 	var checked bool
 	if checkedStr == "on" {
 		checked = true
@@ -518,10 +518,11 @@ func connectEndpointPut(w http.ResponseWriter, r *http.Request) {
 			ref := fhir.Reference{
 				Reference: &epStrRef,
 				Type:      to.Ptr("Endpoint"),
+				Display:   endp.Name,
 			}
 			org.Endpoint = append(org.Endpoint, ref)
 			var resOrg fhir.Organization
-			err = client.Update(orgStrRef, org, resOrg)
+			err = client.Update(orgStrRef, org, &resOrg)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -532,7 +533,7 @@ func connectEndpointPut(w http.ResponseWriter, r *http.Request) {
 		if hasRef == true {
 			org.Endpoint = slices.Delete(org.Endpoint, hasRefIdx, hasRefIdx+1)
 			var resOrg fhir.Organization
-			err = client.Update(epStrRef, org, resOrg)
+			err = client.Update(orgStrRef, org, &resOrg)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
