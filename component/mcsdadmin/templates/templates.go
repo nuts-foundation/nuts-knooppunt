@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
@@ -298,7 +299,22 @@ type EpConnCell struct {
 
 func MakeEpConnectProps(orgs []fhir.Organization, eps []fhir.Endpoint) EpConnProps {
 	out := EpConnProps{}
+
+	slices.SortFunc(orgs, func(a fhir.Organization, b fhir.Organization) int {
+		var strA, strB string
+		if a.Name != nil {
+			strA = *a.Name
+		}
+		if b.Name != nil {
+			strB = *b.Name
+		}
+		return strings.Compare(strA, strB)
+	})
+	slices.SortFunc(eps, func(a fhir.Endpoint, b fhir.Endpoint) int {
+		return strings.Compare(a.Address, b.Address)
+	})
 	out.Endpoints = eps
+
 	out.Rows = make([]EpConnRow, len(orgs))
 	ClmnLen := len(eps)
 
