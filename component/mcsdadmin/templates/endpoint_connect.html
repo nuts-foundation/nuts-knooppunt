@@ -6,8 +6,9 @@
 <table>
     <thead>
     <tr>
+        <th></th>
         {{ range .Endpoints }}
-        <th scope="col">{{ .Address }}</th>
+        <th class="vertical" thscope="col"><div><span>{{ .Address }}</span></div></th>
         {{ end }}
     </tr>
     </thead>

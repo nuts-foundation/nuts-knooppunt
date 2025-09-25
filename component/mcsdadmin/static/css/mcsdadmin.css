@@ -32,3 +32,20 @@
 .form-select {
     margin-bottom: 10px;
 }
+
+table.connections {
+    border-collapse: collapse;
+}
+
+table.connections th, td {
+    padding: 0.6em;
+}
+
+th.vertical {
+    vertical-align: bottom;
+}
+
+th.vertical > div {
+    writing-mode: vertical-rl;
+    transform: rotate(190deg) translateX(-20px);
+}
