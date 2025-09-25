@@ -399,6 +399,13 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var resEp fhir.Endpoint
+	err = client.Create(endpoint, &resEp)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	forOrgStr := r.PostForm.Get("endpoint-for")
 	var owningOrg fhir.Organization
 	if len(forOrgStr) > 0 {
@@ -407,27 +414,20 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
 			return
 		}
-	}
 
-	var resEp fhir.Endpoint
-	err = client.Create(endpoint, &resEp)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+		var epRef fhir.Reference
+		epRef.Type = to.Ptr("Endpoint")
+		epRef.Reference = to.Ptr("Endpoint/" + *resEp.Id)
+		epRef.Display = to.Ptr(endpoint.Address)
 
-	var epRef fhir.Reference
-	epRef.Type = to.Ptr("Endpoint")
-	epRef.Reference = to.Ptr("Endpoint/" + *resEp.Id)
-	epRef.Display = to.Ptr(endpoint.Address)
+		owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
 
-	owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
-
-	var updatedOrg fhir.Organization
-	err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		var updatedOrg fhir.Organization
+		err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -486,7 +486,7 @@ func connectEndpointPut(w http.ResponseWriter, r *http.Request) {
 
 	var org fhir.Organization
 	orgStrRef := fmt.Sprintf("Organization/%s", orgId)
-	err = client.Read(orgStrRef, org)
+	err = client.Read(orgStrRef, &org)
 	if err != nil {
 		http.Error(w, "unknown organization_id", http.StatusBadRequest)
 		return
@@ -494,7 +494,7 @@ func connectEndpointPut(w http.ResponseWriter, r *http.Request) {
 
 	var endp fhir.Endpoint
 	epStrRef := fmt.Sprintf("Endpoint/%s", endpId)
-	err = client.Read(epStrRef, endp)
+	err = client.Read(epStrRef, &endp)
 	if err != nil {
 		http.Error(w, "unknown endpoint_id", http.StatusBadRequest)
 		return
