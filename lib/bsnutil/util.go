@@ -62,7 +62,7 @@ func CreateTransportToken(bsn int, audience string) (string, error) {
 // Returns the original BSN or an error if the token format is invalid.
 func BSNFromTransportToken(token string) (int, error) {
 	// Parse token components
-	audience, transformedBSN, _, err := parseTokenComponents(token)
+	audience, transformedBSN, err := parseTokenComponents(token)
 	if err != nil {
 		return 0, err
 	}
@@ -111,7 +111,7 @@ func simpleXOR(bsn, key int) int {
 // This extracts the core BSN information and creates a consistent pseudonym (ignoring timestamp/nonce).
 func TransportTokenToPseudonym(token string) (string, error) {
 	// Parse token components
-	audience, transformedBSN, _, err := parseTokenComponents(token)
+	audience, transformedBSN, err := parseTokenComponents(token)
 	if err != nil {
 		return "", fmt.Errorf("invalid token format")
 	}
@@ -174,11 +174,11 @@ func validateAudience(audience string) error {
 	return nil
 }
 
-// parseTokenComponents extracts audience, transformedBSN, and nonce from a transport token.
-func parseTokenComponents(token string) (audience string, transformedBSN int, nonce string, err error) {
+// parseTokenComponents extracts audience and transformedBSN from a transport token.
+func parseTokenComponents(token string) (audience string, transformedBSN int, err error) {
 	// Parse the token format: "token-{audience}-{transformedBSN}-{nonce}"
 	if len(token) < minTokenLength || !strings.HasPrefix(token, tokenPrefix) {
-		return "", 0, "", fmt.Errorf("invalid token format")
+		return "", 0, fmt.Errorf("invalid token format")
 	}
 
 	// Split by hyphens and parse components
@@ -186,20 +186,17 @@ func parseTokenComponents(token string) (audience string, transformedBSN int, no
 
 	// We need at least 3 parts: audience, transformedBSN, and nonce
 	if len(parts) < 3 {
-		return "", 0, "", fmt.Errorf("invalid token format")
+		return "", 0, fmt.Errorf("invalid token format")
 	}
 
 	// Parse transformedBSN (second-to-last part)
 	transformedBSNValue, parseErr := strconv.Atoi(parts[len(parts)-2])
 	if parseErr != nil {
-		return "", 0, "", fmt.Errorf("invalid token format")
+		return "", 0, fmt.Errorf("invalid token format")
 	}
 
 	// Reconstruct audience (all parts except the last two: transformedBSN and nonce)
 	audienceValue := strings.Join(parts[:len(parts)-2], "-")
 
-	// Extract nonce (last part)
-	nonceValue := parts[len(parts)-1]
-
-	return audienceValue, transformedBSNValue, nonceValue, nil
+	return audienceValue, transformedBSNValue, nil
 }
