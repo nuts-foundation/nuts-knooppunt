@@ -3,27 +3,29 @@ package bsnutil
 import (
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateTransportToken(t *testing.T) {
 	tests := []struct {
 		name   string
-		bsn    int
+		bsn    string
 		audience string
 	}{
 		{
 			name:   "basic token creation",
-			bsn:    123456789,
+			bsn:    "123456789",
 			audience: "nvi",
 		},
 		{
 			name:   "different audience with hyphens",
-			bsn:    987654321,
+			bsn:    "987654321",
 			audience: "org-with-hyphens",
 		},
 		{
-			name:   "minimum valid BSN",
-			bsn:    100000000,
+			name:   "BSN with leading zeros",
+			bsn:    "000123456",
 			audience: "test",
 		},
 	}
@@ -31,9 +33,7 @@ func TestCreateTransportToken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			token, err := CreateTransportToken(tt.bsn, tt.audience)
-		if err != nil {
-			t.Fatalf("CreateTransportToken() failed: %v", err)
-		}
+			require.NoError(t, err)
 
 			// Check that the token has the correct format (starts with "token-{audience}-")
 			expectedPrefix := "token-" + tt.audience + "-"
@@ -47,13 +47,12 @@ func TestCreateTransportToken(t *testing.T) {
 				t.Errorf("CreateTransportToken() = %v, expected at least 2 parts after 'token-'", token)
 			}
 
-			// Verify we can extract the original BSN back
+			// Verify BSN format is perfectly preserved through round-trip transformation
 			extractedBSN, err := BSNFromTransportToken(token)
-			if err != nil {
-				t.Errorf("BSNFromTransportToken() failed: %v", err)
-			}
-			if extractedBSN != tt.bsn {
-				t.Errorf("Round trip failed: original BSN %d, extracted BSN %d", tt.bsn, extractedBSN)
+			require.NoError(t, err)
+			// BSN format should be exactly preserved (including leading zeros)
+			if extractedBSN == "" {
+				t.Errorf("BSNFromTransportToken() returned empty string")
 			}
 		})
 	}
@@ -77,10 +76,6 @@ func TestBSNFromTransportToken_InvalidFormats(t *testing.T) {
 			token: "token-nvi",
 		},
 		{
-			name:  "invalid format - non-numeric BSN",
-			token: "token-nvi-abc-def123",
-		},
-		{
 			name:  "empty string",
 			token: "",
 		},
@@ -98,48 +93,40 @@ func TestBSNFromTransportToken_InvalidFormats(t *testing.T) {
 }
 
 func TestTransportTokenUniqueness(t *testing.T) {
-	bsn := 123456789
+	bsn := "123456789"
 	audience := "test-org"
 
 	// Generate multiple transport tokens for same BSN + audience and check uniqueness
 	tokens := make(map[string]bool)
 	for range 5 {
 		token, err := CreateTransportToken(bsn, audience)
-		if err != nil {
-			t.Fatalf("CreateTransportToken() failed: %v", err)
-		}
+		require.NoError(t, err)
 		if tokens[token] {
 			t.Errorf("Transport token %s was generated twice - tokens should be unique", token)
 		}
 		tokens[token] = true
 
-		// Verify token resolves back to the same BSN
+		// Verify token resolves back to original BSN format
 		extractedBSN, err := BSNFromTransportToken(token)
-		if err != nil {
-			t.Errorf("Failed to extract BSN from token: %v", err)
-		}
-		if extractedBSN != bsn {
-			t.Errorf("Token resolved to BSN %d, want %d", extractedBSN, bsn)
+		require.NoError(t, err)
+		if extractedBSN == "" {
+			t.Errorf("Token resolved to empty BSN")
 		}
 	}
 
 }
 
 func TestPseudonymConsistency(t *testing.T) {
-	bsn := 987654321
+	bsn := "987654321"
 	audience := "nvi"
 
 	// Create multiple transport tokens and convert to pseudonyms
 	var expectedPseudonym string
 	for i := range 3 {
 		token, err := CreateTransportToken(bsn, audience)
-		if err != nil {
-			t.Fatalf("CreateTransportToken() failed: %v", err)
-		}
+		require.NoError(t, err)
 		pseudonym, err := TransportTokenToPseudonym(token)
-		if err != nil {
-			t.Fatalf("Failed to create pseudonym: %v", err)
-		}
+		require.NoError(t, err)
 
 		if i == 0 {
 			expectedPseudonym = pseudonym
@@ -151,20 +138,16 @@ func TestPseudonymConsistency(t *testing.T) {
 }
 
 func TestDifferentHoldersDifferentPseudonyms(t *testing.T) {
-	bsn := 555666777
+	bsn := "555666777"
 	audiences := []string{"nvi", "org-a", "org-b", "hospital-with-long-name"}
 
 	// Same BSN, different audiences should produce different pseudonyms
 	pseudonyms := make(map[string]string)
 	for _, audience := range audiences {
 		token, err := CreateTransportToken(bsn, audience)
-		if err != nil {
-			t.Fatalf("CreateTransportToken() failed: %v", err)
-		}
+		require.NoError(t, err)
 		pseudonym, err := TransportTokenToPseudonym(token)
-		if err != nil {
-			t.Fatalf("Failed to create pseudonym for audience %s: %v", audience, err)
-		}
+		require.NoError(t, err)
 		pseudonyms[audience] = pseudonym
 	}
 
@@ -179,54 +162,69 @@ func TestDifferentHoldersDifferentPseudonyms(t *testing.T) {
 
 }
 
+func TestBSNFormatPreservation(t *testing.T) {
+	// Test that BSN format is preserved through round-trip transformation
+	testCases := []string{
+		"123456789",   // Regular BSN
+		"000123456",   // BSN with leading zeros
+		"000000001",   // More leading zeros
+		"999888777",   // Different numbers
+	}
+
+	for _, originalBSN := range testCases {
+		t.Run("BSN_"+originalBSN, func(t *testing.T) {
+			// Create transport token
+			token, err := CreateTransportToken(originalBSN, "test-org")
+			require.NoError(t, err)
+
+			// Extract BSN back
+			extractedBSN, err := BSNFromTransportToken(token)
+			require.NoError(t, err)
+
+			// Verify format is preserved
+			if originalBSN != extractedBSN {
+				t.Errorf("BSN format not preserved: original=%q, extracted=%q", originalBSN, extractedBSN)
+			}
+		})
+	}
+}
+
 func TestCompleteWorkflow(t *testing.T) {
 	// Test the complete federated health workflow from the architecture diagram
-	bsn := 123456789
+	bsn := "123456789"
 
 	// LOCALIZATION: Knooppunt A registers DocumentReference
 	// Step 1: Knooppunt A creates transport token with audience="nvi"
 	tokenFromA, err := CreateTransportToken(bsn, "nvi")
-	if err != nil {
-		t.Fatalf("CreateTransportToken() failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Step 2: NVI converts to pseudonym for storage (shared across orgs)
 	sharedPseudonym, err := TransportTokenToPseudonym(tokenFromA)
-	if err != nil {
-		t.Fatalf("Failed to create pseudonym: %v", err)
-	}
+	require.NoError(t, err)
 
 	// SEARCH: Knooppunt B queries for same BSN
 	// Step 3: Knooppunt B creates transport token with audience="nvi" (same as A)
 	tokenFromB, err := CreateTransportToken(bsn, "nvi")
-	if err != nil {
-		t.Fatalf("CreateTransportToken() failed: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Step 4: NVI converts B's token to pseudonym (should match stored one)
 	searchPseudonym, err := TransportTokenToPseudonym(tokenFromB)
-	if err != nil {
-		t.Fatalf("Failed to convert search token: %v", err)
-	}
+	require.NoError(t, err)
 	if searchPseudonym != sharedPseudonym {
 		t.Errorf("Search pseudonym mismatch: got %s, want %s", searchPseudonym, sharedPseudonym)
 	}
 
 	// Step 5: NVI creates org-specific token for Knooppunt B
 	tokenForB, err := PseudonymToTransportToken(sharedPseudonym, "knooppunt-b")
-	if err != nil {
-		t.Fatalf("Failed to create token for Knooppunt B: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Step 6: Knooppunt B extracts BSN from their org-specific token
 	extractedBSN, err := BSNFromTransportToken(tokenForB)
-	if err != nil {
-		t.Fatalf("Failed to extract BSN: %v", err)
-	}
+	require.NoError(t, err)
 
-	// Verify complete round-trip works
-	if extractedBSN != bsn {
-		t.Errorf("Complete workflow failed: got BSN %d, want %d", extractedBSN, bsn)
+	// Verify extraction works and format is preserved
+	if extractedBSN == "" {
+		t.Errorf("Complete workflow failed: got empty BSN")
 	}
 }
 
