@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi/testdata"
+	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonimization"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
 	testUtil "github.com/nuts-foundation/nuts-knooppunt/test"
 	"github.com/stretchr/testify/assert"
@@ -30,13 +31,13 @@ func TestComponent_handleRegister(t *testing.T) {
 			name:                       "registered at NVI",
 			requestBody:                testUtil.ReadJSON(t, testdata.FS, "documentreference.json"),
 			expectedStatus:             http.StatusCreated,
-			expectedNVICreatedResource: testUtil.ParseJSON[fhir.DocumentReference](t, testdata.FS, "documentreference.json"),
+			expectedNVICreatedResource: testUtil.ParseJSON[fhir.DocumentReference](t, testdata.FS, "documentreference-response.json"),
 		},
 		{
 			name:                       "sets profile if not set",
 			requestBody:                testUtil.ReadJSON(t, testdata.FS, "documentreference-without-profile.json"),
 			expectedStatus:             http.StatusCreated,
-			expectedNVICreatedResource: testUtil.ParseJSON[fhir.DocumentReference](t, testdata.FS, "documentreference.json"),
+			expectedNVICreatedResource: testUtil.ParseJSON[fhir.DocumentReference](t, testdata.FS, "documentreference-response.json"),
 		},
 		{
 			name:              "NVI is down",
@@ -61,7 +62,8 @@ func TestComponent_handleRegister(t *testing.T) {
 				Error: testCase.nviTransportError,
 			}
 			component := Component{
-				client: nvi,
+				client:        nvi,
+				pseudonymizer: &pseudonimization.Component{},
 			}
 			httpRequest := httptest.NewRequest("POST", "/nvi/DocumentReference", bytes.NewReader(testCase.requestBody))
 			httpRequest.Header.Add("Content-Type", "application/fhir+json")
@@ -81,7 +83,21 @@ func TestComponent_handleRegister(t *testing.T) {
 			if testCase.expectedStatus == http.StatusCreated {
 				require.Len(t, nvi.CreatedResources["DocumentReference"], 1)
 				actual := nvi.CreatedResources["DocumentReference"][0].(fhir.DocumentReference)
-				assert.Equal(t, testCase.expectedNVICreatedResource, actual)
+				// copy identifier because it's scrubbed
+				actualPatientIdentifier := fhir.Identifier{
+					System: to.Ptr(*actual.Subject.Identifier.System),
+					Value:  to.Ptr(*actual.Subject.Identifier.Value),
+				}
+				// scrub patient identifier value for comparison (it's random)
+				actual.Subject.Identifier.Value = nil
+				actualJSON, _ := json.Marshal(actual)
+				expectedJSON, _ := json.Marshal(testCase.expectedNVICreatedResource)
+				assert.JSONEq(t, string(expectedJSON), string(actualJSON))
+
+				t.Run("assert BSNs are translated", func(t *testing.T) {
+					assert.Equal(t, "http://fhir.nl/fhir/NamingSystem/bsn-transport-token", *actualPatientIdentifier.System)
+					assert.Contains(t, *actualPatientIdentifier.Value, "token-nvi")
+				})
 			}
 		})
 	}
@@ -169,7 +185,8 @@ func TestComponent_handleSearch(t *testing.T) {
 				Error:     testCase.nviTransportError,
 			}
 			component := Component{
-				client: nvi,
+				client:        nvi,
+				pseudonymizer: &pseudonimization.Component{},
 			}
 
 			var httpRequest *http.Request
