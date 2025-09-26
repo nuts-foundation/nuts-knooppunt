@@ -21,7 +21,7 @@ func VisitBundleResources[ResType any](bundle *fhir.Bundle, visitor func(resourc
 		if err := visitor(&res); err != nil {
 			return fmt.Errorf("visit bundle entry resource %T: %w", res, err)
 		}
-		data, err := json.Marshal(entry.Resource)
+		data, err := json.Marshal(res)
 		if err != nil {
 			return fmt.Errorf("remarshal bundle entry resource %T: %w", res, err)
 		}

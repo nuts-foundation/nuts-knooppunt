@@ -109,11 +109,12 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 				newValue, err := c.tokenizeFHIRSearchToken(value, "nvi")
 				if err != nil {
 					fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+					return
 				}
 				newValues[i] = newValue
 			}
 		}
-		searchParams.Add(key, strings.Join(newValues, " "))
+		searchParams[key] = newValues
 	}
 
 	var searchSet fhir.Bundle
