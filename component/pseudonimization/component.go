@@ -1,3 +1,4 @@
+//go:generate mockgen -destination=component_mock.go -package=pseudonimization -source=component.go
 package pseudonimization
 
 import (
@@ -8,6 +9,11 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
+
+type Pseudonymizer interface {
+	IdentifierToToken(identifier fhir.Identifier, audience string) (*fhir.Identifier, error)
+	TokenToBSN(identifier fhir.Identifier, audience string) (*fhir.Identifier, error)
+}
 
 type Component struct {
 }

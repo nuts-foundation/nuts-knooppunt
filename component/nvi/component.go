@@ -30,7 +30,7 @@ var _ component.Lifecycle = (*Component)(nil)
 
 type Component struct {
 	client        fhirclient.Client
-	pseudonymizer *pseudonimization.Component
+	pseudonymizer pseudonimization.Pseudonymizer
 }
 
 func New(config Config) (*Component, error) {
