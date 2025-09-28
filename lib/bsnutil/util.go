@@ -79,7 +79,7 @@ func PseudonymToBSN(pseudonym string, audience string) (string, error) {
 }
 
 func BSNToPseudonym(bsn string, audience string) (string, error) {
-	// AES-CBC to stable encrypt the BSN
+	// AES-ECB to stable encrypt the BSN
 	key := deriveKey(audience, keyLength)
 	result, err := encryptAESECB([]byte(bsn), key)
 	if err != nil {
