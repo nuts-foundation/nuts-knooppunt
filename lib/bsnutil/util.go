@@ -169,7 +169,10 @@ func decryptAESECB(data, key []byte) ([]byte, error) {
 	if len(data)%keySize != 0 {
 		return nil, fmt.Errorf("invalid data length %d, must be multiple of %d", len(data), keySize)
 	}
-	cipher, _ := aes.NewCipher(key)
+	cipher, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
+	}
 	decrypted := make([]byte, len(data))
 	for bs, be := 0, keySize; bs < len(data); bs, be = bs+keySize, be+keySize {
 		cipher.Decrypt(decrypted[bs:be], data[bs:be])
