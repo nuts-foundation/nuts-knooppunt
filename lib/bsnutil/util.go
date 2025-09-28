@@ -47,9 +47,7 @@ func TransportTokenToPseudonym(token string, audience string) (string, error) {
 // PseudonymToTransportToken converts a pseudonym to a transport token format.
 func PseudonymToTransportToken(pseudonym string, audience string) (string, error) {
 	iv := make([]byte, aes.BlockSize)
-	if _, err := rand.Read(iv); err != nil {
-		return "", fmt.Errorf("failed to generate IV: %w", err)
-	}
+	_, _ = rand.Read(iv)
 	block, err := aes.NewCipher(deriveKey(audience, keyLength))
 	if err != nil {
 		return "", err
