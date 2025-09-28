@@ -1,227 +1,179 @@
 package bsnutil
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"strings"
 )
 
-const (
-	tokenPrefix        = "token-"
-	pseudonymPrefix    = "ps-"
-	minTokenLength     = len(tokenPrefix) + 1     // "token-" + at least 1 char
-	minPseudonymLength = len(pseudonymPrefix) + 1 // "ps-" + at least 1 char
-
-	// Input validation limits
-	maxAudienceLength = 255
-)
-
-// CreateTransportToken creates a transport token from BSN and audience using simple XOR transformation.
-// Each transport token is unique (includes random nonce) but contains the same encrypted BSN.
-// This ensures transport tokens cannot be tracked while the NVI can always generate the same pseudonym.
+// Functions:
+//  audience_key = derive_key(audience, secret)
+//  pseudonym = stable_encrypt(bsn, audience_key)
+//  transport_token = random_encrypt(pseudonym, audience_key, nonce)
 //
-// Parameters:
-//   - bsn: The social security number or other identifier (as string to preserve format)
-//   - audience: The identifier for the organization/audience receiving the token
-//
-// Returns a transport token in format: "token-{audience}-{transformedBSN}-{nonce}"
-func CreateTransportToken(bsn string, audience string) (string, error) {
-	// Validate inputs
-	if err := validateAudience(audience); err != nil {
-		return "", err
+// stable_encrypt and random_encrypt are reversible functions'
+//   - stable_encrypt always produces the same output for same input, it uses AES-ECB
+//   - random_encrypt produces different output each time, it uses AES-GCM
+
+const keyLength = 16 // AES-128
+
+// TransportTokenToPseudonym converts a transport token to a pseudonym format.
+func TransportTokenToPseudonym(token string, audience string) (string, error) {
+	ivAndcipherText, err := hex.DecodeString(token)
+	if err != nil {
+		return "", fmt.Errorf("invalid token format: %w", err)
 	}
-
-	// For now, use a simple transformation - later this will use proper encryption
-	// XOR the BSN string directly with audience-derived key
-	key := generateSimpleKey(audience)
-	transformedBSN := encodeXOR(bsn, key)
-
-	// Add random nonce to make each token unique
-	nonce, err := generateRandomNonce()
+	if len(ivAndcipherText) < aes.BlockSize {
+		return "", fmt.Errorf("invalid token length")
+	}
+	iv := ivAndcipherText[:aes.BlockSize]
+	cipherText := ivAndcipherText[aes.BlockSize:]
+	if len(cipherText)%aes.BlockSize != 0 {
+		return "", fmt.Errorf("invalid cipher text length")
+	}
+	block, err := aes.NewCipher(deriveKey(audience, keyLength))
 	if err != nil {
 		return "", err
 	}
+	decrypter := cipher.NewCBCDecrypter(block, iv)
 
-	return fmt.Sprintf("token-%s-%s-%s", audience, transformedBSN, nonce), nil
+	plainText := make([]byte, len(cipherText))
+	decrypter.CryptBlocks(plainText, cipherText)
+	return hex.EncodeToString(plainText), nil
 }
 
-// BSNFromTransportToken extracts the original BSN from a transport token.
-// This reverses the XOR transformation applied in CreateTransportToken.
-//
-// Parameters:
-//   - token: The transport token in format "token-{audience}-{transformedBSN}-{nonce}"
-//
-// Returns the original BSN or an error if the token format is invalid.
-func BSNFromTransportToken(token string) (string, error) {
-	// Parse token components
-	audience, transformedBSN, err := parseTokenComponents(token)
+// PseudonymToTransportToken converts a pseudonym to a transport token format.
+func PseudonymToTransportToken(pseudonym string, audience string) (string, error) {
+	iv := make([]byte, aes.BlockSize)
+	_, _ = rand.Read(iv)
+	block, err := aes.NewCipher(deriveKey(audience, keyLength))
 	if err != nil {
 		return "", err
 	}
-
-	// Generate the same key used for encryption
-	key := generateSimpleKey(audience)
-
-	// Reverse the XOR transformation
-	return decodeXOR(transformedBSN, key)
+	encrypter := cipher.NewCBCEncrypter(block, iv)
+	plainText, err := hex.DecodeString(pseudonym)
+	if err != nil {
+		return "", fmt.Errorf("invalid pseudonym format: %w", err)
+	}
+	cipherText := make([]byte, len(plainText))
+	encrypter.CryptBlocks(cipherText, plainText)
+	result := make([]byte, len(iv)+len(cipherText))
+	copy(result, iv)
+	copy(result[len(iv):], cipherText)
+	return hex.EncodeToString(result), nil
 }
 
-// generateSimpleKey creates a simple numeric key from the audience string.
-// In future versions, this will be replaced with proper key derivation functions.
-func generateSimpleKey(audience string) int {
-	// Use SHA256 hash and take first 4 bytes as integer
-	hash := sha256.Sum256([]byte(audience))
+func PseudonymToBSN(pseudonym string, audience string) (string, error) {
+	data, err := hex.DecodeString(pseudonym)
+	if err != nil {
+		return "", err
+	}
+	key := deriveKey(audience, keyLength)
+	decrypted, err := decryptAESECB(data, key)
+	if err != nil {
+		return "", err
+	}
+	return string(decrypted), nil
+}
 
-	// Convert first 4 bytes to uint32, then ensure positive int range
-	hashValue := binary.BigEndian.Uint32(hash[:4])
-	key := int(hashValue >> 1) // Shift right 1 bit to ensure positive int (31 bits)
+func BSNToPseudonym(bsn string, audience string) (string, error) {
+	// AES-CBC to stable encrypt the BSN
+	key := deriveKey(audience, keyLength)
+	result, err := encryptAESECB([]byte(bsn), key)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(result), nil
+}
+
+// BSNToTransportToken converts a BSN to a transport token format, shorthand for BSNToPseudonym(PseudonymToTransportToken()).
+func BSNToTransportToken(bsn string, audience string) (string, error) {
+	pseudonym, err := BSNToPseudonym(bsn, audience)
+	if err != nil {
+		return "", err
+	}
+	token, err := PseudonymToTransportToken(pseudonym, audience)
+	if err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+// TransportTokenToBSN converts a transport token to a BSN format, shorthand for TransportTokenToPseudonym(PseudonymToBSN()).
+func TransportTokenToBSN(token string, audience string) (string, error) {
+	pseudonym, err := TransportTokenToPseudonym(token, audience)
+	if err != nil {
+		return "", err
+	}
+	bsn, err := PseudonymToBSN(pseudonym, audience)
+	if err != nil {
+		return "", err
+	}
+	return bsn, nil
+}
+
+func deriveKey(audience string, length int) []byte {
+	const staticSecret = "secret-key"
+	// Simple key derivation by XORing audience with static secret
+	key := make([]byte, len(staticSecret))
+	for i := 0; i < len(staticSecret); i++ {
+		key[i] = staticSecret[i] ^ audience[i%len(audience)]
+	}
+
+	// Ensure key is of required length (16, 24, 32 bytes for AES)
+	if len(key) < length {
+		paddedKey := make([]byte, length)
+		copy(paddedKey, key)
+		key = paddedKey
+	} else if len(key) > length {
+		key = key[:length]
+	}
 
 	return key
 }
 
-// generateRandomNonce creates a random nonce to make transport tokens unique.
-func generateRandomNonce() (string, error) {
-	// Generate 4 random bytes and convert to hex string
-	bytes := make([]byte, 4)
-	_, err := rand.Read(bytes)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate random nonce: %w", err)
+func encryptAESECB(data, key []byte) ([]byte, error) {
+	const keySize = 16
+	if len(key) != keySize {
+		return nil, fmt.Errorf("invalid key length %d, must be 16 bytes", len(key))
 	}
-	return fmt.Sprintf("%x", bytes), nil
+	encrypter, _ := aes.NewCipher(key)
+	// Pad data to multiple of keySize
+	padding := keySize - (len(data) % keySize)
+	if padding == keySize {
+		padding = 0
+	}
+	paddedData := make([]byte, len(data)+padding)
+	copy(paddedData, data)
+
+	encrypted := make([]byte, len(paddedData))
+	for bs, be := 0, keySize; bs < len(paddedData); bs, be = bs+keySize, be+keySize {
+		encrypter.Encrypt(encrypted[bs:be], paddedData[bs:be])
+	}
+
+	return encrypted, nil
 }
 
-// encodeXOR takes a plaintext string and returns a hex-encoded XOR result
-func encodeXOR(plaintext string, key int) string {
-	if plaintext == "" {
-		return ""
+func decryptAESECB(data, key []byte) ([]byte, error) {
+	const keySize = 16 // AES-128
+	if len(key) != keySize {
+		return nil, fmt.Errorf("invalid key length %d, must be 16 bytes", len(key))
 	}
-
-	// Convert key to bytes
-	keyBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(keyBytes, uint32(key))
-
-	inputBytes := []byte(plaintext)
-	result := make([]byte, len(inputBytes))
-
-	// Create expanded key for subtle.XORBytes (which requires equal length slices)
-	expandedKey := make([]byte, len(inputBytes))
-	for i := range expandedKey {
-		expandedKey[i] = keyBytes[i%4]
+	if len(data)%keySize != 0 {
+		return nil, fmt.Errorf("invalid data length %d, must be multiple of %d", len(data), keySize)
 	}
-
-	subtle.XORBytes(result, inputBytes, expandedKey)
-	return fmt.Sprintf("%x", result)
-}
-
-// decodeXOR takes a hex-encoded string and returns the plaintext result
-func decodeXOR(hexEncoded string, key int) (string, error) {
-	if hexEncoded == "" {
-		return "", nil
+	cipher, _ := aes.NewCipher(key)
+	decrypted := make([]byte, len(data))
+	for bs, be := 0, keySize; bs < len(data); bs, be = bs+keySize, be+keySize {
+		cipher.Decrypt(decrypted[bs:be], data[bs:be])
 	}
-
-	inputBytes, err := hex.DecodeString(hexEncoded)
-	if err != nil {
-		return "", fmt.Errorf("invalid hex encoding: %w", err)
+	// Remove padding (trailing zero bytes)
+	i := len(decrypted)
+	for i > 0 && decrypted[i-1] == 0 {
+		i--
 	}
-
-	// Convert key to bytes
-	keyBytes := make([]byte, 4)
-	binary.BigEndian.PutUint32(keyBytes, uint32(key))
-
-	result := make([]byte, len(inputBytes))
-
-	// Create expanded key for subtle.XORBytes (which requires equal length slices)
-	expandedKey := make([]byte, len(inputBytes))
-	for i := range expandedKey {
-		expandedKey[i] = keyBytes[i%4]
-	}
-
-	subtle.XORBytes(result, inputBytes, expandedKey)
-	return string(result), nil
-}
-
-// TODO: Remove this later - this logic will be implemented in a HAPI Interceptor at the NVI - only here to prove the concept
-// TransportTokenToPseudonym converts a transport token to a pseudonym format.
-// This extracts the core BSN information and creates a consistent pseudonym (ignoring nonce).
-func TransportTokenToPseudonym(token string) (string, error) {
-	// Parse token components
-	audience, transformedBSN, err := parseTokenComponents(token)
-	if err != nil {
-		return "", fmt.Errorf("invalid token format")
-	}
-
-	// Generate consistent pseudonym using the transformed BSN and audience (deterministic)
-	return fmt.Sprintf("ps-%s-%s", audience, transformedBSN), nil
-}
-
-// TODO: Remove this later - this logic will be implemented in a HAPI Interceptor at the NVI - only here to prove the concept
-// PseudonymToTransportToken converts a pseudonym back to transport token format.
-// This reverses the TransportTokenToPseudonym transformation.
-func PseudonymToTransportToken(pseudonym string, audience string) (string, error) {
-	// Parse the pseudonym format manually to handle audience names with hyphens
-	if len(pseudonym) < minPseudonymLength || !strings.HasPrefix(pseudonym, pseudonymPrefix) {
-		return "", fmt.Errorf("invalid pseudonym format")
-	}
-
-	// Find the last hyphen to separate audience from transformedBSN
-	lastHyphen := strings.LastIndex(pseudonym[len(pseudonymPrefix):], "-")
-	if lastHyphen != -1 {
-		lastHyphen += len(pseudonymPrefix) // Adjust for the "ps-" prefix offset
-	}
-
-	if lastHyphen == -1 || lastHyphen == len(pseudonymPrefix) {
-		return "", fmt.Errorf("invalid pseudonym format")
-	}
-
-	pseudonymHolder := pseudonym[len(pseudonymPrefix):lastHyphen]
-	transformedBSN := pseudonym[lastHyphen+1:]
-
-	// Reverse the XOR to get original BSN
-	key := generateSimpleKey(pseudonymHolder)
-	originalBSN, err := decodeXOR(transformedBSN, key)
-	if err != nil {
-		return "", fmt.Errorf("invalid pseudonym format: %w", err)
-	}
-
-	// Create new token with the target audience
-	return CreateTransportToken(originalBSN, audience)
-}
-
-// validateAudience checks if the audience string is valid and safe to use.
-func validateAudience(audience string) error {
-	if len(audience) == 0 {
-		return fmt.Errorf("invalid audience: cannot be empty")
-	}
-	if len(audience) > maxAudienceLength {
-		return fmt.Errorf("invalid audience: exceeds maximum length of %d characters", maxAudienceLength)
-	}
-	return nil
-}
-
-// parseTokenComponents extracts audience and transformedBSN from a transport token.
-func parseTokenComponents(token string) (audience string, transformedBSN string, err error) {
-	// Parse the token format: "token-{audience}-{transformedBSN}-{nonce}"
-	if len(token) < minTokenLength || !strings.HasPrefix(token, tokenPrefix) {
-		return "", "", fmt.Errorf("invalid token format")
-	}
-
-	// Split by hyphens and parse components
-	parts := strings.Split(token[len(tokenPrefix):], "-") // Skip "token-" prefix
-
-	// We need at least 3 parts: audience, transformedBSN, and nonce
-	if len(parts) < 3 {
-		return "", "", fmt.Errorf("invalid token format")
-	}
-
-	// Get transformedBSN (second-to-last part)
-	transformedBSNValue := parts[len(parts)-2]
-
-	// Reconstruct audience (all parts except the last two: transformedBSN and nonce)
-	audienceValue := strings.Join(parts[:len(parts)-2], "-")
-
-	return audienceValue, transformedBSNValue, nil
+	decrypted = decrypted[:i]
+	return decrypted, nil
 }
