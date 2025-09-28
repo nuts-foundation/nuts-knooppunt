@@ -141,7 +141,10 @@ func encryptAESECB(data, key []byte) ([]byte, error) {
 	if len(key) != keySize {
 		return nil, fmt.Errorf("invalid key length %d, must be 16 bytes", len(key))
 	}
-	encrypter, _ := aes.NewCipher(key)
+	encrypter, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
+	}
 	// Pad data to multiple of keySize
 	padding := keySize - (len(data) % keySize)
 	if padding == keySize {
