@@ -46,7 +46,6 @@ func TestBSNToPseudonym(t *testing.T) {
 		pseudonym2, err := BSNToPseudonym(bsn, "audience-1")
 		require.NoError(t, err)
 		require.Equal(t, pseudonym1, pseudonym2)
-		println(pseudonym1)
 	})
 	t.Run("different audiences yield different pseudonyms", func(t *testing.T) {
 		pseudonym1, err := BSNToPseudonym(bsn, "audience-1")
