@@ -302,12 +302,20 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 		endpoints = append(endpoints, ep)
 	}
 
+	allEndpoints, err := findAll[fhir.Endpoint](client)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	props := struct {
 		Organization fhir.Organization
 		Endpoints    []fhir.Endpoint
+		AllEndpoints []fhir.Endpoint
 	}{
 		Organization: org,
 		Endpoints:    endpoints,
+		AllEndpoints: allEndpoints,
 	}
 	tmpls.RenderWithBase(w, "organization_endpoints.html", props)
 }
