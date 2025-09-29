@@ -33,6 +33,20 @@ func RenderWithBase(w io.Writer, name string, data any) {
 	}
 }
 
+func RenderPartial(w io.Writer, name string, data any) {
+	ts, err := template.ParseFS(tmplFS, name)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to parse template")
+		return
+	}
+
+	err = ts.ExecuteTemplate(w, name, data)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to execute template")
+		return
+	}
+}
+
 const unknownStr = "N/A"
 
 type EpListProps struct {

@@ -1,0 +1,7 @@
+<div class="card">
+    <ul>
+        <li>Type: {{ .ConnectionType.Display }}</li>
+        <li>Payload: {{ (index .PayloadType 0).Text }}</li>
+        <li>Address: {{ .Address }}</li>
+    </ul>
+</div>

@@ -77,6 +77,7 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
 	mux.HandleFunc("GET /mcsdadmin/organization/{id}/endpoints", associateEndpoints)
+	mux.HandleFunc("POST /mcsdadmin/organization/{id}/endpoints", associateEndpointsPost)
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
 	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
 	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
@@ -277,8 +278,6 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func associateEndpoints(w http.ResponseWriter, req *http.Request) {
-	w.WriteHeader(http.StatusOK)
-
 	orgId := req.PathValue("id")
 	path := fmt.Sprintf("Organization/%s", orgId)
 	var org fhir.Organization
@@ -317,7 +316,47 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 		Endpoints:    endpoints,
 		AllEndpoints: allEndpoints,
 	}
+	w.WriteHeader(http.StatusOK)
 	tmpls.RenderWithBase(w, "organization_endpoints.html", props)
+}
+
+func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		log.Error().Err(err).Msg("failed to parse form input")
+		return
+	}
+
+	selectedId := req.PostForm.Get("selected-endpoint")
+	selected, err := findById[fhir.Endpoint](selectedId)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to find endpoint")
+		return
+	}
+
+	orgId := req.PathValue("id")
+	organization, err := findById[fhir.Organization](orgId)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to find organization")
+		return
+	}
+
+	selectedPath := fmt.Sprintf("Endpoint/%s", selectedId)
+	ref := fhir.Reference{
+		Reference: &selectedPath,
+	}
+	organization.Endpoint = append(organization.Endpoint, ref)
+
+	orgPath := fmt.Sprintf("Organization/%s", orgId)
+	var resultOrg fhir.Organization
+	err = client.Update(orgPath, organization, &resultOrg)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to update organization")
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	tmpls.RenderPartial(w, "_card_endpoint.html", selected)
 }
 
 func listEndpoints(w http.ResponseWriter, _ *http.Request) {
@@ -442,16 +481,6 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	forOrgStr := r.PostForm.Get("endpoint-for")
-	var owningOrg fhir.Organization
-	if len(forOrgStr) > 0 {
-		err = client.Read("Organization/"+forOrgStr, &owningOrg)
-		if err != nil {
-			http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
-			return
-		}
-	}
-
 	var resEp fhir.Endpoint
 	err = client.Create(endpoint, &resEp)
 	if err != nil {
@@ -463,13 +492,23 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	epRef.Type = to.Ptr("Endpoint")
 	epRef.Reference = to.Ptr("Endpoint/" + *resEp.Id)
 
-	owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
+	forOrgStr := r.PostForm.Get("endpoint-for")
+	var owningOrg fhir.Organization
+	if len(forOrgStr) > 0 {
+		err = client.Read("Organization/"+forOrgStr, &owningOrg)
+		if err != nil {
+			http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
+			return
+		}
 
-	var updatedOrg fhir.Organization
-	err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
+
+		var updatedOrg fhir.Organization
+		err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -630,6 +669,15 @@ func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+func findById[T any](id string) (T, error) {
+	var prototype T
+	resourceType := caramel.ResourceType(prototype)
+	resourcePath := fmt.Sprintf("%s/%s", resourceType, id)
+
+	err := client.Read(resourcePath, &prototype)
+	return prototype, err
+}
+
 func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {
 	var prototype T
 	resourceType := caramel.ResourceType(prototype)
@@ -653,6 +701,13 @@ func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {
 	return result, nil
 }
 
+func uraIdentifier(uraString string) fhir.Identifier {
+	var identifier fhir.Identifier
+	identifier.Value = to.Ptr(uraString)
+	identifier.System = to.Ptr(coding.URANamingSystem)
+	return identifier
+}
+
 func renderList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.ResponseWriter, dtoFunc func([]R) []DTO) {
 	resourceType := caramel.ResourceType(new(R))
 	items, err := findAll[R](fhirClient)
@@ -665,11 +720,4 @@ func renderList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.
 	}{
 		Items: dtoFunc(items),
 	})
-}
-
-func uraIdentifier(uraString string) fhir.Identifier {
-	var identifier fhir.Identifier
-	identifier.Value = to.Ptr(uraString)
-	identifier.System = to.Ptr(coding.URANamingSystem)
-	return identifier
 }

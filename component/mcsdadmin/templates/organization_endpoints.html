@@ -1,21 +1,29 @@
 {{define "main"}}
 <h3>Organization: Care4U Hospital</h3>
 <label>Endpoint:</label>
-<div class="card">
+<div id="endpoints">
     {{ range .Endpoints }}
-    <ul>
-        <li>Type: {{ .ConnectionType.Display }}</li>
-        <li>Payload: {{ (index .PayloadType 0).Text }}</li>
-        <li>Address: {{ .Address }}</li>
-    </ul>
+    <div class="card">
+        <ul>
+            <li>Type: {{ .ConnectionType.Display }}</li>
+            <li>Payload: {{ (index .PayloadType 0).Text }}</li>
+            <li>Address: {{ .Address }}</li>
+        </ul>
+    </div>
     {{ end }}
 </div>
 <label>Add endpoint</label>
-<select name="all-endpoints" id="all-endpoints">
+<select name="selected-endpoint" id="selected-endpoint">
     <option value="" disabled selected>--Please choose an option--</option>
     {{ range .AllEndpoints }}
     <option value="{{ .Id }}">{{ .Address }}</option>
     {{ end }}
 </select>
-<button class="btn btn-outline-dark btn-sm">Add</button>
+<button class="btn btn-outline-dark btn-sm"
+        hx-include="#selected-endpoint"
+        hx-post="/mcsdadmin/organization/{{ .Organization.Id }}/endpoints"
+        hx-target="#endpoints"
+        hx-swap="beforeend"
+>Add
+</button>
 {{end}}
