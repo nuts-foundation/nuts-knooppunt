@@ -1,0 +1,16 @@
+{{define "main"}}
+<h3>Organization: Care4U Hospital</h3>
+<label>Endpoint:</label>
+<div class="card">
+    {{ range .Endpoints }}
+    <ul>
+        <li>Type: {{ .ConnectionType.Display }}</li>
+        <li>Payload: {{ (index .PayloadType 0).Text }}</li>
+        <li>Address: {{ .Address }}</li>
+    </ul>
+    {{ end }}
+</div>
+<label>Add endpoint</label>
+<input type="text"/>
+<button class="btn btn-outline-dark btn-sm">Add</button>
+{{end}}

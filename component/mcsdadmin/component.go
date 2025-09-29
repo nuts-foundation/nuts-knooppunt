@@ -76,6 +76,7 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
 	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
+	mux.HandleFunc("GET /mcsdadmin/organization/{id}/endpoints", associateEndpoints)
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
 	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
 	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
@@ -273,6 +274,42 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
+}
+
+func associateEndpoints(w http.ResponseWriter, req *http.Request) {
+	w.WriteHeader(http.StatusOK)
+
+	orgId := req.PathValue("id")
+	path := fmt.Sprintf("Organization/%s", orgId)
+	var org fhir.Organization
+	err := client.Read(path, &org)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	endpoints := make([]fhir.Endpoint, 0, len(org.Endpoint))
+	for _, ref := range org.Endpoint {
+		var ep fhir.Endpoint
+		if ref.Reference == nil {
+			continue
+		}
+		err := client.Read(*ref.Reference, &ep)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		endpoints = append(endpoints, ep)
+	}
+
+	props := struct {
+		Organization fhir.Organization
+		Endpoints    []fhir.Endpoint
+	}{
+		Organization: org,
+		Endpoints:    endpoints,
+	}
+	tmpls.RenderWithBase(w, "organization_endpoints.html", props)
 }
 
 func listEndpoints(w http.ResponseWriter, _ *http.Request) {
