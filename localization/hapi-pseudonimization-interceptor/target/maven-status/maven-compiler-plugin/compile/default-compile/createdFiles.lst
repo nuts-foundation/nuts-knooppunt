@@ -1,0 +1,8 @@
+nl/nuts/pseudonyms/ExchangeTokenRequest.class
+nl/nuts/pseudonyms/ExchangeIdentifierRequest.class
+nl/nuts/interceptor/PseudonymInterceptor.class
+nl/nuts/pseudonyms/PseudoniemenServiceClient.class
+nl/nuts/pseudonyms/GetTokenResponse.class
+nl/nuts/pseudonyms/Identifier.class
+nl/nuts/pseudonyms/ExchangeTokenResponse.class
+nl/nuts/pseudonyms/GetTokenRequest.class
