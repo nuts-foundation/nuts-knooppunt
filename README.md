@@ -45,7 +45,7 @@ docker compose up --build
 
 ## Configuration
 
-The application supports configuration through YAML files and environment variables. See [CONFIGURATION.md](CONFIGURATION.md) for detailed configuration options.
+The application supports configuration through YAML files and environment variables. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for detailed configuration options.
 
 Quick start:
 
