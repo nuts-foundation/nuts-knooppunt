@@ -9,7 +9,3 @@ services:
     environment:
       hapi.fhir.custom-bean-packages: nl.nuts.interceptor
       hapi.fhir.custom-interceptor-classes: nl.nuts.interceptor.PseudonymInterceptor
-
-volumes:
-  #postgres-data:
-  hapi-data:
