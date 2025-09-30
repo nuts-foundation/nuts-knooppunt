@@ -16,22 +16,24 @@
     </properties>
 
     <dependencies>
-        <!-- HAPI FHIR Base (API and Model) -->
         <dependency>
             <groupId>ca.uhn.hapi.fhir</groupId>
             <artifactId>hapi-fhir-base</artifactId>
             <version>${hapi.fhir.version}</version>
         </dependency>
-        <!-- HAPI FHIR Server (for interceptors and RestfulServer) -->
         <dependency>
             <groupId>ca.uhn.hapi.fhir</groupId>
             <artifactId>hapi-fhir-server</artifactId>
             <version>${hapi.fhir.version}</version>
         </dependency>
-        <!-- HAPI FHIR Structures (for working with R4 resources, change if needed) -->
         <dependency>
             <groupId>ca.uhn.hapi.fhir</groupId>
             <artifactId>hapi-fhir-structures-r4</artifactId>
+            <version>${hapi.fhir.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>hapi-fhir-jpaserver-searchparam</artifactId>
             <version>${hapi.fhir.version}</version>
         </dependency>
         <!-- Logging (optional, for debugging) -->
@@ -69,6 +71,14 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>${lombok.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/jakarta.servlet/jakarta.servlet-api -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>6.1.0</version>
             <scope>provided</scope>
         </dependency>
 

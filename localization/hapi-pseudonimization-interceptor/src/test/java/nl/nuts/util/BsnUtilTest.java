@@ -1,6 +1,7 @@
 package nl.nuts.util;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -19,12 +20,12 @@ class BsnUtilTest {
         final String token = "token-hospital-abc123-def456";
 
         // When converting to pseudonym
-        final String pseudonym = bsnUtil.transportTokenToPseudonym(token);
+        final String pseudonym = bsnUtil.transportTokenToPseudonym(token, "nvi");
 
         // Then the pseudonym should have correct format (ps-{audience}-{transformedBSN})
         assertNotNull(pseudonym);
         assertTrue(pseudonym.startsWith("ps-"));
-        assertEquals("ps-hospital-abc123", pseudonym);
+        assertEquals("ps-nvi-abc123", pseudonym);
     }
 
     @Test
@@ -33,10 +34,10 @@ class BsnUtilTest {
         final String token = "token-hospital-north-east-abc123-def456";
 
         // When converting to pseudonym
-        final String pseudonym = bsnUtil.transportTokenToPseudonym(token);
+        final String pseudonym = bsnUtil.transportTokenToPseudonym(token, "nvi");
     
         // Then the audience should be preserved correctly
-        assertEquals("ps-hospital-north-east-abc123", pseudonym);
+        assertEquals("ps-nvi-abc123", pseudonym);
     }
 
     @Test
@@ -46,7 +47,7 @@ class BsnUtilTest {
 
         // When/Then converting should throw PseudonimizationExecutionException
         assertThrows(PseudonimizationExecutionException.class, () -> {
-            bsnUtil.transportTokenToPseudonym(token);
+            bsnUtil.transportTokenToPseudonym(token, "nvi");
         });
     }
 
@@ -57,7 +58,7 @@ class BsnUtilTest {
 
         // When/Then converting should throw PseudonimizationExecutionException
         assertThrows(PseudonimizationExecutionException.class, () -> {
-            bsnUtil.transportTokenToPseudonym(token);
+            bsnUtil.transportTokenToPseudonym(token, "nvi");
         });
     }
 
@@ -68,7 +69,7 @@ class BsnUtilTest {
 
         // When/Then converting should throw PseudonimizationExecutionException
         assertThrows(PseudonimizationExecutionException.class, () -> {
-            bsnUtil.transportTokenToPseudonym(token);
+            bsnUtil.transportTokenToPseudonym(token, "nvi");
         });
     }
 
@@ -127,33 +128,14 @@ class BsnUtilTest {
     }
 
     @Test
-    void testRoundTrip_tokenToPseudonymBackToToken() throws Exception {
-        // Given a pseudonym (representing a stored identifier)
-        final String originalPseudonym = "ps-hospital-6d656469";
-
-        // When converting to token for an audience
-        final String token1 = bsnUtil.pseudonymToTransportToken(originalPseudonym, "clinic");
-
-        // Then converting that token back to pseudonym
-        final String pseudonym1 = bsnUtil.transportTokenToPseudonym(token1);
-
-        // When converting the pseudonym to another token for the same audience
-        final String token2 = bsnUtil.pseudonymToTransportToken(pseudonym1, "clinic");
-
-        // Then both tokens should decode to the same pseudonym
-        final String pseudonym2 = bsnUtil.transportTokenToPseudonym(token2);
-        assertEquals(pseudonym1, pseudonym2);
-    }
-
-    @Test
     void testRoundTrip_sameAudienceShouldProduceSamePseudonym() throws Exception {
         // Given two different tokens with the same audience and BSN but different nonces
         final String token1 = "token-hospital-abc123-nonce1";
         final String token2 = "token-hospital-abc123-nonce2";
 
         // When converting both to pseudonyms
-        final String pseudonym1 = bsnUtil.transportTokenToPseudonym(token1);
-        final String pseudonym2 = bsnUtil.transportTokenToPseudonym(token2);
+        final String pseudonym1 = bsnUtil.transportTokenToPseudonym(token1, "nvi");
+        final String pseudonym2 = bsnUtil.transportTokenToPseudonym(token2, "nvi");
 
         // Then pseudonyms should be identical (nonce is ignored)
         assertEquals(pseudonym1, pseudonym2);
@@ -193,8 +175,8 @@ class BsnUtilTest {
         final String token = "token-hospital-abc123-def456";
 
         // When converting multiple times
-        final String pseudonym1 = bsnUtil.transportTokenToPseudonym(token);
-        final String pseudonym2 = bsnUtil.transportTokenToPseudonym(token);
+        final String pseudonym1 = bsnUtil.transportTokenToPseudonym(token, "nvi");
+        final String pseudonym2 = bsnUtil.transportTokenToPseudonym(token, "nvi");
 
         // Then results should be identical (deterministic)
         assertEquals(pseudonym1, pseudonym2);
@@ -214,8 +196,40 @@ class BsnUtilTest {
         assertNotEquals(token1, token2);
 
         // But both should convert to the same pseudonym
-        final String pseudonym1 = bsnUtil.transportTokenToPseudonym(token1);
-        final String pseudonym2 = bsnUtil.transportTokenToPseudonym(token2);
+        final String pseudonym1 = bsnUtil.transportTokenToPseudonym(token1, "nvi");
+        final String pseudonym2 = bsnUtil.transportTokenToPseudonym(token2, "nvi");
         assertEquals(pseudonym1, pseudonym2);
+    }
+
+    @Test
+    void testCompleteWorkflow() throws Exception {
+        // Test the complete federated health workflow from the architecture diagram
+        final String bsn = "123456789";
+
+        // LOCALIZATION: Knooppunt A registers DocumentReference
+        // Step 1: Knooppunt A creates transport token with audience="nvi"
+        final String tokenFromA = bsnUtil.createTransportToken(bsn, "nvi");
+
+        // Step 2: NVI converts to pseudonym for storage (shared across orgs)
+        final String sharedPseudonym = bsnUtil.transportTokenToPseudonym(tokenFromA, "nvi");
+
+        // SEARCH: Knooppunt B queries for same BSN
+        // Step 3: Knooppunt B creates transport token with audience="nvi" (same as A)
+        final String tokenFromB = bsnUtil.createTransportToken(bsn, "nvi");
+
+        // Step 4: NVI converts B's token to pseudonym (should match stored one)
+        final String searchPseudonym = bsnUtil.transportTokenToPseudonym(tokenFromB, "nvi");
+        assertEquals(sharedPseudonym, searchPseudonym,
+            "Search pseudonym mismatch: got " + searchPseudonym + ", want " + sharedPseudonym);
+
+        // Step 5: NVI creates org-specific token for Knooppunt B
+        final String tokenForB = bsnUtil.pseudonymToTransportToken(sharedPseudonym, "knooppunt-b");
+
+        // Step 6: Knooppunt B extracts BSN from their org-specific token
+        final String extractedBSN = bsnUtil.bsnFromTransportToken(tokenForB);
+
+        // Verify extraction works and format is preserved
+        assertFalse(extractedBSN.isEmpty(), "Complete workflow failed: got empty BSN");
+        assertEquals(bsn, extractedBSN, "Extracted BSN should match original BSN");
     }
 }

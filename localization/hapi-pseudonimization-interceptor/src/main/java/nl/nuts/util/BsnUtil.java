@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 import nl.nuts.PseudonimizationExecutionException;
 
@@ -23,12 +24,26 @@ public class BsnUtil {
      * @return A pseudonym in format "ps-{audience}-{transformedBSN}"
      * @throws PseudonimizationExecutionException if the token format is invalid
      */
-    public String transportTokenToPseudonym(final String token) throws PseudonimizationExecutionException {
+    public String transportTokenToPseudonym(final String token,
+                                            final String nviAudience) throws PseudonimizationExecutionException {
         // Parse token components
         final TokenComponents components = parseTokenComponents(token);
 
         // Generate consistent pseudonym using the transformed BSN and audience (deterministic)
-        return String.format("ps-%s-%s", components.audience, components.transformedBSN);
+        return String.format("ps-%s-%s", nviAudience, components.getTransformedBSN());
+    }
+
+    /**
+     * Extracts BSN from a transport token.
+     *
+     * @param token The transport token in format "token-{audience}-{transformedBSN}-{nonce}"
+     * @return The original BSN
+     * @throws PseudonimizationExecutionException if the token format is invalid
+     */
+    public String bsnFromTransportToken(final String token) throws PseudonimizationExecutionException {
+        final TokenComponents components = parseTokenComponents(token);
+        final int key = generateSimpleKey(components.getAudience());
+        return decodeXOR(components.getTransformedBSN(), key);
     }
 
     /**
@@ -39,7 +54,6 @@ public class BsnUtil {
      * @param audience The target audience for the new transport token
      * @return A transport token in format "token-{audience}-{transformedBSN}-{nonce}"
      * @throws PseudonimizationExecutionException if the pseudonym format is invalid
-     * @throws Exception if token creation fails
      */
     public String pseudonymToTransportToken(final String pseudonym, final String audience)
             throws PseudonimizationExecutionException {
@@ -73,9 +87,8 @@ public class BsnUtil {
      * @param bsn The social security number or other identifier
      * @param audience The identifier for the organization/audience receiving the token
      * @return A transport token in format "token-{audience}-{transformedBSN}-{nonce}"
-     * @throws Exception if token generation fails
      */
-    private String createTransportToken(final String bsn, final String audience) {
+    public String createTransportToken(final String bsn, final String audience) {
         // Generate key and transform BSN
         final int key = generateSimpleKey(audience);
         final String transformedBSN = encodeXOR(bsn, key);
@@ -153,18 +166,7 @@ public class BsnUtil {
      * Parses token components from a transport token.
      */
     private TokenComponents parseTokenComponents(final String token) throws PseudonimizationExecutionException {
-        if (token.length() < TOKEN_PREFIX.length() + 1 || !token.startsWith(TOKEN_PREFIX)) {
-            throw new PseudonimizationExecutionException("invalid token format");
-        }
-
-        // Split by hyphens and parse components
-        final String afterPrefix = token.substring(TOKEN_PREFIX.length());
-        final String[] parts = afterPrefix.split("-");
-
-        // We need at least 3 parts: audience, transformedBSN, and nonce
-        if (parts.length < 3) {
-            throw new PseudonimizationExecutionException("invalid token format");
-        }
+        final String[] parts = getStrings(token);
 
         // Get transformedBSN (second-to-last part)
         final String transformedBSN = parts[parts.length - 2];
@@ -180,6 +182,22 @@ public class BsnUtil {
         final String audience = audienceBuilder.toString();
 
         return new TokenComponents(audience, transformedBSN);
+    }
+
+    private static String[] getStrings(final String token) {
+        if (token.length() < TOKEN_PREFIX.length() + 1 || !token.startsWith(TOKEN_PREFIX)) {
+            throw new PseudonimizationExecutionException("invalid token format");
+        }
+
+        // Split by hyphens and parse components
+        final String afterPrefix = token.substring(TOKEN_PREFIX.length());
+        final String[] parts = afterPrefix.split("-");
+
+        // We need at least 3 parts: audience, transformedBSN, and nonce
+        if (parts.length < 3) {
+            throw new PseudonimizationExecutionException("invalid token format");
+        }
+        return parts;
     }
 
     /**
@@ -219,10 +237,11 @@ public class BsnUtil {
     /**
      * Helper class to hold token components.
      */
+    @Getter
     private static class TokenComponents {
 
-        final String audience;
-        final String transformedBSN;
+        private final String audience;
+        private final String transformedBSN;
 
         TokenComponents(final String audience, final String transformedBSN) {
             this.audience = audience;
