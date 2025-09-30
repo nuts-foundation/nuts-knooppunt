@@ -1,4 +1,4 @@
-FROM maven:3.8.3-openjdk-17 AS builder
+FROM maven AS builder
 
 WORKDIR /app
 COPY ./pom.xml .
