@@ -60,7 +60,7 @@ This chapter describes when/how to deploy specific generic functions of the Knoo
 ### Addressing
 
 To participate in the addressing generic function Knooppunt will connect to several FHIR APIs to synchronize data, according to the mCSD profile:
-- a Root Administration Directory, authoratitive on care organizations and their Administration Directory endpoints,
+- a Root Administration Directory, authoritative on care organizations and their Administration Directory endpoints,
 - Administration Directories of care organizations, discovered through the Root Administration Directory.
 - a local Query Directory where the synchronisation process will put data received from other organisations
 
