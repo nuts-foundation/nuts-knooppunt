@@ -1,0 +1,8 @@
+/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/interceptor/PseudonymInterceptor.java
+/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/PseudoniemenServiceClient.java
+/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/ExchangeTokenRequest.java
+/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/ExchangeTokenResponse.java
+/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/GetTokenResponse.java
+/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/ExchangeIdentifierRequest.java
+/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/GetTokenRequest.java
+/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/Identifier.java
