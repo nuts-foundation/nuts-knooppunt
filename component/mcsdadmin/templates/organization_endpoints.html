@@ -1,29 +1,33 @@
 {{define "main"}}
-<h3>Organization: Care4U Hospital</h3>
-<label>Endpoint:</label>
-<div id="endpoints">
-    {{ range .Endpoints }}
-    <div class="card">
-        <ul>
-            <li>Type: {{ .ConnectionType.Display }}</li>
-            <li>Payload: {{ (index .PayloadType 0).Text }}</li>
-            <li>Address: {{ .Address }}</li>
-        </ul>
+<div id="edit-associations">
+    <h3>Organization: Care4U Hospital</h3>
+    <label>Endpoint:</label>
+    <div id="endpoints">
+        {{ range .Endpoints }}
+        <div class="card">
+            <ul>
+                <li>Type: {{ .ConnectionType.Display }}</li>
+                <li>Payload: {{ (index .PayloadType 0).Text }}</li>
+                <li>Address: {{ .Address }}</li>
+            </ul>
+        </div>
+        {{ end }}
     </div>
-    {{ end }}
+    <label>Add endpoint:</label>
+    <div>
+        <select name="selected-endpoint" id="selected-endpoint">
+            <option value="" disabled selected>--Please choose an option--</option>
+            {{ range .AllEndpoints }}
+            <option value="{{ .Id }}">{{ .Address }}</option>
+            {{ end }}
+        </select>
+        <button class="btn btn-outline-dark btn-sm"
+                hx-include="#selected-endpoint"
+                hx-post="/mcsdadmin/organization/{{ .Organization.Id }}/endpoints"
+                hx-target="#endpoints"
+                hx-swap="beforeend"
+        >Add
+        </button>
+    </div>
 </div>
-<label>Add endpoint</label>
-<select name="selected-endpoint" id="selected-endpoint">
-    <option value="" disabled selected>--Please choose an option--</option>
-    {{ range .AllEndpoints }}
-    <option value="{{ .Id }}">{{ .Address }}</option>
-    {{ end }}
-</select>
-<button class="btn btn-outline-dark btn-sm"
-        hx-include="#selected-endpoint"
-        hx-post="/mcsdadmin/organization/{{ .Organization.Id }}/endpoints"
-        hx-target="#endpoints"
-        hx-swap="beforeend"
->Add
-</button>
 {{end}}
