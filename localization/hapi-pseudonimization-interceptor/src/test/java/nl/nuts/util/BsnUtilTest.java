@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import nl.nuts.PseudonimizationExecutionException;
 import org.junit.jupiter.api.Test;
 
 class BsnUtilTest {
@@ -43,8 +44,8 @@ class BsnUtilTest {
         // Given a token without proper prefix
         final String token = "invalid-hospital-abc123-def456";
 
-        // When/Then converting should throw IllegalArgumentException
-        assertThrows(IllegalArgumentException.class, () -> {
+        // When/Then converting should throw PseudonimizationExecutionException
+        assertThrows(PseudonimizationExecutionException.class, () -> {
             bsnUtil.transportTokenToPseudonym(token);
         });
     }
@@ -54,8 +55,8 @@ class BsnUtilTest {
         // Given a token that's too short
         final String token = "token-a";
 
-        // When/Then converting should throw IllegalArgumentException
-        assertThrows(IllegalArgumentException.class, () -> {
+        // When/Then converting should throw PseudonimizationExecutionException
+        assertThrows(PseudonimizationExecutionException.class, () -> {
             bsnUtil.transportTokenToPseudonym(token);
         });
     }
@@ -65,8 +66,8 @@ class BsnUtilTest {
         // Given a token without enough parts
         final String token = "token-hospital-abc123";
 
-        // When/Then converting should throw IllegalArgumentException
-        assertThrows(IllegalArgumentException.class, () -> {
+        // When/Then converting should throw PseudonimizationExecutionException
+        assertThrows(PseudonimizationExecutionException.class, () -> {
             bsnUtil.transportTokenToPseudonym(token);
         });
     }
@@ -95,8 +96,8 @@ class BsnUtilTest {
         final String pseudonym = "invalid-hospital-abc123";
         final String audience = "clinic";
 
-        // When/Then converting should throw IllegalArgumentException
-        assertThrows(IllegalArgumentException.class, () -> {
+        // When/Then converting should throw PseudonimizationExecutionException
+        assertThrows(PseudonimizationExecutionException.class, () -> {
             bsnUtil.pseudonymToTransportToken(pseudonym, audience);
         });
     }
@@ -107,8 +108,8 @@ class BsnUtilTest {
         final String pseudonym = "ps-a";
         final String audience = "clinic";
 
-        // When/Then converting should throw IllegalArgumentException
-        assertThrows(IllegalArgumentException.class, () -> {
+        // When/Then converting should throw PseudonimizationExecutionException
+        assertThrows(PseudonimizationExecutionException.class, () -> {
             bsnUtil.pseudonymToTransportToken(pseudonym, audience);
         });
     }
@@ -119,8 +120,8 @@ class BsnUtilTest {
         final String pseudonym = "ps-nohyphen";
         final String audience = "clinic";
 
-        // When/Then converting should throw IllegalArgumentException
-        assertThrows(IllegalArgumentException.class, () -> {
+        // When/Then converting should throw PseudonimizationExecutionException
+        assertThrows(PseudonimizationExecutionException.class, () -> {
             bsnUtil.pseudonymToTransportToken(pseudonym, audience);
         });
     }

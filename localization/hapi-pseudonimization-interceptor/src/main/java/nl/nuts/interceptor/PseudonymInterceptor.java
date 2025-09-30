@@ -3,7 +3,9 @@ package nl.nuts.interceptor;
 import ca.uhn.fhir.interceptor.api.Hook;
 import ca.uhn.fhir.interceptor.api.Interceptor;
 import ca.uhn.fhir.interceptor.api.Pointcut;
+import ca.uhn.fhir.rest.api.server.IPreResourceShowDetails;
 import ca.uhn.fhir.rest.server.servlet.ServletRequestDetails;
+import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import nl.nuts.util.BsnUtil;
 import org.hl7.fhir.instance.model.api.IBaseResource;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Component;
 @Interceptor
 @Slf4j
 public class PseudonymInterceptor {
+
     private static final String PSEUDO_BSN_SYSTEM = System.getenv().getOrDefault(
             "PSEUDO_BSN_SYSTEM", "http://example.com/pseudoBSN");
     private static final String BSN_TOKEN_SYSTEM = System.getenv().getOrDefault(
@@ -28,8 +31,7 @@ public class PseudonymInterceptor {
     }
 
     @Hook(Pointcut.STORAGE_PRESTORAGE_RESOURCE_CREATED)
-    public void resourceCreated(final ServletRequestDetails requestDetails, final IBaseResource newResource)
-            {
+    public void resourceCreated(final ServletRequestDetails requestDetails, final IBaseResource newResource) {
         if (newResource instanceof final DocumentReference documentReference) {
             log.debug("Intercepting DocumentReference resource creation");
             deTokenizePseudonym(documentReference);
@@ -37,12 +39,12 @@ public class PseudonymInterceptor {
     }
 
     @Hook(Pointcut.STORAGE_PRESHOW_RESOURCES)
-    public void handleResponse(final ServletRequestDetails requestDetails, final IBaseResource resource)
-            {
-        final String requestorURA = requestDetails.getHeader(REQUESTOR_URA_HEADER);
-
-        if (resource instanceof final DocumentReference documentReference) {
-            tokenizePseudonym(documentReference, requestorURA);
+    public void handleResponse(final IPreResourceShowDetails requestDetails) {
+        final List<IBaseResource> allResources = requestDetails.getAllResources();
+        for (final IBaseResource aResoruce : allResources) {
+            if (aResoruce instanceof final DocumentReference documentReference) {
+                tokenizePseudonym(documentReference, "requestorURA");
+            }
         }
     }
 
