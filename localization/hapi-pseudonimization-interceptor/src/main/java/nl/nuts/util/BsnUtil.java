@@ -9,6 +9,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import nl.nuts.PseudonimizationExecutionException;
 
+/**
+ * This is java version of nuts-knooppunt/lib/bsnutil/util.go
+ */
 @NoArgsConstructor
 public class BsnUtil {
 
