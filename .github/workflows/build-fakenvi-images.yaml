@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - fakenvi-fix-dockerbuild
     tags:
       - "v*"
   pull_request:
