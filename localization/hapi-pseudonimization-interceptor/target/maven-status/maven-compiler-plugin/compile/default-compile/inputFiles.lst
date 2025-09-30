@@ -1,8 +1,3 @@
-/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/interceptor/PseudonymInterceptor.java
-/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/PseudoniemenServiceClient.java
-/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/ExchangeTokenRequest.java
-/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/ExchangeTokenResponse.java
-/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/GetTokenResponse.java
-/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/ExchangeIdentifierRequest.java
-/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/GetTokenRequest.java
-/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-interceptor/src/main/java/nl/nuts/pseudonyms/Identifier.java
+/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-pseudonimization-interceptor/src/main/java/nl/nuts/util/BsnUtil.java
+/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-pseudonimization-interceptor/src/main/java/nl/nuts/PseudonimizationExecutionException.java
+/home/gandrejc/development/SYNTARIC/COT/nuts-knooppunt/localization/hapi-pseudonimization-interceptor/src/main/java/nl/nuts/interceptor/PseudonymInterceptor.java
