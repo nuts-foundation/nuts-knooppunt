@@ -82,7 +82,7 @@ jobs:
           file: fake-nvi/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true #${{ github.event_name != 'pull_request' }}
-          tags: tmp-test #${{ steps.docker_meta.outputs.tags }}
+          tags: ghcr.io/nuts-foundation/fake-nvi:tmp-test #${{ steps.docker_meta.outputs.tags }}
           build-args: |
             GIT_VERSION=${{ steps.version.outputs.git_version }}
             GIT_COMMIT=${{ steps.version.outputs.git_commit }}
