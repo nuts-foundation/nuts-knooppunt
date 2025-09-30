@@ -78,7 +78,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: localization/hapi-pseudonimization-interceptor
           file: localization/hapi-pseudonimization-interceptor/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
