@@ -9,7 +9,9 @@ model {
             tags "external"
         }
 
-        mcsdDirectory = softwareSystem "Organization mCSD Administration Directory" "Authority of Organization Endpoints, HealthcareServices and PractitionerRoles" "external"
+        mcsdDirectory = softwareSystem "Organization mCSD Administration Directory" "Authority of Organization Endpoints, HealthcareServices and PractitionerRoles" "external" {
+            tags "external,addressing"
+        }
 
         externalViewer = softwareSystem "External Viewer" "Request healthcare data from other Care Providers" "external"
     }
@@ -49,9 +51,11 @@ model {
                     }
                 }
                 group "Addressing" {
-                    mcsdSyncer = component "mCSD Update client" "Syncing data from remote mCSD directory and consolidate into a Query Directory"
+                    mcsdSyncer = component "mCSD Update client" "Syncing data from remote mCSD directory and consolidate into a Query Directory" {
+                        tags "addressing"
+                    }
                     mcsdDataEntry = component "Addressing Admin" "Administering Organization mCSD resources" {
-                        tags "webapp"
+                        tags "webapp,addressing"
                     }
                 }
 
@@ -74,11 +78,11 @@ model {
             }
 
             fhirQueryDir = container "mCSD Query Directory" "Stores mCSD resources for querying" {
-                tags "database"
+                tags "database,addressing"
                 technology "HAPI FHIR"
             }
             fhirAdminDir = container "mCSD Administration Directory" "Stores mCSD resources for synchronization" {
-                tags "database"
+                tags "database,addressing"
                 tags "new-fhir-admin-directory"
                 technology "HAPI FHIR"
             }
