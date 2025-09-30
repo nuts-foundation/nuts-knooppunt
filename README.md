@@ -30,6 +30,8 @@ go build .
 
 ## Development stack
 
+For a complete overview of the deployment options, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 A docker compose config is provided to run a set of services that are useful for development:
 
 - HAPI server, multi-tenancy enabled, using UUIDs, running on port 8080
