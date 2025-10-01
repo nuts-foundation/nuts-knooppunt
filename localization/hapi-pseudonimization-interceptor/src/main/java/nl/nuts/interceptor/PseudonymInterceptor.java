@@ -38,7 +38,7 @@ import org.springframework.stereotype.Component;
 public class PseudonymInterceptor {
 
     private static final String PSEUDO_BSN_SYSTEM = System.getenv().getOrDefault(
-            "PSEUDO_BSN_SYSTEM", "http://fhir.nl/fhir/NamingSystem/pseudo-bsn");
+            "PSEUDO_BSN_SYSTEM", "http://fhir.nl/fhir/NamingSystem/bsn-pseudonym");
     private static final String BSN_TOKEN_SYSTEM = System.getenv().getOrDefault(
             "BSN_TOKEN_SYSTEM", "http://fhir.nl/fhir/NamingSystem/bsn-transport-token");
     private static final String NVI_AUDIENCE = System.getenv().getOrDefault(
