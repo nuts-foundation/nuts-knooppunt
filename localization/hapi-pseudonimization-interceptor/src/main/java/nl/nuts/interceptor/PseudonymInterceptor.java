@@ -38,9 +38,9 @@ import org.springframework.stereotype.Component;
 public class PseudonymInterceptor {
 
     private static final String PSEUDO_BSN_SYSTEM = System.getenv().getOrDefault(
-            "PSEUDO_BSN_SYSTEM", "http://example.com/pseudoBSN");
+            "PSEUDO_BSN_SYSTEM", "http://fhir.nl/fhir/NamingSystem/pseudo-bsn");
     private static final String BSN_TOKEN_SYSTEM = System.getenv().getOrDefault(
-            "BSN_TOKEN_SYSTEM", "http://example.com/BSNToken");
+            "BSN_TOKEN_SYSTEM", "http://fhir.nl/fhir/NamingSystem/bsn-transport-token");
     private static final String NVI_AUDIENCE = System.getenv().getOrDefault(
             "NVI_AUDIENCE", "nvi-1");
     private static final String REQUESTER_URA_HEADER = "X-Requester-URA";
