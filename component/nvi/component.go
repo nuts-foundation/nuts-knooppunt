@@ -14,12 +14,20 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/tenants"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
+func DefaultConfig() Config {
+	return Config{
+		Audience: "nvi",
+	}
+}
+
 type Config struct {
 	FHIRBaseURL string `koanf:"baseurl"`
+	Audience    string `koanf:"audience"`
 }
 
 func (c Config) Enabled() bool {
@@ -31,6 +39,7 @@ var _ component.Lifecycle = (*Component)(nil)
 type Component struct {
 	client        fhirclient.Client
 	pseudonymizer pseudonimization.Pseudonymizer
+	audience      string
 }
 
 func New(config Config) (*Component, error) {
@@ -38,9 +47,13 @@ func New(config Config) (*Component, error) {
 	if err != nil {
 		return nil, err
 	}
+	if config.Audience == "" {
+		return nil, fmt.Errorf("audience must be configured when NVI component is enabled")
+	}
 	return &Component{
 		client:        fhirclient.New(baseURL, http.DefaultClient, fhirutil.ClientConfig()),
 		pseudonymizer: &pseudonimization.Component{},
+		audience:      config.Audience,
 	}, nil
 }
 
@@ -51,6 +64,12 @@ func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *h
 }
 
 func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest *http.Request) {
+	requesterURA, err := tenants.IDFromRequest(httpRequest)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
 	fhirRequest, err := fhirapi.ParseRequest[fhir.DocumentReference](httpRequest)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
@@ -62,7 +81,7 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 	resource.Meta = profile.Set(resource.Meta, profile.NLGenericFunctionDocumentReference)
 
 	// Use BSN transport tokens to NVI, instead of BSNs
-	tokenizedResource, err := c.tokenizeIdentifiers(resource, "nvi")
+	tokenizedResource, err := c.tokenizeIdentifiers(resource, c.audience)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
@@ -82,7 +101,7 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 	}
 
 	// Translate BSN transport tokens from NVI back to BSNs
-	result, err := c.detokenizeIdentifiers(created, "knooppunt")
+	result, err := c.detokenizeIdentifiers(created, *requesterURA.Value)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
@@ -92,6 +111,12 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 }
 
 func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *http.Request) {
+	requesterURA, err := tenants.IDFromRequest(httpRequest)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
 	fhirRequest, err := fhirapi.ParseRequest[fhir.DocumentReference](httpRequest)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
@@ -117,8 +142,11 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		searchParams[key] = newValues
 	}
 
+	requestHeaders := http.Header{
+		"X-Requester-URA": []string{*requesterURA.Value},
+	}
 	var searchSet fhir.Bundle
-	err = c.client.SearchWithContext(httpRequest.Context(), "DocumentReference", searchParams, &searchSet)
+	err = c.client.SearchWithContext(httpRequest.Context(), "DocumentReference", searchParams, &searchSet, fhirclient.RequestHeaders(requestHeaders))
 	if err != nil {
 		err = &fhirapi.Error{
 			Message:   "Failed to search for DocumentReferences at NVI",
@@ -142,7 +170,7 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 	// Translate BSN transport tokens from NVI back to BSNs
 	err = fhirutil.VisitBundleResources[fhir.DocumentReference](&searchSet, func(resource *fhir.DocumentReference) error {
 		// Translate BSN transport tokens from NVI back to BSNs
-		newResource, err := c.detokenizeIdentifiers(*resource, "knooppunt")
+		newResource, err := c.detokenizeIdentifiers(*resource, *requesterURA.Value)
 		if err != nil {
 			return err
 		}

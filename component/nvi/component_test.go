@@ -12,6 +12,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi/testdata"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonimization"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
 	testUtil "github.com/nuts-foundation/nuts-knooppunt/test"
 	"github.com/stretchr/testify/assert"
@@ -35,6 +36,7 @@ func TestComponent_handleRegister(t *testing.T) {
 		name                       string
 		nviTransportError          error
 		requestBody                []byte
+		tenantID                   *string
 		expectedStatus             int
 		expectedOperationOutcome   *fhir.OperationOutcome
 		expectedNVICreatedResource fhir.DocumentReference
@@ -66,23 +68,50 @@ func TestComponent_handleRegister(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:           "invalid tenant ID",
+			requestBody:    testUtil.ReadJSON(t, testdata.FS, "documentreference-bsn.json"),
+			expectedStatus: http.StatusBadRequest,
+			tenantID:       to.Ptr("invalid"),
+			expectedOperationOutcome: &fhir.OperationOutcome{
+				Issue: []fhir.OperationOutcomeIssue{
+					{
+						Severity:    fhir.IssueSeverityError,
+						Code:        fhir.IssueTypeValue,
+						Diagnostics: to.Ptr("invalid tenant ID in request header"),
+					},
+				},
+			},
+		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			tenantURA := "1"
+			tenantID := coding.URANamingSystem + "|" + tenantURA
+			if testCase.tenantID != nil {
+				tenantID = *testCase.tenantID
+				identifier, err := fhirutil.TokenToIdentifier(*testCase.tenantID)
+				if err == nil && identifier.Value != nil {
+					tenantURA = *identifier.Value
+				}
+			}
+
 			ctrl := gomock.NewController(t)
 			pseudonymizer := pseudonimization.NewMockPseudonymizer(ctrl)
 			pseudonymizer.EXPECT().IdentifierToToken(bsnIdentifier, "nvi").Return(&bsnTokenIdentifier, nil).AnyTimes()
-			pseudonymizer.EXPECT().TokenToBSN(bsnTokenIdentifier, "knooppunt").Return(&bsnIdentifier, nil).AnyTimes()
+			pseudonymizer.EXPECT().TokenToBSN(bsnTokenIdentifier, tenantURA).Return(&bsnIdentifier, nil).AnyTimes()
 			nvi := &test.StubFHIRClient{
 				Error: testCase.nviTransportError,
 			}
 			component := Component{
 				client:        nvi,
 				pseudonymizer: pseudonymizer,
+				audience:      "nvi",
 			}
 			httpRequest := httptest.NewRequest("POST", "/nvi/DocumentReference", bytes.NewReader(testCase.requestBody))
 			httpRequest.Header.Add("Content-Type", "application/fhir+json")
+			httpRequest.Header.Add("X-Tenant-ID", tenantID)
 			httpResponse := httptest.NewRecorder()
 
 			component.handleRegister(httpResponse, httpRequest)
@@ -94,7 +123,8 @@ func TestComponent_handleRegister(t *testing.T) {
 				var operationOutcome fhir.OperationOutcome
 				err := json.Unmarshal(responseData, &operationOutcome)
 				require.NoError(t, err)
-				require.Equal(t, testCase.expectedOperationOutcome, &operationOutcome)
+				expectedJSON, _ := json.Marshal(testCase.expectedOperationOutcome)
+				require.JSONEq(t, string(expectedJSON), string(responseData))
 			}
 			if testCase.expectedStatus == http.StatusCreated {
 				require.Len(t, nvi.CreatedResources["DocumentReference"], 1)
@@ -189,7 +219,7 @@ func TestComponent_handleSearch(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			pseudonymizer := pseudonimization.NewMockPseudonymizer(ctrl)
 			pseudonymizer.EXPECT().IdentifierToToken(bsnIdentifier, "nvi").Return(&bsnTokenIdentifier, nil).AnyTimes()
-			pseudonymizer.EXPECT().TokenToBSN(bsnTokenIdentifier, "knooppunt").Return(&bsnIdentifier, nil).AnyTimes()
+			pseudonymizer.EXPECT().TokenToBSN(bsnTokenIdentifier, "1").Return(&bsnIdentifier, nil).AnyTimes()
 			nvi := &test.StubFHIRClient{
 				Resources: testCase.nviResources,
 				Error:     testCase.nviTransportError,
@@ -211,6 +241,7 @@ func TestComponent_handleSearch(t *testing.T) {
 				httpRequest = httptest.NewRequest("POST", "/nvi/DocumentReference/_search", bytes.NewReader([]byte(searchParams)))
 				httpRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 			}
+			httpRequest.Header.Add("X-Tenant-ID", coding.URANamingSystem+"|1")
 			httpResponse := httptest.NewRecorder()
 			component.handleSearch(httpResponse, httpRequest)
 

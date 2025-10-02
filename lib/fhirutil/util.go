@@ -2,9 +2,13 @@ package fhirutil
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
+
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 // ResourceInfo contains common FHIR resource fields extracted from JSON
@@ -54,4 +58,27 @@ func ExtractResourceInfo(resourceJSON []byte) (*ResourceInfo, error) {
 //   - BuildSourceURL("https://example.com/fhir/", "Patient", "456") -> "https://example.com/fhir/Patient/456"
 func BuildSourceURL(baseURL string, parts ...string) (string, error) {
 	return url.JoinPath(baseURL, parts...)
+}
+
+// TokenToIdentifier converts a FHIR search token ("system|value") to a FHIR Identifier.
+// If the token is empty or not in the correct format, an error is returned.
+func TokenToIdentifier(token string) (*fhir.Identifier, error) {
+	if token == "" {
+		return nil, errors.New("empty token")
+	}
+	parts := strings.Split(token, "|")
+	if len(parts) != 2 {
+		return nil, errors.New("invalid token format")
+	}
+	result := fhir.Identifier{}
+	if parts[0] == "" && parts[1] == "" {
+		return nil, errors.New("invalid token: both system and value are empty")
+	}
+	if parts[0] != "" {
+		result.System = &parts[0]
+	}
+	if parts[1] != "" {
+		result.Value = &parts[1]
+	}
+	return &result, nil
 }
