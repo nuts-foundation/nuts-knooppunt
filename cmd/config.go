@@ -29,6 +29,7 @@ func DefaultConfig() Config {
 			Enabled: false,
 		},
 		MCSDAdmin: mcsdadmin.Config{},
+		NVI:       nvi.DefaultConfig(),
 	}
 }
 
