@@ -1,16 +1,17 @@
 {{define "main"}}
 <div id="edit-associations">
     <h3>Organization: Care4U Hospital</h3>
-    <label>Endpoint:</label>
+    <label>Endpoints:</label>
     <div id="endpoints">
         {{ range .Endpoints }}
-        <div class="card">
-            <ul>
-                <li>Type: {{ .ConnectionType.Display }}</li>
-                <li>Payload: {{ (index .PayloadType 0).Text }}</li>
-                <li>Address: {{ .Address }}</li>
-            </ul>
-        </div>
+            {{ template "_card_endpoint" .  }}
+<!--        <div class="card">-->
+<!--            <ul>-->
+<!--                <li>Type: {{ .ConnectionType.Display }}</li>-->
+<!--                <li>Payload: {{ (index .PayloadType 0).Text }}</li>-->
+<!--                <li>Address: {{ .Address }}</li>-->
+<!--            </ul>-->
+<!--        </div>-->
         {{ end }}
     </div>
     <label>Add endpoint:</label>

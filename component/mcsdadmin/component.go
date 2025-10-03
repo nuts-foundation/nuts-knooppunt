@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -78,6 +79,7 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
 	mux.HandleFunc("GET /mcsdadmin/organization/{id}/endpoints", associateEndpoints)
 	mux.HandleFunc("POST /mcsdadmin/organization/{id}/endpoints", associateEndpointsPost)
+	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}/endpoints", associateEndpointsDelete)
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
 	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
 	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
@@ -357,6 +359,38 @@ func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	tmpls.RenderPartial(w, "_card_endpoint.html", selected)
+}
+
+func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	orgId := req.PathValue("id")
+	organization, err := findById[fhir.Organization](orgId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	epId := req.PostForm.Get("endpointId")
+	for i, ref := range organization.Endpoint {
+		if ref.Id != nil && *ref.Id == epId {
+			organization.Endpoint = slices.Delete(organization.Endpoint, i, i+1)
+		}
+	}
+
+	orgPath := fmt.Sprintf("Organization/%s", orgId)
+	var orgResult fhir.Organization
+	err = client.Update(orgPath, organization, &orgResult)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func listEndpoints(w http.ResponseWriter, _ *http.Request) {

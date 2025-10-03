@@ -18,6 +18,7 @@ func RenderWithBase(w io.Writer, name string, data any) {
 	files := []string{
 		"base.html",
 		name,
+		"_card_endpoint.html",
 	}
 
 	ts, err := template.ParseFS(tmplFS, files...)
