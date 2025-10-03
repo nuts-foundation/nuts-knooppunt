@@ -325,21 +325,30 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
-		log.Error().Err(err).Msg("failed to parse form input")
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	selectedId := req.PostForm.Get("selected-endpoint")
 	selected, err := findById[fhir.Endpoint](selectedId)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to find endpoint")
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	orgId := req.PathValue("id")
 	organization, err := findById[fhir.Organization](orgId)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to find organization")
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	foundIdx := slices.IndexFunc(organization.Endpoint, func(ref fhir.Reference) bool {
+		epId := idFromRef(ref)
+		return epId == selectedId
+	})
+	if foundIdx > -1 {
+		http.Error(w, "endpoint already associated with organization", http.StatusBadRequest)
 		return
 	}
 
@@ -353,7 +362,7 @@ func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 	var resultOrg fhir.Organization
 	err = client.Update(orgPath, organization, &resultOrg)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to update organization")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -770,4 +779,17 @@ func renderList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.
 	}{
 		Items: dtoFunc(items),
 	})
+}
+
+func idFromRef(ref fhir.Reference) string {
+	if ref.Reference == nil {
+		return ""
+	}
+
+	split := strings.Split(*ref.Reference, "/")
+	if len(split) != 2 {
+		return ""
+	}
+
+	return split[1]
 }
