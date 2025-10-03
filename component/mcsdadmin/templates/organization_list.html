@@ -31,6 +31,8 @@
                 </td>
                 <th scope="row">{{ .EndpointCount }}</th>
                 <td>
+                    <a class="btn btn-outline-dark btn-sm"
+                       href="/mcsdadmin/organization/{{.Id}}/endpoints">Endpoints</a>
                     <button class="btn btn-outline-dark btn-sm"
                             hx-delete="/mcsdadmin/organization/{{.Id}}"
                             hx-target="#row-{{.Id}}"

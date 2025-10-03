@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -76,6 +77,9 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
 	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
+	mux.HandleFunc("GET /mcsdadmin/organization/{id}/endpoints", associateEndpoints)
+	mux.HandleFunc("POST /mcsdadmin/organization/{id}/endpoints", associateEndpointsPost)
+	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}/endpoints", associateEndpointsDelete)
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
 	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
 	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
@@ -275,6 +279,140 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
 }
 
+func associateEndpoints(w http.ResponseWriter, req *http.Request) {
+	orgId := req.PathValue("id")
+	path := fmt.Sprintf("Organization/%s", orgId)
+	var org fhir.Organization
+	err := client.Read(path, &org)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	endpoints := make([]fhir.Endpoint, 0, len(org.Endpoint))
+	for _, ref := range org.Endpoint {
+		var ep fhir.Endpoint
+		if ref.Reference == nil {
+			continue
+		}
+		err := client.Read(*ref.Reference, &ep)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		endpoints = append(endpoints, ep)
+	}
+
+	allEndpoints, err := findAll[fhir.Endpoint](client)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	props := struct {
+		Organization  fhir.Organization
+		EndpointCards []tmpls.EndpointCardProps
+		AllEndpoints  []fhir.Endpoint
+	}{
+		Organization:  org,
+		EndpointCards: tmpls.MakeEndpointCards(endpoints, org),
+		AllEndpoints:  allEndpoints,
+	}
+	w.WriteHeader(http.StatusOK)
+	tmpls.RenderWithBase(w, "organization_endpoints.html", props)
+}
+
+func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	selectedId := req.PostForm.Get("selected-endpoint")
+	selected, err := findById[fhir.Endpoint](selectedId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	orgId := req.PathValue("id")
+	organization, err := findById[fhir.Organization](orgId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	foundIdx := slices.IndexFunc(organization.Endpoint, func(ref fhir.Reference) bool {
+		epId := idFromRef(ref)
+		return epId == selectedId
+	})
+	if foundIdx > -1 {
+		http.Error(w, "endpoint already associated with organization", http.StatusBadRequest)
+		return
+	}
+
+	selectedPath := fmt.Sprintf("Endpoint/%s", selectedId)
+	ref := fhir.Reference{
+		Reference: &selectedPath,
+	}
+	organization.Endpoint = append(organization.Endpoint, ref)
+
+	orgPath := fmt.Sprintf("Organization/%s", orgId)
+	var resultOrg fhir.Organization
+	err = client.Update(orgPath, organization, &resultOrg)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	props := tmpls.EndpointCardProps{
+		Endpoint:     selected,
+		Organization: resultOrg,
+	}
+	tmpls.RenderPartial(w, "_card_endpoint", props)
+}
+
+func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	orgId := req.PathValue("id")
+	organization, err := findById[fhir.Organization](orgId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	epId := req.URL.Query().Get("endpointId")
+	epFound := false
+	for i, ref := range organization.Endpoint {
+		refId := idFromRef(ref)
+		if refId == epId {
+			organization.Endpoint = slices.Delete(organization.Endpoint, i, i+1)
+			epFound = true
+		}
+	}
+	if !epFound {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	orgPath := fmt.Sprintf("Organization/%s", orgId)
+	var orgResult fhir.Organization
+	err = client.Update(orgPath, organization, &orgResult)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func listEndpoints(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
@@ -397,16 +535,6 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	forOrgStr := r.PostForm.Get("endpoint-for")
-	var owningOrg fhir.Organization
-	if len(forOrgStr) > 0 {
-		err = client.Read("Organization/"+forOrgStr, &owningOrg)
-		if err != nil {
-			http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
-			return
-		}
-	}
-
 	var resEp fhir.Endpoint
 	err = client.Create(endpoint, &resEp)
 	if err != nil {
@@ -418,13 +546,23 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	epRef.Type = to.Ptr("Endpoint")
 	epRef.Reference = to.Ptr("Endpoint/" + *resEp.Id)
 
-	owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
+	forOrgStr := r.PostForm.Get("endpoint-for")
+	var owningOrg fhir.Organization
+	if len(forOrgStr) > 0 {
+		err = client.Read("Organization/"+forOrgStr, &owningOrg)
+		if err != nil {
+			http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
+			return
+		}
 
-	var updatedOrg fhir.Organization
-	err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
+
+		var updatedOrg fhir.Organization
+		err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -585,6 +723,15 @@ func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+func findById[T any](id string) (T, error) {
+	var prototype T
+	resourceType := caramel.ResourceType(prototype)
+	resourcePath := fmt.Sprintf("%s/%s", resourceType, id)
+
+	err := client.Read(resourcePath, &prototype)
+	return prototype, err
+}
+
 func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {
 	var prototype T
 	resourceType := caramel.ResourceType(prototype)
@@ -608,6 +755,13 @@ func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {
 	return result, nil
 }
 
+func uraIdentifier(uraString string) fhir.Identifier {
+	var identifier fhir.Identifier
+	identifier.Value = to.Ptr(uraString)
+	identifier.System = to.Ptr(coding.URANamingSystem)
+	return identifier
+}
+
 func renderList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.ResponseWriter, dtoFunc func([]R) []DTO) {
 	resourceType := caramel.ResourceType(new(R))
 	items, err := findAll[R](fhirClient)
@@ -622,9 +776,15 @@ func renderList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.
 	})
 }
 
-func uraIdentifier(uraString string) fhir.Identifier {
-	var identifier fhir.Identifier
-	identifier.Value = to.Ptr(uraString)
-	identifier.System = to.Ptr(coding.URANamingSystem)
-	return identifier
+func idFromRef(ref fhir.Reference) string {
+	if ref.Reference == nil {
+		return ""
+	}
+
+	split := strings.Split(*ref.Reference, "/")
+	if len(split) != 2 {
+		return ""
+	}
+
+	return split[1]
 }
