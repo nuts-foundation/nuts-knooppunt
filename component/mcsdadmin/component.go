@@ -310,13 +310,13 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 	}
 
 	props := struct {
-		Organization fhir.Organization
-		Endpoints    []fhir.Endpoint
-		AllEndpoints []fhir.Endpoint
+		Organization  fhir.Organization
+		EndpointCards []tmpls.EndpointCardProps
+		AllEndpoints  []fhir.Endpoint
 	}{
-		Organization: org,
-		Endpoints:    endpoints,
-		AllEndpoints: allEndpoints,
+		Organization:  org,
+		EndpointCards: tmpls.MakeEndpointCards(endpoints, org),
+		AllEndpoints:  allEndpoints,
 	}
 	w.WriteHeader(http.StatusOK)
 	tmpls.RenderWithBase(w, "organization_endpoints.html", props)

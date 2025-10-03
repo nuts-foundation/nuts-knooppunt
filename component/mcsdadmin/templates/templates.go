@@ -293,3 +293,19 @@ func MakeLocationListXsProps(locations []fhir.Location) []LocationListProps {
 	}
 	return out
 }
+
+type EndpointCardProps struct {
+	Endpoint     fhir.Endpoint
+	Organization fhir.Organization
+}
+
+func MakeEndpointCards(endpoints []fhir.Endpoint, org fhir.Organization) []EndpointCardProps {
+	cards := make([]EndpointCardProps, len(endpoints))
+	for i, endp := range endpoints {
+		cards[i] = EndpointCardProps{
+			Endpoint:     endp,
+			Organization: org,
+		}
+	}
+	return cards
+}
