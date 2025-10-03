@@ -391,16 +391,11 @@ func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
 	epId := req.URL.Query().Get("endpointId")
 	epFound := false
 	for i, ref := range organization.Endpoint {
-		if ref.Reference != nil {
-			refSplit := strings.Split(*ref.Reference, "/")
-			if len(refSplit) == 2 {
-				refId := refSplit[1]
-				if refId == epId {
-					organization.Endpoint = slices.Delete(organization.Endpoint, i, i+1)
-				}
-			}
+		refId := idFromRef(ref)
+		if refId == epId {
+			organization.Endpoint = slices.Delete(organization.Endpoint, i, i+1)
+			epFound = true
 		}
-		epFound = true
 	}
 	if !epFound {
 		http.Error(w, err.Error(), http.StatusBadRequest)
