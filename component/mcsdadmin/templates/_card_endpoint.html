@@ -1,5 +1,5 @@
 {{ define "_card_endpoint" }}
-<div class="card">
+<div id="endpoint-card-{{ .Endpoint.Id }}" class="card">
     <ul>
         <li>Type: {{ .Endpoint.ConnectionType.Display }}</li>
         <li>Payload: {{ (index .Endpoint.PayloadType 0).Text }}</li>
@@ -7,6 +7,9 @@
     </ul>
     <button class="btn btn-outline-dark btn-sm"
             hx-delete="/mcsdadmin/organization/{{ .Organization.Id }}/endpoints"
+            hx-swap="delete"
+            hx-target="#endpoint-card-{{ .Endpoint.Id }}"
+            hx-vals='{"endpointId": "{{ .Endpoint.Id }}"}'
     >Delete
     </button>
 </div>
