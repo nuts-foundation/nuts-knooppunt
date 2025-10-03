@@ -35,7 +35,8 @@ func RenderWithBase(w io.Writer, name string, data any) {
 }
 
 func RenderPartial(w io.Writer, name string, data any) {
-	ts, err := template.ParseFS(tmplFS, name)
+	filename := fmt.Sprintf("%s.html", name)
+	ts, err := template.ParseFS(tmplFS, filename)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to parse template")
 		return

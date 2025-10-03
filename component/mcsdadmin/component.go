@@ -358,7 +358,11 @@ func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	tmpls.RenderPartial(w, "_card_endpoint.html", selected)
+	props := tmpls.EndpointCardProps{
+		Endpoint:     selected,
+		Organization: resultOrg,
+	}
+	tmpls.RenderPartial(w, "_card_endpoint", props)
 }
 
 func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
