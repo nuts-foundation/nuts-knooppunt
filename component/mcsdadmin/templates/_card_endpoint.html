@@ -1,9 +1,9 @@
 {{ define "_card_endpoint" }}
 <div id="endpoint-card-{{ .Endpoint.Id }}" class="card">
     <ul>
-        <li>Type: {{ .Endpoint.ConnectionType.Display }}</li>
-        <li>Payload: {{ (index .Endpoint.PayloadType 0).Text }}</li>
-        <li>Address: {{ .Endpoint.Address }}</li>
+        <li>Type: <code>{{ .Endpoint.ConnectionType.Display }}</code></li>
+        <li>Payload: <code>{{ (index .Endpoint.PayloadType 0).Text }}</code></li>
+        <li>Address: <code>{{ .Endpoint.Address }}</code></li>
     </ul>
     <button class="btn btn-outline-dark btn-sm"
             hx-delete="/mcsdadmin/organization/{{ .Organization.Id }}/endpoints"
