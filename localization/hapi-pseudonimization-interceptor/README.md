@@ -323,4 +323,5 @@ docker run -p 8080:8080 nvi
 POST /fhir/DocumentReference
 GET /fhir/DocumentReference/{id}
 GET /fhir/DocumentReference?subject:identifier=http://example.com/BSNToken|token-nvi-38bf96b43cbb92b830-e60a7ad0
+POST /fhir/DocumentReference/_search
 ```

@@ -12,7 +12,6 @@ import ca.uhn.fhir.rest.api.server.ResponseDetails;
 import ca.uhn.fhir.rest.param.ReferenceParam;
 import ca.uhn.fhir.rest.server.servlet.ServletRequestDetails;
 import ca.uhn.fhir.rest.server.util.ICachedSearchDetails;
-import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import nl.nuts.util.BsnUtil;
@@ -43,6 +42,8 @@ public class PseudonymInterceptor {
             "BSN_TOKEN_SYSTEM", "http://fhir.nl/fhir/NamingSystem/bsn-transport-token");
     private static final String NVI_AUDIENCE = System.getenv().getOrDefault(
             "NVI_AUDIENCE", "nvi-1");
+    private static final String INTERCEPTOR_ENABLED_FOR_TENANT = System.getenv().getOrDefault(
+            "NVI_TENANT", "nvi");
     private static final String REQUESTER_URA_HEADER = "X-Requester-URA";
 
     private final BsnUtil bsnUtil;
@@ -51,9 +52,18 @@ public class PseudonymInterceptor {
         this.bsnUtil = new BsnUtil();
     }
 
+    private boolean isEnabled(final ServletRequestDetails servletRequestDetails) {
+        log.info("Tenant: {}", servletRequestDetails.getTenantId());
+        return INTERCEPTOR_ENABLED_FOR_TENANT.equals(servletRequestDetails.getTenantId());
+    }
+
     @Hook(Pointcut.STORAGE_PRESEARCH_REGISTERED)
     public void preSearch(final ICachedSearchDetails searchDetails,
-                          final SearchParameterMap searchParameterMap) {
+                          final SearchParameterMap searchParameterMap,
+                          final ServletRequestDetails servletRequestDetails) {
+        if (!isEnabled(servletRequestDetails)) {
+            return;
+        }
         if (!ResourceType.DocumentReference.name().equals(searchDetails.getResourceType())) {
             return;
         }
@@ -136,7 +146,11 @@ public class PseudonymInterceptor {
      * DocumentReference.subject and create pseudonym from a token set on there
      */
     @Hook(Pointcut.STORAGE_PRESTORAGE_RESOURCE_CREATED)
-    public void resourceCreated(final IBaseResource newResource) {
+    public void resourceCreated(final IBaseResource newResource,
+                                final ServletRequestDetails servletRequestDetails) {
+        if (!isEnabled(servletRequestDetails)) {
+            return;
+        }
         if (!(newResource instanceof final DocumentReference documentReference)) {
             return;
         }
@@ -155,8 +169,10 @@ public class PseudonymInterceptor {
      */
     @Hook(Pointcut.SERVER_OUTGOING_RESPONSE)
     public void handleServerResponse(final ResponseDetails responseDetails,
-                                     final ServletRequestDetails servletRequestDetails,
-                                     final HttpServletResponse response) {
+                                     final ServletRequestDetails servletRequestDetails) {
+        if (!isEnabled(servletRequestDetails)) {
+            return;
+        }
         if (servletRequestDetails.getRequestType() != RequestTypeEnum.POST
                 || !StringUtils.isEmpty(servletRequestDetails.getHeader(REQUESTER_URA_HEADER))) {
             return;
@@ -174,6 +190,10 @@ public class PseudonymInterceptor {
     @Hook(Pointcut.STORAGE_PRESHOW_RESOURCES)
     public void handlePreShowResources(final IPreResourceShowDetails requestDetails,
                                        final ServletRequestDetails servletRequestDetails) {
+        if (!isEnabled(servletRequestDetails)) {
+            return;
+        }
+
         final String audience = servletRequestDetails.getHeader(REQUESTER_URA_HEADER);
 
         if (StringUtils.isEmpty(audience) && servletRequestDetails.getRequestType() == RequestTypeEnum.POST) {

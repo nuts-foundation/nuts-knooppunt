@@ -42,7 +42,7 @@ services:
 
   # HAPI FHIR Server
   hapi-fhir:
-    image: hapiproject/hapi:v8.2.0-2
+    image: ghcr.io/nuts-foundation/fake-nvi:latest # which is hapi:v8.2.0-2 with our NVI specifics
     container_name: hapi-fhir-server
     ports:
       - "7050:7050"

@@ -13,3 +13,4 @@ COPY --from=builder /app/target/*.jar /app/extra-classes/
 ENV hapi.fhir.custom-bean-packages=nl.nuts.interceptor
 ENV hapi.fhir.custom-interceptor-classes=nl.nuts.interceptor.PseudonymInterceptor
 ENV hapi.fhir.allow_external_references=true
+ENV hapi.fhir.partitioning.allow_references_across_partitions=false
