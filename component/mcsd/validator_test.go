@@ -42,6 +42,39 @@ func TestOrganizationValidator(t *testing.T) {
 			},
 			valid: false,
 		},
+		{
+			name:         "Organization without Identifier",
+			organization: fhir.Organization{},
+			valid:        false,
+		},
+		{
+			name: "Organization with non-URA Identifier",
+			organization: fhir.Organization{
+				Identifier: []fhir.Identifier{
+					{
+						System: to.Ptr("http://fhir.nl/fhir/NamingSystem/uzi-nr-sys"),
+						Value:  to.Ptr("12345"),
+					},
+				},
+			},
+			valid: false,
+		},
+		{
+			name: "Organization with URA and non-URA Identifier",
+			organization: fhir.Organization{
+				Identifier: []fhir.Identifier{
+					{
+						System: to.Ptr("http://fhir.nl/fhir/NamingSystem/uzi-nr-sys"),
+						Value:  to.Ptr("12345"),
+					},
+					{
+						System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+						Value:  to.Ptr("12345"),
+					},
+				},
+			},
+			valid: true,
+		},
 	}
 
 	for _, tt := range organizations {
