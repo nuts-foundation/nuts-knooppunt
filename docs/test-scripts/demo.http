@@ -50,5 +50,14 @@ X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000030
     client.global.set("dataHolderIDValue", dataHolderIDValue)
  %}
 
-### Step C: find FHIR API of the Care Provider
+### Step C: find FHIR API of the Care Provider 
+### (using your local query directory with data previously synced through addressing)
 GET http://localhost:7050/fhir/knpt-mcsd-query/Organization?identifier={{dataHolderIDSystem}}|{{dataHolderIDValue}}&_include=Organization:endpoint
+
+> {%
+    const endpointAddress = response.body.entry[response.body.entry.length - 1].address
+    client.global.set("endpointAddress", endpointAddress)
+ %}
+
+### Step D: Get the data at the source
+GET http://localhost:7050/fhir/sunflower-patients/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|999992193
