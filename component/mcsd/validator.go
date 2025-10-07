@@ -63,10 +63,16 @@ func validateOrganizationResource(ctx context.Context, resource *fhir.Organizati
 		return fmt.Errorf("organization can't have multiple identifiers with system %s", coding.URANamingSystem)
 	}
 	// TODO: Enable check, fix test
-	//if len(uraIdentifiers) == 0 && resource.PartOf == nil {
-	//	return fmt.Errorf("organization must have an identifier with system %s or refer to another organization through 'partOf'", coding.URANamingSystem)
-	//}
+
+	if len(uraIdentifiers) == 0 && resource.PartOf == nil {
+		return fmt.Errorf("organization must have an identifier with system %s or refer to another organization through 'partOf'", coding.URANamingSystem)
+	}
+
 	// TODO: Support validation of organizations referring to a parent organization, without having a URA identifier
+
+	//if len(uraIdentifiers) == 0 && resource.PartOf != nil {
+	//
+	//}
 	return nil
 }
 
