@@ -1,0 +1,54 @@
+#
+# IntelliJ IDEA HTTP Client docs: https://www.jetbrains.com/help/idea/http-client-in-product-code-editor.html
+#
+
+### Step A: register patient at NVI
+POST http://localhost:8081/nvi/DocumentReference
+X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000020
+Content-Type: application/fhir+json
+
+{
+  "resourceType": "DocumentReference",
+  "meta": {
+    "profile": [
+      "http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-localization-documentreference"
+    ]
+  },
+  "status": "current",
+  "type": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "55188-7",
+        "display": "Patient data Document"
+      }
+    ]
+  },
+  "subject": {
+    "identifier": {
+      "system": "http://fhir.nl/fhir/NamingSystem/bsn",
+      "value": "999992193"
+    }
+  },
+  "custodian": {
+    "type": "Organization",
+    "identifier": {
+      "system": "http://fhir.nl/fhir/NamingSystem/ura",
+      "value": "00000020"
+    }
+  }
+}
+
+### Step B: localize patient data at NVI
+GET http://localhost:8081/nvi/DocumentReference?subject:identifier=http://fhir.nl/fhir/NamingSystem/bsn|999992193
+X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000030
+
+> {%
+    const dataHolderIDSystem = response.body.entry[response.body.entry.length - 1].resource.custodian.identifier.system
+    const dataHolderIDValue = response.body.entry[response.body.entry.length - 1].resource.custodian.identifier.value
+    client.global.set("dataHolderIDSystem", dataHolderIDSystem)
+    client.global.set("dataHolderIDValue", dataHolderIDValue)
+ %}
+
+### Step C: find FHIR API of the Care Provider
+GET http://localhost:7050/fhir/knpt-mcsd-query/Organization?identifier={{dataHolderIDSystem}}|{{dataHolderIDValue}}&_include=Organization:endpoint
