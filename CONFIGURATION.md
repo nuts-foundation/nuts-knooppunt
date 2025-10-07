@@ -54,13 +54,14 @@ nvi:
 
 Environment variables use the prefix `KNPT_` followed by the configuration path in uppercase with underscores:
 
-| Environment Variable                | YAML Path                      | Description                               |
-|-------------------------------------|--------------------------------|-------------------------------------------|
-| `KNPT_NUTS_ENABLED`                 | `nuts.enabled`                 | Enable embedded Nuts node                 |
-| `KNPT_MCSDADMIN_FHIRBASEURL`        | `mcsdadmin.fhirbaseurl`        | FHIR base URL for admin interface         |
-| `KNPT_MCSD_QUERY_FHIRBASEURL`       | `mcsd.query.fhirbaseurl`       | Local Query Directory FHIR base URL       |
-| `KNPT_MCSD_ADMIN_<KEY>_FHIRBASEURL` | `mcsd.admin.<key>.fhirbaseurl` | Remote mCSD Admin Directory FHIR base URL |
-| `KNPT_NVI_BASEURL`                  | `nvi.baseurl`                  | Base URL of the NVI service.              |
+| Environment Variable                | YAML Path                      | Description                                                                         |
+|-------------------------------------|--------------------------------|-------------------------------------------------------------------------------------|
+| `KNPT_NUTS_ENABLED`                 | `nuts.enabled`                 | Enable embedded Nuts node                                                           |
+| `KNPT_MCSDADMIN_FHIRBASEURL`        | `mcsdadmin.fhirbaseurl`        | FHIR base URL for admin interface                                                   |
+| `KNPT_MCSD_QUERY_FHIRBASEURL`       | `mcsd.query.fhirbaseurl`       | Local Query Directory FHIR base URL                                                 |
+| `KNPT_MCSD_ADMIN_<KEY>_FHIRBASEURL` | `mcsd.admin.<key>.fhirbaseurl` | Remote mCSD Admin Directory FHIR base URL                                           |
+| `KNPT_NVI_BASEURL`                  | `nvi.baseurl`                  | Base URL of the NVI service.                                                        |
+| `KNPT_NVI_AUDIENCE`                 | `nvi.audience`                 | Name of the NVI service, used for creating BSN transport tokens. Defaults to "nvi". |
 
 ### Example Environment Variable Usage
 
@@ -106,3 +107,4 @@ The Nuts node component integrates with the Nuts network for decentralized healt
 The NVI (Nederlandse VerwijsIndex) component provides an API for registering DocumentReference resources.
 
 - `nvi.baseurl`: URL of the FHIR server for NVI DocumentReference registration
+- `nvi.audience`: Name of the NVI service, used for creating BSN transport tokens (default: "nvi")

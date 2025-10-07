@@ -52,6 +52,7 @@ func Start(t *testing.T) Details {
 		},
 		NVI: nvi.Config{
 			FHIRBaseURL: testData.NVI.FHIRBaseURL.String(),
+			Audience:    "nvi",
 		},
 	})
 	return Details{

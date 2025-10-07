@@ -32,3 +32,24 @@
 .form-select {
     margin-bottom: 10px;
 }
+
+#edit-associations .card {
+    padding: 10px;
+    width: 700px;
+    margin: 10px;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+#edit-associations .card button {
+    margin-top: 10px;
+    height: 50px;
+}
+
+#edit-associations .card ul {
+    margin-bottom: 0px;
+}
+
+#edit-associations label {
+    margin: 10px;
+}

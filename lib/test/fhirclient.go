@@ -43,7 +43,8 @@ type StubFHIRClient struct {
 	// It's not used by the client itself, but can be used by tests to verify that the client has been used correctly.
 	CreatedResources map[string][]any
 	// Error is an error that will be returned by all methods of this client.
-	Error error
+	Error    error
+	Searches []string
 }
 
 func (s StubFHIRClient) Read(path string, target any, opts ...fhirclient.Option) error {
@@ -108,6 +109,7 @@ func (s *StubFHIRClient) SearchWithContext(ctx context.Context, resourceType str
 	if s.Error != nil {
 		return s.Error
 	}
+	s.Searches = append(s.Searches, resourceType+"?"+query.Encode())
 	var candidates []BaseResource
 	var additionalResources []BaseResource
 	for _, res := range s.Resources {
@@ -279,6 +281,20 @@ func (s *StubFHIRClient) SearchWithContext(ctx context.Context, resourceType str
 		case "status":
 			filterCandidates(func(candidate BaseResource) bool {
 				return candidate.asMap()["status"] == value
+			})
+		case "patient:identifier":
+			filterCandidates(func(candidate BaseResource) bool {
+				subject, ok := candidate.asMap()["subject"].(map[string]any)
+				if !ok {
+					return false
+				}
+				identifier, ok := subject["identifier"].(map[string]any)
+				if !ok {
+					return false
+				}
+				token := strings.Split(value, "|")
+				return (token[0] == "" || identifier["system"].(string) == token[0]) &&
+					(token[1] == "" || identifier["value"].(string) == token[1])
 			})
 		default:
 			return fmt.Errorf("unsupported query parameter: %s", name)
