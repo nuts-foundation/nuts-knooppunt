@@ -1,0 +1,21 @@
+<Subscription xmlns="http://hl7.org/fhir"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <extension url="http://fhir.nl/StructureDefinition/Patient.birthDate">
+        <valueDate value="2012-03-07"/>
+    </extension>
+    <extension url="http://fhir.nl/StructureDefinition/GatewaySystem">
+        <valueOid value="urn:oid:2.16.840.1.113883.2.4.6.6.1"/>
+    </extension>
+    <extension url="http://fhir.nl/StructureDefinition/SourceSystem">
+        <valueOid value="urn:oid:2.16.840.1.113883.2.4.6.6.90000017"/>
+    </extension>
+    <status value="requested"/>
+    <reason value="OTV"/>
+    <criteria value="Consent?_query=otv
+&amp;patientid=123456789&amp;providerid=01234567&amp;providertype=Z3"/>
+    <channel>
+        <type value="rest-hook"/>
+        <endpoint value="https://zim.prf001.lsp.aorta-zorg.nl/otv/Subscription/312"/>
+        <payload value="application/fhir+xml"/>
+    </channel>
+</Subscription>
