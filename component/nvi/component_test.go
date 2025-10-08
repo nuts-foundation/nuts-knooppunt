@@ -277,3 +277,88 @@ func TestComponent_handleSearch(t *testing.T) {
 		})
 	}
 }
+
+func TestComponent_identifierToToken(t *testing.T) {
+	testCases := []struct {
+		name             string
+		inputIdentifier  fhir.Identifier
+		audience         string
+		mockReturnToken  *fhir.Identifier
+		mockReturnError  error
+		expectedToken    *fhir.Identifier
+		expectedError    bool
+		expectedErrorMsg string
+	}{
+		{
+			name: "successfully tokenizes BSN identifier",
+			inputIdentifier: fhir.Identifier{
+				System: to.Ptr(coding.BSNNamingSystem),
+				Value:  to.Ptr("123456789"),
+			},
+			audience: "nvi",
+			mockReturnToken: &fhir.Identifier{
+				System: to.Ptr(coding.BSNTransportTokenNamingSystem),
+				Value:  to.Ptr("abcdefghi"),
+			},
+			expectedToken: &fhir.Identifier{
+				System: to.Ptr(coding.BSNTransportTokenNamingSystem),
+				Value:  to.Ptr("abcdefghi"),
+			},
+			expectedError: false,
+		},
+		{
+			name: "handles pseudonymizer error",
+			inputIdentifier: fhir.Identifier{
+				System: to.Ptr(coding.BSNNamingSystem),
+				Value:  to.Ptr("invalid"),
+			},
+			audience:         "nvi",
+			mockReturnError:  assert.AnError,
+			expectedError:    true,
+			expectedErrorMsg: "Failed to pseudonymize BSN identifier",
+		},
+		{
+			name: "handles different audience",
+			inputIdentifier: fhir.Identifier{
+				System: to.Ptr(coding.BSNNamingSystem),
+				Value:  to.Ptr("987654321"),
+			},
+			audience: "different-audience",
+			mockReturnToken: &fhir.Identifier{
+				System: to.Ptr(coding.BSNTransportTokenNamingSystem),
+				Value:  to.Ptr("xyz123"),
+			},
+			expectedToken: &fhir.Identifier{
+				System: to.Ptr(coding.BSNTransportTokenNamingSystem),
+				Value:  to.Ptr("xyz123"),
+			},
+			expectedError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			pseudonymizer := pseudonimization.NewMockPseudonymizer(ctrl)
+
+			pseudonymizer.EXPECT().
+				IdentifierToToken(tc.inputIdentifier, tc.audience).
+				Return(tc.mockReturnToken, tc.mockReturnError).
+				Times(1)
+
+			component := Component{
+				pseudonymizer: pseudonymizer,
+			}
+
+			result, err := component.identifierToToken(tc.inputIdentifier, tc.audience)
+
+			if tc.expectedError {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.expectedErrorMsg)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expectedToken, result)
+			}
+		})
+	}
+}
