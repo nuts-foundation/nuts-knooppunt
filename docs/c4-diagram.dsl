@@ -16,7 +16,7 @@ model {
             }
 
             viewer = container "Viewer" "Request healthcare data from other Care Providers" {
-                tags "external,localization"
+                tags "external"
             }
         }
     }
@@ -38,12 +38,11 @@ model {
             viewer = container "Viewer" {
                 tags "addressing,localization"
                 mcsdQueryClient = component "mCSD Query Client" "Queries the mcsd Directory"
-                localisationClient = component "Localisation Client" "Localise patient data"
+                localizationClient = component "Localization Client" "Localize patient data"
             }
 
             ehr = container "EHR" {
                 tags "localization"
-                localisationPublisher = component "Localisation Publisher" "Publish patient localisation data"
             }
 
             fhirAdminDir = container "mCSD Administration Directory" "Exposes mCSD resources for synchronization" "FHIR API" {
@@ -57,7 +56,7 @@ model {
 
         kpSystem = softwareSystem "Local Knooppunt" {
             kp = container "Knooppunt Container" {
-                tags "addressing"
+                tags "addressing,localization"
                 group "Authentication" {
                     nuts = component "Nuts Node" {
                         tags "new-nuts-node"
@@ -73,8 +72,10 @@ model {
                     }
                 }
 
-                group "Localisation" {
-                    localisationClient = component "NVI Client" "Administer NVI entries and search NVI"
+                group "Localization" {
+                    nviGateway = component "NVI Gateway" "Administer NVI entries and search NVI" {
+                        tags "localization"
+                    }
                 }
 
                 group "Consent" {
@@ -120,20 +121,30 @@ model {
             }
 
 
-            # localization
-            kp.localisationClient -> nvi "Register Patients, Query for URAs per patient" FHIR {
-                tags "localization"
-            }
-
             kp.otvClient -> otv "Perform the 'gesloten-vraag'"
 
             admin -> kp.nuts "Manage Nuts node"
+
+            # GF Localization transactions
+            xis.ehr -> kp.nviGateway "Publish patient localization data" FHIR {
+                tags "localization"
+            }
+            kp.nviGateway -> nvi "Publish patient localization data\n(pseudonymized)" FHIR {
+                tags "localization"
+            }
+            kp -> nvi "Localize patient data\n(pseudonymized)" FHIR {
+                tags "localization"
+            }
+            xis.viewer -> kp.nviGateway "Localize patient data" FHIR {
+                tags "localization"
+            }
+
         }
 
         xis -> kpSystem "Queries addressing data"
 
         xis.viewer.mcsdQueryClient -> kpSystem.fhirQueryDir "Query the mCSD addressing directory" "FHIR"
-        xis.ehr.localisationPublisher -> kpSystem.kp.localisationClient "Publish localisation metadata" "FHIR"
+
         # For 'existing' mCSD Administration Directory, typically a facade on the XIS:
         remoteXIS.mcsdUpdateClient -> xis.fhirAdminDir "Query updated mCSD resources" "FHIR" {
             tags "existing-fhir-admin-directory"
@@ -144,13 +155,13 @@ model {
         }
 
         # For 'new' Nuts node (embedded):
-        remoteXIS.viewer -> kpSystem.kp.nuts "Request AccessToken" {
-            tags "new-nuts-node"
-        }
+//        remoteXIS.viewer -> kpSystem.kp.nuts "Request AccessToken" {
+//            tags "new-nuts-node"
+//        }
         # For 'existing' Nuts node:
-        remoteXIS.viewer -> xis.nuts "Request AccessToken" {
-            tags "existing-nuts-node"
-        }
+//        remoteXIS.viewer -> xis.nuts "Request AccessToken" {
+//            tags "existing-nuts-node"
+//        }
     }
 }
 
@@ -165,59 +176,61 @@ views {
     }
 
     # GF Localization
-    container kpSystem "GF_Localisation_ContainerDiagram" {
-        title "Container diagram of systems and transactions involved in GF Localisation"
+    container kpSystem "GF_Localization_ContainerDiagram" {
+        title "Container diagram of systems and transactions involved in GF Localization"
+        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
+        exclude "element.tag==new-nuts-node || relationship.tag==new-nuts-node"
         include "element.tag==localization || relationship.tag==localization"
         autolayout lr
     }
 
     # Deployment A: new (embedded) Nuts node, new FHIR mCSD Admin Directory
-//    systemContext kpSystem "A1_SystemContext" {
-//        title "Deployment A: System diagram of Knooppunt deployment,\nwith embedded Nuts node and new mCSD Administration Directory"
-//        include *
-//        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
-//        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
-//        autolayout lr
-//    }
-//    container kpSystem "A2_ContainerDiagram" {
-//        title "Deployment A: System diagram of Knooppunt deployment,\nwith embedded Nuts node and new mCSD Administration Directory"
-//        include *
-//        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
-//        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
-//        autolayout lr
-//    }
-//
-//    # Deployment B: new (embedded) Nuts node, existing FHIR mCSD Admin Directory
-//    container kpSystem "B2_ContainerDiagram" {
-//        title "Deployment B: Container diagram of Knooppunt deployment,\nwith embedded Nuts node and existing mCSD Administration Directory"
-//        include *
-//        exclude "element.tag==new-fhir-admin-directory || relationship.tag==new-fhir-admin-directory"
-//        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
-//        autolayout lr
-//    }
-//    container xis "B2_XIS_ContainerDiagram" {
-//        title "Deployment B: Container diagram of Knooppunt deployment,\nwith existing Nuts node and existing mCSD Administration Directory\n(XIS perspective)"
-//        include *
-//        exclude "element.tag==new-fhir-admin-directory || relationship.tag==new-fhir-admin-directory"
-//        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
-//        autolayout lr
-//    }
-//
-//    # Deployment C: existing Nuts node, new FHIR mCSD Admin Directory
-//    container kpSystem "C2_ContainerDiagram" {
-//        title "Deployment C: Container diagram of Knooppunt deployment,\nwith existing Nuts node and new mCSD Administration Directory"
-//        include *
-//        exclude "element.tag==new-nuts-node || relationship.tag==new-nuts-node"
-//        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
-//        autolayout lr
-//    }
-//    container xis "C2_XIS_ContainerDiagram" {
-//        title "Deployment C: Container diagram of Knooppunt deployment,\nwith existing Nuts node and new mCSD Administration Directory\n(XIS perspective)"
-//        include *
-//        exclude "element.tag==new-nuts-node || relationship.tag==new-nuts-node"
-//        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
-//        autolayout lr
-//    }
+    //    systemContext kpSystem "A1_SystemContext" {
+    //        title "Deployment A: System diagram of Knooppunt deployment,\nwith embedded Nuts node and new mCSD Administration Directory"
+    //        include *
+    //        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
+    //        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
+    //        autolayout lr
+    //    }
+    //    container kpSystem "A2_ContainerDiagram" {
+    //        title "Deployment A: System diagram of Knooppunt deployment,\nwith embedded Nuts node and new mCSD Administration Directory"
+    //        include *
+    //        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
+    //        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
+    //        autolayout lr
+    //    }
+    //
+    //    # Deployment B: new (embedded) Nuts node, existing FHIR mCSD Admin Directory
+    //    container kpSystem "B2_ContainerDiagram" {
+    //        title "Deployment B: Container diagram of Knooppunt deployment,\nwith embedded Nuts node and existing mCSD Administration Directory"
+    //        include *
+    //        exclude "element.tag==new-fhir-admin-directory || relationship.tag==new-fhir-admin-directory"
+    //        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
+    //        autolayout lr
+    //    }
+    //    container xis "B2_XIS_ContainerDiagram" {
+    //        title "Deployment B: Container diagram of Knooppunt deployment,\nwith existing Nuts node and existing mCSD Administration Directory\n(XIS perspective)"
+    //        include *
+    //        exclude "element.tag==new-fhir-admin-directory || relationship.tag==new-fhir-admin-directory"
+    //        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
+    //        autolayout lr
+    //    }
+    //
+    //    # Deployment C: existing Nuts node, new FHIR mCSD Admin Directory
+    //    container kpSystem "C2_ContainerDiagram" {
+    //        title "Deployment C: Container diagram of Knooppunt deployment,\nwith existing Nuts node and new mCSD Administration Directory"
+    //        include *
+    //        exclude "element.tag==new-nuts-node || relationship.tag==new-nuts-node"
+    //        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
+    //        autolayout lr
+    //    }
+    //    container xis "C2_XIS_ContainerDiagram" {
+    //        title "Deployment C: Container diagram of Knooppunt deployment,\nwith existing Nuts node and new mCSD Administration Directory\n(XIS perspective)"
+    //        include *
+    //        exclude "element.tag==new-nuts-node || relationship.tag==new-nuts-node"
+    //        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
+    //        autolayout lr
+    //    }
 
     styles {
         element "database" {
