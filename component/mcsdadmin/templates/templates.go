@@ -18,6 +18,7 @@ func RenderWithBase(w io.Writer, name string, data any) {
 	files := []string{
 		"base.html",
 		name,
+		"_card_endpoint.html",
 	}
 
 	ts, err := template.ParseFS(tmplFS, files...)
@@ -27,6 +28,21 @@ func RenderWithBase(w io.Writer, name string, data any) {
 	}
 
 	err = ts.ExecuteTemplate(w, "base", data)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to execute template")
+		return
+	}
+}
+
+func RenderPartial(w io.Writer, name string, data any) {
+	filename := fmt.Sprintf("%s.html", name)
+	ts, err := template.ParseFS(tmplFS, filename)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to parse template")
+		return
+	}
+
+	err = ts.ExecuteTemplate(w, name, data)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to execute template")
 		return
@@ -277,4 +293,20 @@ func MakeLocationListXsProps(locations []fhir.Location) []LocationListProps {
 		out[idx] = MakeLocationListProps(l)
 	}
 	return out
+}
+
+type EndpointCardProps struct {
+	Endpoint     fhir.Endpoint
+	Organization fhir.Organization
+}
+
+func MakeEndpointCards(endpoints []fhir.Endpoint, org fhir.Organization) []EndpointCardProps {
+	cards := make([]EndpointCardProps, len(endpoints))
+	for i, endp := range endpoints {
+		cards[i] = EndpointCardProps{
+			Endpoint:     endp,
+			Organization: org,
+		}
+	}
+	return cards
 }

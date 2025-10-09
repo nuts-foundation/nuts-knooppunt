@@ -21,44 +21,44 @@ services:
     command: /bin/sh -c "cd /app && go run main.go http://knooppunt:8081 http://hapi-fhir:7050/fhir"
 
   # PostgreSQL Database
-#  postgres:
-#    image: postgres:14
-#    container_name: hapi-postgres
-#    environment:
-#      POSTGRES_DB: hapi
-#      POSTGRES_USER: admin
-#      POSTGRES_PASSWORD: admin
-#    ports:
-#      - "5432:5432"
-#    volumes:
-#      - postgres-data:/var/lib/postgresql/data
-#    healthcheck:
-#      test: ["CMD-SHELL", "pg_isready -U admin -d hapi"]
-#      interval: 10s
-#      timeout: 5s
-#      retries: 5
-#      start_period: 10s
-#    restart: unless-stopped
+  #  postgres:
+  #    image: postgres:14
+  #    container_name: hapi-postgres
+  #    environment:
+  #      POSTGRES_DB: hapi
+  #      POSTGRES_USER: admin
+  #      POSTGRES_PASSWORD: admin
+  #    ports:
+  #      - "5432:5432"
+  #    volumes:
+  #      - postgres-data:/var/lib/postgresql/data
+  #    healthcheck:
+  #      test: ["CMD-SHELL", "pg_isready -U admin -d hapi"]
+  #      interval: 10s
+  #      timeout: 5s
+  #      retries: 5
+  #      start_period: 10s
+  #    restart: unless-stopped
 
   # HAPI FHIR Server
   hapi-fhir:
-    image: hapiproject/hapi:v8.2.0-2
+    image: ghcr.io/nuts-foundation/fake-nvi:latest # which is hapi:v8.2.0-2 with our NVI specifics
     container_name: hapi-fhir-server
     ports:
       - "7050:7050"
-#    depends_on:
-#      postgres:
-#        condition: service_healthy
+    #    depends_on:
+    #      postgres:
+    #        condition: service_healthy
     environment:
       # For a full list of options, see https://github.com/nuts-foundation/nuts-knooppunt/blob/8463b719caca0a3dd8623a36188a4e1423faa8bb/config/hapi.application.dev.yml
       #
       # Properties that should be enabled when deploying to test/production/etc
       #
-#      spring.datasource.url: jdbc:postgresql://postgres:5432/hapi
-#      spring.datasource.username: admin
-#      spring.datasource.password: admin
-#      spring.datasource.driverClassName: org.postgresql.Driver
-#      spring.jpa.properties.hibernate.dialect: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect"
+      #      spring.datasource.url: jdbc:postgresql://postgres:5432/hapi
+      #      spring.datasource.username: admin
+      #      spring.datasource.password: admin
+      #      spring.datasource.driverClassName: org.postgresql.Driver
+      #      spring.jpa.properties.hibernate.dialect: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect"
       hapi.fhir.server_address: http://localhost:7050/fhir
       hapi.fhir.version: R4
       # Prevents encoding of the pipe char in queries
@@ -102,11 +102,15 @@ services:
     image: curlimages/curl:7.87.0
     depends_on:
       - hapi-fhir
-    entrypoint: [ "sh", "-c", "echo 'Starting fhirstore healthcheck...'; while ! curl -s -f http://hapi-fhir:7050/fhir/DEFAULT/Task > /dev/null; do echo 'Waiting for HAPI FHIR to be ready...'; sleep 5; done; echo 'HAPI FHIR is up and running.'" ]
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "echo 'Starting fhirstore healthcheck...'; while ! curl -s -f http://hapi-fhir:7050/fhir/DEFAULT/Task > /dev/null; do echo 'Waiting for HAPI FHIR to be ready...'; sleep 5; done; echo 'HAPI FHIR is up and running.'",
+      ]
     # Ensure the container exits successfully after the check
     restart: "no"
 
 volumes:
   #postgres-data:
   hapi-data:
-

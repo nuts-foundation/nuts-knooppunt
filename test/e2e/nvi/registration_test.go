@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
@@ -26,15 +27,18 @@ func Test_Registration(t *testing.T) {
 			},
 		},
 	}
+	requestHeaders := fhirclient.RequestHeaders(map[string][]string{
+		"X-Tenant-ID": {coding.URANamingSystem + "|1"},
+	})
 	nviGatewayClient := fhirclient.New(harnessDetail.KnooppuntInternalBaseURL.JoinPath("nvi"), http.DefaultClient, nil)
 
 	var actual fhir.DocumentReference
-	err := nviGatewayClient.Create(expected, &actual)
+	err := nviGatewayClient.Create(expected, &actual, requestHeaders)
 	require.NoError(t, err)
 
 	// Create a second one to ensure multiple registrations work
 	var second fhir.DocumentReference
-	err = nviGatewayClient.Create(expected, &second)
+	err = nviGatewayClient.Create(expected, &second, requestHeaders)
 	require.NoError(t, err)
 
 	t.Run("assert created document reference", func(t *testing.T) {
@@ -45,7 +49,7 @@ func Test_Registration(t *testing.T) {
 			var searchSet fhir.Bundle
 			err := nviGatewayClient.Search("DocumentReference", url.Values{
 				"_id": []string{*actual.Id},
-			}, &searchSet)
+			}, &searchSet, requestHeaders)
 			require.NoError(t, err)
 			require.Len(t, searchSet.Entry, 1)
 		})
@@ -54,14 +58,14 @@ func Test_Registration(t *testing.T) {
 				UsePostSearch: false,
 			})
 			var searchSet fhir.Bundle
-			err := nviGatewayClient.Search("DocumentReference", url.Values{"_id": []string{*actual.Id}}, &searchSet)
+			err := nviGatewayClient.Search("DocumentReference", url.Values{"_id": []string{*actual.Id}}, &searchSet, requestHeaders)
 			require.NoError(t, err)
 			require.Len(t, searchSet.Entry, 1)
 		})
 		t.Run("read DocumentReference directly from NVI", func(t *testing.T) {
 			nviClient := fhirclient.New(harnessDetail.Vectors.NVI.FHIRBaseURL, http.DefaultClient, nil)
 			var fetched fhir.DocumentReference
-			err = nviClient.Read("DocumentReference/"+*actual.Id, &fetched)
+			err = nviClient.Read("DocumentReference/"+*actual.Id, &fetched, requestHeaders)
 			require.NoError(t, err)
 			require.Equal(t, expected.Status, fetched.Status)
 			require.Equal(t, expected.Type.Coding[0].System, fetched.Type.Coding[0].System)
