@@ -9,7 +9,6 @@ import (
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
-	knpt_mcsd_query "github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/knpt-mcsd-query"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
@@ -43,7 +42,10 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 		Name: "knpt-mcsd-admin",
 		ID:   1,
 	}
-	knptMCSDQueryHAPITenant := knpt_mcsd_query.QueryHAPITenant()
+	knptMCSDQueryHAPITenant := hapi.Tenant{
+		Name: "knpt-mcsd-query",
+		ID:   2,
+	}
 	lrzaMCSDAdminHAPITenant := lrza.HAPITenant()
 	care2CureAdminHAPITenant := care2cure.AdminHAPITenant()
 	sunflowerAdminHAPITenant := sunflower.AdminHAPITenant()
@@ -102,16 +104,6 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	for _, resource := range sunflower.PatientsResources() {
 		if err := sunflowerMCSDPatientFHIRClient.UpdateWithContext(ctx, caramel.ResourceType(resource)+"/"+*resource.GetId(), resource, nil); err != nil {
 			return nil, fmt.Errorf("create sunflower patients resource: %w", err)
-		}
-	}
-
-	//
-	// Local Query Directory
-	//
-	knptMCSDQueryFhirClient := knptMCSDQueryHAPITenant.FHIRClient(hapiBaseURL)
-	for _, resource := range knpt_mcsd_query.Resources() {
-		if err := knptMCSDQueryFhirClient.UpdateWithContext(ctx, caramel.ResourceType(resource)+"/"+*resource.GetId(), resource, nil); err != nil {
-			return nil, fmt.Errorf("create knooppunt query resource: %w", err)
 		}
 	}
 
