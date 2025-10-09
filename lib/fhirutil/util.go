@@ -11,6 +11,16 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
+func FilterIdentifiersBySystem(identifiers []fhir.Identifier, system string) []fhir.Identifier {
+	var filtered []fhir.Identifier
+	for _, id := range identifiers {
+		if (id.System == nil && system == "") || (id.System != nil && *id.System == system) {
+			filtered = append(filtered, id)
+		}
+	}
+	return filtered
+}
+
 // ResourceInfo contains common FHIR resource fields extracted from JSON
 type ResourceInfo struct {
 	ID           string
