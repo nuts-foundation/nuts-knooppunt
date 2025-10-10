@@ -20,7 +20,7 @@ We want a solution that is easy to integrate in varying (existing) environments,
 - **Flexibility**: Can be adapted to different deployment environments and use cases.
 - **Modularity**: Components (e.g. Nuts node, Open Policy Agent) can be enabled/disabled as needed.
 - **Security**: Minimize attack surfaces.
-- **Plugability**: Should be as easy as possible to integrate.
+- **Pluggability**: Should be as easy as possible to integrate.
 
 ### Use cases
 
