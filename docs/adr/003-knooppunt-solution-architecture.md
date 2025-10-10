@@ -68,8 +68,7 @@ The Knooppunt sits as internal service inside the vendor's network. It's only su
 It relies on a separate, fit-for-purpose Policy Enforcement Point that is either pre-existing or newly deployed.
 The Knooppunt project can provide a reference implementation based on proven, open source software technology (e.g. NGINX or HAProxy).
 
-This aligns with the [Nuts SSIBAC Solution Architecture](https://wiki.nuts.nl/books/ssibac/page/referentie-solution-architectuur-wip);
-the Knooppunt then acts as "AS" and "PXP".
+This aligns with the [Nuts SSIBAC Solution Architecture](https://wiki.nuts.nl/books/ssibac/page/referentie-solution-architectuur-wip); the Knooppunt then acts as "AS" and "PXP".
 
 ```text
 ┌─────────────────┐       ┌──────────────────┐     ┌──────────────┐
@@ -104,6 +103,8 @@ Outbound data exchanges, initiated by the local EHR, could be routed through the
 - Negotiating TLS with the external party
 - Negotiating authentication with the external party
 - Looking the right endpoint to call
+
+This is not in scope for this ADR.
 
 ## Decision Outcome
 
