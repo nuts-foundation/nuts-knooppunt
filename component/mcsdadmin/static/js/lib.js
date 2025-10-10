@@ -10,6 +10,12 @@ function removeOption(elementId) {
     var optionDiv = document.getElementById(elementId);
     var childrenCount = optionDiv.children.length;
     if (childrenCount > 1) {
-        optionDiv.removeChild(optionDiv.lastChild)
+        optionDiv.removeChild(optionDiv.lastChild);
     }
+}
+
+window.onload = function () {
+    document.body.addEventListener('htmx:responseError', function (ev) {
+        console.log(ev);
+    });
 }

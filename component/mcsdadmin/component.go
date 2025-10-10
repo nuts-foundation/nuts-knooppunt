@@ -714,7 +714,7 @@ func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Requ
 
 		err := client.Delete(path)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			RespondError(w, fmt.Sprintf("Can not delete %s.", resourceType), http.StatusBadRequest)
 			return
 		}
 
@@ -787,4 +787,18 @@ func idFromRef(ref fhir.Reference) string {
 	}
 
 	return split[1]
+}
+
+func RespondError(w http.ResponseWriter, text string, httpcode int) {
+	w.WriteHeader(httpcode)
+	h := w.Header()
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("X-Content-Type-Options", "nosniff")
+
+	props := struct {
+		Text string
+	}{
+		Text: text,
+	}
+	tmpls.RenderPartial(w, "_alert_error", props)
 }

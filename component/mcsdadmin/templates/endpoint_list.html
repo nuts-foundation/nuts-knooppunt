@@ -1,4 +1,12 @@
 {{define "main"}}
+<div class="alert alert-danger alert-dismissible fade show">
+    <strong>Error!</strong> Can not delete endpoint because it's referenced by an organization.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+<div class="alert alert-danger alert-dismissible fade show">
+    <strong>Error!</strong> Failed to delete endpoint because of an unknown error.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2>Endpoints</h2>
     <a href="/mcsdadmin/endpoint/new" class="btn btn-primary">New Endpoint</a>
