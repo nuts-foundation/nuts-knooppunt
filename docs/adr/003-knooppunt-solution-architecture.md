@@ -26,11 +26,12 @@ We want a solution that is easy to integrate in varying (existing) environments,
 
 Deciding on the architecture depends on the use cases we want to support. The main use cases are:
 
-- Initiating data exchange with a system from a remote party
-  - This involves looking up parties, endpoints, authentication
-- Handling data exchange, initiated by a remote party
+- Handling data exchange, initiated by a remote party (inbound)
   - This involves receiving requests, authenticating, authorizing, and responding.
   - It could also involve masking or filtering data based on consent or authorization rules, before it's returned to the requester.
+- Initiating data exchange with a system from a remote party (outbound)
+    - This involves looking up parties, endpoints, authentication
+    - Outbound requests are out of scope for this ADR.
 
 ## Considered Options
 This section describes considered architecture options.
@@ -108,3 +109,4 @@ This is not in scope for this ADR.
 
 ## Decision Outcome
 
+Proposal: follow the "Knooppunt as internal system" architecture, because it aligns with Nuts principles, minimizes additional risk for the vendors, and simplifies the Knooppunt.
