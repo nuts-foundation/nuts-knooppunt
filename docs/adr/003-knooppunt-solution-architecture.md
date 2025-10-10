@@ -109,4 +109,5 @@ This is not in scope for this ADR.
 
 ## Decision Outcome
 
+We have decided to implement the Knooppunt as a Policy Decision Point (PDP) that integrates with existing infrastructure via an external proxy for inbound data exchanges. This approach was chosen because it minimizes the attack surface of the Knooppunt, leverages existing security components, and provides flexibility for vendors to use their preferred Policy Enforcement Point (PEP). While it introduces some deployment and configuration complexity, the benefits in terms of security, modularity, and compliance alignment outweigh these drawbacks.
 Proposal: follow the "Knooppunt as internal system" architecture, because it aligns with Nuts principles, minimizes additional risk for the vendors, and simplifies the Knooppunt.
