@@ -31,9 +31,11 @@ model {
 
 
     xis = softwareSystem "XIS" "Local XIS integrating the Knooppunt" {
-        tags "addressing,localization"
         ehr = container "EHR" {
             tags "addressing,localization"
+            localizationClient = component "Localization Client" "Publishing and localizing patient localization data" {
+                tags "localization"
+            }
         }
 
         kp = container "Knooppunt" {
@@ -67,7 +69,6 @@ model {
         }
     }
 
-
     #
     # GF Addressing transactions
     #
@@ -93,107 +94,117 @@ model {
     #
     # GF Localization transactions
     #
-    xis.ehr -> xis.kp.nviGateway "Publish patient localization data" FHIR {
-        tags "localization"
-    }
-    xis.kp.nviGateway -> nvi "Publish patient localization data\n(pseudonymized)" FHIR {
-        tags "localization"
-    }
-    xis.kp.nviGatewaY -> nvi "Localize patient data\n(pseudonymized)" FHIR {
-        tags "localization"
-    }
-    xis.ehr -> xis.kp.nviGateway "Localize patient data" FHIR {
-        tags "localization"
-    }
+//    xis.ehr -> xis.kp "Publish patient localization data" FHIR {
+//        tags "localization"
+//    }
+//    xis.ehr.localizationClient -> xis.kp.nviGateway "Publish patient localization data" FHIR {
+//        tags "localization"
+//    }
+//    xis.kp.nviGateway -> nvi "Publish patient localization data\n(pseudonymized)" FHIR {
+//        tags "localization"
+//    }
+//    xis.kp.nviGateway -> nvi "Localize patient data\n(pseudonymized)" FHIR {
+//        tags "localization"
+//    }
+//    xis.ehr -> xis.kp.nviGateway "Localize patient data" FHIR {
+//        tags "localization"
+//    }
 
     #
     # GF Consent transactions
     #
-    xis.kp.otvClient -> otv "Perform the 'gesloten-vraag'"
+    xis.kp.otvClient -> otv "Perform the 'gesloten-vraag'" {
+        tags "consent"
+    }
+}
 
-    views {
-        # GF Adressing
-        container kpSystem "GF_Addressing_ContainerDiagram" {
-            title "Container diagram of systems and transactions involved in GF Addressing"
-            exclude "element.tag==localization || relationship.tag==localization"
-            include "element.tag==addressing || relationship.tag==addressing"
-            autolayout lr
+views {
+    # GF Adressing
+    container xis "GF_Addressing_ContainerDiagram" {
+        title "Container diagram of systems and transactions involved in GF Addressing"
+        include "element.tag==addressing || relationship.tag==addressing"
+//        autolayout lr
+    }
+    component xis.kp "GF_Addressing_ComponentDiagram" {
+        title "Component diagram of systems and transactions involved in GF Addressing"
+        include "element.tag==addressing || relationship.tag==addressing"
+        //        autolayout lr
+    }
+
+    # GF Localization
+    container xis "GF_Localization_ContainerDiagram" {
+        title "Container diagram of systems and transactions involved in GF Localization"
+        include "element.tag==localization || relationship.tag==localization"
+
+        autolayout lr
+    }
+
+    # Deployment A: new (embedded) Nuts node, new FHIR mCSD Admin Directory
+    //    systemContext kpSystem "A1_SystemContext" {
+    //        title "Deployment A: System diagram of Knooppunt deployment,\nwith embedded Nuts node and new mCSD Administration Directory"
+    //        include *
+    //        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
+    //        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
+    //        autolayout lr
+    //    }
+    //    container kpSystem "A2_ContainerDiagram" {
+    //        title "Deployment A: System diagram of Knooppunt deployment,\nwith embedded Nuts node and new mCSD Administration Directory"
+    //        include *
+    //        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
+    //        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
+    //        autolayout lr
+    //    }
+    //
+    //    # Deployment B: new (embedded) Nuts node, existing FHIR mCSD Admin Directory
+    //    container kpSystem "B2_ContainerDiagram" {
+    //        title "Deployment B: Container diagram of Knooppunt deployment,\nwith embedded Nuts node and existing mCSD Administration Directory"
+    //        include *
+    //        exclude "element.tag==new-fhir-admin-directory || relationship.tag==new-fhir-admin-directory"
+    //        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
+    //        autolayout lr
+    //    }
+    //    container xis "B2_XIS_ContainerDiagram" {
+    //        title "Deployment B: Container diagram of Knooppunt deployment,\nwith existing Nuts node and existing mCSD Administration Directory\n(XIS perspective)"
+    //        include *
+    //        exclude "element.tag==new-fhir-admin-directory || relationship.tag==new-fhir-admin-directory"
+    //        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
+    //        autolayout lr
+    //    }
+    //
+    //    # Deployment C: existing Nuts node, new FHIR mCSD Admin Directory
+    //    container kpSystem "C2_ContainerDiagram" {
+    //        title "Deployment C: Container diagram of Knooppunt deployment,\nwith existing Nuts node and new mCSD Administration Directory"
+    //        include *
+    //        exclude "element.tag==new-nuts-node || relationship.tag==new-nuts-node"
+    //        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
+    //        autolayout lr
+    //    }
+    //    container xis "C2_XIS_ContainerDiagram" {
+    //        title "Deployment C: Container diagram of Knooppunt deployment,\nwith existing Nuts node and new mCSD Administration Directory\n(XIS perspective)"
+    //        include *
+    //        exclude "element.tag==new-nuts-node || relationship.tag==new-nuts-node"
+    //        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
+    //        autolayout lr
+    //    }
+
+    styles {
+        element "database" {
+            shape cylinder
         }
-
-        # GF Localization
-        container kpSystem "GF_Localization_ContainerDiagram" {
-            title "Container diagram of systems and transactions involved in GF Localization"
-            exclude "element.tag==new-nuts-node || relationship.tag==new-nuts-node"
-            include "element.tag==localization || relationship.tag==localization"
-            autolayout lr
+        element "Boundary" {
+            strokeWidth 5
         }
-
-        # Deployment A: new (embedded) Nuts node, new FHIR mCSD Admin Directory
-        //    systemContext kpSystem "A1_SystemContext" {
-        //        title "Deployment A: System diagram of Knooppunt deployment,\nwith embedded Nuts node and new mCSD Administration Directory"
-        //        include *
-        //        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
-        //        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
-        //        autolayout lr
-        //    }
-        //    container kpSystem "A2_ContainerDiagram" {
-        //        title "Deployment A: System diagram of Knooppunt deployment,\nwith embedded Nuts node and new mCSD Administration Directory"
-        //        include *
-        //        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
-        //        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
-        //        autolayout lr
-        //    }
-        //
-        //    # Deployment B: new (embedded) Nuts node, existing FHIR mCSD Admin Directory
-        //    container kpSystem "B2_ContainerDiagram" {
-        //        title "Deployment B: Container diagram of Knooppunt deployment,\nwith embedded Nuts node and existing mCSD Administration Directory"
-        //        include *
-        //        exclude "element.tag==new-fhir-admin-directory || relationship.tag==new-fhir-admin-directory"
-        //        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
-        //        autolayout lr
-        //    }
-        //    container xis "B2_XIS_ContainerDiagram" {
-        //        title "Deployment B: Container diagram of Knooppunt deployment,\nwith existing Nuts node and existing mCSD Administration Directory\n(XIS perspective)"
-        //        include *
-        //        exclude "element.tag==new-fhir-admin-directory || relationship.tag==new-fhir-admin-directory"
-        //        exclude "element.tag==existing-nuts-node || relationship.tag==existing-nuts-node"
-        //        autolayout lr
-        //    }
-        //
-        //    # Deployment C: existing Nuts node, new FHIR mCSD Admin Directory
-        //    container kpSystem "C2_ContainerDiagram" {
-        //        title "Deployment C: Container diagram of Knooppunt deployment,\nwith existing Nuts node and new mCSD Administration Directory"
-        //        include *
-        //        exclude "element.tag==new-nuts-node || relationship.tag==new-nuts-node"
-        //        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
-        //        autolayout lr
-        //    }
-        //    container xis "C2_XIS_ContainerDiagram" {
-        //        title "Deployment C: Container diagram of Knooppunt deployment,\nwith existing Nuts node and new mCSD Administration Directory\n(XIS perspective)"
-        //        include *
-        //        exclude "element.tag==new-nuts-node || relationship.tag==new-nuts-node"
-        //        exclude "element.tag==existing-fhir-admin-directory || relationship.tag==existing-fhir-admin-directory"
-        //        autolayout lr
-        //    }
-
-        styles {
-            element "database" {
-                shape cylinder
-            }
-            element "Boundary" {
-                strokeWidth 5
-            }
-            element "external" {
-                background #1168bd
-                color #ffffff
-                shape RoundedBox
-            }
-            element "webapp" {
-                shape WebBrowser
-            }
-            relationship "Relationship" {
-                thickness 4
-            }
+        element "external" {
+            background #1168bd
+            color #ffffff
+            shape RoundedBox
+        }
+        element "webapp" {
+            shape WebBrowser
+        }
+        relationship "Relationship" {
+            thickness 4
         }
     }
+}
 }
