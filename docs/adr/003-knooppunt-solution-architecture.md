@@ -103,7 +103,7 @@ Outbound data exchanges, initiated by the local EHR, could be routed through the
 
 - Negotiating TLS with the external party
 - Negotiating authentication with the external party
-- Looking the right endpoint to call
+- Looking up the right endpoint to call
 
 This is not in scope for this ADR.
 
