@@ -718,6 +718,10 @@ func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Requ
 			return
 		}
 
+		h := w.Header()
+		h.Set("Content-Type", "text/plain; charset=utf-8")
+		h.Set("HX-Reswap", "delete")
+
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -790,10 +794,12 @@ func idFromRef(ref fhir.Reference) string {
 }
 
 func RespondError(w http.ResponseWriter, text string, httpcode int) {
-	w.WriteHeader(httpcode)
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("HX-Retarget", "#alerts")
+	h.Set("HX-Reswap", "innerHTML")
+	w.WriteHeader(httpcode)
 
 	props := struct {
 		Text string

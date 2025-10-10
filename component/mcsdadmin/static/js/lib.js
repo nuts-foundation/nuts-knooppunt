@@ -14,8 +14,16 @@ function removeOption(elementId) {
     }
 }
 
-window.onload = function () {
-    document.body.addEventListener('htmx:responseError', function (ev) {
-        console.log(ev);
-    });
-}
+window.onload = function(){
+    htmx.config.responseHandling = [
+        // 204 - No Content by default does nothing, but is not an error
+        {code:"204", swap: false},
+        // 200 & 300 responses are non-errors and are swapped
+        {code:"[23]..", swap: true},
+        // 400 & 500 we expect the server to return an alert box
+        // (Server can instruct to do something else by using HX-Retarget and friends)
+        {code:"[45]..", swap: true, target: "#alerts"},
+        // catch all for any other response code
+        {code:"...", swap: false}
+    ]
+};
