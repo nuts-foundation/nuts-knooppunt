@@ -14,6 +14,11 @@ function removeOption(elementId) {
     }
 }
 
+function dismissAlert(elementId) {
+    var elm = document.getElementById(elementId);
+    elm.hidden = true
+}
+
 window.onload = function(){
     htmx.config.responseHandling = [
         // 204 - No Content by default does nothing, but is not an error

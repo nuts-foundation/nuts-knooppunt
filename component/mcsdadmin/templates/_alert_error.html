@@ -1,6 +1,6 @@
 {{ define "_alert_error" }}
-<div class="alert alert-danger alert-dismissible fade show">
+<div id="alert-box" class="alert alert-danger alert-dismissible fade show">
     <strong>Error!</strong> {{ .Text }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" onclick="dismissAlert('alert-box')"></button>
 </div>
 {{ end }}
