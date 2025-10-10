@@ -58,7 +58,7 @@ Data exchanges are routed through the Knooppunt, theoretically offloading all "c
   - Easier to reason about, since all data exchanges go through a single component.
 - Disadvantages:
   - Large attack surface on the Knooppunt, since it handles all data exchanges.
-    Makes it harder to use employ security measures vendors already have in place, especially for resource transformation and filtering.
+    Makes it harder to use security measures vendors already have in place, especially for resource transformation and filtering.
   - Might not actually make things easier for vendors, if they want to implement requirements not supported by the Knooppunt (e.g. auditing, data minimization)
 
 ### Knooppunt as internal system
