@@ -2,6 +2,8 @@ package mcsdadmin
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -714,9 +716,13 @@ func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Requ
 
 		err := client.Delete(path)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			RespondError(w, fmt.Sprintf("Can not delete %s.", resourceType), http.StatusBadRequest)
 			return
 		}
+
+		h := w.Header()
+		h.Set("Content-Type", "text/plain; charset=utf-8")
+		h.Set("HX-Reswap", "delete")
 
 		w.WriteHeader(http.StatusOK)
 		return
@@ -787,4 +793,33 @@ func idFromRef(ref fhir.Reference) string {
 	}
 
 	return split[1]
+}
+
+func ShortID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		// rand.Read never returns an error, and always fills b entirely.
+		panic("unreachable")
+	}
+
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func RespondError(w http.ResponseWriter, text string, httpcode int) {
+	h := w.Header()
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("HX-Retarget", "#alerts")
+	h.Set("HX-Reswap", "beforeend")
+	w.WriteHeader(httpcode)
+
+	props := struct {
+		AlertId string
+		Text    string
+	}{
+		AlertId: ShortID(),
+		Text:    text,
+	}
+
+	tmpls.RenderPartial(w, "_alert_error", props)
 }
