@@ -2,6 +2,8 @@ package mcsdadmin
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -793,18 +795,31 @@ func idFromRef(ref fhir.Reference) string {
 	return split[1]
 }
 
+func ShortID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		// rand.Read never returns an error, and always fills b entirely.
+		panic("unreachable")
+	}
+
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
 func RespondError(w http.ResponseWriter, text string, httpcode int) {
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("HX-Retarget", "#alerts")
-	h.Set("HX-Reswap", "innerHTML")
+	h.Set("HX-Reswap", "beforeend")
 	w.WriteHeader(httpcode)
 
 	props := struct {
-		Text string
+		AlertId string
+		Text    string
 	}{
-		Text: text,
+		AlertId: ShortID(),
+		Text:    text,
 	}
+
 	tmpls.RenderPartial(w, "_alert_error", props)
 }
