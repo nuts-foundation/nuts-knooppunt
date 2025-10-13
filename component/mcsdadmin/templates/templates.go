@@ -310,3 +310,46 @@ func MakeEndpointCards(endpoints []fhir.Endpoint, org fhir.Organization) []Endpo
 	}
 	return cards
 }
+
+type PractitionerRoleProps struct {
+	Dezi         string
+	Organization string
+	Code         string
+	Telecom      string
+}
+
+func MakePractitionerRoleProps(role fhir.PractitionerRole) PractitionerRoleProps {
+	out := PractitionerRoleProps{}
+	for _, identifier := range role.Identifier {
+		if identifier.System == nil || identifier.Value == nil {
+			continue
+		}
+		if *identifier.System == "dezi-system-here-please" {
+			out.Dezi = *identifier.Value
+		}
+	}
+
+	if role.Organization != nil {
+		out.Organization = fmtRef(*role.Organization)
+	} else {
+		out.Organization = unknownStr
+	}
+
+	if len(role.Code) > 0 {
+		out.Code = fmtCodable(role.Code[0])
+	} else {
+		out.Code = unknownStr
+	}
+
+	out.Telecom = unknownStr
+
+	return out
+}
+
+func MakePractitionerRoleXsProps(roles []fhir.PractitionerRole) []PractitionerRoleProps {
+	out := make([]PractitionerRoleProps, len(roles))
+	for idx, role := range roles {
+		out[idx] = MakePractitionerRoleProps(role)
+	}
+	return out
+}

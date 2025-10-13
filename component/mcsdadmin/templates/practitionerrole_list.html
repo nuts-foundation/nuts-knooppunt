@@ -1,0 +1,39 @@
+{{define "main"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Practitioner Role</h2>
+    <a href="/mcsdadmin/practitionerrole/new" class="btn btn-primary">New Practitioner Role</a>
+</div>
+<div class="card">
+    <div class="card-body">
+        <table class="table table-striped table-hover">
+            <thead class="table-light">
+            <tr>
+                <th scope="col">DEZI-Number</th>
+                <th scope="col">Organization</th>
+                <th scope="col">Code</th>
+                <th scope="col">Telecom</th>
+            </tr>
+            </thead>
+            <tbody>
+            {{range .Items }}
+            <tr id="row-{{.Id}}">
+                <th scope="row">{{ .Dezi }}</th>
+                <td>{{ .Organization }}</td>
+                <td>{{ .Code }}</td>
+                <td>{{ .Telecom }}</td>
+                <td>
+                    <button class="btn btn-outline-dark btn-sm"
+                            hx-delete="/mcsdadmin/practitionerrole/{{ .Id }}"
+                            hx-target="#row-{{.Id}}"
+                            hx-swap="delete"
+                    >
+                        Delete
+                    </button>
+                </td>
+            </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}

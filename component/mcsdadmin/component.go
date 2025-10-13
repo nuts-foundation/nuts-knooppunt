@@ -92,6 +92,9 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("DELETE /mcsdadmin/location/{id}", deleteHandler("Location"))
 	mux.HandleFunc("DELETE /mcsdadmin/healthcareservice/{id}", deleteHandler("HealthcareService"))
 	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}", deleteHandler("Organization"))
+	mux.HandleFunc("GET /mcsdadmin/practitionerrole", listPractitionerRole)
+	mux.HandleFunc("GET /mcsdadmin/practitionerrole/new", newPractitionerRole)
+	mux.HandleFunc("POST /mcsdadmin/practitionerrole/new", newPractitionerRolePost)
 	mux.HandleFunc("GET /mcsdadmin", homePage)
 	mux.HandleFunc("GET /mcsdadmin/", notFound)
 }
@@ -697,6 +700,19 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 func listLocations(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	renderList[fhir.Location, tmpls.LocationListProps](client, w, tmpls.MakeLocationListXsProps)
+}
+
+func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func newPractitionerRole(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func listPractitionerRole(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	renderList[fhir.PractitionerRole, tmpls.PractitionerRoleProps](client, w, tmpls.MakePractitionerRoleXsProps)
 }
 
 func homePage(w http.ResponseWriter, _ *http.Request) {
