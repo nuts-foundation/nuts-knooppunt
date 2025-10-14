@@ -707,7 +707,25 @@ func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func newPractitionerRole(w http.ResponseWriter, r *http.Request) {
+	organizations, err := findAll[fhir.Organization](client)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to fetch organizations")
+		// TODO: Make this work with both full pages as wel as inline alerts
+		//internalError(w, "failed to fetch organizations", err)
+		return
+	}
+
+	orgsExists := len(organizations) > 0
+
+	props := struct {
+		Organizations []fhir.Organization
+		OrgsExists    bool
+	}{
+		Organizations: organizations,
+		OrgsExists:    orgsExists,
+	}
 	w.WriteHeader(http.StatusOK)
+	tmpls.RenderWithBase(w, "practitionerrole_edit.html", props)
 }
 
 func listPractitionerRole(w http.ResponseWriter, r *http.Request) {
@@ -732,7 +750,7 @@ func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Requ
 
 		err := client.Delete(path)
 		if err != nil {
-			RespondError(w, fmt.Sprintf("Can not delete %s.", resourceType), http.StatusBadRequest)
+			respondError(w, fmt.Sprintf("Can not delete %s.", resourceType), http.StatusBadRequest)
 			return
 		}
 
@@ -821,7 +839,7 @@ func ShortID() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func RespondError(w http.ResponseWriter, text string, httpcode int) {
+func respondError(w http.ResponseWriter, text string, httpcode int) {
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("X-Content-Type-Options", "nosniff")
@@ -838,4 +856,9 @@ func RespondError(w http.ResponseWriter, text string, httpcode int) {
 	}
 
 	tmpls.RenderPartial(w, "_alert_error", props)
+}
+
+func internalError(w http.ResponseWriter, msg string, err error) {
+	log.Error().Err(err).Msg(msg)
+	respondError(w, msg, http.StatusInternalServerError)
 }
