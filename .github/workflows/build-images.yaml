@@ -1,12 +1,12 @@
 ---
-name: "Build Docker images"
+name: 'Build Docker images'
 
 on:
   push:
     branches:
       - main
     tags:
-      - "v*"
+      - 'v*'
   pull_request:
     branches:
       - main
@@ -75,34 +75,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set build env
-        run: |
-          echo "GIT_VERSION=${{ steps.version.outputs.git_version }}" >> $GITHUB_ENV
-          echo "GIT_COMMIT=${{ steps.version.outputs.git_commit }}" >> $GITHUB_ENV
-          echo "GIT_BRANCH=${{ steps.version.outputs.git_branch }}" >> $GITHUB_ENV
-          echo "SKAFFOLD_DEFAULT_REPO=ghcr.io/nuts-foundation/nuts-knooppunt" >> $GITHUB_ENV
-
       - name: Build and push
-        uses: hiberbee/github-action-skaffold@1.27.0
-        if: ${{ github.event_name == 'pull_request' }}
+        uses: docker/build-push-action@v6
         with:
-          command: build
-          skaffold-version: 2.16.1
-          profile: ci
-          push: false
-
-      - name: Build and push
-        uses: hiberbee/github-action-skaffold@1.27.0
-        if: ${{ github.event_name != 'pull_request' }}
-        with:
-          command: build
-          skaffold-version: 2.16.1
-          push: true
-          tag: ${{ steps.docker_meta.outputs.tags }}
-          file-output: artifacts.json
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ github.event_name != 'pull_request' }}
-        with:
-          name: skaffold
-          path: artifacts.json
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          build-args: |
+            GIT_VERSION=${{ steps.version.outputs.git_version }}
+            GIT_COMMIT=${{ steps.version.outputs.git_commit }}
+            GIT_BRANCH=${{ steps.version.outputs.git_branch }}
