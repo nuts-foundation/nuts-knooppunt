@@ -155,6 +155,10 @@ public class PseudonymInterceptor {
             return;
         }
         log.trace("Intercepting DocumentReference resource creation");
+
+        // Validate custodian matches X-Requester-URA header
+        validateCustodian(documentReference, servletRequestDetails);
+
         modifyDocumentFromTokenToPseudonym(documentReference);
         log.info("{}", FhirContext.forR4Cached().newJsonParser().encodeResourceToString(documentReference));
     }
@@ -271,6 +275,64 @@ public class PseudonymInterceptor {
         final String token = bsnUtil.pseudonymToTransportToken(pseudonym, audience);
         log.trace("Converted pseudonym to token: {}", token);
         return token;
+    }
+
+    /**
+     * Validates that DocumentReference.custodian matches the X-Requester-URA header.
+     * The custodian should be a reference to an Organization with an identifier containing the URA.
+     *
+     * @param documentReference the DocumentReference to validate
+     * @param servletRequestDetails the request details containing headers
+     * @throws IllegalArgumentException if custodian doesn't match the X-Requester-URA header
+     */
+    private void validateCustodian(final DocumentReference documentReference,
+                                   final ServletRequestDetails servletRequestDetails) {
+        final String requesterURA = servletRequestDetails.getHeader(REQUESTER_URA_HEADER);
+
+        // If no header is present, we can't validate, let it pass
+        if (StringUtils.isEmpty(requesterURA)) {
+            return;
+        }
+
+        final Reference custodian = documentReference.getCustodian();
+
+        if (custodian.getIdentifier().isEmpty() && !custodian.isEmpty()) {
+            // means that it's actually a reference to the Organization
+            // meaning we'd ideally then need to fetch it and check of Organization.identifier matches
+            // our header, but we won't do that... so just let it pass in this case
+            return;
+        }
+
+        // Extract URA from custodian
+        final String custodianURA = extractURAFromCustodian(custodian);
+
+        // Validate that custodian URA matches the requester URA
+        if (!requesterURA.equals(custodianURA)) {
+            throw new IllegalArgumentException(
+                    String.format("DocumentReference.custodian URA (%s) does not match %s header (%s)",
+                                  custodianURA, REQUESTER_URA_HEADER, requesterURA));
+        }
+
+        log.debug("Custodian URA validation successful: {}", custodianURA);
+    }
+
+    /**
+     * Extracts the URA value from a custodian Reference.
+     * Expects the custodian to contain an identifier with the URA naming system.
+     *
+     * @param custodian the custodian Reference
+     * @return the URA value, or null if not found
+     */
+    private String extractURAFromCustodian(final Reference custodian) {
+        final Identifier identifier = custodian.getIdentifier();
+        if (identifier == null) {
+            return null;
+        }
+
+        if ("http://fhir.nl/fhir/NamingSystem/ura".equals(identifier.getSystem())) {
+            return identifier.getValue();
+        }
+        return null;
     }
 }
 
