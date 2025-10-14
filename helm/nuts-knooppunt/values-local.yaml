@@ -6,16 +6,19 @@ config:
     fhirbaseurl: http://fhir:8080/fhir
 
 gateway:
-  enabled: true
-  className: envoy
+  enabled: false
 
 httpRoute:
+  enabled: false
+
+ingress:
   enabled: true
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
+  className: ""
+  hosts:
+    - host: nuts-knooppunt.localhost
+      paths:
+        - path: /
+          pathType: Prefix
 
 fhir:
   enabled: true

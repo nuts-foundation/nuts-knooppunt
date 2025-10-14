@@ -125,3 +125,13 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# Gateway API configuration
+gateway:
+  enabled: false
+  name: ""
+  hosts: []
+
+# PostgreSQL configuration via CloudNativePG
+postgres:
+  enabled: true

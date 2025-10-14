@@ -61,6 +61,7 @@ service:
 
 gateway:
   enabled: false
+  className: ""
   name: nuts-knooppunt
 
 # This block is for setting up the httpRoute for more information can be found here: https://gateway-api.sigs.k8s.io/api-types/httproute/
