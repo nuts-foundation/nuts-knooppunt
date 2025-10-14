@@ -62,7 +62,6 @@ func validateOrganizationResource(ctx context.Context, resource *fhir.Organizati
 	if len(uraIdentifiers) > 1 {
 		return fmt.Errorf("organization can't have multiple identifiers with system %s", coding.URANamingSystem)
 	}
-	// TODO: Enable check, fix test
 
 	if len(uraIdentifiers) == 0 && resource.PartOf == nil {
 		return fmt.Errorf("organization must have an identifier with system %s or refer to another organization through 'partOf'", coding.URANamingSystem)
@@ -70,9 +69,14 @@ func validateOrganizationResource(ctx context.Context, resource *fhir.Organizati
 
 	// TODO: Support validation of organizations referring to a parent organization, without having a URA identifier
 
-	//if len(uraIdentifiers) == 0 && resource.PartOf != nil {
-	//
-	//}
+	// if len(uraIdentifiers) == 0 && resource.PartOf != nil {
+	//	response, err := http.NewRequest(http.MethodGet, *resource.PartOf.Reference, bytes.NewReader())
+	//	if err != nil {
+	//		return fmt.Errorf("could not follow reference to parent Organization %s", resource.PartOf)
+	//	}
+	//	response.Body
+	// }
+
 	return nil
 }
 
@@ -85,13 +89,25 @@ func validateHealthcareServiceResource(ctx context.Context, resource *fhir.Healt
 }
 
 func validatePractitionerRoleResource(ctx context.Context, resource *fhir.PractitionerRole) error {
+	if resource.Organization == nil {
+		return fmt.Errorf("practitioner role must have an organization reference")
+	}
+
 	return nil
 }
 
 func validateEndpointResource(ctx context.Context, resource *fhir.Endpoint) error {
+	if resource.ManagingOrganization == nil {
+		return fmt.Errorf("endpoint must have a 'managingOrganization' referencing an Organization")
+	}
+
 	return nil
 }
 
 func validateLocationResource(ctx context.Context, resource *fhir.Location) error {
+	if resource.ManagingOrganization == nil {
+		return fmt.Errorf("location must have a 'managingOrganization' referencing an Organization")
+	}
+
 	return nil
 }
