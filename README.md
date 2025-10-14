@@ -73,19 +73,3 @@ The embedded [Nuts node](https://github.com/nuts-foundation/nuts-node) can be co
 Endpoints:
 - Public status page: [http://localhost:8080/nuts/status](http://localhost:8080/nuts/status)
 - Internal diagnostics page: [http://localhost:8081/nuts/status/diagnostics](http://localhost:8081/nuts/status/diagnostics)
-
-## Kubernetes
-
-### Local Development
-
-Setup your local cluster with k3d by running:
-
-```bash
-k3d cluster create --config k3d.yml
-```
-
-Followed by:
-
-```bash
-skaffold run -p local --default-repo knpt-registry.localhost:5005
-```
