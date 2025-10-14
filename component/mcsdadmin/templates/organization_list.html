@@ -9,8 +9,10 @@
             <thead class="table-light">
             <tr>
                 <th scope="col">Name</th>
+                <th scope="col">URA</th>
                 <th scope="col">Type</th>
                 <th scope="col">Active</th>
+                <th scope="col">Endpoints</th>
                 <th scope="col">Actions</th>
             </tr>
             </thead>
@@ -18,6 +20,7 @@
             {{range .Items}}
             <tr id="row-{{.Id}}">
                 <th scope="row">{{ .Name }}</th>
+                <th scope="row">{{ .URA }}</th>
                 <td>{{.Type}}</td>
                 <td>
                     {{if .Active }}
@@ -26,11 +29,13 @@
                     <span class="badge bg-secondary">Inactive</span>
                     {{end}}
                 </td>
+                <th scope="row">{{ .EndpointCount }}</th>
                 <td>
+                    <a class="btn btn-outline-dark btn-sm"
+                       href="/mcsdadmin/organization/{{.Id}}/endpoints">Endpoints</a>
                     <button class="btn btn-outline-dark btn-sm"
                             hx-delete="/mcsdadmin/organization/{{.Id}}"
                             hx-target="#row-{{.Id}}"
-                            hx-swap="delete"
                     >
                         Delete
                     </button>

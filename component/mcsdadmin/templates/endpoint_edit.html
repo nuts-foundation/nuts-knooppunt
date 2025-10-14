@@ -1,82 +1,90 @@
 {{define "main"}}
 <div class="card">
-  <div class="card-header">
-    <h4>Edit Endpoint</h4>
-  </div>
-  <div class="card-body">
-    <form method="post" enctype="application/x-www-form-urlencoded">
-        <div class="mb-3">
-            <label for="address" class="form-label">Address:</label>
-            <input id="address" type="text" name="address" class="form-control" placeholder="https://" required>
-        </div>
-        <div class="mb-3">
-            <label for="payload-type" class="form-label">Payload Type:</label>
-            <select name="payload-type" id="payload-type" class="form-select">
-                <option value="">--Please choose an option--</option>
-                {{range .PayloadTypes }}
-                <option value="{{ .Code }}">{{ .Display }}</option>
-                {{ end }}
-            </select>
-        </div>
-        <div class="mb-3">
-            <fieldset class="border p-3 rounded">
-                <legend class="w-auto px-2" style="font-size: 1rem;">Period:</legend>
-                <div class="row">
-                    <div class="col-md-6">
-                        <label for="period-start" class="form-label">From:</label>
-                        <input id="period-start" type="date" name="period-start" class="form-control" />
-                    </div>
-                    <div class="col-md-6">
-                        <label for="period-end" class="form-label">To:</label>
-                        <input id="period-end" type="date" name="period-end" class="form-control" />
-                    </div>
+    <div class="card-header">
+        <h4>Edit Endpoint</h4>
+    </div>
+    <div class="card-body">
+        <form method="post" enctype="application/x-www-form-urlencoded">
+            <div class="mb-3">
+                <label for="address" class="form-label">Address:</label>
+                <input id="address" type="text" name="address" class="form-control" placeholder="https://" required>
+            </div>
+            <div class="mb-3">
+                <div id="option-type" class="option">
+                    <label for="payload-type" class="form-label">Payload Type:</label>
+                    <select name="payload-type" id="payload-type" class="form-select" required>
+                        <option value="" disabled selected>--Please choose an option--</option>
+                        {{range .PayloadTypes }}
+                        <option value="{{ .Code }}">{{ .Display }}</option>
+                        {{ end }}
+                    </select>
                 </div>
-            </fieldset>
-        </div>
-        <div class="mb-3">
-            <label for="contact" class="form-label">Contact:</label>
-            <input id="contact" type="text" name="contact" class="form-control" />
-        </div>
-        <div class="mb-3">
-            <label for="managing-org" class="form-label">Managing organisation:</label>
-            <select name="managing-org" id="managing-org" class="form-select">
-                <option value="">--Please choose an option--</option>
-                {{range .Organizations}}
-                <option value="{{ .Id }}">{{ .Name }}</option>
-                {{ end }}
-            </select>
-        </div>
-        <div class="mb-3">
-            <label for="connection-type" class="form-label">Connection Type:</label>
-            <select name="connection-type" id="connection-type" class="form-select">
-                <option value="">--Please choose an option--</option>
-                {{range .ConnectionTypes }}
-                <option value="{{ .Code }}">{{ .Display }}</option>
-                {{ end }}
-            </select>
-        </div>
-        <div class="mb-3">
-            <label for="purpose-of-use" class="form-label">Purpose of use:</label>
-            <select name="purpose-of-use" id="purpose-of-use" class="form-select">
-                <option value="">--Please choose an option--</option>
-                {{range .PurposeOfUse }}
-                <option value="{{ .Code }}">{{ .Display }}</option>
-                {{ end }}
-            </select>
-        </div>
-        <div class="mb-3">
-            <label for="status" class="form-label">Status:</label>
-            <select name="status" id="status" class="form-select">
-                <option value="">--Please choose an option--</option>
-                {{range .Status}}
-                <option value="{{ .Code }}">{{ .Display }}</option>
-                {{ end }}
-            </select>
-        </div>
-        <div class="mb-3">
-            <button type="submit" class="btn btn-primary">Submit</button>
-        </div>
-    </form>
-  </div>
+                <button onclick='addOption("payload-type");' type="button" class="btn btn-secondary btn-sm">Add type
+                </button>
+            </div>
+            <div class="mb-3">
+                <fieldset class="border p-3 rounded">
+                    <legend class="w-auto px-2" style="font-size: 1rem;">Period:</legend>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="period-start" class="form-label">From:</label>
+                            <input id="period-start" type="date" name="period-start" class="form-control"/>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="period-end" class="form-label">To:</label>
+                            <input id="period-end" type="date" name="period-end" class="form-control"/>
+                        </div>
+                    </div>
+                </fieldset>
+            </div>
+            <div class="mb-3">
+                <label for="contact" class="form-label">Contact:</label>
+                <input id="contact" type="text" name="contact" class="form-control"/>
+            </div>
+            <div class="mb-3">
+                <label for="managing-org" class="form-label">KvK for Managing Organization:</label>
+                <input id="managing-org" type="text" name="managing-org" class="form-control">
+            </div>
+            <div class="mb-3">
+                <label for="connection-type" class="form-label">Connection Type:</label>
+                <select name="connection-type" id="connection-type" class="form-select" required>
+                    <option value="" disabled selected>--Please choose an option--</option>
+                    {{range .ConnectionTypes }}
+                    <option value="{{ .Code }}">{{ .Display }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="purpose-of-use" class="form-label">Purpose of use:</label>
+                <select name="purpose-of-use" id="purpose-of-use" class="form-select">
+                    <option value="" disabled selected>--Please choose an option--</option>
+                    {{range .PurposeOfUse }}
+                    <option value="{{ .Code }}">{{ .Display }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="status" class="form-label">Status:</label>
+                <select name="status" id="status" class="form-select" required>
+                    <option value="" disabled selected>--Please choose an option--</option>
+                    {{range .Status}}
+                    <option value="{{ .Code }}">{{ .Display }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="endpoint-for" class="form-label">Endpoint of:</label>
+                <select name="endpoint-for" id="endpoint-for" class="form-select">
+                    <option value="" disabled selected>--Please choose an option--</option>
+                    {{range .Organizations}}
+                    <option value="{{ .Id }}">{{ .Name }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            <div class="mb-3">
+                <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+        </form>
+    </div>
 </div>
 {{end}}

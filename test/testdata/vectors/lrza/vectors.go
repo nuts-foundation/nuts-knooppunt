@@ -3,8 +3,16 @@ package lrza
 import (
 	"net/url"
 
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
+
+func HAPITenant() hapi.Tenant {
+	return hapi.Tenant{
+		Name: "lrza-mcsd-admin",
+		ID:   3,
+	}
+}
 
 // Organizations returns all organizations in the LRZa root directory
 func Organizations() []fhir.Organization {

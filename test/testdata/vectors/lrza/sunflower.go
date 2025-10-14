@@ -9,7 +9,10 @@ import (
 
 func CareHomeSunflower() fhir.Organization {
 	return fhir.Organization{
-		Id:   to.Ptr("fce3bc5d-0cca-41ed-8072-4734fbac9dcf"),
+		Id: to.Ptr("fce3bc5d-0cca-41ed-8072-4734fbac9dcf"),
+		Meta: &fhir.Meta{
+			Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization"},
+		},
 		Name: to.Ptr("Sunflower Care Home"),
 		Identifier: []fhir.Identifier{
 			{
@@ -32,12 +35,18 @@ func CareHomeSunflowerEndpoints(hapiBaseURL *url.URL) []fhir.Endpoint {
 			Id:      to.Ptr("cadbb0ba-0cf0-4f4e-8ee2-5a48a9fae724"),
 			Address: hapiBaseURL.JoinPath("sunflower-admin").String(),
 			Meta: &fhir.Meta{
-				Profile: []string{"https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"},
+				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
 			},
 			Status: fhir.EndpointStatusActive,
-			ConnectionType: fhir.Coding{
-				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/endpoint-connection-type"),
-				Code:   to.Ptr("mcsd-directory"),
+			PayloadType: []fhir.CodeableConcept{
+				{
+					Coding: []fhir.Coding{
+						{
+							System: to.Ptr("http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities"),
+							Code:   to.Ptr("http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"),
+						},
+					},
+				},
 			},
 			Period: &fhir.Period{
 				Start: to.Ptr("2025-05-01T00:00:00Z"),

@@ -2,9 +2,11 @@ package templates
 
 import (
 	"embed"
+	"fmt"
 	"html/template"
 	"io"
 
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -16,6 +18,7 @@ func RenderWithBase(w io.Writer, name string, data any) {
 	files := []string{
 		"base.html",
 		name,
+		"_card_endpoint.html",
 	}
 
 	ts, err := template.ParseFS(tmplFS, files...)
@@ -25,6 +28,21 @@ func RenderWithBase(w io.Writer, name string, data any) {
 	}
 
 	err = ts.ExecuteTemplate(w, "base", data)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to execute template")
+		return
+	}
+}
+
+func RenderPartial(w io.Writer, name string, data any) {
+	filename := fmt.Sprintf("%s.html", name)
+	ts, err := template.ParseFS(tmplFS, filename)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to parse template")
+		return
+	}
+
+	err = ts.ExecuteTemplate(w, name, data)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to execute template")
 		return
@@ -118,10 +136,12 @@ func MakeEpListXsProps(eps []fhir.Endpoint) []EpListProps {
 }
 
 type OrgListProps struct {
-	Id     string
-	Name   string
-	Type   string
-	Active bool
+	Id            string
+	Name          string
+	URA           string
+	EndpointCount string
+	Type          string
+	Active        bool
 }
 
 func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
@@ -133,6 +153,14 @@ func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
 		out.Name = *org.Name
 	} else {
 		out.Name = unknownStr
+	}
+
+	for _, idn := range org.Identifier {
+		if idn.System != nil && idn.Value != nil {
+			if *idn.System == coding.URANamingSystem {
+				out.URA = *idn.Value
+			}
+		}
 	}
 
 	if len(org.Type) > 0 {
@@ -148,6 +176,9 @@ func MakeOrgListProps(org fhir.Organization) (out OrgListProps) {
 	} else {
 		out.Active = false
 	}
+
+	epCount := len(org.Endpoint)
+	out.EndpointCount = fmt.Sprint(epCount)
 
 	return out
 }
@@ -262,4 +293,20 @@ func MakeLocationListXsProps(locations []fhir.Location) []LocationListProps {
 		out[idx] = MakeLocationListProps(l)
 	}
 	return out
+}
+
+type EndpointCardProps struct {
+	Endpoint     fhir.Endpoint
+	Organization fhir.Organization
+}
+
+func MakeEndpointCards(endpoints []fhir.Endpoint, org fhir.Organization) []EndpointCardProps {
+	cards := make([]EndpointCardProps, len(endpoints))
+	for i, endp := range endpoints {
+		cards[i] = EndpointCardProps{
+			Endpoint:     endp,
+			Organization: org,
+		}
+	}
+	return cards
 }

@@ -2,10 +2,13 @@ package mcsdadmin
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -13,6 +16,10 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/static"
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -38,7 +45,7 @@ func New(config Config) *Component {
 		return nil
 	}
 
-	client = fhirclient.New(baseURL, http.DefaultClient, fhirClientConfig())
+	client = fhirclient.New(baseURL, http.DefaultClient, fhirutil.ClientConfig())
 
 	return &Component{
 		config:     config,
@@ -72,6 +79,9 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
 	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
+	mux.HandleFunc("GET /mcsdadmin/organization/{id}/endpoints", associateEndpoints)
+	mux.HandleFunc("POST /mcsdadmin/organization/{id}/endpoints", associateEndpointsPost)
+	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}/endpoints", associateEndpointsDelete)
 	mux.HandleFunc("GET /mcsdadmin/endpoint", listEndpoints)
 	mux.HandleFunc("GET /mcsdadmin/endpoint/new", newEndpoint)
 	mux.HandleFunc("POST /mcsdadmin/endpoint/new", newEndpointPost)
@@ -98,17 +108,12 @@ func newService(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
-	types, err := valuesets.CodingsFrom("service-type")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-
 	props := struct {
 		Types         []fhir.Coding
 		Organizations []fhir.Organization
 	}{
 		Organizations: organizations,
-		Types:         types,
+		Types:         valuesets.ServiceTypeCodings,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -124,23 +129,35 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var service fhir.HealthcareService
+	service := fhir.HealthcareService{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionHealthcareService},
+		},
+	}
 	name := r.PostForm.Get("name")
 	service.Name = &name
 	active := r.PostForm.Get("active") == "true"
 	service.Active = &active
 
-	typeCode := r.PostForm.Get("type")
-	serviceType, ok := valuesets.CodableFrom("service-type", typeCode)
-	if ok {
-		service.Type = []fhir.CodeableConcept{serviceType}
+	typeCodes := r.PostForm["type"]
+	typeCodesCount := len(typeCodes)
+	if typeCodesCount > 0 {
+		service.Type = make([]fhir.CodeableConcept, typeCodesCount)
+		for i, t := range typeCodes {
+			serviceType, ok := valuesets.CodableFrom(valuesets.ServiceTypeCodings, t)
+			if ok {
+				service.Type[i] = serviceType
+			} else {
+				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
+				return
+			}
+		}
 	}
 
 	reference := "Organization/" + r.PostForm.Get("providedById")
-	refType := "Organization"
 	service.ProvidedBy = &fhir.Reference{
 		Reference: &reference,
-		Type:      &refType,
+		Type:      to.Ptr("Organization"),
 	}
 
 	var providedByOrg fhir.Organization
@@ -169,18 +186,23 @@ func listOrganizations(w http.ResponseWriter, _ *http.Request) {
 }
 
 func newOrganization(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-
-	types, err := valuesets.CodingsFrom("organization-type")
+	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	orgsExists := len(organizations) > 0
+
+	w.WriteHeader(http.StatusOK)
 
 	props := struct {
-		Types []fhir.Coding
+		Types         []fhir.Coding
+		Organizations []fhir.Organization
+		OrgsExist     bool
 	}{
-		Types: types,
+		Types:         valuesets.OrganizationTypeCodings,
+		Organizations: organizations,
+		OrgsExist:     orgsExists,
 	}
 
 	tmpls.RenderWithBase(w, "organization_edit.html", props)
@@ -195,18 +217,58 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var org fhir.Organization
+	org := fhir.Organization{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionOrganization},
+		},
+	}
 	name := r.PostForm.Get("name")
 	org.Name = &name
+	uraString := r.PostForm.Get("identifier")
+	if uraString == "" {
+		http.Error(w, "Bad request: missing URA identifier", http.StatusBadRequest)
+		return
+	}
+	org.Identifier = []fhir.Identifier{
+		uraIdentifier(uraString),
+	}
 
-	orgTypeCode := r.PostForm.Get("type")
-	orgType, ok := valuesets.CodableFrom("organization-type", orgTypeCode)
-	if ok {
-		org.Type = []fhir.CodeableConcept{orgType}
+	orgTypeCodes := r.PostForm["type"]
+	typeCodesCount := len(orgTypeCodes)
+	if typeCodesCount > 0 {
+		org.Type = make([]fhir.CodeableConcept, 0, typeCodesCount)
+		for _, t := range orgTypeCodes {
+			if t == "" {
+				continue
+			}
+			orgType, ok := valuesets.CodableFrom(valuesets.OrganizationTypeCodings, t)
+			if ok {
+				org.Type = append(org.Type, orgType)
+			} else {
+				http.Error(w, fmt.Sprintf("could not find type code %s", t), http.StatusBadRequest)
+				return
+			}
+		}
 	}
 
 	active := r.PostForm.Get("active") == "true"
 	org.Active = &active
+
+	partOf := r.PostForm.Get("part-of")
+	if len(partOf) > 0 {
+		reference := "Organization/" + partOf
+		org.PartOf = &fhir.Reference{
+			Reference: &reference,
+			Type:      to.Ptr("Organization"),
+		}
+		var parentOrg fhir.Organization
+		err = client.Read(reference, &parentOrg)
+		if err != nil {
+			http.Error(w, "internal error: could not find organization", http.StatusInternalServerError)
+			return
+		}
+		org.PartOf.Display = parentOrg.Name
+	}
 
 	var resOrg fhir.Organization
 	err = client.Create(org, &resOrg)
@@ -217,6 +279,140 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
+}
+
+func associateEndpoints(w http.ResponseWriter, req *http.Request) {
+	orgId := req.PathValue("id")
+	path := fmt.Sprintf("Organization/%s", orgId)
+	var org fhir.Organization
+	err := client.Read(path, &org)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	endpoints := make([]fhir.Endpoint, 0, len(org.Endpoint))
+	for _, ref := range org.Endpoint {
+		var ep fhir.Endpoint
+		if ref.Reference == nil {
+			continue
+		}
+		err := client.Read(*ref.Reference, &ep)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		endpoints = append(endpoints, ep)
+	}
+
+	allEndpoints, err := findAll[fhir.Endpoint](client)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	props := struct {
+		Organization  fhir.Organization
+		EndpointCards []tmpls.EndpointCardProps
+		AllEndpoints  []fhir.Endpoint
+	}{
+		Organization:  org,
+		EndpointCards: tmpls.MakeEndpointCards(endpoints, org),
+		AllEndpoints:  allEndpoints,
+	}
+	w.WriteHeader(http.StatusOK)
+	tmpls.RenderWithBase(w, "organization_endpoints.html", props)
+}
+
+func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	selectedId := req.PostForm.Get("selected-endpoint")
+	selected, err := findById[fhir.Endpoint](selectedId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	orgId := req.PathValue("id")
+	organization, err := findById[fhir.Organization](orgId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	foundIdx := slices.IndexFunc(organization.Endpoint, func(ref fhir.Reference) bool {
+		epId := idFromRef(ref)
+		return epId == selectedId
+	})
+	if foundIdx > -1 {
+		http.Error(w, "endpoint already associated with organization", http.StatusBadRequest)
+		return
+	}
+
+	selectedPath := fmt.Sprintf("Endpoint/%s", selectedId)
+	ref := fhir.Reference{
+		Reference: &selectedPath,
+	}
+	organization.Endpoint = append(organization.Endpoint, ref)
+
+	orgPath := fmt.Sprintf("Organization/%s", orgId)
+	var resultOrg fhir.Organization
+	err = client.Update(orgPath, organization, &resultOrg)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	props := tmpls.EndpointCardProps{
+		Endpoint:     selected,
+		Organization: resultOrg,
+	}
+	tmpls.RenderPartial(w, "_card_endpoint", props)
+}
+
+func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	orgId := req.PathValue("id")
+	organization, err := findById[fhir.Organization](orgId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	epId := req.URL.Query().Get("endpointId")
+	epFound := false
+	for i, ref := range organization.Endpoint {
+		refId := idFromRef(ref)
+		if refId == epId {
+			organization.Endpoint = slices.Delete(organization.Endpoint, i, i+1)
+			epFound = true
+		}
+	}
+	if !epFound {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	orgPath := fmt.Sprintf("Organization/%s", orgId)
+	var orgResult fhir.Organization
+	err = client.Update(orgPath, organization, &orgResult)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func listEndpoints(w http.ResponseWriter, _ *http.Request) {
@@ -230,26 +426,6 @@ func newEndpoint(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	status, err := valuesets.CodingsFrom("endpoint-status")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	payloadTypes, err := valuesets.CodingsFrom("endpoint-payload-type")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	connectionTypes, err := valuesets.CodingsFrom("endpoint-connection-type")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	purposeOfUse, err := valuesets.CodingsFrom("purpose-of-use")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
 	props := struct {
 		ConnectionTypes []fhir.Coding
@@ -258,11 +434,11 @@ func newEndpoint(w http.ResponseWriter, _ *http.Request) {
 		PurposeOfUse    []fhir.Coding
 		Status          []fhir.Coding
 	}{
-		ConnectionTypes: connectionTypes,
+		ConnectionTypes: valuesets.EndpointConnectionTypeCodings,
 		Organizations:   organizations,
-		PayloadTypes:    payloadTypes,
-		PurposeOfUse:    purposeOfUse,
-		Status:          status,
+		PayloadTypes:    valuesets.EndpointPayloadTypeCodings,
+		PurposeOfUse:    valuesets.PurposeOfUseCodings,
+		Status:          valuesets.EndpointStatusCodings,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -278,17 +454,32 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var endpoint fhir.Endpoint
+	endpoint := fhir.Endpoint{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionEndpoint},
+		},
+	}
 	address := r.PostForm.Get("address")
+	if address == "" {
+		http.Error(w, "bad request: missing address", http.StatusBadRequest)
+		return
+	}
 	endpoint.Address = address
 
-	var payloadType fhir.CodeableConcept
-	payloadTypeId := r.PostForm.Get("payload-type")
-	payloadType, ok := valuesets.CodableFrom("endpoint-payload-type", payloadTypeId)
-	if ok {
-		endpoint.PayloadType = []fhir.CodeableConcept{payloadType}
+	typeCodes := r.PostForm["payload-type"]
+	typeCodesCount := len(typeCodes)
+	if typeCodesCount > 0 {
+		endpoint.PayloadType = make([]fhir.CodeableConcept, typeCodesCount)
+		for i, t := range typeCodes {
+			serviceType, ok := valuesets.CodableFrom(valuesets.EndpointPayloadTypeCodings, t)
+			if ok {
+				endpoint.PayloadType[i] = serviceType
+			} else {
+				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
+			}
+		}
 	} else {
-		log.Warn().Msg("Failed to find referred payload type")
+		http.Error(w, "missing payload type", http.StatusBadRequest)
 	}
 
 	periodStart := r.PostForm.Get("period-start")
@@ -298,8 +489,6 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 			Start: &periodStart,
 			End:   &periodEnd,
 		}
-	} else {
-		log.Warn().Msg("Missing period")
 	}
 
 	contactValue := r.PostForm.Get("contact")
@@ -308,54 +497,44 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 			Value: &contactValue,
 		}
 		endpoint.Contact = []fhir.ContactPoint{contact}
-	} else {
-		log.Warn().Msg("Missing contact value")
 	}
 
-	orgFormStr := r.PostForm.Get("managing-org")
-	if len(orgFormStr) > 0 {
-		var managingOrg fhir.Organization
-		reference := "Organization/" + orgFormStr
-		refType := "Organization"
-		endpoint.ManagingOrganization = &fhir.Reference{
-			Reference: &reference,
-			Type:      &refType,
+	kvkStr := r.PostForm.Get("managing-org")
+	if len(kvkStr) > 0 {
+		ref := fhir.Reference{
+			Identifier: to.Ptr(fhir.Identifier{
+				System: to.Ptr(coding.KVKNamingSystem),
+				Value:  to.Ptr(kvkStr),
+			}),
 		}
-		err = client.Read(reference, &managingOrg)
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to find referred organisation")
-			return
-		}
-		endpoint.ManagingOrganization.Display = managingOrg.Name
-	} else {
-		log.Warn().Msg("Missing organisation value")
+		endpoint.ManagingOrganization = to.Ptr(ref)
 	}
 
 	var connectionType fhir.Coding
 	connectionTypeId := r.PostForm.Get("connection-type")
-	connectionType, ok = valuesets.CodingFrom("endpoint-connection-type", connectionTypeId)
+	connectionType, ok := valuesets.CodingFrom(valuesets.EndpointConnectionTypeCodings, connectionTypeId)
 	if ok {
 		endpoint.ConnectionType = connectionType
 	} else {
-		log.Warn().Msg("Failed to find referred connection type")
+		http.Error(w, "bad request: missing connection type", http.StatusBadRequest)
+		return
 	}
 
 	purposeOfUseId := r.PostForm.Get("purpose-of-use")
-	purposeOfUse, ok := valuesets.CodableFrom("purpose-of-use", purposeOfUseId)
+	purposeOfUse, ok := valuesets.CodableFrom(valuesets.PurposeOfUseCodings, purposeOfUseId)
 	if ok {
 		extension := fhir.Extension{
 			Url:                  "https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.PurposeOfUse",
 			ValueCodeableConcept: &purposeOfUse,
 		}
 		endpoint.Extension = append(endpoint.Extension, extension)
-	} else {
-		log.Warn().Msg("Failed to find referred purpose of use")
 	}
 
 	status := r.PostForm.Get("status")
 	endpoint.Status, ok = valuesets.EndpointStatusFrom(status)
 	if !ok {
-		log.Warn().Msg("Failed to determine status, default to active")
+		http.Error(w, "bad request: missing status", http.StatusBadRequest)
+		return
 	}
 
 	var resEp fhir.Endpoint
@@ -365,6 +544,29 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var epRef fhir.Reference
+	epRef.Type = to.Ptr("Endpoint")
+	epRef.Reference = to.Ptr("Endpoint/" + *resEp.Id)
+
+	forOrgStr := r.PostForm.Get("endpoint-for")
+	var owningOrg fhir.Organization
+	if len(forOrgStr) > 0 {
+		err = client.Read("Organization/"+forOrgStr, &owningOrg)
+		if err != nil {
+			http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
+			return
+		}
+
+		owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
+
+		var updatedOrg fhir.Organization
+		err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
 	w.WriteHeader(http.StatusCreated)
 	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
 }
@@ -372,29 +574,22 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 func newLocation(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
-	locationTypes, err := valuesets.CodingsFrom("location-type")
+	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find location types")
-	}
-
-	physicalTypes, err := valuesets.CodingsFrom("location-physical-type")
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find physical location types")
-	}
-
-	status, err := valuesets.CodingsFrom("location-status")
-	if err != nil {
-		log.Warn().Err(err).Msg("Failed to find location status types")
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	props := struct {
 		PhysicalTypes []fhir.Coding
 		Status        []fhir.Coding
 		Types         []fhir.Coding
+		Organizations []fhir.Organization
 	}{
-		PhysicalTypes: physicalTypes,
-		Status:        status,
-		Types:         locationTypes,
+		PhysicalTypes: valuesets.LocationPhysicalTypeCodings,
+		Status:        valuesets.LocationStatusCodings,
+		Types:         valuesets.LocationTypeCodings,
+		Organizations: organizations,
 	}
 
 	tmpls.RenderWithBase(w, "location_edit.html", props)
@@ -407,13 +602,17 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var location fhir.Location
+	location := fhir.Location{
+		Meta: &fhir.Meta{
+			Profile: []string{profile.NLGenericFunctionLocation},
+		},
+	}
 	name := r.PostForm.Get("name")
 	location.Name = &name
 
 	typeCode := r.PostForm.Get("type")
 	if len(typeCode) > 0 {
-		locType, ok := valuesets.CodableFrom("location-type", typeCode)
+		locType, ok := valuesets.CodableFrom(valuesets.LocationTypeCodings, typeCode)
 		if !ok {
 			log.Warn().Msg("Could not find selected location type")
 		} else {
@@ -429,14 +628,61 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		log.Warn().Msg("Could not find location status")
 	}
 
+	var address fhir.Address
+	addressLine := r.PostForm.Get("address-line")
+	if addressLine == "" {
+		http.Error(w, "missing address line", http.StatusBadRequest)
+		return
+	}
+	address.Line = []string{addressLine}
+
+	addressCity := r.PostForm.Get("address-city")
+	if addressCity != "" {
+		address.City = to.Ptr(addressCity)
+	}
+	addressDistrict := r.PostForm.Get("address-district")
+	if addressDistrict != "" {
+		address.District = to.Ptr(addressDistrict)
+	}
+	addressState := r.PostForm.Get("address-state")
+	if addressState != "" {
+		address.State = to.Ptr(addressState)
+	}
+	addressPostalCode := r.PostForm.Get("address-postal-code")
+	if addressPostalCode != "" {
+		address.PostalCode = to.Ptr(addressPostalCode)
+	}
+	addressCountry := r.PostForm.Get("address-country")
+	if addressCountry != "" {
+		address.Country = to.Ptr(addressCountry)
+	}
+	location.Address = to.Ptr(address)
+
 	physicalCode := r.PostForm.Get("physicalType")
 	if len(physicalCode) > 0 {
-		physical, ok := valuesets.CodableFrom("location-physical-type", physicalCode)
+		physical, ok := valuesets.CodableFrom(valuesets.LocationPhysicalTypeCodings, physicalCode)
 		if !ok {
 			log.Warn().Msg("Could not find selected physical location type")
 		} else {
 			location.PhysicalType = &physical
 		}
+	}
+
+	orgStr := r.PostForm.Get("managing-org")
+	if orgStr != "" {
+		reference := "Organization/" + orgStr
+		refType := "Organization"
+		location.ManagingOrganization = &fhir.Reference{
+			Reference: &reference,
+			Type:      &refType,
+		}
+		var managingOrg fhir.Organization
+		err = client.Read(reference, &managingOrg)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		location.ManagingOrganization.Display = managingOrg.Name
 	}
 
 	var resLoc fhir.Location
@@ -470,26 +716,26 @@ func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Requ
 
 		err := client.Delete(path)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			RespondError(w, fmt.Sprintf("Can not delete %s.", resourceType), http.StatusBadRequest)
 			return
 		}
+
+		h := w.Header()
+		h.Set("Content-Type", "text/plain; charset=utf-8")
+		h.Set("HX-Reswap", "delete")
 
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 }
 
-func fhirClientConfig() *fhirclient.Config {
-	config := fhirclient.DefaultConfig()
-	config.DefaultOptions = []fhirclient.Option{
-		fhirclient.RequestHeaders(map[string][]string{
-			"Cache-Control": {"no-cache"},
-		}),
-	}
-	config.Non2xxStatusHandler = func(response *http.Response, responseBody []byte) {
-		log.Debug().Msgf("Non-2xx status code from FHIR server (%s %s, status=%d), content: %s", response.Request.Method, response.Request.URL, response.StatusCode, string(responseBody))
-	}
-	return &config
+func findById[T any](id string) (T, error) {
+	var prototype T
+	resourceType := caramel.ResourceType(prototype)
+	resourcePath := fmt.Sprintf("%s/%s", resourceType, id)
+
+	err := client.Read(resourcePath, &prototype)
+	return prototype, err
 }
 
 func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {
@@ -515,6 +761,13 @@ func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {
 	return result, nil
 }
 
+func uraIdentifier(uraString string) fhir.Identifier {
+	var identifier fhir.Identifier
+	identifier.Value = to.Ptr(uraString)
+	identifier.System = to.Ptr(coding.URANamingSystem)
+	return identifier
+}
+
 func renderList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.ResponseWriter, dtoFunc func([]R) []DTO) {
 	resourceType := caramel.ResourceType(new(R))
 	items, err := findAll[R](fhirClient)
@@ -527,4 +780,46 @@ func renderList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.
 	}{
 		Items: dtoFunc(items),
 	})
+}
+
+func idFromRef(ref fhir.Reference) string {
+	if ref.Reference == nil {
+		return ""
+	}
+
+	split := strings.Split(*ref.Reference, "/")
+	if len(split) != 2 {
+		return ""
+	}
+
+	return split[1]
+}
+
+func ShortID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		// rand.Read never returns an error, and always fills b entirely.
+		panic("unreachable")
+	}
+
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func RespondError(w http.ResponseWriter, text string, httpcode int) {
+	h := w.Header()
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("HX-Retarget", "#alerts")
+	h.Set("HX-Reswap", "beforeend")
+	w.WriteHeader(httpcode)
+
+	props := struct {
+		AlertId string
+		Text    string
+	}{
+		AlertId: ShortID(),
+		Text:    text,
+	}
+
+	tmpls.RenderPartial(w, "_alert_error", props)
 }

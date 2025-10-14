@@ -1,31 +1,54 @@
 {{define "main"}}
 <div class="card">
-  <div class="card-header">
-    <h4>Edit Organization</h4>
-  </div>
-  <div class="card-body">
-    <form method="post" enctype="application/x-www-form-urlencoded">
-        <div class="mb-3">
-            <label for="name" class="form-label">Name of the organization:</label>
-            <input id="name" type="text" name="name" class="form-control" placeholder="Enter name here" required>
-        </div>
-        <div class="mb-3">
-            <label for="type-select" class="form-label">Choose a type:</label>
-            <select name="type" id="type-select" class="form-select">
-                <option value="">--Please choose an option--</option>
-                {{ range .Types }}
-                <option value="{{ .Code }}">{{ .Display }}</option>
-                {{ end }}
-            </select>
-        </div>
-        <div class="mb-3 form-check">
-            <input type="checkbox" name="active" id="active" value="true" class="form-check-input">
-            <label class="form-check-label" for="active">Active</label>
-        </div>
-        <div class="mb-3">
-            <button type="submit" class="btn btn-primary">Submit</button>
-        </div>
-    </form>
-  </div>
+    <div class="card-header">
+        <h4>Edit Organization</h4>
+    </div>
+    <div class="card-body">
+        <form method="post" enctype="application/x-www-form-urlencoded">
+            <div class="mb-3">
+                <label for="name" class="form-label">Name of the organization:</label>
+                <input id="name" type="text" name="name" class="form-control" placeholder="Enter name here" required>
+            </div>
+            <div class="mb-3">
+                <label for="identifier" class="form-label">URA identifier:</label>
+                <input id="identifier" type="text" name="identifier" class="form-control"
+                       placeholder="Enter identifier here" required>
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" name="active" id="active" value="true" class="form-check-input">
+                <label class="form-check-label" for="active">Active</label>
+            </div>
+            <div class="mb-3">
+                <label for="type-select" class="form-label">Choose a type:</label>
+                <div id="type-options" class="options">
+                    <select name="type" id="type-select" class="form-select" required>
+                        <option value="">--Please choose an option--</option>
+                        {{ range .Types }}
+                        <option value="{{ .Code }}">{{ .Display }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                <div>
+                    <button onclick='addOption("type-select");' type="button" class="btn btn-secondary btn-sm">
+                        Add type
+                    </button>
+                </div>
+            </div>
+            {{ if .OrgsExist }}
+            <div class="mb-3">
+                <label for="part-of" class="form-label">Part of Organization:</label>
+                <select name="part-of" id="part-of" class="form-select">
+                    <option value="">--Please choose an option--</option>
+                    {{range .Organizations}}
+                    <option value="{{ .Id }}">{{ .Name }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            {{ end }}
+            <div class="mb-3">
+                <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+        </form>
+    </div>
 </div>
 {{end}}

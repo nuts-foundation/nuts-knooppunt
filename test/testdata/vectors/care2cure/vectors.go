@@ -1,13 +1,24 @@
 package care2cure
 
 import (
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
+func HAPITenant() hapi.Tenant {
+	return hapi.Tenant{
+		Name: "care2cure-admin",
+		ID:   4,
+	}
+}
+
 func Organization() fhir.Organization {
 	return fhir.Organization{
-		Id:   to.Ptr("a3e4080d-8d53-4e53-bfbc-564e85158649"),
+		Id: to.Ptr("a3e4080d-8d53-4e53-bfbc-564e85158649"),
+		Meta: &fhir.Meta{
+			Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization"},
+		},
 		Name: to.Ptr("Care2Cure Hospital"),
 		Identifier: []fhir.Identifier{
 			{
@@ -30,7 +41,7 @@ func Endpoints() []fhir.Endpoint {
 			Id:      to.Ptr("bce8a799-e6ba-4c06-8a1c-bc052f01a636"),
 			Address: "https://example.com/care2curehospital/fhir",
 			Meta: &fhir.Meta{
-				Profile: []string{"https://profiles.ihe.net/ITI/mCSD/StructureDefinition/IHE.mCSD.Endpoint"},
+				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
 			},
 			Status: fhir.EndpointStatusActive,
 			ConnectionType: fhir.Coding{

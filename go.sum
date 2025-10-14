@@ -44,8 +44,8 @@ github.com/PaesslerAG/jsonpath v0.1.0/go.mod h1:4BzmtoM/PI8fPO4aQGIusjGxGir2BzcV
 github.com/PaesslerAG/jsonpath v0.1.2-0.20230323094847-3484786d6f97 h1:XIsQOSBJi/9Bexr+rjUpuYi0IkQ+YqNKKlE7Yt/sw9Q=
 github.com/PaesslerAG/jsonpath v0.1.2-0.20230323094847-3484786d6f97/go.mod h1:zTyVtYhYjcHpfCtqnCMxejgp0pEEwb/xJzhn05NrkJk=
 github.com/RaveNoX/go-jsoncommentstrip v1.0.0/go.mod h1:78ihd09MekBnJnxpICcwzCMzGrKSKYe4AqU6PDYYpjk=
-github.com/SanteonNL/go-fhir-client v0.5.0 h1:3Lg/zpqQKvh193F3Hkgrqi1kCuNGBQ2S2UquwKgaPpI=
-github.com/SanteonNL/go-fhir-client v0.5.0/go.mod h1:CcU6J3vgxsdjTWry0s2BAJcV6SvdaRTsry9ixR7zqc4=
+github.com/SanteonNL/go-fhir-client v0.6.1 h1:d98ekb+XGHmarvoGoTKyke5M9DMpfMjClg+qogrY4kE=
+github.com/SanteonNL/go-fhir-client v0.6.1/go.mod h1:CcU6J3vgxsdjTWry0s2BAJcV6SvdaRTsry9ixR7zqc4=
 github.com/alexandrevicenzi/go-sse v1.6.0 h1:3KvOzpuY7UrbqZgAtOEmub9/V5ykr7Myudw+PA+H1Ik=
 github.com/alexandrevicenzi/go-sse v1.6.0/go.mod h1:jdrNAhMgVqP7OfcUuM8eJx0sOY17wc+girs5utpFZUU=
 github.com/alicebob/miniredis/v2 v2.35.0 h1:QwLphYqCEAo1eu1TqPRN2jgVMPBweeQcR21jeqDCONI=

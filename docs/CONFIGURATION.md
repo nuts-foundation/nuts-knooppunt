@@ -43,18 +43,25 @@ mcsdadmin:
 nuts:
   # Whether to enable the Nuts node component
   enabled: true
+
+# NVI (Nederlandse VerwijsIndex) configuration
+nvi:
+  # Base URL for FHIR server used by NVI component
+  baseurl: "https://example.com/nvi"
 ```
 
 ## Environment Variables
 
 Environment variables use the prefix `KNPT_` followed by the configuration path in uppercase with underscores:
 
-| Environment Variable                | YAML Path                      | Description                               |
-|-------------------------------------|--------------------------------|-------------------------------------------|
-| `KNPT_NUTS_ENABLED`                 | `nuts.enabled`                 | Enable embedded Nuts node                 |
-| `KNPT_MCSDADMIN_FHIRBASEURL`        | `mcsdadmin.fhirbaseurl`        | FHIR base URL for admin interface         |
-| `KNPT_MCSD_QUERY_FHIRBASEURL`       | `mcsd.query.fhirbaseurl`       | Local Query Directory FHIR base URL       |
-| `KNPT_MCSD_ADMIN_<KEY>_FHIRBASEURL` | `mcsd.admin.<key>.fhirbaseurl` | Remote mCSD Admin Directory FHIR base URL |
+| Environment Variable                | YAML Path                      | Description                                                                         |
+|-------------------------------------|--------------------------------|-------------------------------------------------------------------------------------|
+| `KNPT_NUTS_ENABLED`                 | `nuts.enabled`                 | Enable embedded Nuts node                                                           |
+| `KNPT_MCSDADMIN_FHIRBASEURL`        | `mcsdadmin.fhirbaseurl`        | FHIR base URL for admin interface                                                   |
+| `KNPT_MCSD_QUERY_FHIRBASEURL`       | `mcsd.query.fhirbaseurl`       | Local Query Directory FHIR base URL                                                 |
+| `KNPT_MCSD_ADMIN_<KEY>_FHIRBASEURL` | `mcsd.admin.<key>.fhirbaseurl` | Remote mCSD Admin Directory FHIR base URL                                           |
+| `KNPT_NVI_BASEURL`                  | `nvi.baseurl`                  | Base URL of the NVI service.                                                        |
+| `KNPT_NVI_AUDIENCE`                 | `nvi.audience`                 | Name of the NVI service, used for creating BSN transport tokens. Defaults to "nvi". |
 
 ### Example Environment Variable Usage
 
@@ -64,6 +71,9 @@ export KNPT_NUTS_ENABLED=false
 
 # Set FHIR base URL for admin interface  
 export KNPT_MCSDADMIN_FHIRBASEURL=http://fhir.example.com:8080/fhir
+
+# Set FHIR base URL for NVI component
+export KNPT_NVI_BASEURL=http://nvi.example.com:8080/fhir
 
 # Start the application
 ./nuts-knooppunt
@@ -91,3 +101,10 @@ The mCSD Admin component provides a web interface for managing healthcare servic
 The Nuts node component integrates with the Nuts network for decentralized healthcare data exchange.
 
 - `nuts.enabled`: Whether to enable the Nuts node component (default: true)
+
+### NVI Configuration
+
+The NVI (Nederlandse VerwijsIndex) component provides an API for registering DocumentReference resources.
+
+- `nvi.baseurl`: URL of the FHIR server for NVI DocumentReference registration
+- `nvi.audience`: Name of the NVI service, used for creating BSN transport tokens (default: "nvi")

@@ -13,12 +13,14 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
+	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 )
 
 type Config struct {
 	MCSD      mcsd.Config      `koanf:"mcsd"`
 	MCSDAdmin mcsdadmin.Config `koanf:"mcsdadmin"`
 	Nuts      nutsnode.Config  `koanf:"nuts"`
+	NVI       nvi.Config       `koanf:"nvi"`
 }
 
 func DefaultConfig() Config {
@@ -27,6 +29,7 @@ func DefaultConfig() Config {
 			Enabled: false,
 		},
 		MCSDAdmin: mcsdadmin.Config{},
+		NVI:       nvi.DefaultConfig(),
 	}
 }
 

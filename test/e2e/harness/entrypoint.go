@@ -2,23 +2,35 @@ package harness
 
 import (
 	"net/url"
+	"os"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
+	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/stretchr/testify/require"
 )
 
 type Details struct {
+	Vectors                  vectors.Details
 	KnooppuntInternalBaseURL *url.URL
 	MCSDQueryFHIRBaseURL     *url.URL
+	LRZaFHIRBaseURL          *url.URL
+	Care2CureFHIRBaseURL     *url.URL
+	SunflowerFHIRBaseURL     *url.URL
 	SunflowerURA             string
 	Care2CureURA             string
 }
 
 func Start(t *testing.T) Details {
 	t.Helper()
+
+	// Delay container shutdown to improve container reusability
+	os.Setenv("TESTCONTAINERS_RYUK_RECONNECTION_TIMEOUT", "5m")
+	os.Setenv("TESTCONTAINERS_RYUK_CONNECTION_TIMEOUT", "5m")
 
 	dockerNetwork, err := createDockerNetwork(t)
 	require.NoError(t, err)
@@ -38,11 +50,19 @@ func Start(t *testing.T) Details {
 				FHIRBaseURL: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
 			},
 		},
+		NVI: nvi.Config{
+			FHIRBaseURL: testData.NVI.FHIRBaseURL.String(),
+			Audience:    "nvi",
+		},
 	})
 	return Details{
 		KnooppuntInternalBaseURL: knooppuntInternalURL,
 		MCSDQueryFHIRBaseURL:     testData.Knooppunt.MCSD.QueryFHIRBaseURL,
-		SunflowerURA:             "00000020",
-		Care2CureURA:             "00000030",
+		LRZaFHIRBaseURL:          testData.LRZa.FHIRBaseURL,
+		SunflowerFHIRBaseURL:     sunflower.HAPITenant().BaseURL(hapiBaseURL),
+		SunflowerURA:             *sunflower.Organization().Identifier[0].Value,
+		Care2CureFHIRBaseURL:     care2cure.HAPITenant().BaseURL(hapiBaseURL),
+		Care2CureURA:             *care2cure.Organization().Identifier[0].Value,
+		Vectors:                  *testData,
 	}
 }

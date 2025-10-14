@@ -11,6 +11,7 @@ import (
 )
 
 func startKnooppunt(t *testing.T, config cmd.Config) *url.URL {
+
 	t.Helper()
 	wg := sync.WaitGroup{}
 	wg.Add(1)

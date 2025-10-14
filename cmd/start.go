@@ -9,6 +9,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
+	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -21,8 +22,12 @@ func Start(ctx context.Context, config Config) error {
 
 	publicMux := http.NewServeMux()
 	internalMux := http.NewServeMux()
+	mcsdUpdateClient, err := mcsd.New(config.MCSD)
+	if err != nil {
+		return errors.Wrap(err, "failed to create mCSD Update Client")
+	}
 	components := []component.Lifecycle{
-		mcsd.New(config.MCSD),
+		mcsdUpdateClient,
 		mcsdadmin.New(config.MCSDAdmin),
 		status.New(),
 		httpComponent.New(publicMux, internalMux),
@@ -34,6 +39,18 @@ func Start(ctx context.Context, config Config) error {
 			return errors.Wrap(err, "failed to create nuts node component")
 		}
 		components = append(components, nutsNode)
+	} else {
+		log.Ctx(ctx).Info().Msg("Nuts node is disabled")
+	}
+
+	if config.NVI.Enabled() {
+		nviComponent, err := nvi.New(config.NVI)
+		if err != nil {
+			return errors.Wrap(err, "failed to create NVI component")
+		}
+		components = append(components, nviComponent)
+	} else {
+		log.Ctx(ctx).Info().Msg("NVI component is disabled")
 	}
 
 	// Components: RegisterHandlers()
