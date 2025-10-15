@@ -262,7 +262,7 @@ public class PseudonymInterceptor {
     }
 
     private String tokenToPseudonym(final String token) {
-        final String pseudonym = bsnUtil.transportTokenToPseudonym(token, NVI_AUDIENCE);
+        final String pseudonym = bsnUtil.transportTokenToPseudonym(token);
         log.trace("Converted token to pseudonym: {}", pseudonym);
         return pseudonym;
     }

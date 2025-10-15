@@ -27,13 +27,14 @@ public class BsnUtil {
      * @return A pseudonym in format "ps-{audience}-{transformedBSN}"
      * @throws PseudonimizationExecutionException if the token format is invalid
      */
-    public String transportTokenToPseudonym(final String token,
-                                            final String nviAudience) throws PseudonimizationExecutionException {
+    public String transportTokenToPseudonym(final String token) throws PseudonimizationExecutionException {
         // Parse token components
         final TokenComponents components = parseTokenComponents(token);
 
-        // Generate consistent pseudonym using the transformed BSN and audience (deterministic)
-        return String.format("ps-%s-%s", nviAudience, components.getTransformedBSN());
+        // Generate consistent pseudonym using the transformed BSN and the original token's audience (deterministic)
+        // NOTE: We use components.getAudience() (from the token) not nviAudience parameter,
+        // because the transformedBSN is encrypted with the token's audience key
+        return String.format("ps-%s-%s", components.getAudience(), components.getTransformedBSN());
     }
 
     /**

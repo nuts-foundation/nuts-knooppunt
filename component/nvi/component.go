@@ -88,8 +88,11 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 	}
 	resource = *tokenizedResource
 
+	requestHeaders := http.Header{
+		"X-Requester-URA": []string{*requesterURA.Value},
+	}
 	var created fhir.DocumentReference
-	err = c.client.CreateWithContext(httpRequest.Context(), resource, &created)
+	err = c.client.CreateWithContext(httpRequest.Context(), resource, &created, fhirclient.RequestHeaders(requestHeaders))
 	if err != nil {
 		err = &fhirapi.Error{
 			Message:   "Failed to register DocumentReference at NVI",

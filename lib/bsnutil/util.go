@@ -147,6 +147,7 @@ func decodeXOR(hexEncoded string, key int) (string, error) {
 // TODO: Remove this later - this logic will be implemented in a HAPI Interceptor at the NVI - only here to prove the concept
 // TransportTokenToPseudonym converts a transport token to a pseudonym format.
 // This extracts the core BSN information and creates a consistent pseudonym (ignoring nonce).
+// NOTE: The pseudonym uses the token's audience because the transformedBSN is encrypted with that audience's key.
 func TransportTokenToPseudonym(token string) (string, error) {
 	// Parse token components
 	audience, transformedBSN, err := parseTokenComponents(token)
@@ -154,7 +155,8 @@ func TransportTokenToPseudonym(token string) (string, error) {
 		return "", fmt.Errorf("invalid token format")
 	}
 
-	// Generate consistent pseudonym using the transformed BSN and audience (deterministic)
+	// Generate consistent pseudonym using the transformed BSN and the token's audience (deterministic)
+	// We use the token's audience (not a parameter) because the transformedBSN is encrypted with that key
 	return fmt.Sprintf("ps-%s-%s", audience, transformedBSN), nil
 }
 
