@@ -709,20 +709,18 @@ func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
 func newPractitionerRole(w http.ResponseWriter, r *http.Request) {
 	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to fetch organizations")
-		// TODO: Make this work with both full pages as wel as inline alerts
-		//internalError(w, "failed to fetch organizations", err)
+		internalError(w, r, "failed to load organizations", err)
 		return
 	}
 
-	orgsExists := len(organizations) > 0
+	orgsExist := len(organizations) > 0
 
 	props := struct {
 		Organizations []fhir.Organization
-		OrgsExists    bool
+		OrgsExist     bool
 	}{
 		Organizations: organizations,
-		OrgsExists:    orgsExists,
+		OrgsExist:     orgsExist,
 	}
 	w.WriteHeader(http.StatusOK)
 	tmpls.RenderWithBase(w, "practitionerrole_edit.html", props)
@@ -858,7 +856,25 @@ func respondError(w http.ResponseWriter, text string, httpcode int) {
 	tmpls.RenderPartial(w, "_alert_error", props)
 }
 
-func internalError(w http.ResponseWriter, msg string, err error) {
+func internalError(w http.ResponseWriter, r *http.Request, msg string, err error) {
 	log.Error().Err(err).Msg(msg)
-	respondError(w, msg, http.StatusInternalServerError)
+
+	isHtmxRequest := r.Header.Get("HX-Request") == "true"
+	if isHtmxRequest {
+		// Request is received from HTMX so we will assume rendering an error on the page
+
+		respondError(w, msg, http.StatusInternalServerError)
+	} else {
+		// No HTMX detected so let's just render the full error page
+
+		props := struct {
+			AlertId string
+			Text    string
+		}{
+			AlertId: ShortID(),
+			Text:    msg,
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		tmpls.RenderWithBase(w, "errorpage.html", props)
+	}
 }

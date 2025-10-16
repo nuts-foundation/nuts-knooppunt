@@ -14,12 +14,29 @@ import (
 //go:embed *.html
 var tmplFS embed.FS
 
+var partialTemplates = []string{}
+
+func init() {
+	files, err := tmplFS.ReadDir(".")
+	if err != nil {
+		log.Error().Msg("could not initiate template files")
+	}
+
+	for _, file := range files {
+		name := file.Name()
+		startsWithUnderscore := name[:1] == "_"
+		if startsWithUnderscore {
+			partialTemplates = append(partialTemplates, name)
+		}
+	}
+}
+
 func RenderWithBase(w io.Writer, name string, data any) {
 	files := []string{
 		"base.html",
 		name,
-		"_card_endpoint.html",
 	}
+	files = append(files, partialTemplates...)
 
 	ts, err := template.ParseFS(tmplFS, files...)
 	if err != nil {
