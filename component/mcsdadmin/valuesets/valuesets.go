@@ -104,7 +104,8 @@ func CodingFrom(set []fhir.Coding, codeId string) (fhir.Coding, bool) {
 	return fhir.Coding{}, false
 }
 
-func CodableFrom(set []fhir.Coding, codeId string) (out fhir.CodeableConcept, ok bool) {
+func CodableFrom(set []fhir.Coding, codeId string) (fhir.CodeableConcept, bool) {
+	var out fhir.CodeableConcept
 	for _, c := range set {
 		if c.Code != nil && *c.Code == codeId {
 			out.Coding = []fhir.Coding{c}
@@ -113,6 +114,20 @@ func CodableFrom(set []fhir.Coding, codeId string) (out fhir.CodeableConcept, ok
 		}
 	}
 	return out, false
+}
+
+func CodablesFrom(set []fhir.Coding, codeIds []string) ([]fhir.CodeableConcept, bool) {
+	outOk := true
+	out := make([]fhir.CodeableConcept, 0, len(set))
+	for _, codeId := range codeIds {
+		codable, ok := CodableFrom(set, codeId)
+		if !ok {
+			outOk = false
+		} else {
+			out = append(out, codable)
+		}
+	}
+	return out, outOk
 }
 
 func EndpointStatusFrom(code string) (out fhir.EndpointStatus, ok bool) {

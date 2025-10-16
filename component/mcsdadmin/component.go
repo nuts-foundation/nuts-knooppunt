@@ -13,6 +13,7 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	formdata "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/formdata"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/static"
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
@@ -740,19 +741,13 @@ func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
 	codes := r.PostForm["codes"]
 	codesCount := len(codes)
 	if codesCount > 0 {
-		role.Code = make([]fhir.CodeableConcept, 0, codesCount)
-		for _, c := range codes {
-			if c == "" {
-				continue
-			}
-			codable, ok := valuesets.CodableFrom(valuesets.PractitionerRoleCodings, c)
-			if ok {
-				role.Code = append(role.Code, codable)
-			} else {
-				badRequest(w, r, fmt.Sprintf("could not find type code %s", c))
-				return
-			}
+		nonEmptyCodes := formdata.FilterEmpty(codes)
+		codables, ok := valuesets.CodablesFrom(valuesets.PractitionerRoleCodings, nonEmptyCodes)
+		if !ok {
+			badRequest(w, r, fmt.Sprintf("could not find all type codes"))
+			return
 		}
+		role.Code = codables
 	}
 
 	var resRole fhir.PractitionerRole
