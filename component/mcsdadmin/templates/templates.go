@@ -329,6 +329,7 @@ func MakeEndpointCards(endpoints []fhir.Endpoint, org fhir.Organization) []Endpo
 }
 
 type PractitionerRoleProps struct {
+	Id           string
 	Dezi         string
 	Organization string
 	Code         string
@@ -337,6 +338,12 @@ type PractitionerRoleProps struct {
 
 func MakePractitionerRoleProps(role fhir.PractitionerRole) PractitionerRoleProps {
 	out := PractitionerRoleProps{}
+	if role.Id != nil {
+		out.Id = *role.Id
+	} else {
+		out.Id = unknownStr
+	}
+
 	for _, identifier := range role.Identifier {
 		if identifier.System == nil || identifier.Value == nil {
 			continue

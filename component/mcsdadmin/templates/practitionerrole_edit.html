@@ -4,15 +4,15 @@
         <h4>Edit Practitioner Role</h4>
     </div>
     <div class="card-body">
-        <form method="post" enctype="application/x-www-form-urlencoded">
+        <form hx-boost="true" method="post" enctype="application/x-www-form-urlencoded">
             {{ if .OrgsExist }}
             <div class="mb-3">
                 <label for="dezi-number" class="form-label">DEZI-number:</label>
                 <input id="dezi-number" type="text" name="dezi-number" class="form-control" placeholder="Enter code here" required>
             </div>
             <div class="mb-3">
-                <label for="part-of" class="form-label">Part of Organization:</label>
-                <select name="part-of" id="part-of" class="form-select">
+                <label for="organization-id" class="form-label">Part of Organization:</label>
+                <select name="organization-id" id="organization-id" class="form-select">
                     <option value="">--Please choose an option--</option>
                     {{range .Organizations}}
                     <option value="{{ .Id }}">{{ .Name }}</option>

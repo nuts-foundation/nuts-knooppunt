@@ -703,7 +703,47 @@ func listLocations(w http.ResponseWriter, _ *http.Request) {
 }
 
 func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
+	err := r.ParseForm()
+	if err != nil {
+		badRequest(w, r, "failed to processes form data", err)
+		return
+	}
+
+	var role fhir.PractitionerRole
+	uziNumber := r.PostForm.Get("dezi-number")
+	if uziNumber != "" {
+		identifier := fhir.Identifier{
+			System: to.Ptr(coding.UZINamingSystem),
+			Value:  to.Ptr(uziNumber),
+		}
+		ref := fhir.Reference{
+			Identifier: to.Ptr(identifier),
+		}
+		role.Practitioner = to.Ptr(ref)
+	} else {
+		badRequest(w, r, "required field Dezi-number missing", err)
+		return
+	}
+
+	orgId := r.PostForm.Get("organization-id")
+	_, err = findById[fhir.Organization](orgId)
+	if err != nil {
+		badRequest(w, r, fmt.Sprintf("could not find organistion with id: %s", orgId))
+		return
+	}
+	orgRef := fhir.Reference{
+		Reference: to.Ptr(fmt.Sprintf("Organization/%s", orgId)),
+	}
+	role.Organization = to.Ptr(orgRef)
+
+	var resRole fhir.PractitionerRole
+	err = client.Create(role, &resRole)
+	if err != nil {
+		internalError(w, r, "could not create practitioner role", err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	renderList[fhir.PractitionerRole, tmpls.PractitionerRoleProps](client, w, tmpls.MakePractitionerRoleXsProps)
 }
 
 func newPractitionerRole(w http.ResponseWriter, r *http.Request) {
@@ -748,7 +788,7 @@ func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Requ
 
 		err := client.Delete(path)
 		if err != nil {
-			respondError(w, fmt.Sprintf("Can not delete %s.", resourceType), http.StatusBadRequest)
+			respondErrorAlert(w, fmt.Sprintf("Can not delete %s.", resourceType), http.StatusBadRequest)
 			return
 		}
 
@@ -837,7 +877,7 @@ func ShortID() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func respondError(w http.ResponseWriter, text string, httpcode int) {
+func respondErrorAlert(w http.ResponseWriter, text string, httpcode int) {
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("X-Content-Type-Options", "nosniff")
@@ -856,25 +896,44 @@ func respondError(w http.ResponseWriter, text string, httpcode int) {
 	tmpls.RenderPartial(w, "_alert_error", props)
 }
 
+func respondErrorPage(w http.ResponseWriter, text string, httpcode int) {
+	props := struct {
+		AlertId string
+		Text    string
+	}{
+		AlertId: ShortID(),
+		Text:    text,
+	}
+	w.WriteHeader(http.StatusInternalServerError)
+	tmpls.RenderWithBase(w, "errorpage.html", props)
+}
+
 func internalError(w http.ResponseWriter, r *http.Request, msg string, err error) {
 	log.Error().Err(err).Msg(msg)
 
 	isHtmxRequest := r.Header.Get("HX-Request") == "true"
 	if isHtmxRequest {
 		// Request is received from HTMX so we will assume rendering an error on the page
-
-		respondError(w, msg, http.StatusInternalServerError)
+		respondErrorAlert(w, msg, http.StatusInternalServerError)
 	} else {
 		// No HTMX detected so let's just render the full error page
+		respondErrorPage(w, msg, http.StatusInternalServerError)
+	}
+}
 
-		props := struct {
-			AlertId string
-			Text    string
-		}{
-			AlertId: ShortID(),
-			Text:    msg,
-		}
-		w.WriteHeader(http.StatusInternalServerError)
-		tmpls.RenderWithBase(w, "errorpage.html", props)
+func badRequest(w http.ResponseWriter, r *http.Request, msg string, errs ...error) {
+	hasError := len(errs) > 0
+	if hasError {
+		err := errs[0]
+		log.Warn().Err(err).Msg(msg)
+	}
+
+	isHtmxRequest := r.Header.Get("HX-Request") == "true"
+	if isHtmxRequest {
+		// Request is received from HTMX so we will assume rendering an error on the page
+		respondErrorAlert(w, msg, http.StatusBadRequest)
+	} else {
+		// No HTMX detected so let's just render the full error page
+		respondErrorPage(w, msg, http.StatusBadRequest)
 	}
 }
