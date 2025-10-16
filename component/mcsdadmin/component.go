@@ -738,17 +738,12 @@ func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
 	}
 	role.Organization = to.Ptr(orgRef)
 
-	codes := r.PostForm["codes"]
-	codesCount := len(codes)
-	if codesCount > 0 {
-		nonEmptyCodes := formdata.FilterEmpty(codes)
-		codables, ok := valuesets.CodablesFrom(valuesets.PractitionerRoleCodings, nonEmptyCodes)
-		if !ok {
-			badRequest(w, r, fmt.Sprintf("could not find all type codes"))
-			return
-		}
-		role.Code = codables
+	codeables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.PractitionerRoleCodings, "codes")
+	if !ok {
+		badRequest(w, r, fmt.Sprintf("could not find all type codes"))
+		return
 	}
+	role.Code = codeables
 
 	var resRole fhir.PractitionerRole
 	err = client.Create(role, &resRole)
