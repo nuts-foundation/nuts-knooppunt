@@ -38,6 +38,9 @@ var PurposeOfUseCodings = mustGetValueSet("purpose-of-use")
 // ServiceTypeCodings contains the codings from https://hl7.org/fhir/R4/valueset-service-type.html
 var ServiceTypeCodings = mustGetValueSet("service-type")
 
+// PractitionerRoleCodings contains the codings from https://terminology.hl7.org/6.5.0/CodeSystem-practitioner-role.html
+var PractitionerRoleCodings = mustGetValueSet("practitioner-role")
+
 func mustGetValueSet(name string) []fhir.Coding {
 	result := getValueSets()[name]
 	if result == nil {

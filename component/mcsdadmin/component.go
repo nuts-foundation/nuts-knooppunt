@@ -737,6 +737,24 @@ func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
 	}
 	role.Organization = to.Ptr(orgRef)
 
+	codes := r.PostForm["codes"]
+	codesCount := len(codes)
+	if codesCount > 0 {
+		role.Code = make([]fhir.CodeableConcept, 0, codesCount)
+		for _, c := range codes {
+			if c == "" {
+				continue
+			}
+			codable, ok := valuesets.CodableFrom(valuesets.PractitionerRoleCodings, c)
+			if ok {
+				role.Code = append(role.Code, codable)
+			} else {
+				badRequest(w, r, fmt.Sprintf("could not find type code %s", c))
+				return
+			}
+		}
+	}
+
 	var resRole fhir.PractitionerRole
 	err = client.Create(role, &resRole)
 	if err != nil {
@@ -759,9 +777,11 @@ func newPractitionerRole(w http.ResponseWriter, r *http.Request) {
 	props := struct {
 		Organizations []fhir.Organization
 		OrgsExist     bool
+		Codes         []fhir.Coding
 	}{
 		Organizations: organizations,
 		OrgsExist:     orgsExist,
+		Codes:         valuesets.PractitionerRoleCodings,
 	}
 	w.WriteHeader(http.StatusOK)
 	tmpls.RenderWithBase(w, "practitionerrole_edit.html", props)

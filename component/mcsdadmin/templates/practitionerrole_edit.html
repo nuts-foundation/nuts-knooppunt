@@ -19,6 +19,22 @@
                     {{ end }}
                 </select>
             </div>
+            <div class="mb-3">
+                <label for="code-select" class="form-label">Choose a code:</label>
+                <div id="code-options" class="options">
+                    <select name="codes" id="code-select" class="form-select" required>
+                        <option value="">--Please choose an option--</option>
+                        {{ range .Codes }}
+                        <option value="{{ .Code }}">{{ .Display }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                <div>
+                    <button onclick='addOption("code-select");' type="button" class="btn btn-secondary btn-sm">
+                        Add code
+                    </button>
+                </div>
+            </div>
             {{ else }}
             <p>Please add an organization before adding roles</p>
             {{ end }}
