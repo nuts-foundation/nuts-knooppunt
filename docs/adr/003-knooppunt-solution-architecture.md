@@ -43,11 +43,11 @@ The Knooppunt sits on the edge of the vendor's network, handling all data exchan
 - Policy Enforcement Point
 
 ```text
-┌─────────────────┐        ┌────────────┐       ┌──────────────┐
-│                 │        │            │       │              │
-│ External System ├───────►│ Knooppunt  ├──────►│ EHR FHIR API │
-│                 │        │            │       │              │
-└─────────────────┘        └────────────┘       └──────────────┘
+┌─────────────────┐       ┌─────────┐       ┌────────────┐       ┌──────────────┐
+│                 │       │         │       │            │       │              │
+│ External System ├──────►│  Proxy  │──────►│ Knooppunt  ├──────►│ EHR FHIR API │
+│                 │       │         │       │            │       │              │
+└─────────────────┘       └─────────┘       └────────────┘       └──────────────┘
 ```
 
 Data exchanges are routed through the Knooppunt, theoretically offloading all "complicated" concerns from the vendor.
