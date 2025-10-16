@@ -36,6 +36,9 @@ Deciding on the architecture depends on the use cases we want to support. The ma
 ## Considered Options
 This section describes considered architecture options.
 
+In any of the options, there's a proxy (e.g. NGINX, HAProxy, Traefik) in front of the Knooppunt and/or EHR FHIR API.
+This is a typical reverse proxy, handling TLS termination, routing, load balancing, caching, etc.
+
 ### The Magic Box
 The Knooppunt sits on the edge of the vendor's network, handling all data exchanges. It acts as:
 - OAuth2 Authorization Server
