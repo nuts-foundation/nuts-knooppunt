@@ -143,20 +143,12 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	active := r.PostForm.Get("active") == "true"
 	service.Active = &active
 
-	typeCodes := r.PostForm["type"]
-	typeCodesCount := len(typeCodes)
-	if typeCodesCount > 0 {
-		service.Type = make([]fhir.CodeableConcept, typeCodesCount)
-		for i, t := range typeCodes {
-			serviceType, ok := valuesets.CodableFrom(valuesets.ServiceTypeCodings, t)
-			if ok {
-				service.Type[i] = serviceType
-			} else {
-				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
-				return
-			}
-		}
+	codables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.ServiceTypeCodings, "type")
+	if !ok {
+		badRequest(w, r, "Could not find type all type codes")
+		return
 	}
+	service.Type = codables
 
 	reference := "Organization/" + r.PostForm.Get("providedById")
 	service.ProvidedBy = &fhir.Reference{
@@ -237,23 +229,12 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 		uraIdentifier(uraString),
 	}
 
-	orgTypeCodes := r.PostForm["type"]
-	typeCodesCount := len(orgTypeCodes)
-	if typeCodesCount > 0 {
-		org.Type = make([]fhir.CodeableConcept, 0, typeCodesCount)
-		for _, t := range orgTypeCodes {
-			if t == "" {
-				continue
-			}
-			orgType, ok := valuesets.CodableFrom(valuesets.OrganizationTypeCodings, t)
-			if ok {
-				org.Type = append(org.Type, orgType)
-			} else {
-				http.Error(w, fmt.Sprintf("could not find type code %s", t), http.StatusBadRequest)
-				return
-			}
-		}
+	codables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.OrganizationTypeCodings, "type")
+	if !ok {
+		badRequest(w, r, "could not find all type codes")
+		return
 	}
+	org.Type = codables
 
 	active := r.PostForm.Get("active") == "true"
 	org.Active = &active
@@ -470,21 +451,17 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint.Address = address
 
-	typeCodes := r.PostForm["payload-type"]
-	typeCodesCount := len(typeCodes)
-	if typeCodesCount > 0 {
-		endpoint.PayloadType = make([]fhir.CodeableConcept, typeCodesCount)
-		for i, t := range typeCodes {
-			serviceType, ok := valuesets.CodableFrom(valuesets.EndpointPayloadTypeCodings, t)
-			if ok {
-				endpoint.PayloadType[i] = serviceType
-			} else {
-				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
-			}
-		}
-	} else {
-		http.Error(w, "missing payload type", http.StatusBadRequest)
+	if len(r.PostForm["payload-types"]) < 1 {
+		badRequest(w, r, "missing payload type")
+		return
 	}
+
+	codables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.EndpointPayloadTypeCodings, "payload-type")
+	if !ok {
+		badRequest(w, r, "could not find all type codes")
+		return
+	}
+	endpoint.PayloadType = codables
 
 	periodStart := r.PostForm.Get("period-start")
 	periodEnd := r.PostForm.Get("period-end")
@@ -516,7 +493,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	var connectionType fhir.Coding
 	connectionTypeId := r.PostForm.Get("connection-type")
-	connectionType, ok := valuesets.CodingFrom(valuesets.EndpointConnectionTypeCodings, connectionTypeId)
+	connectionType, ok = valuesets.CodingFrom(valuesets.EndpointConnectionTypeCodings, connectionTypeId)
 	if ok {
 		endpoint.ConnectionType = connectionType
 	} else {
@@ -738,12 +715,12 @@ func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
 	}
 	role.Organization = to.Ptr(orgRef)
 
-	codeables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.PractitionerRoleCodings, "codes")
+	codables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.PractitionerRoleCodings, "codes")
 	if !ok {
 		badRequest(w, r, fmt.Sprintf("could not find all type codes"))
 		return
 	}
-	role.Code = codeables
+	role.Code = codables
 
 	var resRole fhir.PractitionerRole
 	err = client.Create(role, &resRole)
