@@ -710,7 +710,7 @@ func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var role fhir.PractitionerRole
-	uziNumber := r.PostForm.Get("dezi-number")
+	uziNumber := r.PostForm.Get("uzi-number")
 	if uziNumber != "" {
 		identifier := fhir.Identifier{
 			System: to.Ptr(coding.UZINamingSystem),
@@ -721,18 +721,19 @@ func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
 		}
 		role.Practitioner = to.Ptr(ref)
 	} else {
-		badRequest(w, r, "required field Dezi-number missing", err)
+		badRequest(w, r, "required field uzi-number missing", err)
 		return
 	}
 
 	orgId := r.PostForm.Get("organization-id")
-	_, err = findById[fhir.Organization](orgId)
+	org, err := findById[fhir.Organization](orgId)
 	if err != nil {
 		badRequest(w, r, fmt.Sprintf("could not find organistion with id: %s", orgId))
 		return
 	}
 	orgRef := fhir.Reference{
 		Reference: to.Ptr(fmt.Sprintf("Organization/%s", orgId)),
+		Display:   org.Name,
 	}
 	role.Organization = to.Ptr(orgRef)
 
