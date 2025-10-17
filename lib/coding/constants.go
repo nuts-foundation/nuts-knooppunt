@@ -6,6 +6,7 @@ import (
 )
 
 const URANamingSystem = "http://fhir.nl/fhir/NamingSystem/ura"
+const UZINamingSystem = "http://fhir.nl/fhir/NamingSystem/uzi"
 const KVKNamingSystem = "http://fhir.nl/fhir/NamingSystem/kvk"
 const BSNNamingSystem = "http://fhir.nl/fhir/NamingSystem/bsn"
 const BSNTransportTokenNamingSystem = "http://fhir.nl/fhir/NamingSystem/bsn-transport-token"
