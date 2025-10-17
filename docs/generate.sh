@@ -6,6 +6,8 @@ if [ -d "${PWD}/images_im" ]; then
   rm -rf "${PWD}/images_im"
 fi
 
+# Ensure required directories exist before running Docker to avoid root-owned auto-creation
+mkdir -p "${PWD}/images_im" "${PWD}/images"
 docker run --rm -v "${PWD}:/docs:ro" -v "${PWD}/images_im:/diagrams" \
   structurizr/cli:latest \
   export \
