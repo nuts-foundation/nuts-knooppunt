@@ -1,5 +1,7 @@
 #!/bin/bash
-docker run --rm -v "${PWD}:/docs:ro" -v "${PWD}/images:/images" \
-  extenda/structurizr-to-png \
-  --path c4-diagram.dsl \
-  --output /images
+docker run --rm -v "${PWD}:/docs:ro" -v "${PWD}/diagrams:/diagrams" \
+  structurizr/cli:latest \
+  export \
+  -workspace /docs/c4-diagram.dsl \
+  -format plantuml/structurizr \
+  -output /diagrams
