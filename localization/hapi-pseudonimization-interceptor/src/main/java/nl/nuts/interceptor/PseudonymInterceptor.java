@@ -154,35 +154,14 @@ public class PseudonymInterceptor {
         if (!(newResource instanceof final DocumentReference documentReference)) {
             return;
         }
-        log.trace("Intercepting DocumentReference resource creation");
+
+        validateUraHeaderPresence(servletRequestDetails);
 
         // Validate custodian matches X-Requester-URA header
         validateCustodian(documentReference, servletRequestDetails);
 
         modifyDocumentFromTokenToPseudonym(documentReference);
         log.info("{}", FhirContext.forR4Cached().newJsonParser().encodeResourceToString(documentReference));
-    }
-
-    /**
-     * If it is a POST (Resource has been created), but there is no REQUESTER_URA_HEADER present, we must prevent
-     * presentation of the created Resource as a response. In this scenario, this hook replaces actual DocumentReference
-     * response with an OperationOutcome containing the warning and description.
-     * <p>
-     * This can not be done in @Hook(Pointcut.STORAGE_PRESHOW_RESOURCES) as you can not modify response Resources
-     * in that flow.
-     */
-    @Hook(Pointcut.SERVER_OUTGOING_RESPONSE)
-    public void handleServerResponse(final ResponseDetails responseDetails,
-                                     final ServletRequestDetails servletRequestDetails) {
-        if (!isEnabled(servletRequestDetails)) {
-            return;
-        }
-        if (servletRequestDetails.getRequestType() != RequestTypeEnum.POST
-                || !StringUtils.isEmpty(servletRequestDetails.getHeader(REQUESTER_URA_HEADER))) {
-            return;
-        }
-        responseDetails.setResponseResource(
-                createWarningOutcome(responseDetails.getResponseResource().getIdElement().getValue()));
     }
 
 
@@ -198,22 +177,25 @@ public class PseudonymInterceptor {
             return;
         }
 
-        final String audience = servletRequestDetails.getHeader(REQUESTER_URA_HEADER);
-
-        if (StringUtils.isEmpty(audience) && servletRequestDetails.getRequestType() == RequestTypeEnum.POST) {
-            return;
-        } else if (StringUtils.isEmpty(audience)) {
-            throw new IllegalArgumentException(
-                    String.format("Resource can not be retrieved due to the fact there is no %s header present.",
-                                  REQUESTER_URA_HEADER));
-        }
+        validateUraHeaderPresence(servletRequestDetails);
 
         final List<IBaseResource> allResources = requestDetails.getAllResources();
         allResources.stream()
                 .filter(aResource -> aResource instanceof DocumentReference)
                 .forEach(documentReference -> modifyDocumentFromPseudonymToToken((DocumentReference) documentReference,
-                                                                                 audience));
+                                                                                 getUraHeader(servletRequestDetails)));
+    }
 
+    private void validateUraHeaderPresence(final ServletRequestDetails servletRequestDetails) {
+        final String audience = getUraHeader(servletRequestDetails);
+        if (StringUtils.isBlank(audience)) {
+            throw new IllegalArgumentException(
+                    String.format("'%s' header is mandatory.", REQUESTER_URA_HEADER));
+        }
+    }
+
+    private String getUraHeader(final ServletRequestDetails servletRequestDetails) {
+        return servletRequestDetails.getHeader(REQUESTER_URA_HEADER);
     }
 
     private OperationOutcome createWarningOutcome(final String createdResourceId) {
