@@ -722,6 +722,33 @@ func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
 	}
 	role.Code = codables
 
+	telecomData := formdata.ParseMaps(r.PostForm, "telecom")
+	for _, tel := range telecomData {
+		const msg = "invalid telecom information provided"
+		system, ok := tel["System"]
+		if !ok {
+			badRequest(w, r, msg)
+			return
+		}
+		value, ok := tel["Value"]
+		if !ok {
+			badRequest(w, r, msg)
+			return
+		}
+		contactPointSystem, ok := valuesets.ContactPointSystemFrom(system)
+		if !ok {
+			badRequest(w, r, msg)
+			return
+		}
+
+		contactPoint := fhir.ContactPoint{
+			System: to.Ptr(contactPointSystem),
+			Value:  to.Ptr(value),
+		}
+
+		role.Telecom = append(role.Telecom, contactPoint)
+	}
+
 	var resRole fhir.PractitionerRole
 	err = client.Create(role, &resRole)
 	if err != nil {

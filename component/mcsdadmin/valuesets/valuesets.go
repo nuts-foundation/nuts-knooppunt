@@ -162,3 +162,24 @@ func LocationStatusFrom(code string) (out fhir.LocationStatus, ok bool) {
 		return fhir.LocationStatusActive, false
 	}
 }
+
+func ContactPointSystemFrom(code string) (out fhir.ContactPointSystem, ok bool) {
+	switch code {
+	case "phone":
+		return fhir.ContactPointSystemPhone, true
+	case "fax":
+		return fhir.ContactPointSystemFax, true
+	case "email":
+		return fhir.ContactPointSystemEmail, true
+	case "pager":
+		return fhir.ContactPointSystemPager, true
+	case "url":
+		return fhir.ContactPointSystemUrl, true
+	case "sms":
+		return fhir.ContactPointSystemSms, true
+	case "other":
+		return fhir.ContactPointSystemOther, true
+	default:
+		return fhir.ContactPointSystemPhone, false
+	}
+}
