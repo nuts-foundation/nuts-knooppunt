@@ -1,10 +1,8 @@
 package formdata
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
-	"reflect"
 	"regexp"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
@@ -21,23 +19,6 @@ func init() {
 		return
 	}
 	keyExp = *exp
-}
-
-func ParseStructs[S any](postform url.Values, key string) ([]S, error) {
-	var item S
-	valueOfS := reflect.ValueOf(item)
-	if valueOfS.Kind() != reflect.Struct {
-		return []S{item}, errors.New("input type not a struct")
-	}
-
-	typeOfS := valueOfS.Type()
-	for i := 0; i < valueOfS.NumField(); i++ {
-		f := valueOfS.Field(i)
-		fmt.Printf("%d: %s %s = %v\n", i,
-			typeOfS.Field(i).Name, f.Type(), f.Interface())
-	}
-
-	return []S{item}, errors.New("not implemented")
 }
 
 func ParseMaps(postform url.Values, fieldName string) []map[string]string {
