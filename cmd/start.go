@@ -44,11 +44,9 @@ func Start(ctx context.Context, config Config) error {
 		log.Ctx(ctx).Info().Msg("Nuts node is disabled")
 	}
 
-	// Create MITZ component (needed by NVI)
-	var mitzComponent *mitz.Component
+	// Create MITZ component
 	if config.MITZ.Enabled() {
-		var err error
-		mitzComponent, err = mitz.New(config.MITZ)
+		mitzComponent, err := mitz.New(config.MITZ)
 		if err != nil {
 			return errors.Wrap(err, "failed to create MITZ component")
 		}
@@ -57,9 +55,9 @@ func Start(ctx context.Context, config Config) error {
 		log.Ctx(ctx).Info().Msg("MITZ component is disabled")
 	}
 
-	// Create NVI component with MITZ subscriber
+	// Create NVI component
 	if config.NVI.Enabled() {
-		nviComponent, err := nvi.New(config.NVI, mitzComponent)
+		nviComponent, err := nvi.New(config.NVI)
 		if err != nil {
 			return errors.Wrap(err, "failed to create NVI component")
 		}
