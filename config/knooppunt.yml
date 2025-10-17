@@ -19,7 +19,32 @@ mcsdadmin:
   # Base URL for FHIR server used by admin interface
   fhirbaseurl: "http://localhost:8080/fhir"
 
-# Nuts node configuration  
+# Nuts node configuration
 nuts:
   # Whether to enable the Nuts node component
   enabled: true
+
+nvi:
+  baseurl: "https://server.fire.ly/R4"
+
+# MITZ Connector configuration
+mitz:
+  # MITZ base URL (paths are hardcoded in code)
+  mitzbase: "https://tst-api.mijn-mitz.nl/tst-us/mitz"
+  notify_callback_url: "https://platform-md.alpha-06.parsek.net/vitaly-service/mitz/fhir"
+  # Gateway system OID (optional)
+  gateway_system: "urn:oid:2.16.840.1.113883.2.4.6.6.1"
+  # Source system OID (optional)
+  source_system: "urn:oid:2.16.840.1.113883.2.4.6.6.90000017"
+  provider_type: "Z3"
+  # mTLS client certificate configuration (optional)
+  # Option 1: PEM format (separate cert and key files)
+  #tls_cert_file: "/path/to/client-cert.pem"
+  #tls_key_file: "/path/to/client-key.pem" # jqL7CKahaNA2LlRceLpQ
+  # Option 2: PKCS#12 format (.p12 or .pfx file with cert + key)
+  tls_cert_file: "/home/gandrejc/tmp/mitz/vitaly-acc-1.oehp.nl.p12"
+  # tls_key_file is not needed for .p12/.pfx files
+  # Password for encrypted private key or .p12/.pfx file (optional)
+  tls_key_password: "jqL7CKahaNA2LlRceLpQ"
+  # CA certificate to trust MITZ server (if not in system trust store)
+  tls_ca_file: "/home/gandrejc/tmp/mitz/tst-api.mijn-mitz.nl"

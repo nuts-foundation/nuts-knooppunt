@@ -8,6 +8,7 @@ import (
 	httpComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
@@ -43,8 +44,22 @@ func Start(ctx context.Context, config Config) error {
 		log.Ctx(ctx).Info().Msg("Nuts node is disabled")
 	}
 
+	// Create MITZ component (needed by NVI)
+	var mitzComponent *mitz.Component
+	if config.MITZ.Enabled() {
+		var err error
+		mitzComponent, err = mitz.New(config.MITZ)
+		if err != nil {
+			return errors.Wrap(err, "failed to create MITZ component")
+		}
+		components = append(components, mitzComponent)
+	} else {
+		log.Ctx(ctx).Info().Msg("MITZ component is disabled")
+	}
+
+	// Create NVI component with MITZ subscriber
 	if config.NVI.Enabled() {
-		nviComponent, err := nvi.New(config.NVI)
+		nviComponent, err := nvi.New(config.NVI, mitzComponent)
 		if err != nil {
 			return errors.Wrap(err, "failed to create NVI component")
 		}
