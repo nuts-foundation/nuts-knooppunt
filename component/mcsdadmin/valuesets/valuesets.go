@@ -41,6 +41,9 @@ var ServiceTypeCodings = mustGetValueSet("service-type")
 // PractitionerRoleCodings contains the codings from https://terminology.hl7.org/6.5.0/CodeSystem-practitioner-role.html
 var PractitionerRoleCodings = mustGetValueSet("practitioner-role")
 
+// ContactPointSystem contains the codings from http://hl7.org/fhir/codesystem-contact-point-system.html
+var ContactPointSystem = mustGetValueSet("contact-point-system")
+
 func mustGetValueSet(name string) []fhir.Coding {
 	result := getValueSets()[name]
 	if result == nil {

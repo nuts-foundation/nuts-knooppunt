@@ -745,10 +745,12 @@ func newPractitionerRole(w http.ResponseWriter, r *http.Request) {
 		Organizations []fhir.Organization
 		OrgsExist     bool
 		Codes         []fhir.Coding
+		TelecomCodes  []fhir.Coding
 	}{
 		Organizations: organizations,
 		OrgsExist:     orgsExist,
 		Codes:         valuesets.PractitionerRoleCodings,
+		TelecomCodes:  valuesets.ContactPointSystem,
 	}
 	w.WriteHeader(http.StatusOK)
 	tmpls.RenderWithBase(w, "practitionerrole_edit.html", props)

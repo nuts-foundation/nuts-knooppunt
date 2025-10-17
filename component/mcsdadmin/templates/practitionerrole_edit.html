@@ -35,6 +35,27 @@
                     </button>
                 </div>
             </div>
+            <div class="mb-3">
+                <fieldset>
+                    <legend>Contact details</legend>
+                    <label for="code-select" class="form-label">Choose a method:</label>
+                    <div id="telecom-options" class="options">
+                        <select name="telecom[0][system]" id="telecom[0][system]" class="form-select" required>
+                            <option value="">--Please choose an option--</option>
+                            {{ range .TelecomCodes }}
+                            <option value="{{ .Code }}">{{ .Display }}</option>
+                            {{ end }}
+                        </select>
+                    </div>
+                    <label for="telecom[0][value]" class="form-label">Value:</label>
+                    <input id="telecom[0][value]" type="text" name="telecom[0][value]" class="form-control" placeholder="Enter here" required>
+                </fieldset>
+                <div>
+                    <button onclick='addOption("code-select");' type="button" class="btn btn-secondary btn-sm">
+                        Add code
+                    </button>
+                </div>
+            </div>
             {{ else }}
             <p>Please add an organization before adding roles</p>
             {{ end }}
