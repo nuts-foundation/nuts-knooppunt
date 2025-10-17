@@ -1,72 +1,123 @@
 package mitz
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/xacml"
+	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 // Config holds the configuration for the MITZ component
 type Config struct {
-	IsEnabled     bool   `koanf:"enabled"`
-	FHIRBaseURL   string `koanf:"baseurl"`
-	GatewaySystem string `koanf:"gateway_system"`
-	SourceSystem  string `koanf:"source_system"`
+	MitzBase          string `koanf:"mitzbase"`
+	GatewaySystem     string `koanf:"gateway_system"`
+	SourceSystem      string `koanf:"source_system"`
+	ProviderType      string `koanf:"provider_type"`
+	NotifyCallbackUrl string `koanf:"notify_callback_url"`
+	TLSCertFile       string `koanf:"tls_cert_file"`    // PEM certificate file OR .p12/.pfx file
+	TLSKeyFile        string `koanf:"tls_key_file"`     // PEM key file (not used if TLSCertFile is .p12/.pfx)
+	TLSKeyPassword    string `koanf:"tls_key_password"` // Password for encrypted key or .p12/.pfx file
+	TLSCAFile         string `koanf:"tls_ca_file"`      // CA certificate file to verify MITZ server
 }
 
 func (c Config) Enabled() bool {
-	return c.IsEnabled
-}
-
-// SubscribeRequest represents the parameters for creating a MITZ subscription
-// todo: remove this once we have IG for Knooppunt integration
-type SubscribeRequest struct {
-	PatientID        string `json:"patient_id"`
-	PatientBirthDate string `json:"patient_birth_date"`
-	ProviderID       string `json:"provider_id"`
-	ProviderType     string `json:"provider_type"`
-	CallbackURL      string `json:"callback_url"`
+	return c.MitzBase != ""
 }
 
 var _ component.Lifecycle = (*Component)(nil)
 
 // Component is the MITZ component that handles FHIR consent bundles
 type Component struct {
-	client        fhirclient.Client
-	gatewaySystem string
-	sourceSystem  string
+	client               fhirclient.Client
+	httpClient           *http.Client
+	consentCheckEndpoint string
+	gatewaySystem        string
+	sourceSystem         string
+	providerType         string
+	notifyCallbackUrl    string
 }
+
+const (
+	subscriptionPath = "/abonnementen/fhir"
+	consentCheckPath = "/geslotenautorisatievraag/xacml3"
+)
 
 // New creates a new MITZ component
 func New(config Config) (*Component, error) {
-	if config.FHIRBaseURL == "" {
-		return nil, fmt.Errorf("FHIR base URL must be configured when MITZ component is enabled")
+	if config.MitzBase == "" {
+		return nil, fmt.Errorf("mitzbase must be configured when MITZ component is enabled")
 	}
 
-	baseURL, err := url.Parse(config.FHIRBaseURL)
+	// Parse base URL and construct subscription endpoint
+	subscriptionURL, err := url.Parse(config.MitzBase + subscriptionPath)
 	if err != nil {
-		return nil, fmt.Errorf("invalid FHIR base URL: %w", err)
+		return nil, fmt.Errorf("invalid subscription endpoint: %w", err)
 	}
+
+	// Create HTTP client with optional mTLS configuration
+	httpClient, err := createHTTPClient(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+	}
+
+	consentCheckEndpoint := config.MitzBase + consentCheckPath
 
 	return &Component{
-		client:        fhirclient.New(baseURL, http.DefaultClient, fhirutil.ClientConfig()),
-		gatewaySystem: config.GatewaySystem,
-		sourceSystem:  config.SourceSystem,
+		client:               fhirclient.New(subscriptionURL, httpClient, fhirutil.ClientConfig()),
+		httpClient:           httpClient,
+		consentCheckEndpoint: consentCheckEndpoint,
+		gatewaySystem:        config.GatewaySystem,
+		sourceSystem:         config.SourceSystem,
+		providerType:         config.ProviderType,
+		notifyCallbackUrl:    config.NotifyCallbackUrl,
 	}, nil
+}
+
+// createHTTPClient creates an HTTP client with optional mTLS configuration
+func createHTTPClient(config Config) (*http.Client, error) {
+	client := &http.Client{
+		Transport: http.DefaultTransport,
+	}
+
+	// If TLS certificate is configured, set up mTLS
+	if config.TLSCertFile != "" {
+		tlsConfig, err := tlsutil.CreateTLSConfig(tlsutil.Config{
+			CertFile: config.TLSCertFile,
+			KeyFile:  config.TLSKeyFile,
+			Password: config.TLSKeyPassword,
+			CAFile:   config.TLSCAFile,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create TLS config: %w", err)
+		}
+
+		// Create transport with TLS config
+		client.Transport = &http.Transport{
+			TLSClientConfig: tlsConfig,
+		}
+	}
+
+	return client, nil
 }
 
 // RegisterHttpHandlers registers the HTTP handlers for the MITZ component
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.Handle("POST /mitz/notify", http.HandlerFunc(c.handleNotify))
 	internalMux.Handle("POST /mitz/subscribe", http.HandlerFunc(c.handleSubscribe))
+	internalMux.Handle("GET /mitz/Consent", http.HandlerFunc(c.handleConsentCheck))
 }
 
 // Start starts the component
@@ -81,44 +132,176 @@ func (c *Component) Stop(ctx context.Context) error {
 
 // handleNotify handles FHIR consent bundle notifications
 func (c *Component) handleNotify(httpResponse http.ResponseWriter, httpRequest *http.Request) {
-	fhirRequest, err := fhirapi.ParseRequest[fhir.Bundle](httpRequest)
-	if err != nil {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
-		return
-	}
-	bundle := fhirRequest.Resource
+	log.Info().Msg("Received FHIR consent bundle notification")
 
-	// Validate bundle type
-	if bundle.Type != fhir.BundleTypeTransaction {
-		err := &fhirapi.Error{
-			Message:   "Bundle must be of type 'transaction'",
-			IssueType: fhir.IssueTypeInvalid,
-		}
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
-		return
-	}
+	// todo: process it? atm we don't care about it. If we will care, we may have a problem because they seem
+	// to be sending XMLs, which go fhir lib doesn't support yet
 
-	// TODO: Process the bundle as needed
-	// For now, just accept and return OK
+	log.Info().Msg("Successfully processed consent bundle notification")
 	httpResponse.WriteHeader(http.StatusOK)
 }
 
-// handleSubscribe handles subscription creation requests
+// CreateSubscription creates a MITZ subscription (implements nvi.MITZSubscriber interface)
+func (c *Component) CreateSubscription(ctx context.Context, patientID, providerID string) error {
+	// Create FHIR Subscription
+	subscription := c.createSubscription(patientID, providerID)
+
+	// Send subscription to configured FHIR endpoint
+	var created fhir.Subscription
+	var headers fhirclient.Headers
+	err := c.client.CreateWithContext(ctx, subscription, &created, fhirclient.ResponseHeaders(&headers))
+	if err != nil {
+		// Check if it's an OperationOutcome error to extract status code
+		if outcomeErr, ok := err.(fhirclient.OperationOutcomeError); ok {
+			switch outcomeErr.HttpStatusCode {
+			case http.StatusBadRequest:
+				return fmt.Errorf("FHIR resource does not meet specifications: %w", err)
+			case http.StatusUnauthorized:
+				return fmt.Errorf("not authorized to create subscription at MITZ endpoint: %w", err)
+			case http.StatusNotFound:
+				return fmt.Errorf("MITZ endpoint not found: %w", err)
+			case http.StatusUnprocessableEntity:
+				return fmt.Errorf("MITZ business rules are not met: %w", err)
+			case http.StatusTooManyRequests:
+				return fmt.Errorf("too many requests to MITZ endpoint: %w", err)
+			default:
+				return fmt.Errorf("failed to create subscription at MITZ endpoint: %w", err)
+			}
+		}
+		// 202 Accepted is OK (MITZ responds with 202 instead of 201)
+	}
+
+	location := headers.Header.Get("Location")
+
+	log.Info().
+		Str("patientID", patientID).
+		Str("providerID", providerID).
+		Str("subscriptionId", location).
+		Msg("Successfully created MITZ subscription")
+
+	return nil
+}
+
+// handleConsentCheck triggers a consent check by invoking MITZ closed query
+func (c *Component) handleConsentCheck(httpResponse http.ResponseWriter, httpRequest *http.Request) {
+	if c.consentCheckEndpoint == "" {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
+			Message:   "Consent check endpoint not configured",
+			IssueType: fhir.IssueTypeNotSupported,
+		})
+		return
+	}
+
+	// Create a request with all required parameters
+	req := xacml.AuthzRequest{
+		PatientBSN:             "900186021",
+		HealthcareFacilityType: "Z3",
+		AuthorInstitutionID:    "00000659",
+		EventCode:              "GGC002",
+		SubjectRole:            "01.015",
+		ProviderID:             "000095254",
+		ProviderInstitutionID:  "00000666",
+		ConsultingFacilityType: "Z3",
+		PurposeOfUse:           "TREAT",
+		ToAddress:              "http://localhost:8000/4",
+	}
+
+	authnDecisionQueryXml, err := xacml.CreateAuthzDecisionQuery(req)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
+			Message:   "Failed to create authorization decision query",
+			Cause:     err,
+			IssueType: fhir.IssueTypeInvalid,
+		})
+		return
+	}
+
+	// Log the XML request
+	log.Info().
+		Str("endpoint", c.consentCheckEndpoint).
+		Str("xmlPayload", authnDecisionQueryXml).
+		Msg("Sending consent check request to MITZ")
+
+	// Create HTTP request with XML payload
+	httpReq, err := http.NewRequestWithContext(
+		httpRequest.Context(),
+		http.MethodPost,
+		c.consentCheckEndpoint,
+		bytes.NewBufferString(authnDecisionQueryXml),
+	)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
+			Message:   "Failed to create HTTP request",
+			Cause:     err,
+			IssueType: fhir.IssueTypeTransient,
+		})
+		return
+	}
+
+	// Set XML content type
+	httpReq.Header.Set("Content-Type", "text/xml")
+
+	// Send request using mTLS-configured HTTP client
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to send consent check request to MITZ")
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
+			Message:   "Failed to send consent check request",
+			Cause:     err,
+			IssueType: fhir.IssueTypeTransient,
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to read consent check response")
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
+			Message:   "Failed to read consent check response",
+			Cause:     err,
+			IssueType: fhir.IssueTypeTransient,
+		})
+		return
+	}
+
+	// Log response
+	log.Info().
+		Int("statusCode", resp.StatusCode).
+		Str("responseBody", string(responseBody)).
+		Msg("Received consent check response from MITZ")
+
+	// Check for non-2xx status
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
+			Message:   fmt.Sprintf("Consent check failed with status %d: %s", resp.StatusCode, string(responseBody)),
+			IssueType: fhir.IssueTypeTransient,
+		})
+		return
+	}
+
+	// Return the XML response
+	httpResponse.Header().Set("Content-Type", "text/xml")
+	httpResponse.WriteHeader(http.StatusOK)
+	httpResponse.Write(responseBody)
+}
+
+// handleSubscribe handles subscription creation requests where payload is already Mitz compliant Consent
 func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpRequest *http.Request) {
-	fhirRequest, err := fhirapi.ParseRequest[SubscribeRequest](httpRequest)
+	fhirRequest, err := fhirapi.ParseRequest[fhir.Subscription](httpRequest)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
 	}
-	request := fhirRequest.Resource
-
-	// Create FHIR Subscription
-	subscription := c.createSubscription(request)
+	resource := fhirRequest.Resource
 
 	// Send subscription to configured FHIR endpoint
 	// The MITZ endpoint should respond with 202 Accepted
-	var created fhir.Subscription
-	err = c.client.CreateWithContext(httpRequest.Context(), subscription, &created)
+	// Note: The go-fhir-client library only supports JSON, not XML
+	// XML support would require manually constructing the HTTP request
+	var headers fhirclient.Headers
+	err = c.client.CreateWithContext(httpRequest.Context(), resource, nil, fhirclient.ResponseHeaders(&headers))
 	if err != nil {
 		// Check if it's an OperationOutcome error to extract status code
 		if outcomeErr, ok := err.(fhirclient.OperationOutcomeError); ok {
@@ -160,47 +343,59 @@ func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpReques
 					IssueType: fhir.IssueTypeTransient,
 				}
 			}
-		} else {
-			err = &fhirapi.Error{
-				Message:   "Failed to create subscription at MITZ endpoint",
-				Cause:     err,
-				IssueType: fhir.IssueTypeTransient,
-			}
+			fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+			return
 		}
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
-		return
+	}
+
+	location := headers.Header.Get("Location")
+	// Extract ID from Location header (e.g., "Subscription/8904A5ED-713A-4A63-9B24-954AC7B7052D" -> "8904A5ED-713A-4A63-9B24-954AC7B7052D")
+	if location != "" {
+		parts := strings.Split(location, "/")
+		if len(parts) > 1 {
+			resource.Id = to.Ptr(parts[len(parts)-1])
+		}
 	}
 
 	// MITZ should respond with 202 Accepted
 	// Note: The fhir-client doesn't expose the raw HTTP response,
 	// so we trust that if CreateWithContext succeeds, the subscription was accepted
-	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusAccepted, created)
+	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusCreated, resource)
 }
 
 // createSubscription creates a FHIR Subscription from the subscribe request
-func (c *Component) createSubscription(req SubscribeRequest) fhir.Subscription {
+func (c *Component) createSubscription(patientId, providerId string) fhir.Subscription {
 	subscription := fhir.Subscription{
 		Status: fhir.SubscriptionStatusRequested,
 		Reason: "OTV",
 		Criteria: fmt.Sprintf("Consent?_query=otv&patientid=%s&providerid=%s&providertype=%s",
-			req.PatientID, req.ProviderID, req.ProviderType),
+			patientId, providerId, c.providerType),
 		Channel: fhir.SubscriptionChannel{
 			Type:     fhir.SubscriptionChannelTypeRestHook,
-			Endpoint: to.Ptr(req.CallbackURL),
-			Payload:  to.Ptr("application/fhir+xml"),
+			Endpoint: to.Ptr(c.notifyCallbackUrl),
+			Payload:  to.Ptr("application/fhir+json"),
 		},
 	}
 
 	// Add extensions
 	var extensions []fhir.Extension
 
-	// Patient birth date extension
+	/**
+	This data is
+	conditionally mandatory: if the
+	healthcare provider has a verified
+	date of birth of the patient, then it
+	must be given.
+
+	Patient birth date extension
 	if req.PatientBirthDate != "" {
 		extensions = append(extensions, fhir.Extension{
 			Url:       "http://fhir.nl/StructureDefinition/Patient.birthDate",
 			ValueDate: to.Ptr(req.PatientBirthDate),
 		})
 	}
+
+	*/
 
 	// Gateway system extension
 	if c.gatewaySystem != "" {

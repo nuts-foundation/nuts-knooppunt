@@ -11,8 +11,7 @@
     </extension>
     <status value="requested"/>
     <reason value="OTV"/>
-    <criteria value="Consent?_query=otv
-&amp;patientid=123456789&amp;providerid=01234567&amp;providertype=Z3"/>
+    <criteria value="Consent?_query=otv&amp;patientid=123456789&amp;providerid=01234567&amp;providertype=Z3"/>
     <channel>
         <type value="rest-hook"/>
         <endpoint value="https://zim.prf001.lsp.aorta-zorg.nl/otv/Subscription/312"/>

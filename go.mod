@@ -25,6 +25,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/zorgbijjou/golang-fhir-models/fhir-models v0.0.0-20250901091002-777673f2b656
 	go.uber.org/mock v0.5.2
+	golang.org/x/crypto v0.40.0
 )
 
 require (
@@ -229,7 +230,6 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.3 // indirect
-	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
@@ -253,4 +253,5 @@ require (
 	modernc.org/sqlite v1.38.2 // indirect
 	rsc.io/qr v0.2.0 // indirect
 	schneider.vip/problem v1.9.1 // indirect
+	software.sslmate.com/src/go-pkcs12 v0.6.0 // indirect
 )

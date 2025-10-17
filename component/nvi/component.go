@@ -15,6 +15,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tenants"
+	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -37,12 +38,18 @@ func (c Config) Enabled() bool {
 var _ component.Lifecycle = (*Component)(nil)
 
 type Component struct {
-	client        fhirclient.Client
-	pseudonymizer pseudonimization.Pseudonymizer
-	audience      string
+	client         fhirclient.Client
+	pseudonymizer  pseudonimization.Pseudonymizer
+	audience       string
+	mitzSubscriber MITZSubscriber
 }
 
-func New(config Config) (*Component, error) {
+// MITZSubscriber interface for creating MITZ subscriptions
+type MITZSubscriber interface {
+	CreateSubscription(ctx context.Context, patientID, providerID string) error
+}
+
+func New(config Config, mitzSubscriber MITZSubscriber) (*Component, error) {
 	baseURL, err := url.Parse(config.FHIRBaseURL)
 	if err != nil {
 		return nil, err
@@ -51,9 +58,10 @@ func New(config Config) (*Component, error) {
 		return nil, fmt.Errorf("audience must be configured when NVI component is enabled")
 	}
 	return &Component{
-		client:        fhirclient.New(baseURL, http.DefaultClient, fhirutil.ClientConfig()),
-		pseudonymizer: &pseudonimization.Component{},
-		audience:      config.Audience,
+		client:         fhirclient.New(baseURL, http.DefaultClient, fhirutil.ClientConfig()),
+		pseudonymizer:  &pseudonimization.Component{},
+		audience:       config.Audience,
+		mitzSubscriber: mitzSubscriber,
 	}, nil
 }
 
@@ -108,6 +116,22 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
+	}
+
+	// Create MITZ subscription if subscriber is configured
+	if c.mitzSubscriber != nil {
+		err = c.createMITZSubscription(httpRequest.Context(), result, requesterURA)
+		if err != nil {
+			// Log error but don't fail the request
+			// The DocumentReference was already created successfully
+			log.Error().Err(err).Msg("Failed to create MITZ subscription")
+			fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
+				Message:   "DocumentReference created but MITZ subscription failed",
+				Cause:     err,
+				IssueType: fhir.IssueTypeTransient,
+			})
+			return
+		}
 	}
 
 	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusCreated, result)
@@ -274,4 +298,25 @@ func hasNextLink(bundle *fhir.Bundle) bool {
 		}
 	}
 	return false
+}
+
+// createMITZSubscription creates a MITZ subscription from the DocumentReference
+func (c Component) createMITZSubscription(ctx context.Context, docRef *fhir.DocumentReference, requesterURA *fhir.Identifier) error {
+	// Extract patient ID from subject
+	if docRef.Subject == nil || docRef.Subject.Identifier == nil {
+		return fmt.Errorf("DocumentReference.Subject.Identifier is required for MITZ subscription")
+	}
+
+	patientID := ""
+	if docRef.Subject.Identifier.Value != nil {
+		patientID = *docRef.Subject.Identifier.Value
+	}
+
+	// Use requester URA as provider ID
+	providerID := ""
+	if requesterURA != nil && requesterURA.Value != nil {
+		providerID = *requesterURA.Value
+	}
+
+	return c.mitzSubscriber.CreateSubscription(ctx, patientID, providerID)
 }
