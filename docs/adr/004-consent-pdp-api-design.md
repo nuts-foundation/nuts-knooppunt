@@ -1,3 +1,5 @@
+# ADR: API Design for a generic patient consent PDP endpoint
+
 The NVI contains information about treatment relationships between patients and healthcare providers.
 This information is considered sensitive and should be handled as regular health data.
 The NVI is a shared service, but operates on the behalf of each individual healthcare organization that uses it for discovering treatment relationships.
@@ -87,9 +89,12 @@ The AuthZEN specification defines a RESTful API for making authorization decisio
 
 The NVI has to provide the folling information to the custodian's PDP in order to check for patient consent:
 
-- Subject: The patient for whom the treatment relationship information is being requested.
-- Practitioner: The identifier of the healthcare practitioner requesting the information.
-- Organization: The identifier and type of the organization requesting the information.
+- Patient: The patient for whom the treatment relationship information is being requested.
+- Practitioner(Optional?): The identifier of the healthcare practitioner requesting the information. This information might not always be available to the NVI.
+- Requestor: The identifier and type of the organization requesting the information.
+- Custodian: The identifier of the responsible custodian organization for the patient information.
+
+The subject of the request is the NVI itself.
 
 Furthermore, the NVI has to specify which records it wants to disclose to the requesting organization.
 
@@ -107,7 +112,10 @@ Based on the AuthZEN specification, the following JSON structure can be used for
     "properties": {
       "patientId": "<pseudonymized-patient-id>",
       "practitionerId": "<identifier-of-requesting-practitioner>",
-      "organization": {
+      "custodian": {
+        "id": "<identifier-of-responsible-custodian-organization>",
+      },
+      "requestor": {
         "id": "<identifier-of-requesting-organization>",
         "type": "<Hospital-code>"
       }
