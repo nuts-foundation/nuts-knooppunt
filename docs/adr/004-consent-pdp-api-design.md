@@ -83,10 +83,75 @@ There is a standardized API for PDP decision requests in development by the Open
 
 The AuthZEN specification defines a RESTful API for making authorization decisions and allows the PEP to send detailed information about the access request to the PDP.
 
-## Consent Decision Request
+### Consent Decision Request
 
 The NVI has to provide the folling information to the custodian's PDP in order to check for patient consent:
 
 - Subject: The patient for whom the treatment relationship information is being requested.
 - Practitioner: The identifier of the healthcare practitioner requesting the information.
 - Organization: The identifier and type of the organization requesting the information.
+
+Furthermore, the NVI has to specify which records it wants to disclose to the requesting organization.
+
+To include multiple records in a single request, we can use the "evaluations" array defined in the AuthZEN specification from section 7.
+
+Since all evaluations should be performed, we assume the default `"evaluations_semantic": "execute_all"` option.
+
+Based on the AuthZEN specification, the following JSON structure can be used for the consent decision request:
+
+```json
+{
+  "subject": {
+    "type": "<urn:oid:system-oid>",
+    "id": "<NVI-ID>",
+    "properties": {
+      "patientId": "<pseudonymized-patient-id>",
+      "practitionerId": "<identifier-of-requesting-practitioner>",
+      "organization": {
+        "id": "<identifier-of-requesting-organization>",
+        "type": "<Hospital-code>"
+      }
+    }
+  },
+  "action": {
+    "name": "disclose"
+  },
+  "evaluations": [
+    {
+      "resource": {
+        "id": "<uuid-of-resource-to-access>",
+        "type": "DocumentReference",
+        "properties": {
+          "category": "mental-health"
+        }
+      }
+    },
+    {
+      "resource": {
+        "id": "<uuid-of-resource-to-access>",
+        "type": "DocumentReference"
+        "properties": {
+          "category": "medication"
+        }
+      }
+    }
+  ]
+}
+```
+
+### Consent Decision Response
+
+The response from the PDP contains the decision for each evaluation in the requested order.
+
+```json
+{
+  "evaluations": [
+    {
+      "decision": false
+    },
+    {
+      "decision": true
+    }
+  ]
+}
+```
