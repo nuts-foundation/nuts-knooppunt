@@ -102,12 +102,13 @@ func createHTTPClient(config Config) (*http.Client, error) {
 			CAFile:   config.TLSCAFile,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create TLS config: %w", err)
-		}
-
-		// Create transport with TLS config
-		client.Transport = &http.Transport{
-			TLSClientConfig: tlsConfig,
+			// Log warning but don't fail - allow running without mTLS
+			log.Warn().Err(err).Str("certFile", config.TLSCertFile).Msg("Failed to load TLS certificate, continuing without mTLS")
+		} else {
+			// Create transport with TLS config
+			client.Transport = &http.Transport{
+				TLSClientConfig: tlsConfig,
+			}
 		}
 	}
 
