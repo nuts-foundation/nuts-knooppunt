@@ -1,0 +1,9 @@
+dependencies:
+- name: fhir
+  repository: file://../fhir
+  version: 0.1.0
+- name: nuts-node-chart
+  repository: oci://ghcr.io/brainhivenl/nuts-node
+  version: 0.0.5-pre
+digest: sha256:4ae4e835c0d8d043f4eee9bbaffd3d5836e4ee3ee7d382b294ba73ba84a82c07
+generated: "2025-09-07T23:50:06.919017+02:00"
