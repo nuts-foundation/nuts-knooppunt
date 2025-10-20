@@ -19,21 +19,19 @@ func TestNew(t *testing.T) {
 			MitzBase:      "http://example.com",
 			GatewaySystem: "urn:oid:2.16.840.1.113883.2.4.6.6.1",
 			SourceSystem:  "urn:oid:2.16.840.1.113883.2.4.6.6.90000017",
-			ProviderType:  "Z3",
 		}
 
-		component, err := New(config)
+		component, err := New(config, nil)
 		require.NoError(t, err)
 		require.NotNil(t, component)
 		assert.Equal(t, "urn:oid:2.16.840.1.113883.2.4.6.6.1", component.gatewaySystem)
 		assert.Equal(t, "urn:oid:2.16.840.1.113883.2.4.6.6.90000017", component.sourceSystem)
-		assert.Equal(t, "Z3", component.providerType)
 	})
 
 	t.Run("missing mitzbase", func(t *testing.T) {
 		config := Config{}
 
-		component, err := New(config)
+		component, err := New(config, nil)
 		require.Error(t, err)
 		assert.Nil(t, component)
 		assert.Contains(t, err.Error(), "mitzbase must be configured")
@@ -44,7 +42,7 @@ func TestNew(t *testing.T) {
 			MitzBase: "://invalid-url",
 		}
 
-		component, err := New(config)
+		component, err := New(config, nil)
 		require.Error(t, err)
 		assert.Nil(t, component)
 		assert.Contains(t, err.Error(), "invalid subscription endpoint")
@@ -53,13 +51,11 @@ func TestNew(t *testing.T) {
 
 func TestCreateSubscription(t *testing.T) {
 	component := &Component{
-		gatewaySystem:     "urn:oid:2.16.840.1.113883.2.4.6.6.1",
-		sourceSystem:      "urn:oid:2.16.840.1.113883.2.4.6.6.90000017",
-		providerType:      "Z3",
-		notifyCallbackUrl: "https://example.com/callback",
+		gatewaySystem: "urn:oid:2.16.840.1.113883.2.4.6.6.1",
+		sourceSystem:  "urn:oid:2.16.840.1.113883.2.4.6.6.90000017",
 	}
 
-	subscription := component.createSubscription("123456789", "01234567")
+	subscription := component.createSubscription("123456789", "01234567", "Z3")
 
 	// Verify basic fields
 	assert.Equal(t, fhir.SubscriptionStatusRequested, subscription.Status)
@@ -68,8 +64,6 @@ func TestCreateSubscription(t *testing.T) {
 
 	// Verify channel
 	assert.Equal(t, fhir.SubscriptionChannelTypeRestHook, subscription.Channel.Type)
-	assert.NotNil(t, subscription.Channel.Endpoint)
-	assert.Equal(t, "https://example.com/callback", *subscription.Channel.Endpoint)
 	assert.NotNil(t, subscription.Channel.Payload)
 	assert.Equal(t, "application/fhir+json", *subscription.Channel.Payload)
 
@@ -99,11 +93,9 @@ func TestCreateSubscription(t *testing.T) {
 }
 
 func TestCreateSubscription_WithoutOptionalFields(t *testing.T) {
-	component := &Component{
-		notifyCallbackUrl: "https://example.com/callback",
-	}
+	component := &Component{}
 
-	subscription := component.createSubscription("123456789", "01234567")
+	subscription := component.createSubscription("123456789", "01234567", "Z3")
 
 	// Should have no extensions when optional fields are missing
 	assert.Len(t, subscription.Extension, 0)
@@ -113,7 +105,7 @@ func TestRegisterHttpHandlers(t *testing.T) {
 	config := Config{
 		MitzBase: "http://example.com",
 	}
-	component, err := New(config)
+	component, err := New(config, nil)
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()

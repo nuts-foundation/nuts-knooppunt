@@ -31,12 +31,10 @@ nvi:
 mitz:
   # MITZ base URL (paths are hardcoded in code)
   mitzbase: "https://tst-api.mijn-mitz.nl/tst-us/mitz"
-  notify_callback_url: "https://platform-md.alpha-06.parsek.net/vitaly-service/mitz/fhir"
   # Gateway system OID (optional)
   gateway_system: "urn:oid:2.16.840.1.113883.2.4.6.6.1"
   # Source system OID (optional)
   source_system: "urn:oid:2.16.840.1.113883.2.4.6.6.90000017"
-  provider_type: "Z3"
   # mTLS client certificate configuration (optional)
   # Option 1: PEM format (separate cert and key files)
   #tls_cert_file: "/path/to/client-cert.pem"

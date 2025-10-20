@@ -22,15 +22,13 @@ import (
 
 // Config holds the configuration for the MITZ component
 type Config struct {
-	MitzBase          string `koanf:"mitzbase"`
-	GatewaySystem     string `koanf:"gateway_system"`
-	SourceSystem      string `koanf:"source_system"`
-	ProviderType      string `koanf:"provider_type"`
-	NotifyCallbackUrl string `koanf:"notify_callback_url"`
-	TLSCertFile       string `koanf:"tls_cert_file"`    // PEM certificate file OR .p12/.pfx file
-	TLSKeyFile        string `koanf:"tls_key_file"`     // PEM key file (not used if TLSCertFile is .p12/.pfx)
-	TLSKeyPassword    string `koanf:"tls_key_password"` // Password for encrypted key or .p12/.pfx file
-	TLSCAFile         string `koanf:"tls_ca_file"`      // CA certificate file to verify MITZ server
+	MitzBase       string `koanf:"mitzbase"`
+	GatewaySystem  string `koanf:"gateway_system"`
+	SourceSystem   string `koanf:"source_system"`
+	TLSCertFile    string `koanf:"tls_cert_file"`    // PEM certificate file OR .p12/.pfx file
+	TLSKeyFile     string `koanf:"tls_key_file"`     // PEM key file (not used if TLSCertFile is .p12/.pfx)
+	TLSKeyPassword string `koanf:"tls_key_password"` // Password for encrypted key or .p12/.pfx file
+	TLSCAFile      string `koanf:"tls_ca_file"`      // CA certificate file to verify MITZ server
 }
 
 func (c Config) Enabled() bool {
@@ -39,6 +37,11 @@ func (c Config) Enabled() bool {
 
 var _ component.Lifecycle = (*Component)(nil)
 
+// EndpointQuerier interface for querying endpoints from mCSD
+type EndpointQuerier interface {
+	QueryEndpointNotifyEndpoint(ctx context.Context) (*fhir.Endpoint, error)
+}
+
 // Component is the MITZ component that handles FHIR consent bundles
 type Component struct {
 	client               fhirclient.Client
@@ -46,8 +49,7 @@ type Component struct {
 	consentCheckEndpoint string
 	gatewaySystem        string
 	sourceSystem         string
-	providerType         string
-	notifyCallbackUrl    string
+	endpointQuerier      EndpointQuerier
 }
 
 const (
@@ -56,7 +58,7 @@ const (
 )
 
 // New creates a new MITZ component
-func New(config Config) (*Component, error) {
+func New(config Config, endpointQuerier EndpointQuerier) (*Component, error) {
 	if config.MitzBase == "" {
 		return nil, fmt.Errorf("mitzbase must be configured when MITZ component is enabled")
 	}
@@ -81,8 +83,7 @@ func New(config Config) (*Component, error) {
 		consentCheckEndpoint: consentCheckEndpoint,
 		gatewaySystem:        config.GatewaySystem,
 		sourceSystem:         config.SourceSystem,
-		providerType:         config.ProviderType,
-		notifyCallbackUrl:    config.NotifyCallbackUrl,
+		endpointQuerier:      endpointQuerier,
 	}, nil
 }
 
@@ -116,7 +117,7 @@ func createHTTPClient(config Config) (*http.Client, error) {
 // RegisterHttpHandlers registers the HTTP handlers for the MITZ component
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.Handle("POST /mitz/notify", http.HandlerFunc(c.handleNotify))
-	internalMux.Handle("POST /mitz/subscribe", http.HandlerFunc(c.handleSubscribe))
+	internalMux.Handle("POST /mitz/Subscription", http.HandlerFunc(c.handleSubscribe))
 	internalMux.Handle("GET /mitz/Consent", http.HandlerFunc(c.handleConsentCheck))
 }
 
@@ -142,9 +143,9 @@ func (c *Component) handleNotify(httpResponse http.ResponseWriter, httpRequest *
 }
 
 // CreateSubscription creates a MITZ subscription (implements nvi.MITZSubscriber interface)
-func (c *Component) CreateSubscription(ctx context.Context, patientID, providerID string) error {
+func (c *Component) CreateSubscription(ctx context.Context, patientID, providerID, providerType string) error {
 	// Create FHIR Subscription
-	subscription := c.createSubscription(patientID, providerID)
+	subscription := c.createSubscription(patientID, providerID, providerType)
 
 	// Send subscription to configured FHIR endpoint
 	var created fhir.Subscription
@@ -287,6 +288,94 @@ func (c *Component) handleConsentCheck(httpResponse http.ResponseWriter, httpReq
 	httpResponse.Write(responseBody)
 }
 
+// validateMITZSubscription validates that a Subscription resource meets MITZ requirements
+func validateMITZSubscription(subscription fhir.Subscription) *fhirapi.Error {
+	// Validate status
+	if subscription.Status != fhir.SubscriptionStatusRequested {
+		return &fhirapi.Error{
+			Message:   fmt.Sprintf("Subscription.status must be 'requested', got '%s'", subscription.Status),
+			IssueType: fhir.IssueTypeValue,
+		}
+	}
+
+	// Validate reason
+	if subscription.Reason != "OTV" {
+		return &fhirapi.Error{
+			Message:   fmt.Sprintf("Subscription.reason must be 'OTV', got '%s'", subscription.Reason),
+			IssueType: fhir.IssueTypeValue,
+		}
+	}
+
+	// Validate criteria format
+	if !strings.HasPrefix(subscription.Criteria, "Consent?_query=otv&") {
+		return &fhirapi.Error{
+			Message:   "Subscription.criteria must start with 'Consent?_query=otv&'",
+			IssueType: fhir.IssueTypeValue,
+		}
+	}
+
+	// Validate criteria contains required parameters
+	if !strings.Contains(subscription.Criteria, "patientid=") {
+		return &fhirapi.Error{
+			Message:   "Subscription.criteria must contain 'patientid' parameter",
+			IssueType: fhir.IssueTypeValue,
+		}
+	}
+	if !strings.Contains(subscription.Criteria, "providerid=") {
+		return &fhirapi.Error{
+			Message:   "Subscription.criteria must contain 'providerid' parameter",
+			IssueType: fhir.IssueTypeValue,
+		}
+	}
+	if !strings.Contains(subscription.Criteria, "providertype=") {
+		return &fhirapi.Error{
+			Message:   "Subscription.criteria must contain 'providertype' parameter",
+			IssueType: fhir.IssueTypeValue,
+		}
+	}
+
+	// Validate channel
+	if subscription.Channel.Type != fhir.SubscriptionChannelTypeRestHook {
+		return &fhirapi.Error{
+			Message:   fmt.Sprintf("Subscription.channel.type must be 'rest-hook', got '%s'", subscription.Channel.Type),
+			IssueType: fhir.IssueTypeValue,
+		}
+	}
+
+	for _, ext := range subscription.Extension {
+		// Only allow these extensions
+		if ext.Url != "http://fhir.nl/StructureDefinition/Patient.birthDate" &&
+			ext.Url != "http://fhir.nl/StructureDefinition/GatewaySystem" &&
+			ext.Url != "http://fhir.nl/StructureDefinition/SourceSystem" {
+			return &fhirapi.Error{
+				Message:   fmt.Sprintf("Unsupported extension URL: %s", ext.Url),
+				IssueType: fhir.IssueTypeNotSupported,
+			}
+		}
+	}
+
+	return nil
+}
+
+// addConfigExtensions adds GatewaySystem and SourceSystem extensions from config to the subscription
+func (c *Component) addConfigExtensions(subscription *fhir.Subscription) {
+	// Gateway system extension
+	if c.gatewaySystem != "" {
+		subscription.Extension = append(subscription.Extension, fhir.Extension{
+			Url:      "http://fhir.nl/StructureDefinition/GatewaySystem",
+			ValueOid: to.Ptr(c.gatewaySystem),
+		})
+	}
+
+	// Source system extension
+	if c.sourceSystem != "" {
+		subscription.Extension = append(subscription.Extension, fhir.Extension{
+			Url:      "http://fhir.nl/StructureDefinition/SourceSystem",
+			ValueOid: to.Ptr(c.sourceSystem),
+		})
+	}
+}
+
 // handleSubscribe handles subscription creation requests where payload is already Mitz compliant Consent
 func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpRequest *http.Request) {
 	fhirRequest, err := fhirapi.ParseRequest[fhir.Subscription](httpRequest)
@@ -295,6 +384,45 @@ func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpReques
 		return
 	}
 	resource := fhirRequest.Resource
+
+	// Validate the subscription resource
+	if err := validateMITZSubscription(resource); err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	// Add gateway and source system extensions from config
+	c.addConfigExtensions(&resource)
+
+	// Set default payload if not provided
+	if resource.Channel.Payload == nil || *resource.Channel.Payload == "" {
+		resource.Channel.Payload = to.Ptr("application/fhir+json")
+		log.Ctx(httpRequest.Context()).Debug().Msg("Set default channel payload to application/fhir+json")
+	}
+
+	// Query for consent notify endpoint and set it in the subscription if not already provided
+	if resource.Channel.Endpoint == nil || *resource.Channel.Endpoint == "" {
+		if c.endpointQuerier != nil {
+			endpoint, err := c.endpointQuerier.QueryEndpointNotifyEndpoint(httpRequest.Context())
+			if err != nil {
+				log.Ctx(httpRequest.Context()).Error().Err(err).Msg("Failed to query consent notify endpoint")
+				fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
+					Message:   "Failed to query consent notify endpoint",
+					Cause:     err,
+					IssueType: fhir.IssueTypeTransient,
+				})
+				return
+			}
+			if endpoint != nil && endpoint.Address != "" {
+				resource.Channel.Endpoint = to.Ptr(endpoint.Address)
+				log.Ctx(httpRequest.Context()).Debug().Str("endpoint", endpoint.Address).Msg("Set subscription channel endpoint from mCSD")
+			} else {
+				log.Ctx(httpRequest.Context()).Warn().Msg("No consent notify endpoint found in mCSD")
+			}
+		}
+	} else {
+		log.Ctx(httpRequest.Context()).Debug().Str("endpoint", *resource.Channel.Endpoint).Msg("Using channel endpoint from incoming subscription")
+	}
 
 	// Send subscription to configured FHIR endpoint
 	// The MITZ endpoint should respond with 202 Accepted
@@ -364,16 +492,15 @@ func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpReques
 }
 
 // createSubscription creates a FHIR Subscription from the subscribe request
-func (c *Component) createSubscription(patientId, providerId string) fhir.Subscription {
+func (c *Component) createSubscription(patientId, providerId, providerType string) fhir.Subscription {
 	subscription := fhir.Subscription{
 		Status: fhir.SubscriptionStatusRequested,
 		Reason: "OTV",
 		Criteria: fmt.Sprintf("Consent?_query=otv&patientid=%s&providerid=%s&providertype=%s",
-			patientId, providerId, c.providerType),
+			patientId, providerId, providerType),
 		Channel: fhir.SubscriptionChannel{
-			Type:     fhir.SubscriptionChannelTypeRestHook,
-			Endpoint: to.Ptr(c.notifyCallbackUrl),
-			Payload:  to.Ptr("application/fhir+json"),
+			Type:    fhir.SubscriptionChannelTypeRestHook,
+			Payload: to.Ptr("application/fhir+json"),
 		},
 	}
 

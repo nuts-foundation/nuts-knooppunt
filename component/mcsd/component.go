@@ -403,3 +403,42 @@ func extractResourceIDFromURL(entry fhir.BundleEntry) string {
 
 	return ""
 }
+
+// QueryEndpointNotifyEndpoint queries all administration directories for an Endpoint with the specified payload-type code
+// Returns the first matching endpoint found, or nil if no match is found
+func (c *Component) QueryEndpointNotifyEndpoint(ctx context.Context) (*fhir.Endpoint, error) {
+	for _, adminDirectory := range c.administrationDirectories {
+		adminDirURL, err := url.Parse(adminDirectory.fhirBaseURL)
+		if err != nil {
+			log.Ctx(ctx).Warn().Err(err).Str("fhir_server", adminDirectory.fhirBaseURL).Msg("Failed to parse admin directory URL")
+			continue
+		}
+
+		client := c.fhirClientFn(adminDirURL)
+
+		// Search for Endpoint resources with specific payload-type
+		searchParams := url.Values{
+			"payload-type": []string{coding.MCSDPayloadTypeSystem + "|" + coding.MCSDPayloadTypeConsentNotify},
+			"_count":       []string{"1"}, // We only need the first match
+		}
+
+		var searchSet fhir.Bundle
+		err = client.SearchWithContext(ctx, "Endpoint", searchParams, &searchSet)
+		if err != nil {
+			log.Ctx(ctx).Warn().Err(err).Str("fhir_server", adminDirectory.fhirBaseURL).Msg("Failed to search for Endpoints")
+			continue
+		}
+
+		// Return the first matching endpoint
+		if len(searchSet.Entry) > 0 && searchSet.Entry[0].Resource != nil {
+			var endpoint fhir.Endpoint
+			if err := json.Unmarshal(searchSet.Entry[0].Resource, &endpoint); err != nil {
+				log.Ctx(ctx).Warn().Err(err).Str("fhir_server", adminDirectory.fhirBaseURL).Msg("Failed to unmarshal Endpoint resource")
+				continue
+			}
+			return &endpoint, nil
+		}
+	}
+
+	return nil, nil
+}
