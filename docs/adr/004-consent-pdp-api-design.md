@@ -151,6 +151,8 @@ Based on the AuthZEN specification, the following JSON structure can be used for
 
 The response from the PDP contains the decision for each evaluation in the requested order.
 
+If the PDP does not have the ability to differentiate between multiple evaluations, (e.g. only using the closed authorization query from Mitz) it can return the same decision for all evaluations.
+
 ```json
 {
   "evaluations": [
