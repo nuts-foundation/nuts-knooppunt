@@ -154,31 +154,14 @@ public class PseudonymInterceptor {
         if (!(newResource instanceof final DocumentReference documentReference)) {
             return;
         }
-        log.trace("Intercepting DocumentReference resource creation");
+
+        validateUraHeaderPresence(servletRequestDetails);
+
+        // Validate custodian matches X-Requester-URA header
+        validateCustodian(documentReference, servletRequestDetails);
+
         modifyDocumentFromTokenToPseudonym(documentReference);
         log.info("{}", FhirContext.forR4Cached().newJsonParser().encodeResourceToString(documentReference));
-    }
-
-    /**
-     * If it is a POST (Resource has been created), but there is no REQUESTER_URA_HEADER present, we must prevent
-     * presentation of the created Resource as a response. In this scenario, this hook replaces actual DocumentReference
-     * response with an OperationOutcome containing the warning and description.
-     * <p>
-     * This can not be done in @Hook(Pointcut.STORAGE_PRESHOW_RESOURCES) as you can not modify response Resources
-     * in that flow.
-     */
-    @Hook(Pointcut.SERVER_OUTGOING_RESPONSE)
-    public void handleServerResponse(final ResponseDetails responseDetails,
-                                     final ServletRequestDetails servletRequestDetails) {
-        if (!isEnabled(servletRequestDetails)) {
-            return;
-        }
-        if (servletRequestDetails.getRequestType() != RequestTypeEnum.POST
-                || !StringUtils.isEmpty(servletRequestDetails.getHeader(REQUESTER_URA_HEADER))) {
-            return;
-        }
-        responseDetails.setResponseResource(
-                createWarningOutcome(responseDetails.getResponseResource().getIdElement().getValue()));
     }
 
 
@@ -194,22 +177,25 @@ public class PseudonymInterceptor {
             return;
         }
 
-        final String audience = servletRequestDetails.getHeader(REQUESTER_URA_HEADER);
-
-        if (StringUtils.isEmpty(audience) && servletRequestDetails.getRequestType() == RequestTypeEnum.POST) {
-            return;
-        } else if (StringUtils.isEmpty(audience)) {
-            throw new IllegalArgumentException(
-                    String.format("Resource can not be retrieved due to the fact there is no %s header present.",
-                                  REQUESTER_URA_HEADER));
-        }
+        validateUraHeaderPresence(servletRequestDetails);
 
         final List<IBaseResource> allResources = requestDetails.getAllResources();
         allResources.stream()
                 .filter(aResource -> aResource instanceof DocumentReference)
                 .forEach(documentReference -> modifyDocumentFromPseudonymToToken((DocumentReference) documentReference,
-                                                                                 audience));
+                                                                                 getUraHeader(servletRequestDetails)));
+    }
 
+    private void validateUraHeaderPresence(final ServletRequestDetails servletRequestDetails) {
+        final String audience = getUraHeader(servletRequestDetails);
+        if (StringUtils.isBlank(audience)) {
+            throw new IllegalArgumentException(
+                    String.format("'%s' header is mandatory.", REQUESTER_URA_HEADER));
+        }
+    }
+
+    private String getUraHeader(final ServletRequestDetails servletRequestDetails) {
+        return servletRequestDetails.getHeader(REQUESTER_URA_HEADER);
     }
 
     private OperationOutcome createWarningOutcome(final String createdResourceId) {
@@ -271,6 +257,64 @@ public class PseudonymInterceptor {
         final String token = bsnUtil.pseudonymToTransportToken(pseudonym, audience);
         log.trace("Converted pseudonym to token: {}", token);
         return token;
+    }
+
+    /**
+     * Validates that DocumentReference.custodian matches the X-Requester-URA header.
+     * The custodian should be a reference to an Organization with an identifier containing the URA.
+     *
+     * @param documentReference the DocumentReference to validate
+     * @param servletRequestDetails the request details containing headers
+     * @throws IllegalArgumentException if custodian doesn't match the X-Requester-URA header
+     */
+    private void validateCustodian(final DocumentReference documentReference,
+                                   final ServletRequestDetails servletRequestDetails) {
+        final String requesterURA = servletRequestDetails.getHeader(REQUESTER_URA_HEADER);
+
+        // If no header is present, we can't validate, let it pass
+        if (StringUtils.isEmpty(requesterURA)) {
+            return;
+        }
+
+        final Reference custodian = documentReference.getCustodian();
+
+        if (custodian.getIdentifier().isEmpty() && !custodian.isEmpty()) {
+            // means that it's actually a reference to the Organization
+            // meaning we'd ideally then need to fetch it and check of Organization.identifier matches
+            // our header, but we won't do that... so just let it pass in this case
+            return;
+        }
+
+        // Extract URA from custodian
+        final String custodianURA = extractURAFromCustodian(custodian);
+
+        // Validate that custodian URA matches the requester URA
+        if (!requesterURA.equals(custodianURA)) {
+            throw new IllegalArgumentException(
+                    String.format("DocumentReference.custodian URA (%s) does not match %s header (%s)",
+                                  custodianURA, REQUESTER_URA_HEADER, requesterURA));
+        }
+
+        log.debug("Custodian URA validation successful: {}", custodianURA);
+    }
+
+    /**
+     * Extracts the URA value from a custodian Reference.
+     * Expects the custodian to contain an identifier with the URA naming system.
+     *
+     * @param custodian the custodian Reference
+     * @return the URA value, or null if not found
+     */
+    private String extractURAFromCustodian(final Reference custodian) {
+        final Identifier identifier = custodian.getIdentifier();
+        if (identifier == null) {
+            return null;
+        }
+
+        if ("http://fhir.nl/fhir/NamingSystem/ura".equals(identifier.getSystem())) {
+            return identifier.getValue();
+        }
+        return null;
     }
 }
 
