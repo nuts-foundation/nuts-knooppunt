@@ -38,20 +38,20 @@
             <div class="mb-3">
                 <fieldset>
                     <legend>Contact details</legend>
-                    <label for="code-select" class="form-label">Choose a method:</label>
                     <div id="telecom-options" class="options">
+                        <label for="code-select" class="form-label">Choose a method:</label>
                         <select name="telecom[0][System]" id="telecom[0][System]" class="form-select" required>
                             <option value="">--Please choose an option--</option>
                             {{ range .TelecomCodes }}
                             <option value="{{ .Code }}">{{ .Display }}</option>
                             {{ end }}
                         </select>
+                        <label for="telecom[0][Value]" class="form-label">Value:</label>
+                        <input id="telecom[0][Value]" type="text" name="telecom[0][Value]" class="form-control" placeholder="Enter here" required>
                     </div>
-                    <label for="telecom[0][Value]" class="form-label">Value:</label>
-                    <input id="telecom[0][Value]" type="text" name="telecom[0][Value]" class="form-control" placeholder="Enter here" required>
                 </fieldset>
                 <div>
-                    <button onclick='addOption("code-select");' type="button" class="btn btn-secondary btn-sm">
+                    <button onclick='addOption("telecom-options");' type="button" class="btn btn-secondary btn-sm">
                         Add code
                     </button>
                 </div>
