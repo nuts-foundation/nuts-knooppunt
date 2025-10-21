@@ -147,7 +147,7 @@ workspace "Knooppunt" "Description" {
             include *
         }
 
-        # GF Adressing
+        # GF Addressing
         container xis "GF_Addressing_ContainerDiagram" {
             title "XIS Perspective: containers, systems and databases involved in GF Addressing"
             include "element.tag==addressing || relationship.tag==addressing"
