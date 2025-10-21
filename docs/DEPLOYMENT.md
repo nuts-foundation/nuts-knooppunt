@@ -6,7 +6,8 @@ The diagrams on this page were created using [Structurizr](https://structurizr.c
 
 ## Overview
 
-![structurizr-GF_SystemContext.svg](images/structurizr-GF_SystemContext.svg)![structurizr-A1_SystemContext.png](images/structurizr-A1_SystemContext.png)
+![structurizr-GF_SystemContext.svg](images/structurizr-GF_SystemContext.svg)
+![structurizr-A1_SystemContext.png](images/structurizr-A1_SystemContext.png)
 
 ### GF Addressing
 ![structurizr-GF_Addressing_ContainerDiagram.svg](images/structurizr-GF_Addressing_ContainerDiagram.svg)
