@@ -42,7 +42,7 @@ The Knooppunt sits on the edge of the vendor's network, handling all data exchan
 └─────────────────┘       └────────────┘       └──────────────┘
 ```
 
-Data exchanges are routed through the Knooppunt, theoretically offloading all "complicated" concerns from the vendor.
+All inbound data requests are routed through the Knooppunt, theoretically offloading all "complicated" concerns from the vendor.
 
 - Advantages:
   - Simpler deployment, since it only requires the Knooppunt to be deployed.
