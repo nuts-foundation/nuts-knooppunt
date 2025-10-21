@@ -45,7 +45,7 @@ func TestNew(t *testing.T) {
 		component, err := New(config, nil)
 		require.Error(t, err)
 		assert.Nil(t, component)
-		assert.Contains(t, err.Error(), "invalid subscription endpoint")
+		assert.Contains(t, err.Error(), "invalid mitzbase URL")
 	})
 }
 

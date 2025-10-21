@@ -30,7 +30,7 @@ nvi:
 # MITZ Connector configuration
 mitz:
   # MITZ base URL (paths are hardcoded in code)
-  mitzbase: "https://tst-api.mijn-mitz.nl/tst-us/mitz"
+  mitzbase: "http://localhost:8087/tst-us/mitz"
   # Gateway system OID (optional)
   gateway_system: "urn:oid:2.16.840.1.113883.2.4.6.6.1"
   # Source system OID (optional)
@@ -38,11 +38,11 @@ mitz:
   # mTLS client certificate configuration (optional)
   # Option 1: PEM format (separate cert and key files)
   #tls_cert_file: "/path/to/client-cert.pem"
-  #tls_key_file: "/path/to/client-key.pem" # jqL7CKahaNA2LlRceLpQ
+  #tls_key_file: "/path/to/client-key.pem"
   # Option 2: PKCS#12 format (.p12 or .pfx file with cert + key)
-  tls_cert_file: "/home/gandrejc/tmp/mitz/vitaly-acc-1.oehp.nl.p12"
+  tls_cert_file: "/path/to/cert-file"
   # tls_key_file is not needed for .p12/.pfx files
   # Password for encrypted private key or .p12/.pfx file (optional)
-  tls_key_password: "jqL7CKahaNA2LlRceLpQ"
+  tls_key_password: "key password"
   # CA certificate to trust MITZ server (if not in system trust store)
-  tls_ca_file: "/home/gandrejc/tmp/mitz/tst-api.mijn-mitz.nl"
+  tls_ca_file: "/path/to/ca-file"

@@ -64,10 +64,11 @@ func New(config Config, endpointQuerier EndpointQuerier) (*Component, error) {
 	}
 
 	// Parse base URL and construct subscription endpoint
-	subscriptionURL, err := url.Parse(config.MitzBase + subscriptionPath)
+	baseURL, err := url.Parse(config.MitzBase)
 	if err != nil {
-		return nil, fmt.Errorf("invalid subscription endpoint: %w", err)
+		return nil, fmt.Errorf("invalid mitzbase URL: %w", err)
 	}
+	subscriptionURL := baseURL.JoinPath(subscriptionPath)
 
 	// Create HTTP client with optional mTLS configuration
 	httpClient, err := createHTTPClient(config)
@@ -102,14 +103,17 @@ func createHTTPClient(config Config) (*http.Client, error) {
 			CAFile:   config.TLSCAFile,
 		})
 		if err != nil {
-			// Log warning but don't fail - allow running without mTLS
-			log.Warn().Err(err).Str("certFile", config.TLSCertFile).Msg("Failed to load TLS certificate, continuing without mTLS")
-		} else {
-			// Create transport with TLS config
-			client.Transport = &http.Transport{
-				TLSClientConfig: tlsConfig,
-			}
+			// Fail early when TLS is explicitly configured but setup fails
+			return nil, fmt.Errorf("TLS is configured but failed to load: %w", err)
 		}
+
+		// Create transport with TLS config
+		client.Transport = &http.Transport{
+			TLSClientConfig: tlsConfig,
+		}
+		log.Info().Str("certFile", config.TLSCertFile).Msg("Successfully configured mTLS for MITZ connection")
+	} else {
+		log.Info().Msg("No TLS certificate configured, using plain HTTP client for MITZ connection")
 	}
 
 	return client, nil
@@ -170,8 +174,8 @@ func (c *Component) CreateSubscription(ctx context.Context, patientID, providerI
 				return fmt.Errorf("failed to create subscription at MITZ endpoint: %w", err)
 			}
 		}
-		// 202 Accepted is OK (MITZ responds with 202 instead of 201)
 	}
+	// 202 Accepted is OK (MITZ responds with 202 instead of 201)
 
 	location := headers.Header.Get("Location")
 
