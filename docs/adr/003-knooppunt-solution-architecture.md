@@ -25,7 +25,7 @@ We want a solution that is easy to integrate in varying (existing) environments,
 ## Considered Options
 This section describes considered architecture options.
 
-In any of the options, there's a proxy (e.g. NGINX, HAProxy, Traefik) in front of the Knooppunt and/or EHR FHIR API.
+In all of the options, there's a proxy (e.g. NGINX, HAProxy, Traefik) in front of the Knooppunt and/or EHR FHIR API.
 This is a typical reverse proxy, handling TLS termination, routing, load balancing, caching, etc.
 
 ### Monolithic architecture
