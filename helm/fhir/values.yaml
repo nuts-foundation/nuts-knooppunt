@@ -126,6 +126,10 @@ tolerations: []
 
 affinity: {}
 
+# Postgres configuration section. Set enabled to true to use Postgres.
+postgres:
+  enabled: false
+
 # Gateway API configuration
 gateway:
   enabled: false
