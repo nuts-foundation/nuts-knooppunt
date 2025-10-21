@@ -7,5 +7,3 @@ data:
   {{- if .Values.configExtra }}
   {{- toYaml .Values.configExtra | nindent 2 }}
   {{- end }}
-
-
