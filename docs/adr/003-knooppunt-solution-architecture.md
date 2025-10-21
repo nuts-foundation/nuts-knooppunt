@@ -91,13 +91,13 @@ The PEP will typically interact with the Knooppunt using OAuth2 Token Introspect
 The Knooppunt project can provide a (reference) PEP implementation based on proven, open source software technology (e.g. NGINX or HAProxy), or even an instance of the Knooppunt itself with reduced functionality.
 
 - Advantages:
-  - Smaller attack surface on the Knooppunt, since it doesn't handle data exchanges directly.
-  - Easier to integrate with existing security infrastructure (e.g. existing reverse proxies that could act as PEP).
-  - More flexibility for vendors to choose or reuse a Policy Enforcement Point that fits their needs.
-  - Easier to align with vendor compliancy requirements.
+  - Small attack surface, since it only handles traffic sent to it by the trusted PEP.
+  - Allows for reuse of existing security infrastructure (e.g. existing reverse proxies).
+  - Allows for reuse of an existing Policy Enforcement Point.
+  - Allows vendor to implement specific compliance requirements by use of other components.
 - Disadvantages:
-  - More complex deployment, since it requires an additional component (the PEP).
-  - More complex configuration, since the proxy needs to be set up correctly to work with the Knooppunt.
+  - Complex deployment, since it requires an additional component (the PEP).
+  - Complex configuration, since the PEP needs to be set up correctly to work with the Knooppunt.
   - Potentially more points of failure, since there are more components involved.
 
 ## Decision Outcome
