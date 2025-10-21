@@ -150,6 +150,9 @@ fhir:
     enabled: true
   gateway:
     enabled: false
+  database:
+    storage:
+      size: 5Gi
 
 # Nuts Knooppunt configuration
 config:
@@ -165,3 +168,6 @@ nuts:
   data:
     persistedVolumeClaim:
       enabled: true
+  database:
+    storage:
+      size: 5Gi

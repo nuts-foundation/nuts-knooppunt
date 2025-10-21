@@ -129,13 +129,11 @@ affinity: {}
 # Postgres configuration section. Set enabled to true to use Postgres.
 postgres:
   enabled: false
+  storage:
+    size: 1G
 
 # Gateway API configuration
 gateway:
   enabled: false
   name: ""
   hosts: []
-
-# PostgreSQL configuration via CloudNativePG
-postgres:
-  enabled: true
