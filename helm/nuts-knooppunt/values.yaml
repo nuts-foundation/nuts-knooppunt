@@ -11,7 +11,7 @@ image:
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: ""
+  tag: "0.1.2"
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -154,17 +154,19 @@ fhir:
     storage:
       size: 5Gi
 
-# Nuts Knooppunt configuration
-config:
-  nuts:
-    enabled: false
-
-# Nuts dependency configuration
+# NUTS Node configuration
+# Set enabled: true to enable NUTS node deployment
 nuts:
-  enabled: true
+  enabled: false
   fullnameOverride: nuts
   nuts:
-    config: {}
+    config:
+      url: https://nuts.example.com  # Public URL of the NUTS node
+      crypto:
+        storage: fs  # Use filesystem storage for crypto keys (alternatives: vaultkv for Vault)
+      storage:
+        sql:
+          connection: postgres://app:rB7rvlS93GjhCa3UfFTf1Q01vyVWdpXL2Kn8ZPfDarUotsItohQvo2PULzNzXuZF@my-nuts-knooppunt-nuts-db-rw:5432/app?sslmode=disable
   data:
     persistedVolumeClaim:
       enabled: true
