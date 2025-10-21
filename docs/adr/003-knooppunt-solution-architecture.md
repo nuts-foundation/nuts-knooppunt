@@ -45,13 +45,13 @@ The Knooppunt sits on the edge of the vendor's network, handling all data exchan
 All inbound data requests are routed through the Knooppunt, theoretically offloading all "complicated" concerns from the vendor.
 
 - Advantages:
-  - Simpler deployment, since it only requires the Knooppunt to be deployed.
-  - Easier to configure, since all configuration is centralized in the Knooppunt.
-  - Easier to reason about, since all data exchanges go through a single component.
+  - Simple deployment, since it only requires the Knooppunt to be deployed.
+  - Easy to configure, since all configuration is centralized in the Knooppunt.
+  - Easy to reason about, since all data exchanges go through a single component.
 - Disadvantages:
-  - Large attack surface on the Knooppunt, since it handles all data exchanges.
+  - Large attack surface on the Knooppunt, since it handles all inbound requests.
     Makes it harder to use security measures vendors already have in place, especially for resource transformation and filtering.
-  - Might not actually make things easier for vendors, if they want to implement requirements not supported by the Knooppunt (e.g. auditing, data minimization)
+  - Less flexible when the vendor needs additional concerns not supported by the Knooppunt (e.g. auditing, data minimization)
 
 ### Nuts Reference Solution Architecture
 
