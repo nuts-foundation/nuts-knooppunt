@@ -63,7 +63,7 @@ This architecture (following Oasis Service Oriented Architecture), separates the
 
 Note: Oasis specifies more roles (PIP, PAP), but those are not relevant for this ADR.
 
-The Knooppunt sits as internal service inside the vendor's network. It's only supportive for data exchanges. It acts as:
+The Knooppunt sits as service inside the vendor's network, supportive for data exchanges through its PDP role. It acts as:
 - OAuth2 Authorization Server
 - Policy Decision Point
 
