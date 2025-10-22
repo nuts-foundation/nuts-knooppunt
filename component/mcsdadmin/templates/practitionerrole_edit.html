@@ -8,7 +8,8 @@
             {{ if .OrgsExist }}
             <div class="mb-3">
                 <label for="uzi-number" class="form-label">UZI-number:</label>
-                <input id="uzi-number" type="text" name="uzi-number" class="form-control" placeholder="Enter code here" required>
+                <input id="uzi-number" type="text" name="uzi-number" class="form-control" placeholder="Enter code here"
+                       required>
             </div>
             <div class="mb-3">
                 <label for="organization-id" class="form-label">Part of Organization:</label>
@@ -36,23 +37,26 @@
                 </div>
             </div>
             <div class="mb-3">
-                <fieldset>
-                    <legend>Contact details</legend>
-                    <div id="telecom-options" class="options">
-                        <label for="code-select" class="form-label">Choose a method:</label>
-                        <select name="telecom[0][System]" id="telecom[0][System]" class="form-select" required>
-                            <option value="">--Please choose an option--</option>
-                            {{ range .TelecomCodes }}
-                            <option value="{{ .Code }}">{{ .Display }}</option>
-                            {{ end }}
-                        </select>
-                        <label for="telecom[0][Value]" class="form-label">Value:</label>
-                        <input id="telecom[0][Value]" type="text" name="telecom[0][Value]" class="form-control" placeholder="Enter here" required>
-                    </div>
-                </fieldset>
+                <div>
+                    <fieldset id="telecom-options">
+                        <legend>Contact details</legend>
+                        <div class="options">
+                            <label class="form-label">Choose a method:</label>
+                            <select name="telecom[0][System]" id="telecom[0][System]" class="form-select" required>
+                                <option value="">--Please choose an option--</option>
+                                {{ range .TelecomCodes }}
+                                <option value="{{ .Code }}">{{ .Display }}</option>
+                                {{ end }}
+                            </select>
+                            <label class="form-label">Value:</label>
+                            <input id="telecom[0][Value]" type="text" name="telecom[0][Value]" class="form-control"
+                                   placeholder="Enter here" required>
+                        </div>
+                    </fieldset>
+                </div>
                 <div>
                     <button onclick='addOption("telecom-options");' type="button" class="btn btn-secondary btn-sm">
-                        Add code
+                        Add contact details
                     </button>
                 </div>
             </div>

@@ -1,16 +1,25 @@
 function addOption(elementId) {
     let option = document.getElementById(elementId);
     let newOption = option.cloneNode(true);
-    let complexOption = option.tagName === "DIV"
+    
+    let complexOption = option.tagName === "DIV" || option.tagName === "FIELDSET";
     
     if (complexOption) {
         // Update the names of the child nodes in case of a complex option
-        let childNodes = Array.from(newOption.children)
+        let childNodes = Array.from(newOption.querySelectorAll("*"));
         childNodes.forEach(child => {
-            let name = child.name
-            child.name = incrementIndex(name)
-            
+            let name = child.name;
+            let incrName = incrementIndex(name);
+            child.name = incrName
+            child.id = incrName
+            console.log("name: ", name, "replaced with", child.name);
         })
+        
+        // Move the ID over to the new node so that it is just for the next increment
+        newOption.id = option.id
+        option.removeAttribute('id')
+        
+        option.parentElement.appendChild(newOption);
     } else {
         // Just copy the option in case of a simple option
         newOption.id = null;
@@ -21,12 +30,21 @@ function addOption(elementId) {
 }
 
 const indexRe = /.+\[(\d+)\].+/;
+
 function incrementIndex (name) {
     if (typeof name === "string") {
-        console.log(name)
-        console.log(name.match(re))
+        let match = name.match(indexRe)
+        if (match.length > 1) {
+            let target = `[${match[1]}]`
+            let replacementInt = parseInt(match[1]) +1
+            let replacement = `[${replacementInt}]`
+            return name.replace(target, replacement)
+        } else {
+            console.warn(`unknow name format for complex option: ${name}`)
+            return name;
+        }
     } else {
-        return name
+        return name;
     }
 } 
 
@@ -40,7 +58,7 @@ function removeOption(elementId) {
 
 function dismissAlert(elementId) {
     let elm = document.getElementById(elementId);
-    elm.hidden = true
+    elm.hidden = true;
 }
 
 window.onload = function(){
