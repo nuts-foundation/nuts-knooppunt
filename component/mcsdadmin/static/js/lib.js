@@ -12,7 +12,6 @@ function addOption(elementId) {
             let incrName = incrementIndex(name);
             child.name = incrName
             child.id = incrName
-            console.log("name: ", name, "replaced with", child.name);
         })
         
         // Move the ID over to the new node so that it is just for the next increment
