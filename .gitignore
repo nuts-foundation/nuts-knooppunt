@@ -6,3 +6,6 @@ nuts-knooppunt
 
 # Runtime files
 data
+
+# MacOS
+.DS_Store
