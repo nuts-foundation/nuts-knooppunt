@@ -105,10 +105,10 @@ func listServices(w http.ResponseWriter, _ *http.Request) {
 	renderList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, tmpls.MakeServiceListXsProps)
 }
 
-func newService(w http.ResponseWriter, _ *http.Request) {
+func newService(w http.ResponseWriter, r *http.Request) {
 	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not load organizations", err)
 		return
 	}
 
@@ -125,11 +125,9 @@ func newService(w http.ResponseWriter, _ *http.Request) {
 }
 
 func newServicePost(w http.ResponseWriter, r *http.Request) {
-	log.Debug().Msg("New post for HealthcareService resource")
-
 	err := r.ParseForm()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to parse form input")
+		badRequest(w, r, "invalid form input", err)
 		return
 	}
 
@@ -159,7 +157,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	var providedByOrg fhir.Organization
 	err = client.Read(reference, &providedByOrg)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to find referred organisation")
+		badRequest(w, r, "failed to find referred organisation", err)
 		return
 	}
 	service.ProvidedBy.Display = providedByOrg.Name
@@ -167,7 +165,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	var resSer fhir.HealthcareService
 	err = client.Create(service, &resSer)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not create FHIR resource", err)
 		return
 	}
 
@@ -181,10 +179,10 @@ func listOrganizations(w http.ResponseWriter, _ *http.Request) {
 	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
 }
 
-func newOrganization(w http.ResponseWriter, _ *http.Request) {
+func newOrganization(w http.ResponseWriter, r *http.Request) {
 	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not load organizations", err)
 		return
 	}
 	orgsExists := len(organizations) > 0
@@ -209,7 +207,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 
 	err := r.ParseForm()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to parse form input")
+		badRequest(w, r, "invalid form input", err)
 		return
 	}
 
@@ -222,7 +220,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	org.Name = &name
 	uraString := r.PostForm.Get("identifier")
 	if uraString == "" {
-		http.Error(w, "Bad request: missing URA identifier", http.StatusBadRequest)
+		badRequest(w, r, "missing URA identifier")
 		return
 	}
 	org.Identifier = []fhir.Identifier{
@@ -249,7 +247,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 		var parentOrg fhir.Organization
 		err = client.Read(reference, &parentOrg)
 		if err != nil {
-			http.Error(w, "internal error: could not find organization", http.StatusInternalServerError)
+			internalError(w, r, "could not find organization", err)
 			return
 		}
 		org.PartOf.Display = parentOrg.Name
@@ -258,7 +256,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	var resOrg fhir.Organization
 	err = client.Create(org, &resOrg)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not create FHIR resource", err)
 		return
 	}
 
@@ -272,7 +270,7 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 	var org fhir.Organization
 	err := client.Read(path, &org)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, req, "could not read organization resource", err)
 		return
 	}
 
@@ -284,7 +282,7 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 		}
 		err := client.Read(*ref.Reference, &ep)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalError(w, req, "could not read reference resource", err)
 			return
 		}
 		endpoints = append(endpoints, ep)
@@ -292,7 +290,7 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 
 	allEndpoints, err := findAll[fhir.Endpoint](client)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, req, "could not load endpoints", err)
 		return
 	}
 
@@ -312,7 +310,7 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w, req, "invalid form input", err)
 		return
 	}
 
@@ -364,7 +362,7 @@ func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w, req, "invalid form input", err)
 		return
 	}
 
@@ -435,7 +433,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	err := r.ParseForm()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to parse form input")
+		badRequest(w, r, "invalid form input", err)
 		return
 	}
 
@@ -579,7 +577,7 @@ func newLocation(w http.ResponseWriter, _ *http.Request) {
 func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to parse form input")
+		badRequest(w, r, "invalid form input", err)
 		return
 	}
 
@@ -921,7 +919,7 @@ func respondErrorPage(w http.ResponseWriter, text string, httpcode int) {
 		AlertId: ShortID(),
 		Text:    text,
 	}
-	w.WriteHeader(http.StatusInternalServerError)
+	w.WriteHeader(httpcode)
 	tmpls.RenderWithBase(w, "errorpage.html", props)
 }
 
