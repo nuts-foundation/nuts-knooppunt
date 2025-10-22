@@ -12,20 +12,18 @@ function addOption(elementId) {
             let incrName = incrementIndex(name);
             child.name = incrName
             child.id = incrName
+            
+            if (child.tagName === "INPUT") {
+                child.value = ""
+            }
         })
-        
+
         // Move the ID over to the new node so that it is just for the next increment
         newOption.id = option.id
-        option.removeAttribute('id')
-        
-        option.parentElement.appendChild(newOption);
-    } else {
-        // Just copy the option in case of a simple option
-        newOption.id = null;
-        newOption.required = false;
-        
-        option.parentElement.appendChild(newOption);
     }
+    
+    option.removeAttribute('id')
+    option.parentElement.appendChild(newOption);
 }
 
 const indexRe = /.+\[(\d+)\].+/;
