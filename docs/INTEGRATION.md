@@ -17,7 +17,7 @@ The Knooppunt acts as a gateway that simplifies MITZ integration by:
 - **Abstracting complexity**: Handles technical details like mTLS authentication and FHIR validation
 - **Providing unified APIs**: Offers consistent FHIR-based endpoints
 - **Managing authentication**: Handles client certificates and service-to-service authentication
-- **Auto-discovery**: Automatically discovers notification endpoints from mCSD (see [mCSD Endpoint Configuration](#mcsd-endpoint-configuration))
+- **Configuration-based endpoints**: Uses configured notification endpoints for subscriptions
 
 ### Architecture
 
@@ -78,7 +78,7 @@ curl -X POST http://localhost:8081/mitz/Subscription \
 - `channel.type`: Must be `"rest-hook"`
 
 **Optional**:
-- `channel.endpoint`: Notification callback URL (auto-discovered from mCSD if omitted - see [mCSD Endpoint Configuration](#mcsd-endpoint-configuration))
+- `channel.endpoint`: Notification callback URL (uses configured `notify_endpoint` if omitted)
 - `channel.payload`: Content type (defaults to `"application/fhir+json"`)
 
 #### Response
@@ -100,63 +100,41 @@ curl -X POST http://localhost:8081/mitz/Subscription \
 
 **HTTP Status**: 201 Created
 
-### mCSD Endpoint Configuration
+### Notification Endpoint Configuration
 
-For automatic notification endpoint discovery, an Endpoint resource must be configured in mCSD (Mobile Care Services Discovery).
+The Knooppunt must be configured with a notification endpoint URL where MITZ will send consent change notifications.
 
-#### Required Endpoint Resource
+#### Configuration
 
-The mCSD administration directory must contain an Endpoint resource with the following characteristics:
+Set the `notify_endpoint` in your Knooppunt configuration (`knooppunt.yml`):
 
-**PayloadType**:
-- Must include a coding with:
-  - `system`: `http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities`
-  - `code`: `consent-notify`
-
-**Address**:
-- The URL where MITZ should send consent change notifications
-- Must be publicly accessible from MITZ
-- Must be whitelisted by the MITZ team, **OR** use the endpoint already whitelisted by Knooppunt (contact Rein for details)
-
-#### Example Endpoint Resource
-
-```json
-{
-  "resourceType": "Endpoint",
-  "id": "consent-notify-endpoint",
-  "status": "active",
-  "connectionType": {
-    "system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
-    "code": "hl7-fhir-rest"
-  },
-  "name": "Consent Notification Endpoint",
-  "payloadType": [
-    {
-      "coding": [
-        {
-          "system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities",
-          "code": "consent-notify"
-        }
-      ]
-    }
-  ],
-  "address": "https://your-platform.example.com/mitz/notify"
-}
+```yaml
+mitz:
+  mitzbase: "https://tst-api.mijn-mitz.nl"
+  notify_endpoint: "https://your-platform.example.com/mitz/notify"
+  # ... other MITZ settings
 ```
 
-#### Behavior
+#### Endpoint Requirements
 
-- **If Endpoint exists in mCSD**: Knooppunt automatically uses this address for `channel.endpoint` in the subscription
-- **If Endpoint not found**: You must provide `channel.endpoint` explicitly in your subscription request
-- **If both provided**: The endpoint in your request takes precedence over the mCSD-discovered endpoint
+- **URL**: The endpoint URL where MITZ should send consent change notifications
+- **Publicly accessible**: Must be reachable from MITZ infrastructure
+- **Whitelisted**: Must be whitelisted by the MITZ team, **OR** use the proxy endpoint already whitelisted by Knooppunt (contact Rein for details)
+- **HTTPS recommended**: Use HTTPS for secure communication
 
-**Note**: Contact your Knooppunt administrator to verify the mCSD Endpoint configuration.
+#### Endpoint Precedence
+
+1. **Explicit endpoint in request**: If `channel.endpoint` is provided in the subscription request, it takes precedence
+2. **Configured endpoint**: If no endpoint is provided in the request, the configured `notify_endpoint` is used
+3. **Missing endpoint**: If neither is provided, a warning is logged and the subscription may fail at MITZ
+
+**Recommendation**: Always configure `notify_endpoint` to ensure subscriptions work without requiring clients to specify endpoints.
 
 ### Subscription Behavior
 
 1. **Validation**: Knooppunt validates the subscription meets MITZ requirements
 2. **Extension Addition**: Automatically adds gateway and source system OIDs
-3. **Endpoint Discovery**: Auto-discovers notification endpoint from mCSD if not provided (see [mCSD Endpoint Configuration](#mcsd-endpoint-configuration))
+3. **Endpoint Setting**: Uses configured `notify_endpoint` if no endpoint provided in request (see [Notification Endpoint Configuration](#notification-endpoint-configuration))
 4. **Forwarding**: Sends subscription to MITZ with mTLS authentication
 5. **Response**: Returns created subscription with ID
 
@@ -203,9 +181,9 @@ curl -X POST http://localhost:8081/mitz/Subscription \
 - **Cause**: Invalid subscription status
 - **Solution**: Always use `"status": "requested"` for new subscriptions
 
-**Error**: `No consent notify endpoint found in mCSD`
-- **Cause**: mCSD not configured with notification endpoint
-- **Solution**: Either provide `channel.endpoint` in request or configure mCSD to include Endpoint with the right payload-type (see [mCSD Endpoint Configuration](#mcsd-endpoint-configuration))
+**Error**: `No subscription notify endpoint configured` (warning in logs)
+- **Cause**: Neither `notify_endpoint` in config nor `channel.endpoint` in request provided
+- **Solution**: Either configure `notify_endpoint` in `knooppunt.yml` or provide `channel.endpoint` in your subscription request (see [Notification Endpoint Configuration](#notification-endpoint-configuration))
 
 **Error**: `Connection refused`
 - **Cause**: Knooppunt not running or wrong port

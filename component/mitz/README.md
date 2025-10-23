@@ -17,7 +17,7 @@ The component acts as a proxy between your application and the MITZ FHIR endpoin
 - mTLS authentication with client certificates
 - FHIR Subscription resource creation and management
 - XACML authorization decision queries
-- Dynamic endpoint discovery via mCSD for Subscription.channel
+- Configurable subscription notification endpoint
 
 ## Configuration
 
@@ -27,6 +27,9 @@ Configure the MITZ component in `knooppunt.yml`:
 mitz:
   # MITZ base URL (paths are hardcoded in code)
   mitzbase: "https://tst-api.mijn-mitz.nl"
+
+  # Endpoint URL where MITZ will send consent change notifications
+  notify_endpoint: "https://your-app.example.com/mitz/notify"
 
   # Optional: Gateway and source system OIDs (added as extensions to subscriptions)
   gateway_system: "urn:oid:2.16.840.1.113883.2.4.6.6.1"
@@ -43,6 +46,7 @@ mitz:
 | Option | Required | Description |
 |--------|----------|-------------|
 | `mitzbase` | Yes | Base URL of the MITZ endpoint |
+| `notify_endpoint` | Yes | URL where MITZ will send consent notifications (your callback endpoint) |
 | `gateway_system` | No | Gateway system OID (added as FHIR extension) |
 | `source_system` | No | Source system OID (added as FHIR extension) |
 | `tls_cert_file` | No | Path to client certificate (.p12/.pfx or .pem) |
@@ -80,7 +84,7 @@ Creates a consent subscription at the MITZ endpoint.
 - `channel.type`: Must be `"rest-hook"`
 
 **Optional Fields**:
-- `channel.endpoint`: Notification callback URL (auto-discovered from mCSD if not provided)
+- `channel.endpoint`: Notification callback URL (uses configured `notify_endpoint` if not provided in request)
 - `channel.payload`: Content type (defaults to `"application/fhir+json"` if not provided)
 - `extension`: Patient birthdate, gateway system, or source system extensions
 
@@ -105,7 +109,7 @@ Creates a consent subscription at the MITZ endpoint.
 1. Validates the subscription meets MITZ requirements
 2. Adds gateway and source system extensions from config (if configured)
 3. Sets default `channel.payload` to `"application/fhir+json"` if not provided
-4. Auto-discovers `channel.endpoint` from mCSD if not provided in the request
+4. Sets `channel.endpoint` to configured `notify_endpoint` if not provided in the request
 5. Sends the subscription to MITZ
 6. Returns the created subscription with its ID
 
@@ -127,17 +131,16 @@ Performs a consent authorization check via XACML query.
 
 **Note**: Currently uses hardcoded test parameters. Production use requires parameterization.
 
-## Dynamic Endpoint Discovery
+## Subscription Endpoint Configuration
 
-The component integrates with mCSD to automatically discover the consent notification endpoint:
+The component requires a configured notification endpoint where MITZ will send consent change notifications:
 
-1. When a subscription request is received without a `channel.endpoint`
-2. The component queries all configured mCSD administration directories
-3. It searches for an Endpoint resource with payload-type `consent-notify`
-4. If found, the endpoint's address is automatically set in the subscription
-5. If not found or if the query fails, a warning is logged
+1. Set the `notify_endpoint` in your configuration (`knooppunt.yml`)
+2. When a subscription is created without an explicit `channel.endpoint`, the configured value is used
+3. If the subscription request includes an explicit `channel.endpoint`, that value takes precedence
+4. Ensure the endpoint is whitelisted with your MITZ provider so they can reach it
 
-This ensures the notification endpoint is always current without hardcoding it in configuration.
+This ensures your application receives all consent notifications from MITZ without additional discovery overhead.
 
 ## mTLS Authentication
 
@@ -190,28 +193,22 @@ The component handles MITZ errors and translates them to FHIR OperationOutcome r
 | 422 | BusinessRule | MITZ business rules not met |
 | 429 | Throttled | Too many requests |
 
-## Integration with mCSD
+## Integration with Other Components
 
-The MITZ component requires the mCSD component for endpoint discovery:
+The MITZ component is independently initialized and does not require other components:
 
 ```go
 // In cmd/start.go
-mcsdUpdateClient, err := mcsd.New(config.MCSD)
-mitzComponent, err := mitz.New(config.MITZ, mcsdUpdateClient)
+mitzComponent, err := mitz.New(config.MITZ)
 ```
 
-The mCSD component must be configured with at least one administration directory that contains an Endpoint resource with:
-- `payloadType` containing a coding with:
-  - `system`: `http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities`
-  - `code`: `consent-notify`
-- `address`: The URL where consent notifications should be sent
+The MITZ configuration is independent - you only need to provide the MITZ endpoint details and the notification callback URL via configuration.
 
 
 ## Dependencies
 
 - `github.com/SanteonNL/go-fhir-client` - FHIR client library
 - `github.com/zorgbijjou/golang-fhir-models` - FHIR data models
-- mCSD component - For endpoint discovery
 
 
 

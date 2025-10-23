@@ -15,10 +15,14 @@ import (
 
 // Config holds TLS configuration options
 type Config struct {
-	CertFile string // PEM certificate file OR .p12/.pfx file
-	KeyFile  string // PEM key file (not used if CertFile is .p12/.pfx)
-	Password string // Password for encrypted key or .p12/.pfx file
-	CAFile   string // CA certificate file to verify server
+	// CertFile is the path to a PEM certificate file OR .p12/.pfx file
+	CertFile string
+	// KeyFile is the path to a PEM key file (not used if CertFile is .p12/.pfx)
+	KeyFile string
+	// Password is the password for encrypted key or .p12/.pfx file
+	Password string
+	// CAFile is the path to a CA certificate file to verify server
+	CAFile string
 }
 
 // LoadClientCertificate loads a client certificate from PEM or PKCS#12 file
@@ -73,8 +77,12 @@ func LoadCACertPool(caFile string) (*x509.CertPool, error) {
 }
 
 // CreateTLSConfig creates a TLS configuration with client certificate and optional CA
-func CreateTLSConfig(config Config) (*tls.Config, error) {
-	cert, err := LoadClientCertificate(config)
+func CreateTLSConfig(certFile, keyFile, password, caFile string) (*tls.Config, error) {
+	cert, err := LoadClientCertificate(Config{
+		CertFile: certFile,
+		KeyFile:  keyFile,
+		Password: password,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +92,8 @@ func CreateTLSConfig(config Config) (*tls.Config, error) {
 	}
 
 	// Load CA certificate if specified
-	if config.CAFile != "" {
-		caCertPool, err := LoadCACertPool(config.CAFile)
+	if caFile != "" {
+		caCertPool, err := LoadCACertPool(caFile)
 		if err != nil {
 			return nil, err
 		}

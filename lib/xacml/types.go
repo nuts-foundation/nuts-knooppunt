@@ -4,25 +4,30 @@ import "crypto/rsa"
 
 // AuthzRequest represents the parameters needed to create an XACML authorization decision query
 type AuthzRequest struct {
-	// Resource attributes
-	PatientBSN             string // Patient BSN (extension value)
-	HealthcareFacilityType string // e.g., "Z3"
-	AuthorInstitutionID    string // e.g., "00000659"
+	// PatientBSN is the patient BSN (extension value)
+	PatientBSN string
+	// HealthcareFacilityType is the healthcare facility type (e.g., "Z3")
+	HealthcareFacilityType string
+	// AuthorInstitutionID is the author institution ID (e.g., "00000659")
+	AuthorInstitutionID string
 
-	// Action attributes
-	EventCode string // e.g., "GGC002"
+	// EventCode is the action event code (e.g., "GGC002")
+	EventCode string
 
-	// Subject attributes
-	SubjectRole            string // e.g., "01.015"
-	ProviderID             string // e.g., "000095254"
-	ProviderInstitutionID  string // e.g., "00000666"
-	ConsultingFacilityType string // e.g., "Z3"
+	// SubjectRole is the subject role (e.g., "01.015")
+	SubjectRole string
+	// ProviderID is the provider ID (e.g., "000095254")
+	ProviderID string
+	// ProviderInstitutionID is the provider institution ID (e.g., "00000666")
+	ProviderInstitutionID string
+	// ConsultingFacilityType is the consulting facility type (e.g., "Z3")
+	ConsultingFacilityType string
 
-	// Environment attributes
-	PurposeOfUse string // e.g., "TREAT"
+	// PurposeOfUse is the purpose of use (e.g., "TREAT")
+	PurposeOfUse string
 
-	// Endpoint
-	ToAddress string // e.g., "http://localhost:8000/4"
+	// ToAddress is the endpoint address (e.g., "http://localhost:8000/4")
+	ToAddress string
 }
 
 // SigningConfig contains the configuration for signing XACML queries

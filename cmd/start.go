@@ -46,7 +46,7 @@ func Start(ctx context.Context, config Config) error {
 
 	// Create MITZ component
 	if config.MITZ.Enabled() {
-		mitzComponent, err := mitz.New(config.MITZ, mcsdUpdateClient)
+		mitzComponent, err := mitz.New(config.MITZ)
 		if err != nil {
 			return errors.Wrap(err, "failed to create MITZ component")
 		}

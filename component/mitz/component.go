@@ -25,6 +25,7 @@ type Config struct {
 	MitzBase       string `koanf:"mitzbase"`
 	GatewaySystem  string `koanf:"gateway_system"`
 	SourceSystem   string `koanf:"source_system"`
+	NotifyEndpoint string `koanf:"notify_endpoint"`  // Endpoint URL for subscription notifications
 	TLSCertFile    string `koanf:"tls_cert_file"`    // PEM certificate file OR .p12/.pfx file
 	TLSKeyFile     string `koanf:"tls_key_file"`     // PEM key file (not used if TLSCertFile is .p12/.pfx)
 	TLSKeyPassword string `koanf:"tls_key_password"` // Password for encrypted key or .p12/.pfx file
@@ -37,11 +38,6 @@ func (c Config) Enabled() bool {
 
 var _ component.Lifecycle = (*Component)(nil)
 
-// EndpointQuerier interface for querying endpoints from mCSD
-type EndpointQuerier interface {
-	QueryEndpointNotifyEndpoint(ctx context.Context) (*fhir.Endpoint, error)
-}
-
 // Component is the MITZ component that handles FHIR consent bundles
 type Component struct {
 	client               fhirclient.Client
@@ -49,7 +45,7 @@ type Component struct {
 	consentCheckEndpoint string
 	gatewaySystem        string
 	sourceSystem         string
-	endpointQuerier      EndpointQuerier
+	notifyEndpoint       string
 }
 
 const (
@@ -58,7 +54,7 @@ const (
 )
 
 // New creates a new MITZ component
-func New(config Config, endpointQuerier EndpointQuerier) (*Component, error) {
+func New(config Config) (*Component, error) {
 	if config.MitzBase == "" {
 		return nil, fmt.Errorf("mitzbase must be configured when MITZ component is enabled")
 	}
@@ -76,7 +72,7 @@ func New(config Config, endpointQuerier EndpointQuerier) (*Component, error) {
 		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
 	}
 
-	consentCheckEndpoint := config.MitzBase + consentCheckPath
+	consentCheckEndpoint := baseURL.JoinPath(consentCheckPath).String()
 
 	return &Component{
 		client:               fhirclient.New(subscriptionURL, httpClient, fhirutil.ClientConfig()),
@@ -84,7 +80,7 @@ func New(config Config, endpointQuerier EndpointQuerier) (*Component, error) {
 		consentCheckEndpoint: consentCheckEndpoint,
 		gatewaySystem:        config.GatewaySystem,
 		sourceSystem:         config.SourceSystem,
-		endpointQuerier:      endpointQuerier,
+		notifyEndpoint:       config.NotifyEndpoint,
 	}, nil
 }
 
@@ -96,12 +92,12 @@ func createHTTPClient(config Config) (*http.Client, error) {
 
 	// If TLS certificate is configured, set up mTLS
 	if config.TLSCertFile != "" {
-		tlsConfig, err := tlsutil.CreateTLSConfig(tlsutil.Config{
-			CertFile: config.TLSCertFile,
-			KeyFile:  config.TLSKeyFile,
-			Password: config.TLSKeyPassword,
-			CAFile:   config.TLSCAFile,
-		})
+		tlsConfig, err := tlsutil.CreateTLSConfig(
+			config.TLSCertFile,
+			config.TLSKeyFile,
+			config.TLSKeyPassword,
+			config.TLSCAFile,
+		)
 		if err != nil {
 			// Fail early when TLS is explicitly configured but setup fails
 			return nil, fmt.Errorf("TLS is configured but failed to load: %w", err)
@@ -123,7 +119,6 @@ func createHTTPClient(config Config) (*http.Client, error) {
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.Handle("POST /mitz/notify", http.HandlerFunc(c.handleNotify))
 	internalMux.Handle("POST /mitz/Subscription", http.HandlerFunc(c.handleSubscribe))
-	internalMux.Handle("GET /mitz/Consent", http.HandlerFunc(c.handleConsentCheck))
 }
 
 // Start starts the component
@@ -405,25 +400,13 @@ func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpReques
 		log.Ctx(httpRequest.Context()).Debug().Msg("Set default channel payload to application/fhir+json")
 	}
 
-	// Query for consent notify endpoint and set it in the subscription if not already provided
+	// Use endpoint from configuration if not already provided in the request
 	if resource.Channel.Endpoint == nil || *resource.Channel.Endpoint == "" {
-		if c.endpointQuerier != nil {
-			endpoint, err := c.endpointQuerier.QueryEndpointNotifyEndpoint(httpRequest.Context())
-			if err != nil {
-				log.Ctx(httpRequest.Context()).Error().Err(err).Msg("Failed to query consent notify endpoint")
-				fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-					Message:   "Failed to query consent notify endpoint",
-					Cause:     err,
-					IssueType: fhir.IssueTypeTransient,
-				})
-				return
-			}
-			if endpoint != nil && endpoint.Address != "" {
-				resource.Channel.Endpoint = to.Ptr(endpoint.Address)
-				log.Ctx(httpRequest.Context()).Debug().Str("endpoint", endpoint.Address).Msg("Set subscription channel endpoint from mCSD")
-			} else {
-				log.Ctx(httpRequest.Context()).Warn().Msg("No consent notify endpoint found in mCSD")
-			}
+		if c.notifyEndpoint != "" {
+			resource.Channel.Endpoint = to.Ptr(c.notifyEndpoint)
+			log.Ctx(httpRequest.Context()).Debug().Str("endpoint", c.notifyEndpoint).Msg("Set subscription channel endpoint from configuration")
+		} else {
+			log.Ctx(httpRequest.Context()).Warn().Msg("No subscription notify endpoint configured")
 		}
 	} else {
 		log.Ctx(httpRequest.Context()).Debug().Str("endpoint", *resource.Channel.Endpoint).Msg("Using channel endpoint from incoming subscription")
