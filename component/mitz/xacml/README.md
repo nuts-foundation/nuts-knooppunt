@@ -1,56 +1,10 @@
-# MITZ Component
+# XACML Component
 
-This component generates XACML (eXtensible Access Control Markup Language) authorization decision queries for healthcare access control scenarios.
+This package generates XACML (eXtensible Access Control Markup Language) authorization decision queries for healthcare access control scenarios based on the IHE (Integrating the Healthcare Enterprise) APPC (Access Control) profile.
 
 ## Overview
 
-The MITZ component creates SOAP envelopes containing XACML authorization decision queries based on the IHE (Integrating the Healthcare Enterprise) profile for Access Control (APPC).
-
-## Usage
-
-### Creating an XACML Authorization Decision Query
-
-```go
-package main
-
-import (
-    "fmt"
-    "github.com/nuts-foundation/nuts-knooppunt/component/mitz"
-)
-
-func main() {
-    // Create a request with all required parameters
-    req := mitz.XACMLRequest{
-        // Resource attributes (about what is being accessed)
-        PatientBSN:             "900186021",      // Patient's BSN
-        HealthcareFacilityType: "Z3",             // Type of healthcare facility
-        AuthorInstitutionID:    "00000659",       // Institution ID that created the document
-
-        // Action attributes (what action is being requested)
-        EventCode: "GGC002",                      // Event/procedure code
-
-        // Subject attributes (who is requesting access)
-        SubjectRole:            "01.015",         // Healthcare professional role
-        ProviderID:             "000095254",      // Healthcare provider ID
-        ProviderInstitutionID:  "00000666",       // Institution of the provider
-        ConsultingFacilityType: "Z3",             // Type of consulting facility
-
-        // Environment attributes (context of the request)
-        PurposeOfUse: "TREAT",                    // Purpose: TREAT, RESEARCH, etc.
-
-        // Endpoint
-        ToAddress: "http://localhost:8000/4",     // XACML PDP endpoint
-    }
-
-    // Generate the XACML query
-    xml, err := mitz.CreateXACMLAuthzDecisionQuery(req)
-    if err != nil {
-        panic(err)
-    }
-
-    fmt.Println(xml)
-}
-```
+The XACML package creates SOAP envelopes containing XACML authorization decision queries with structured attributes for healthcare access control. Usage examples can be found in the unit tests (see `xacml_test.go`).
 
 ## XACML Request Structure
 
@@ -98,7 +52,7 @@ The implementation uses standard HL7 and IHE code systems:
 - **Provider IDs**: `2.16.528.1.1007.3.1`
 - **Purpose of Use**: `2.16.840.1.113883.1.11.20448`
 
-## Example Output
+## Generated Output
 
 The generated XML follows the XACML 3.0 SAML profile structure and includes proper namespace declarations for:
 - SOAP Envelope (`http://www.w3.org/2003/05/soap-envelope`)
@@ -106,4 +60,4 @@ The generated XML follows the XACML 3.0 SAML profile structure and includes prop
 - XACML 3.0 (`urn:oasis:names:tc:xacml:3.0:*`)
 - HL7 v3 (`urn:hl7-org:v3`)
 
-See `example.xml` for a complete example of the generated output.
+For a concrete example, see `example/example.xml` in this directory.

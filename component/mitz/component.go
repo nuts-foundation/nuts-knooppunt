@@ -11,10 +11,10 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/xacml"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -22,14 +22,19 @@ import (
 
 // Config holds the configuration for the MITZ component
 type Config struct {
-	MitzBase       string `koanf:"mitzbase"`
-	GatewaySystem  string `koanf:"gateway_system"`
-	SourceSystem   string `koanf:"source_system"`
-	NotifyEndpoint string `koanf:"notify_endpoint"`  // Endpoint URL for subscription notifications
-	TLSCertFile    string `koanf:"tls_cert_file"`    // PEM certificate file OR .p12/.pfx file
-	TLSKeyFile     string `koanf:"tls_key_file"`     // PEM key file (not used if TLSCertFile is .p12/.pfx)
-	TLSKeyPassword string `koanf:"tls_key_password"` // Password for encrypted key or .p12/.pfx file
-	TLSCAFile      string `koanf:"tls_ca_file"`      // CA certificate file to verify MITZ server
+	MitzBase      string `koanf:"mitzbase"`
+	GatewaySystem string `koanf:"gateway_system"`
+	SourceSystem  string `koanf:"source_system"`
+	// NotifyEndpoint is the URL for subscription notifications
+	NotifyEndpoint string `koanf:"notify_endpoint"`
+	// TLSCertFile is the PEM certificate file OR .p12/.pfx file
+	TLSCertFile string `koanf:"tls_cert_file"`
+	// TLSKeyFile is the PEM key file (not used if TLSCertFile is .p12/.pfx)
+	TLSKeyFile string `koanf:"tls_key_file"`
+	// TLSKeyPassword is the password for encrypted key or .p12/.pfx file
+	TLSKeyPassword string `koanf:"tls_key_password"`
+	// TLSCAFile is the CA certificate file to verify MITZ server
+	TLSCAFile string `koanf:"tls_ca_file"`
 }
 
 func (c Config) Enabled() bool {
@@ -117,7 +122,7 @@ func createHTTPClient(config Config) (*http.Client, error) {
 
 // RegisterHttpHandlers registers the HTTP handlers for the MITZ component
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	internalMux.Handle("POST /mitz/notify", http.HandlerFunc(c.handleNotify))
+	publicMux.Handle("POST /mitz/notify", http.HandlerFunc(c.handleNotify))
 	internalMux.Handle("POST /mitz/Subscription", http.HandlerFunc(c.handleSubscribe))
 }
 
@@ -133,13 +138,12 @@ func (c *Component) Stop(ctx context.Context) error {
 
 // handleNotify handles FHIR consent bundle notifications
 func (c *Component) handleNotify(httpResponse http.ResponseWriter, httpRequest *http.Request) {
-	log.Info().Msg("Received FHIR consent bundle notification")
+	log.Debug().Msg("Received FHIR consent bundle notification")
 
 	// todo: process it? atm we don't care about it. If we will care, we may have a problem because they seem
 	// to be sending XMLs, which go fhir lib doesn't support yet
 
-	log.Info().Msg("Successfully processed consent bundle notification")
-	httpResponse.WriteHeader(http.StatusOK)
+	httpResponse.WriteHeader(http.StatusNoContent)
 }
 
 // CreateSubscription creates a MITZ subscription (implements nvi.MITZSubscriber interface)

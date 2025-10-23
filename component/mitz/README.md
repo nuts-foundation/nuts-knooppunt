@@ -216,4 +216,4 @@ The MITZ configuration is independent - you only need to provide the MITZ endpoi
 ## See Also
 
 - [mCSD Component](../mcsd/README.md)
-- [XACML Library](../../lib/xacml/README.md)
+- [XACML Library](./xacml/README.md)

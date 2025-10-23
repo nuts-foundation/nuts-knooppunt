@@ -26,33 +26,33 @@ type Config struct {
 }
 
 // LoadClientCertificate loads a client certificate from PEM or PKCS#12 file
-func LoadClientCertificate(config Config) (tls.Certificate, error) {
-	if config.CertFile == "" {
+func LoadClientCertificate(certFile, keyFile, password string) (tls.Certificate, error) {
+	if certFile == "" {
 		return tls.Certificate{}, fmt.Errorf("certificate file not specified")
 	}
 
 	// Check if it's PKCS#12 (.p12/.pfx)
-	ext := strings.ToLower(filepath.Ext(config.CertFile))
+	ext := strings.ToLower(filepath.Ext(certFile))
 	isPKCS12 := ext == ".p12" || ext == ".pfx"
 
 	if isPKCS12 {
-		cert, err := loadPKCS12(config.CertFile, config.Password)
+		cert, err := loadPKCS12(certFile, password)
 		if err != nil {
 			return tls.Certificate{}, fmt.Errorf("failed to load PKCS#12: %w", err)
 		}
-		log.Info().Str("p12File", config.CertFile).Msg("Loaded client certificate from PKCS#12")
+		log.Info().Str("p12File", certFile).Msg("Loaded client certificate from PKCS#12")
 		return cert, nil
 	}
 
 	// Load PEM
-	if config.KeyFile == "" {
+	if keyFile == "" {
 		return tls.Certificate{}, fmt.Errorf("key file required when using PEM certificate")
 	}
-	cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("failed to load certificate: %w", err)
 	}
-	log.Info().Str("certFile", config.CertFile).Str("keyFile", config.KeyFile).Msg("Loaded client certificate from PEM")
+	log.Info().Str("certFile", certFile).Str("keyFile", keyFile).Msg("Loaded client certificate from PEM")
 	return cert, nil
 }
 
@@ -78,11 +78,7 @@ func LoadCACertPool(caFile string) (*x509.CertPool, error) {
 
 // CreateTLSConfig creates a TLS configuration with client certificate and optional CA
 func CreateTLSConfig(certFile, keyFile, password, caFile string) (*tls.Config, error) {
-	cert, err := LoadClientCertificate(Config{
-		CertFile: certFile,
-		KeyFile:  keyFile,
-		Password: password,
-	})
+	cert, err := LoadClientCertificate(certFile, keyFile, password)
 	if err != nil {
 		return nil, err
 	}

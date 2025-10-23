@@ -108,17 +108,18 @@ func TestRegisterHttpHandlers(t *testing.T) {
 	component, err := New(config)
 	require.NoError(t, err)
 
-	mux := http.NewServeMux()
+	publicMux := http.NewServeMux()
+	internalMux := http.NewServeMux()
 
-	component.RegisterHttpHandlers(nil, mux)
+	component.RegisterHttpHandlers(publicMux, internalMux)
 
-	// Test that handlers are registered
+	// Test that notify handler is registered on publicMux
 	bundle := fhir.Bundle{Type: fhir.BundleTypeTransaction}
 	body, _ := json.Marshal(bundle)
 	req := httptest.NewRequest(http.MethodPost, "/mitz/notify", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/fhir+json")
 	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
+	publicMux.ServeHTTP(w, req)
 	// Should not be 404
 	assert.NotEqual(t, http.StatusNotFound, w.Code)
 }

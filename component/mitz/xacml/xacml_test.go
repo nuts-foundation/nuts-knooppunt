@@ -300,3 +300,41 @@ func TestUnsignedQuery_NoSignature(t *testing.T) {
 	assert.NotContains(t, xml, "ds:SignedInfo")
 	assert.NotContains(t, xml, "ds:SignatureValue")
 }
+
+// ExampleCreateAuthzDecisionQuery demonstrates how to create an XACML authorization decision query.
+// This example shows the typical usage pattern for generating SOAP envelopes containing
+// XACML authorization decision queries based on the IHE APPC (Access Control) profile.
+func ExampleCreateAuthzDecisionQuery() {
+	// Create a request with all required parameters
+	req := AuthzRequest{
+		// Resource attributes (about what is being accessed)
+		PatientBSN:             "900186021", // Patient's BSN
+		HealthcareFacilityType: "Z3",        // Type of healthcare facility
+		AuthorInstitutionID:    "00000659",  // Institution ID that created the document
+
+		// Action attributes (what action is being requested)
+		EventCode: "GGC002", // Event/procedure code
+
+		// Subject attributes (who is requesting access)
+		SubjectRole:            "01.015",    // Healthcare professional role
+		ProviderID:             "000095254", // Healthcare provider ID
+		ProviderInstitutionID:  "00000666",  // Institution of the provider
+		ConsultingFacilityType: "Z3",        // Type of consulting facility
+
+		// Environment attributes (context of the request)
+		PurposeOfUse: "TREAT", // Purpose: TREAT, RESEARCH, etc.
+
+		// Endpoint
+		ToAddress: "http://localhost:8000/4", // XACML PDP endpoint
+	}
+
+	// Generate the XACML query
+	xml, err := CreateAuthzDecisionQuery(req)
+	if err != nil {
+		panic(err)
+	}
+
+	// The generated xml is a SOAP envelope containing an XACML authorization decision query
+	// with proper namespace declarations and structured attributes for healthcare access control
+	_ = xml // Use the generated XML for authorization decision requests
+}
