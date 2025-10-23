@@ -39,9 +39,6 @@ func Start(t *testing.T) Details {
 	os.Setenv("TESTCONTAINERS_RYUK_RECONNECTION_TIMEOUT", "5m")
 	os.Setenv("TESTCONTAINERS_RYUK_CONNECTION_TIMEOUT", "5m")
 
-	// Create mock MITZ server
-	mockMITZ := NewMockMITZServer(t)
-
 	dockerNetwork, err := createDockerNetwork(t)
 	require.NoError(t, err)
 	hapiBaseURL := startHAPI(t, dockerNetwork.Name)
@@ -60,12 +57,9 @@ func Start(t *testing.T) Details {
 				FHIRBaseURL: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
 			},
 		},
-		NVI: nvi.DefaultConfig(),
-		MITZ: mitz.Config{
-			MitzBase:       mockMITZ.GetURL(),
-			NotifyEndpoint: "http://localhost:8080/consent/notify",
-			GatewaySystem:  "test-gateway",
-			SourceSystem:   "test-source",
+		NVI: nvi.Config{
+			FHIRBaseURL: testData.NVI.FHIRBaseURL.String(),
+			Audience:    "nvi",
 		},
 	})
 
