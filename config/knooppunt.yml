@@ -19,7 +19,27 @@ mcsdadmin:
   # Base URL for FHIR server used by admin interface
   fhirbaseurl: "http://localhost:8080/fhir"
 
-# Nuts node configuration  
+# Nuts node configuration
 nuts:
   # Whether to enable the Nuts node component
   enabled: true
+
+# MITZ Connector configuration
+mitz:
+  # MITZ base URL (paths are hardcoded in code)
+  mitzbase: "http://localhost:8087/tst-us/mitz"
+  # Gateway system OID (optional)
+  gatewaysystem: "urn:oid:2.16.840.1.113883.2.4.6.6.1"
+  # Source system OID (optional)
+  sourcesystem: "urn:oid:2.16.840.1.113883.2.4.6.6.90000017"
+  # mTLS client certificate configuration (optional)
+  # Option 1: PEM format (separate cert and key files)
+  #tlscertfile: "/path/to/client-cert.pem"
+  #tlskeyfile: "/path/to/client-key.pem"
+  # Option 2: PKCS#12 format (.p12 or .pfx file with cert + key)
+  #tlscertfile: "/path/to/cert-file"
+  # tlskeyfile is not needed for .p12/.pfx files
+  # Password for encrypted private key or .p12/.pfx file (optional)
+  #tlskeypassword: "key password"
+  # CA certificate to trust MITZ server (if not in system trust store)
+  #tlscafile: "/path/to/ca-file"
