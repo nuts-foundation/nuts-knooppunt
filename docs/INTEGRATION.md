@@ -1,16 +1,30 @@
-# Knooppunt MITZ Integration Guide
+# Knooppunt Integration Guide
 
-This document describes how vendors can integrate with the Knooppunt to access MITZ (Mijn Informatie Toestemmingen Zorg) - the Dutch national consent management system for healthcare.
+This document describes how to integrate with the Knooppunt.
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [MITZ Integration](#mitz-integration)
-- [Testing Your Integration](#testing-your-integration)
+- [NVI](#nvi)
+- [Consent (MITZ)](#consent-mitz)
 
 ---
 
-## Overview
+## NVI
+The chapter describes how to integrate with the NVI (Nederlandse VerwijsIndex) service using the Knooppunt.
+
+You can create or search for DocumentReference resources using the following endpoints:
+- Registration endpoint: [POST http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
+- Search endpoint:
+  - [POST http://localhost:8081/nvi/DocumentReference/_search](http://localhost:8081/nvi/DocumentReference/_search)
+  - [GET http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
+
+These endpoints need the URA of the requesting care organization. You provide this URA using the `X-Tenant-ID` HTTP header:
+
+```http
+X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|<URA>
+```
+
+## Consent MITZ
 
 The Knooppunt acts as a gateway that simplifies MITZ integration by:
 
@@ -30,11 +44,6 @@ The Knooppunt acts as a gateway that simplifies MITZ integration by:
 └──────────────┘                            └─────────────┘                       └──────────────┘
 ```
 
----
-
-## MITZ Integration
-
-MITZ is the Dutch national consent management system for healthcare.
 
 ### Endpoints on the knooppunt
 
@@ -144,67 +153,3 @@ mitz:
 When consent changes occur, MITZ sends notifications to the configured endpoint.
 
 **Note**: For development/testing, the NGINX proxy handles notifications (returns 201 without processing). Using this proxy url, you don't need to worry about whitelisting your endpoint with the MITZ team. Contact Rein for endpoint details.
-
----
-
-## Testing Your Integration
-
-### Test MITZ Subscription Creation
-
-```bash
-# Create a subscription
-curl -X POST http://localhost:8081/mitz/Subscription \
-  -H "Content-Type: application/fhir+json" \
-  -d '{
-    "resourceType": "Subscription",
-    "status": "requested",
-    "reason": "OTV",
-    "criteria": "Consent?_query=otv&patientid=999999990&providerid=00000001&providertype=Z3",
-    "channel": {
-      "type": "rest-hook"
-    }
-  }'
-```
-
-### Troubleshooting
-
-#### MITZ Errors
-
-**Error**: `Failed to create subscription at MITZ endpoint`
-- **Cause**: MITZ connection issue or invalid subscription
-- **Solution**:
-  - Verify Knooppunt is running and MITZ is configured
-  - Check Knooppunt logs for connection errors
-  - Validate subscription criteria format
-
-**Error**: `Subscription.status must be 'requested'`
-- **Cause**: Invalid subscription status
-- **Solution**: Always use `"status": "requested"` for new subscriptions
-
-**Error**: `No subscription notify endpoint configured` (warning in logs)
-- **Cause**: Neither `notify_endpoint` in config nor `channel.endpoint` in request provided
-- **Solution**: Either configure `notify_endpoint` in `knooppunt.yml` or provide `channel.endpoint` in your subscription request (see [Notification Endpoint Configuration](#notification-endpoint-configuration))
-
-**Error**: `Connection refused`
-- **Cause**: Knooppunt not running or wrong port
-- **Solution**: Verify Knooppunt is running on the expected port
-
-**Error**: `403 Forbidden` from MITZ
-- **Cause**: Client certificate not whitelisted or mTLS authentication failed
-- **Solution**: Contact Knooppunt administrator to verify MITZ configuration
-
-### Logs and Debugging
-
-View Knooppunt logs to debug integration issues. Look for:
-- **MITZ component logs**: Messages related to subscription creation and MITZ communication
-- **Validation errors**: Details about why a subscription was rejected
-- **Connection errors**: Network or authentication issues with MITZ
-
-Contact your Knooppunt administrator for access to logs.
-
----
-
-## See Also
-
-- [MITZ Component Documentation](../component/mitz/README.md) - Technical implementation details
-- [MITZ Prerequisites](../component/mitz/README.md#prerequisites) - Certificate and endpoint whitelisting requirements

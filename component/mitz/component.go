@@ -3,6 +3,7 @@ package mitz
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,18 +24,18 @@ import (
 // Config holds the configuration for the MITZ component
 type Config struct {
 	MitzBase      string `koanf:"mitzbase"`
-	GatewaySystem string `koanf:"gateway_system"`
-	SourceSystem  string `koanf:"source_system"`
+	GatewaySystem string `koanf:"gatewaysystem"`
+	SourceSystem  string `koanf:"sourcesystem"`
 	// NotifyEndpoint is the URL for subscription notifications
-	NotifyEndpoint string `koanf:"notify_endpoint"`
+	NotifyEndpoint string `koanf:"notifyendpoint"`
 	// TLSCertFile is the PEM certificate file OR .p12/.pfx file
-	TLSCertFile string `koanf:"tls_cert_file"`
+	TLSCertFile string `koanf:"tlscertfile"`
 	// TLSKeyFile is the PEM key file (not used if TLSCertFile is .p12/.pfx)
-	TLSKeyFile string `koanf:"tls_key_file"`
+	TLSKeyFile string `koanf:"tlskeyfile"`
 	// TLSKeyPassword is the password for encrypted key or .p12/.pfx file
-	TLSKeyPassword string `koanf:"tls_key_password"`
+	TLSKeyPassword string `koanf:"tlskeypassword"`
 	// TLSCAFile is the CA certificate file to verify MITZ server
-	TLSCAFile string `koanf:"tls_ca_file"`
+	TLSCAFile string `koanf:"tlscafile"`
 }
 
 func (c Config) Enabled() bool {
@@ -54,8 +55,9 @@ type Component struct {
 }
 
 const (
-	subscriptionPath = "/abonnementen/fhir"
-	consentCheckPath = "/geslotenautorisatievraag/xacml3"
+	subscriptionPath    = "/abonnementen/fhir"
+	consentCheckPath    = "/geslotenautorisatievraag/xacml3"
+	fhirJSONContentType = "application/fhir+json"
 )
 
 // New creates a new MITZ component
@@ -138,7 +140,7 @@ func (c *Component) Stop(ctx context.Context) error {
 
 // handleNotify handles FHIR consent bundle notifications
 func (c *Component) handleNotify(httpResponse http.ResponseWriter, httpRequest *http.Request) {
-	log.Debug().Msg("Received FHIR consent bundle notification")
+	log.Ctx(httpRequest.Context()).Debug().Msg("Received FHIR consent bundle notification")
 
 	// todo: process it? atm we don't care about it. If we will care, we may have a problem because they seem
 	// to be sending XMLs, which go fhir lib doesn't support yet
@@ -157,7 +159,8 @@ func (c *Component) CreateSubscription(ctx context.Context, patientID, providerI
 	err := c.client.CreateWithContext(ctx, subscription, &created, fhirclient.ResponseHeaders(&headers))
 	if err != nil {
 		// Check if it's an OperationOutcome error to extract status code
-		if outcomeErr, ok := err.(fhirclient.OperationOutcomeError); ok {
+		var outcomeErr fhirclient.OperationOutcomeError
+		if errors.As(err, &outcomeErr) {
 			switch outcomeErr.HttpStatusCode {
 			case http.StatusBadRequest:
 				return fmt.Errorf("FHIR resource does not meet specifications: %w", err)
@@ -310,31 +313,40 @@ func validateMITZSubscription(subscription fhir.Subscription) *fhirapi.Error {
 		}
 	}
 
-	// Validate criteria format
-	if !strings.HasPrefix(subscription.Criteria, "Consent?_query=otv&") {
+	// Validate criteria format and extract query parameters
+	if !strings.HasPrefix(subscription.Criteria, "Consent?") {
 		return &fhirapi.Error{
-			Message:   "Subscription.criteria must start with 'Consent?_query=otv&'",
+			Message:   "Subscription.criteria must start with 'Consent?'",
 			IssueType: fhir.IssueTypeValue,
 		}
 	}
 
-	// Validate criteria contains required parameters
-	if !strings.Contains(subscription.Criteria, "patientid=") {
+	// Extract and parse query string
+	queryStr := strings.TrimPrefix(subscription.Criteria, "Consent?")
+	queryParams, err := url.ParseQuery(queryStr)
+	if err != nil {
 		return &fhirapi.Error{
-			Message:   "Subscription.criteria must contain 'patientid' parameter",
+			Message:   fmt.Sprintf("Invalid criteria query string: %v", err),
 			IssueType: fhir.IssueTypeValue,
 		}
 	}
-	if !strings.Contains(subscription.Criteria, "providerid=") {
+
+	// Validate _query parameter
+	if queryParams.Get("_query") != "otv" {
 		return &fhirapi.Error{
-			Message:   "Subscription.criteria must contain 'providerid' parameter",
+			Message:   "Subscription.criteria must contain '_query=otv' parameter",
 			IssueType: fhir.IssueTypeValue,
 		}
 	}
-	if !strings.Contains(subscription.Criteria, "providertype=") {
-		return &fhirapi.Error{
-			Message:   "Subscription.criteria must contain 'providertype' parameter",
-			IssueType: fhir.IssueTypeValue,
+
+	// Validate required parameters are present
+	requiredParams := []string{"patientid", "providerid", "providertype"}
+	for _, param := range requiredParams {
+		if queryParams.Get(param) == "" {
+			return &fhirapi.Error{
+				Message:   fmt.Sprintf("Subscription.criteria must contain '%s' parameter", param),
+				IssueType: fhir.IssueTypeValue,
+			}
 		}
 	}
 
@@ -400,8 +412,8 @@ func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpReques
 
 	// Set default payload if not provided
 	if resource.Channel.Payload == nil || *resource.Channel.Payload == "" {
-		resource.Channel.Payload = to.Ptr("application/fhir+json")
-		log.Ctx(httpRequest.Context()).Debug().Msg("Set default channel payload to application/fhir+json")
+		resource.Channel.Payload = to.Ptr(fhirJSONContentType)
+		log.Ctx(httpRequest.Context()).Debug().Msg("Set default channel payload to " + fhirJSONContentType)
 	}
 
 	// Use endpoint from configuration if not already provided in the request
@@ -492,7 +504,7 @@ func (c *Component) createSubscription(patientId, providerId, providerType strin
 			patientId, providerId, providerType),
 		Channel: fhir.SubscriptionChannel{
 			Type:    fhir.SubscriptionChannelTypeRestHook,
-			Payload: to.Ptr("application/fhir+json"),
+			Payload: to.Ptr(fhirJSONContentType),
 		},
 	}
 
