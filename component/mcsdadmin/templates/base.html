@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/mcsdadmin/css/fontawesome.min.css">
     <link rel="stylesheet" href="/mcsdadmin/css/mcsdadmin.css">
     <script src="/mcsdadmin/js/htmx.min.js"></script>
-    <script src="/mcsdadmin/js/lib.js"></script>
+    <script src="/mcsdadmin/js/lib.js" defer></script>
 </head>
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
@@ -36,9 +36,14 @@
                 <a class="nav-link" href="/mcsdadmin/location">
                     <i class="fas fa-map-marker-alt"></i> Locations
                 </a>
+                <a class="nav-link" href="/mcsdadmin/practitionerrole">
+                    <i class="fas fa-user-nurse"></i> Practitioner Role
+                </a>
             </div>
         </nav>
+        
         <main class="col-md-9 col-lg-10 main-content">
+            <div id="alerts"></div>
             {{ template "main" . }}
         </main>
     </div>
