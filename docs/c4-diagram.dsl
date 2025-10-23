@@ -20,7 +20,9 @@ workspace "Knooppunt" "Description" {
                 nvi = softwareSystem "NVI" "Nationale Verwijs Index, contains entries with URA and patient" {
                     tags "External System,localization"
                 }
-                otv = softwareSystem "OTV" "Nation Online Consent System, contains patient consents" "External System"
+                otv = softwareSystem "OTV" "Mitz national system, containing patient consents" "External System" {
+                    tags "External System,consent"
+                }
             }
 
 
@@ -36,7 +38,7 @@ workspace "Knooppunt" "Description" {
                     }
 
                     viewer = container "Viewer" "Request healthcare data from other Care Providers" {
-                        tags "External System"
+                        tags "External System,dataexchange"
                     }
                 }
             }
@@ -48,18 +50,18 @@ workspace "Knooppunt" "Description" {
 
             xis = softwareSystem "XIS" "Local XIS integrating the Knooppunt" {
                 ehr = container "EHR" {
-                    tags "addressing,localization"
+                    tags "addressing,localization,dataexchange"
                     localizationClient = component "Localization Client" "Publishing and localizing patient localization data" {
                         tags "localization"
                     }
                 }
-                //  After we introduce a PEP:
-                //        pep = container "Policy Enforcement Point" "Proxy that enforces access policies on data exchanges." "NGINX" {
-                //            tags "addressing,localization"
-                //        }
+
+                pep = container "Policy Enforcement Point" "Proxy that enforces access policies on data exchanges." "NGINX" {
+                    tags "dataexchange"
+                }
 
                 kp = container "Knooppunt" {
-                    tags "addressing,localization,consent"
+                    tags "addressing,localization,consent,dataexchange"
 
                     mcsdSyncer = component "mCSD Update client" "Syncing data from remote mCSD directory and consolidate into a Query Directory" {
                         tags "addressing"
@@ -73,8 +75,12 @@ workspace "Knooppunt" "Description" {
                         tags "localization"
                     }
 
-                    otvClient = component "OTV Client" "Request consent information from the Mitz OTV" {
+                    mitzClient = component "Mitz Client" "Request consent information from the Mitz OTV" {
                         tags "consent"
+                    }
+
+                    pdp = component "Policy Decision Point" "Makes authorization decisions for data exchange requests" {
+                        tags "dataexchange"
                     }
                 }
 
@@ -120,9 +126,8 @@ workspace "Knooppunt" "Description" {
         #
         # GF Localization transactions
         #
-        xis.ehr.localizationClient -> xis.kp.nviGateway "Publish and find localization data" FHIR {
+        xis.ehr.localizationClient -> xis.kp.nviGateway "Publish and find localization data\nhttp://knooppunt:8081/nvi" FHIR {
             tags "localization"
-            url "http://knooppunt:8081/nvi"
         }
         xis.kp.nviGateway -> nvi "Publish and find localization data\n(pseudonymized)" FHIR {
             tags "localization"
@@ -131,8 +136,25 @@ workspace "Knooppunt" "Description" {
         #
         # GF Consent transactions
         #
-        xis.kp.otvClient -> otv "Perform the 'gesloten-vraag'" {
+        xis.kp.mitzClient -> otv "Perform the 'gesloten-vraag'" SOAP {
             tags "consent"
+        }
+
+        #
+        # Data Exchange transactions
+        #
+        remoteXIS.viewer -> xis.pep "Request patient healthcare data" "FHIR" {
+            tags "dataexchange"
+        }
+        xis.pep -> xis.kp.pdp "Authorize data exchange request" "OPA / AuthzAPI" {
+            tags "dataexchange"
+        }
+        xis.kp.pdp -> xis.kp.mitzClient "Check patient consent" {
+            tags "dataexchange,consent"
+        }
+
+        xis.pep -> xis.ehr "Forward authorized request" "FHIR" {
+            tags "dataexchange"
         }
     }
 
@@ -166,6 +188,20 @@ workspace "Knooppunt" "Description" {
         component xis.kp "GF_Localization_ComponentDiagram" {
             title "Knooppunt perspective: component diagram of systems and transactions involved in GF Localization"
             include "element.tag==localization || relationship.tag==localization"
+        }
+
+        # Data exchange
+        container xis "DataExchange_ContainerDiagram" {
+            title "XIS Perspective: containers, systems and databases involved in Data Exchange"
+            include "element.tag==dataexchange || relationship.tag==dataexchange"
+            include "element.tag==consent || relationship.tag==consent"
+            exclude "relationship.tag==localization"
+        }
+        component xis.kp "DataExchange_ComponentDiagram" {
+            title "Knooppunt perspective: component diagram of systems and transactions involved in Data Exchange"
+            include "element.tag==dataexchange || relationship.tag==dataexchange"
+            include "element.tag==consent || relationship.tag==consent"
+            exclude "relationship.tag==localization"
         }
 
         styles {
