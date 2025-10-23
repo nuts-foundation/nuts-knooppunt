@@ -21,7 +21,7 @@ func TestNew(t *testing.T) {
 			SourceSystem:  "urn:oid:2.16.840.1.113883.2.4.6.6.90000017",
 		}
 
-		component, err := New(config, nil)
+		component, err := New(config)
 		require.NoError(t, err)
 		require.NotNil(t, component)
 		assert.Equal(t, "urn:oid:2.16.840.1.113883.2.4.6.6.1", component.gatewaySystem)
@@ -31,7 +31,7 @@ func TestNew(t *testing.T) {
 	t.Run("missing mitzbase", func(t *testing.T) {
 		config := Config{}
 
-		component, err := New(config, nil)
+		component, err := New(config)
 		require.Error(t, err)
 		assert.Nil(t, component)
 		assert.Contains(t, err.Error(), "mitzbase must be configured")
@@ -42,7 +42,7 @@ func TestNew(t *testing.T) {
 			MitzBase: "://invalid-url",
 		}
 
-		component, err := New(config, nil)
+		component, err := New(config)
 		require.Error(t, err)
 		assert.Nil(t, component)
 		assert.Contains(t, err.Error(), "invalid mitzbase URL")
@@ -105,7 +105,7 @@ func TestRegisterHttpHandlers(t *testing.T) {
 	config := Config{
 		MitzBase: "http://example.com",
 	}
-	component, err := New(config, nil)
+	component, err := New(config)
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
