@@ -68,7 +68,7 @@ Environment variables use the prefix `KNPT_` followed by the configuration path 
 | `KNPT_MITZ_SOURCESYSTEM`            | `mitz.sourcesystem`            | Gateway system OID (added as FHIR extension)                                                                                                               |
 | `KNPT_MITZ_TLSCERTFILE`             | `mitz.tlscertfile`             | Path to client certificate (.p12/.pfx or .pem)                                                                                                             |
 | `KNPT_MITZ_TLSKEYFILE`              | `mitz.tlskeyfile`              | Path to private key (only for .pem certs)                                                                                                                  |
-| `KNPT_MITZ_TLSKEYPASSWORD`          | `mitz.tlskeypassword`          | Password for encrypted certificate/key                                                                                                                     |
+| `KNPT_MITZ_TLSKEYPASSWORD`          | `mitz.tlskeypassword`          | Password for .p12/.pfx                                                                                                                               |
 | `KNPT_MITZ_TLSCAFILE`               | `mitz.tlscafile`               | Path to server certificate                                                                                                                                 |
 
 ### Example Environment Variable Usage
