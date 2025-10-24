@@ -54,21 +54,21 @@ nvi:
 
 Environment variables use the prefix `KNPT_` followed by the configuration path in uppercase with underscores:
 
-| Environment Variable                | YAML Path            | Description                                                                         |
-|-------------------------------------|----------------------|-------------------------------------------------------------------------------------|
-| `KNPT_NUTS_ENABLED`                 | `nuts.enabled`       | Enable embedded Nuts node                                                           |
-| `KNPT_MCSDADMIN_FHIRBASEURL`        | `mcsdadmin.fhirbaseurl` | FHIR base URL for admin interface                                                   |
-| `KNPT_MCSD_QUERY_FHIRBASEURL`       | `mcsd.query.fhirbaseurl` | Local Query Directory FHIR base URL                                                 |
+| Environment Variable                | YAML Path                      | Description                                                                         |
+|-------------------------------------|--------------------------------|-------------------------------------------------------------------------------------|
+| `KNPT_NUTS_ENABLED`                 | `nuts.enabled`                 | Enable embedded Nuts node                                                           |
+| `KNPT_MCSDADMIN_FHIRBASEURL`        | `mcsdadmin.fhirbaseurl`        | FHIR base URL for admin interface                                                   |
+| `KNPT_MCSD_QUERY_FHIRBASEURL`       | `mcsd.query.fhirbaseurl`       | Local Query Directory FHIR base URL                                                 |
 | `KNPT_MCSD_ADMIN_<KEY>_FHIRBASEURL` | `mcsd.admin.<key>.fhirbaseurl` | Remote mCSD Admin Directory FHIR base URL                                           |
-| `KNPT_NVI_BASEURL`                  | `nvi.baseurl`        | Base URL of the NVI service.                                                        |
-| `KNPT_NVI_AUDIENCE`                 | `nvi.audience`       | Name of the NVI service, used for creating BSN transport tokens. Defaults to "nvi". |
-| `KNPT_MITZ_MITZBASE`                | `mitz.mitzbase`      | Base URL of the MITZ endpoint                                                       |
-| `KNPT_MITZ_GATEWAYSYSTEM`           | `mitz.gatewaysystem` | URL where MITZ will send consent notifications (your callback endpoint)             |
-| `KNPT_MITZ_SOURCESYSTEM`            | `mitz.sourcesystem`  | Gateway system OID (added as FHIR extension)                                        |
-| `KNPT_MITZ_TLSCERTFILE`             | `mitz.tlscertfile`   | Source system OID (added as FHIR extension)                                         |
-| `KNPT_MITZ_TLSKEYFILE`              | `mitz.tlskeyfile`    | Path to client certificate (.p12/.pfx or .pem)                                      |
-| `KNPT_MITZ_TLSKEYPASSWORD`          | `mitz.tlskeypassword` | Path to private key (only for .pem certs)                                           |
-| `KNPT_MITZ_TLSCAFILE`               | `mitz.tlscafile`     | Password for encrypted certificate/key                                              |
+| `KNPT_NVI_BASEURL`                  | `nvi.baseurl`                  | Base URL of the NVI service.                                                        |
+| `KNPT_NVI_AUDIENCE`                 | `nvi.audience`                 | Name of the NVI service, used for creating BSN transport tokens. Defaults to "nvi". |
+| `KNPT_MITZ_MITZBASE`                | `mitz.mitzbase`                | Base URL of the MITZ endpoint                                                       |
+| `KNPT_MITZ_GATEWAYSYSTEM`           | `mitz.gatewaysystem`           | URL where MITZ will send consent notifications (your callback endpoint)             |
+| `KNPT_MITZ_SOURCESYSTEM`            | `mitz.sourcesystem`            | Gateway system OID (added as FHIR extension)                                        |
+| `KNPT_MITZ_TLSCERTFILE`             | `mitz.tlscertfile`             | Path to client certificate (.p12/.pfx or .pem)                                      |
+| `KNPT_MITZ_TLSKEYFILE`              | `mitz.tlskeyfile`              | Path to private key (only for .pem certs)                                           |
+| `KNPT_MITZ_TLSKEYPASSWORD`          | `mitz.tlskeypassword`          | Password for encrypted certificate/key                                              |
+| `KNPT_MITZ_TLSCAFILE`               | `mitz.tlscafile`               | Path to server certificate                                                          |
 
 ### Example Environment Variable Usage
 
