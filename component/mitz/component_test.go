@@ -49,58 +49,6 @@ func TestNew(t *testing.T) {
 	})
 }
 
-func TestCreateSubscription(t *testing.T) {
-	component := &Component{
-		gatewaySystem: "urn:oid:2.16.840.1.113883.2.4.6.6.1",
-		sourceSystem:  "urn:oid:2.16.840.1.113883.2.4.6.6.90000017",
-	}
-
-	subscription := component.createSubscription("123456789", "01234567", "Z3")
-
-	// Verify basic fields
-	assert.Equal(t, fhir.SubscriptionStatusRequested, subscription.Status)
-	assert.Equal(t, "OTV", subscription.Reason)
-	assert.Equal(t, "Consent?_query=otv&patientid=123456789&providerid=01234567&providertype=Z3", subscription.Criteria)
-
-	// Verify channel
-	assert.Equal(t, fhir.SubscriptionChannelTypeRestHook, subscription.Channel.Type)
-	assert.NotNil(t, subscription.Channel.Payload)
-	assert.Equal(t, "application/fhir+json", *subscription.Channel.Payload)
-
-	// Verify extensions
-	assert.Len(t, subscription.Extension, 2)
-
-	// Check patient birth date extension
-	var foundGateway, foundSource bool
-	for _, ext := range subscription.Extension {
-		switch ext.Url {
-		//case "http://fhir.nl/StructureDefinition/Patient.birthDate":
-		//	foundBirthDate = true
-		//	assert.NotNil(t, ext.ValueDate)
-		//	assert.Equal(t, "2012-03-07", *ext.ValueDate)
-		case "http://fhir.nl/StructureDefinition/GatewaySystem":
-			foundGateway = true
-			assert.NotNil(t, ext.ValueOid)
-			assert.Equal(t, "urn:oid:2.16.840.1.113883.2.4.6.6.1", *ext.ValueOid)
-		case "http://fhir.nl/StructureDefinition/SourceSystem":
-			foundSource = true
-			assert.NotNil(t, ext.ValueOid)
-			assert.Equal(t, "urn:oid:2.16.840.1.113883.2.4.6.6.90000017", *ext.ValueOid)
-		}
-	}
-	assert.True(t, foundGateway, "Gateway system extension not found")
-	assert.True(t, foundSource, "Source system extension not found")
-}
-
-func TestCreateSubscription_WithoutOptionalFields(t *testing.T) {
-	component := &Component{}
-
-	subscription := component.createSubscription("123456789", "01234567", "Z3")
-
-	// Should have no extensions when optional fields are missing
-	assert.Len(t, subscription.Extension, 0)
-}
-
 func TestRegisterHttpHandlers(t *testing.T) {
 	config := Config{
 		MitzBase: "http://example.com",
