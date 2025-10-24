@@ -1,4 +1,4 @@
-package care2cure
+package knpt_mcsd_query
 
 import (
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
@@ -6,29 +6,28 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-func AdminHAPITenant() hapi.Tenant {
+func QueryHAPITenant() hapi.Tenant {
 	return hapi.Tenant{
-		Name: "care2cure-admin",
-		ID:   4,
+		Name: "knpt-mcsd-query",
+		ID:   2,
 	}
 }
-
 func Organization() fhir.Organization {
 	return fhir.Organization{
-		Id: to.Ptr("a3e4080d-8d53-4e53-bfbc-564e85158649"),
+		Id: to.Ptr("e5909595-767e-41c1-9b00-a23ddf33e5d2"),
 		Meta: &fhir.Meta{
 			Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization"},
 		},
-		Name: to.Ptr("Care2Cure Hospital"),
+		Name: to.Ptr("Sunflower Care Home"),
 		Identifier: []fhir.Identifier{
 			{
 				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
-				Value:  to.Ptr("00000030"),
+				Value:  to.Ptr("00000020"),
 			},
 		},
 		Endpoint: []fhir.Reference{
 			{
-				Reference: to.Ptr("Endpoint/bce8a799-e6ba-4c06-8a1c-bc052f01a636"),
+				Reference: to.Ptr("Endpoint/f8a9c2d1-4567-489a-bcde-123456789abd"),
 				Type:      to.Ptr("Endpoint"),
 			},
 		},
@@ -38,8 +37,8 @@ func Organization() fhir.Organization {
 func Endpoints() []fhir.Endpoint {
 	return []fhir.Endpoint{
 		{
-			Id:      to.Ptr("bce8a799-e6ba-4c06-8a1c-bc052f01a636"),
-			Address: "https://example.com/care2curehospital/fhir",
+			Id:      to.Ptr("f8a9c2d1-4567-489a-bcde-123456789abd"),
+			Address: "http://localhost:7050/fhir/sunflower-patients",
 			Meta: &fhir.Meta{
 				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
 			},
@@ -49,7 +48,7 @@ func Endpoints() []fhir.Endpoint {
 				Code:   to.Ptr("fhir"),
 			},
 			Period: &fhir.Period{
-				Start: to.Ptr("2025-01-02T00:00:00Z"),
+				Start: to.Ptr("2025-01-01T00:00:00Z"),
 			},
 		},
 	}
