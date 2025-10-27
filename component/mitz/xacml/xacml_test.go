@@ -26,7 +26,6 @@ func TestCreateAuthzDecisionQuery(t *testing.T) {
 		ProviderInstitutionID:  "00000666",
 		ConsultingFacilityType: "Z3",
 		PurposeOfUse:           "TREAT",
-		ToAddress:              "http://localhost:8000/4",
 	}
 
 	xml, err := CreateAuthzDecisionQuery(req)
@@ -79,7 +78,6 @@ func TestCreateAuthzDecisionQuery_Structure(t *testing.T) {
 		ProviderInstitutionID:  "00005678",
 		ConsultingFacilityType: "H1",
 		PurposeOfUse:           "RESEARCH",
-		ToAddress:              "http://test.example.com/endpoint",
 	}
 
 	xml, err := CreateAuthzDecisionQuery(req)
@@ -109,7 +107,6 @@ func TestCreateAuthzDecisionQuery_AttributeIDs(t *testing.T) {
 		ProviderInstitutionID:  "00000002",
 		ConsultingFacilityType: "Z1",
 		PurposeOfUse:           "TREAT",
-		ToAddress:              "http://example.com",
 	}
 
 	xml, err := CreateAuthzDecisionQuery(req)
@@ -144,7 +141,6 @@ func TestCreateAuthzDecisionQuery_DataTypes(t *testing.T) {
 		ProviderInstitutionID:  "00009998",
 		ConsultingFacilityType: "Z9",
 		PurposeOfUse:           "TREAT",
-		ToAddress:              "http://test.com",
 	}
 
 	xml, err := CreateAuthzDecisionQuery(req)
@@ -204,7 +200,6 @@ func TestCreateSignedAuthzDecisionQuery(t *testing.T) {
 		ProviderInstitutionID:  "00000666",
 		ConsultingFacilityType: "Z3",
 		PurposeOfUse:           "TREAT",
-		ToAddress:              "http://localhost:8000/4",
 	}
 
 	xml, err := CreateSignedAuthzDecisionQuery(req, signingConfig)
@@ -244,7 +239,6 @@ func TestCreateSignedAuthzDecisionQuery_WithoutConfig(t *testing.T) {
 		ProviderInstitutionID:  "00000002",
 		ConsultingFacilityType: "Z3",
 		PurposeOfUse:           "TREAT",
-		ToAddress:              "http://example.com",
 	}
 
 	_, err := CreateSignedAuthzDecisionQuery(req, nil)
@@ -265,7 +259,6 @@ func TestSignedQuery_HasRequestID(t *testing.T) {
 		ProviderInstitutionID:  "00000002",
 		ConsultingFacilityType: "Z1",
 		PurposeOfUse:           "TREAT",
-		ToAddress:              "http://example.com",
 	}
 
 	xml, err := CreateSignedAuthzDecisionQuery(req, signingConfig)
@@ -289,7 +282,6 @@ func TestUnsignedQuery_NoSignature(t *testing.T) {
 		ProviderInstitutionID:  "00009998",
 		ConsultingFacilityType: "Z9",
 		PurposeOfUse:           "TREAT",
-		ToAddress:              "http://test.com",
 	}
 
 	xml, err := CreateAuthzDecisionQuery(req)
@@ -323,9 +315,6 @@ func ExampleCreateAuthzDecisionQuery() {
 
 		// Environment attributes (context of the request)
 		PurposeOfUse: "TREAT", // Purpose: TREAT, RESEARCH, etc.
-
-		// Endpoint
-		ToAddress: "http://localhost:8000/4", // XACML PDP endpoint
 	}
 
 	// Generate the XACML query
