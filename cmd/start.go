@@ -11,6 +11,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
+	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
@@ -64,6 +65,15 @@ func Start(ctx context.Context, config Config) error {
 		components = append(components, nviComponent)
 	} else {
 		log.Ctx(ctx).Info().Msg("NVI component is disabled")
+	}
+
+	// Create PDP component
+	if config.PDP.Enabled {
+		pdpComponent, err := pdp.New(config.PDP)
+		if err != nil {
+			return errors.Wrap(err, "failed to create PDP component")
+		}
+		components = append(components, pdpComponent)
 	}
 
 	// Components: RegisterHandlers()
