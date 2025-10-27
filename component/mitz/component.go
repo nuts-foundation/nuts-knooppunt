@@ -147,60 +147,35 @@ func (c *Component) handleNotify(httpResponse http.ResponseWriter, httpRequest *
 	httpResponse.WriteHeader(http.StatusNoContent)
 }
 
-// handleConsentCheck triggers a consent check by invoking MITZ closed query
-func (c *Component) handleConsentCheck(httpResponse http.ResponseWriter, httpRequest *http.Request) {
+// CheckConsent triggers a consent check by invoking MITZ closed query.
+// This is a non-HTTP function that can be invoked programmatically.
+// It takes an AuthzRequest containing all required parameters for the consent check.
+// Returns an XACMLResponse containing the decision (Permit/Deny/NotApplicable/Indeterminate) and the full XML response.
+func (c *Component) CheckConsent(ctx context.Context, authzReq xacml.AuthzRequest) (*xacml.XACMLResponse, error) {
 	if c.consentCheckEndpoint == "" {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-			Message:   "Consent check endpoint not configured",
-			IssueType: fhir.IssueTypeNotSupported,
-		})
-		return
+		return nil, fmt.Errorf("consent check endpoint not configured")
 	}
 
-	// Create a request with all required parameters
-	req := xacml.AuthzRequest{
-		PatientBSN:             "900186021",
-		HealthcareFacilityType: "Z3",
-		AuthorInstitutionID:    "00000659",
-		EventCode:              "GGC002",
-		SubjectRole:            "01.015",
-		ProviderID:             "000095254",
-		ProviderInstitutionID:  "00000666",
-		ConsultingFacilityType: "Z3",
-		PurposeOfUse:           "TREAT",
-		ToAddress:              "http://localhost:8000/4",
-	}
-
-	authnDecisionQueryXml, err := xacml.CreateAuthzDecisionQuery(req)
+	authnDecisionQueryXml, err := xacml.CreateAuthzDecisionQuery(authzReq)
 	if err != nil {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-			Message:   "Failed to create authorization decision query",
-			Cause:     err,
-			IssueType: fhir.IssueTypeInvalid,
-		})
-		return
+		return nil, fmt.Errorf("failed to create authorization decision query: %w", err)
 	}
 
 	// Log the XML request
-	log.Info().
+	log.Ctx(ctx).Info().
 		Str("endpoint", c.consentCheckEndpoint).
 		Str("xmlPayload", authnDecisionQueryXml).
 		Msg("Sending consent check request to MITZ")
 
 	// Create HTTP request with XML payload
 	httpReq, err := http.NewRequestWithContext(
-		httpRequest.Context(),
+		ctx,
 		http.MethodPost,
 		c.consentCheckEndpoint,
 		bytes.NewBufferString(authnDecisionQueryXml),
 	)
 	if err != nil {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-			Message:   "Failed to create HTTP request",
-			Cause:     err,
-			IssueType: fhir.IssueTypeTransient,
-		})
-		return
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
 	// Set XML content type
@@ -209,47 +184,41 @@ func (c *Component) handleConsentCheck(httpResponse http.ResponseWriter, httpReq
 	// Send request using mTLS-configured HTTP client
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to send consent check request to MITZ")
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-			Message:   "Failed to send consent check request",
-			Cause:     err,
-			IssueType: fhir.IssueTypeTransient,
-		})
-		return
+		log.Ctx(ctx).Error().Err(err).Msg("Failed to send consent check request to MITZ")
+		return nil, fmt.Errorf("failed to send consent check request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Read response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to read consent check response")
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-			Message:   "Failed to read consent check response",
-			Cause:     err,
-			IssueType: fhir.IssueTypeTransient,
-		})
-		return
+		log.Ctx(ctx).Error().Err(err).Msg("Failed to read consent check response")
+		return nil, fmt.Errorf("failed to read consent check response: %w", err)
 	}
 
 	// Log response
-	log.Info().
+	log.Ctx(ctx).Info().
 		Int("statusCode", resp.StatusCode).
 		Str("responseBody", string(responseBody)).
 		Msg("Received consent check response from MITZ")
 
 	// Check for non-2xx status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-			Message:   fmt.Sprintf("Consent check failed with status %d: %s", resp.StatusCode, string(responseBody)),
-			IssueType: fhir.IssueTypeTransient,
-		})
-		return
+		return nil, fmt.Errorf("consent check failed with status %d: %s", resp.StatusCode, string(responseBody))
 	}
 
-	// Return the XML response
-	httpResponse.Header().Set("Content-Type", "text/xml")
-	httpResponse.WriteHeader(http.StatusOK)
-	httpResponse.Write(responseBody)
+	// Parse the XACML response to extract the decision
+	xacmlResp, err := xacml.ParseXACMLResponse(responseBody)
+	if err != nil {
+		log.Ctx(ctx).Error().Err(err).Msg("Failed to parse XACML response")
+		return nil, fmt.Errorf("failed to parse XACML response: %w", err)
+	}
+
+	log.Ctx(ctx).Info().
+		Str("decision", xacmlResp.Decision.String()).
+		Msg("Consent check decision")
+
+	return xacmlResp, nil
 }
 
 // validateMITZSubscription validates that a Subscription resource meets MITZ requirements

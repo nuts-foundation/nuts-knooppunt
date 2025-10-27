@@ -28,6 +28,8 @@ func CreateSignedAuthzDecisionQuery(req AuthzRequest, signingConfig *SigningConf
 
 // createAuthzDecisionQuery generates a SOAP envelope (optionally signed) containing an XACML authorization decision query
 func createAuthzDecisionQuery(req AuthzRequest, signingConfig *SigningConfig) (string, error) {
+	// Hardcoded ToAddress endpoint for MITZ callback
+	const toAddress = "http://localhost:8000/4"
 	// Create SOAP Envelope
 	envelope := etree.NewElement("SOAP-ENV:Envelope")
 	envelope.CreateAttr("xmlns:SOAP-ENV", "http://www.w3.org/2003/05/soap-envelope")
@@ -50,7 +52,7 @@ func createAuthzDecisionQuery(req AuthzRequest, signingConfig *SigningConfig) (s
 	address.SetText("http://www.w3.org/2005/08/addressing/anonymous")
 
 	to := header.CreateElement("wsa:To")
-	to.SetText(req.ToAddress)
+	to.SetText(toAddress)
 
 	// SOAP Body
 	body := envelope.CreateElement("SOAP-ENV:Body")
@@ -296,4 +298,90 @@ func buildXACMLSignedInfo(requestID, digestValue string) *etree.Element {
 	digestValueElement.SetText(digestValue)
 
 	return signedInfo
+}
+
+// ParseXACMLResponse parses the XACML authorization decision query response and extracts the decision.
+// The response is expected to be a SOAP envelope containing an XACML Response with a Result/Decision element.
+// Example structure:
+//
+//	<s:Envelope>
+//	  <s:Body>
+//	    <Response>
+//	      <Result>
+//	        <Decision>Permit</Decision>
+//	        ...
+//	      </Result>
+//	    </Response>
+//	  </s:Body>
+//	</s:Envelope>
+func ParseXACMLResponse(responseXML []byte) (*XACMLResponse, error) {
+	doc := etree.NewDocument()
+	err := doc.ReadFromBytes(responseXML)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse XACML response XML: %w", err)
+	}
+
+	root := doc.Root()
+	if root == nil {
+		return nil, fmt.Errorf("invalid XACML response: no root element found")
+	}
+
+	// Navigate to the Decision element: /Envelope/Body/Response/Result/Decision
+	// Using etree's FindElement with paths that handle namespaces
+	var decisionText string
+
+	// Try to find Response element with namespace
+	responseElem := root.FindElement(".//{urn:oasis:names:tc:xacml:3.0:core:schema:wd-17}Response")
+	if responseElem == nil {
+		// Try without namespace
+		responseElem = root.FindElement(".//Response")
+	}
+	if responseElem == nil {
+		return nil, fmt.Errorf("invalid XACML response: Response element not found")
+	}
+
+	// Find Result element
+	resultElem := responseElem.FindElement("{urn:oasis:names:tc:xacml:3.0:core:schema:wd-17}Result")
+	if resultElem == nil {
+		// Try without namespace
+		resultElem = responseElem.FindElement("Result")
+	}
+	if resultElem == nil {
+		return nil, fmt.Errorf("invalid XACML response: Result element not found")
+	}
+
+	// Find Decision element
+	decisionElem := resultElem.FindElement("{urn:oasis:names:tc:xacml:3.0:core:schema:wd-17}Decision")
+	if decisionElem == nil {
+		// Try without namespace
+		decisionElem = resultElem.FindElement("Decision")
+	}
+	if decisionElem == nil {
+		return nil, fmt.Errorf("invalid XACML response: Decision element not found")
+	}
+
+	decisionText = decisionElem.Text()
+	if decisionText == "" {
+		return nil, fmt.Errorf("invalid XACML response: Decision element is empty")
+	}
+
+	// Convert decision text to Decision constant
+	var decision Decision
+	switch decisionText {
+	case "Permit":
+		decision = DecisionPermit
+	case "Deny":
+		decision = DecisionDeny
+	case "NotApplicable":
+		decision = DecisionNotApplicable
+	case "Indeterminate":
+		decision = DecisionIndeterminate
+	default:
+		return nil, fmt.Errorf("invalid decision value: %s", decisionText)
+	}
+
+	return &XACMLResponse{
+		Decision: decision,
+		RawXML:   responseXML,
+	}, nil
 }
