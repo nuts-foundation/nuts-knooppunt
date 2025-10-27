@@ -52,6 +52,16 @@ func Start(ctx context.Context, config Config) error {
 			return errors.Wrap(err, "failed to create MITZ component")
 		}
 		components = append(components, mitzComponent)
+
+		// Create PDP component
+		if config.PDP.Enabled {
+			pdpComponent, err := pdp.New(config.PDP, mitzComponent)
+			if err != nil {
+				return errors.Wrap(err, "failed to create PDP component")
+			}
+			components = append(components, pdpComponent)
+		}
+
 	} else {
 		log.Ctx(ctx).Info().Msg("MITZ component is disabled")
 	}
@@ -65,15 +75,6 @@ func Start(ctx context.Context, config Config) error {
 		components = append(components, nviComponent)
 	} else {
 		log.Ctx(ctx).Info().Msg("NVI component is disabled")
-	}
-
-	// Create PDP component
-	if config.PDP.Enabled {
-		pdpComponent, err := pdp.New(config.PDP)
-		if err != nil {
-			return errors.Wrap(err, "failed to create PDP component")
-		}
-		components = append(components, pdpComponent)
 	}
 
 	// Components: RegisterHandlers()

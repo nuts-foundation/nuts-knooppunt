@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 )
 
 type Config struct {
@@ -23,12 +24,14 @@ var _ component.Lifecycle = (*Component)(nil)
 
 type Component struct {
 	Config Config
+	Mitz   *mitz.Component
 }
 
 // New creates an instance of the pdp component, which provides a simple policy decision endpoint.
-func New(config Config) (*Component, error) {
+func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
 	return &Component{
 		Config: config,
+		Mitz:   mitzcomp,
 	}, nil
 }
 
