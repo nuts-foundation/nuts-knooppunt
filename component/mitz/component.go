@@ -147,48 +147,6 @@ func (c *Component) handleNotify(httpResponse http.ResponseWriter, httpRequest *
 	httpResponse.WriteHeader(http.StatusNoContent)
 }
 
-// CreateSubscription creates a MITZ subscription (implements nvi.MITZSubscriber interface)
-func (c *Component) CreateSubscription(ctx context.Context, patientID, providerID, providerType string) error {
-	// Create FHIR Subscription
-	subscription := c.createSubscription(patientID, providerID, providerType)
-
-	// Send subscription to configured FHIR endpoint
-	var created fhir.Subscription
-	var headers fhirclient.Headers
-	err := c.client.CreateWithContext(ctx, subscription, &created, fhirclient.ResponseHeaders(&headers))
-	if err != nil {
-		// Check if it's an OperationOutcome error to extract status code
-		var outcomeErr fhirclient.OperationOutcomeError
-		if errors.As(err, &outcomeErr) {
-			switch outcomeErr.HttpStatusCode {
-			case http.StatusBadRequest:
-				return fmt.Errorf("FHIR resource does not meet specifications: %w", err)
-			case http.StatusUnauthorized:
-				return fmt.Errorf("not authorized to create subscription at MITZ endpoint: %w", err)
-			case http.StatusNotFound:
-				return fmt.Errorf("MITZ endpoint not found: %w", err)
-			case http.StatusUnprocessableEntity:
-				return fmt.Errorf("MITZ business rules are not met: %w", err)
-			case http.StatusTooManyRequests:
-				return fmt.Errorf("too many requests to MITZ endpoint: %w", err)
-			default:
-				return fmt.Errorf("failed to create subscription at MITZ endpoint: %w", err)
-			}
-		}
-	}
-	// 202 Accepted is OK (MITZ responds with 202 instead of 201)
-
-	location := headers.Header.Get("Location")
-
-	log.Info().
-		Str("patientID", patientID).
-		Str("providerID", providerID).
-		Str("subscriptionId", location).
-		Msg("Successfully created MITZ subscription")
-
-	return nil
-}
-
 // CheckConsent triggers a consent check by invoking MITZ closed query.
 // This is a non-HTTP function that can be invoked programmatically.
 // It takes an AuthzRequest containing all required parameters for the consent check.
