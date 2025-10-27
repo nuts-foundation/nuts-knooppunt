@@ -3,8 +3,8 @@ package mitz
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,7 +12,6 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
-	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
@@ -146,48 +145,6 @@ func (c *Component) handleNotify(httpResponse http.ResponseWriter, httpRequest *
 	// to be sending XMLs, which go fhir lib doesn't support yet
 
 	httpResponse.WriteHeader(http.StatusNoContent)
-}
-
-// CreateSubscription creates a MITZ subscription (implements nvi.MITZSubscriber interface)
-func (c *Component) CreateSubscription(ctx context.Context, patientID, providerID, providerType string) error {
-	// Create FHIR Subscription
-	subscription := c.createSubscription(patientID, providerID, providerType)
-
-	// Send subscription to configured FHIR endpoint
-	var created fhir.Subscription
-	var headers fhirclient.Headers
-	err := c.client.CreateWithContext(ctx, subscription, &created, fhirclient.ResponseHeaders(&headers))
-	if err != nil {
-		// Check if it's an OperationOutcome error to extract status code
-		var outcomeErr fhirclient.OperationOutcomeError
-		if errors.As(err, &outcomeErr) {
-			switch outcomeErr.HttpStatusCode {
-			case http.StatusBadRequest:
-				return fmt.Errorf("FHIR resource does not meet specifications: %w", err)
-			case http.StatusUnauthorized:
-				return fmt.Errorf("not authorized to create subscription at MITZ endpoint: %w", err)
-			case http.StatusNotFound:
-				return fmt.Errorf("MITZ endpoint not found: %w", err)
-			case http.StatusUnprocessableEntity:
-				return fmt.Errorf("MITZ business rules are not met: %w", err)
-			case http.StatusTooManyRequests:
-				return fmt.Errorf("too many requests to MITZ endpoint: %w", err)
-			default:
-				return fmt.Errorf("failed to create subscription at MITZ endpoint: %w", err)
-			}
-		}
-	}
-	// 202 Accepted is OK (MITZ responds with 202 instead of 201)
-
-	location := headers.Header.Get("Location")
-
-	log.Info().
-		Str("patientID", patientID).
-		Str("providerID", providerID).
-		Str("subscriptionId", location).
-		Msg("Successfully created MITZ subscription")
-
-	return nil
 }
 
 // handleConsentCheck triggers a consent check by invoking MITZ closed query
@@ -377,6 +334,7 @@ func validateMITZSubscription(subscription fhir.Subscription) *fhirapi.Error {
 func (c *Component) addConfigExtensions(subscription *fhir.Subscription) {
 	// Gateway system extension
 	if c.gatewaySystem != "" {
+		log.Debug().Str("oid", c.gatewaySystem).Msg("Adding GatewaySystem from configuration")
 		subscription.Extension = append(subscription.Extension, fhir.Extension{
 			Url:      "http://fhir.nl/StructureDefinition/GatewaySystem",
 			ValueOid: to.Ptr(c.gatewaySystem),
@@ -385,6 +343,7 @@ func (c *Component) addConfigExtensions(subscription *fhir.Subscription) {
 
 	// Source system extension
 	if c.sourceSystem != "" {
+		log.Debug().Str("oid", c.sourceSystem).Msg("Adding SourceSystem from configuration")
 		subscription.Extension = append(subscription.Extension, fhir.Extension{
 			Url:      "http://fhir.nl/StructureDefinition/SourceSystem",
 			ValueOid: to.Ptr(c.sourceSystem),
@@ -493,60 +452,4 @@ func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpReques
 	// Note: The fhir-client doesn't expose the raw HTTP response,
 	// so we trust that if CreateWithContext succeeds, the subscription was accepted
 	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusCreated, resource)
-}
-
-// createSubscription creates a FHIR Subscription from the subscribe request
-func (c *Component) createSubscription(patientId, providerId, providerType string) fhir.Subscription {
-	subscription := fhir.Subscription{
-		Status: fhir.SubscriptionStatusRequested,
-		Reason: "OTV",
-		Criteria: fmt.Sprintf("Consent?_query=otv&patientid=%s&providerid=%s&providertype=%s",
-			patientId, providerId, providerType),
-		Channel: fhir.SubscriptionChannel{
-			Type:    fhir.SubscriptionChannelTypeRestHook,
-			Payload: to.Ptr(fhirJSONContentType),
-		},
-	}
-
-	// Add extensions
-	var extensions []fhir.Extension
-
-	/**
-	This data is
-	conditionally mandatory: if the
-	healthcare provider has a verified
-	date of birth of the patient, then it
-	must be given.
-
-	Patient birth date extension
-	if req.PatientBirthDate != "" {
-		extensions = append(extensions, fhir.Extension{
-			Url:       "http://fhir.nl/StructureDefinition/Patient.birthDate",
-			ValueDate: to.Ptr(req.PatientBirthDate),
-		})
-	}
-
-	*/
-
-	// Gateway system extension
-	if c.gatewaySystem != "" {
-		extensions = append(extensions, fhir.Extension{
-			Url:      "http://fhir.nl/StructureDefinition/GatewaySystem",
-			ValueOid: to.Ptr(c.gatewaySystem),
-		})
-	}
-
-	// Source system extension
-	if c.sourceSystem != "" {
-		extensions = append(extensions, fhir.Extension{
-			Url:      "http://fhir.nl/StructureDefinition/SourceSystem",
-			ValueOid: to.Ptr(c.sourceSystem),
-		})
-	}
-
-	if len(extensions) > 0 {
-		subscription.Extension = extensions
-	}
-
-	return subscription
 }
