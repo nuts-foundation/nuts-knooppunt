@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 )
@@ -46,9 +47,12 @@ func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *h
 }
 
 type MainPolicyInput struct {
-	Method string   `json:"method"`
-	Path   []string `json:"path"`
-	User   string   `json:"user"`
+	Method       string   `json:"method"`
+	Path         []string `json:"path"`
+	SubjectType  string   `json:"subject_type"`
+	SubjectId    string   `json:"subject_id"`
+	SubjectRole  *string  `json:"subject_organization_id"`
+	PurposeOfUse string   `json:"purpose_of_use"`
 }
 
 type MainPolicyResponse struct {
@@ -60,6 +64,19 @@ type MainPolicyResult struct {
 }
 
 func mainPolicyHandler(w http.ResponseWriter, r *http.Request) {
+	var input MainPolicyInput
+	err := json.NewDecoder(r.Body).Decode(&input)
+	if err != nil {
+		http.Error(w, "unable to parse request body", http.StatusBadRequest)
+		return
+	}
+
+	ok := validateInput(input)
+	if !ok {
+		http.Error(w, "input not valid", http.StatusBadRequest)
+		return
+	}
+
 	resp := MainPolicyResponse{
 		Result: MainPolicyResult{
 			Allow: false,
@@ -74,4 +91,20 @@ func mainPolicyHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(b)
+}
+
+func validateInput(input MainPolicyInput) bool {
+	requiredValues := []string{input.SubjectId, input.SubjectType, input.PurposeOfUse}
+	if slices.Contains(requiredValues, "") {
+		return false
+	}
+
+	validMethods := []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPatch}
+	if !slices.Contains(validMethods, input.Method) {
+		return false
+	}
+
+	// Add more validations here once we agreed upon a contract
+
+	return true
 }
