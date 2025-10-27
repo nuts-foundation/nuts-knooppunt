@@ -2,6 +2,7 @@ package pdp
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
@@ -41,8 +42,36 @@ func (c Component) Stop(ctx context.Context) error {
 }
 
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	internalMux.HandleFunc("/pdp", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	})
+	internalMux.HandleFunc("POST /pdp", mainPolicyHandler)
+}
+
+type MainPolicyInput struct {
+	Method string   `json:"method"`
+	Path   []string `json:"path"`
+	User   string   `json:"user"`
+}
+
+type MainPolicyResponse struct {
+	Result MainPolicyResult `json:"result"`
+}
+
+type MainPolicyResult struct {
+	Allow bool `json:"allow"`
+}
+
+func mainPolicyHandler(w http.ResponseWriter, r *http.Request) {
+	resp := MainPolicyResponse{
+		Result: MainPolicyResult{
+			Allow: false,
+		},
+	}
+
+	b, err := json.Marshal(resp)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(b)
 }
