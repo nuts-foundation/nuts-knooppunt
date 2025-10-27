@@ -54,7 +54,7 @@ type MainPolicyInput struct {
 	Path         []string `json:"path"`
 	SubjectType  string   `json:"subject_type"`
 	SubjectId    string   `json:"subject_id"`
-	SubjectRole  *string  `json:"subject_organization_id"`
+	SubjectRole  *string  `json:"subject_role"`
 	PurposeOfUse string   `json:"purpose_of_use"`
 }
 
