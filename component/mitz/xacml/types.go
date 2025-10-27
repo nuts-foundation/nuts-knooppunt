@@ -54,14 +54,14 @@ type AuthzRequest struct {
 	PatientBSN string
 
 	// HealthcareFacilityType is the healthcare facility type classification code.
-	// OPTIONAL - Identifies the type of healthcare facility.
+	// REQUIRED - Identifies the type of healthcare facility.
 	// Valid values: see https://decor.nictiz.nl/pub/eoverdracht/e-overdracht-html-20120928T120000/vs-2.16.840.1.113883.2.4.15.1060.html
 	// Example: "Z3" (general hospital code)
 	HealthcareFacilityType string
 
 	// AuthorInstitutionID is the unique identifier (URA code) of the individual healthcare provider institution
 	// that is filing/authoring the authorization request.
-	// OPTIONAL - Identifies the filing organization requesting the authorization.
+	// REQUIRED - Identifies the filing organization requesting the authorization.
 	// Example: "00000659" (URA code)
 	AuthorInstitutionID string
 
@@ -75,27 +75,23 @@ type AuthzRequest struct {
 	// Example: "01.015" (physician role code)
 	SubjectRole string
 
-	// ProviderID is the unique identifier of the healthcare provider/professional making the request.
-	// OPTIONAL - Can be a UZI number, BIG number, AGB code, or an organization-issued identification number.
-	// The identification number is capped at 60 characters.
-	// When using non-UZI identification, ensure the root OID in the XACML request is set correctly.
+	// ProviderID Identification number responsible
 	// Example: "000095254" (UZI number)
 	ProviderID string
 
 	// ProviderInstitutionID is the unique identifier (URA code) of the healthcare institution (consulting organization)
-	// that employs or is responsible for the provider making the request.
-	// OPTIONAL - Identifies the consulting/responsible organization.
+	// REQUIRED - Identifies the consulting/responsible organization.
 	// Example: "00000666" (institution URA code)
 	ProviderInstitutionID string
 
 	// ConsultingFacilityType is the consulting facility type classification code.
-	// OPTIONAL - Identifies the type of facility providing the consultation/service.
+	// REQUIRED - Identifies the type of facility providing the consultation/service.
 	// Valid values: see https://decor.nictiz.nl/pub/eoverdracht/e-overdracht-html-20120928T120000/vs-2.16.840.1.113883.2.4.15.1060.html
 	// Example: "Z3" (general hospital code)
 	ConsultingFacilityType string
 
 	// PurposeOfUse is the reason/purpose for accessing the patient's information.
-	// OPTIONAL - Indicates the intended use of the authorization.
+	// REQUIRED - Indicates the intended use of the authorization.
 	// Valid values: "TREAT" (Normal with explicit consent) or "COC" (Normal with assumed consent)
 	// Example: "TREAT"
 	PurposeOfUse string
