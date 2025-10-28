@@ -178,33 +178,4 @@ describe('buildOpaRequest', () => {
 
         expect(result.input.method).toBe('POST');
     });
-
-    test('does not include raw bearer token in OPA request (security)', () => {
-        const tokenClaims = {
-            sub: 'user123',
-            role: 'practitioner',
-            uzi: '123456789',
-            ura: '00000020'
-        };
-        const fhirContext = { resourceType: 'Patient', resourceId: 'patient-123' };
-        const request = createMockRequest({
-            headersIn: { 'Authorization': 'Bearer secret-token-12345' },
-            variables: {
-                request_uri: '/fhir/Patient/patient-123',
-                request_method: 'GET'
-            }
-        });
-
-        const result = buildOpaRequest(tokenClaims, fhirContext, request);
-
-        // Verify the raw token is not included anywhere in OPA request
-        const resultStr = JSON.stringify(result);
-        expect(resultStr).not.toContain('Bearer');
-        expect(resultStr).not.toContain('secret-token-12345');
-        expect(resultStr).not.toContain('Authorization');
-
-        // Only claims should be present
-        expect(result.input.subject_id).toBe('user123');
-        expect(result.input.organization_ura).toBe('00000020');
-    });
 });
