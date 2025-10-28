@@ -449,7 +449,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint.Address = address
 
-	if len(r.PostForm["payload-types"]) < 1 {
+	if len(r.PostForm["payload-type"]) < 1 {
 		badRequest(w, r, "missing payload type")
 		return
 	}
