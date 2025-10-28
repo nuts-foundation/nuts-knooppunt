@@ -114,7 +114,7 @@ services:
   # Policy Enforcement Point (PEP) - NGINX-based reference implementation
   # Start with: docker compose --profile pep up
   pep:
-    image: nginx:1.25-alpine
+    image: nginx:1.29.2-alpine
     container_name: knooppunt-pep
     ports:
       - "9080:8080"
