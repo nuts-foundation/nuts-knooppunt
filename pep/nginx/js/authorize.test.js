@@ -4,8 +4,10 @@
  */
 
 // Import functions from authorize.js
-import { extractBearerToken, parsePathArray, extractFhirContext, buildOpaRequest } from './authorize.js';
+import authorize from './authorize.js';
 import { jest } from '@jest/globals';
+
+const { extractBearerToken, parsePathArray, extractFhirContext, buildOpaRequest } = authorize;
 
 // Mock NGINX request object
 function createMockRequest(overrides = {}) {
