@@ -105,12 +105,31 @@ describe('extractFhirContext', () => {
 });
 
 describe('buildOpaRequest', () => {
+    // Save and restore process.env
+    const originalEnv = process.env;
+
+    beforeEach(() => {
+        process.env = {
+            ...originalEnv,
+            DATA_HOLDER_ORGANIZATION_URA: '00000666',
+            DATA_HOLDER_FACILITY_TYPE: 'Z3',
+            REQUESTING_FACILITY_TYPE: 'Z3',
+            PURPOSE_OF_USE: 'TREAT',
+            EVENT_CODE: 'GGC002'
+        };
+    });
+
+    afterEach(() => {
+        process.env = originalEnv;
+    });
+
     test('builds complete OPA request', () => {
         const tokenClaims = {
             sub: 'user123',
-            role: 'practitioner',
-            uzi: '123456789',
-            ura: '00000020'
+            requesting_organization_ura: '00000020',
+            requesting_uzi_role_code: '01.015',
+            requesting_practitioner_identifier: '123456789',
+            patient_bsn: '900186021'
         };
         const fhirContext = {
             resourceType: 'Patient',
@@ -129,22 +148,24 @@ describe('buildOpaRequest', () => {
             input: {
                 method: 'GET',
                 path: ['fhir', 'Patient', 'patient-123'],
-                subject_type: 'practitioner',
-                subject_id: 'user123',
-                subject_role: 'practitioner',
-                subject_uzi: '123456789',
-                organization_ura: '00000020',
+                requesting_organization_ura: '00000020',
+                requesting_uzi_role_code: '01.015',
+                requesting_practitioner_identifier: '123456789',
+                requesting_facility_type: 'Z3',
+                data_holder_organization_ura: '00000666',
+                data_holder_facility_type: 'Z3',
+                patient_bsn: '900186021',
                 resource_type: 'Patient',
                 resource_id: 'patient-123',
-                purpose_of_use: 'treatment'
+                purpose_of_use: 'TREAT',
+                event_code: 'GGC002'
             }
         });
     });
 
     test('handles missing optional fields', () => {
         const tokenClaims = {
-            sub: 'user123',
-            role: 'patient'
+            sub: 'user123'
         };
         const fhirContext = {
             resourceType: 'Observation',
@@ -159,9 +180,9 @@ describe('buildOpaRequest', () => {
 
         const result = buildOpaRequest(tokenClaims, fhirContext, request);
 
-        //TODO: Decide whether we want this, or actually to deny the request
-        expect(result.input.subject_uzi).toBeNull();
-        expect(result.input.organization_ura).toBeNull();
+        expect(result.input.requesting_practitioner_identifier).toBeNull();
+        expect(result.input.requesting_organization_ura).toBeNull();
+        expect(result.input.patient_bsn).toBeNull();
         expect(result.input.resource_id).toBeNull();
     });
 

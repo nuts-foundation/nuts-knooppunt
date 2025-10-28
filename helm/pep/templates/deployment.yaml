@@ -42,6 +42,16 @@ spec:
             value: {{ .Values.env.knooppuntPdpHost | quote }}
           - name: KNOOPPUNT_PDP_PORT
             value: {{ .Values.env.knooppuntPdpPort | quote }}
+          - name: DATA_HOLDER_ORGANIZATION_URA
+            value: {{ .Values.env.dataHolderOrganizationUra | quote }}
+          - name: DATA_HOLDER_FACILITY_TYPE
+            value: {{ .Values.env.dataHolderFacilityType | quote }}
+          - name: REQUESTING_FACILITY_TYPE
+            value: {{ .Values.env.requestingFacilityType | quote }}
+          - name: PURPOSE_OF_USE
+            value: {{ .Values.env.purposeOfUse | quote }}
+          - name: EVENT_CODE
+            value: {{ .Values.env.eventCode | quote }}
           ports:
             - name: http
               containerPort: 8080

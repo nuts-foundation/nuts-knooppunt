@@ -44,8 +44,8 @@ NGINX-based reference implementation that enforces authorization decisions from 
 # Start PEP with rest of stack
 docker compose --profile pep up -d
 
-# Test with mock token (format: bearer-<ura>-<role>-<uzi>)
-curl -H "Authorization: Bearer bearer-00000020-practitioner-123456789" \
+# Test with mock token (format: bearer-<ura>-<uzi_role>-<practitioner_id>-<bsn>)
+curl -H "Authorization: Bearer bearer-00000020-01.015-123456789-900186021" \
   http://localhost:9080/fhir/Patient/patient-123
 ```
 
@@ -66,15 +66,25 @@ curl -H "Authorization: Bearer bearer-00000020-practitioner-123456789" \
 Environment variables in `docker-compose.yml`:
 
 ```yaml
+# Backend connections
 FHIR_BACKEND_HOST=hapi-fhir   # FHIR server
 FHIR_BACKEND_PORT=7050
 KNOOPPUNT_PDP_HOST=knooppunt  # PDP endpoint
 KNOOPPUNT_PDP_PORT=8081       # Internal API only
+
+# Data holder configuration (organization where data is stored)
+DATA_HOLDER_ORGANIZATION_URA=00000666
+DATA_HOLDER_FACILITY_TYPE=Z3
+
+# Request configuration
+REQUESTING_FACILITY_TYPE=Z3
+PURPOSE_OF_USE=TREAT
+EVENT_CODE=GGC002
 ```
 
 ## OPA Request Format
 
-The PEP sends snake_case formatted requests to the PDP:
+The PEP sends requests with clear field names matching XACML/Mitz terminology:
 
 ```json
 POST /v1/data/knooppunt/authz
@@ -83,14 +93,25 @@ POST /v1/data/knooppunt/authz
   "input": {
     "method": "GET",
     "path": ["fhir", "Patient", "patient-123"],
-    "subject_type": "practitioner",
-    "subject_id": "mock-user",
-    "subject_role": "practitioner",
-    "subject_uzi": "123456789",
-    "organization_ura": "00000020",
+
+    // REQUESTING PARTY (who is asking for data)
+    "requesting_organization_ura": "00000020",
+    "requesting_uzi_role_code": "01.015",
+    "requesting_practitioner_identifier": "123456789",
+    "requesting_facility_type": "Z3",
+
+    // DATA HOLDER PARTY (who has the data)
+    "data_holder_organization_ura": "00000666",
+    "data_holder_facility_type": "Z3",
+
+    // PATIENT/RESOURCE CONTEXT
+    "patient_bsn": "900186021",
     "resource_type": "Patient",
     "resource_id": "patient-123",
-    "purpose_of_use": "treatment"
+
+    // PURPOSE AND EVENT
+    "purpose_of_use": "TREAT",
+    "event_code": "GGC002"
   }
 }
 ```

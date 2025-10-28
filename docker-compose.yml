@@ -125,6 +125,11 @@ services:
       - FHIR_BACKEND_PORT=7050
       - KNOOPPUNT_PDP_HOST=knooppunt
       - KNOOPPUNT_PDP_PORT=8081
+      - DATA_HOLDER_ORGANIZATION_URA=00000666
+      - DATA_HOLDER_FACILITY_TYPE=Z3
+      - REQUESTING_FACILITY_TYPE=Z3
+      - PURPOSE_OF_USE=TREAT
+      - EVENT_CODE=GGC002
     depends_on:
       - hapi-fhir
       - knooppunt # Knooppunt provides the PDP endpoint

@@ -15,6 +15,11 @@ env:
   fhirBackendPort: "8080"
   knooppuntPdpHost: "knooppunt"
   knooppuntPdpPort: "8081"
+  dataHolderOrganizationUra: "00000001"
+  dataHolderFacilityType: "Z3"
+  requestingFacilityType: "Z3"
+  purposeOfUse: "TREAT"
+  eventCode: "GGC002"
 
 imagePullSecrets: []
 nameOverride: ""

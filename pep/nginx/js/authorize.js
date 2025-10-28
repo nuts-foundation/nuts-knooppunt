@@ -27,7 +27,7 @@ function extractBearerToken(request) {
 }
 
 /**
- * Mock token introspection for testing (format: bearer-<ura>-<role>-<uzi>)
+ * Mock token introspection for testing (format: bearer-<ura>-<uzi_role>-<practitioner_id>-<bsn>)
  * Called by /_introspect endpoint
  * @param {Object} request - NGINX request object
  */
@@ -47,11 +47,11 @@ function mockIntrospect(request) {
 
         const token = decodeURIComponent(tokenMatch[1]);
 
-        // Mock token format: bearer-<ura>-<role>-<uzi>
-        // Example: bearer-00000020-practitioner-123456789
+        // Mock token format: bearer-<ura>-<uzi_role>-<practitioner_id>-<bsn>
+        // Example: bearer-00000020-01.015-123456789-900186021
         const parts = token.split('-');
 
-        if (parts.length < 4 || parts[0] !== 'bearer') {
+        if (parts.length < 5 || parts[0] !== 'bearer') {
             request.return(200, JSON.stringify({
                 active: false
             }));
@@ -62,10 +62,10 @@ function mockIntrospect(request) {
         request.return(200, JSON.stringify({
             active: true,
             sub: 'mock-user',
-            ura: parts[1],
-            role: parts[2],
-            uzi: parts[3] || null,
-            organization: 'Mock Organization',
+            requesting_organization_ura: parts[1],
+            requesting_uzi_role_code: parts[2],
+            requesting_practitioner_identifier: parts[3],
+            patient_bsn: parts[4],
             scope: 'fhir/Patient.read fhir/Observation.read'
         }));
 
@@ -115,12 +115,11 @@ function parsePathArray(uri) {
 }
 
 /**
- * Build OPA request for PDP (snake_case format per OPA style guide)
- * This format will be translated to XACML by the PDP for Mitz "gesloten vraag"
+ * Build OPA request for PDP with clear field names matching XACML/Mitz terminology
  * @param {Object} tokenClaims - Claims from introspected token
  * @param {Object} fhirContext - FHIR resource context
  * @param {Object} request - NGINX request object
- * @returns {Object} - OPA-compliant request with snake_case fields
+ * @returns {Object} - OPA-compliant request for PDP
  */
 function buildOpaRequest(tokenClaims, fhirContext, request) {
     const uri = request.variables.request_uri || '';
@@ -131,21 +130,24 @@ function buildOpaRequest(tokenClaims, fhirContext, request) {
             method: request.variables.request_method || request.method,
             path: parsePathArray(uri),
 
-            // Subject (requester) information from token
-            subject_type: tokenClaims.role || 'unknown',
-            subject_id: tokenClaims.sub || null,
-            subject_role: tokenClaims.role || null,
-            subject_uzi: tokenClaims.uzi || null,
+            // REQUESTING PARTY (who is asking for data)
+            requesting_organization_ura: tokenClaims.requesting_organization_ura || null,
+            requesting_uzi_role_code: tokenClaims.requesting_uzi_role_code || null,
+            requesting_practitioner_identifier: tokenClaims.requesting_practitioner_identifier || null,
+            requesting_facility_type: process.env.REQUESTING_FACILITY_TYPE || 'Z3',
 
-            // Organization context
-            organization_ura: tokenClaims.ura || null,
+            // DATA HOLDER PARTY (who has the data being requested)
+            data_holder_organization_ura: process.env.DATA_HOLDER_ORGANIZATION_URA || null,
+            data_holder_facility_type: process.env.DATA_HOLDER_FACILITY_TYPE || 'Z3',
 
-            // Resource context (optional fields for FHIR)
+            // PATIENT/RESOURCE CONTEXT
+            patient_bsn: tokenClaims.patient_bsn || null,
             resource_type: fhirContext.resourceType,
             resource_id: fhirContext.resourceId,
 
-            // Purpose
-            purpose_of_use: 'treatment' // TODO: extract from token or request
+            // PURPOSE AND EVENT
+            purpose_of_use: process.env.PURPOSE_OF_USE || 'TREAT',
+            event_code: process.env.EVENT_CODE || 'GGC002'
         }
     };
 }
@@ -195,7 +197,8 @@ async function checkAuthorization(request) {
             return;
         }
 
-        request.log(`Token parsed: sub=${tokenClaims.sub}, ura=${tokenClaims.ura}`);
+        request.log(`Token parsed: requesting_org=${tokenClaims.requesting_organization_ura}, ` +
+              `patient_bsn=${tokenClaims.patient_bsn}`);
 
         // Step 3: Extract FHIR context from request
         const fhirContext = extractFhirContext(request.variables.request_uri || '');
@@ -203,7 +206,7 @@ async function checkAuthorization(request) {
         request.log(`FHIR context: resourceType=${fhirContext.resourceType}, ` +
               `resourceId=${fhirContext.resourceId}`);
 
-        // Step 4: Build flat JSON OPA request for PDP
+        // Step 4: Build OPA request for PDP
         const opaRequest = buildOpaRequest(tokenClaims, fhirContext, request);
 
         // Step 5: Call Knooppunt PDP
@@ -213,8 +216,9 @@ async function checkAuthorization(request) {
         };
 
         const opaRequestInput = opaRequest.input;
-        request.log(`Calling PDP: OrganizationURA=${opaRequestInput.organization_ura}, ResourceType=${opaRequestInput.resource_type}, ` +
-              `ResourceId=${opaRequestInput.resource_id}, Method=${opaRequestInput.method}`);
+        request.log(`Calling PDP: requesting_org=${opaRequestInput.requesting_organization_ura}, ` +
+              `data_holder=${opaRequestInput.data_holder_organization_ura}, ` +
+              `patient_bsn=${opaRequestInput.patient_bsn}, resource=${opaRequestInput.resource_type}`);
 
         const pdpResponse = await request.subrequest('/_pdp', pdpRequestOpts);
 
