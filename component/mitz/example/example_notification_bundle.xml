@@ -1,0 +1,234 @@
+<Bundle xmlns="http://hl7.org/fhir">
+    <id value="a508cfaa-5b22-4d61-a9f2-52df2a1ea266"/>
+    <type value="transaction"/>
+    <entry>
+        <fullUrl value="urn:uuid:27b7bc07-7a6a-4545-a813-0f0bba89b09c"/>
+        <resource>
+            <Consent>
+                <id value="27b7bc07-7a6a-4545-a813-0f0bba89b09c"/>
+                <meta>
+                    <profile value="http://vzvz.nl/fhir/StructureDefinition/Consent-Mitz-Notify|3.8.0"/>
+                </meta>
+                <text>
+                    <status value="generated"/>
+                    <div xmlns="http://www.w3.org/1999/xhtml">De patiënt verleent toestemming om Behandelgegevens
+                        beschikbaar te stellen aan behandelaren in Apotheken.
+                    </div>
+                </text>
+                <extension url="http://fhir.nl/StructureDefinition/OTV-ProviderCategory">
+                    <valueCodeableConcept>
+                        <coding>
+                            <system value="http://fhir.nl/otv/CodeSystem/raadplegende-zorgaanbiedercategorie"/>
+                            <version value="3960100"/>
+                            <code value="RPZAC005"/>
+                            <display value="Apotheken"/>
+                        </coding>
+                    </valueCodeableConcept>
+                </extension>
+                <status value="active"/>
+                <scope>
+                    <coding>
+                        <system value="http://terminology.hl7.org/CodeSystem/consentscope"/>
+                        <version value="3960100"/>
+                        <code value="patient-privacy"/>
+                    </coding>
+                </scope>
+                <category>
+                    <coding>
+                        <system value="http://fhir.nl/otv/CodeSystem/gegevenscategorie"/>
+                        <version value="3960100"/>
+                        <code value="GGC002"/>
+                        <display value="Behandelgegevens"/>
+                    </coding>
+                </category>
+                <patient>
+                    <reference value="urn:uuid:2083dda0-4a90-4b37-87fe-3c974399dbe2"/>
+                </patient>
+                <dateTime value="2024-11-18T10:51:16.8967927Z"/>
+                <provision>
+                    <type value="permit"/>
+                    <actor>
+                        <role>
+                            <coding>
+                                <system value="http://terminology.hl7.org/CodeSystem/v3-ParticipationType"/>
+                                <code value="CST"/>
+                            </coding>
+                        </role>
+                        <reference>
+                            <reference value="urn:uuid:25102ef4-96a0-4f95-97aa-f4a9884d1637"/>
+                        </reference>
+                    </actor>
+                    <purpose>
+                        <system value="http://hl7.org/fhir/v3/ActReason"/>
+                        <code value="TREAT"/>
+                    </purpose>
+                </provision>
+            </Consent>
+        </resource>
+        <request>
+            <method value="POST"/>
+            <url value="Consent"/>
+        </request>
+    </entry>
+    <entry>
+        <fullUrl value="urn:uuid:99d561ea-caaa-442f-88dc-e6d753d79c73"/>
+        <resource>
+            <Consent>
+                <id value="99d561ea-caaa-442f-88dc-e6d753d79c73"/>
+                <meta>
+                    <profile value="http://vzvz.nl/fhir/StructureDefinition/Consent-Mitz-Notify|3.8.0"/>
+                </meta>
+                <text>
+                    <status value="generated"/>
+                    <div xmlns="http://www.w3.org/1999/xhtml">De patiënt verleent geen toestemming om Behandelgegevens
+                        beschikbaar te stellen aan behandelaren in Huisartsen en huisartsenposten; Geestelijke
+                        gezondheidszorg (GGZ); Verpleging en verzorging; Overige zorg (tandartsen, paramedici,
+                        jeugdgezondheidszorg); Ziekenhuizen, medische centra, klinieken, laboratoria en diagnostische
+                        centra; Zorgaanbieders in de Europese Unie buiten Nederland.
+                    </div>
+                </text>
+                <extension url="http://fhir.nl/StructureDefinition/OTV-ProviderCategory">
+                    <valueCodeableConcept>
+                        <coding>
+                            <system value="http://fhir.nl/otv/CodeSystem/raadplegende-zorgaanbiedercategorie"/>
+                            <version value="3960100"/>
+                            <code value="RPZAC001"/>
+                            <display value="Huisartsen en huisartsenposten"/>
+                        </coding>
+                    </valueCodeableConcept>
+                </extension>
+                <extension url="http://fhir.nl/StructureDefinition/OTV-ProviderCategory">
+                    <valueCodeableConcept>
+                        <coding>
+                            <system value="http://fhir.nl/otv/CodeSystem/raadplegende-zorgaanbiedercategorie"/>
+                            <version value="3960100"/>
+                            <code value="RPZAC104"/>
+                            <display
+                                value="Ziekenhuizen, medische centra, klinieken, laboratoria en diagnostische centra"/>
+                        </coding>
+                    </valueCodeableConcept>
+                </extension>
+                <extension url="http://fhir.nl/StructureDefinition/OTV-ProviderCategory">
+                    <valueCodeableConcept>
+                        <coding>
+                            <system value="http://fhir.nl/otv/CodeSystem/raadplegende-zorgaanbiedercategorie"/>
+                            <version value="3960100"/>
+                            <code value="RPZAC004"/>
+                            <display value="Verpleging en verzorging"/>
+                        </coding>
+                    </valueCodeableConcept>
+                </extension>
+                <extension url="http://fhir.nl/StructureDefinition/OTV-ProviderCategory">
+                    <valueCodeableConcept>
+                        <coding>
+                            <system value="http://fhir.nl/otv/CodeSystem/raadplegende-zorgaanbiedercategorie"/>
+                            <version value="3960100"/>
+                            <code value="RPZAC003"/>
+                            <display value="Geestelijke gezondheidszorg (GGZ)"/>
+                        </coding>
+                    </valueCodeableConcept>
+                </extension>
+                <extension url="http://fhir.nl/StructureDefinition/OTV-ProviderCategory">
+                    <valueCodeableConcept>
+                        <coding>
+                            <system value="http://fhir.nl/otv/CodeSystem/raadplegende-zorgaanbiedercategorie"/>
+                            <version value="3960100"/>
+                            <code value="RPZAC103"/>
+                            <display value="Overige zorg (tandartsen, paramedici, jeugdgezondheidszorg)"/>
+                        </coding>
+                    </valueCodeableConcept>
+                </extension>
+                <extension url="http://fhir.nl/StructureDefinition/OTV-ProviderCategory">
+                    <valueCodeableConcept>
+                        <coding>
+                            <system value="http://fhir.nl/otv/CodeSystem/raadplegende-zorgaanbiedercategorie"/>
+                            <version value="3960100"/>
+                            <code value="RPZAC200"/>
+                            <display value="Zorgaanbieders in de Europese Unie buiten Nederland"/>
+                        </coding>
+                    </valueCodeableConcept>
+                </extension>
+                <status value="inactive"/>
+                <scope>
+                    <coding>
+                        <system value="http://terminology.hl7.org/CodeSystem/consentscope"/>
+                        <version value="3960100"/>
+                        <code value="patient-privacy"/>
+                    </coding>
+                </scope>
+                <category>
+                    <coding>
+                        <system value="http://fhir.nl/otv/CodeSystem/gegevenscategorie"/>
+                        <version value="3960100"/>
+                        <code value="GGC002"/>
+                        <display value="Behandelgegevens"/>
+                    </coding>
+                </category>
+                <patient>
+                    <reference value="urn:uuid:2083dda0-4a90-4b37-87fe-3c974399dbe2"/>
+                </patient>
+                <dateTime value="2024-11-18T10:51:16.8967927Z"/>
+                <provision>
+                    <actor>
+                        <role>
+                            <coding>
+                                <system value="http://terminology.hl7.org/CodeSystem/v3-ParticipationType"/>
+                                <code value="CST"/>
+                            </coding>
+                        </role>
+                        <reference>
+                            <reference value="urn:uuid:25102ef4-96a0-4f95-97aa-f4a9884d1637"/>
+                        </reference>
+                    </actor>
+                    <purpose>
+                        <system value="http://hl7.org/fhir/v3/ActReason"/>
+                        <code value="TREAT"/>
+                    </purpose>
+                </provision>
+            </Consent>
+        </resource>
+        <request>
+            <method value="POST"/>
+            <url value="Consent"/>
+        </request>
+    </entry>
+    <entry>
+        <fullUrl value="urn:uuid:2083dda0-4a90-4b37-87fe-3c974399dbe2"/>
+        <resource>
+            <Patient>
+                <id value="2083dda0-4a90-4b37-87fe-3c974399dbe2"/>
+                <identifier>
+                    <system value="http://fhir.nl/fhir/NamingSystem/bsn"/>
+                    <value value="900186021"/>
+                </identifier>
+            </Patient>
+        </resource>
+        <request>
+            <method value="POST"/>
+            <url value="Patient"/>
+        </request>
+    </entry>
+    <entry>
+        <fullUrl value="urn:uuid:25102ef4-96a0-4f95-97aa-f4a9884d1637"/>
+        <resource>
+            <Organization>
+                <id value="25102ef4-96a0-4f95-97aa-f4a9884d1637"/>
+                <identifier>
+                    <system value="http://fhir.nl/fhir/NamingSystem/ura"/>
+                    <value value="00000659"/>
+                </identifier>
+                <type>
+                    <coding>
+                        <system value="http://nictiz.nl/fhir/NamingSystem/organization-type"/>
+                        <version value="3960100"/>
+                        <code value="Z3"/>
+                    </coding>
+                </type>
+            </Organization>
+        </resource>
+        <request>
+            <method value="POST"/>
+            <url value="Organization"/>
+        </request>
+    </entry>
+</Bundle>

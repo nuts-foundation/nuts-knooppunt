@@ -12,6 +12,7 @@ import (
 	"github.com/knadh/koanf/v2"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 )
@@ -21,6 +22,7 @@ type Config struct {
 	MCSDAdmin mcsdadmin.Config `koanf:"mcsdadmin"`
 	Nuts      nutsnode.Config  `koanf:"nuts"`
 	NVI       nvi.Config       `koanf:"nvi"`
+	MITZ      mitz.Config      `koanf:"mitz"`
 }
 
 func DefaultConfig() Config {
@@ -30,6 +32,7 @@ func DefaultConfig() Config {
 		},
 		MCSDAdmin: mcsdadmin.Config{},
 		NVI:       nvi.DefaultConfig(),
+		MITZ:      mitz.Config{},
 	}
 }
 
