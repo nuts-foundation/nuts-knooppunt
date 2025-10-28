@@ -26,6 +26,21 @@ jobs:
 
     - name: Download dependencies
       run: go mod download
-    
-    - name: Run tests
+
+    - name: Run Go tests
       run: go test -p 1 -v ./...
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: pep/nginx/js/package-lock.json
+
+    - name: Install PEP test dependencies
+      run: npm ci
+      working-directory: pep/nginx/js
+
+    - name: Run PEP tests
+      run: npm test
+      working-directory: pep/nginx/js

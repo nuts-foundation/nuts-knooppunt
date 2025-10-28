@@ -260,3 +260,7 @@ async function checkAuthorization(request) {
 }
 
 export default { checkAuthorization, mockIntrospect };
+
+// Export functions for testing
+// Note: NJS only uses the default export, these are for unit tests
+export { extractBearerToken, parsePathArray, extractFhirContext, buildOpaRequest };

@@ -132,5 +132,14 @@ No changes needed to `authorize.js`.
 - **nginx/nginx.conf** - Main NGINX config (rate limiting, request size limits)
 - **nginx/conf.d/knooppunt.conf** - PEP routes and upstreams
 - **nginx/js/authorize.js** - Authorization logic (NJS)
+- **nginx/js/authorize.test.js** - Unit tests for authorization logic
 
 See inline code comments for details.
+
+## Testing
+
+```bash
+cd pep/nginx/js
+npm install
+npm test
+```
