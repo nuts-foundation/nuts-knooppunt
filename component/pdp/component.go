@@ -106,6 +106,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
 	if err != nil {
 		http.Error(w, "could not complete the consent check", http.StatusInternalServerError)
+		return
 	}
 
 	allow := false
