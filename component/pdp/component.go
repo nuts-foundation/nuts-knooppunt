@@ -8,6 +8,7 @@ import (
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 )
 
 type Config struct {
@@ -46,16 +47,24 @@ func (c Component) Stop(ctx context.Context) error {
 }
 
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	internalMux.HandleFunc("POST /pdp", mainPolicyHandler)
+	internalMux.HandleFunc("POST /pdp", http.HandlerFunc(c.HandleMainPolicy))
 }
 
 type MainPolicyInput struct {
-	Method       string   `json:"method"`
-	Path         []string `json:"path"`
-	SubjectType  string   `json:"subject_type"`
-	SubjectId    string   `json:"subject_id"`
-	SubjectRole  *string  `json:"subject_role"`
-	PurposeOfUse string   `json:"purpose_of_use"`
+	Method                           string   `json:"method"`
+	Path                             []string `json:"path"`
+	PatientBSN                       string   `json:"patient_bsn"`
+	RequestingUziRoleCode            string   `json:"requesting_uzi_role_code"`
+	RequestingPractitionerIdentifier string   `json:"requesting_practitioner_identifier"`
+	RequestingOrganizationUra        string   `json:"requesting_organization_ura"`
+	RequestingFacilityType           string   `json:"requesting_facility_type"`
+	DataHolderOrganizationUra        string   `json:"data_holder_organization_ura"`
+	DataHolderFacilityType           string   `json:"data_holder_facility_type"`
+	PurposeOfUse                     string   `json:"purpose_of_use"`
+}
+
+type MainPolicyRequest struct {
+	Input MainPolicyInput `json:"input"`
 }
 
 type MainPolicyResponse struct {
@@ -66,9 +75,10 @@ type MainPolicyResult struct {
 	Allow bool `json:"allow"`
 }
 
-func mainPolicyHandler(w http.ResponseWriter, r *http.Request) {
-	var input MainPolicyInput
-	err := json.NewDecoder(r.Body).Decode(&input)
+func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
+	var reqBody MainPolicyRequest
+	err := json.NewDecoder(r.Body).Decode(&reqBody)
+	input := reqBody.Input
 	if err != nil {
 		http.Error(w, "unable to parse request body", http.StatusBadRequest)
 		return
@@ -80,15 +90,45 @@ func mainPolicyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := context.Background()
+	mitzComp := *c.Mitz
+	consentReq := xacml.AuthzRequest{
+		PatientBSN:             input.PatientBSN,
+		HealthcareFacilityType: input.DataHolderFacilityType,
+		AuthorInstitutionID:    input.DataHolderOrganizationUra,
+		EventCode:              "GGC002",
+		SubjectRole:            input.RequestingUziRoleCode,
+		ProviderID:             input.RequestingUziRoleCode,
+		ProviderInstitutionID:  input.RequestingOrganizationUra,
+		ConsultingFacilityType: input.RequestingFacilityType,
+		PurposeOfUse:           "TREAT",
+	}
+	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
+	if err != nil {
+		http.Error(w, "could not complete the consent check", http.StatusInternalServerError)
+	}
+
+	allow := false
+	switch consentResp.Decision {
+	case xacml.DecisionPermit:
+
+		allow = true
+	case xacml.DecisionDeny:
+
+		allow = false
+	default:
+		allow = false
+	}
+
 	resp := MainPolicyResponse{
 		Result: MainPolicyResult{
-			Allow: false,
+			Allow: allow,
 		},
 	}
 
 	b, err := json.Marshal(resp)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "failed to encode json output", http.StatusInternalServerError)
 		return
 	}
 
@@ -97,7 +137,17 @@ func mainPolicyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func validateInput(input MainPolicyInput) bool {
-	requiredValues := []string{input.SubjectId, input.SubjectType, input.PurposeOfUse}
+	requiredValues := []string{
+		input.Method,
+		input.PatientBSN,
+		input.RequestingUziRoleCode,
+		input.RequestingPractitionerIdentifier,
+		input.RequestingOrganizationUra,
+		input.RequestingFacilityType,
+		input.DataHolderOrganizationUra,
+		input.DataHolderFacilityType,
+		input.PurposeOfUse,
+	}
 	if slices.Contains(requiredValues, "") {
 		return false
 	}
