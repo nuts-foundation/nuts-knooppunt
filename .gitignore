@@ -13,3 +13,4 @@ data
 # PEP test dependencies
 pep/nginx/js/node_modules/
 pep/nginx/js/coverage/
+pep/logs/

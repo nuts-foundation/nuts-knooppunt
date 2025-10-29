@@ -120,6 +120,8 @@ services:
     container_name: knooppunt-pep
     ports:
       - "9080:8080"
+    volumes:
+      - ./pep/logs:/var/log/nginx
     environment:
       - FHIR_BACKEND_HOST=hapi-fhir
       - FHIR_BACKEND_PORT=7050
