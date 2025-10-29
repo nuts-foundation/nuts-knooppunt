@@ -1,0 +1,19 @@
+### Testing valid request
+
+POST http://localhost:8081/pdp
+Content-Type: application/json
+
+{
+  "input": {
+    "method": "GET",
+    "Path": ["fhir", "Patient", "118876"],
+    "patient_bsn": "900186021",
+    "requesting_uzi_role_code": "01.015",
+    "requesting_practitioner_identifier": "000095254",
+    "requesting_organization_ura": "00000666",
+    "requesting_facility_type": "Z3",
+    "data_holder_organization_ura": "00000659",
+    "data_holder_facility_type": "Z3",
+    "purpose_of_use": "treatment"
+  }
+}
