@@ -111,10 +111,8 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	allow := false
 	switch consentResp.Decision {
 	case xacml.DecisionPermit:
-
 		allow = true
 	case xacml.DecisionDeny:
-
 		allow = false
 	default:
 		allow = false
