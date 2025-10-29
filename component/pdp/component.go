@@ -3,6 +3,7 @@ package pdp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"slices"
 
@@ -48,6 +49,7 @@ func (c Component) Stop(ctx context.Context) error {
 
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.HandleFunc("POST /pdp", http.HandlerFunc(c.HandleMainPolicy))
+	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", http.HandlerFunc(c.HandlePolicy))
 }
 
 type MainPolicyInput struct {
@@ -159,4 +161,20 @@ func validateInput(input MainPolicyInput) bool {
 	// Add more validations here once we agreed upon a contract
 
 	return true
+}
+
+func (c Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
+	pack := r.PathValue("package")
+	if pack != "knooppunt" {
+		http.Error(w, "invalid package", http.StatusBadRequest)
+		return
+	}
+
+	policy := r.PathValue("rule")
+	switch policy {
+	case "authz":
+		c.HandleMainPolicy(w, r)
+	default:
+		http.Error(w, fmt.Sprintf("unknown rule %s", policy), http.StatusBadRequest)
+	}
 }
