@@ -31,6 +31,5 @@ dependencies:
   - name: nuts-node-chart
     alias: nuts
     condition: nuts.enabled
-    # repository: https://nuts-foundation.github.io/nuts-node/
-    repository: oci://ghcr.io/brainhivenl/nuts-node
-    version: "0.0.5-pre"
+    repository: https://nuts-foundation.github.io/nuts-node/
+    version: "0.0.5"
