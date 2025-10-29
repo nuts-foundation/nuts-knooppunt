@@ -51,7 +51,7 @@ curl -H "Authorization: Bearer bearer-00000020-01.015-123456789-900186021" \
 
 **Endpoints:**
 - PEP: `http://localhost:9080`
-- PDP: `http://localhost:8081/v1/data/knooppunt/authz` (internal API)
+- PDP: `http://localhost:8081/pdp/v1/data/knooppunt/authz` (internal API)
 
 ## How It Works
 
@@ -78,8 +78,7 @@ DATA_HOLDER_FACILITY_TYPE=Z3
 
 # Request configuration
 REQUESTING_FACILITY_TYPE=Z3
-PURPOSE_OF_USE=TREAT
-EVENT_CODE=GGC002
+PURPOSE_OF_USE=treatment
 ```
 
 ## OPA Request Format
@@ -87,7 +86,7 @@ EVENT_CODE=GGC002
 The PEP sends requests with clear field names matching XACML/Mitz terminology:
 
 ```json
-POST /v1/data/knooppunt/authz
+POST /pdp/v1/data/knooppunt/authz
 
 {
   "input": {
@@ -109,9 +108,8 @@ POST /v1/data/knooppunt/authz
     "resource_type": "Patient",
     "resource_id": "patient-123",
 
-    // PURPOSE AND EVENT
-    "purpose_of_use": "TREAT",
-    "event_code": "GGC002"
+    // PURPOSE OF USE
+    "purpose_of_use": "treatment"
   }
 }
 ```

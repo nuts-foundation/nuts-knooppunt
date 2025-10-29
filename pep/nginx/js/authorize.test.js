@@ -114,8 +114,7 @@ describe('buildOpaRequest', () => {
             DATA_HOLDER_ORGANIZATION_URA: '00000666',
             DATA_HOLDER_FACILITY_TYPE: 'Z3',
             REQUESTING_FACILITY_TYPE: 'Z3',
-            PURPOSE_OF_USE: 'TREAT',
-            EVENT_CODE: 'GGC002'
+            PURPOSE_OF_USE: 'treatment'
         };
     });
 
@@ -157,8 +156,7 @@ describe('buildOpaRequest', () => {
                 patient_bsn: '900186021',
                 resource_type: 'Patient',
                 resource_id: 'patient-123',
-                purpose_of_use: 'TREAT',
-                event_code: 'GGC002'
+                purpose_of_use: 'treatment'
             }
         });
     });

@@ -145,9 +145,8 @@ function buildOpaRequest(tokenClaims, fhirContext, request) {
             resource_type: fhirContext.resourceType,
             resource_id: fhirContext.resourceId,
 
-            // PURPOSE AND EVENT
-            purpose_of_use: process.env.PURPOSE_OF_USE || 'TREAT',
-            event_code: process.env.EVENT_CODE || 'GGC002'
+            // PURPOSE OF USE
+            purpose_of_use: process.env.PURPOSE_OF_USE || 'treatment'
         }
     };
 }

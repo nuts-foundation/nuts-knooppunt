@@ -57,8 +57,6 @@ spec:
             value: {{ .Values.env.requestingFacilityType | quote }}
           - name: PURPOSE_OF_USE
             value: {{ .Values.env.purposeOfUse | quote }}
-          - name: EVENT_CODE
-            value: {{ .Values.env.eventCode | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
