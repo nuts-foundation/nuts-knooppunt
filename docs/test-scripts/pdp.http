@@ -17,3 +17,15 @@ Content-Type: application/json
     "purpose_of_use": "treatment"
   }
 }
+
+### Testing invalid request
+
+POST http://localhost:8081/pdp
+Content-Type: application/json
+
+{
+  "input": {
+    "patient_bsn": "",
+    "requesting_uzi_role_code": "true"
+  }
+}
