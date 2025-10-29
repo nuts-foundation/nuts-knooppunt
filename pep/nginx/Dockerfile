@@ -17,7 +17,7 @@ RUN mkdir -p /var/log/nginx && \
 
 # Set default environment variables
 ENV FHIR_BACKEND_HOST=fhir \
-    FHIR_BACKEND_PORT=8080 \
+    FHIR_BACKEND_PORT=7050 \
     KNOOPPUNT_PDP_HOST=knooppunt \
     KNOOPPUNT_PDP_PORT=8081 \
     DATA_HOLDER_ORGANIZATION_URA=00000001 \

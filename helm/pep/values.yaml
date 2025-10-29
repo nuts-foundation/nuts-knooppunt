@@ -16,7 +16,7 @@ image:
 # PEP configuration environment variables
 env:
   fhirBackendHost: "hapi-fhir"
-  fhirBackendPort: "8080"
+  fhirBackendPort: "7050"
   knooppuntPdpHost: "knooppunt"
   knooppuntPdpPort: "8081"
   dataHolderOrganizationUra: "00000001"

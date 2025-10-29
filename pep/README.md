@@ -68,7 +68,7 @@ Environment variables in `docker-compose.yml`:
 ```yaml
 # Backend connections
 FHIR_BACKEND_HOST=hapi-fhir   # FHIR server
-FHIR_BACKEND_PORT=7050
+FHIR_BACKEND_PORT=7050        # HAPI FHIR default port, as 8080 is used by the knooppunt
 KNOOPPUNT_PDP_HOST=knooppunt  # PDP endpoint
 KNOOPPUNT_PDP_PORT=8081       # Internal API only
 
