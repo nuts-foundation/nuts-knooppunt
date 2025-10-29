@@ -134,6 +134,9 @@ function buildOpaRequest(tokenClaims, fhirContext, request) {
             requesting_organization_ura: tokenClaims.requesting_organization_ura || null,
             requesting_uzi_role_code: tokenClaims.requesting_uzi_role_code || null,
             requesting_practitioner_identifier: tokenClaims.requesting_practitioner_identifier || null,
+            // TODO: Facility type is a property of the organization (URA), not directly provided by clients.
+            // Once authn/authz IGs are finalized, determine how to properly resolve this value.
+            // Hardcoded for single-org reference implementation until architecture is defined.
             requesting_facility_type: process.env.REQUESTING_FACILITY_TYPE || 'Z3',
 
             // DATA HOLDER PARTY (who has the data being requested)
