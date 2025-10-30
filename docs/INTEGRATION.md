@@ -20,7 +20,7 @@ based on the mCSD (Mobile Care Services Discovery) profile.
 You need to provide an mCSD Administration Directory, which is typically:
 
 - A FHIR façade over an existing database or API
-- A FHIR server (e.g. HAPI FHIR) in which mCSD resources are managed, either;
+- A FHIR server (e.g. HAPI FHIR) in which mCSD resources are managed, either:
     - manually, e.g. using the embedded mCSD Admin web application (configure `mcsdadmin.fhirbaseurl`),
     - synchronized from another source in some way.
 
