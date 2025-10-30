@@ -100,7 +100,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		AuthorInstitutionID:    input.DataHolderOrganizationUra,
 		EventCode:              "GGC002",
 		SubjectRole:            input.RequestingUziRoleCode,
-		ProviderID:             input.RequestingUziRoleCode,
+		ProviderID:             input.RequestingPractitionerIdentifier,
 		ProviderInstitutionID:  input.RequestingOrganizationUra,
 		ConsultingFacilityType: input.RequestingFacilityType,
 		PurposeOfUse:           "TREAT",
