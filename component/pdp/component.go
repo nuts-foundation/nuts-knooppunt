@@ -100,6 +100,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		PatientBSN:             input.PatientBSN,
 		HealthcareFacilityType: input.DataHolderFacilityType,
 		AuthorInstitutionID:    input.DataHolderOrganizationUra,
+		// This code is always the same, it's the code for _de gesloten vraag_
 		EventCode:              "GGC002",
 		SubjectRole:            input.RequestingUziRoleCode,
 		ProviderID:             input.RequestingPractitionerIdentifier,
@@ -114,13 +115,8 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	allow := false
-	switch consentResp.Decision {
-	case xacml.DecisionPermit:
+	if consentResp.Decision == xacml.DecisionPermit {
 		allow = true
-	case xacml.DecisionDeny:
-		allow = false
-	default:
-		allow = false
 	}
 
 	resp := MainPolicyResponse{
