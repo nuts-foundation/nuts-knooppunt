@@ -96,18 +96,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 
 	ctx := context.Background()
 	mitzComp := *c.Mitz
-	consentReq := xacml.AuthzRequest{
-		PatientBSN:             input.PatientBSN,
-		HealthcareFacilityType: input.DataHolderFacilityType,
-		AuthorInstitutionID:    input.DataHolderOrganizationUra,
-		// This code is always the same, it's the code for _de gesloten vraag_
-		EventCode:              "GGC002",
-		SubjectRole:            input.RequestingUziRoleCode,
-		ProviderID:             input.RequestingPractitionerIdentifier,
-		ProviderInstitutionID:  input.RequestingOrganizationUra,
-		ConsultingFacilityType: input.RequestingFacilityType,
-		PurposeOfUse:           "TREAT",
-	}
+	consentReq := xacmlFromInput(input)
 	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
 	if err != nil {
 		http.Error(w, "could not complete the consent check", http.StatusInternalServerError)
@@ -133,6 +122,31 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(b)
+}
+
+func xacmlFromInput(input MainPolicyInput) xacml.AuthzRequest {
+	var purpose string
+	switch input.PurposeOfUse {
+	case "treatment":
+		purpose = "TREAT"
+	case "secondary":
+		purpose = "COC"
+	default:
+		purpose = "TREAT"
+	}
+
+	return xacml.AuthzRequest{
+		PatientBSN:             input.PatientBSN,
+		HealthcareFacilityType: input.DataHolderFacilityType,
+		AuthorInstitutionID:    input.DataHolderOrganizationUra,
+		// This code is always the same, it's the code for _de gesloten vraag_
+		EventCode:              "GGC002",
+		SubjectRole:            input.RequestingUziRoleCode,
+		ProviderID:             input.RequestingPractitionerIdentifier,
+		ProviderInstitutionID:  input.RequestingOrganizationUra,
+		ConsultingFacilityType: input.RequestingFacilityType,
+		PurposeOfUse:           purpose,
+	}
 }
 
 func validateInput(input MainPolicyInput) bool {
