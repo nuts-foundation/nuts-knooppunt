@@ -6,7 +6,7 @@ Content-Type: application/json
 {
   "input": {
     "method": "GET",
-    "Path": ["fhir", "Patient", "118876"],
+    "path": ["fhir", "Patient", "118876"],
     "patient_bsn": "900186021",
     "requesting_uzi_role_code": "01.015",
     "requesting_practitioner_identifier": "000095254",
