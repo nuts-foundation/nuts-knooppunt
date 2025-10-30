@@ -43,3 +43,6 @@ mitz:
   #tlskeypassword: "key password"
   # CA certificate to trust MITZ server (if not in system trust store)
   #tlscafile: "/path/to/ca-file"
+
+pdp:
+  enabled: true
