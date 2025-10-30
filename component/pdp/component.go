@@ -53,16 +53,18 @@ func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *h
 }
 
 type MainPolicyInput struct {
+	DataHolderFacilityType           string   `json:"data_holder_facility_type"`
+	DataHolderOrganizationUra        string   `json:"data_holder_organization_ura"`
 	Method                           string   `json:"method"`
 	Path                             []string `json:"path"`
 	PatientBSN                       string   `json:"patient_bsn"`
-	RequestingUziRoleCode            string   `json:"requesting_uzi_role_code"`
-	RequestingPractitionerIdentifier string   `json:"requesting_practitioner_identifier"`
-	RequestingOrganizationUra        string   `json:"requesting_organization_ura"`
-	RequestingFacilityType           string   `json:"requesting_facility_type"`
-	DataHolderOrganizationUra        string   `json:"data_holder_organization_ura"`
-	DataHolderFacilityType           string   `json:"data_holder_facility_type"`
 	PurposeOfUse                     string   `json:"purpose_of_use"`
+	RequestingFacilityType           string   `json:"requesting_facility_type"`
+	RequestingOrganizationUra        string   `json:"requesting_organization_ura"`
+	RequestingPractitionerIdentifier string   `json:"requesting_practitioner_identifier"`
+	RequestingUziRoleCode            string   `json:"requesting_uzi_role_code"`
+	ResourceId                       string   `json:"resource_id"`
+	ResourceType                     string   `json:"resource_type"`
 }
 
 type MainPolicyRequest struct {
@@ -148,6 +150,8 @@ func validateInput(input MainPolicyInput) bool {
 		input.DataHolderOrganizationUra,
 		input.DataHolderFacilityType,
 		input.PurposeOfUse,
+		input.ResourceId,
+		input.ResourceType,
 	}
 	if slices.Contains(requiredValues, "") {
 		return false
