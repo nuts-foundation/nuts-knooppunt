@@ -74,6 +74,13 @@ Set [`nvi.baseurl`](./CONFIGURATION.md) to the base URL of the NVI service.
 >    https://knooppunt-test.nuts-services.nl/nvi
 >    ```
 
+### Inbound data requests
+
+To handle inbound data requests, you need to deploy a Policy Enforcement Point (PEP) in front of the Knooppunt.
+This is typically a reverse proxy that performs authentication and authorization of incoming requests.
+
+An example PEP using NGINX [can be found here](../pep).
+
 ### Authentication
 
 The Knooppunt can be deployed with an embedded Nuts node. If a vendor has an existing Nuts node,
