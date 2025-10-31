@@ -53,12 +53,13 @@ jobs:
       - name: Update chart versions
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          # Update nuts-knooppunt chart version
+          # Update all chart versions
           sed -i "s/^version:.*/version: $VERSION/" helm/nuts-knooppunt/Chart.yaml
-          # Update fhir chart version
           sed -i "s/^version:.*/version: $VERSION/" helm/fhir/Chart.yaml
-          # Update pep chart version
           sed -i "s/^version:.*/version: $VERSION/" helm/pep/Chart.yaml
+
+          # Update fhir dependency version in nuts-knooppunt Chart.yaml
+          sed -i "/^  - name: fhir$/,/^    version:/ s/version: .*/version: \"$VERSION\"/" helm/nuts-knooppunt/Chart.yaml
 
       - name: Update chart dependencies
         run: |
