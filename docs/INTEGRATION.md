@@ -4,19 +4,82 @@ This document describes how to integrate with the Knooppunt.
 
 ## Table of Contents
 
+- [Addressing](#addressing)
 - [NVI](#nvi)
 - [Consent (MITZ)](#consent-mitz)
 
 ---
 
+## Addressing
+
+This chapter describes how to integrate with the addressing generic function of the Knooppunt,
+based on the mCSD (Mobile Care Services Discovery) profile. It provides the following:
+
+- Synchronization from remote mCSD Administration Directories to your local mCSD Query Directory, so it can be used to find organizations, endpoints, etc.
+- Optional: an embedded mCSD Administration Directory web application to manage your local mCSD Administration Directory.
+
+### Pre-requisites
+
+You need to provide an mCSD Administration Directory, which is typically:
+
+- A FHIR façade over an existing database or API, or
+- a FHIR server (e.g. HAPI FHIR) in which mCSD resources are managed, either:
+    - manually, e.g. using the embedded mCSD Admin web application (configure `mcsdadmin.fhirbaseurl`),
+    - synchronized from another source in some way.
+
+You also need to provide a FHIR server as mCSD Query Directory, to which mCSD resources are synchronized, e.g. HAPI FHIR.
+
+Then, configure:
+
+- the Root Administration Directory to synchronize from (`mcsd.admin.<key>.fhirbaseurl`), and
+- the local Query Directory to synchronize to (`mcsd.query.fhirbaseurl`).
+
+### Triggering synchronization
+
+To synchronize remote mCSD Directories to your local query directory, use the following endpoint to trigger a synchronization:
+
+```http
+POST http://localhost:8081/mcsd/update
+```
+
+It will return a JSON report of the update per mCSD Administration Directory that was synchronized from, e.g.:
+
+```json
+{
+  "https://example.com/mcsd": {
+    "created": 1,
+    "updated": 5,
+    "deleted": 0,
+    "warnings": [
+      "Some-warning-message"
+    ],
+    "errors": [
+      "Some-error-message"
+    ]
+  }
+}
+```
+
+### Using the mCSD Administration Application
+
+The Knooppunt contains a web-application to manually manage the mCSD Administration Directory entries (e.g. create organizations and endpoints).
+
+You can find the mCSD Admin application at:
+
+```http
+http://localhost:8080/mcsdadmin
+```
+
 ## NVI
-The chapter describes how to integrate with the NVI (Nederlandse VerwijsIndex) service using the Knooppunt.
+
+This chapter describes how to integrate with the NVI (Nederlandse VerwijsIndex) service using the Knooppunt.
 
 You can create or search for DocumentReference resources using the following endpoints:
+
 - Registration endpoint: [POST http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
 - Search endpoint:
-  - [POST http://localhost:8081/nvi/DocumentReference/_search](http://localhost:8081/nvi/DocumentReference/_search)
-  - [GET http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
+    - [POST http://localhost:8081/nvi/DocumentReference/_search](http://localhost:8081/nvi/DocumentReference/_search)
+    - [GET http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
 
 These endpoints need the URA of the requesting care organization. You provide this URA using the `X-Tenant-ID` HTTP header:
 
@@ -44,15 +107,12 @@ The Knooppunt acts as a gateway that simplifies MITZ integration by:
 └──────────────┘                            └─────────────┘                       └──────────────┘
 ```
 
-
 ### Endpoints on the knooppunt
 
-| Endpoint | Method | Purpose                                   |
-|----------|--------|-------------------------------------------|
-| `/mitz/Subscription` | POST | Create a consent subscription             |
-| `/mitz/notify` | POST | Receive consent notifications (from MITZ) |
-
-
+| Endpoint             | Method | Purpose                                   |
+|----------------------|--------|-------------------------------------------|
+| `/mitz/Subscription` | POST   | Create a consent subscription             |
+| `/mitz/notify`       | POST   | Receive consent notifications (from MITZ) |
 
 ### Creating a Consent Subscription
 
@@ -78,15 +138,17 @@ curl -X POST http://localhost:8081/mitz/Subscription \
 #### Request Fields
 
 **Required**:
+
 - `status`: Must be `"requested"`
 - `reason`: Must be `"OTV"` (Ontvangen Toestemmingen Vraag)
 - `criteria`: Query string with:
-  - `patientid`: Patient BSN (9 digits)
-  - `providerid`: Provider URA (8 digits)
-  - `providertype`: Healthcare provider type (e.g., `Z3` for hospitals)
+    - `patientid`: Patient BSN (9 digits)
+    - `providerid`: Provider URA (8 digits)
+    - `providertype`: Healthcare provider type (e.g., `Z3` for hospitals)
 - `channel.type`: Must be `"rest-hook"`
 
 **Optional**:
+
 - `channel.endpoint`: Notification callback URL (uses configured `notify_endpoint` if omitted)
 - `channel.payload`: Content type (defaults to `"application/fhir+json"`)
 
@@ -128,7 +190,7 @@ mitz:
 
 - **URL**: The endpoint URL where MITZ should send consent change notifications
 - **Publicly accessible**: Must be reachable from MITZ infrastructure
-- **Whitelisted**: Must be whitelisted by the MITZ team, **OR** use the proxy endpoint already whitelisted by Knooppunt (contact Rein for details)
+- **Allow-listed**: Must be allow-listed by the MITZ team.
 - **HTTPS recommended**: Use HTTPS for secure communication
 
 #### Endpoint Precedence
@@ -147,9 +209,6 @@ mitz:
 4. **Forwarding**: Sends subscription to MITZ with mTLS authentication
 5. **Response**: Returns created subscription with ID
 
-
 ### Notification Handling
 
 When consent changes occur, MITZ sends notifications to the configured endpoint.
-
-**Note**: For development/testing, the NGINX proxy handles notifications (returns 201 without processing). Using this proxy url, you don't need to worry about whitelisting your endpoint with the MITZ team. Contact Rein for endpoint details.
