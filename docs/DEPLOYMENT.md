@@ -14,6 +14,9 @@ The diagrams on this page were created using [Structurizr](https://structurizr.c
 ### GF Localization
 ![structurizr-GF_Localization_ContainerDiagram.svg](images/structurizr-GF_Localization_ContainerDiagram.svg)
 
+### Handling inbound data requests
+![structurizr-DataExchange_ContainerDiagram.svg](images/structurizr-DataExchange_ContainerDiagram.svg)
+
 ### Technology
 
 The Knooppunt is provided as a Docker image: `docker pull ghcr.io/nuts-foundation/nuts-knooppunt:0.1.2`

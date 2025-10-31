@@ -10,3 +10,7 @@ This document details the inner design of the Knooppunt.
 ## Localization
 
 ![structurizr-GF_Localization_ComponentDiagram.svg](images/structurizr-GF_Localization_ComponentDiagram.svg)
+
+## Handling inbound data requests
+
+![structurizr-DataExchange_ComponentDiagram.svg](images/structurizr-DataExchange_ComponentDiagram.svg)
