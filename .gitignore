@@ -1,8 +1,8 @@
 # Intellij IDEA
 .idea
 
-# Binaries
-nuts-knooppunt
+# Binaries (use / prefix to match only in root directory)
+/nuts-knooppunt
 
 # Runtime files
 data
