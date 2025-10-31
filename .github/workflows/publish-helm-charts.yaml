@@ -50,21 +50,41 @@ jobs:
             echo "Using test version: $VERSION (no tag detected)"
           fi
 
-      - name: Update chart versions and names
+      - name: Update standalone chart versions and names
         run: |
           VERSION="${{ steps.version.outputs.version }}"
 
           # Prefix chart names with 'helm-' to distinguish from Docker images
-          sed -i "s/^name: nuts-knooppunt$/name: helm-nuts-knooppunt/" helm/nuts-knooppunt/Chart.yaml
           sed -i "s/^name: fhir$/name: helm-fhir/" helm/fhir/Chart.yaml
           sed -i "s/^name: pep$/name: helm-pep/" helm/pep/Chart.yaml
 
-          # Update all chart versions
-          sed -i "s/^version:.*/version: $VERSION/" helm/nuts-knooppunt/Chart.yaml
+          # Update standalone chart versions
           sed -i "s/^version:.*/version: $VERSION/" helm/fhir/Chart.yaml
           sed -i "s/^version:.*/version: $VERSION/" helm/pep/Chart.yaml
 
-          # Update fhir dependency name, repository, and version in nuts-knooppunt Chart.yaml
+      - name: Package and push standalone charts first
+        run: |
+          # Package standalone charts (no dependencies)
+          helm package helm/fhir -d .helm-packages
+          helm package helm/pep -d .helm-packages
+
+          # Push standalone charts to GHCR
+          for chart in .helm-packages/*.tgz; do
+            echo "Pushing $chart to ghcr.io/${{ github.repository_owner }}"
+            helm push "$chart" oci://ghcr.io/${{ github.repository_owner }}
+          done
+
+      - name: Update nuts-knooppunt chart with OCI dependencies
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Prefix chart name
+          sed -i "s/^name: nuts-knooppunt$/name: helm-nuts-knooppunt/" helm/nuts-knooppunt/Chart.yaml
+
+          # Update version
+          sed -i "s/^version:.*/version: $VERSION/" helm/nuts-knooppunt/Chart.yaml
+
+          # Update fhir dependency to use OCI registry
           sed -i "s/^  - name: fhir$/  - name: helm-fhir/" helm/nuts-knooppunt/Chart.yaml
           sed -i "/^  - name: helm-fhir$/,/^    version:/ s|repository: .*|repository: oci://ghcr.io/${{ github.repository_owner }}|" helm/nuts-knooppunt/Chart.yaml
           sed -i "/^  - name: helm-fhir$/,/^    version:/ s/version: .*/version: \"$VERSION\"/" helm/nuts-knooppunt/Chart.yaml
@@ -72,20 +92,16 @@ jobs:
       - name: Update chart dependencies
         run: |
           cd helm/nuts-knooppunt
+          # Now helm-fhir is available on GHCR, so this will succeed
           helm dependency update
 
-      - name: Package Helm charts
+      - name: Package and push nuts-knooppunt chart
         run: |
+          # Package nuts-knooppunt (with resolved dependencies)
           helm package helm/nuts-knooppunt -d .helm-packages
-          helm package helm/fhir -d .helm-packages
-          helm package helm/pep -d .helm-packages
 
-      - name: Push Helm charts to OCI registry
-        run: |
-          for chart in .helm-packages/*.tgz; do
-            echo "Pushing $chart to ghcr.io/${{ github.repository_owner }}"
-            helm push "$chart" oci://ghcr.io/${{ github.repository_owner }}
-          done
+          # Push to GHCR
+          helm push .helm-packages/helm-nuts-knooppunt-*.tgz oci://ghcr.io/${{ github.repository_owner }}
 
       - name: Output published charts
         run: |
