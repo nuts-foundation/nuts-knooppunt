@@ -159,7 +159,7 @@ kubectl delete pvc -l app.kubernetes.io/instance=my-nuts-knooppunt
 This chart depends on:
 
 - **fhir** (v0.1.0): HAPI FHIR server chart (file://../fhir)
-- **nuts-node-chart** (v0.0.4): NUTS Node official chart (https://nuts-foundation.github.io/nuts-node/)
+- **nuts-node-chart** (v0.0.6): NUTS Node official chart (https://nuts-foundation.github.io/nuts-node/)
 
 ## Upgrading
 
