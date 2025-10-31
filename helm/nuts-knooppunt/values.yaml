@@ -166,7 +166,7 @@ nuts:
         storage: fs  # Use filesystem storage for crypto keys (alternatives: vaultkv for Vault)
       storage:
         sql:
-          connection: postgres://app:rB7rvlS93GjhCa3UfFTf1Q01vyVWdpXL2Kn8ZPfDarUotsItohQvo2PULzNzXuZF@my-nuts-knooppunt-nuts-db-rw:5432/app?sslmode=disable
+          connection: postgres://app:YOUR_PASSWORD_HERE@my-nuts-knooppunt-nuts-db-rw:5432/app?sslmode=disable
   data:
     persistedVolumeClaim:
       enabled: true
