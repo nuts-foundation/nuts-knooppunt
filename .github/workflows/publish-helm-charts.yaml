@@ -1,0 +1,89 @@
+---
+name: 'Publish Helm Charts'
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - 'feat/helm-oci-registry'  # For testing the workflow
+  workflow_dispatch:
+
+# cancel build action if superseded by new commit on same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-charts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.14.0'
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Using version from tag: $VERSION"
+          else
+            # Use timestamp-based version for testing from branches
+            VERSION="0.0.0-test-$(date +%Y%m%d%H%M%S)"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Using test version: $VERSION (no tag detected)"
+          fi
+
+      - name: Update chart versions
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Update nuts-knooppunt chart version
+          sed -i "s/^version:.*/version: $VERSION/" helm/nuts-knooppunt/Chart.yaml
+          # Update fhir chart version
+          sed -i "s/^version:.*/version: $VERSION/" helm/fhir/Chart.yaml
+          # Update pep chart version
+          sed -i "s/^version:.*/version: $VERSION/" helm/pep/Chart.yaml
+
+      - name: Update chart dependencies
+        run: |
+          cd helm/nuts-knooppunt
+          helm dependency update
+
+      - name: Package Helm charts
+        run: |
+          helm package helm/nuts-knooppunt -d .helm-packages
+          helm package helm/fhir -d .helm-packages
+          helm package helm/pep -d .helm-packages
+
+      - name: Push Helm charts to OCI registry
+        run: |
+          for chart in .helm-packages/*.tgz; do
+            echo "Pushing $chart to ghcr.io/${{ github.repository_owner }}"
+            helm push "$chart" oci://ghcr.io/${{ github.repository_owner }}
+          done
+
+      - name: Output published charts
+        run: |
+          echo "Published Helm charts:"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/nuts-knooppunt:${{ steps.version.outputs.version }}"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/fhir:${{ steps.version.outputs.version }}"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/pep:${{ steps.version.outputs.version }}"
+          echo ""
+          echo "Install with:"
+          echo "  helm install my-knooppunt oci://ghcr.io/${{ github.repository_owner }}/nuts-knooppunt --version ${{ steps.version.outputs.version }}"
