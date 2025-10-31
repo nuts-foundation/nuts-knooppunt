@@ -1,12 +1,10 @@
 ---
-name: 'Publish Helm Charts'
+name: "Publish Helm Charts"
 
 on:
   push:
     tags:
-      - 'v*'
-    branches:
-      - 'feat/helm-oci-registry'  # For testing the workflow
+      - "v*"
   workflow_dispatch:
 
 # cancel build action if superseded by new commit on same branch
@@ -27,7 +25,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
-          version: '3.14.0'
+          version: "3.14.0"
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -64,8 +62,9 @@ jobs:
           sed -i "s/^version:.*/version: $VERSION/" helm/fhir/Chart.yaml
           sed -i "s/^version:.*/version: $VERSION/" helm/pep/Chart.yaml
 
-          # Update fhir dependency name and version in nuts-knooppunt Chart.yaml
+          # Update fhir dependency name, repository, and version in nuts-knooppunt Chart.yaml
           sed -i "s/^  - name: fhir$/  - name: helm-fhir/" helm/nuts-knooppunt/Chart.yaml
+          sed -i "/^  - name: helm-fhir$/,/^    version:/ s|repository: .*|repository: oci://ghcr.io/${{ github.repository_owner }}|" helm/nuts-knooppunt/Chart.yaml
           sed -i "/^  - name: helm-fhir$/,/^    version:/ s/version: .*/version: \"$VERSION\"/" helm/nuts-knooppunt/Chart.yaml
 
       - name: Update chart dependencies
