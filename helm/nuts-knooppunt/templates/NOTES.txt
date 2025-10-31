@@ -1,3 +1,76 @@
+{{- if .Values.nuts.enabled }}
+================================================================================
+NUTS Node Database Configuration
+================================================================================
+
+Database secrets:
+  CloudNativePG secret: {{ include "nuts-knooppunt.nuts.dbSecretName" . }}
+  Converted secret:     {{ include "nuts-knooppunt.fullname" . }}-nuts-db-fixed
+
+A Helm hook automatically converts the postgresql:// URI to postgres:// format.
+
+To verify the converted secret was created:
+
+  kubectl get secret {{ include "nuts-knooppunt.fullname" . }}-nuts-db-fixed
+
+{{- $hasDbConnection := false }}
+{{- $expectedSecretName := printf "%s-nuts-db-fixed" (include "nuts-knooppunt.fullname" .) }}
+{{- $dbConfigCorrect := false }}
+{{- range .Values.nuts.extraEnv }}
+  {{- if eq .name "NUTS_STORAGE_SQL_CONNECTION" }}
+    {{- $hasDbConnection = true }}
+    {{- if and .valueFrom .valueFrom.secretKeyRef }}
+      {{- if eq .valueFrom.secretKeyRef.name $expectedSecretName }}
+        {{- if eq .valueFrom.secretKeyRef.key "uri" }}
+          {{- $dbConfigCorrect = true }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if not $hasDbConnection }}
+
+⚠️  WARNING: Database connection not configured!
+
+Configuration required:
+  Create a custom values file (e.g., my-values.yaml) with your NUTS configuration.
+  See values.yaml for examples of required settings including:
+  - Database connection (extraEnv with NUTS_STORAGE_SQL_CONNECTION)
+  - Public URL (nuts.config.url)
+  - DID methods (nuts.config.didmethods)
+
+  Expected database secret configuration:
+    extraEnv:
+      - name: NUTS_STORAGE_SQL_CONNECTION
+        valueFrom:
+          secretKeyRef:
+            name: {{ $expectedSecretName }}
+            key: uri
+
+  Then upgrade your release:
+    helm upgrade {{ .Release.Name }} . -f my-values.yaml
+
+{{- else if not $dbConfigCorrect }}
+
+⚠️  WARNING: Database connection configured incorrectly!
+
+The NUTS_STORAGE_SQL_CONNECTION is set but doesn't reference the correct secret.
+
+Expected configuration:
+  extraEnv:
+    - name: NUTS_STORAGE_SQL_CONNECTION
+      valueFrom:
+        secretKeyRef:
+          name: {{ $expectedSecretName }}
+          key: uri
+
+  Update your values file and run:
+    helm upgrade {{ .Release.Name }} . -f my-values.yaml
+
+{{- end }}
+================================================================================
+{{- end }}
+
 1. Get the application URL by running these commands:
 {{- if .Values.ingress.enabled }}
 {{- range $host := .Values.ingress.hosts }}

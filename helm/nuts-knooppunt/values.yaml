@@ -159,14 +159,31 @@ fhir:
 nuts:
   enabled: false
   fullnameOverride: nuts
+  # Environment variables for the NUTS node container
+  # The NUTS_STORAGE_SQL_CONNECTION is automatically set from a converted database secret
+  # CloudNativePG creates secrets with postgresql:// scheme, but NUTS node requires postgres://
+  # A Helm hook job automatically converts the secret format on install/upgrade
+  #
+  # To configure: Create your own values file (e.g., my-values.yaml) and set:
+  #   extraEnv:
+  #     - name: NUTS_STORAGE_SQL_CONNECTION
+  #       valueFrom:
+  #         secretKeyRef:
+  #           name: <your-release-name>-nuts-db-fixed
+  #           key: uri
+  #
+  # Example for release name "my-nuts-knooppunt":
+  extraEnv:
+    - name: NUTS_STORAGE_SQL_CONNECTION
+      valueFrom:
+        secretKeyRef:
+          name: RELEASE_NAME-nuts-db-fixed  # IMPORTANT: Update RELEASE_NAME to match your actual release name
+          key: uri
   nuts:
     config:
       url: https://nuts.example.com  # Public URL of the NUTS node
       crypto:
         storage: fs  # Use filesystem storage for crypto keys (alternatives: vaultkv for Vault)
-      storage:
-        sql:
-          connection: postgres://app:YOUR_PASSWORD_HERE@my-nuts-knooppunt-nuts-db-rw:5432/app?sslmode=disable
   data:
     persistedVolumeClaim:
       enabled: true
