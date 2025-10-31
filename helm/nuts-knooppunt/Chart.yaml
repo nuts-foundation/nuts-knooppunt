@@ -32,4 +32,4 @@ dependencies:
     alias: nuts
     condition: nuts.enabled
     repository: https://nuts-foundation.github.io/nuts-node/
-    version: "0.0.5"
+    version: "0.0.6"
