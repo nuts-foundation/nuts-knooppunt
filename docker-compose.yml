@@ -111,6 +111,39 @@ services:
     # Ensure the container exits successfully after the check
     restart: "no"
 
+  # Policy Enforcement Point (PEP) - NGINX-based reference implementation
+  # Start with: docker compose --profile pep up
+  pep:
+    build:
+      context: ./pep/nginx
+      dockerfile: Dockerfile
+    container_name: knooppunt-pep
+    ports:
+      - "9080:8080"
+    volumes:
+      - ./pep/logs:/var/log/nginx
+    environment:
+      - FHIR_BACKEND_HOST=hapi-fhir
+      - FHIR_BACKEND_PORT=7050
+      - KNOOPPUNT_PDP_HOST=knooppunt
+      - KNOOPPUNT_PDP_PORT=8081
+      - DATA_HOLDER_ORGANIZATION_URA=00000666
+      - DATA_HOLDER_FACILITY_TYPE=Z3
+      - REQUESTING_FACILITY_TYPE=Z3
+      - PURPOSE_OF_USE=treatment
+    depends_on:
+      - hapi-fhir
+      - knooppunt # Knooppunt provides the PDP endpoint
+    healthcheck:
+      test:
+        ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    profiles:
+      - pep
+
 volumes:
   #postgres-data:
   hapi-data:

@@ -13,6 +13,7 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	formdata "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/formdata"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/static"
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
@@ -92,6 +93,9 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("DELETE /mcsdadmin/location/{id}", deleteHandler("Location"))
 	mux.HandleFunc("DELETE /mcsdadmin/healthcareservice/{id}", deleteHandler("HealthcareService"))
 	mux.HandleFunc("DELETE /mcsdadmin/organization/{id}", deleteHandler("Organization"))
+	mux.HandleFunc("GET /mcsdadmin/practitionerrole", listPractitionerRole)
+	mux.HandleFunc("GET /mcsdadmin/practitionerrole/new", newPractitionerRole)
+	mux.HandleFunc("POST /mcsdadmin/practitionerrole/new", newPractitionerRolePost)
 	mux.HandleFunc("GET /mcsdadmin", homePage)
 	mux.HandleFunc("GET /mcsdadmin/", notFound)
 }
@@ -101,10 +105,10 @@ func listServices(w http.ResponseWriter, _ *http.Request) {
 	renderList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, tmpls.MakeServiceListXsProps)
 }
 
-func newService(w http.ResponseWriter, _ *http.Request) {
+func newService(w http.ResponseWriter, r *http.Request) {
 	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not load organizations", err)
 		return
 	}
 
@@ -121,11 +125,9 @@ func newService(w http.ResponseWriter, _ *http.Request) {
 }
 
 func newServicePost(w http.ResponseWriter, r *http.Request) {
-	log.Debug().Msg("New post for HealthcareService resource")
-
 	err := r.ParseForm()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to parse form input")
+		badRequest(w, r, "invalid form input", err)
 		return
 	}
 
@@ -139,20 +141,12 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	active := r.PostForm.Get("active") == "true"
 	service.Active = &active
 
-	typeCodes := r.PostForm["type"]
-	typeCodesCount := len(typeCodes)
-	if typeCodesCount > 0 {
-		service.Type = make([]fhir.CodeableConcept, typeCodesCount)
-		for i, t := range typeCodes {
-			serviceType, ok := valuesets.CodableFrom(valuesets.ServiceTypeCodings, t)
-			if ok {
-				service.Type[i] = serviceType
-			} else {
-				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
-				return
-			}
-		}
+	codables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.ServiceTypeCodings, "type")
+	if !ok {
+		badRequest(w, r, "Could not find type all type codes")
+		return
 	}
+	service.Type = codables
 
 	reference := "Organization/" + r.PostForm.Get("providedById")
 	service.ProvidedBy = &fhir.Reference{
@@ -163,7 +157,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	var providedByOrg fhir.Organization
 	err = client.Read(reference, &providedByOrg)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to find referred organisation")
+		badRequest(w, r, "failed to find referred organisation", err)
 		return
 	}
 	service.ProvidedBy.Display = providedByOrg.Name
@@ -171,7 +165,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	var resSer fhir.HealthcareService
 	err = client.Create(service, &resSer)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not create FHIR resource", err)
 		return
 	}
 
@@ -185,10 +179,10 @@ func listOrganizations(w http.ResponseWriter, _ *http.Request) {
 	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
 }
 
-func newOrganization(w http.ResponseWriter, _ *http.Request) {
+func newOrganization(w http.ResponseWriter, r *http.Request) {
 	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not load organizations", err)
 		return
 	}
 	orgsExists := len(organizations) > 0
@@ -213,7 +207,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 
 	err := r.ParseForm()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to parse form input")
+		badRequest(w, r, "invalid form input", err)
 		return
 	}
 
@@ -226,30 +220,19 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	org.Name = &name
 	uraString := r.PostForm.Get("identifier")
 	if uraString == "" {
-		http.Error(w, "Bad request: missing URA identifier", http.StatusBadRequest)
+		badRequest(w, r, "missing URA identifier")
 		return
 	}
 	org.Identifier = []fhir.Identifier{
 		uraIdentifier(uraString),
 	}
 
-	orgTypeCodes := r.PostForm["type"]
-	typeCodesCount := len(orgTypeCodes)
-	if typeCodesCount > 0 {
-		org.Type = make([]fhir.CodeableConcept, 0, typeCodesCount)
-		for _, t := range orgTypeCodes {
-			if t == "" {
-				continue
-			}
-			orgType, ok := valuesets.CodableFrom(valuesets.OrganizationTypeCodings, t)
-			if ok {
-				org.Type = append(org.Type, orgType)
-			} else {
-				http.Error(w, fmt.Sprintf("could not find type code %s", t), http.StatusBadRequest)
-				return
-			}
-		}
+	codables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.OrganizationTypeCodings, "type")
+	if !ok {
+		badRequest(w, r, "could not find all type codes")
+		return
 	}
+	org.Type = codables
 
 	active := r.PostForm.Get("active") == "true"
 	org.Active = &active
@@ -264,7 +247,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 		var parentOrg fhir.Organization
 		err = client.Read(reference, &parentOrg)
 		if err != nil {
-			http.Error(w, "internal error: could not find organization", http.StatusInternalServerError)
+			internalError(w, r, "could not find organization", err)
 			return
 		}
 		org.PartOf.Display = parentOrg.Name
@@ -273,7 +256,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	var resOrg fhir.Organization
 	err = client.Create(org, &resOrg)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not create FHIR resource", err)
 		return
 	}
 
@@ -287,7 +270,7 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 	var org fhir.Organization
 	err := client.Read(path, &org)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, req, "could not read organization resource", err)
 		return
 	}
 
@@ -299,7 +282,7 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 		}
 		err := client.Read(*ref.Reference, &ep)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalError(w, req, "could not read reference resource", err)
 			return
 		}
 		endpoints = append(endpoints, ep)
@@ -307,7 +290,7 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 
 	allEndpoints, err := findAll[fhir.Endpoint](client)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, req, "could not load endpoints", err)
 		return
 	}
 
@@ -327,7 +310,7 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w, req, "invalid form input", err)
 		return
 	}
 
@@ -379,7 +362,7 @@ func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w, req, "invalid form input", err)
 		return
 	}
 
@@ -450,7 +433,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	err := r.ParseForm()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to parse form input")
+		badRequest(w, r, "invalid form input", err)
 		return
 	}
 
@@ -466,21 +449,17 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint.Address = address
 
-	typeCodes := r.PostForm["payload-type"]
-	typeCodesCount := len(typeCodes)
-	if typeCodesCount > 0 {
-		endpoint.PayloadType = make([]fhir.CodeableConcept, typeCodesCount)
-		for i, t := range typeCodes {
-			serviceType, ok := valuesets.CodableFrom(valuesets.EndpointPayloadTypeCodings, t)
-			if ok {
-				endpoint.PayloadType[i] = serviceType
-			} else {
-				http.Error(w, fmt.Sprintf("Could not find type code %s", t), http.StatusBadRequest)
-			}
-		}
-	} else {
-		http.Error(w, "missing payload type", http.StatusBadRequest)
+	if len(r.PostForm["payload-type"]) < 1 {
+		badRequest(w, r, "missing payload type")
+		return
 	}
+
+	codables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.EndpointPayloadTypeCodings, "payload-type")
+	if !ok {
+		badRequest(w, r, "could not find all type codes")
+		return
+	}
+	endpoint.PayloadType = codables
 
 	periodStart := r.PostForm.Get("period-start")
 	periodEnd := r.PostForm.Get("period-end")
@@ -512,7 +491,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 
 	var connectionType fhir.Coding
 	connectionTypeId := r.PostForm.Get("connection-type")
-	connectionType, ok := valuesets.CodingFrom(valuesets.EndpointConnectionTypeCodings, connectionTypeId)
+	connectionType, ok = valuesets.CodingFrom(valuesets.EndpointConnectionTypeCodings, connectionTypeId)
 	if ok {
 		endpoint.ConnectionType = connectionType
 	} else {
@@ -598,7 +577,7 @@ func newLocation(w http.ResponseWriter, _ *http.Request) {
 func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	err := r.ParseForm()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to parse form input")
+		badRequest(w, r, "invalid form input", err)
 		return
 	}
 
@@ -699,6 +678,114 @@ func listLocations(w http.ResponseWriter, _ *http.Request) {
 	renderList[fhir.Location, tmpls.LocationListProps](client, w, tmpls.MakeLocationListXsProps)
 }
 
+func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
+	err := r.ParseForm()
+	if err != nil {
+		badRequest(w, r, "failed to processes form data", err)
+		return
+	}
+
+	var role fhir.PractitionerRole
+	uziNumber := r.PostForm.Get("uzi-number")
+	if uziNumber != "" {
+		identifier := fhir.Identifier{
+			System: to.Ptr(coding.UZINamingSystem),
+			Value:  to.Ptr(uziNumber),
+		}
+		ref := fhir.Reference{
+			Identifier: to.Ptr(identifier),
+		}
+		role.Practitioner = to.Ptr(ref)
+	} else {
+		badRequest(w, r, "required field uzi-number missing", err)
+		return
+	}
+
+	orgId := r.PostForm.Get("organization-id")
+	org, err := findById[fhir.Organization](orgId)
+	if err != nil {
+		badRequest(w, r, fmt.Sprintf("could not find organistion with id: %s", orgId))
+		return
+	}
+	orgRef := fhir.Reference{
+		Reference: to.Ptr(fmt.Sprintf("Organization/%s", orgId)),
+		Display:   org.Name,
+	}
+	role.Organization = to.Ptr(orgRef)
+
+	codables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.PractitionerRoleCodings, "codes")
+	if !ok {
+		badRequest(w, r, fmt.Sprintf("could not find all type codes"))
+		return
+	}
+	role.Code = codables
+
+	telecomData := formdata.ParseMaps(r.PostForm, "telecom")
+	for _, tel := range telecomData {
+		const msg = "invalid telecom information provided"
+		system, ok := tel["System"]
+		if !ok {
+			badRequest(w, r, msg)
+			return
+		}
+		value, ok := tel["Value"]
+		if !ok {
+			badRequest(w, r, msg)
+			return
+		}
+		contactPointSystem, ok := valuesets.ContactPointSystemFrom(system)
+		if !ok {
+			badRequest(w, r, msg)
+			return
+		}
+
+		contactPoint := fhir.ContactPoint{
+			System: to.Ptr(contactPointSystem),
+			Value:  to.Ptr(value),
+		}
+
+		role.Telecom = append(role.Telecom, contactPoint)
+	}
+
+	var resRole fhir.PractitionerRole
+	err = client.Create(role, &resRole)
+	if err != nil {
+		internalError(w, r, "could not create practitioner role", err)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	renderList[fhir.PractitionerRole, tmpls.PractitionerRoleProps](client, w, tmpls.MakePractitionerRoleXsProps)
+}
+
+func newPractitionerRole(w http.ResponseWriter, r *http.Request) {
+	organizations, err := findAll[fhir.Organization](client)
+	if err != nil {
+		internalError(w, r, "failed to load organizations", err)
+		return
+	}
+
+	orgsExist := len(organizations) > 0
+
+	props := struct {
+		Organizations []fhir.Organization
+		OrgsExist     bool
+		Codes         []fhir.Coding
+		TelecomCodes  []fhir.Coding
+	}{
+		Organizations: organizations,
+		OrgsExist:     orgsExist,
+		Codes:         valuesets.PractitionerRoleCodings,
+		TelecomCodes:  valuesets.ContactPointSystem,
+	}
+	w.WriteHeader(http.StatusOK)
+	tmpls.RenderWithBase(w, "practitionerrole_edit.html", props)
+}
+
+func listPractitionerRole(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	renderList[fhir.PractitionerRole, tmpls.PractitionerRoleProps](client, w, tmpls.MakePractitionerRoleXsProps)
+}
+
 func homePage(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	tmpls.RenderWithBase(w, "home.html", nil)
@@ -716,7 +803,7 @@ func deleteHandler(resourceType string) func(w http.ResponseWriter, r *http.Requ
 
 		err := client.Delete(path)
 		if err != nil {
-			RespondError(w, fmt.Sprintf("Can not delete %s.", resourceType), http.StatusBadRequest)
+			respondErrorAlert(w, fmt.Sprintf("Can not delete %s.", resourceType), http.StatusBadRequest)
 			return
 		}
 
@@ -805,7 +892,7 @@ func ShortID() string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func RespondError(w http.ResponseWriter, text string, httpcode int) {
+func respondErrorAlert(w http.ResponseWriter, text string, httpcode int) {
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("X-Content-Type-Options", "nosniff")
@@ -822,4 +909,46 @@ func RespondError(w http.ResponseWriter, text string, httpcode int) {
 	}
 
 	tmpls.RenderPartial(w, "_alert_error", props)
+}
+
+func respondErrorPage(w http.ResponseWriter, text string, httpcode int) {
+	props := struct {
+		AlertId string
+		Text    string
+	}{
+		AlertId: ShortID(),
+		Text:    text,
+	}
+	w.WriteHeader(httpcode)
+	tmpls.RenderWithBase(w, "errorpage.html", props)
+}
+
+func internalError(w http.ResponseWriter, r *http.Request, msg string, err error) {
+	log.Error().Err(err).Msg(msg)
+
+	isHtmxRequest := r.Header.Get("HX-Request") == "true"
+	if isHtmxRequest {
+		// Request is received from HTMX so we will assume rendering an error on the page
+		respondErrorAlert(w, msg, http.StatusInternalServerError)
+	} else {
+		// No HTMX detected so let's just render the full error page
+		respondErrorPage(w, msg, http.StatusInternalServerError)
+	}
+}
+
+func badRequest(w http.ResponseWriter, r *http.Request, msg string, errs ...error) {
+	hasError := len(errs) > 0
+	if hasError {
+		err := errs[0]
+		log.Warn().Err(err).Msg(msg)
+	}
+
+	isHtmxRequest := r.Header.Get("HX-Request") == "true"
+	if isHtmxRequest {
+		// Request is received from HTMX so we will assume rendering an error on the page
+		respondErrorAlert(w, msg, http.StatusBadRequest)
+	} else {
+		// No HTMX detected so let's just render the full error page
+		respondErrorPage(w, msg, http.StatusBadRequest)
+	}
 }
