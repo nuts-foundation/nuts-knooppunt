@@ -14,3 +14,6 @@ data
 pep/nginx/js/node_modules/
 pep/nginx/js/coverage/
 pep/logs/
+
+# Helm chart dependencies
+helm/**/charts/*.tgz
