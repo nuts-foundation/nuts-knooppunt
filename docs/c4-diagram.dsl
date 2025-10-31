@@ -48,7 +48,7 @@ workspace "Knooppunt" "Description" {
         group "Local Systems" {
 
 
-            xis = softwareSystem "XIS" "Local XIS integrating the Knooppunt" {
+            xis = softwareSystem "XIS" "Local XIS consisting of EHR and Knooppunt services" {
                 ehr = container "EHR" {
                     tags "addressing,localization,dataexchange"
                     localizationClient = component "Localization Client" "Publishing and localizing patient localization data" {
@@ -97,17 +97,21 @@ workspace "Knooppunt" "Description" {
         #
         # GF Addressing transactions
         #
-        xis.kp.mcsdSyncer -> xis.fhirQueryDir "Update mCSD Resources from remote Administration Directories" FHIR {
+        xis.kp.mcsdSyncer -> xis.fhirQueryDir "ITI-130: Update mCSD Resources from remote Administration Directories" FHIR {
             tags "addressing"
+            url "https://profiles.ihe.net/ITI/mCSD/ITI-130.html"
         }
         xis.kp.mcsdAdminApp -> xis.fhirAdminDir "Manage mCSD resources" {
             tags "addressing"
         }
-        xis.ehr -> xis.fhirQueryDir "Query the mCSD directory" "FHIR" {
+        xis.ehr -> xis.fhirQueryDir "ITI-90: Query the mCSD directory" "FHIR" {
             tags "addressing"
+            url "https://profiles.ihe.net/ITI/mCSD/ITI-90.html"
         }
-        remoteXIS.mcsdUpdateClient -> xis.fhirAdminDir "Query mCSD resources" "FHIR" {
+        remoteXIS.mcsdUpdateClient -> xis.fhirAdminDir "ITI-91: Query mCSD resources" "FHIR" {
             tags "addressing"
+            url "https://profiles.ihe.net/ITI/mCSD/ITI-91.html"
+
         }
         //  After we introduce a PEP:
         //    remoteXIS.mcsdUpdateClient -> xis.fhirAdminDir "Query mCSD resources" "FHIR" {
@@ -116,11 +120,13 @@ workspace "Knooppunt" "Description" {
         //    xis.pep -> xis.fhirAdminDir "Query mCSD resources" "FHIR" {
         //        tags "addressing"
         //    }
-        xis.kp.mcsdSyncer -> lrza "Fetch Organizations with their URA and mCSD Directory endpoints" FHIR {
+        xis.kp.mcsdSyncer -> lrza "ITI-91: Query Organizations with their URA and mCSD Directory endpoints" FHIR {
             tags "addressing"
+            url "https://profiles.ihe.net/ITI/mCSD/ITI-91.html"
         }
-        xis.kp.mcsdSyncer -> remoteXIS.mcsdDirectory "Query mCSD resources" FHIR {
+        xis.kp.mcsdSyncer -> remoteXIS.mcsdDirectory "ITI-91: Query mCSD resources" FHIR {
             tags "addressing"
+            url "https://profiles.ihe.net/ITI/mCSD/ITI-91.html"
         }
 
         #
