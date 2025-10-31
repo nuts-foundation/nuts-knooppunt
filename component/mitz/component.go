@@ -3,8 +3,8 @@ package mitz
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,7 +12,6 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
-	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
@@ -148,102 +147,35 @@ func (c *Component) handleNotify(httpResponse http.ResponseWriter, httpRequest *
 	httpResponse.WriteHeader(http.StatusNoContent)
 }
 
-// CreateSubscription creates a MITZ subscription (implements nvi.MITZSubscriber interface)
-func (c *Component) CreateSubscription(ctx context.Context, patientID, providerID, providerType string) error {
-	// Create FHIR Subscription
-	subscription := c.createSubscription(patientID, providerID, providerType)
-
-	// Send subscription to configured FHIR endpoint
-	var created fhir.Subscription
-	var headers fhirclient.Headers
-	err := c.client.CreateWithContext(ctx, subscription, &created, fhirclient.ResponseHeaders(&headers))
-	if err != nil {
-		// Check if it's an OperationOutcome error to extract status code
-		var outcomeErr fhirclient.OperationOutcomeError
-		if errors.As(err, &outcomeErr) {
-			switch outcomeErr.HttpStatusCode {
-			case http.StatusBadRequest:
-				return fmt.Errorf("FHIR resource does not meet specifications: %w", err)
-			case http.StatusUnauthorized:
-				return fmt.Errorf("not authorized to create subscription at MITZ endpoint: %w", err)
-			case http.StatusNotFound:
-				return fmt.Errorf("MITZ endpoint not found: %w", err)
-			case http.StatusUnprocessableEntity:
-				return fmt.Errorf("MITZ business rules are not met: %w", err)
-			case http.StatusTooManyRequests:
-				return fmt.Errorf("too many requests to MITZ endpoint: %w", err)
-			default:
-				return fmt.Errorf("failed to create subscription at MITZ endpoint: %w", err)
-			}
-		}
-	}
-	// 202 Accepted is OK (MITZ responds with 202 instead of 201)
-
-	location := headers.Header.Get("Location")
-
-	log.Info().
-		Str("patientID", patientID).
-		Str("providerID", providerID).
-		Str("subscriptionId", location).
-		Msg("Successfully created MITZ subscription")
-
-	return nil
-}
-
-// handleConsentCheck triggers a consent check by invoking MITZ closed query
-func (c *Component) handleConsentCheck(httpResponse http.ResponseWriter, httpRequest *http.Request) {
+// CheckConsent triggers a consent check by invoking MITZ closed query.
+// This is a non-HTTP function that can be invoked programmatically.
+// It takes an AuthzRequest containing all required parameters for the consent check.
+// Returns an XACMLResponse containing the decision (Permit/Deny/NotApplicable/Indeterminate) and the full XML response.
+func (c *Component) CheckConsent(ctx context.Context, authzReq xacml.AuthzRequest) (*xacml.XACMLResponse, error) {
 	if c.consentCheckEndpoint == "" {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-			Message:   "Consent check endpoint not configured",
-			IssueType: fhir.IssueTypeNotSupported,
-		})
-		return
+		return nil, fmt.Errorf("consent check endpoint not configured")
 	}
 
-	// Create a request with all required parameters
-	req := xacml.AuthzRequest{
-		PatientBSN:             "900186021",
-		HealthcareFacilityType: "Z3",
-		AuthorInstitutionID:    "00000659",
-		EventCode:              "GGC002",
-		SubjectRole:            "01.015",
-		ProviderID:             "000095254",
-		ProviderInstitutionID:  "00000666",
-		ConsultingFacilityType: "Z3",
-		PurposeOfUse:           "TREAT",
-		ToAddress:              "http://localhost:8000/4",
-	}
-
-	authnDecisionQueryXml, err := xacml.CreateAuthzDecisionQuery(req)
+	authnDecisionQueryXml, err := xacml.CreateAuthzDecisionQuery(authzReq)
 	if err != nil {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-			Message:   "Failed to create authorization decision query",
-			Cause:     err,
-			IssueType: fhir.IssueTypeInvalid,
-		})
-		return
+		return nil, fmt.Errorf("failed to create authorization decision query: %w", err)
 	}
 
 	// Log the XML request
-	log.Info().
+	log.Ctx(ctx).Info().
 		Str("endpoint", c.consentCheckEndpoint).
 		Str("xmlPayload", authnDecisionQueryXml).
 		Msg("Sending consent check request to MITZ")
 
 	// Create HTTP request with XML payload
 	httpReq, err := http.NewRequestWithContext(
-		httpRequest.Context(),
+		ctx,
 		http.MethodPost,
 		c.consentCheckEndpoint,
 		bytes.NewBufferString(authnDecisionQueryXml),
 	)
 	if err != nil {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-			Message:   "Failed to create HTTP request",
-			Cause:     err,
-			IssueType: fhir.IssueTypeTransient,
-		})
-		return
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
 	// Set XML content type
@@ -252,47 +184,41 @@ func (c *Component) handleConsentCheck(httpResponse http.ResponseWriter, httpReq
 	// Send request using mTLS-configured HTTP client
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to send consent check request to MITZ")
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-			Message:   "Failed to send consent check request",
-			Cause:     err,
-			IssueType: fhir.IssueTypeTransient,
-		})
-		return
+		log.Ctx(ctx).Error().Err(err).Msg("Failed to send consent check request to MITZ")
+		return nil, fmt.Errorf("failed to send consent check request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Read response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to read consent check response")
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-			Message:   "Failed to read consent check response",
-			Cause:     err,
-			IssueType: fhir.IssueTypeTransient,
-		})
-		return
+		log.Ctx(ctx).Error().Err(err).Msg("Failed to read consent check response")
+		return nil, fmt.Errorf("failed to read consent check response: %w", err)
 	}
 
 	// Log response
-	log.Info().
+	log.Ctx(ctx).Info().
 		Int("statusCode", resp.StatusCode).
 		Str("responseBody", string(responseBody)).
 		Msg("Received consent check response from MITZ")
 
 	// Check for non-2xx status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, &fhirapi.Error{
-			Message:   fmt.Sprintf("Consent check failed with status %d: %s", resp.StatusCode, string(responseBody)),
-			IssueType: fhir.IssueTypeTransient,
-		})
-		return
+		return nil, fmt.Errorf("consent check failed with status %d: %s", resp.StatusCode, string(responseBody))
 	}
 
-	// Return the XML response
-	httpResponse.Header().Set("Content-Type", "text/xml")
-	httpResponse.WriteHeader(http.StatusOK)
-	httpResponse.Write(responseBody)
+	// Parse the XACML response to extract the decision
+	xacmlResp, err := xacml.ParseXACMLResponse(responseBody)
+	if err != nil {
+		log.Ctx(ctx).Error().Err(err).Msg("Failed to parse XACML response")
+		return nil, fmt.Errorf("failed to parse XACML response: %w", err)
+	}
+
+	log.Ctx(ctx).Info().
+		Str("decision", xacmlResp.Decision.String()).
+		Msg("Consent check decision")
+
+	return xacmlResp, nil
 }
 
 // validateMITZSubscription validates that a Subscription resource meets MITZ requirements
@@ -377,6 +303,7 @@ func validateMITZSubscription(subscription fhir.Subscription) *fhirapi.Error {
 func (c *Component) addConfigExtensions(subscription *fhir.Subscription) {
 	// Gateway system extension
 	if c.gatewaySystem != "" {
+		log.Debug().Str("oid", c.gatewaySystem).Msg("Adding GatewaySystem from configuration")
 		subscription.Extension = append(subscription.Extension, fhir.Extension{
 			Url:      "http://fhir.nl/StructureDefinition/GatewaySystem",
 			ValueOid: to.Ptr(c.gatewaySystem),
@@ -385,6 +312,7 @@ func (c *Component) addConfigExtensions(subscription *fhir.Subscription) {
 
 	// Source system extension
 	if c.sourceSystem != "" {
+		log.Debug().Str("oid", c.sourceSystem).Msg("Adding SourceSystem from configuration")
 		subscription.Extension = append(subscription.Extension, fhir.Extension{
 			Url:      "http://fhir.nl/StructureDefinition/SourceSystem",
 			ValueOid: to.Ptr(c.sourceSystem),
@@ -493,60 +421,4 @@ func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpReques
 	// Note: The fhir-client doesn't expose the raw HTTP response,
 	// so we trust that if CreateWithContext succeeds, the subscription was accepted
 	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusCreated, resource)
-}
-
-// createSubscription creates a FHIR Subscription from the subscribe request
-func (c *Component) createSubscription(patientId, providerId, providerType string) fhir.Subscription {
-	subscription := fhir.Subscription{
-		Status: fhir.SubscriptionStatusRequested,
-		Reason: "OTV",
-		Criteria: fmt.Sprintf("Consent?_query=otv&patientid=%s&providerid=%s&providertype=%s",
-			patientId, providerId, providerType),
-		Channel: fhir.SubscriptionChannel{
-			Type:    fhir.SubscriptionChannelTypeRestHook,
-			Payload: to.Ptr(fhirJSONContentType),
-		},
-	}
-
-	// Add extensions
-	var extensions []fhir.Extension
-
-	/**
-	This data is
-	conditionally mandatory: if the
-	healthcare provider has a verified
-	date of birth of the patient, then it
-	must be given.
-
-	Patient birth date extension
-	if req.PatientBirthDate != "" {
-		extensions = append(extensions, fhir.Extension{
-			Url:       "http://fhir.nl/StructureDefinition/Patient.birthDate",
-			ValueDate: to.Ptr(req.PatientBirthDate),
-		})
-	}
-
-	*/
-
-	// Gateway system extension
-	if c.gatewaySystem != "" {
-		extensions = append(extensions, fhir.Extension{
-			Url:      "http://fhir.nl/StructureDefinition/GatewaySystem",
-			ValueOid: to.Ptr(c.gatewaySystem),
-		})
-	}
-
-	// Source system extension
-	if c.sourceSystem != "" {
-		extensions = append(extensions, fhir.Extension{
-			Url:      "http://fhir.nl/StructureDefinition/SourceSystem",
-			ValueOid: to.Ptr(c.sourceSystem),
-		})
-	}
-
-	if len(extensions) > 0 {
-		subscription.Extension = extensions
-	}
-
-	return subscription
 }
