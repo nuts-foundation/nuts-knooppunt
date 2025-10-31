@@ -72,7 +72,7 @@ http://localhost:8080/mcsdadmin
 
 ## NVI
 
-The chapter describes how to integrate with the NVI (Nederlandse VerwijsIndex) service using the Knooppunt.
+This chapter describes how to integrate with the NVI (Nederlandse VerwijsIndex) service using the Knooppunt.
 
 You can create or search for DocumentReference resources using the following endpoints:
 
