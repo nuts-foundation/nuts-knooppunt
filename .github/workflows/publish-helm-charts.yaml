@@ -50,16 +50,23 @@ jobs:
             echo "Using test version: $VERSION (no tag detected)"
           fi
 
-      - name: Update chart versions
+      - name: Update chart versions and names
         run: |
           VERSION="${{ steps.version.outputs.version }}"
+
+          # Prefix chart names with 'helm-' to distinguish from Docker images
+          sed -i "s/^name: nuts-knooppunt$/name: helm-nuts-knooppunt/" helm/nuts-knooppunt/Chart.yaml
+          sed -i "s/^name: fhir$/name: helm-fhir/" helm/fhir/Chart.yaml
+          sed -i "s/^name: pep$/name: helm-pep/" helm/pep/Chart.yaml
+
           # Update all chart versions
           sed -i "s/^version:.*/version: $VERSION/" helm/nuts-knooppunt/Chart.yaml
           sed -i "s/^version:.*/version: $VERSION/" helm/fhir/Chart.yaml
           sed -i "s/^version:.*/version: $VERSION/" helm/pep/Chart.yaml
 
-          # Update fhir dependency version in nuts-knooppunt Chart.yaml
-          sed -i "/^  - name: fhir$/,/^    version:/ s/version: .*/version: \"$VERSION\"/" helm/nuts-knooppunt/Chart.yaml
+          # Update fhir dependency name and version in nuts-knooppunt Chart.yaml
+          sed -i "s/^  - name: fhir$/  - name: helm-fhir/" helm/nuts-knooppunt/Chart.yaml
+          sed -i "/^  - name: helm-fhir$/,/^    version:/ s/version: .*/version: \"$VERSION\"/" helm/nuts-knooppunt/Chart.yaml
 
       - name: Update chart dependencies
         run: |
@@ -82,9 +89,9 @@ jobs:
       - name: Output published charts
         run: |
           echo "Published Helm charts:"
-          echo "  - oci://ghcr.io/${{ github.repository_owner }}/nuts-knooppunt:${{ steps.version.outputs.version }}"
-          echo "  - oci://ghcr.io/${{ github.repository_owner }}/fhir:${{ steps.version.outputs.version }}"
-          echo "  - oci://ghcr.io/${{ github.repository_owner }}/pep:${{ steps.version.outputs.version }}"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-nuts-knooppunt:${{ steps.version.outputs.version }}"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-fhir:${{ steps.version.outputs.version }}"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-pep:${{ steps.version.outputs.version }}"
           echo ""
           echo "Install with:"
-          echo "  helm install my-knooppunt oci://ghcr.io/${{ github.repository_owner }}/nuts-knooppunt --version ${{ steps.version.outputs.version }}"
+          echo "  helm install my-knooppunt oci://ghcr.io/${{ github.repository_owner }}/helm-nuts-knooppunt --version ${{ steps.version.outputs.version }}"
