@@ -13,26 +13,30 @@ This document describes how to integrate with the Knooppunt.
 ## Addressing
 
 This chapter describes how to integrate with the addressing generic function of the Knooppunt,
-based on the mCSD (Mobile Care Services Discovery) profile.
+based on the mCSD (Mobile Care Services Discovery) profile. It provides the following:
+
+- Synchronization from remote mCSD Administration Directories to your local mCSD Query Directory, so it can be used to find organizations, endpoints, etc.
+- Optional: an embedded mCSD Administration Directory web application to manage your local mCSD Administration Directory.
 
 ### Pre-requisites
 
 You need to provide an mCSD Administration Directory, which is typically:
 
-- A FHIR façade over an existing database or API
-- A FHIR server (e.g. HAPI FHIR) in which mCSD resources are managed, either:
+- A FHIR façade over an existing database or API, or
+- a FHIR server (e.g. HAPI FHIR) in which mCSD resources are managed, either:
     - manually, e.g. using the embedded mCSD Admin web application (configure `mcsdadmin.fhirbaseurl`),
     - synchronized from another source in some way.
+
+You also need to provide a FHIR server as mCSD Query Directory, to which mCSD resources are synchronized, e.g. HAPI FHIR.
 
 Then, configure:
 
 - the Root Administration Directory to synchronize from (`mcsd.admin.<key>.fhirbaseurl`), and
 - the local Query Directory to synchronize to (`mcsd.query.fhirbaseurl`).
 
-### Usage
+### Triggering synchronization
 
-To synchronize remote mCSD Directories to your local query directory, use the following endpoint to trigger a
-synchronization:
+To synchronize remote mCSD Directories to your local query directory, use the following endpoint to trigger a synchronization:
 
 ```http
 POST http://localhost:8081/mcsd/update
@@ -54,6 +58,16 @@ It will return a JSON report of the update per mCSD Administration Directory tha
     ]
   }
 }
+```
+
+### Using the mCSD Administration Application
+
+The Knooppunt contains a web-application to manually manage the mCSD Administration Directory entries (e.g. create organizations and endpoints).
+
+You can find the mCSD Admin application at:
+
+```http
+http://localhost:8080/mcsdadmin
 ```
 
 ## NVI
