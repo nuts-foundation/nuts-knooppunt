@@ -7,7 +7,7 @@ on:
       - "v*"
   workflow_dispatch:
 
-# cancel build action if superseded by new commit on same branch
+# cancel build action if superseded by new commit on same branch (not needed for tag builds, leaving it in when it also builds on branches)
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
