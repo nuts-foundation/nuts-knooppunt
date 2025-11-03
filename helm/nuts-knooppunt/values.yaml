@@ -146,6 +146,8 @@ affinity: {}
 fhir:
   enabled: false
   fullnameOverride: fhir
+  multitenancy:
+    enabled: true
   postgres:
     enabled: true
   gateway:

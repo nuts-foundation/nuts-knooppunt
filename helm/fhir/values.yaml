@@ -152,3 +152,7 @@ gateway:
   enabled: false
   name: ""
   hosts: []
+
+# Hapi FHIR configuration
+multitenancy:
+  enabled: false
