@@ -36,20 +36,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version from tag
-        id: version
-        run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "Using version from tag: $VERSION"
-          else
-            # Use timestamp-based version for testing from branches
-            VERSION="0.0.0-test-$(date +%Y%m%d%H%M%S)"
-            echo "version=$VERSION" >> $GITHUB_OUTPUT
-            echo "Using test version: $VERSION (no tag detected)"
-          fi
-
       - name: Package and push standalone charts first
         run: |
           # Package standalone charts (no dependencies)
