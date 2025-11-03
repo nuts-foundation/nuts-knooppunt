@@ -734,4 +734,20 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 		require.NoError(t, err)
 		assert.Len(t, component.administrationDirectories, 1, "Directory should be registered when exclusion list is empty")
 	})
+
+	t.Run("invalid URL returns error even if in exclusion list", func(t *testing.T) {
+		component, err := New(Config{
+			ExcludeAdminDirectories: []string{
+				"not-a-valid-url",
+			},
+		})
+		require.NoError(t, err)
+
+		// Invalid URL should return error, not silently skip
+		err = component.registerAdministrationDirectory(context.Background(), "not-a-valid-url", []string{"Organization"}, false)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid FHIR base URL")
+		assert.Len(t, component.administrationDirectories, 0, "Invalid URL should not be registered")
+	})
 }

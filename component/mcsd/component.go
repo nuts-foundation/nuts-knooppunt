@@ -127,14 +127,6 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 
 func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool) error {
 
-	trimmedFHIRBaseURL := strings.TrimRight(fhirBaseURL, "/")
-	// Check if the URL is in the exclusion list (also trim exclusion list entries for consistent matching)
-	for _, excludedURL := range c.config.ExcludeAdminDirectories {
-		if strings.TrimRight(excludedURL, "/") == trimmedFHIRBaseURL {
-			log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURL).Msg("Skipping administration directory registration: excluded by configuration")
-			return nil
-		}
-	}
 	// Must be a valid http or https URL
 	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
 	if err != nil {
@@ -143,6 +135,15 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 	parsedFHIRBaseURL.Scheme = strings.ToLower(parsedFHIRBaseURL.Scheme)
 	if (parsedFHIRBaseURL.Scheme != "https" && parsedFHIRBaseURL.Scheme != "http") || parsedFHIRBaseURL.Host == "" {
 		return fmt.Errorf("invalid FHIR base URL (url=%s)", fhirBaseURL)
+	}
+
+	// Check if the URL is in the exclusion list (also trim exclusion list entries for consistent matching)
+	trimmedFHIRBaseURL := strings.TrimRight(fhirBaseURL, "/")
+	for _, excludedURL := range c.config.ExcludeAdminDirectories {
+		if strings.TrimRight(excludedURL, "/") == trimmedFHIRBaseURL {
+			log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURL).Msg("Skipping administration directory registration: excluded by configuration")
+			return nil
+		}
 	}
 
 	exists := slices.ContainsFunc(c.administrationDirectories, func(directory administrationDirectory) bool {
