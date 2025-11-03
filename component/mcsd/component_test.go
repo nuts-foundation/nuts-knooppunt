@@ -605,7 +605,7 @@ func TestGetLastUpdated(t *testing.T) {
 	}
 }
 
-func TestComponent_ExcludeAdminDirectories(t *testing.T) {
+func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	t.Run("excludes administration directory by exact URL match", func(t *testing.T) {
 		component, err := New(Config{
 			ExcludeAdminDirectories: []string{
@@ -616,8 +616,7 @@ func TestComponent_ExcludeAdminDirectories(t *testing.T) {
 
 		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false)
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "administration directory (url=http://example.com/fhir) is excluded")
+		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
 		assert.Len(t, component.administrationDirectories, 0, "No directories should be registered")
 	})
 
@@ -632,8 +631,36 @@ func TestComponent_ExcludeAdminDirectories(t *testing.T) {
 		// Try to register with trailing slash - should still be excluded
 		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir/", []string{"Organization"}, false)
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "administration directory (url=http://example.com/fhir/) is excluded")
+		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
+		assert.Len(t, component.administrationDirectories, 0, "No directories should be registered")
+	})
+
+	t.Run("matches exclusion list entries with trailing slashes", func(t *testing.T) {
+		component, err := New(Config{
+			ExcludeAdminDirectories: []string{
+				"http://example.com/fhir/", // Exclusion list has trailing slash
+			},
+		})
+		require.NoError(t, err)
+
+		// Try to register without trailing slash - should still be excluded due to trimming
+		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false)
+
+		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
+		assert.Len(t, component.administrationDirectories, 0, "No directories should be registered")
+	})
+
+	t.Run("matches with both having trailing slashes", func(t *testing.T) {
+		component, err := New(Config{
+			ExcludeAdminDirectories: []string{
+				"http://example.com/fhir/", // Both have trailing slash
+			},
+		})
+		require.NoError(t, err)
+
+		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir/", []string{"Organization"}, false)
+
+		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
 		assert.Len(t, component.administrationDirectories, 0, "No directories should be registered")
 	})
 
@@ -667,8 +694,7 @@ func TestComponent_ExcludeAdminDirectories(t *testing.T) {
 		// Try to register the same URL as admin directory - should be excluded
 		err = component.registerAdministrationDirectory(context.Background(), ownFHIRBaseURL, []string{"Organization"}, true)
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "is excluded")
+		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
 		assert.Len(t, component.administrationDirectories, 0, "Own directory should not be registered as admin directory")
 	})
 
@@ -690,9 +716,9 @@ func TestComponent_ExcludeAdminDirectories(t *testing.T) {
 		// Register an allowed directory
 		err4 := component.registerAdministrationDirectory(context.Background(), "http://allowed.com/fhir", []string{"Organization"}, false)
 
-		require.Error(t, err1)
-		require.Error(t, err2)
-		require.Error(t, err3)
+		require.NoError(t, err1, "Should not error when URL is excluded, just skip registration")
+		require.NoError(t, err2, "Should not error when URL is excluded, just skip registration")
+		require.NoError(t, err3, "Should not error when URL is excluded, just skip registration")
 		require.NoError(t, err4)
 		assert.Len(t, component.administrationDirectories, 1, "Only the allowed directory should be registered")
 	})

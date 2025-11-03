@@ -128,8 +128,12 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool) error {
 
 	trimmedFHIRBaseURL := strings.TrimRight(fhirBaseURL, "/")
-	if slices.Contains(c.config.ExcludeAdminDirectories, trimmedFHIRBaseURL) {
-		return fmt.Errorf("administration directory (url=%s) is excluded", fhirBaseURL)
+	// Check if the URL is in the exclusion list (also trim exclusion list entries for consistent matching)
+	for _, excludedURL := range c.config.ExcludeAdminDirectories {
+		if strings.TrimRight(excludedURL, "/") == trimmedFHIRBaseURL {
+			log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURL).Msg("Skipping administration directory registration: excluded by configuration")
+			return nil
+		}
 	}
 	// Must be a valid http or https URL
 	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
