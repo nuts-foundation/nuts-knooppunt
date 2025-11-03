@@ -63,7 +63,7 @@ spec:
           {{- if .Values.multitenancy.enabled }}
             # Enable partitioning and allow string tenant identifiers
             - name: hapi.fhir.partitioning.allow_references_across_partitions
-              value: false
+              value: "false"
           {{- end }}
           envFrom:
             - configMapRef:
