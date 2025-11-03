@@ -1,5 +1,5 @@
 apiVersion: v2
-name: nuts-knooppunt
+name: helm-nuts-knooppunt
 description: Helm chart for nuts-knooppunt
 
 # A chart can be either an 'application' or a 'library' chart.
@@ -24,9 +24,9 @@ version: 0.1.0
 appVersion: "1.16.0"
 
 dependencies:
-  - name: fhir
+  - name: helm-fhir
     condition: fhir.enabled
-    repository: file://../fhir
+    repository: oci://ghcr.io/nuts-foundation
     version: "0.1.0"
   - name: nuts-node-chart
     alias: nuts

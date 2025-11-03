@@ -48,18 +48,6 @@ jobs:
             echo "Using test version: $VERSION (no tag detected)"
           fi
 
-      - name: Update standalone chart versions and names
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
-          # Prefix chart names with 'helm-' to distinguish from Docker images
-          sed -i "s/^name: fhir$/name: helm-fhir/" helm/fhir/Chart.yaml
-          sed -i "s/^name: pep$/name: helm-pep/" helm/pep/Chart.yaml
-
-          # Update standalone chart versions
-          sed -i "s/^version:.*/version: $VERSION/" helm/fhir/Chart.yaml
-          sed -i "s/^version:.*/version: $VERSION/" helm/pep/Chart.yaml
-
       - name: Package and push standalone charts first
         run: |
           # Package standalone charts (no dependencies)
@@ -71,21 +59,6 @@ jobs:
             echo "Pushing $chart to ghcr.io/${{ github.repository_owner }}"
             helm push "$chart" oci://ghcr.io/${{ github.repository_owner }}
           done
-
-      - name: Update nuts-knooppunt chart with OCI dependencies
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-
-          # Prefix chart name
-          sed -i "s/^name: nuts-knooppunt$/name: helm-nuts-knooppunt/" helm/nuts-knooppunt/Chart.yaml
-
-          # Update version
-          sed -i "s/^version:.*/version: $VERSION/" helm/nuts-knooppunt/Chart.yaml
-
-          # Update fhir dependency to use OCI registry
-          sed -i "s/^  - name: fhir$/  - name: helm-fhir/" helm/nuts-knooppunt/Chart.yaml
-          sed -i "/^  - name: helm-fhir$/,/^    version:/ s|repository: .*|repository: oci://ghcr.io/${{ github.repository_owner }}|" helm/nuts-knooppunt/Chart.yaml
-          sed -i "/^  - name: helm-fhir$/,/^    version:/ s/version: .*/version: \"$VERSION\"/" helm/nuts-knooppunt/Chart.yaml
 
       - name: Update chart dependencies
         run: |
@@ -103,10 +76,15 @@ jobs:
 
       - name: Output published charts
         run: |
+          # Read versions from Chart.yaml files
+          KNOOPPUNT_VERSION=$(grep "^version:" helm/nuts-knooppunt/Chart.yaml | awk '{print $2}')
+          FHIR_VERSION=$(grep "^version:" helm/fhir/Chart.yaml | awk '{print $2}')
+          PEP_VERSION=$(grep "^version:" helm/pep/Chart.yaml | awk '{print $2}')
+
           echo "Published Helm charts:"
-          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-nuts-knooppunt:${{ steps.version.outputs.version }}"
-          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-fhir:${{ steps.version.outputs.version }}"
-          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-pep:${{ steps.version.outputs.version }}"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-nuts-knooppunt:$KNOOPPUNT_VERSION"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-fhir:$FHIR_VERSION"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-pep:$PEP_VERSION"
           echo ""
           echo "Install with:"
-          echo "  helm install my-knooppunt oci://ghcr.io/${{ github.repository_owner }}/helm-nuts-knooppunt --version ${{ steps.version.outputs.version }}"
+          echo "  helm install my-knooppunt oci://ghcr.io/${{ github.repository_owner }}/helm-nuts-knooppunt --version $KNOOPPUNT_VERSION"
