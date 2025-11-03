@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://www.w3.org/2003/05/soap-envelope" xmlns:s="http://www.w3.org/2001/XMLSchema" xmlns:types="urn:oasis:names:tc:xacml:3.0:profile:saml2.0:v2:schema:protocol:wd-14" xmlns:wsa="http://www.w3.org/2005/08/addressing" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <SOAP-ENV:Header>
+        <wsa:Action>XACMLAuthorizationDecisionQueryRequest</wsa:Action>
+        <wsa:MessageID>urn:uuid:B8CB2497-A47E-48D9-907C-2B4DFBFB5697</wsa:MessageID>
+        <wsa:ReplyTo>
+            <wsa:Address>http://www.w3.org/2005/08/addressing/anonymous</wsa:Address>
+        </wsa:ReplyTo>
+        <wsa:To>http://localhost:8000/4</wsa:To>
+    </SOAP-ENV:Header>
+    <SOAP-ENV:Body>
+        <types:XACMLAuthzDecisionQuery>
+            <Request CombinedDecision="false" ReturnPolicyIdList="false" xmlns="urn:oasis:names:tc:xacml:3.0:core:schema:wd-17">
+                <Attributes Category="urn:oasis:names:tc:xacml:3.0:attribute-category:resource" xml:id="resource">
+                    <Attribute AttributeId="urn:oasis:names:tc:xacml:2.0:resource:resource-id" IncludeInResult="true">
+                        <AttributeValue DataType="urn:hl7-org:v3#II">
+                            <InstanceIdentifier extension="900186021" root="2.16.840.1.113883.2.4.6.3" xmlns="urn:hl7-org:v3"/>
+                        </AttributeValue>
+                    </Attribute>
+                    <Attribute AttributeId="urn:ihe:iti:appc:2016:document-entry:healthcare-facility-type-code" IncludeInResult="true">
+                        <AttributeValue DataType="urn:hl7-org:v3#CV">
+                            <CodedValue code="Z3" codeSystem="2.16.840.1.113883.2.4.15.1060" xmlns="urn:hl7-org:v3"/>
+                        </AttributeValue>
+                    </Attribute>
+                    <Attribute AttributeId="urn:ihe:iti:appc:2016:author-institution:id" IncludeInResult="true">
+                        <AttributeValue DataType="urn:hl7-org:v3#II">
+                            <InstanceIdentifier extension="00000659" root="2.16.528.1.1007.3.3" xmlns="urn:hl7-org:v3"/>
+                        </AttributeValue>
+                    </Attribute>
+                </Attributes>
+                <Attributes Category="urn:oasis:names:tc:xacml:3.0:attribute-category:action" xml:id="action0">
+                    <Attribute AttributeId="urn:ihe:iti:appc:2016:document-entry:event-code" IncludeInResult="true">
+                        <AttributeValue DataType="urn:hl7-org:v3#CV">
+                            <CodedValue code="GGC002" codeSystem="2.16.840.1.113883.2.4.3.111.5.10.1" xmlns="urn:hl7-org:v3"/>
+                        </AttributeValue>
+                    </Attribute>
+                </Attributes>
+                <Attributes Category="urn:oasis:names:tc:xacml:1.0:subject-category:access-subject" xml:id="subject">
+                    <Attribute AttributeId="urn:oasis:names:tc:xacml:2.0:subject:role" IncludeInResult="true">
+                        <AttributeValue DataType="urn:hl7-org:v3#CV">
+                            <CodedValue code="01.015" codeSystem="2.16.840.1.113883.2.4.15.111" xmlns="urn:hl7-org:v3"/>
+                        </AttributeValue>
+                    </Attribute>
+                    <Attribute AttributeId="urn:ihe:iti:xua:2017:subject:provider-identifier" IncludeInResult="true">
+                        <AttributeValue DataType="urn:hl7-org:v3#II">
+                            <InstanceIdentifier assigningAuthorityName="CIBG" extension="000095254" root="2.16.528.1.1007.3.1" xmlns="urn:hl7-org:v3"/>
+                        </AttributeValue>
+                    </Attribute>
+                    <Attribute AttributeId="urn:nl:otv:names:tc:1.0:subject:provider-institution" IncludeInResult="true">
+                        <AttributeValue DataType="urn:hl7-org:v3#II">
+                            <InstanceIdentifier extension="00000666" root="2.16.528.1.1007.3.3" xmlns="urn:hl7-org:v3"/>
+                        </AttributeValue>
+                    </Attribute>
+                    <Attribute AttributeId="urn:nl:otv:names:tc:1.0:subject:consulting-healthcare-facility-type-code" IncludeInResult="true">
+                        <AttributeValue DataType="urn:hl7-org:v3#CV">
+                            <CodedValue code="Z3" codeSystem="2.16.840.1.113883.2.4.15.1060" xmlns="urn:hl7-org:v3"/>
+                        </AttributeValue>
+                    </Attribute>
+                </Attributes>
+                <Attributes Category="urn:oasis:names:tc:xacml:3.0:attribute-category:environment" xml:id="environment">
+                    <Attribute AttributeId="urn:oasis:names:tc:xspa:1.0:subject:purposeofuse" IncludeInResult="true">
+                        <AttributeValue DataType="urn:hl7-org:v3#CV">
+                            <CodedValue code="TREAT" codeSystem="2.16.840.1.113883.1.11.20448" xmlns="urn:hl7-org:v3"/>
+                        </AttributeValue>
+                    </Attribute>
+                </Attributes>
+            </Request>
+        </types:XACMLAuthzDecisionQuery>
+    </SOAP-ENV:Body>
+</SOAP-ENV:Envelope>

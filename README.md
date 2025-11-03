@@ -13,6 +13,22 @@ Implementation of the Nuts Knooppunt specifications.
     - [POST http://localhost:8081/nvi/DocumentReference/_search](http://localhost:8081/nvi/DocumentReference/_search)
     - [GET http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
 
+## Configuration
+
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for configuration options and instructions.
+
+## Deployment
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for how to deploy the Knooppunt in your XIS/healthcare system.
+
+## Integration
+
+See [docs/INTEGRATION.md](docs/INTEGRATION.md) for how to integrate the Knooppunt in your local XIS/healthcare system.
+
+## Architecture
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for an overview of the architecture and design of the Knooppunt (for Knooppunt developers).
+
 ## Go toolchain
 
 It's a typical Go application, so:
@@ -43,33 +59,3 @@ Start the stack with:
 docker compose up --build
 ```
 
-## Configuration
-
-The application supports configuration through YAML files and environment variables. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for detailed configuration options.
-
-Quick start:
-
-```shell
-# Configuration is automatically read from config/knooppunt.yml and config/nuts.yml
-./nuts-knooppunt
-
-# Using environment variables to override config
-export KNPT_NUTS_ENABLED=false
-export KNPT_MCSDADMIN_FHIRBASEURL=http://localhost:8080/fhir
-./nuts-knooppunt
-```
-
-### Legacy Configuration
-
-- `KNPT_CONFIGDIR`: Directory where the configuration files are stored. Defaults to `./config`.
-
-## Components
-
-This section lists the components of the application, commonly used endpoints and configuration options.
-
-### Nuts node
-The embedded [Nuts node](https://github.com/nuts-foundation/nuts-node) can be configured through environment variables prefixed with `NUTS_`, or by using a configuration file called `config/nuts.yml`.
-
-Endpoints:
-- Public status page: [http://localhost:8080/nuts/status](http://localhost:8080/nuts/status)
-- Internal diagnostics page: [http://localhost:8081/nuts/status/diagnostics](http://localhost:8081/nuts/status/diagnostics)
