@@ -81,9 +81,9 @@ This happens transparently - the client thinks it's using `:identifier` modifier
 
 ## Supported API Operations
 
-### 1. POST DocumentReference (Create)
+All operations require `X-Requester-URA` header. This value needs to match DocumentReference.custodian.identifier.where(system='http://fhir.nl/fhir/NamingSystem/ura').value
 
-#### With X-Requester-URA Header
+### 1. POST DocumentReference (Create)
 
 **Request:**
 ```http
@@ -122,46 +122,6 @@ Content-Type: application/fhir+json
   ...
 }
 ```
-
-#### Without X-Requester-URA Header
-
-**Request:**
-```http
-POST /DocumentReference
-Content-Type: application/fhir+json
-
-{
-  "resourceType": "DocumentReference",
-  "subject": {
-    "identifier": {
-      "system": "http://example.com/BSNToken",
-      "value": "token-hospital-abc123-def456"
-    }
-  },
-  ...
-}
-```
-
-**Behavior:**
-1. Token is converted to pseudonym and stored
-2. Resource is created successfully
-3. **Response is replaced with an OperationOutcome warning** (cannot return the token without knowing the audience)
-
-**Response:**
-```json
-{
-  "resourceType": "OperationOutcome",
-  "issue": [{
-    "severity": "warning",
-    "code": "security",
-    "details": {
-      "text": "Resource was created (DocumentReference/123, see Location header), but can not be presented as no audience has been supplied. Do a GET with X-Requester-URA header to retrieve the Resource."
-    }
-  }]
-}
-```
-
-The `Location` header contains the URL to retrieve the resource.
 
 ### 2. GET DocumentReference/{id} (Read Single Resource)
 

@@ -14,12 +14,29 @@ import (
 //go:embed *.html
 var tmplFS embed.FS
 
+var partialTemplates = []string{}
+
+func init() {
+	files, err := tmplFS.ReadDir(".")
+	if err != nil {
+		log.Error().Msg("could not initiate template files")
+	}
+
+	for _, file := range files {
+		name := file.Name()
+		startsWithUnderscore := name[:1] == "_"
+		if startsWithUnderscore {
+			partialTemplates = append(partialTemplates, name)
+		}
+	}
+}
+
 func RenderWithBase(w io.Writer, name string, data any) {
 	files := []string{
 		"base.html",
 		name,
-		"_card_endpoint.html",
 	}
+	files = append(files, partialTemplates...)
 
 	ts, err := template.ParseFS(tmplFS, files...)
 	if err != nil {
@@ -309,4 +326,52 @@ func MakeEndpointCards(endpoints []fhir.Endpoint, org fhir.Organization) []Endpo
 		}
 	}
 	return cards
+}
+
+type PractitionerRoleProps struct {
+	Id           string
+	Uzi          string
+	Organization string
+	Code         string
+	Telecom      string
+}
+
+func MakePractitionerRoleProps(role fhir.PractitionerRole) PractitionerRoleProps {
+	out := PractitionerRoleProps{}
+	if role.Id != nil {
+		out.Id = *role.Id
+	} else {
+		out.Id = unknownStr
+	}
+
+	ref := role.Practitioner
+	if ref != nil && ref.Identifier != nil && ref.Identifier.Value != nil {
+		out.Uzi = *ref.Identifier.Value
+	} else {
+		out.Uzi = unknownStr
+	}
+
+	if role.Organization != nil {
+		out.Organization = fmtRef(*role.Organization)
+	} else {
+		out.Organization = unknownStr
+	}
+
+	if len(role.Code) > 0 {
+		out.Code = fmtCodable(role.Code[0])
+	} else {
+		out.Code = unknownStr
+	}
+
+	out.Telecom = unknownStr
+
+	return out
+}
+
+func MakePractitionerRoleXsProps(roles []fhir.PractitionerRole) []PractitionerRoleProps {
+	out := make([]PractitionerRoleProps, len(roles))
+	for idx, role := range roles {
+		out[idx] = MakePractitionerRoleProps(role)
+	}
+	return out
 }

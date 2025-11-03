@@ -33,6 +33,19 @@
     margin-bottom: 10px;
 }
 
+fieldset {
+    border: 1px solid lightgrey;
+    padding: 5px;
+    margin-bottom: 10px;
+}
+
+legend {
+    padding: 1px 10px;
+    float: none;
+    width: auto;
+    font-size: 1rem;
+}
+
 #edit-associations .card {
     padding: 10px;
     width: 700px;

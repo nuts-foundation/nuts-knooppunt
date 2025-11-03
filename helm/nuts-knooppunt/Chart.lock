@@ -1,0 +1,9 @@
+dependencies:
+- name: fhir
+  repository: file://../fhir
+  version: 0.1.0
+- name: nuts-node-chart
+  repository: https://nuts-foundation.github.io/nuts-node/
+  version: 0.0.6
+digest: sha256:f2f74a65adf4eb1c904fda043fcf11ad7d29803c368575c623b064be88921fb4
+generated: "2025-10-31T13:12:41.463572+01:00"

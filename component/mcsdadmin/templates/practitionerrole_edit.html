@@ -1,0 +1,72 @@
+{{define "main"}}
+<div class="card">
+    <div class="card-header">
+        <h4>Edit Practitioner Role</h4>
+    </div>
+    <div class="card-body">
+        <form hx-boost="true" method="post" enctype="application/x-www-form-urlencoded">
+            {{ if .OrgsExist }}
+            <div class="mb-3">
+                <label for="uzi-number" class="form-label">UZI-number:</label>
+                <input id="uzi-number" type="text" name="uzi-number" class="form-control" placeholder="Enter code here"
+                       required>
+            </div>
+            <div class="mb-3">
+                <label for="organization-id" class="form-label">Part of Organization:</label>
+                <select name="organization-id" id="organization-id" class="form-select">
+                    <option value="">--Please choose an option--</option>
+                    {{range .Organizations}}
+                    <option value="{{ .Id }}">{{ .Name }}</option>
+                    {{ end }}
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="code-select" class="form-label">Choose a code:</label>
+                <div id="code-options" class="options">
+                    <select name="codes" id="code-select" class="form-select" required>
+                        <option value="">--Please choose an option--</option>
+                        {{ range .Codes }}
+                        <option value="{{ .Code }}">{{ .Display }}</option>
+                        {{ end }}
+                    </select>
+                </div>
+                <div>
+                    <button onclick='addOption("code-select");' type="button" class="btn btn-secondary btn-sm">
+                        Add code
+                    </button>
+                </div>
+            </div>
+            <div class="mb-3">
+                <div>
+                    <fieldset id="telecom-options">
+                        <legend>Contact details</legend>
+                        <div class="options">
+                            <label class="form-label">Choose a method:</label>
+                            <select name="telecom[0][System]" id="telecom[0][System]" class="form-select" required>
+                                <option value="">--Please choose an option--</option>
+                                {{ range .TelecomCodes }}
+                                <option value="{{ .Code }}">{{ .Display }}</option>
+                                {{ end }}
+                            </select>
+                            <label class="form-label">Value:</label>
+                            <input id="telecom[0][Value]" type="text" name="telecom[0][Value]" class="form-control"
+                                   placeholder="Enter here" required>
+                        </div>
+                    </fieldset>
+                </div>
+                <div>
+                    <button onclick='addOption("telecom-options");' type="button" class="btn btn-secondary btn-sm">
+                        Add contact details
+                    </button>
+                </div>
+            </div>
+            {{ else }}
+            <p>Please add an organization before adding roles</p>
+            {{ end }}
+            <div class="mb-3">
+                <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}
