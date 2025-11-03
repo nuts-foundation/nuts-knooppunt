@@ -604,3 +604,47 @@ func TestGetLastUpdated(t *testing.T) {
 		})
 	}
 }
+
+func TestComponent_updateFromDirectory(t *testing.T) {
+	t.Run("#233: no entry.Request in _history results", func(t *testing.T) {
+		t.Log("See https://github.com/nuts-foundation/nuts-knooppunt/issues/233")
+		server := startMockServer(t, map[string]string{
+			"/fhir/Organization/_history": "test/bugs/233-no-bundle-request/organization_response.json",
+		})
+		component, err := New(Config{})
+		require.NoError(t, err)
+		report, err := component.updateFromDirectory(context.Background(), server.URL+"/fhir", []string{"Organization"}, false)
+		require.NoError(t, err)
+		require.NotNil(t, report)
+		require.Len(t, report.Warnings, 1)
+		assert.Equal(t, report.Warnings[0], "Skipping entry with no request: #0")
+		assert.Empty(t, report.Errors)
+		assert.Equal(t, 0, report.CountCreated)
+		assert.Equal(t, 0, report.CountUpdated)
+		assert.Equal(t, 0, report.CountDeleted)
+	})
+}
+
+func startMockServer(t *testing.T, filesToServe map[string]string) *httptest.Server {
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+
+	emptyBundleData, err := os.ReadFile("test/empty_bundle_response.json")
+	require.NoError(t, err)
+	emptyResponseStr := string(emptyBundleData)
+	pathsToServe := map[string]*string{
+		"/fhir/Endpoint/_history":          &emptyResponseStr,
+		"/fhir/Organization/_history":      &emptyResponseStr,
+		"/fhir/Location/_history":          &emptyResponseStr,
+		"/fhir/HealthcareService/_history": &emptyResponseStr,
+	}
+	for path, filename := range filesToServe {
+		data, err := os.ReadFile(filename)
+		require.NoError(t, err)
+		dataStr := string(data)
+		pathsToServe[path] = &dataStr
+	}
+
+	mockHistoryEndpoints(mux, pathsToServe)
+	return server
+}
