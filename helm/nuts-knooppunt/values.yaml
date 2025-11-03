@@ -147,7 +147,7 @@ fhir:
   enabled: false
   fullnameOverride: fhir
   multitenancy:
-    enabled: true
+    enabled: false
   postgres:
     enabled: true
   gateway:
