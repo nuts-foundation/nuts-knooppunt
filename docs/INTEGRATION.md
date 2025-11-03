@@ -181,7 +181,7 @@ Set the `notify_endpoint` in your Knooppunt configuration (`knooppunt.yml`):
 
 ```yaml
 mitz:
-  mitzbase: "https://tst-api.mijn-mitz.nl"
+  mitzbase: "https://tst-api.mijn-mitz.nl/tst-us/mitz"
   notify_endpoint: "https://your-platform.example.com/mitz/notify"
   # ... other MITZ settings
 ```
