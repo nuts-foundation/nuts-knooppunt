@@ -3,8 +3,6 @@
 
 FROM nginx:1.29.2-alpine
 
-RUN echo "Building knooppunt-pep with layer caching enabled"
-
 # Copy NGINX configuration files
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY js/authorize.js /etc/nginx/js/authorize.js
