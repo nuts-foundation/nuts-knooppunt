@@ -97,13 +97,13 @@ func (m *MockXACMLMitzServer) handleXACMLAuthz(w http.ResponseWriter, r *http.Re
 	// Set response headers
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(responseXML))
+	_, _ = w.Write([]byte(responseXML))
 }
 
 // handleStatus handles status checks
 func (m *MockXACMLMitzServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
+	_, _ = w.Write([]byte("ok"))
 }
 
 // GetURL returns the URL of the mock XACML MITZ server
