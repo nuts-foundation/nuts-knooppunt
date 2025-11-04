@@ -63,7 +63,8 @@ func Test_PEPAuthorization(t *testing.T) {
 		defer resp.Body.Close()
 
 		// Log response for debugging
-		body, _ := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
 		t.Logf("Response status: %d, body: %s", resp.StatusCode, string(body))
 
 		// Should be allowed - expect 200 since we created the patient
