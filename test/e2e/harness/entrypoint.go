@@ -132,7 +132,7 @@ func StartPEP(t *testing.T, pepConfig PEPConfig) PEPDetails {
 	pepConfig.FHIRBackendHost = "host.docker.internal"
 	pepConfig.FHIRBackendPort = hapiBaseURL.Port()
 	pepConfig.KnooppuntPDPHost = "host.docker.internal"
-	pepConfig.KnooppuntPDPPort = "8081"
+	pepConfig.KnooppuntPDPPort = knooppuntPDPURL.Port()
 
 	// Start PEP container
 	pepBaseURL := startPEP(t, pepConfig)
