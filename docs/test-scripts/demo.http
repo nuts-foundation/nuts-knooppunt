@@ -5,6 +5,7 @@
 ### Step A: register patient at NVI
 POST http://localhost:8081/nvi/DocumentReference
 X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000020
+X-Requester-URA: 00000020
 Content-Type: application/fhir+json
 
 {
@@ -36,12 +37,20 @@ Content-Type: application/fhir+json
       "system": "http://fhir.nl/fhir/NamingSystem/ura",
       "value": "00000020"
     }
-  }
+  },
+  "content" : [{
+    "attachment" : {
+      "contentType" : "text/plain",
+      "data" : "IlRoaXMgRG9jdW1lbnRSZWZlcmVuY2UgZG9lcyBub3QgcG9pbnQgdG8gYSBzcGVjaWZpYyBkb2N1bWVudCwgYnV0IHJhdGhlciB0byBkb2N1bWVudHMgb3IgZGF0YSBpbiBnZW5lcmFsIGF0IHRoZSBjdXN0b2RpYW4gcmVmZXJlbmNlZCBpbiB0aGlzIGluc3RhbmNlLiBUaGlzIGNhbiBiZSB1c2VkIGJ5IGRhdGEgbG9jYWxpemF0aW9uIHNlcnZpY2VzIChhbHNvIGtub3duIGFzIG1lZGljYWwgcmVjb3JkIGxvY2FsaXphdGlvbiBzZXJ2aWNlcykuIg==",
+      "title" : "Generic reference to patient data"
+    }
+  }]
 }
 
 ### Step B: localize patient data at NVI
 GET http://localhost:8081/nvi/DocumentReference?subject:identifier=http://fhir.nl/fhir/NamingSystem/bsn|999992193
-X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000030
+X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000020
+X-Requester-URA: 00000020
 
 > {%
     const dataHolderIDSystem = response.body.entry[response.body.entry.length - 1].resource.custodian.identifier.system
