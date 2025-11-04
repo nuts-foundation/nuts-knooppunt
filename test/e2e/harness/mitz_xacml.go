@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // MockXACMLMitzServer is a mock MITZ server that handles XACML authorization requests
@@ -31,9 +33,7 @@ func NewMockXACMLMitzServer(t *testing.T) *MockXACMLMitzServer {
 
 	// Find an available port
 	listener, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("failed to find available port: %v", err)
-	}
+	require.NoError(t, err, "failed to find available port")
 
 	mitz.url = fmt.Sprintf("http://%s", listener.Addr().String())
 
