@@ -53,6 +53,7 @@ func TestComponent_update_regression(t *testing.T) {
 		"/Location/_history":          &locationHistoryResponseStr,
 		"/Organization/_history":      &organizationHistoryResponseStr,
 		"/HealthcareService/_history": &emptyResponseStr,
+		"/PractitionerRole/_history":  &emptyResponseStr,
 	})
 	server := httptest.NewServer(mux)
 
@@ -108,6 +109,7 @@ func TestComponent_update(t *testing.T) {
 		"/Organization/_history":      &rootDirOrganizationHistoryResponse,
 		"/HealthcareService/_history": &emptyResponseStr,
 		"/Location/_history":          &emptyResponseStr,
+		"/PractitionerRole/_history":  &emptyResponseStr,
 	})
 
 	rootDirServer := httptest.NewServer(rootDirMux)
@@ -138,6 +140,7 @@ func TestComponent_update(t *testing.T) {
 		"/fhir/Organization/_history_page2": &org1DirOrganizationHistoryPage2Response,
 		"/fhir/Location/_history":           &emptyResponseStr,
 		"/fhir/HealthcareService/_history":  &emptyResponseStr,
+		"/fhir/PractitionerRole/_history":   &emptyResponseStr,
 	})
 
 	org1DirServer := httptest.NewServer(org1DirMux)
@@ -278,6 +281,7 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	mockHistoryEndpoints(rootDirMux, map[string]*string{
 		"/Location/_history":          &emptyResponseStr2,
 		"/HealthcareService/_history": &emptyResponseStr2,
+		"/PractitionerRole/_history":  &emptyResponseStr2,
 	})
 
 	rootDirServer := httptest.NewServer(rootDirMux)
@@ -359,6 +363,7 @@ func TestComponent_noDuplicateResourcesInTransactionBundle(t *testing.T) {
 		"/Location/_history":          &emptyResponseStr3,
 		"/Endpoint/_history":          &emptyResponseStr3,
 		"/HealthcareService/_history": &emptyResponseStr3,
+		"/PractitionerRole/_history":  &emptyResponseStr3,
 	})
 	mockServer := httptest.NewServer(mockMux)
 	defer mockServer.Close()
