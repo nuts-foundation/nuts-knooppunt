@@ -33,5 +33,5 @@ GET http://localhost:7050/fhir/nvi/DocumentReference/{{documentReferenceId}}
 X-Requester-URA: 00000030
 
 ### Get a DocumentReference by identifier
-GET http://localhost:7050/fhir/nvi/DocumentReference/?subject:identifier=http://fhir.nl/fhir/NamingSystem/bsn-transport-token|token-hospital-abc123-def456
+GET http://localhost:7050/fhir/nvi/DocumentReference?subject:identifier=http://fhir.nl/fhir/NamingSystem/bsn-transport-token|token-hospital-abc123-def456
 X-Requester-URA: 00000030
