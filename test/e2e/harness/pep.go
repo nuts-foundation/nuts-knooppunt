@@ -62,9 +62,13 @@ func startPEP(t *testing.T, config PEPConfig) *url.URL {
 	})
 
 	// Get PEP endpoint
-	endpoint, err := pepContainer.Endpoint(ctx, "http")
+	host, err := pepContainer.Host(ctx)
 	require.NoError(t, err)
-	u, err := url.Parse(endpoint)
+	mappedPort, err := pepContainer.MappedPort(ctx, "8080")
 	require.NoError(t, err)
+	u := &url.URL{
+		Scheme: "http",
+		Host:   host + ":" + mappedPort.Port(),
+	}
 	return u
 }
