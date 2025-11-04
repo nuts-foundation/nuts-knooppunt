@@ -3,6 +3,8 @@
 
 FROM nginx:1.29.2-alpine
 
+RUN echo "Building with GitHub Actions cache"
+
 # Copy NGINX configuration files
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY js/authorize.js /etc/nginx/js/authorize.js
