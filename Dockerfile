@@ -7,6 +7,8 @@ ARG GIT_COMMIT=0
 ARG GIT_BRANCH=main
 ARG GIT_VERSION=undefined
 
+RUN echo "Building nuts-knooppunt with layer caching enabled"
+
 ENV GOPATH=/
 
 COPY go.mod .
