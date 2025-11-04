@@ -1,0 +1,37 @@
+#
+# IntelliJ IDEA HTTP Client docs: https://www.jetbrains.com/help/idea/http-client-in-product-code-editor.html
+#
+
+### Post a DocumentReference
+POST http://localhost:7050/fhir/nvi/DocumentReference
+X-Requester-URA: 00000030
+Content-Type: application/fhir+json
+
+{
+  "resourceType": "DocumentReference",
+  "subject": {
+    "identifier": {
+      "system": "http://example.com/BSNToken",
+      "value": "token-hospital-abc123-def456"
+    }
+  },
+  "custodian": {
+    "type": "Organization",
+    "identifier": {
+      "system": "http://fhir.nl/fhir/NamingSystem/ura",
+      "value": "00000030"
+    }
+  }
+}
+
+> {%
+    client.global.set("documentReferenceId", response.body.id)
+%}
+
+### Get a DocumentReference by ID
+GET http://localhost:7050/fhir/nvi/DocumentReference/{{documentReferenceId}}
+X-Requester-URA: 00000030
+
+### Get a DocumentReference by identifier
+GET http://localhost:7050/fhir/nvi/DocumentReference?subject:identifier=http://example.com/BSNToken|token-hospital-abc123-def456
+X-Requester-URA: 00000030
