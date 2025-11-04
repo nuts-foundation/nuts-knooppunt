@@ -7,6 +7,9 @@ FROM nginx:1.29.2-alpine
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY js/authorize.js /etc/nginx/js/authorize.js
 
+# Remove default nginx config
+RUN rm -f /etc/nginx/conf.d/default.conf
+
 # Copy config template - official nginx image will process this automatically
 # via /docker-entrypoint.d/20-envsubst-on-templates.sh
 COPY conf.d/knooppunt.conf /etc/nginx/templates/knooppunt.conf.template
@@ -16,8 +19,10 @@ RUN mkdir -p /var/log/nginx && \
     chown -R nginx:nginx /var/log/nginx
 
 # Set default environment variables
-ENV FHIR_BACKEND_HOST=fhir \
+ENV NGINX_PORT=8080 \
+    FHIR_BACKEND_HOST=fhir \
     FHIR_BACKEND_PORT=7050 \
+    FHIR_BASE_PATH=/fhir \
     KNOOPPUNT_PDP_HOST=knooppunt \
     KNOOPPUNT_PDP_PORT=8081 \
     DATA_HOLDER_ORGANIZATION_URA=00000001 \
