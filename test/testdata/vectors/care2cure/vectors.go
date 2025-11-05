@@ -6,7 +6,7 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-func HAPITenant() hapi.Tenant {
+func AdminHAPITenant() hapi.Tenant {
 	return hapi.Tenant{
 		Name: "care2cure-admin",
 		ID:   4,
