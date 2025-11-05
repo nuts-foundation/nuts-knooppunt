@@ -240,6 +240,11 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 
 	var report DirectoryUpdateReport
 	for i, entry := range deduplicatedEntries {
+		if entry.Request == nil {
+			msg := fmt.Sprintf("Skipping entry with no request: #%d", i)
+			report.Warnings = append(report.Warnings, msg)
+			continue
+		}
 		log.Ctx(ctx).Trace().Str("fhir_server", fhirBaseURLRaw).Msgf("Processing entry: %s", entry.Request.Url)
 		resourceType, err := buildUpdateTransaction(ctx, &tx, entry, allowedResourceTypes, allowDiscovery, fhirBaseURLRaw)
 		if err != nil {

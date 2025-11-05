@@ -340,60 +340,6 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	require.Equal(t, lastUpdate, sinceParams[2], "_since parameter should match the stored lastUpdate timestamp")
 }
 
-func TestComponent_noDuplicateResourcesInTransactionBundle(t *testing.T) {
-	// This test verifies that when _history returns multiple versions of the same resource,
-	// the transaction bundle sent to the query directory contains no duplicates.
-	// This addresses the HAPI error: "Transaction bundle contains multiple resources with ID: urn:uuid:..."
-	emptyResponse, err := os.ReadFile("test/regression_lrza_empty_history_response.json")
-	require.NoError(t, err)
-	historyWithDuplicatesBytes, err := os.ReadFile("test/history_with_duplicates.json")
-	require.NoError(t, err)
-
-	mockMux := http.NewServeMux()
-	// Convert []byte responses to strings for pointer approach
-	historyWithDuplicatesStr := string(historyWithDuplicatesBytes)
-	emptyResponseStr3 := string(emptyResponse)
-
-	mockHistoryEndpoints(mockMux, map[string]*string{
-		"/Organization/_history":      &historyWithDuplicatesStr,
-		"/Location/_history":          &emptyResponseStr3,
-		"/Endpoint/_history":          &emptyResponseStr3,
-		"/HealthcareService/_history": &emptyResponseStr3,
-	})
-	mockServer := httptest.NewServer(mockMux)
-	defer mockServer.Close()
-
-	capturingClient := &test.StubFHIRClient{}
-	component, err := New(Config{
-		QueryDirectory: DirectoryConfig{FHIRBaseURL: "http://example.com/local/fhir"},
-	})
-	require.NoError(t, err)
-
-	// Register as discovered directory to avoid Organization filtering
-	err = component.registerAdministrationDirectory(context.Background(), mockServer.URL, []string{"Organization", "Endpoint"}, false)
-	require.NoError(t, err)
-
-	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
-		if baseURL.String() == mockServer.URL {
-			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
-		}
-		if baseURL.String() == "http://example.com/local/fhir" {
-			return capturingClient
-		}
-		return &test.StubFHIRClient{Error: errors.New("unknown URL")}
-	}
-
-	ctx := context.Background()
-	report, err := component.update(ctx)
-
-	require.NoError(t, err)
-	require.Empty(t, report[mockServer.URL].Errors, "Should not have errors after deduplication")
-
-	// Should have 0 Organizations because the DELETE operation is the most recent
-	orgs := capturingClient.CreatedResources["Organization"]
-	require.Len(t, orgs, 0, "Should have 0 Organizations after deduplication (DELETE is most recent operation)")
-}
-
 func TestExtractResourceIDFromURL(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -603,6 +549,85 @@ func TestGetLastUpdated(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestComponent_updateFromDirectory(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("#233: no entry.Request in _history results", func(t *testing.T) {
+		t.Log("See https://github.com/nuts-foundation/nuts-knooppunt/issues/233")
+		server := startMockServer(t, map[string]string{
+			"/fhir/Organization/_history": "test/bugs/233-no-bundle-request/organization_response.json",
+		})
+		component, err := New(Config{})
+		require.NoError(t, err)
+		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false)
+		require.NoError(t, err)
+		require.NotNil(t, report)
+		require.Len(t, report.Warnings, 1)
+		assert.Equal(t, report.Warnings[0], "Skipping entry with no request: #0")
+		assert.Empty(t, report.Errors)
+		assert.Equal(t, 0, report.CountCreated)
+		assert.Equal(t, 0, report.CountUpdated)
+		assert.Equal(t, 0, report.CountDeleted)
+	})
+
+	t.Run("no duplicate resources in transaction bundle", func(t *testing.T) {
+		// This test verifies that when _history returns multiple versions of the same resource,
+		// the transaction bundle sent to the query directory contains no duplicates.
+		// This addresses the HAPI error: "Transaction bundle contains multiple resources with ID: urn:uuid:..."
+		server := startMockServer(t, map[string]string{
+			"/fhir/Organization/_history": "test/history_with_duplicates.json",
+		})
+		defer server.Close()
+
+		capturingClient := &test.StubFHIRClient{}
+		component, err := New(Config{})
+		require.NoError(t, err)
+
+		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+			if baseURL.String() == server.URL+"/fhir" {
+				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
+			}
+			if baseURL.String() == "http://example.com/local/fhir" {
+				return capturingClient
+			}
+			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
+		}
+
+		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization", "Endpoint"}, false)
+
+		require.NoError(t, err)
+		require.Empty(t, report.Errors, "Should not have errors after deduplication")
+
+		// Should have 0 Organizations because the DELETE operation is the most recent
+		orgs := capturingClient.CreatedResources["Organization"]
+		require.Len(t, orgs, 0, "Should have 0 Organizations after deduplication (DELETE is most recent operation)")
+	})
+}
+
+func startMockServer(t *testing.T, filesToServe map[string]string) *httptest.Server {
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+
+	emptyBundleData, err := os.ReadFile("test/empty_bundle_response.json")
+	require.NoError(t, err)
+	emptyResponseStr := string(emptyBundleData)
+	pathsToServe := map[string]*string{
+		"/fhir/Endpoint/_history":          &emptyResponseStr,
+		"/fhir/Organization/_history":      &emptyResponseStr,
+		"/fhir/Location/_history":          &emptyResponseStr,
+		"/fhir/HealthcareService/_history": &emptyResponseStr,
+	}
+	for path, filename := range filesToServe {
+		data, err := os.ReadFile(filename)
+		require.NoError(t, err)
+		dataStr := string(data)
+		pathsToServe[path] = &dataStr
+	}
+
+	mockHistoryEndpoints(mux, pathsToServe)
+	return server
 }
 
 func TestComponent_registerAdministrationDirectory(t *testing.T) {
