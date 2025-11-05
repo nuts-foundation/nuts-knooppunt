@@ -34,10 +34,38 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 
 	// Handle DELETE operations (no resource body)
 	if entry.Request.Method == fhir.HTTPVerbDELETE {
-		// TODO: DELETE operations require conditional updates or search-then-delete using _source parameter
-		// For now, skip ALL DELETE operations since StubFHIRClient doesn't support them in unit tests
-		// DELETE operations with proper FHIR IDs are tested in E2E tests with real HAPI FHIR
-		resourceType := strings.Split(entry.Request.Url, "/")[0]
+		// Extract resourceType and resourceID from the DELETE URL
+		// Format can be: "ResourceType/id" or "ResourceType/id/_history/version"
+		parts := strings.Split(entry.Request.Url, "/")
+		if len(parts) < 2 {
+			return "", fmt.Errorf("invalid DELETE URL format: %s", entry.Request.Url)
+		}
+		resourceType := parts[0]
+		resourceID := parts[1]
+		// If it's a history URL (_history/version), we still use the resource ID (parts[1])
+
+		// Check if this resource type is allowed
+		if !slices.Contains(allowedResourceTypes, resourceType) {
+			return "", fmt.Errorf("resource type %s not allowed", resourceType)
+		}
+
+		// Build source URL for conditional delete using _source parameter
+		sourceURL, err := libfhir.BuildSourceURL(sourceBaseURL, resourceType, resourceID)
+		if err != nil {
+			return "", fmt.Errorf("failed to build source URL for DELETE: %w", err)
+		}
+
+		// Add conditional DELETE to transaction bundle
+		// Use _source parameter to find and delete the resource in the query directory
+		log.Ctx(ctx).Debug().Msgf("Deleting resource %s", *entry.FullUrl)
+		tx.Entry = append(tx.Entry, fhir.BundleEntry{
+			Request: &fhir.BundleEntryRequest{
+				Url: resourceType + "?" + url.Values{
+					"_source": []string{sourceURL},
+				}.Encode(),
+				Method: fhir.HTTPVerbDELETE,
+			},
+		})
 		return resourceType, nil
 	}
 

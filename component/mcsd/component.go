@@ -72,6 +72,7 @@ type administrationDirectory struct {
 	fhirBaseURL   string
 	resourceTypes []string
 	discover      bool
+	sourceURL     string // The fullUrl from the Bundle entry that created this Endpoint, used for unregistration on DELETE
 }
 
 type DirectoryUpdateReport struct {
@@ -94,7 +95,7 @@ func New(config Config) (*Component, error) {
 		updateMux:       &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.AdministrationDirectories {
-		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true); err != nil {
+		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true, ""); err != nil {
 			return nil, fmt.Errorf("register root administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
 		}
 	}
@@ -124,7 +125,7 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 	})
 }
 
-func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool) error {
+func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool, sourceURL string) error {
 	// Must be a valid http or https URL
 	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
 	if err != nil {
@@ -145,29 +146,43 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 		resourceTypes: resourceTypes,
 		fhirBaseURL:   fhirBaseURL,
 		discover:      discover,
+		sourceURL:     sourceURL,
 	})
 	log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURL).Msgf("Registered mCSD Directory (discover=%v)", discover)
 	return nil
 }
 
-// clearDynamicallyDiscoveredDirectories removes dynamically discovered administration directories
-// while keeping statically configured ones (those with discover=true from the initial config).
-// This prevents caching of removed Endpoints that were discovered in previous update cycles.
-func (c *Component) clearDynamicallyDiscoveredDirectories() {
-	var staticDirectories []administrationDirectory
-	for _, dir := range c.administrationDirectories {
-		if dir.discover {
-			staticDirectories = append(staticDirectories, dir)
+// unregisterAdministrationDirectory removes an administration directory from the list by its fullUrl.
+// This is called when an Endpoint is deleted to prevent it from being fetched in future updates.
+// The fullUrl parameter is the Bundle entry fullUrl that was used when the Endpoint was registered.
+func (c *Component) unregisterAdministrationDirectory(ctx context.Context, fullUrl string) {
+	initialCount := len(c.administrationDirectories)
+	c.administrationDirectories = slices.DeleteFunc(c.administrationDirectories, func(dir administrationDirectory) bool {
+		return dir.sourceURL == fullUrl
+	})
+	if len(c.administrationDirectories) < initialCount {
+		log.Ctx(ctx).Info().Str("full_url", fullUrl).Msg("Unregistered mCSD Directory after Endpoint deletion")
+	}
+}
+
+// processEndpointDeletes processes DELETE operations for Endpoints and unregisters them from administrationDirectories.
+// This prevents deleted Endpoints from being fetched in future updates, fixing issue #241.
+func (c *Component) processEndpointDeletes(ctx context.Context, entries []fhir.BundleEntry) {
+	for _, entry := range entries {
+		if entry.Request != nil && entry.Request.Method == fhir.HTTPVerbDELETE && entry.FullUrl != nil {
+			parts := strings.Split(entry.Request.Url, "/")
+			if len(parts) >= 2 && parts[0] == "Endpoint" {
+				// Unregister the administration directory using the fullUrl
+				// The fullUrl uniquely identifies the resource that was deleted
+				c.unregisterAdministrationDirectory(ctx, *entry.FullUrl)
+			}
 		}
 	}
-	c.administrationDirectories = staticDirectories
 }
 
 func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
-
-	c.clearDynamicallyDiscoveredDirectories()
 
 	result := make(UpdateReport)
 	for i := 0; i < len(c.administrationDirectories); i++ {
@@ -236,6 +251,11 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
 	deduplicatedEntries := deduplicateHistoryEntries(entries)
 
+	// Pre-process Endpoint DELETEs to unregister administration directories
+	if allowDiscovery {
+		c.processEndpointDeletes(ctx, deduplicatedEntries)
+	}
+
 	// Build transaction with deterministic conditional references
 	tx := fhir.Bundle{
 		Type:  fhir.BundleTypeTransaction,
@@ -255,6 +275,8 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
 		}
+
+		// Handle Endpoint discovery and registration
 		if allowDiscovery && resourceType == "Endpoint" && entry.Resource != nil {
 			var endpoint fhir.Endpoint
 			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
@@ -268,8 +290,14 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			}
 
 			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
+				// Use the fullUrl from the Bundle entry to track this Endpoint
+				// The fullUrl uniquely identifies the resource and can be used for later unregistration
+				if entry.FullUrl == nil {
+					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: Endpoint missing fullUrl", i))
+					continue
+				}
 				log.Ctx(ctx).Debug().Msgf("Discovered mCSD Directory: %s", endpoint.Address)
-				err := c.registerAdministrationDirectory(ctx, endpoint.Address, directoryResourceTypes, false)
+				err := c.registerAdministrationDirectory(ctx, endpoint.Address, directoryResourceTypes, false, *entry.FullUrl)
 				if err != nil {
 					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
 				}

@@ -582,7 +582,11 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		defer server.Close()
 
 		capturingClient := &test.StubFHIRClient{}
-		component, err := New(Config{})
+		component, err := New(Config{
+			QueryDirectory: DirectoryConfig{
+				FHIRBaseURL: "http://example.com/local/fhir",
+			},
+		})
 		require.NoError(t, err)
 
 		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
@@ -605,16 +609,78 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		require.Len(t, orgs, 0, "Should have 0 Organizations after deduplication (DELETE is most recent operation)")
 	})
 
-	t.Run("clears administrationDirectories list before update to prevent deleted Endpoints from being cached", func(t *testing.T) {
-		// This test verifies that when Endpoints are discovered and registered as administration directories,
-		// they are properly cleared on subsequent update() cycles. Without clearing, deleted Endpoints would remain
-		// in the list and continue to be fetched even after removal from the source directory.
+	t.Run("handles DELETE operations for Endpoints and unregisters from administrationDirectories", func(t *testing.T) {
+		// This test verifies that when an Endpoint is deleted (DELETE operation in _history),
+		// it is properly removed from the query directory and unregistered from administrationDirectories.
+		// This fixes issue #241 where deleted Endpoints were cached indefinitely.
 
-		// Server returns endpoints with directory capability
-		server1 := startMockServer(t, map[string]string{
-			"/fhir/Endpoint/_history": "test/root_dir_endpoint_history_response.json",
+		ctx := context.Background()
+
+		// Create test data with an Endpoint that will be deleted
+		initialBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": [{
+				"fullUrl": "http://test.example.org/fhir/Endpoint/test-endpoint",
+				"resource": {
+					"resourceType": "Endpoint",
+					"id": "test-endpoint",
+					"status": "active",
+					"payloadType": [{
+						"coding": [{
+							"system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities",
+							"code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"
+						}]
+					}],
+					"address": "https://directory.example.org/fhir"
+				},
+				"request": {
+					"method": "POST",
+					"url": "Endpoint/test-endpoint"
+				}
+			}]
+		}`
+
+		// Create bundle with DELETE operation for the same Endpoint
+		deleteBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": [{
+				"fullUrl": "http://test.example.org/fhir/Endpoint/test-endpoint",
+				"request": {
+					"method": "DELETE",
+					"url": "Endpoint/test-endpoint"
+				}
+			}]
+		}`
+
+		// Create a mock server that returns the initial bundle first, then the delete bundle
+		callCount := 0
+		mux := http.NewServeMux()
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		mux.HandleFunc("/fhir/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if callCount == 0 {
+				w.Write([]byte(initialBundle))
+			} else {
+				w.Write([]byte(deleteBundle))
+			}
+			callCount++
 		})
-		defer server1.Close()
+		mux.HandleFunc("/fhir/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
+		})
+		mux.HandleFunc("/fhir/Location/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
+		})
+		mux.HandleFunc("/fhir/HealthcareService/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
+		})
 
 		component, err := New(Config{
 			QueryDirectory: DirectoryConfig{
@@ -622,16 +688,16 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			},
 			AdministrationDirectories: map[string]DirectoryConfig{
 				"test-dir": {
-					FHIRBaseURL: server1.URL + "/fhir",
+					FHIRBaseURL: server.URL + "/fhir",
 				},
 			},
 		})
 		require.NoError(t, err)
 
-		// Mock FHIR client that tracks what's created
+		// Mock FHIR client that tracks operations
 		capturingClient := &test.StubFHIRClient{}
 		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
-			if baseURL.String() == server1.URL+"/fhir" {
+			if baseURL.String() == server.URL+"/fhir" {
 				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
 			}
 			if baseURL.String() == "http://example.com/local/fhir" {
@@ -640,39 +706,50 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
 		}
 
-		// First update cycle - discover and register Endpoints as administration directories
-		_, err = component.update(ctx)
+		// First update - should discover and register the Endpoint
+		report1, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint"}, true)
 		require.NoError(t, err)
+		require.Empty(t, report1.Errors)
+		require.Equal(t, 1, report1.CountCreated, "Should have created 1 Endpoint")
 
-		// Verify that Endpoints were discovered and registered (should have at least the configured one + discovered ones)
+		// Verify Endpoint was created in query directory
+		require.NotNil(t, capturingClient.CreatedResources)
+		require.Len(t, capturingClient.CreatedResources["Endpoint"], 1, "Endpoint should be created in query directory")
+
+		// Verify Endpoint was discovered and registered with correct fullUrl
 		initialAdminDirCount := len(component.administrationDirectories)
-		require.Greater(t, initialAdminDirCount, 1, "Should have at least the configured directory plus discovered Endpoints")
-
-		// Manually add a fake entry to simulate a previously discovered endpoint that should be cleared in next cycle
-		component.administrationDirectories = append(component.administrationDirectories, administrationDirectory{
-			fhirBaseURL:   "http://deleted-endpoint.example.org/fhir",
-			resourceTypes: []string{"Organization"},
-			discover:      false, // Dynamically discovered, not from config
-		})
-		countAfterManualAdd := len(component.administrationDirectories)
-		require.Equal(t, initialAdminDirCount+1, countAfterManualAdd, "Manual entry should be added")
-
-		// Second update cycle - administrationDirectories should be cleared before processing
-		// This simulates the scenario where the Endpoint was deleted from the source
-		_, err = component.update(ctx)
-		require.NoError(t, err)
-
-		// The list should be cleared of dynamic entries and repopulated, not accumulated
-		// Without the fix, the manually added "deleted-endpoint" would still be in the list
-		afterSecondUpdateCount := len(component.administrationDirectories)
-		assert.Equal(t, initialAdminDirCount, afterSecondUpdateCount,
-			"administrationDirectories should have dynamic entries cleared and repopulated. The manually added 'deleted-endpoint' should be gone.")
-
-		// Verify the deleted endpoint is not in the list
+		foundEndpoint := false
+		var registeredFullUrl string
 		for _, dir := range component.administrationDirectories {
-			assert.NotEqual(t, "http://deleted-endpoint.example.org/fhir", dir.fhirBaseURL,
-				"Deleted endpoint should not be in administrationDirectories after update")
+			if dir.fhirBaseURL == "https://directory.example.org/fhir" {
+				foundEndpoint = true
+				registeredFullUrl = dir.sourceURL
+				break
+			}
 		}
+		assert.True(t, foundEndpoint, "Endpoint should be registered as administration directory")
+		assert.Equal(t, "http://test.example.org/fhir/Endpoint/test-endpoint", registeredFullUrl, "Registered Endpoint should have fullUrl from Bundle entry")
+
+		// Second update - should process DELETE and unregister the Endpoint
+		report2, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint"}, true)
+		require.NoError(t, err)
+		require.Empty(t, report2.Errors)
+
+		// Verify DELETE was processed and Endpoint was unregistered
+		afterDeleteCount := len(component.administrationDirectories)
+		assert.Less(t, afterDeleteCount, initialAdminDirCount, "Deleted Endpoint should be unregistered")
+
+		deletedEndpointStillExists := false
+		for _, dir := range component.administrationDirectories {
+			if dir.fhirBaseURL == "https://directory.example.org/fhir" {
+				deletedEndpointStillExists = true
+				break
+			}
+		}
+		assert.False(t, deletedEndpointStillExists, "Deleted Endpoint should not remain in administrationDirectories")
+
+		// Verify DELETE was sent to query directory
+		assert.Equal(t, 1, report2.CountDeleted, "Should have 1 deleted resource")
 	})
 }
 
