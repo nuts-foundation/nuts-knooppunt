@@ -140,7 +140,42 @@ tolerations: []
 
 affinity: {}
 
-# PostgreSQL configuration
+# Nuts Knooppunt application configuration
+# This is rendered into knooppunt.yml ConfigMap
+config:
+  # mCSD (Mobile Care Services Discovery) configuration
+  mcsd:
+    # Administration directories to synchronize from
+    # admin:
+    #   "example-org":
+    #     fhirbaseurl: "https://fhir.example.org/fhir"
+    #   "another-org":
+    #     fhirbaseurl: "https://fhir.another-org.com/fhir"
+
+    # Local FHIR directory configuration (query directory)
+    query:
+      fhirbaseurl: "http://fhir:8080/fhir"
+
+    # Exclude administration directories from being registered
+    # Use this to prevent your own FHIR server from being added as an admin directory
+    # This avoids syncing your own resources back to yourself
+    adminexclude:
+      - "http://fhir:8080/fhir"  # Exclude own query directory
+      # - "https://fhir.other-excluded.org/fhir"  # Add more exclusions as needed
+
+  # mCSD Admin configuration (web interface)
+  # mcsdadmin:
+  #   fhirbaseurl: "http://fhir:8080/fhir"
+
+  # MITZ Connector configuration
+  # mitz:
+  #   mitzbase: "http://mitz-server:8087/tst-us/mitz"
+  #   gatewaysystem: "urn:oid:2.16.840.1.113883.2.4.6.6.1"
+  #   sourcesystem: "urn:oid:2.16.840.1.113883.2.4.6.6.90000017"
+
+  # PDP (Policy Decision Point) configuration
+  # pdp:
+  #   enabled: true
 
 # Hapi FHIR configuration
 fhir:

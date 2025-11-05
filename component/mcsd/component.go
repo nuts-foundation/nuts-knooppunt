@@ -60,6 +60,7 @@ type Component struct {
 type Config struct {
 	AdministrationDirectories map[string]DirectoryConfig `koanf:"admin"`
 	QueryDirectory            DirectoryConfig            `koanf:"query"`
+	ExcludeAdminDirectories   []string                   `koanf:"adminexclude"`
 }
 
 type DirectoryConfig struct {
@@ -134,6 +135,15 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 	parsedFHIRBaseURL.Scheme = strings.ToLower(parsedFHIRBaseURL.Scheme)
 	if (parsedFHIRBaseURL.Scheme != "https" && parsedFHIRBaseURL.Scheme != "http") || parsedFHIRBaseURL.Host == "" {
 		return fmt.Errorf("invalid FHIR base URL (url=%s)", fhirBaseURL)
+	}
+
+	// Check if the URL is in the exclusion list (also trim exclusion list entries for consistent matching)
+	trimmedFHIRBaseURL := strings.TrimRight(fhirBaseURL, "/")
+	for _, excludedURL := range c.config.ExcludeAdminDirectories {
+		if strings.TrimRight(excludedURL, "/") == trimmedFHIRBaseURL {
+			log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURL).Msg("Skipping administration directory registration: excluded by configuration")
+			return nil
+		}
 	}
 
 	exists := slices.ContainsFunc(c.administrationDirectories, func(directory administrationDirectory) bool {
