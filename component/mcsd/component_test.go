@@ -78,8 +78,10 @@ func TestComponent_update_regression(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, report)
-	assert.Empty(t, report[server.URL].Warnings)
-	assert.NotNil(t, report[server.URL].Warnings, "expected an empty slice")
+	// Expect warnings about Location resources (root directories only support Organization and Endpoint)
+	// The regression data contains Location resources which should produce warnings
+	assert.NotEmpty(t, report[server.URL].Warnings, "expected warnings about Location resources not being allowed")
+	assert.Contains(t, report[server.URL].Warnings[0], "Location not allowed", "expected warning about Location not being allowed in root directory")
 	assert.Empty(t, report[server.URL].Errors)
 	assert.NotNil(t, report[server.URL].Errors, "expected an empty slice")
 }
