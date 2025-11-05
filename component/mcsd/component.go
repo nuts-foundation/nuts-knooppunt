@@ -221,6 +221,9 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
 	deduplicatedEntries := deduplicateHistoryEntries(entries)
 
+	// Remove the entries from administrationDirectories before update to prevent caching of removed Endpoints.
+	c.administrationDirectories = []administrationDirectory{}
+
 	// Build transaction with deterministic conditional references
 	tx := fhir.Bundle{
 		Type:  fhir.BundleTypeTransaction,
