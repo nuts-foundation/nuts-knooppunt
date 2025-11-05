@@ -5,7 +5,6 @@
 ### Step A: register patient at NVI
 POST http://localhost:8081/nvi/DocumentReference
 X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000020
-X-Requester-URA: 00000020
 Content-Type: application/fhir+json
 
 {
@@ -50,7 +49,6 @@ Content-Type: application/fhir+json
 ### Step B: localize patient data at NVI
 GET http://localhost:8081/nvi/DocumentReference?subject:identifier=http://fhir.nl/fhir/NamingSystem/bsn|999992193
 X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000020
-X-Requester-URA: 00000020
 
 > {%
     const dataHolderIDSystem = response.body.entry[response.body.entry.length - 1].resource.custodian.identifier.system
