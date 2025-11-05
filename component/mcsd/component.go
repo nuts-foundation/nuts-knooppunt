@@ -150,9 +150,24 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 	return nil
 }
 
+// clearDynamicallyDiscoveredDirectories removes dynamically discovered administration directories
+// while keeping statically configured ones (those with discover=true from the initial config).
+// This prevents caching of removed Endpoints that were discovered in previous update cycles.
+func (c *Component) clearDynamicallyDiscoveredDirectories() {
+	var staticDirectories []administrationDirectory
+	for _, dir := range c.administrationDirectories {
+		if dir.discover {
+			staticDirectories = append(staticDirectories, dir)
+		}
+	}
+	c.administrationDirectories = staticDirectories
+}
+
 func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
+
+	c.clearDynamicallyDiscoveredDirectories()
 
 	result := make(UpdateReport)
 	for i := 0; i < len(c.administrationDirectories); i++ {
@@ -220,9 +235,6 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// Deduplicate resources from _history query - keep only the most recent version
 	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
 	deduplicatedEntries := deduplicateHistoryEntries(entries)
-
-	// Remove the entries from administrationDirectories before update to prevent caching of removed Endpoints.
-	c.administrationDirectories = []administrationDirectory{}
 
 	// Build transaction with deterministic conditional references
 	tx := fhir.Bundle{
