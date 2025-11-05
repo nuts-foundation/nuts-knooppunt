@@ -1,0 +1,80 @@
+@startuml
+title Data Exchange Authorization Sequence Diagrams
+
+box Local XIS - Data Holder (Bronhouder)
+    participant ehr as "EHR\n [ FHIR Server ]"
+    participant pip as "Policy Information Point\n [ TBD ]"
+    participant pdp as "Policy Decision Point\n[ Knooppunt ]"
+    participant pep as "Policy Enforcement Point\n[ NGINX ]"
+end box
+box Remote XIS - Data Requester (Afnemer)
+    participant remoteXIS as "FHIR Client/Server"
+end box
+
+== Referral (Verwijzing), e.g. eOverdracht ==
+activate ehr
+ehr -> pip : Record resource-level consent\nPOST /Consent\n  custodian, actor, provision
+activate pip
+    pip --> ehr : 201 Created
+deactivate pip
+ehr -> pip : Record patient-level consent\nPOST /Consent\n  custodian, actor, patient
+activate pip
+    pip --> ehr : 201 Created
+deactivate pip
+ehr -> remoteXIS : Notify\nPOST Task/123
+activate remoteXIS
+remoteXIS --> ehr : 200 OK
+deactivate ehr
+
+group Read Task
+    remoteXIS -> pep : GET Task/123\nscope=eOverdracht-server
+    activate pep
+    pep -> pdp: Evaluate access request\nPOST v1/data/main
+    note right: 'main' policy includes all use case-policies
+    activate pdp
+    loop Evaluate scope-mapped-policy
+        group CapabilityStatement Policy
+        pdp -> pdp : Evaluate
+            activate pdp
+                pdp -> pip : GET /CapabilityStatement\n ?url=canonical-url
+                activate pip
+                    pip --> pdp : CapabilityStatement
+                deactivate pip
+                pdp -> pdp : Check FHIR operation v.s.\nCapabilityStatement
+                pdp --> pdp : Permit/Deny
+            deactivate
+        end group
+        pdp --> pep : If <i>Deny</i>,\nend evaluation
+        group Resource-Level Policy
+        pdp -> pdp : Evaluate
+            activate pdp
+                pdp -> pip : GET /Consent\n  ?data=Task/123\n  &custodian=URA|9876\n  &actor=URA|4321
+                activate pip
+                    pip --> pdp : 200 OK\n(Consents)
+                deactivate pip
+                pdp -> pdp : Verify consent\n(period, t.b.d.)
+                pdp --> pdp : Permit/Deny
+            deactivate
+        end group
+        pdp --> pep : If <i>Permit</i>,\nend evaluation
+        group Patient-Level Policy\n(if 'patient' input parameter exists)
+                pdp -> pdp : Evaluate
+                    activate pdp
+                        pdp -> pip : GET /Consent\n  ?data=Task/123\n  &custodian=URA|9876\n  &actor=URA|4321
+                        activate pip
+                            pip --> pdp : 200 OK\n(Consents)
+                        deactivate pip
+                        pdp -> pdp : Verify consent\n(period, t.b.d.)
+                        pdp --> pdp : Permit/Deny
+                    deactivate
+                end group
+        pdp --> pep : Permit/Deny
+    end group
+    deactivate pdp
+    pep --> remoteXIS : 200 OK\n(Task)
+    deactivate
+end group
+
+deactivate remoteXIS
+
+@enduml
