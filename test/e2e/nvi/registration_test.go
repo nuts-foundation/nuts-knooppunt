@@ -18,12 +18,10 @@ func Test_Registration(t *testing.T) {
 
 	expected := fhir.DocumentReference{
 		Status: fhir.DocumentReferenceStatusCurrent,
-		Type: &fhir.CodeableConcept{
-			Coding: []fhir.Coding{
-				{
-					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/bsn"),
-					Code:   to.Ptr("12345"),
-				},
+		Subject: &fhir.Reference{
+			Identifier: &fhir.Identifier{
+				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/bsn"),
+				Value:  to.Ptr("12345"),
 			},
 		},
 		Custodian: &fhir.Reference{
@@ -58,7 +56,16 @@ func Test_Registration(t *testing.T) {
 				"patient:identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn|12345"},
 			}, &searchSet, requestHeaders)
 			require.NoError(t, err)
-			require.Len(t, searchSet.Entry, 1)
+			require.Len(t, searchSet.Entry, 2)
+		})
+
+		t.Run("search through NVI Gateway with subject:identifier", func(t *testing.T) {
+			var searchSet fhir.Bundle
+			err := nviGatewayClient.Search("DocumentReference", url.Values{
+				"subject:identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn|12345"},
+			}, &searchSet, requestHeaders)
+			require.NoError(t, err)
+			require.Len(t, searchSet.Entry, 2)
 		})
 	})
 }
