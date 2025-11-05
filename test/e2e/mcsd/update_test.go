@@ -48,7 +48,7 @@ func Test_mCSDUpdateClient(t *testing.T) {
 			// assertEndpoint(t, queryFHIRClient, harnessDetail.SunflowerURA, "mcsd-directory", "/sunflower/mcsd")
 
 			// Assert FHIR endpoint exists in query directory (from admin directory)
-			assertEndpoint(t, queryFHIRClient, harnessDetail.SunflowerURA, "fhir", "/sunflower/fhir")
+			assertEndpoint(t, queryFHIRClient, harnessDetail.SunflowerURA, "fhir", "fhir/sunflower-patients")
 		})
 		t.Run("assert Care2Cure organization resources", func(t *testing.T) {
 			expectedOrg := lrza.Care2Cure()

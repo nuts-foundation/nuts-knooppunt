@@ -1,0 +1,70 @@
+#
+# IntelliJ IDEA HTTP Client docs: https://www.jetbrains.com/help/idea/http-client-in-product-code-editor.html
+#
+
+### Step A: register patient at NVI
+POST http://localhost:8081/nvi/DocumentReference
+X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000020
+Content-Type: application/fhir+json
+
+{
+  "resourceType": "DocumentReference",
+  "meta": {
+    "profile": [
+      "http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-localization-documentreference"
+    ]
+  },
+  "status": "current",
+  "type": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "55188-7",
+        "display": "Patient data Document"
+      }
+    ]
+  },
+  "subject": {
+    "identifier": {
+      "system": "http://fhir.nl/fhir/NamingSystem/bsn",
+      "value": "999992193"
+    }
+  },
+  "custodian": {
+    "type": "Organization",
+    "identifier": {
+      "system": "http://fhir.nl/fhir/NamingSystem/ura",
+      "value": "00000020"
+    }
+  },
+  "content" : [{
+    "attachment" : {
+      "contentType" : "text/plain",
+      "data" : "IlRoaXMgRG9jdW1lbnRSZWZlcmVuY2UgZG9lcyBub3QgcG9pbnQgdG8gYSBzcGVjaWZpYyBkb2N1bWVudCwgYnV0IHJhdGhlciB0byBkb2N1bWVudHMgb3IgZGF0YSBpbiBnZW5lcmFsIGF0IHRoZSBjdXN0b2RpYW4gcmVmZXJlbmNlZCBpbiB0aGlzIGluc3RhbmNlLiBUaGlzIGNhbiBiZSB1c2VkIGJ5IGRhdGEgbG9jYWxpemF0aW9uIHNlcnZpY2VzIChhbHNvIGtub3duIGFzIG1lZGljYWwgcmVjb3JkIGxvY2FsaXphdGlvbiBzZXJ2aWNlcykuIg==",
+      "title" : "Generic reference to patient data"
+    }
+  }]
+}
+
+### Step B: localize patient data at NVI
+GET http://localhost:8081/nvi/DocumentReference?subject:identifier=http://fhir.nl/fhir/NamingSystem/bsn|999992193
+X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000020
+
+> {%
+    const dataHolderIDSystem = response.body.entry[response.body.entry.length - 1].resource.custodian.identifier.system
+    const dataHolderIDValue = response.body.entry[response.body.entry.length - 1].resource.custodian.identifier.value
+    client.global.set("dataHolderIDSystem", dataHolderIDSystem)
+    client.global.set("dataHolderIDValue", dataHolderIDValue)
+ %}
+
+### Step C: find FHIR API of the Care Provider 
+### (using your local query directory with data previously synced through addressing)
+GET http://localhost:7050/fhir/knpt-mcsd-query/Organization?identifier={{dataHolderIDSystem}}|{{dataHolderIDValue}}&_include=Organization:endpoint
+
+> {%
+    const endpointAddress = response.body.entry[response.body.entry.length - 1].address
+    client.global.set("endpointAddress", endpointAddress)
+ %}
+
+### Step D: Get the data at the source
+GET http://localhost:7050/fhir/sunflower-patients/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|999992193

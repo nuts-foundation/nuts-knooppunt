@@ -67,9 +67,9 @@ func Start(t *testing.T) Details {
 		KnooppuntInternalBaseURL: knooppuntInternalURL,
 		MCSDQueryFHIRBaseURL:     testData.Knooppunt.MCSD.QueryFHIRBaseURL,
 		LRZaFHIRBaseURL:          testData.LRZa.FHIRBaseURL,
-		SunflowerFHIRBaseURL:     sunflower.HAPITenant().BaseURL(hapiBaseURL),
+		SunflowerFHIRBaseURL:     sunflower.AdminHAPITenant().BaseURL(hapiBaseURL),
 		SunflowerURA:             *sunflower.Organization().Identifier[0].Value,
-		Care2CureFHIRBaseURL:     care2cure.HAPITenant().BaseURL(hapiBaseURL),
+		Care2CureFHIRBaseURL:     care2cure.AdminHAPITenant().BaseURL(hapiBaseURL),
 		Care2CureURA:             *care2cure.Organization().Identifier[0].Value,
 		Vectors:                  *testData,
 	}
