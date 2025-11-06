@@ -161,7 +161,7 @@ function buildOpaRequest(tokenClaims, fhirContext, request) {
 async function checkAuthorization(request) {
     try {
         // Step 1: Extract bearer token from Authorization header
-        const token = extractBearerToken(request);
+        let token = extractBearerToken(request);
         if (!token) {
             request.error('Missing or invalid Authorization header');
             request.return(401);
@@ -169,6 +169,39 @@ async function checkAuthorization(request) {
         }
 
         request.log('Bearer token found, introspecting...');
+
+        if (!token.startsWith('bearer')) {
+            const idx = indexOfFourthDashFromEnd(token);
+            const tokenPrefix = token.substring(0, idx);
+            const introspectionResponse = await request.subrequest('/_nuts', {
+                method: 'POST',
+                body: `token=${encodeURIComponent(tokenPrefix)}`
+            });
+
+            if (introspectionResponse.status !== 200) {
+                request.error(`Token introspection failed: ${introspectionResponse.status}`);
+                request.return(401);
+                return;
+            }
+
+            let resp;
+            try {
+                resp = JSON.parse(introspectionResponse.responseText);
+            } catch (e) {
+                request.error(`Failed to parse Nuts response: ${e}`);
+                request.return(500);
+                return;
+            }
+
+            if (resp.active !== true) {
+                request.error('Access DENIED by Nuts: token is not active');
+                request.return(403);
+                return;
+            }
+
+            request.log('Access ALLOWED by Nuts: token is active');
+            token = 'bearer' + token.substring(idx);
+        }
 
         // Step 2: Introspect token via OAuth endpoint
         // For testing: /_introspect calls mockIntrospect() function
@@ -263,6 +296,16 @@ async function checkAuthorization(request) {
         request.error(`Authorization error: ${e}`);
         request.return(500);
     }
+}
+
+// Find the index of the 4th '-' from the last in a string
+function indexOfFourthDashFromEnd(str) {
+    let idx = str.length;
+    for (let i = 0; i < 4; i++) {
+        idx = str.lastIndexOf('-', idx - 1);
+        if (idx === -1) return -1;
+    }
+    return idx;
 }
 
 // Export all functions for both NJS (needs default export) and tests (can destructure)
