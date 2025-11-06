@@ -1,5 +1,5 @@
 @startuml
-title Data Exchange Authorization Sequence Diagrams
+title Data Exchange Authorization   Sequence Diagrams
 
 box Local XIS - Data Holder (Bronhouder)
     participant ehr as "EHR\n [ FHIR Server ]"
@@ -13,11 +13,11 @@ end box
 
 == Referral (Verwijzing), e.g. eOverdracht ==
 activate ehr
-ehr -> pip : Record resource-level consent\nPOST /Consent\n  custodian, actor, provision
+ehr -> pip : Record resource-level consent\n[FHIR] POST /Consent\n  custodian, actor, provision
 activate pip
     pip --> ehr : 201 Created
 deactivate pip
-ehr -> pip : Record patient-level consent\nPOST /Consent\n  custodian, actor, patient
+ehr -> pip : Record patient-level consent\n[FHIR] POST /Consent\n  custodian, actor, patient
 activate pip
     pip --> ehr : 201 Created
 deactivate pip
@@ -27,7 +27,7 @@ remoteXIS --> ehr : 200 OK
 deactivate ehr
 
 group Read Task
-    remoteXIS -> pep : GET Task/123\nscope=eOverdracht-server
+    remoteXIS -> pep : [FHIR] GET Task/123\nscope=eOverdracht-server
     activate pep
     pep -> pdp: Evaluate access request\nPOST v1/data/main
     note right: 'main' policy includes all use case-policies
@@ -36,7 +36,7 @@ group Read Task
         group CapabilityStatement Policy
         pdp -> pdp : Evaluate
             activate pdp
-                pdp -> pip : GET /CapabilityStatement\n ?url=canonical-url
+                pdp -> pip : [FHIR] GET /CapabilityStatement\n ?url=canonical-url
                 activate pip
                     pip --> pdp : CapabilityStatement
                 deactivate pip
@@ -48,7 +48,7 @@ group Read Task
         group Resource-Level Policy
         pdp -> pdp : Evaluate
             activate pdp
-                pdp -> pip : GET /Consent\n  ?data=Task/123\n  &custodian=URA|9876\n  &actor=URA|4321
+                pdp -> pip : [FHIR] GET /Consent\n  ?data=Task/123\n  &custodian=URA|9876\n  &actor=URA|4321
                 activate pip
                     pip --> pdp : 200 OK\n(Consents)
                 deactivate pip
@@ -57,17 +57,29 @@ group Read Task
             deactivate
         end group
         pdp --> pep : If <i>Permit</i>,\nend evaluation
-        group Patient-Level Policy\n(if 'patient' input parameter exists)
-                pdp -> pdp : Evaluate
-                    activate pdp
-                        pdp -> pip : GET /Consent\n  ?data=Task/123\n  &custodian=URA|9876\n  &actor=URA|4321
-                        activate pip
-                            pip --> pdp : 200 OK\n(Consents)
-                        deactivate pip
-                        pdp -> pdp : Verify consent\n(period, t.b.d.)
-                        pdp --> pdp : Permit/Deny
-                    deactivate
-                end group
+        group Patient-Level Policy (Local Consent)\n(if 'patient' input parameter exists)
+            pdp -> pdp : Evaluate
+            activate pdp
+                pdp -> pip : [FHIR] GET /Consent\n  ?patient=Patient/ABC\n  &custodian=URA|9876\n  &actor=URA|4321\n
+                activate pip
+                    pip --> pdp : 200 OK\n(Consents)
+                deactivate pip
+                pdp -> pdp : Verify consent\n(period, t.b.d.)
+                pdp --> pdp : Permit/Deny
+            deactivate
+        end group
+        pdp --> pep : If <i>Permit</i>,\nend evaluation
+        group Patient-Level Policy (Online Consent)\n(if 'patient' input parameter exists,\nand Mitz integration is enabled)
+            pdp -> pdp : Evaluate
+            activate pdp
+                pdp -> pip : Perform Mitz closed-question\n[SOAP]
+                activate pip
+                    pip --> pdp : 200 OK\n(Consents)
+                deactivate pip
+                pdp -> pdp : Verify consent\n(period, t.b.d.)
+                pdp --> pdp : Permit/Deny
+            deactivate
+        end group
         pdp --> pep : Permit/Deny
     end group
     deactivate pdp
