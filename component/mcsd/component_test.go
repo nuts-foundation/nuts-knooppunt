@@ -59,13 +59,13 @@ func TestComponent_update_regression(t *testing.T) {
 	server := httptest.NewServer(mux)
 
 	localClient := &test.StubFHIRClient{}
-	component, err := New(Config{
-		AdministrationDirectories: map[string]DirectoryConfig{
-			"lrza": {
-				FHIRBaseURL: server.URL,
-			},
+	config := DefaultConfig()
+	config.AdministrationDirectories = map[string]DirectoryConfig{
+		"lrza": {
+			FHIRBaseURL: server.URL,
 		},
-	})
+	}
+	component, err := New(config)
 	require.NoError(t, err)
 	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
 		if baseURL.String() == server.URL {
@@ -113,6 +113,7 @@ func TestComponent_update(t *testing.T) {
 		"/HealthcareService/_history": &emptyResponseStr,
 		"/Location/_history":          &emptyResponseStr,
 		"/PractitionerRole/_history":  &emptyResponseStr,
+		"/Practitioner/_history":      &emptyResponseStr,
 	})
 
 	rootDirServer := httptest.NewServer(rootDirMux)
@@ -144,6 +145,7 @@ func TestComponent_update(t *testing.T) {
 		"/fhir/Location/_history":           &emptyResponseStr,
 		"/fhir/HealthcareService/_history":  &emptyResponseStr,
 		"/fhir/PractitionerRole/_history":   &emptyResponseStr,
+		"/fhir/Practitioner/_history":       &emptyResponseStr,
 	})
 
 	org1DirServer := httptest.NewServer(org1DirMux)
@@ -156,16 +158,16 @@ func TestComponent_update(t *testing.T) {
 	org1DirOrganizationHistoryPage1Response = strings.ReplaceAll(org1DirOrganizationHistoryPage1Response, "{{ORG1_DIR_BASEURL}}", orgDir1BaseURL)
 
 	localClient := &test.StubFHIRClient{}
-	component, err := New(Config{
-		AdministrationDirectories: map[string]DirectoryConfig{
-			"rootDir": {
-				FHIRBaseURL: rootDirServer.URL,
-			},
+	config := DefaultConfig()
+	config.AdministrationDirectories = map[string]DirectoryConfig{
+		"rootDir": {
+			FHIRBaseURL: rootDirServer.URL,
 		},
-		QueryDirectory: DirectoryConfig{
-			FHIRBaseURL: "http://example.com/local/fhir",
-		},
-	})
+	}
+	config.QueryDirectory = DirectoryConfig{
+		FHIRBaseURL: "http://example.com/local/fhir",
+	}
+	component, err := New(config)
 	require.NoError(t, err)
 
 	unknownFHIRServerClient := &test.StubFHIRClient{
@@ -290,16 +292,16 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	rootDirServer := httptest.NewServer(rootDirMux)
 
 	localClient := &test.StubFHIRClient{}
-	component, err := New(Config{
-		AdministrationDirectories: map[string]DirectoryConfig{
-			"rootDir": {
-				FHIRBaseURL: rootDirServer.URL,
-			},
+	config := DefaultConfig()
+	config.AdministrationDirectories = map[string]DirectoryConfig{
+		"rootDir": {
+			FHIRBaseURL: rootDirServer.URL,
 		},
-		QueryDirectory: DirectoryConfig{
-			FHIRBaseURL: "http://example.com/local/fhir",
-		},
-	})
+	}
+	config.QueryDirectory = DirectoryConfig{
+		FHIRBaseURL: "http://example.com/local/fhir",
+	}
+	component, err := New(config)
 	require.NoError(t, err)
 
 	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
@@ -688,6 +690,14 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
 		})
+		mux.HandleFunc("/fhir/PractitionerRole/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
+		})
+		mux.HandleFunc("/fhir/Practitioner/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
+		})
 
 		component, err := New(Config{
 			QueryDirectory: DirectoryConfig{
@@ -962,19 +972,18 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 	})
 
 	t.Run("uses default DirectoryResourceTypes when not configured", func(t *testing.T) {
-		// This test verifies that when DirectoryResourceTypes is not configured,
-		// the default resource types are used.
+		// This test verifies that when using DefaultConfig(),
+		// the default resource types are set.
 
-		component, err := New(Config{
-			QueryDirectory: DirectoryConfig{
-				FHIRBaseURL: "http://example.com/local/fhir",
-			},
-			// DirectoryResourceTypes not specified
-		})
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{
+			FHIRBaseURL: "http://example.com/local/fhir",
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Verify the component uses default resource types
-		expectedDefaults := []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole"}
+		expectedDefaults := []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
 		assert.Equal(t, expectedDefaults, component.directoryResourceTypes)
 	})
 }
@@ -991,6 +1000,8 @@ func startMockServer(t *testing.T, filesToServe map[string]string) *httptest.Ser
 		"/fhir/Organization/_history":      &emptyResponseStr,
 		"/fhir/Location/_history":          &emptyResponseStr,
 		"/fhir/HealthcareService/_history": &emptyResponseStr,
+		"/fhir/PractitionerRole/_history":  &emptyResponseStr,
+		"/fhir/Practitioner/_history":      &emptyResponseStr,
 	}
 	for path, filename := range filesToServe {
 		data, err := os.ReadFile(filename)

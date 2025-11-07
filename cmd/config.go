@@ -29,6 +29,7 @@ type Config struct {
 
 func DefaultConfig() Config {
 	return Config{
+		MCSD: mcsd.DefaultConfig(),
 		Nuts: nutsnode.Config{
 			Enabled: false,
 		},

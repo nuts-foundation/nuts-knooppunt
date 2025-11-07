@@ -24,7 +24,7 @@ import (
 var _ component.Lifecycle = &Component{}
 
 var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
-var defaultDirectoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole"}
+var defaultDirectoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
 
 // clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
 // to account for potential clock differences between client and FHIR server
@@ -58,6 +58,12 @@ type Component struct {
 	updateMux                 *sync.RWMutex
 }
 
+func DefaultConfig() Config {
+	return Config{
+		DirectoryResourceTypes: defaultDirectoryResourceTypes,
+	}
+}
+
 type Config struct {
 	AdministrationDirectories map[string]DirectoryConfig `koanf:"admin"`
 	QueryDirectory            DirectoryConfig            `koanf:"query"`
@@ -87,12 +93,6 @@ type DirectoryUpdateReport struct {
 }
 
 func New(config Config) (*Component, error) {
-	// Use configured directory resource types, or default if not specified
-	directoryResourceTypes := config.DirectoryResourceTypes
-	if len(directoryResourceTypes) == 0 {
-		directoryResourceTypes = defaultDirectoryResourceTypes
-	}
-
 	result := &Component{
 		config: config,
 		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
@@ -100,7 +100,7 @@ func New(config Config) (*Component, error) {
 				UsePostSearch: false,
 			})
 		},
-		directoryResourceTypes: directoryResourceTypes,
+		directoryResourceTypes: config.DirectoryResourceTypes,
 		lastUpdateTimes:        make(map[string]string),
 		updateMux:              &sync.RWMutex{},
 	}
