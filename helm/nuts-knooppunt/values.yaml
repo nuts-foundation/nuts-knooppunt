@@ -163,6 +163,16 @@ config:
       - "http://fhir:8080/fhir"  # Exclude own query directory
       # - "https://fhir.other-excluded.org/fhir"  # Add more exclusions as needed
 
+    # Resource types to synchronize from discovered mCSD directories
+    # If not specified, defaults to: Organization, Endpoint, Location, HealthcareService, PractitionerRole
+    # directoryresourcetypes:
+    #   - "Organization"
+    #   - "Endpoint"
+    #   - "Location"
+    #   - "HealthcareService"
+    #   - "PractitionerRole"
+    #   # - "Practitioner"  # Uncomment to also sync Practitioner resources
+
   # mCSD Admin configuration (web interface)
   # mcsdadmin:
   #   fhirbaseurl: "http://fhir:8080/fhir"

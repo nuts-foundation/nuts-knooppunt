@@ -832,6 +832,151 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		// Verify exactly 2 resource types were queried
 		assert.Equal(t, 2, len(calledEndpoints), "Should have queried exactly 2 resource types")
 	})
+
+	t.Run("uses configured DirectoryResourceTypes for discovered endpoints", func(t *testing.T) {
+		// This test verifies that when DirectoryResourceTypes is configured,
+		// those resource types are used when discovering and registering new Endpoints.
+
+		ctx := context.Background()
+
+		// Track which resource type endpoints were called
+		calledEndpoints := make(map[string]bool)
+		var mu sync.Mutex
+
+		mux := http.NewServeMux()
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		// Response with an Endpoint that should be discovered
+		// Must have the correct payloadType coding to be recognized as an mCSD directory
+		discoveredEndpointBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": [{
+				"fullUrl": "http://example.com/Endpoint/discovered-endpoint",
+				"resource": {
+					"resourceType": "Endpoint",
+					"id": "discovered-endpoint",
+					"status": "active",
+					"connectionType": {
+						"system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
+						"code": "hl7-fhir-rest"
+					},
+					"address": "` + server.URL + `/fhir/discovered",
+					"payloadType": [{
+						"coding": [{
+							"system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities",
+							"code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"
+						}]
+					}]
+				},
+				"request": {
+					"method": "POST",
+					"url": "Endpoint"
+				}
+			}]
+		}`
+
+		emptyBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": []
+		}`
+
+		// Set up handlers that track which endpoints are called
+		// All potential resource types
+		allResourceTypes := []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
+		for _, rt := range allResourceTypes {
+			resourceType := rt // capture for closure
+			mux.HandleFunc("/fhir/"+resourceType+"/_history", func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				calledEndpoints[resourceType] = true
+				mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				// Return discovered endpoint only for Endpoint queries
+				if resourceType == "Endpoint" {
+					w.Write([]byte(discoveredEndpointBundle))
+				} else {
+					w.Write([]byte(emptyBundle))
+				}
+			})
+			// Handler for discovered directory
+			mux.HandleFunc("/fhir/discovered/"+resourceType+"/_history", func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				calledEndpoints["discovered/"+resourceType] = true
+				mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(emptyBundle))
+			})
+		}
+
+		// Create component with custom DirectoryResourceTypes that includes Practitioner
+		customResourceTypes := []string{"Organization", "Endpoint", "Practitioner"}
+		component, err := New(Config{
+			QueryDirectory: DirectoryConfig{
+				FHIRBaseURL: "http://example.com/local/fhir",
+			},
+			DirectoryResourceTypes: customResourceTypes,
+		})
+		require.NoError(t, err)
+
+		// Verify the component stored the custom resource types
+		assert.Equal(t, customResourceTypes, component.directoryResourceTypes)
+
+		capturingClient := &test.StubFHIRClient{}
+		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+			if strings.HasPrefix(baseURL.String(), server.URL) {
+				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
+			}
+			if baseURL.String() == "http://example.com/local/fhir" {
+				return capturingClient
+			}
+			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
+		}
+
+		// Register the root directory (which will query using rootDirectoryResourceTypes: Organization, Endpoint)
+		err = component.registerAdministrationDirectory(ctx, server.URL+"/fhir", rootDirectoryResourceTypes, true, "")
+		require.NoError(t, err)
+
+		// First update should discover the endpoint from root directory and immediately query it
+		// because the update() loop processes newly discovered directories in the same iteration
+		_, err = component.update(ctx)
+		require.NoError(t, err)
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		// Verify root directory queries (uses rootDirectoryResourceTypes)
+		assert.True(t, calledEndpoints["Organization"], "Root directory should query Organization")
+		assert.True(t, calledEndpoints["Endpoint"], "Root directory should query Endpoint")
+
+		// Verify discovered directory queries (uses component.directoryResourceTypes which is customResourceTypes)
+		assert.True(t, calledEndpoints["discovered/Organization"], "Discovered directory should query Organization (in customResourceTypes)")
+		assert.True(t, calledEndpoints["discovered/Endpoint"], "Discovered directory should query Endpoint (in customResourceTypes)")
+		assert.True(t, calledEndpoints["discovered/Practitioner"], "Discovered directory should query Practitioner (in customResourceTypes)")
+
+		// Verify that resource types NOT in customResourceTypes were NOT queried for discovered directory
+		assert.False(t, calledEndpoints["discovered/Location"], "Discovered directory should NOT query Location (not in customResourceTypes)")
+		assert.False(t, calledEndpoints["discovered/HealthcareService"], "Discovered directory should NOT query HealthcareService (not in customResourceTypes)")
+		assert.False(t, calledEndpoints["discovered/PractitionerRole"], "Discovered directory should NOT query PractitionerRole (not in customResourceTypes)")
+	})
+
+	t.Run("uses default DirectoryResourceTypes when not configured", func(t *testing.T) {
+		// This test verifies that when DirectoryResourceTypes is not configured,
+		// the default resource types are used.
+
+		component, err := New(Config{
+			QueryDirectory: DirectoryConfig{
+				FHIRBaseURL: "http://example.com/local/fhir",
+			},
+			// DirectoryResourceTypes not specified
+		})
+		require.NoError(t, err)
+
+		// Verify the component uses default resource types
+		expectedDefaults := []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole"}
+		assert.Equal(t, expectedDefaults, component.directoryResourceTypes)
+	})
 }
 
 func startMockServer(t *testing.T, filesToServe map[string]string) *httptest.Server {
