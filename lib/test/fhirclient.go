@@ -468,6 +468,52 @@ func (s *StubFHIRClient) handleTransaction(tx fhir.Bundle) (*fhir.Bundle, error)
 				},
 				Resource: resultJSON,
 			})
+		case fhir.HTTPVerbDELETE:
+			// Handle DELETE operations - remove resources matching the conditional delete query
+			// The entry.Request.Url format is: "ResourceType?_source=..."
+			parts := strings.Split(entry.Request.Url, "?")
+			if len(parts) != 2 {
+				return nil, fmt.Errorf("invalid DELETE URL format: %s", entry.Request.Url)
+			}
+			resourceType := parts[0]
+			queryStr := parts[1]
+			query, err := url.ParseQuery(queryStr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid DELETE query string: %w", err)
+			}
+
+			// Find and remove resources matching the query
+			deletedCount := 0
+			var remainingResources []any
+			for _, res := range s.Resources {
+				var baseResource BaseResource
+				unmarshalInto(res, &baseResource)
+
+				// Check if this resource matches the DELETE criteria
+				shouldDelete := false
+				if baseResource.Type == resourceType {
+					// Check _source parameter
+					if sourceParam := query.Get("_source"); sourceParam != "" {
+						if baseResource.Meta != nil && baseResource.Meta.Source != nil && *baseResource.Meta.Source == sourceParam {
+							shouldDelete = true
+							deletedCount++
+						}
+					}
+				}
+
+				if !shouldDelete {
+					remainingResources = append(remainingResources, res)
+				}
+			}
+			s.Resources = remainingResources
+
+			// Add response for DELETE - use 204 No Content for successful deletion
+			status := "204 No Content"
+			txResult.Entry = append(txResult.Entry, fhir.BundleEntry{
+				Response: &fhir.BundleEntryResponse{
+					Status: status,
+				},
+			})
 		default:
 			return nil, fmt.Errorf("unsupported http verb for FHIR transaction bundle: %s", entry.Request.Method)
 		}

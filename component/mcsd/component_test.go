@@ -79,8 +79,10 @@ func TestComponent_update_regression(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, report)
-	assert.Empty(t, report[server.URL].Warnings)
-	assert.NotNil(t, report[server.URL].Warnings, "expected an empty slice")
+	// Root directories only query Organization and Endpoint resource types
+	// Location history is provided in test data but should not be queried (and thus no warnings about it)
+	// The test verifies the regression data can be processed without errors
+	assert.Empty(t, report[server.URL].Warnings, "should have no warnings since Location is not queried for root directories")
 	assert.Empty(t, report[server.URL].Errors)
 	assert.NotNil(t, report[server.URL].Errors, "expected an empty slice")
 }
@@ -375,7 +377,7 @@ func TestComponent_noDuplicateResourcesInTransactionBundle(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register as discovered directory to avoid Organization filtering
-	err = component.registerAdministrationDirectory(context.Background(), mockServer.URL, []string{"Organization", "Endpoint"}, false)
+	err = component.registerAdministrationDirectory(context.Background(), mockServer.URL, []string{"Organization", "Endpoint"}, false, "")
 	require.NoError(t, err)
 
 	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
@@ -608,4 +610,377 @@ func TestGetLastUpdated(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestComponent_updateFromDirectory(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("#233: no entry.Request in _history results", func(t *testing.T) {
+		t.Log("See https://github.com/nuts-foundation/nuts-knooppunt/issues/233")
+		server := startMockServer(t, map[string]string{
+			"/fhir/Organization/_history": "test/bugs/233-no-bundle-request/organization_response.json",
+		})
+		component, err := New(Config{})
+		require.NoError(t, err)
+		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false)
+		require.NoError(t, err)
+		require.NotNil(t, report)
+		require.Len(t, report.Warnings, 1)
+		assert.Equal(t, report.Warnings[0], "Skipping entry with no request: #0")
+		assert.Empty(t, report.Errors)
+		assert.Equal(t, 0, report.CountCreated)
+		assert.Equal(t, 0, report.CountUpdated)
+		assert.Equal(t, 0, report.CountDeleted)
+	})
+
+	t.Run("no duplicate resources in transaction bundle", func(t *testing.T) {
+		// This test verifies that when _history returns multiple versions of the same resource,
+		// the transaction bundle sent to the query directory contains no duplicates.
+		// This addresses the HAPI error: "Transaction bundle contains multiple resources with ID: urn:uuid:..."
+		server := startMockServer(t, map[string]string{
+			"/fhir/Organization/_history": "test/history_with_duplicates.json",
+		})
+		defer server.Close()
+
+		capturingClient := &test.StubFHIRClient{}
+		component, err := New(Config{
+			QueryDirectory: DirectoryConfig{
+				FHIRBaseURL: "http://example.com/local/fhir",
+			},
+		})
+		require.NoError(t, err)
+
+		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+			if baseURL.String() == server.URL+"/fhir" {
+				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
+			}
+			if baseURL.String() == "http://example.com/local/fhir" {
+				return capturingClient
+			}
+			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
+		}
+
+		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization", "Endpoint"}, false)
+
+		require.NoError(t, err)
+		require.Empty(t, report.Errors, "Should not have errors after deduplication")
+
+		// Should have 0 Organizations because the DELETE operation is the most recent
+		orgs := capturingClient.CreatedResources["Organization"]
+		require.Len(t, orgs, 0, "Should have 0 Organizations after deduplication (DELETE is most recent operation)")
+	})
+
+	t.Run("handles DELETE operations for Endpoints and unregisters from administrationDirectories", func(t *testing.T) {
+		// This test verifies that when an Endpoint is deleted (DELETE operation in _history),
+		// it is properly removed from the query directory and unregistered from administrationDirectories.
+		// This fixes issue #241 where deleted Endpoints were cached indefinitely.
+
+		ctx := context.Background()
+
+		// Create test data with an Endpoint that will be deleted
+		initialBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": [{
+				"fullUrl": "http://test.example.org/fhir/Endpoint/test-endpoint",
+				"resource": {
+					"resourceType": "Endpoint",
+					"id": "test-endpoint",
+					"status": "active",
+					"payloadType": [{
+						"coding": [{
+							"system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities",
+							"code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"
+						}]
+					}],
+					"address": "https://directory.example.org/fhir"
+				},
+				"request": {
+					"method": "POST",
+					"url": "Endpoint/test-endpoint"
+				}
+			}]
+		}`
+
+		// Create bundle with DELETE operation for the same Endpoint
+		deleteBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": [{
+				"fullUrl": "http://test.example.org/fhir/Endpoint/test-endpoint",
+				"request": {
+					"method": "DELETE",
+					"url": "Endpoint/test-endpoint"
+				}
+			}]
+		}`
+
+		// Create a mock server that returns the initial bundle first, then the delete bundle
+		callCount := 0
+		mux := http.NewServeMux()
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		mux.HandleFunc("/fhir/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if callCount == 0 {
+				w.Write([]byte(initialBundle))
+			} else {
+				w.Write([]byte(deleteBundle))
+			}
+			callCount++
+		})
+		mux.HandleFunc("/fhir/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
+		})
+		mux.HandleFunc("/fhir/Location/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
+		})
+		mux.HandleFunc("/fhir/HealthcareService/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
+		})
+
+		component, err := New(Config{
+			QueryDirectory: DirectoryConfig{
+				FHIRBaseURL: "http://example.com/local/fhir",
+			},
+			AdministrationDirectories: map[string]DirectoryConfig{
+				"test-dir": {
+					FHIRBaseURL: server.URL + "/fhir",
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		// Mock FHIR client that tracks operations
+		capturingClient := &test.StubFHIRClient{}
+		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+			if baseURL.String() == server.URL+"/fhir" {
+				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
+			}
+			if baseURL.String() == "http://example.com/local/fhir" {
+				return capturingClient
+			}
+			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
+		}
+
+		// First update - should discover and register the Endpoint
+		report1, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint"}, true)
+		require.NoError(t, err)
+		require.Empty(t, report1.Errors)
+		require.Equal(t, 1, report1.CountCreated, "Should have created 1 Endpoint")
+
+		// Verify Endpoint was created in query directory
+		require.NotNil(t, capturingClient.CreatedResources)
+		require.Len(t, capturingClient.CreatedResources["Endpoint"], 1, "Endpoint should be created in query directory")
+
+		// Verify Endpoint was discovered and registered with correct fullUrl
+		initialAdminDirCount := len(component.administrationDirectories)
+		foundEndpoint := false
+		var registeredFullUrl string
+		for _, dir := range component.administrationDirectories {
+			if dir.fhirBaseURL == "https://directory.example.org/fhir" {
+				foundEndpoint = true
+				registeredFullUrl = dir.sourceURL
+				break
+			}
+		}
+		assert.True(t, foundEndpoint, "Endpoint should be registered as administration directory")
+		assert.Equal(t, "http://test.example.org/fhir/Endpoint/test-endpoint", registeredFullUrl, "Registered Endpoint should have fullUrl from Bundle entry")
+
+		// Second update - should process DELETE and unregister the Endpoint
+		report2, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint"}, true)
+		require.NoError(t, err)
+		require.Empty(t, report2.Errors)
+
+		// Verify DELETE was processed and Endpoint was unregistered
+		afterDeleteCount := len(component.administrationDirectories)
+		assert.Less(t, afterDeleteCount, initialAdminDirCount, "Deleted Endpoint should be unregistered")
+
+		deletedEndpointStillExists := false
+		for _, dir := range component.administrationDirectories {
+			if dir.fhirBaseURL == "https://directory.example.org/fhir" {
+				deletedEndpointStillExists = true
+				break
+			}
+		}
+		assert.False(t, deletedEndpointStillExists, "Deleted Endpoint should not remain in administrationDirectories")
+
+		// Verify DELETE was sent to query directory
+		assert.Equal(t, 1, report2.CountDeleted, "Should have 1 deleted resource")
+	})
+}
+
+func startMockServer(t *testing.T, filesToServe map[string]string) *httptest.Server {
+	mux := http.NewServeMux()
+	server := httptest.NewServer(mux)
+
+	emptyBundleData, err := os.ReadFile("test/empty_bundle_response.json")
+	require.NoError(t, err)
+	emptyResponseStr := string(emptyBundleData)
+	pathsToServe := map[string]*string{
+		"/fhir/Endpoint/_history":          &emptyResponseStr,
+		"/fhir/Organization/_history":      &emptyResponseStr,
+		"/fhir/Location/_history":          &emptyResponseStr,
+		"/fhir/HealthcareService/_history": &emptyResponseStr,
+	}
+	for path, filename := range filesToServe {
+		data, err := os.ReadFile(filename)
+		require.NoError(t, err)
+		dataStr := string(data)
+		pathsToServe[path] = &dataStr
+	}
+
+	mockHistoryEndpoints(mux, pathsToServe)
+	return server
+}
+
+func TestComponent_registerAdministrationDirectory(t *testing.T) {
+	t.Run("excludes administration directory by exact URL match", func(t *testing.T) {
+		component, err := New(Config{
+			ExcludeAdminDirectories: []string{
+				"http://example.com/fhir",
+			},
+		})
+		require.NoError(t, err)
+
+		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "")
+
+		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
+		assert.Len(t, component.administrationDirectories, 0, "No directories should be registered")
+	})
+
+	t.Run("excludes administration directory with trailing slash trimmed", func(t *testing.T) {
+		component, err := New(Config{
+			ExcludeAdminDirectories: []string{
+				"http://example.com/fhir",
+			},
+		})
+		require.NoError(t, err)
+
+		// Try to register with trailing slash - should still be excluded
+		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir/", []string{"Organization"}, false, "")
+
+		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
+		assert.Len(t, component.administrationDirectories, 0, "No directories should be registered")
+	})
+
+	t.Run("matches exclusion list entries with trailing slashes", func(t *testing.T) {
+		component, err := New(Config{
+			ExcludeAdminDirectories: []string{
+				"http://example.com/fhir/", // Exclusion list has trailing slash
+			},
+		})
+		require.NoError(t, err)
+
+		// Try to register without trailing slash - should still be excluded due to trimming
+		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "")
+
+		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
+		assert.Len(t, component.administrationDirectories, 0, "No directories should be registered")
+	})
+
+	t.Run("matches with both having trailing slashes", func(t *testing.T) {
+		component, err := New(Config{
+			ExcludeAdminDirectories: []string{
+				"http://example.com/fhir/", // Both have trailing slash
+			},
+		})
+		require.NoError(t, err)
+
+		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir/", []string{"Organization"}, false, "")
+
+		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
+		assert.Len(t, component.administrationDirectories, 0, "No directories should be registered")
+	})
+
+	t.Run("allows administration directory not in exclusion list", func(t *testing.T) {
+		component, err := New(Config{
+			ExcludeAdminDirectories: []string{
+				"http://excluded.com/fhir",
+			},
+		})
+		require.NoError(t, err)
+
+		err = component.registerAdministrationDirectory(context.Background(), "http://allowed.com/fhir", []string{"Organization"}, false, "")
+
+		require.NoError(t, err)
+		assert.Len(t, component.administrationDirectories, 1, "Directory should be registered")
+		assert.Equal(t, "http://allowed.com/fhir", component.administrationDirectories[0].fhirBaseURL)
+	})
+
+	t.Run("excludes own query directory from being registered as admin directory", func(t *testing.T) {
+		ownFHIRBaseURL := "http://localhost:8080/fhir"
+		component, err := New(Config{
+			QueryDirectory: DirectoryConfig{
+				FHIRBaseURL: ownFHIRBaseURL,
+			},
+			ExcludeAdminDirectories: []string{
+				ownFHIRBaseURL,
+			},
+		})
+		require.NoError(t, err)
+
+		// Try to register the same URL as admin directory - should be excluded
+		err = component.registerAdministrationDirectory(context.Background(), ownFHIRBaseURL, []string{"Organization"}, true, "")
+
+		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
+		assert.Len(t, component.administrationDirectories, 0, "Own directory should not be registered as admin directory")
+	})
+
+	t.Run("excludes multiple directories", func(t *testing.T) {
+		component, err := New(Config{
+			ExcludeAdminDirectories: []string{
+				"http://excluded1.com/fhir",
+				"http://excluded2.com/fhir",
+				"http://excluded3.com/fhir",
+			},
+		})
+		require.NoError(t, err)
+
+		// Try to register excluded directories
+		err1 := component.registerAdministrationDirectory(context.Background(), "http://excluded1.com/fhir", []string{"Organization"}, false, "")
+		err2 := component.registerAdministrationDirectory(context.Background(), "http://excluded2.com/fhir", []string{"Organization"}, false, "")
+		err3 := component.registerAdministrationDirectory(context.Background(), "http://excluded3.com/fhir", []string{"Organization"}, false, "")
+
+		// Register an allowed directory
+		err4 := component.registerAdministrationDirectory(context.Background(), "http://allowed.com/fhir", []string{"Organization"}, false, "")
+
+		require.NoError(t, err1, "Should not error when URL is excluded, just skip registration")
+		require.NoError(t, err2, "Should not error when URL is excluded, just skip registration")
+		require.NoError(t, err3, "Should not error when URL is excluded, just skip registration")
+		require.NoError(t, err4)
+		assert.Len(t, component.administrationDirectories, 1, "Only the allowed directory should be registered")
+	})
+
+	t.Run("empty exclusion list allows all directories", func(t *testing.T) {
+		component, err := New(Config{
+			ExcludeAdminDirectories: []string{},
+		})
+		require.NoError(t, err)
+
+		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "")
+
+		require.NoError(t, err)
+		assert.Len(t, component.administrationDirectories, 1, "Directory should be registered when exclusion list is empty")
+	})
+
+	t.Run("invalid URL returns error even if in exclusion list", func(t *testing.T) {
+		component, err := New(Config{
+			ExcludeAdminDirectories: []string{
+				"not-a-valid-url",
+			},
+		})
+		require.NoError(t, err)
+
+		// Invalid URL should return error, not silently skip
+		err = component.registerAdministrationDirectory(context.Background(), "not-a-valid-url", []string{"Organization"}, false, "")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid FHIR base URL")
+		assert.Len(t, component.administrationDirectories, 0, "Invalid URL should not be registered")
+	})
 }

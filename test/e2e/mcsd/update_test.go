@@ -48,7 +48,7 @@ func Test_mCSDUpdateClient(t *testing.T) {
 			// assertEndpoint(t, queryFHIRClient, harnessDetail.SunflowerURA, "mcsd-directory", "/sunflower/mcsd")
 
 			// Assert FHIR endpoint exists in query directory (from admin directory)
-			assertEndpoint(t, queryFHIRClient, harnessDetail.SunflowerURA, "fhir", "/sunflower/fhir")
+			assertEndpoint(t, queryFHIRClient, harnessDetail.SunflowerURA, "fhir", "fhir/sunflower-patients")
 		})
 		t.Run("assert Care2Cure organization resources", func(t *testing.T) {
 			expectedOrg := lrza.Care2Cure()
@@ -386,12 +386,12 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		}, &searchResults2)
 		require.NoError(t, err, "Failed to search for organizations in query directory after deletion")
 
-		// On main branch, DELETE operations are skipped for safety (until _source conditional updates are implemented)
-		// So the organization should still exist in the query directory
-		require.Len(t, searchResults2.Entry, 1, "Should still have 1 organization in query directory (DELETE operations are skipped on main branch)")
+		// DELETE operations are now properly processed using conditional _source deletions
+		// The organization should be removed from the query directory
+		require.Len(t, searchResults2.Entry, 0, "Should have 0 organizations in query directory after DELETE is processed")
 
-		// Verify the DeleteCount is 0 in the sync report (confirming DELETE was skipped)
-		require.Equal(t, 0, care2CureReport2.CountDeleted, "DELETE operations should be skipped on main branch")
+		// Verify the DeleteCount is 1 in the sync report (confirming DELETE was processed)
+		require.Equal(t, 1, care2CureReport2.CountDeleted, "DELETE operations should be processed and counted")
 	})
 }
 

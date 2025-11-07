@@ -9,10 +9,17 @@ mcsd:
       fhirbaseurl: "https://fhir.example.org/fhir"
     "another-org":
       fhirbaseurl: "https://fhir.another-org.com/fhir"
-  
+
   # Local FHIR directory configuration
   query:
     fhirbaseurl: "http://localhost:8080/fhir"
+
+  # Exclude administration directories from being registered
+  # Use this to prevent your own FHIR server from being added as an admin directory
+  # This avoids syncing your own resources back to yourself
+  adminexclude:
+    - "http://localhost:8080/fhir"  # Exclude own query directory
+    # - "https://fhir.other-excluded.org/fhir"  # Add more exclusions as needed
 
 # mCSD Admin configuration
 mcsdadmin:
