@@ -24,7 +24,7 @@ import (
 var _ component.Lifecycle = &Component{}
 
 var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
-var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService"}
+var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole"}
 
 // clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
 // to account for potential clock differences between client and FHIR server
@@ -246,7 +246,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 
 	var entries []fhir.BundleEntry
 	var firstSearchSet fhir.Bundle
-	for i, resourceType := range directoryResourceTypes {
+	for i, resourceType := range allowedResourceTypes {
 		currEntries, currSearchSet, err := c.queryHistory(ctx, remoteAdminDirectoryFHIRClient, resourceType, searchParams)
 		if err != nil {
 			return DirectoryUpdateReport{}, fmt.Errorf("failed to query %s history: %w", resourceType, err)

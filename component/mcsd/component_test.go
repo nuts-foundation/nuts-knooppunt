@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -53,6 +54,7 @@ func TestComponent_update_regression(t *testing.T) {
 		"/Location/_history":          &locationHistoryResponseStr,
 		"/Organization/_history":      &organizationHistoryResponseStr,
 		"/HealthcareService/_history": &emptyResponseStr,
+		"/PractitionerRole/_history":  &emptyResponseStr,
 	})
 	server := httptest.NewServer(mux)
 
@@ -78,10 +80,10 @@ func TestComponent_update_regression(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, report)
-	// Expect warnings about Location resources (root directories only support Organization and Endpoint)
-	// The regression data contains Location resources which should produce warnings
-	assert.NotEmpty(t, report[server.URL].Warnings, "expected warnings about Location resources not being allowed")
-	assert.Contains(t, report[server.URL].Warnings[0], "Location not allowed", "expected warning about Location not being allowed in root directory")
+	// Root directories only query Organization and Endpoint resource types
+	// Location history is provided in test data but should not be queried (and thus no warnings about it)
+	// The test verifies the regression data can be processed without errors
+	assert.Empty(t, report[server.URL].Warnings, "should have no warnings since Location is not queried for root directories")
 	assert.Empty(t, report[server.URL].Errors)
 	assert.NotNil(t, report[server.URL].Errors, "expected an empty slice")
 }
@@ -110,6 +112,7 @@ func TestComponent_update(t *testing.T) {
 		"/Organization/_history":      &rootDirOrganizationHistoryResponse,
 		"/HealthcareService/_history": &emptyResponseStr,
 		"/Location/_history":          &emptyResponseStr,
+		"/PractitionerRole/_history":  &emptyResponseStr,
 	})
 
 	rootDirServer := httptest.NewServer(rootDirMux)
@@ -140,6 +143,7 @@ func TestComponent_update(t *testing.T) {
 		"/fhir/Organization/_history_page2": &org1DirOrganizationHistoryPage2Response,
 		"/fhir/Location/_history":           &emptyResponseStr,
 		"/fhir/HealthcareService/_history":  &emptyResponseStr,
+		"/fhir/PractitionerRole/_history":   &emptyResponseStr,
 	})
 
 	org1DirServer := httptest.NewServer(org1DirMux)
@@ -280,6 +284,7 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	mockHistoryEndpoints(rootDirMux, map[string]*string{
 		"/Location/_history":          &emptyResponseStr2,
 		"/HealthcareService/_history": &emptyResponseStr2,
+		"/PractitionerRole/_history":  &emptyResponseStr2,
 	})
 
 	rootDirServer := httptest.NewServer(rootDirMux)
@@ -752,6 +757,80 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 
 		// Verify DELETE was sent to query directory
 		assert.Equal(t, 1, report2.CountDeleted, "Should have 1 deleted resource")
+	})
+
+	t.Run("respects allowedResourceTypes parameter and only queries specified resource types", func(t *testing.T) {
+		// This test verifies that updateFromDirectory only queries the resource types
+		// specified in the allowedResourceTypes parameter, not all resource types.
+		// This prevents 404 errors when the FHIR server doesn't support certain resource types.
+
+		ctx := context.Background()
+
+		// Track which resource type endpoints were called
+		calledEndpoints := make(map[string]bool)
+		var mu sync.Mutex
+
+		mux := http.NewServeMux()
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		// Empty bundle response
+		emptyBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": []
+		}`
+
+		// Set up handlers that track which endpoints are called
+		resourceTypes := []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole"}
+		for _, rt := range resourceTypes {
+			resourceType := rt // capture for closure
+			mux.HandleFunc("/fhir/"+resourceType+"/_history", func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				calledEndpoints[resourceType] = true
+				mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(emptyBundle))
+			})
+		}
+
+		component, err := New(Config{
+			QueryDirectory: DirectoryConfig{
+				FHIRBaseURL: "http://example.com/local/fhir",
+			},
+		})
+		require.NoError(t, err)
+
+		capturingClient := &test.StubFHIRClient{}
+		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+			if baseURL.String() == server.URL+"/fhir" {
+				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
+			}
+			if baseURL.String() == "http://example.com/local/fhir" {
+				return capturingClient
+			}
+			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
+		}
+
+		// Call updateFromDirectory with only Organization and Endpoint
+		allowedTypes := []string{"Organization", "Endpoint"}
+		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", allowedTypes, false)
+
+		require.NoError(t, err)
+		require.Empty(t, report.Errors)
+
+		// Verify only the allowed resource types were queried
+		mu.Lock()
+		defer mu.Unlock()
+
+		assert.True(t, calledEndpoints["Organization"], "Organization/_history should have been called")
+		assert.True(t, calledEndpoints["Endpoint"], "Endpoint/_history should have been called")
+		assert.False(t, calledEndpoints["Location"], "Location/_history should NOT have been called (not in allowedResourceTypes)")
+		assert.False(t, calledEndpoints["HealthcareService"], "HealthcareService/_history should NOT have been called (not in allowedResourceTypes)")
+		assert.False(t, calledEndpoints["PractitionerRole"], "PractitionerRole/_history should NOT have been called (not in allowedResourceTypes)")
+
+		// Verify exactly 2 resource types were queried
+		assert.Equal(t, 2, len(calledEndpoints), "Should have queried exactly 2 resource types")
 	})
 }
 
