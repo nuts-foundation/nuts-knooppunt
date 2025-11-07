@@ -5,7 +5,8 @@ import (
 	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
-	httpComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
+	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
+	libHTTPComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
@@ -28,11 +29,12 @@ func Start(ctx context.Context, config Config) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to create mCSD Update Client")
 	}
+	httpComponent := libHTTPComponent.New(config.HTTP, publicMux, internalMux)
 	components := []component.Lifecycle{
 		mcsdUpdateClient,
 		mcsdadmin.New(config.MCSDAdmin),
 		status.New(),
-		httpComponent.New(publicMux, internalMux),
+		httpComponent,
 	}
 
 	if config.Nuts.Enabled {
@@ -44,6 +46,13 @@ func Start(ctx context.Context, config Config) error {
 	} else {
 		log.Ctx(ctx).Info().Msg("Nuts node is disabled")
 	}
+
+	// Create AuthN component
+	authnComponent, err := authn.New(config.AuthN, httpComponent, config.Config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create AuthN component")
+	}
+	components = append(components, authnComponent)
 
 	// Create MITZ component
 	if config.MITZ.Enabled() {

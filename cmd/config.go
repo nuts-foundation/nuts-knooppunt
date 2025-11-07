@@ -10,6 +10,9 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/structs"
 	"github.com/knadh/koanf/v2"
+	"github.com/nuts-foundation/nuts-knooppunt/cmd/core"
+	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
+	"github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
@@ -19,16 +22,20 @@ import (
 )
 
 type Config struct {
+	core.Config
 	MCSD      mcsd.Config      `koanf:"mcsd"`
 	MCSDAdmin mcsdadmin.Config `koanf:"mcsdadmin"`
 	Nuts      nutsnode.Config  `koanf:"nuts"`
 	NVI       nvi.Config       `koanf:"nvi"`
 	PDP       pdp.Config       `koanf:"pdp"`
 	MITZ      mitz.Config      `koanf:"mitz"`
+	HTTP      http.Config      `koanf:"http"`
+	AuthN     authn.Config     `koanf:"authn"`
 }
 
 func DefaultConfig() Config {
 	return Config{
+		Config: core.DefaultConfig(),
 		Nuts: nutsnode.Config{
 			Enabled: false,
 		},
@@ -36,6 +43,7 @@ func DefaultConfig() Config {
 		NVI:       nvi.DefaultConfig(),
 		PDP:       pdp.DefaultConfig(),
 		MITZ:      mitz.Config{},
+		HTTP:      http.DefaultConfig(),
 	}
 }
 
