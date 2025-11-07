@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd/core"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
@@ -73,6 +74,7 @@ func New(config Config, httpInterfaces httpComponent.InterfaceInfo, coreConfig c
 
 	storage := &Storage{
 		clients: make(map[string]Client),
+		tokens:  &sync.Map{},
 	}
 	for _, client := range config.Clients {
 		if _, exists := storage.clients[client.ID]; exists {

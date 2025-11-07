@@ -1,14 +1,18 @@
 package authn
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd/core"
 	httpComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/from"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/netutil"
 	"github.com/stretchr/testify/require"
 )
@@ -74,16 +78,22 @@ func Test_RequestToken(t *testing.T) {
 		require.Equal(t, data["scope"], "openid")
 
 		t.Run("introspect token", func(t *testing.T) {
-			httpResponse, err := http.PostForm(httpService.Internal().URL().JoinPath("/auth/introspect").String(), map[string][]string{
-				"token":         {data["access_token"].(string)},
-				"client_secret": {"test-secret"},
-			})
+			httpRequest, _ := http.NewRequest(http.MethodPost, httpService.Internal().URL().JoinPath("/auth/introspect").String(), strings.NewReader(url.Values{
+				"token": {data["access_token"].(string)},
+			}.Encode()))
+			httpRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			httpRequest.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("test-client:test-secret")))
+
+			httpResponse, err := http.DefaultClient.Do(httpRequest)
 			require.NoError(t, err)
 			defer httpResponse.Body.Close()
 			require.Equal(t, http.StatusOK, httpResponse.StatusCode)
-			responseData, _ := io.ReadAll(httpResponse.Body)
-			var introspectData map[string]any
-			require.NoError(t, json.Unmarshal(responseData, &introspectData))
+			response, err := from.JSONResponse[map[string]any](httpResponse)
+
+			require.NoError(t, err)
+			require.Equal(t, true, response["active"])
+			require.Equal(t, "openid", response["scope"])
+			require.Equal(t, []interface{}{"TODO(audience)"}, response["aud"])
 		})
 	})
 }

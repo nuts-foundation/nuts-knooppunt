@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
@@ -19,6 +20,8 @@ const TokenLifetime = 5 * time.Minute
 
 type Storage struct {
 	clients map[string]Client
+	// TODO: Change to GF AuthN tokens
+	tokens *sync.Map
 }
 
 func (o Storage) ClientCredentials(ctx context.Context, clientID, clientSecret string) (op.Client, error) {
@@ -80,6 +83,7 @@ func (o Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest)
 		Scopes:         request.GetScopes(),
 		ExpirationTime: time.Now().Add(TokenLifetime),
 	}
+	o.tokens.Store(token.ID, token)
 	return token.ID, token.ExpirationTime, nil
 }
 
@@ -162,7 +166,16 @@ func (o Storage) Health(ctx context.Context) error {
 }
 
 func (o Storage) SetIntrospectionFromToken(ctx context.Context, userinfo *oidc.IntrospectionResponse, tokenID, subject, clientID string) error {
-	return errors.New("token introspection not supported")
+	// TODO: change to GF AuthN token introspection
+	tokenRaw, ok := o.tokens.Load(tokenID)
+	if !ok {
+		return errors.New("token not found")
+	}
+	token, _ := tokenRaw.(*Token)
+	userinfo.Active = time.Now().Before(token.ExpirationTime)
+	userinfo.Audience = token.Audience
+	userinfo.Scope = token.Scopes
+	return nil
 }
 
 func (o Storage) CreateAccessAndRefreshTokens(ctx context.Context, request op.TokenRequest, currentRefreshToken string) (accessTokenID string, newRefreshTokenID string, expiration time.Time, err error) {
