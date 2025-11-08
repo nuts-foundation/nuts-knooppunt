@@ -26,6 +26,10 @@ func Start(ctx context.Context, config Config) error {
 		slog.WarnContext(ctx, "Strict mode is disabled. This is NOT recommended for production environments!")
 	}
 
+	if !config.StrictMode {
+		log.Ctx(ctx).Warn().Msgf("Strict mode is disabled. This is NOT recommended for production environments!")
+	}
+
 	publicMux := http.NewServeMux()
 	internalMux := http.NewServeMux()
 
