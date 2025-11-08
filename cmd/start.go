@@ -23,6 +23,10 @@ func Start(ctx context.Context, config Config) error {
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	zerolog.DefaultContextLogger = &log.Logger
 
+	if !config.StrictMode {
+		log.Ctx(ctx).Warn().Msgf("Strict mode is disabled. This is NOT recommended for production environments!")
+	}
+
 	publicMux := http.NewServeMux()
 	internalMux := http.NewServeMux()
 	mcsdUpdateClient, err := mcsd.New(config.MCSD)
