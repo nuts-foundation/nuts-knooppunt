@@ -60,7 +60,7 @@ Disadvantages:
 
 #### End-user authentication
 
-For end-user authentication, the **OIDC Authorized Code** flow can be used to authenticate caregivers using DEZI.
+For end-user authentication, the **OIDC Authorization Code** flow can be used to authenticate caregivers using DEZI.
 
 Although DEZI looks like a standard OpenID Connect Provider implementation, it could do heavy lifting like decrypting
 the `id_token`.
