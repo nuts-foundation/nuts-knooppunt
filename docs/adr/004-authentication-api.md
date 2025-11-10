@@ -109,7 +109,7 @@ which makes it a bit easier to include end-user identity (a JSON object) in the 
 Advantages:
 
 - More flexible: allows inclusion of additional claims (like end-user identity) in the JWT assertion without manual
-  encoding on JSON objects to strings.
+  encoding of JSON objects to strings.
 - Improved security: leverages asymmetric cryptography for authentication, reducing risks associated with static
   secrets.
 
