@@ -1,6 +1,8 @@
 # Nuts Knooppunt Configuration
 # This file demonstrates the configuration options available
 
+strictmode: false
+
 # mCSD (Mobile Care Services Discovery) configuration
 mcsd:
   # Root directories to synchronize from

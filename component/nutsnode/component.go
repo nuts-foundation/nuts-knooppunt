@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 
+	knooppuntCore "github.com/nuts-foundation/nuts-knooppunt/cmd/core"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/netutil"
 	"github.com/nuts-foundation/nuts-node/cmd"
@@ -53,6 +54,7 @@ func New(config Config) (*Component, error) {
 
 type Component struct {
 	config       Config
+	coreConfig   knooppuntCore.Config
 	ctx          context.Context
 	cancel       context.CancelFunc
 	system       *core.System
@@ -72,6 +74,7 @@ func (c *Component) Start() error {
 		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr.Host,
 		"NUTS_DATADIR":               dataDir,
 		"NUTS_VERBOSITY":             zerolog.GlobalLevel().String(),
+		"NUTS_STRICTMODE":            strconv.FormatBool(c.coreConfig.StrictMode),
 	}
 	// Only set NUTS_CONFIGFILE if the config file exists
 	if _, err := os.Stat(configFile); err == nil {
