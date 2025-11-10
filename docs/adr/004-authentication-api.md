@@ -135,8 +135,8 @@ Advantages:
 
 Disadvantages:
 
-- The RFC is still a "proposed standard", so not officially an established standard yet.
-- Limited library support.
+- Limited library support: being a newer specification, it may not be widely supported in existing OAuth2 libraries and
+  frameworks.
 
 ## Decision Outcome
 
