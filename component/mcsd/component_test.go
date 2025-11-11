@@ -568,7 +568,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		server := startMockServer(t, map[string]string{
 			"/fhir/Organization/_history": "test/bugs/233-no-bundle-request/organization_response.json",
 		})
-		component, err := New(Config{})
+		component, err := New(DefaultConfig())
 		require.NoError(t, err)
 		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false)
 		require.NoError(t, err)
@@ -591,11 +591,11 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		defer server.Close()
 
 		capturingClient := &test.StubFHIRClient{}
-		component, err := New(Config{
-			QueryDirectory: DirectoryConfig{
-				FHIRBaseURL: "http://example.com/local/fhir",
-			},
-		})
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{
+			FHIRBaseURL: "http://example.com/local/fhir",
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
@@ -699,16 +699,16 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
 		})
 
-		component, err := New(Config{
-			QueryDirectory: DirectoryConfig{
-				FHIRBaseURL: "http://example.com/local/fhir",
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{
+			FHIRBaseURL: "http://example.com/local/fhir",
+		}
+		config.AdministrationDirectories = map[string]DirectoryConfig{
+			"test-dir": {
+				FHIRBaseURL: server.URL + "/fhir",
 			},
-			AdministrationDirectories: map[string]DirectoryConfig{
-				"test-dir": {
-					FHIRBaseURL: server.URL + "/fhir",
-				},
-			},
-		})
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Mock FHIR client that tracks operations
@@ -804,11 +804,11 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			})
 		}
 
-		component, err := New(Config{
-			QueryDirectory: DirectoryConfig{
-				FHIRBaseURL: "http://example.com/local/fhir",
-			},
-		})
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{
+			FHIRBaseURL: "http://example.com/local/fhir",
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		capturingClient := &test.StubFHIRClient{}
@@ -922,12 +922,12 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 
 		// Create component with custom DirectoryResourceTypes that includes Practitioner
 		customResourceTypes := []string{"Organization", "Endpoint", "Practitioner"}
-		component, err := New(Config{
-			QueryDirectory: DirectoryConfig{
-				FHIRBaseURL: "http://example.com/local/fhir",
-			},
-			DirectoryResourceTypes: customResourceTypes,
-		})
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{
+			FHIRBaseURL: "http://example.com/local/fhir",
+		}
+		config.DirectoryResourceTypes = customResourceTypes
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Verify the component stored the custom resource types
@@ -1016,11 +1016,9 @@ func startMockServer(t *testing.T, filesToServe map[string]string) *httptest.Ser
 
 func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	t.Run("excludes administration directory by exact URL match", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"http://example.com/fhir",
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{"http://example.com/fhir"}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "")
@@ -1030,11 +1028,11 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("excludes administration directory with trailing slash trimmed", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"http://example.com/fhir",
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{
+			"http://example.com/fhir",
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Try to register with trailing slash - should still be excluded
@@ -1045,11 +1043,11 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("matches exclusion list entries with trailing slashes", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"http://example.com/fhir/", // Exclusion list has trailing slash
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{
+			"http://example.com/fhir/", // Exclusion list has trailing slash
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Try to register without trailing slash - should still be excluded due to trimming
@@ -1060,11 +1058,11 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("matches with both having trailing slashes", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"http://example.com/fhir/", // Both have trailing slash
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{
+			"http://example.com/fhir/", // Both have trailing slash
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir/", []string{"Organization"}, false, "")
@@ -1074,11 +1072,11 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("allows administration directory not in exclusion list", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"http://excluded.com/fhir",
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{
+			"http://excluded.com/fhir",
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		err = component.registerAdministrationDirectory(context.Background(), "http://allowed.com/fhir", []string{"Organization"}, false, "")
@@ -1090,14 +1088,14 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 
 	t.Run("excludes own query directory from being registered as admin directory", func(t *testing.T) {
 		ownFHIRBaseURL := "http://localhost:8080/fhir"
-		component, err := New(Config{
-			QueryDirectory: DirectoryConfig{
-				FHIRBaseURL: ownFHIRBaseURL,
-			},
-			ExcludeAdminDirectories: []string{
-				ownFHIRBaseURL,
-			},
-		})
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{
+			FHIRBaseURL: ownFHIRBaseURL,
+		}
+		config.ExcludeAdminDirectories = []string{
+			ownFHIRBaseURL,
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Try to register the same URL as admin directory - should be excluded
@@ -1108,13 +1106,13 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("excludes multiple directories", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"http://excluded1.com/fhir",
-				"http://excluded2.com/fhir",
-				"http://excluded3.com/fhir",
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{
+			"http://excluded1.com/fhir",
+			"http://excluded2.com/fhir",
+			"http://excluded3.com/fhir",
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Try to register excluded directories
@@ -1133,9 +1131,9 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("empty exclusion list allows all directories", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "")
@@ -1145,11 +1143,11 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("invalid URL returns error even if in exclusion list", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"not-a-valid-url",
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{
+			"not-a-valid-url",
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Invalid URL should return error, not silently skip
