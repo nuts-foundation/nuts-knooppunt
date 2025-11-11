@@ -25,6 +25,12 @@ Key design goals are:
 
 This section describes the considered options.
 
+### No Knooppunt authentication API
+
+In this option, the Knooppunt does not provide any authentication API.
+
+EHR vendors will have to integrate the Nuts node v2 authentication API and DEZI directly in their EHR systems.
+
 ### Nuts v2 auth API
 
 If the GF Authentication specifies Nuts as authentication mechanism, the EHR can use the Nuts v2 authentication API to
