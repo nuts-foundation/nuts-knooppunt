@@ -10,6 +10,7 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/structs"
 	"github.com/knadh/koanf/v2"
+	"github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
@@ -25,6 +26,7 @@ type Config struct {
 	NVI       nvi.Config       `koanf:"nvi"`
 	PDP       pdp.Config       `koanf:"pdp"`
 	MITZ      mitz.Config      `koanf:"mitz"`
+	HTTP      http.Config      `koanf:"http"`
 }
 
 func DefaultConfig() Config {
@@ -36,6 +38,7 @@ func DefaultConfig() Config {
 		NVI:       nvi.DefaultConfig(),
 		PDP:       pdp.DefaultConfig(),
 		MITZ:      mitz.Config{},
+		HTTP:      http.DefaultConfig(),
 	}
 }
 

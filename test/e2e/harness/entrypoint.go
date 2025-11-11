@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd"
+	"github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
@@ -55,6 +56,7 @@ func Start(t *testing.T) Details {
 	require.NoError(t, err, "failed to load test data into HAPI FHIR server")
 
 	knooppuntInternalURL := startKnooppunt(t, cmd.Config{
+		HTTP: http.TestConfig(),
 		MCSD: mcsd.Config{
 			AdministrationDirectories: map[string]mcsd.DirectoryConfig{
 				"lrza": {
@@ -92,6 +94,7 @@ func StartMITZ(t *testing.T) MITZDetails {
 
 	// Start Knooppunt with minimal config (only MITZ enabled)
 	knooppuntInternalURL := startKnooppunt(t, cmd.Config{
+		HTTP: http.TestConfig(),
 		MITZ: mitz.Config{
 			MitzBase:       mockMITZ.GetURL(),
 			NotifyEndpoint: "http://localhost:8080/consent/notify",
@@ -118,6 +121,7 @@ func StartPEP(t *testing.T, pepConfig PEPConfig) PEPDetails {
 
 	// Start Knooppunt with PDP and MITZ enabled
 	knooppuntPDPURL := startKnooppunt(t, cmd.Config{
+		HTTP: http.TestConfig(),
 		PDP: pdp.Config{
 			Enabled: true,
 		},
