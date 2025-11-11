@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/rs/zerolog/log"
@@ -34,12 +35,18 @@ type InterfaceConfig struct {
 func (c InterfaceConfig) URL() *url.URL {
 	u := c.BaseURL
 	if u == "" {
-		hostname, err := os.Hostname()
-		if err != nil {
-			log.Warn().Err(err).Msg("Failed to get hostname, defaulting to localhost")
-			hostname = "localhost"
+		if strings.HasPrefix(c.Address, ":") {
+			// E.g. :8080
+			hostname, err := os.Hostname()
+			if err != nil {
+				log.Warn().Err(err).Msg("Failed to get hostname, defaulting to localhost")
+				hostname = "localhost"
+			}
+			u = "http://" + hostname + c.Address
+		} else {
+			// E.g. localhost:8080
+			u = "http://" + c.Address
 		}
-		u = "http://" + hostname + c.Address
 	}
 	result, _ := url.Parse(u)
 	return result
