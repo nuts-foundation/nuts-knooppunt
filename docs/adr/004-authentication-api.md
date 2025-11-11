@@ -81,6 +81,17 @@ There are several OAuth2 grant types that can be used for machine-to-machine aut
 The EHR authenticates to the Knooppunt using its `client_id` and static `client_secret` to obtain an access token,
 providing a custom parameter for the end-user DEZI `id_token` if needed.
 
+Example token exchange request:
+
+```
+grant_type=client_credentials
+ &scope=<requested scopes>
+ &client_id=<EHR client ID>
+ &client_secret=<EHR client secret>
+ &dezi_id_token=<DEZI id_token> (optional)
+ &nuts_subject_id=<Nuts subject ID>
+```
+
 Advantages:
 
 - Simplicity: widely understood and easy to implement. Most OAuth2 libraries and frameworks natively support this flow.
@@ -122,11 +133,27 @@ Disadvantages:
 
 ##### OAuth 2.0 Token Exchange (RFC8693)
 
-[OAuth 2.0 Token Exchange](https://www.rfc-editor.org/rfc/rfc8693.html) is a newer OAuth2 grant type that allows one
-token to be exchanged for another,
+[OAuth 2.0 Token Exchange](https://www.rfc-editor.org/rfc/rfc8693.html) is a newer OAuth2 grant type that allows one token to be exchanged for another,
 supporting "on behalf of" scenarios.
 Using this flow, the EHR can exchange the DEZI `id_token` at the Knooppunt for an access token to a remote EHR system,
 representing both the care organization and the authenticated caregiver.
+
+The `subject_token` parameter is optional and can be omitted if no user is present.
+
+Example token exchange request:
+
+```
+grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+ &audience=<remote EHR system (remote OAuth2 issuer URL)>
+ &subject_token=<DEZI id_token>
+ &subject_token_type=urn:ietf:params:oauth:token-type:id_token
+ &actor_token=<Nuts subject ID>
+ &actor_token_type=nuts-subject-id
+ &requested_token_type=urn:ietf:params:oauth:token-type:access_token
+ &scope=<requested scopes>
+ &client_id=<EHR client ID>
+ &client_secret=<EHR client secret>
+```
 
 Advantages:
 
