@@ -13,8 +13,12 @@ import (
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
 
-var _ op.Storage = (*Storage)(nil)
-var _ op.ClientCredentialsStorage = (*Storage)(nil)
+const subjectTokenType = "urn:ietf:params:oauth:token-type:id_token"
+const nutsSubjectIDTokenType = "nuts-subject-id"
+
+// var _ op.Storage = (*Storage)(nil)
+// var _ op.ClientCredentialsStorage = (*Storage)(nil) // for client credentials grant
+var _ op.TokenExchangeStorage = (*Storage)(nil)
 
 const TokenLifetime = 5 * time.Minute
 
@@ -24,30 +28,34 @@ type Storage struct {
 	tokens *sync.Map
 }
 
-func (o Storage) ClientCredentials(ctx context.Context, clientID, clientSecret string) (op.Client, error) {
-	client, err := o.getClientByID(clientID)
-	if err != nil {
-		return nil, err
+func (o Storage) ValidateTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) error {
+	if request.GetExchangeSubjectTokenType() != "" && request.GetExchangeSubjectTokenType() != subjectTokenType {
+		return fmt.Errorf("unsupported subject token type: %s (expected '%s')", request.GetExchangeSubjectTokenType(), subjectTokenType)
 	}
-	err = o.AuthorizeClientIDSecret(ctx, clientID, clientSecret)
-	if err != nil {
-		return nil, err
+	if request.GetExchangeActorTokenType() != nutsSubjectIDTokenType {
+		return fmt.Errorf("unsupported actor token type: %s (expected '%s')", request.GetExchangeActorTokenType(), nutsSubjectIDTokenType)
 	}
-	return client, nil
+	if len(request.GetAudience()) != 1 {
+		return fmt.Errorf("exactly one audience must be specified")
+	}
+	if request.GetRequestedTokenType() != oidc.AccessTokenType {
+		return fmt.Errorf("unsupported requested token type: %s (expected '%s')", request.GetRequestedTokenType(), oidc.AccessTokenType)
+	}
+	return nil
 }
 
-func (o Storage) ClientCredentialsTokenRequest(ctx context.Context, clientID string, scopes []string) (op.TokenRequest, error) {
-	client, err := o.getClientByID(clientID)
-	if err != nil {
-		return nil, err
-	}
-	// TODO: Subject should be related to GF AuthN subject
-	return &ClientCredentialsTokenRequest{
-		Subject: client.ID,
-		// TODO: Audience
-		Audience: []string{"TODO(audience)"},
-		Scopes:   scopes,
-	}, nil
+func (o Storage) CreateTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) error {
+	// Auditing could happen here
+	return nil
+}
+
+func (o Storage) GetPrivateClaimsFromTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) (claims map[string]any, err error) {
+	// Token request is forwarded to GF Authentication, so no private claims to return
+	return nil, nil
+}
+
+func (o Storage) SetUserinfoFromTokenExchangeRequest(ctx context.Context, userinfo *oidc.UserInfo, request op.TokenExchangeRequest) error {
+	panic("SetUserinfoFromTokenExchangeRequest(): implement me")
 }
 
 func (o Storage) CreateAuthRequest(ctx context.Context, request *oidc.AuthRequest, _ string) (op.AuthRequest, error) {
@@ -71,7 +79,7 @@ func (o Storage) DeleteAuthRequest(ctx context.Context, id string) error {
 }
 
 func (o Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest) (accessTokenID string, expiration time.Time, err error) {
-	_, ok := request.(*ClientCredentialsTokenRequest)
+	_, ok := request.(op.TokenExchangeRequest)
 	if !ok {
 		return "", time.Time{}, fmt.Errorf("invalid token request: %T", request)
 	}

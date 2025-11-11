@@ -58,6 +58,38 @@ func Test_RequestToken(t *testing.T) {
 		require.Equal(t, data["token_endpoint"], httpService.Internal().URL().JoinPath("/auth/token").String())
 		require.Equal(t, data["issuer"], httpService.Public().URL().JoinPath("/auth").String())
 	})
+	t.Run("Token Exchange grant type", func(t *testing.T) {
+		params, _ := json.Marshal(map[string][]string{
+			"grant_type":         {"urn:ietf:params:oauth:grant-type:token-exchange"},
+			"client_id":          {"test-client"},
+			"client_secret":      {"test-secret"},
+			"subject_token":      {"TODO(subject token)"},
+			"subject_token_type": {"urn:ietf:params:oauth:token-type:id_token"},
+			"actor_token":        {"TODO(actor token)"},
+			"actor_token_type":   {"nuts-subject-id"},
+			"audience":           {"TODO(audience)"},
+			"scope":              {"some-scope"},
+		})
+		http.NewRequest(http.MethodPost, httpService.Internal().URL().JoinPath("/auth/token").String(),
+		httpResponse, err := http.PostForm(httpService.Internal().URL().JoinPath("/auth/token").String(), map[string][]string{
+			"grant_type":         {"urn:ietf:params:oauth:grant-type:token-exchange"},
+			"client_id":          {"test-client"},
+			"client_secret":      {"test-secret"},
+			"subject_token":      {"TODO(subject token)"},
+			"subject_token_type": {"urn:ietf:params:oauth:token-type:id_token"},
+			"actor_token":        {"TODO(actor token)"},
+			"actor_token_type":   {"nuts-subject-id"},
+			"audience":           {"TODO(audience)"},
+			"scope":              {"some-scope"},
+		})
+		require.NoError(t, err)
+		defer httpResponse.Body.Close()
+
+		data, err := from.JSONResponse[map[string]any](httpResponse)
+		require.NoError(t, err)
+
+		require.NotEmpty(t, data["access_token"])
+	})
 	t.Run("Client Credentials grant type", func(t *testing.T) {
 		httpResponse, err := http.PostForm(httpService.Internal().URL().JoinPath("/auth/token").String(), map[string][]string{
 			"grant_type":    {"client_credentials"},
@@ -67,10 +99,8 @@ func Test_RequestToken(t *testing.T) {
 		})
 		require.NoError(t, err)
 		defer httpResponse.Body.Close()
-		require.Equal(t, http.StatusOK, httpResponse.StatusCode)
-		responseData, _ := io.ReadAll(httpResponse.Body)
-		var data map[string]any
-		require.NoError(t, json.Unmarshal(responseData, &data))
+		data, err := from.JSONResponse[map[string]any](httpResponse)
+		require.NoError(t, err)
 
 		require.NotEmpty(t, data["access_token"])
 		require.NotEmpty(t, data["expires_in"])
@@ -87,7 +117,6 @@ func Test_RequestToken(t *testing.T) {
 			httpResponse, err := http.DefaultClient.Do(httpRequest)
 			require.NoError(t, err)
 			defer httpResponse.Body.Close()
-			require.Equal(t, http.StatusOK, httpResponse.StatusCode)
 			response, err := from.JSONResponse[map[string]any](httpResponse)
 
 			require.NoError(t, err)
