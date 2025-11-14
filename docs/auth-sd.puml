@@ -1,0 +1,53 @@
+@startuml
+
+title Authentication Sequence Diagram
+
+actor User
+participant Browser
+participant EHR
+participant Knooppunt
+
+participant RemoteXIS as "Remote XIS"
+
+User -> EHR : Interact
+group User AuthN - OpenID Authorized Code\n(e.g. EHR login)
+    EHR -> EHR : Make Auth Request\nURL
+    EHR -> Browser : Redirect\n/Open
+    Browser -> Knooppunt : OIDC Authorization Request\n(scope=openid profile)
+
+    group GF Auth (omitted for brevity)
+        Knooppunt --> Browser : Request authentication
+        Browser -> Knooppunt : Submit auth credential
+    end
+
+    Knooppunt --> Browser : OIDC Auth Response\n(auth code)
+    Browser -> EHR : Redirect\n(auth code)
+    EHR -> Knooppunt : OIDC Token Request\n(auth code)
+    Knooppunt --> EHR : OIDC Token Response\n(id_token)
+end
+
+group User data request
+    User -> EHR : Request data\nfrom remote source
+    group OAuth2 Client Credentials
+        EHR -> Knooppunt : OAuth2 Token Request\n(id_token)
+        Knooppunt --> EHR : OAuth2 Token Response\n(access token)
+    end
+
+    EHR -> RemoteXIS : Data request\n(access token)
+    RemoteXIS --> EHR : Data response\n(e.g. FHIR)
+    EHR --> User : Data response
+end
+
+group Non-user data request
+    EHR -> EHR : System-initiated\ndata request
+    group OAuth2 Client Credentials
+        EHR -> Knooppunt : OAuth2 Token Request
+        Knooppunt --> EHR : OAuth2 Token Response\n(access token)
+    end
+
+    EHR -> RemoteXIS : Data request\n(access token)
+    RemoteXIS --> EHR : Data response\n(e.g. FHIR)
+    EHR -> EHR : Process data
+end
+
+@enduml

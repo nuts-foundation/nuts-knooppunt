@@ -1,0 +1,68 @@
+.sidebar {
+    background-color: #f8f9fa;
+    border-right: 1px solid #dee2e6;
+    min-height: calc(100vh - 56px);
+    padding-top: 1rem;
+}
+
+.sidebar .nav-link {
+    color: #495057;
+    border-radius: 0.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.sidebar .nav-link:hover {
+    background-color: #e9ecef;
+    color: #495057;
+}
+
+.sidebar .nav-link.active {
+    background-color: #007bff;
+    color: #fff;
+}
+
+.main-content {
+    padding: 20px;
+}
+
+.navbar-brand {
+    font-weight: bold;
+}
+
+.form-select {
+    margin-bottom: 10px;
+}
+
+fieldset {
+    border: 1px solid lightgrey;
+    padding: 5px;
+    margin-bottom: 10px;
+}
+
+legend {
+    padding: 1px 10px;
+    float: none;
+    width: auto;
+    font-size: 1rem;
+}
+
+#edit-associations .card {
+    padding: 10px;
+    width: 700px;
+    margin: 10px;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+#edit-associations .card button {
+    margin-top: 10px;
+    height: 50px;
+}
+
+#edit-associations .card ul {
+    margin-bottom: 0px;
+}
+
+#edit-associations label {
+    margin: 10px;
+}

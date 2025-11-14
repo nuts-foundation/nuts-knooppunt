@@ -1,5 +1,19 @@
 # Intellij IDEA
 .idea
 
-# Binaries
-./nuts-knooppunt
+# Binaries (use / prefix to match only in root directory)
+/nuts-knooppunt
+
+# Runtime files
+data
+
+# MacOS
+.DS_Store
+
+# PEP test dependencies
+pep/nginx/js/node_modules/
+pep/nginx/js/coverage/
+pep/logs/
+
+# Helm chart dependencies
+helm/**/charts/*.tgz

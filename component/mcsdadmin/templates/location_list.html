@@ -1,0 +1,42 @@
+{{define "main"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Locations</h2>
+    <a href="/mcsdadmin/location/new" class="btn btn-primary">New Location</a>
+</div>
+<div class="card">
+    <div class="card-body">
+        <table class="table table-striped table-hover">
+            <thead class="table-light">
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+                <th scope="col">Status</th>
+                <th scope="col">Physical Type</th>
+                <th scope="col">Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            {{range .Items }}
+            <tr id="row-{{.Id}}">
+                <th scope="row">{{ .Name }}</th>
+                <td>{{ .Type }}</td>
+                <td>
+                    <span class="badge bg-info">{{ .Status }}</span>
+                </td>
+                <td>{{ .PhysicalType }}</td>
+                <td>
+                    <button class="btn btn-outline-dark btn-sm"
+                            hx-delete="/mcsdadmin/location/{{ .Id }}"
+                            hx-target="#row-{{.Id}}"
+                            hx-swap="delete"
+                    >
+                        Delete
+                    </button>
+                </td>
+            </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}

@@ -1,28 +1,27 @@
 package main
 
 import (
-	"github.com/pkg/errors"
-	"github.com/rs/zerolog"
+	"context"
+
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/nuts-foundation/nuts-knooppunt/cmd"
 	"github.com/rs/zerolog/log"
-	"net/http"
 )
 
 func main() {
-	const interfaceAddress = ":8080"
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	zerolog.DefaultContextLogger = &log.Logger
-	log.Info().Msgf("Public interface listens on %s", interfaceAddress)
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("Hello, World!"))
-	})
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("OK"))
-	})
-	if err := http.ListenAndServe(interfaceAddress, nil); err != nil {
-		if !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal().Err(err).Msg("Failed to start server")
-		}
+	// Load configuration
+	config, err := cmd.LoadConfig()
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to load configuration")
 	}
-	log.Info().Msg("Goodbye!")
+
+	// Listen for interrupt signals (CTRL/CMD+C, OS instructing the process to stop) to cancel context.
+	ctx, cancelFunc := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancelFunc()
+	if err := cmd.Start(ctx, config); err != nil {
+		panic(err)
+	}
 }

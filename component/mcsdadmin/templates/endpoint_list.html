@@ -1,0 +1,48 @@
+{{define "main"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Endpoints</h2>
+    <a href="/mcsdadmin/endpoint/new" class="btn btn-primary">New Endpoint</a>
+</div>
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-light">
+                <tr>
+                    <th scope="col">Address</th>
+                    <th scope="col">Payload Type</th>
+                    <th scope="col">Period</th>
+                    <th scope="col">Managing Organization</th>
+                    <th scope="col">Connection Type</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Actions</th>
+                </tr>
+                </thead>
+                <tbody>
+                {{range .Items}}
+                <tr id="row-{{.Id}}">
+                    <th scope="row">{{ .Address }}</th>
+                    <td>{{ .PayloadType }}</td>
+                    <td>{{ .Period }}</td>
+                    <td>{{ .ManagingOrg }}</td>
+                    <td>{{ .ConnectionType }}</td>
+                    <td>
+                        <span class="badge bg-info">{{ .Status }}</span>
+                    </td>
+                    <td>
+                        <button class="btn btn-outline-dark btn-sm"
+                                hx-delete="/mcsdadmin/endpoint/{{.Id}}"
+                                hx-target="#row-{{.Id}}"
+                                hx-swap="delete"
+                        >
+                            Delete
+                        </button>
+                    </td>
+                </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{{end}}

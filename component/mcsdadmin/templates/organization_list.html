@@ -1,0 +1,49 @@
+{{define "main"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Organizations</h2>
+    <a href="/mcsdadmin/organization/new" class="btn btn-primary">New Organization</a>
+</div>
+<div class="card">
+    <div class="card-body">
+        <table class="table table-striped table-hover">
+            <thead class="table-light">
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">URA</th>
+                <th scope="col">Type</th>
+                <th scope="col">Active</th>
+                <th scope="col">Endpoints</th>
+                <th scope="col">Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            {{range .Items}}
+            <tr id="row-{{.Id}}">
+                <th scope="row">{{ .Name }}</th>
+                <th scope="row">{{ .URA }}</th>
+                <td>{{.Type}}</td>
+                <td>
+                    {{if .Active }}
+                    <span class="badge bg-success">Active</span>
+                    {{else}}
+                    <span class="badge bg-secondary">Inactive</span>
+                    {{end}}
+                </td>
+                <th scope="row">{{ .EndpointCount }}</th>
+                <td>
+                    <a class="btn btn-outline-dark btn-sm"
+                       href="/mcsdadmin/organization/{{.Id}}/endpoints">Endpoints</a>
+                    <button class="btn btn-outline-dark btn-sm"
+                            hx-delete="/mcsdadmin/organization/{{.Id}}"
+                            hx-target="#row-{{.Id}}"
+                    >
+                        Delete
+                    </button>
+                </td>
+            </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </div>
+</div>
+{{end}}

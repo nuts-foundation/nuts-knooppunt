@@ -1,0 +1,257 @@
+# Default values for nuts-knooppunt.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+replicaCount: 1
+
+# This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
+image:
+  repository: ghcr.io/nuts-foundation/nuts-knooppunt
+  # This sets the pull policy for images.
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "0.2.0"
+
+# This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+imagePullSecrets: []
+# This is to override the chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+# This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# This is for setting Kubernetes Annotations to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+podAnnotations: {}
+# This is for setting Kubernetes Labels to a Pod.
+# For more information checkout: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+podLabels: {}
+
+podSecurityContext:
+  {}
+  # fsGroup: 2000
+
+securityContext:
+  {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+# This is for setting up a service more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/
+service:
+  # This sets the service type more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types
+  type: ClusterIP
+  # This sets the ports more information can be found here: https://kubernetes.io/docs/concepts/services-networking/service/#field-spec-ports
+  port: 8080
+  internalPort: 8081
+
+gateway:
+  enabled: false
+  className: ""
+  name: nuts-knooppunt
+
+# This block is for setting up the httpRoute for more information can be found here: https://gateway-api.sigs.k8s.io/api-types/httproute/
+httpRoute:
+  enabled: false
+  hostnames:
+    - nuts-knooppunt.localhost
+  parentRefs:
+    - name: nuts-knooppunt
+
+# This block is for setting up the ingress for more information can be found here: https://kubernetes.io/docs/concepts/services-networking/ingress/
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+resources:
+  {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+livenessProbe:
+  httpGet:
+    path: /status
+    port: internal
+readinessProbe:
+  httpGet:
+    path: /status
+    port: internal
+
+# This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Additional volumes on the output Deployment definition.
+volumes: []
+# - name: foo
+#   secret:
+#     secretName: mysecret
+#     optional: false
+
+# Additional volumeMounts on the output Deployment definition.
+volumeMounts: []
+# - name: foo
+#   mountPath: "/etc/foo"
+#   readOnly: true
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Nuts Knooppunt application configuration
+# This is rendered into knooppunt.yml ConfigMap
+config:
+  # HTTP interface configuration
+  http:
+    public:
+      address: ":8080"  # TCP address for public HTTP interface
+      # url: ""  # Optional: Public base URL (e.g., https://public.example.com). If not specified, defaults to http://<hostname>:<port>
+    internal:
+      address: ":8081"  # TCP address for internal HTTP interface
+      # url: ""  # Optional: Internal base URL (e.g., http://internal.example.com). If not specified, defaults to http://<hostname>:<port>
+
+  # mCSD (Mobile Care Services Discovery) configuration
+  mcsd:
+    # Administration directories to synchronize from
+    # admin:
+    #   "example-org":
+    #     fhirbaseurl: "https://fhir.example.org/fhir"
+    #   "another-org":
+    #     fhirbaseurl: "https://fhir.another-org.com/fhir"
+
+    # Local FHIR directory configuration (query directory)
+    query:
+      fhirbaseurl: "http://fhir:8080/fhir"
+
+    # Exclude administration directories from being registered
+    # Use this to prevent your own FHIR server from being added as an admin directory
+    # This avoids syncing your own resources back to yourself
+    adminexclude:
+      - "http://fhir:8080/fhir"  # Exclude own query directory
+      # - "https://fhir.other-excluded.org/fhir"  # Add more exclusions as needed
+
+    # Resource types to synchronize from discovered mCSD directories
+    # If not specified, defaults to: Organization, Endpoint, Location, HealthcareService, PractitionerRole, Practitioner
+    # directoryresourcetypes:
+    #   - "Organization"
+    #   - "Endpoint"
+    #   - "Location"
+    #   - "HealthcareService"
+    #   - "PractitionerRole"
+    #   - "Practitioner"
+
+  # mCSD Admin configuration (web interface)
+  # mcsdadmin:
+  #   fhirbaseurl: "http://fhir:8080/fhir"
+
+  # MITZ Connector configuration
+  # mitz:
+  #   mitzbase: "http://mitz-server:8087/tst-us/mitz"
+  #   gatewaysystem: "urn:oid:2.16.840.1.113883.2.4.6.6.1"
+  #   sourcesystem: "urn:oid:2.16.840.1.113883.2.4.6.6.90000017"
+
+  # PDP (Policy Decision Point) configuration
+  # pdp:
+  #   enabled: true
+
+# Hapi FHIR configuration
+fhir:
+  enabled: false
+  fullnameOverride: fhir
+  multitenancy:
+    enabled: false
+  postgres:
+    enabled: true
+  gateway:
+    enabled: false
+  database:
+    storage:
+      size: 5Gi
+  configExtra:
+    # Lets the server generate UUIDs for resources instead of integers
+    "hapi.fhir.server_id_strategy": "UUID"
+    # Allow storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
+    "hapi.fhir.store_meta_source_information": "SOURCE_URI"
+    # Prevents encoding of the pipe char in queries
+    "server.tomcat.relaxed-query-chars": "|"
+    # The FHIR version to use
+    "hapi.fhir.version": "R4"
+
+# NUTS Node configuration
+# Set enabled: true to enable NUTS node deployment
+nuts:
+  enabled: false
+  fullnameOverride: nuts
+  # Environment variables for the NUTS node container
+  # The NUTS_STORAGE_SQL_CONNECTION is automatically set from a converted database secret
+  # CloudNativePG creates secrets with postgresql:// scheme, but NUTS node requires postgres://
+  # A Helm hook job automatically converts the secret format on install/upgrade
+  #
+  # To configure: Create your own values file (e.g., my-values.yaml) and set:
+  #   extraEnv:
+  #     - name: NUTS_STORAGE_SQL_CONNECTION
+  #       valueFrom:
+  #         secretKeyRef:
+  #           name: <your-release-name>-nuts-db-fixed
+  #           key: uri
+  #
+  # Example for release name "my-nuts-knooppunt":
+  extraEnv:
+    - name: NUTS_STORAGE_SQL_CONNECTION
+      valueFrom:
+        secretKeyRef:
+          name: RELEASE_NAME-nuts-db-fixed  # IMPORTANT: Update RELEASE_NAME to match your actual release name
+          key: uri
+  nuts:
+    config:
+      url: https://nuts.example.com  # Public URL of the NUTS node
+      crypto:
+        storage: fs  # Use filesystem storage for crypto keys (alternatives: vaultkv for Vault)
+  data:
+    persistedVolumeClaim:
+      enabled: true
+  database:
+    storage:
+      size: 5Gi
