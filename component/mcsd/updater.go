@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"slices"
 	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
@@ -24,7 +23,7 @@ import (
 //
 // Resources are only synced to the query directory if they come from non-discoverable directories.
 // Discoverable directories are for discovery only and their resources should not be synced.
-func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, sourceBaseURL string) (string, error) {
+func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, validationRules ValidationRules, isDiscoverableDirectory bool, sourceBaseURL string) (string, error) {
 	if entry.FullUrl == nil {
 		return "", errors.New("missing 'fullUrl' field")
 	}
@@ -82,8 +81,9 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 	if !ok {
 		return "", fmt.Errorf("not a valid resourceType (fullUrl=%s)", to.EmptyString(entry.FullUrl))
 	}
-	if !slices.Contains(allowedResourceTypes, resourceType) {
-		return "", fmt.Errorf("resource type %s not allowed", resourceType)
+
+	if err := ValidateUpdate(ctx, validationRules, entry.Resource); err != nil {
+		return "", err
 	}
 
 	// Only sync resources from non-discoverable directories to the query directory
