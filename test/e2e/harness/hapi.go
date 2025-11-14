@@ -27,6 +27,7 @@ func startHAPI(t *testing.T, dockerNetworkName string) *url.URL {
 			"hapi.fhir.delete_expunge_enabled": "true",
 			"hapi.fhir.allow_multiple_delete":  "true",
 			"NVI_AUDIENCE":                     "nvi",
+			"NVI_TENANT":                       "nvi",
 		},
 		WaitingFor: wait.ForHTTP("/fhir/DEFAULT/Account"),
 		LogConsumerCfg: &testcontainers.LogConsumerConfig{
