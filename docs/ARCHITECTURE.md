@@ -11,6 +11,12 @@ This document details the inner design of the Knooppunt.
 
 ![structurizr-GF_Localization_ComponentDiagram.svg](images/structurizr-GF_Localization_ComponentDiagram.svg)
 
+## Authentication
+
+The following diagram shows how authentication is handled in the Knooppunt.
+
+![dataexchange-authorization-sd.svg](images/dataexchange-authorization-sd.svg)
+
 ## Handling inbound data requests
 
 External data requests are authenticated and authorized by the Knooppunt.
@@ -26,3 +32,9 @@ The Knooppunt acts as Authorization Server ("AS") and Policy Decision Point ("PX
 ### Implementation
 
 ![structurizr-DataExchange_ComponentDiagram.svg](images/structurizr-DataExchange_ComponentDiagram.svg)
+
+### Sequence diagram
+
+The following diagram shows how inbound data requests are handled:
+
+![dataexchange-authorization-sd.svg](images/dataexchange-authorization-sd.svg)
