@@ -109,8 +109,7 @@ func New(config Config) (*Component, error) {
 			return nil, fmt.Errorf("register root administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
 		}
 	}
-	if result.config.DirectoryResourceTypes == nil {
-		log.Warn().Msg("No administration directories configured, using default configuration")
+	if result.config.DirectoryResourceTypes == nil || len(result.config.DirectoryResourceTypes) == 0 {
 		result.config.DirectoryResourceTypes = append([]string(nil), defaultDirectoryResourceTypes...)
 	}
 	return result, nil
