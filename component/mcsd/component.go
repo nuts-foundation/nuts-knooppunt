@@ -24,7 +24,7 @@ import (
 var _ component.Lifecycle = &Component{}
 
 var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
-var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole"}
+var defaultDirectoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
 
 // clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
 // to account for potential clock differences between client and FHIR server
@@ -53,14 +53,22 @@ type Component struct {
 	fhirClientFn func(baseURL *url.URL) fhirclient.Client
 
 	administrationDirectories []administrationDirectory
+	directoryResourceTypes    []string
 	lastUpdateTimes           map[string]string
 	updateMux                 *sync.RWMutex
+}
+
+func DefaultConfig() Config {
+	return Config{
+		DirectoryResourceTypes: defaultDirectoryResourceTypes,
+	}
 }
 
 type Config struct {
 	AdministrationDirectories map[string]DirectoryConfig `koanf:"admin"`
 	QueryDirectory            DirectoryConfig            `koanf:"query"`
 	ExcludeAdminDirectories   []string                   `koanf:"adminexclude"`
+	DirectoryResourceTypes    []string                   `koanf:"directoryresourcetypes"`
 }
 
 type DirectoryConfig struct {
@@ -92,13 +100,17 @@ func New(config Config) (*Component, error) {
 				UsePostSearch: false,
 			})
 		},
-		lastUpdateTimes: make(map[string]string),
-		updateMux:       &sync.RWMutex{},
+		directoryResourceTypes: config.DirectoryResourceTypes,
+		lastUpdateTimes:        make(map[string]string),
+		updateMux:              &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.AdministrationDirectories {
 		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true, ""); err != nil {
 			return nil, fmt.Errorf("register root administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
 		}
+	}
+	if result.config.DirectoryResourceTypes == nil || len(result.config.DirectoryResourceTypes) == 0 {
+		result.config.DirectoryResourceTypes = append([]string(nil), defaultDirectoryResourceTypes...)
 	}
 	return result, nil
 }
@@ -307,7 +319,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 					continue
 				}
 				log.Ctx(ctx).Debug().Msgf("Discovered mCSD Directory: %s", endpoint.Address)
-				err := c.registerAdministrationDirectory(ctx, endpoint.Address, directoryResourceTypes, false, *entry.FullUrl)
+				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, *entry.FullUrl)
 				if err != nil {
 					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
 				}

@@ -55,23 +55,21 @@ func Start(t *testing.T) Details {
 	testData, err := vectors.Load(hapiBaseURL)
 	require.NoError(t, err, "failed to load test data into HAPI FHIR server")
 
-	knooppuntInternalURL := startKnooppunt(t, cmd.Config{
-		HTTP: http.TestConfig(),
-		MCSD: mcsd.Config{
-			AdministrationDirectories: map[string]mcsd.DirectoryConfig{
-				"lrza": {
-					FHIRBaseURL: testData.LRZa.FHIRBaseURL.String(),
-				},
-			},
-			QueryDirectory: mcsd.DirectoryConfig{
-				FHIRBaseURL: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
-			},
+	config := cmd.DefaultConfig()
+	config.HTTP = http.TestConfig()
+	config.MCSD.AdministrationDirectories = map[string]mcsd.DirectoryConfig{
+		"lrza": {
+			FHIRBaseURL: testData.LRZa.FHIRBaseURL.String(),
 		},
-		NVI: nvi.Config{
-			FHIRBaseURL: testData.NVI.FHIRBaseURL.String(),
-			Audience:    "nvi",
-		},
-	})
+	}
+	config.MCSD.QueryDirectory = mcsd.DirectoryConfig{
+		FHIRBaseURL: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
+	}
+	config.NVI = nvi.Config{
+		FHIRBaseURL: testData.NVI.FHIRBaseURL.String(),
+		Audience:    "nvi",
+	}
+	knooppuntInternalURL := startKnooppunt(t, config)
 
 	return Details{
 		KnooppuntInternalBaseURL: knooppuntInternalURL,
