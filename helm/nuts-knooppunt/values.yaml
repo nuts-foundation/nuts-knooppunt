@@ -142,12 +142,68 @@ tolerations: []
 
 affinity: {}
 
-# PostgreSQL configuration
+# Nuts Knooppunt application configuration
+# This is rendered into knooppunt.yml ConfigMap
+config:
+  # HTTP interface configuration
+  http:
+    public:
+      address: ":8080"  # TCP address for public HTTP interface
+      # url: ""  # Optional: Public base URL (e.g., https://public.example.com). If not specified, defaults to http://<hostname>:<port>
+    internal:
+      address: ":8081"  # TCP address for internal HTTP interface
+      # url: ""  # Optional: Internal base URL (e.g., http://internal.example.com). If not specified, defaults to http://<hostname>:<port>
+
+  # mCSD (Mobile Care Services Discovery) configuration
+  mcsd:
+    # Administration directories to synchronize from
+    # admin:
+    #   "example-org":
+    #     fhirbaseurl: "https://fhir.example.org/fhir"
+    #   "another-org":
+    #     fhirbaseurl: "https://fhir.another-org.com/fhir"
+
+    # Local FHIR directory configuration (query directory)
+    query:
+      fhirbaseurl: "http://fhir:8080/fhir"
+
+    # Exclude administration directories from being registered
+    # Use this to prevent your own FHIR server from being added as an admin directory
+    # This avoids syncing your own resources back to yourself
+    adminexclude:
+      - "http://fhir:8080/fhir"  # Exclude own query directory
+      # - "https://fhir.other-excluded.org/fhir"  # Add more exclusions as needed
+
+    # Resource types to synchronize from discovered mCSD directories
+    # If not specified, defaults to: Organization, Endpoint, Location, HealthcareService, PractitionerRole, Practitioner
+    # directoryresourcetypes:
+    #   - "Organization"
+    #   - "Endpoint"
+    #   - "Location"
+    #   - "HealthcareService"
+    #   - "PractitionerRole"
+    #   - "Practitioner"
+
+  # mCSD Admin configuration (web interface)
+  # mcsdadmin:
+  #   fhirbaseurl: "http://fhir:8080/fhir"
+
+  # MITZ Connector configuration
+  # mitz:
+  #   mitzbase: "http://mitz-server:8087/tst-us/mitz"
+  #   gatewaysystem: "urn:oid:2.16.840.1.113883.2.4.6.6.1"
+  #   sourcesystem: "urn:oid:2.16.840.1.113883.2.4.6.6.90000017"
+
+  # PDP (Policy Decision Point) configuration
+  # pdp:
+  #   enabled: true
 
 # Hapi FHIR configuration
 fhir:
   enabled: false
   fullnameOverride: fhir
+  multitenancy:
+    enabled: false
   postgres:
     enabled: true
   gateway:
@@ -155,6 +211,15 @@ fhir:
   database:
     storage:
       size: 5Gi
+  configExtra:
+    # Lets the server generate UUIDs for resources instead of integers
+    "hapi.fhir.server_id_strategy": "UUID"
+    # Allow storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
+    "hapi.fhir.store_meta_source_information": "SOURCE_URI"
+    # Prevents encoding of the pipe char in queries
+    "server.tomcat.relaxed-query-chars": "|"
+    # The FHIR version to use
+    "hapi.fhir.version": "R4"
 
 # NUTS Node configuration
 # Set enabled: true to enable NUTS node deployment

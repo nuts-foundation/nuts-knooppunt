@@ -18,6 +18,6 @@ docker run --rm -v "${PWD}:/docs:ro" -v "${PWD}/images_im:/diagrams" \
 # Post-processing: convert generated PlantUML files to SVG using PlantUML Docker image.
 # This will look for files with .puml or .plantuml extensions under docs/diagrams
 # and run PlantUML to produce .svg files alongside them.
-
+cp "${PWD}/"*.puml "${PWD}/images_im/"
 docker run --rm -v "${PWD}/images_im:/diagrams:ro" -v "${PWD}/images:/images" plantuml/plantuml:latest \
  plantuml -verbose -tsvg  -o /images /diagrams

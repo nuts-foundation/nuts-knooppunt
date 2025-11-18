@@ -60,6 +60,11 @@ spec:
                   name: {{ include "fhir.fullname" . }}-db-app
                   key: password
           {{- end }}
+          {{- if .Values.multitenancy.enabled }}
+            # Enable partitioning and allow string tenant identifiers
+            - name: hapi.fhir.partitioning.allow_references_across_partitions
+              value: "false"
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "fhir.fullname" . }}-config

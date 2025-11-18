@@ -1,6 +1,6 @@
 {{define "main"}}
 <div id="edit-associations">
-    <h3>Organization: Care4U Hospital</h3>
+    <h3>Organization: {{ .Organization.Name }}</h3>
     <label>Endpoints:</label>
     <div id="endpoints">
         {{ range .EndpointCards }}

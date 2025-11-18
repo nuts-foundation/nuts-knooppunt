@@ -16,6 +16,10 @@ func TestLoadConfig_Default(t *testing.T) {
 	// Should have default values
 	assert.False(t, config.Nuts.Enabled)
 	assert.Equal(t, "", config.MCSDAdmin.FHIRBaseURL)
+
+	// MCSD should have default DirectoryResourceTypes
+	expectedResourceTypes := []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
+	assert.Equal(t, expectedResourceTypes, config.MCSD.DirectoryResourceTypes)
 }
 
 func TestLoadConfig_FromYAML(t *testing.T) {

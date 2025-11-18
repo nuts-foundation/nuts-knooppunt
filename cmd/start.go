@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
-	httpComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
+	libHTTPComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
@@ -28,11 +28,12 @@ func Start(ctx context.Context, config Config) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to create mCSD Update Client")
 	}
+	httpComponent := libHTTPComponent.New(config.HTTP, publicMux, internalMux)
 	components := []component.Lifecycle{
 		mcsdUpdateClient,
 		mcsdadmin.New(config.MCSDAdmin),
 		status.New(),
-		httpComponent.New(publicMux, internalMux),
+		httpComponent,
 	}
 
 	if config.Nuts.Enabled {

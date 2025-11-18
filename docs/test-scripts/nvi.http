@@ -45,5 +45,3 @@ Content-Type: application/fhir+json
 
 POST http://localhost:8081/nvi/DocumentReference
 Content-Type: application/fhir+json
-
-asdasdsad

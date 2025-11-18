@@ -24,7 +24,7 @@ import (
 var _ component.Lifecycle = &Component{}
 
 var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
-var directoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService"}
+var defaultDirectoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
 
 // clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
 // to account for potential clock differences between client and FHIR server
@@ -53,13 +53,22 @@ type Component struct {
 	fhirClientFn func(baseURL *url.URL) fhirclient.Client
 
 	administrationDirectories []administrationDirectory
+	directoryResourceTypes    []string
 	lastUpdateTimes           map[string]string
 	updateMux                 *sync.RWMutex
+}
+
+func DefaultConfig() Config {
+	return Config{
+		DirectoryResourceTypes: defaultDirectoryResourceTypes,
+	}
 }
 
 type Config struct {
 	AdministrationDirectories map[string]DirectoryConfig `koanf:"admin"`
 	QueryDirectory            DirectoryConfig            `koanf:"query"`
+	ExcludeAdminDirectories   []string                   `koanf:"adminexclude"`
+	DirectoryResourceTypes    []string                   `koanf:"directoryresourcetypes"`
 }
 
 type DirectoryConfig struct {
@@ -72,6 +81,7 @@ type administrationDirectory struct {
 	fhirBaseURL   string
 	resourceTypes []string
 	discover      bool
+	sourceURL     string // The fullUrl from the Bundle entry that created this Endpoint, used for unregistration on DELETE
 }
 
 type DirectoryUpdateReport struct {
@@ -90,13 +100,17 @@ func New(config Config) (*Component, error) {
 				UsePostSearch: false,
 			})
 		},
-		lastUpdateTimes: make(map[string]string),
-		updateMux:       &sync.RWMutex{},
+		directoryResourceTypes: config.DirectoryResourceTypes,
+		lastUpdateTimes:        make(map[string]string),
+		updateMux:              &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.AdministrationDirectories {
-		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true); err != nil {
+		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true, ""); err != nil {
 			return nil, fmt.Errorf("register root administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
 		}
+	}
+	if result.config.DirectoryResourceTypes == nil || len(result.config.DirectoryResourceTypes) == 0 {
+		result.config.DirectoryResourceTypes = append([]string(nil), defaultDirectoryResourceTypes...)
 	}
 	return result, nil
 }
@@ -124,7 +138,7 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 	})
 }
 
-func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool) error {
+func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool, sourceURL string) error {
 	// Must be a valid http or https URL
 	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
 	if err != nil {
@@ -133,6 +147,15 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 	parsedFHIRBaseURL.Scheme = strings.ToLower(parsedFHIRBaseURL.Scheme)
 	if (parsedFHIRBaseURL.Scheme != "https" && parsedFHIRBaseURL.Scheme != "http") || parsedFHIRBaseURL.Host == "" {
 		return fmt.Errorf("invalid FHIR base URL (url=%s)", fhirBaseURL)
+	}
+
+	// Check if the URL is in the exclusion list (also trim exclusion list entries for consistent matching)
+	trimmedFHIRBaseURL := strings.TrimRight(fhirBaseURL, "/")
+	for _, excludedURL := range c.config.ExcludeAdminDirectories {
+		if strings.TrimRight(excludedURL, "/") == trimmedFHIRBaseURL {
+			log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURL).Msg("Skipping administration directory registration: excluded by configuration")
+			return nil
+		}
 	}
 
 	exists := slices.ContainsFunc(c.administrationDirectories, func(directory administrationDirectory) bool {
@@ -145,9 +168,38 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 		resourceTypes: resourceTypes,
 		fhirBaseURL:   fhirBaseURL,
 		discover:      discover,
+		sourceURL:     sourceURL,
 	})
 	log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURL).Msgf("Registered mCSD Directory (discover=%v)", discover)
 	return nil
+}
+
+// unregisterAdministrationDirectory removes an administration directory from the list by its fullUrl.
+// This is called when an Endpoint is deleted to prevent it from being fetched in future updates.
+// The fullUrl parameter is the Bundle entry fullUrl that was used when the Endpoint was registered.
+func (c *Component) unregisterAdministrationDirectory(ctx context.Context, fullUrl string) {
+	initialCount := len(c.administrationDirectories)
+	c.administrationDirectories = slices.DeleteFunc(c.administrationDirectories, func(dir administrationDirectory) bool {
+		return dir.sourceURL == fullUrl
+	})
+	if len(c.administrationDirectories) < initialCount {
+		log.Ctx(ctx).Info().Str("full_url", fullUrl).Msg("Unregistered mCSD Directory after Endpoint deletion")
+	}
+}
+
+// processEndpointDeletes processes DELETE operations for Endpoints and unregisters them from administrationDirectories.
+// This prevents deleted Endpoints from being fetched in future updates, fixing issue #241.
+func (c *Component) processEndpointDeletes(ctx context.Context, entries []fhir.BundleEntry) {
+	for _, entry := range entries {
+		if entry.Request != nil && entry.Request.Method == fhir.HTTPVerbDELETE && entry.FullUrl != nil {
+			parts := strings.Split(entry.Request.Url, "/")
+			if len(parts) >= 2 && parts[0] == "Endpoint" {
+				// Unregister the administration directory using the fullUrl
+				// The fullUrl uniquely identifies the resource that was deleted
+				c.unregisterAdministrationDirectory(ctx, *entry.FullUrl)
+			}
+		}
+	}
 }
 
 func (c *Component) update(ctx context.Context) (UpdateReport, error) {
@@ -206,7 +258,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 
 	var entries []fhir.BundleEntry
 	var firstSearchSet fhir.Bundle
-	for i, resourceType := range directoryResourceTypes {
+	for i, resourceType := range allowedResourceTypes {
 		currEntries, currSearchSet, err := c.queryHistory(ctx, remoteAdminDirectoryFHIRClient, resourceType, searchParams)
 		if err != nil {
 			return DirectoryUpdateReport{}, fmt.Errorf("failed to query %s history: %w", resourceType, err)
@@ -221,6 +273,11 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
 	deduplicatedEntries := deduplicateHistoryEntries(entries)
 
+	// Pre-process Endpoint DELETEs to unregister administration directories
+	if allowDiscovery {
+		c.processEndpointDeletes(ctx, deduplicatedEntries)
+	}
+
 	// Build transaction with deterministic conditional references
 	tx := fhir.Bundle{
 		Type:  fhir.BundleTypeTransaction,
@@ -229,12 +286,19 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 
 	var report DirectoryUpdateReport
 	for i, entry := range deduplicatedEntries {
+		if entry.Request == nil {
+			msg := fmt.Sprintf("Skipping entry with no request: #%d", i)
+			report.Warnings = append(report.Warnings, msg)
+			continue
+		}
 		log.Ctx(ctx).Trace().Str("fhir_server", fhirBaseURLRaw).Msgf("Processing entry: %s", entry.Request.Url)
 		resourceType, err := buildUpdateTransaction(ctx, &tx, entry, allowedResourceTypes, allowDiscovery, fhirBaseURLRaw)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
 		}
+
+		// Handle Endpoint discovery and registration
 		if allowDiscovery && resourceType == "Endpoint" && entry.Resource != nil {
 			var endpoint fhir.Endpoint
 			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
@@ -248,8 +312,14 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			}
 
 			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
+				// Use the fullUrl from the Bundle entry to track this Endpoint
+				// The fullUrl uniquely identifies the resource and can be used for later unregistration
+				if entry.FullUrl == nil {
+					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: Endpoint missing fullUrl", i))
+					continue
+				}
 				log.Ctx(ctx).Debug().Msgf("Discovered mCSD Directory: %s", endpoint.Address)
-				err := c.registerAdministrationDirectory(ctx, endpoint.Address, directoryResourceTypes, false)
+				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, *entry.FullUrl)
 				if err != nil {
 					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
 				}

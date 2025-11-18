@@ -31,8 +31,9 @@ You also need to provide a FHIR server as mCSD Query Directory, to which mCSD re
 
 Then, configure:
 
-- the Root Administration Directory to synchronize from (`mcsd.admin.<key>.fhirbaseurl`), and
-- the local Query Directory to synchronize to (`mcsd.query.fhirbaseurl`).
+- the Root Administration Directory to synchronize from (`mcsd.admin.<key>.fhirbaseurl`),
+- the local Query Directory to synchronize to (`mcsd.query.fhirbaseurl`), and
+- (optional) directories to exclude from synchronization (`mcsd.adminexclude`), which is useful to prevent self-referencing loops when your own query directory appears as a discovered Endpoint.
 
 ### Triggering synchronization
 
@@ -181,7 +182,7 @@ Set the `notify_endpoint` in your Knooppunt configuration (`knooppunt.yml`):
 
 ```yaml
 mitz:
-  mitzbase: "https://tst-api.mijn-mitz.nl"
+  mitzbase: "https://tst-api.mijn-mitz.nl/tst-us/mitz"
   notify_endpoint: "https://your-platform.example.com/mitz/notify"
   # ... other MITZ settings
 ```
