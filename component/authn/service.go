@@ -18,6 +18,7 @@ var _ component.Lifecycle = (*Component)(nil)
 const (
 	tokenEndpointPath              = "/auth/token"
 	tokenIntrospectionEndpointPath = "/auth/introspect"
+	authorizationEndpointPath      = "/auth/authorize"
 )
 
 type Config struct {
@@ -29,7 +30,7 @@ var endpointConfig = struct {
 	internalEndpoints []string
 }{
 	publicEndpoints: []string{
-		// TODO: for now, no browser interaction (we don't supported authorized code flow yet), so no public endpoints
+		authorizationEndpointPath,
 	},
 	internalEndpoints: []string{
 		tokenEndpointPath,
@@ -133,19 +134,20 @@ func newOIDCProvider(storage op.Storage, httpInterfaces httpComponent.InterfaceI
 
 	internalBaseURL := httpInterfaces.Internal().URL()
 	op.DefaultEndpoints = &op.Endpoints{
-		Authorization:       op.DefaultEndpoints.Authorization,
-		Token:               op.NewEndpointWithURL(tokenEndpointPath, internalBaseURL.JoinPath(tokenEndpointPath).String()),
-		Introspection:       op.NewEndpointWithURL(tokenIntrospectionEndpointPath, internalBaseURL.JoinPath(tokenIntrospectionEndpointPath).String()),
-		Userinfo:            op.DefaultEndpoints.Userinfo,
+		// Privately available endpoints
+		Token:         op.NewEndpointWithURL(tokenEndpointPath, internalBaseURL.JoinPath(tokenEndpointPath).String()),
+		Introspection: op.NewEndpointWithURL(tokenIntrospectionEndpointPath, internalBaseURL.JoinPath(tokenIntrospectionEndpointPath).String()),
+		// Publicly available endpoints
+		Authorization: op.NewEndpointWithURL(authorizationEndpointPath, internalBaseURL.JoinPath(authorizationEndpointPath).String()),
+		// Unsupported endpoints (for now)
 		Revocation:          op.DefaultEndpoints.Revocation,
+		Userinfo:            op.DefaultEndpoints.Userinfo,
 		EndSession:          op.DefaultEndpoints.EndSession,
 		JwksURI:             op.DefaultEndpoints.JwksURI,
 		DeviceAuthorization: op.DefaultEndpoints.DeviceAuthorization,
 	}
 
 	opts := append([]op.Option{
-		// as an example on how to customize an endpoint this will change the authorization_endpoint from /authorize to /auth
-		op.WithCustomAuthEndpoint(op.NewEndpoint("auth")),
 		// TODO
 		//op.WithLogger(logrus.StandardLogger()),
 	}, extraOptions...)
