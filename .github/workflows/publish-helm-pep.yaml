@@ -1,0 +1,55 @@
+---
+name: "Publish Helm Chart - pep"
+
+on:
+  push:
+    branches:
+      - main
+      - feat/helm-oci-registry
+    paths:
+      - "helm/pep/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-pep:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package and push helm-pep chart
+        run: |
+          # Package helm-pep
+          helm package helm/pep -d .helm-packages
+
+          # Push to GHCR
+          helm push .helm-packages/helm-pep-*.tgz oci://ghcr.io/${{ github.repository_owner }}
+
+      - name: Output published chart
+        run: |
+          PEP_VERSION=$(grep "^version:" helm/pep/Chart.yaml | awk '{print $2}')
+
+          echo "Published Helm chart:"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-pep:$PEP_VERSION"
+          echo ""
+          echo "Install with:"
+          echo "  helm install my-pep oci://ghcr.io/${{ github.repository_owner }}/helm-pep --version $PEP_VERSION"
