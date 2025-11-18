@@ -4,7 +4,7 @@ This directory contains Helm charts for nuts-knooppunt and its components.
 
 ## Available Charts
 
-- `helm-nuts-knooppunt` - Main chart with fhir and nuts-node dependencies
+- `helm-nuts-knooppunt` - Main chart with fhir, pep, and nuts-node dependencies
 - `helm-fhir` - HAPI FHIR server (standalone)
 - `helm-pep` - Policy Enforcement Point (standalone)
 
@@ -28,7 +28,7 @@ The nuts-knooppunt chart version is coupled to the application version.
 GitHub Actions automatically:
 - Extracts version from tag (`v0.2.0` → `0.2.0`)
 - Updates `helm/nuts-knooppunt/Chart.yaml` with `version` and `appVersion`
-- Pulls dependencies (helm-fhir, nuts-node-chart) from their registries
+- Pulls dependencies (helm-fhir, helm-pep, nuts-node-chart) from their registries
 - Packages and publishes helm-nuts-knooppunt to GHCR
 
 **Note:** The workflow runs on any git tag matching `v*`.

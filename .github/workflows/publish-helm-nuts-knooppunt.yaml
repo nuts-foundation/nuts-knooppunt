@@ -59,7 +59,7 @@ jobs:
       - name: Update chart dependencies
         run: |
           cd helm/nuts-knooppunt
-          # Pull dependencies (helm-fhir, nuts-node-chart) from their registries
+          # Pull dependencies (helm-fhir, helm-pep, nuts-node-chart) from their registries
           helm dependency update
 
       - name: Package and push nuts-knooppunt chart
