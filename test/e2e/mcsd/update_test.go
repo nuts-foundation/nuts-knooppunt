@@ -33,10 +33,10 @@ func Test_mCSDUpdateClient(t *testing.T) {
 
 		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
 		t.Run("assert Sunflower organization resources", func(t *testing.T) {
-			expectedOrg := lrza.Care2Cure()
+			expectedOrg := lrza.CareHomeSunflower()
 			org, err := searchOrg(queryFHIRClient, harnessDetail.SunflowerURA)
 			require.NoError(t, err)
-			assert.Equal(t, "Sunflower Care Home", *org.Name)
+			assert.Equal(t, *expectedOrg.Name, *org.Name)
 			assert.NotEqual(t, *expectedOrg.Id, *org.Id, "copy of organization in local Query Directory should have new ID")
 			t.Run("meta", func(t *testing.T) {
 				expectedSource := harnessDetail.SunflowerFHIRBaseURL.JoinPath("Organization", *sunflower.Organization().Id)

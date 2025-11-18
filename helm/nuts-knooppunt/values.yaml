@@ -143,6 +143,15 @@ affinity: {}
 # Nuts Knooppunt application configuration
 # This is rendered into knooppunt.yml ConfigMap
 config:
+  # HTTP interface configuration
+  http:
+    public:
+      address: ":8080"  # TCP address for public HTTP interface
+      # url: ""  # Optional: Public base URL (e.g., https://public.example.com). If not specified, defaults to http://<hostname>:<port>
+    internal:
+      address: ":8081"  # TCP address for internal HTTP interface
+      # url: ""  # Optional: Internal base URL (e.g., http://internal.example.com). If not specified, defaults to http://<hostname>:<port>
+
   # mCSD (Mobile Care Services Discovery) configuration
   mcsd:
     # Administration directories to synchronize from
@@ -162,6 +171,16 @@ config:
     adminexclude:
       - "http://fhir:8080/fhir"  # Exclude own query directory
       # - "https://fhir.other-excluded.org/fhir"  # Add more exclusions as needed
+
+    # Resource types to synchronize from discovered mCSD directories
+    # If not specified, defaults to: Organization, Endpoint, Location, HealthcareService, PractitionerRole, Practitioner
+    # directoryresourcetypes:
+    #   - "Organization"
+    #   - "Endpoint"
+    #   - "Location"
+    #   - "HealthcareService"
+    #   - "PractitionerRole"
+    #   - "Practitioner"
 
   # mCSD Admin configuration (web interface)
   # mcsdadmin:

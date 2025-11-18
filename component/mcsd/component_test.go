@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -53,17 +54,18 @@ func TestComponent_update_regression(t *testing.T) {
 		"/Location/_history":          &locationHistoryResponseStr,
 		"/Organization/_history":      &organizationHistoryResponseStr,
 		"/HealthcareService/_history": &emptyResponseStr,
+		"/PractitionerRole/_history":  &emptyResponseStr,
 	})
 	server := httptest.NewServer(mux)
 
 	localClient := &test.StubFHIRClient{}
-	component, err := New(Config{
-		AdministrationDirectories: map[string]DirectoryConfig{
-			"lrza": {
-				FHIRBaseURL: server.URL,
-			},
+	config := DefaultConfig()
+	config.AdministrationDirectories = map[string]DirectoryConfig{
+		"lrza": {
+			FHIRBaseURL: server.URL,
 		},
-	})
+	}
+	component, err := New(config)
 	require.NoError(t, err)
 	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
 		if baseURL.String() == server.URL {
@@ -78,10 +80,10 @@ func TestComponent_update_regression(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, report)
-	// Expect warnings about Location resources (root directories only support Organization and Endpoint)
-	// The regression data contains Location resources which should produce warnings
-	assert.NotEmpty(t, report[server.URL].Warnings, "expected warnings about Location resources not being allowed")
-	assert.Contains(t, report[server.URL].Warnings[0], "Location not allowed", "expected warning about Location not being allowed in root directory")
+	// Root directories only query Organization and Endpoint resource types
+	// Location history is provided in test data but should not be queried (and thus no warnings about it)
+	// The test verifies the regression data can be processed without errors
+	assert.Empty(t, report[server.URL].Warnings, "should have no warnings since Location is not queried for root directories")
 	assert.Empty(t, report[server.URL].Errors)
 	assert.NotNil(t, report[server.URL].Errors, "expected an empty slice")
 }
@@ -110,6 +112,8 @@ func TestComponent_update(t *testing.T) {
 		"/Organization/_history":      &rootDirOrganizationHistoryResponse,
 		"/HealthcareService/_history": &emptyResponseStr,
 		"/Location/_history":          &emptyResponseStr,
+		"/PractitionerRole/_history":  &emptyResponseStr,
+		"/Practitioner/_history":      &emptyResponseStr,
 	})
 
 	rootDirServer := httptest.NewServer(rootDirMux)
@@ -140,6 +144,8 @@ func TestComponent_update(t *testing.T) {
 		"/fhir/Organization/_history_page2": &org1DirOrganizationHistoryPage2Response,
 		"/fhir/Location/_history":           &emptyResponseStr,
 		"/fhir/HealthcareService/_history":  &emptyResponseStr,
+		"/fhir/PractitionerRole/_history":   &emptyResponseStr,
+		"/fhir/Practitioner/_history":       &emptyResponseStr,
 	})
 
 	org1DirServer := httptest.NewServer(org1DirMux)
@@ -152,16 +158,16 @@ func TestComponent_update(t *testing.T) {
 	org1DirOrganizationHistoryPage1Response = strings.ReplaceAll(org1DirOrganizationHistoryPage1Response, "{{ORG1_DIR_BASEURL}}", orgDir1BaseURL)
 
 	localClient := &test.StubFHIRClient{}
-	component, err := New(Config{
-		AdministrationDirectories: map[string]DirectoryConfig{
-			"rootDir": {
-				FHIRBaseURL: rootDirServer.URL,
-			},
+	config := DefaultConfig()
+	config.AdministrationDirectories = map[string]DirectoryConfig{
+		"rootDir": {
+			FHIRBaseURL: rootDirServer.URL,
 		},
-		QueryDirectory: DirectoryConfig{
-			FHIRBaseURL: "http://example.com/local/fhir",
-		},
-	})
+	}
+	config.QueryDirectory = DirectoryConfig{
+		FHIRBaseURL: "http://example.com/local/fhir",
+	}
+	component, err := New(config)
 	require.NoError(t, err)
 
 	unknownFHIRServerClient := &test.StubFHIRClient{
@@ -280,21 +286,22 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	mockHistoryEndpoints(rootDirMux, map[string]*string{
 		"/Location/_history":          &emptyResponseStr2,
 		"/HealthcareService/_history": &emptyResponseStr2,
+		"/PractitionerRole/_history":  &emptyResponseStr2,
 	})
 
 	rootDirServer := httptest.NewServer(rootDirMux)
 
 	localClient := &test.StubFHIRClient{}
-	component, err := New(Config{
-		AdministrationDirectories: map[string]DirectoryConfig{
-			"rootDir": {
-				FHIRBaseURL: rootDirServer.URL,
-			},
+	config := DefaultConfig()
+	config.AdministrationDirectories = map[string]DirectoryConfig{
+		"rootDir": {
+			FHIRBaseURL: rootDirServer.URL,
 		},
-		QueryDirectory: DirectoryConfig{
-			FHIRBaseURL: "http://example.com/local/fhir",
-		},
-	})
+	}
+	config.QueryDirectory = DirectoryConfig{
+		FHIRBaseURL: "http://example.com/local/fhir",
+	}
+	component, err := New(config)
 	require.NoError(t, err)
 
 	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
@@ -561,7 +568,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		server := startMockServer(t, map[string]string{
 			"/fhir/Organization/_history": "test/bugs/233-no-bundle-request/organization_response.json",
 		})
-		component, err := New(Config{})
+		component, err := New(DefaultConfig())
 		require.NoError(t, err)
 		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false)
 		require.NoError(t, err)
@@ -584,11 +591,11 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		defer server.Close()
 
 		capturingClient := &test.StubFHIRClient{}
-		component, err := New(Config{
-			QueryDirectory: DirectoryConfig{
-				FHIRBaseURL: "http://example.com/local/fhir",
-			},
-		})
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{
+			FHIRBaseURL: "http://example.com/local/fhir",
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
@@ -683,17 +690,25 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
 		})
-
-		component, err := New(Config{
-			QueryDirectory: DirectoryConfig{
-				FHIRBaseURL: "http://example.com/local/fhir",
-			},
-			AdministrationDirectories: map[string]DirectoryConfig{
-				"test-dir": {
-					FHIRBaseURL: server.URL + "/fhir",
-				},
-			},
+		mux.HandleFunc("/fhir/PractitionerRole/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
 		})
+		mux.HandleFunc("/fhir/Practitioner/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
+		})
+
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{
+			FHIRBaseURL: "http://example.com/local/fhir",
+		}
+		config.AdministrationDirectories = map[string]DirectoryConfig{
+			"test-dir": {
+				FHIRBaseURL: server.URL + "/fhir",
+			},
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Mock FHIR client that tracks operations
@@ -753,6 +768,224 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		// Verify DELETE was sent to query directory
 		assert.Equal(t, 1, report2.CountDeleted, "Should have 1 deleted resource")
 	})
+
+	t.Run("respects allowedResourceTypes parameter and only queries specified resource types", func(t *testing.T) {
+		// This test verifies that updateFromDirectory only queries the resource types
+		// specified in the allowedResourceTypes parameter, not all resource types.
+		// This prevents 404 errors when the FHIR server doesn't support certain resource types.
+
+		ctx := context.Background()
+
+		// Track which resource type endpoints were called
+		calledEndpoints := make(map[string]bool)
+		var mu sync.Mutex
+
+		mux := http.NewServeMux()
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		// Empty bundle response
+		emptyBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": []
+		}`
+
+		// Set up handlers that track which endpoints are called
+		resourceTypes := []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole"}
+		for _, rt := range resourceTypes {
+			resourceType := rt // capture for closure
+			mux.HandleFunc("/fhir/"+resourceType+"/_history", func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				calledEndpoints[resourceType] = true
+				mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(emptyBundle))
+			})
+		}
+
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{
+			FHIRBaseURL: "http://example.com/local/fhir",
+		}
+		component, err := New(config)
+		require.NoError(t, err)
+
+		capturingClient := &test.StubFHIRClient{}
+		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+			if baseURL.String() == server.URL+"/fhir" {
+				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
+			}
+			if baseURL.String() == "http://example.com/local/fhir" {
+				return capturingClient
+			}
+			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
+		}
+
+		// Call updateFromDirectory with only Organization and Endpoint
+		allowedTypes := []string{"Organization", "Endpoint"}
+		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", allowedTypes, false)
+
+		require.NoError(t, err)
+		require.Empty(t, report.Errors)
+
+		// Verify only the allowed resource types were queried
+		mu.Lock()
+		defer mu.Unlock()
+
+		assert.True(t, calledEndpoints["Organization"], "Organization/_history should have been called")
+		assert.True(t, calledEndpoints["Endpoint"], "Endpoint/_history should have been called")
+		assert.False(t, calledEndpoints["Location"], "Location/_history should NOT have been called (not in allowedResourceTypes)")
+		assert.False(t, calledEndpoints["HealthcareService"], "HealthcareService/_history should NOT have been called (not in allowedResourceTypes)")
+		assert.False(t, calledEndpoints["PractitionerRole"], "PractitionerRole/_history should NOT have been called (not in allowedResourceTypes)")
+
+		// Verify exactly 2 resource types were queried
+		assert.Equal(t, 2, len(calledEndpoints), "Should have queried exactly 2 resource types")
+	})
+
+	t.Run("uses configured DirectoryResourceTypes for discovered endpoints", func(t *testing.T) {
+		// This test verifies that when DirectoryResourceTypes is configured,
+		// those resource types are used when discovering and registering new Endpoints.
+
+		ctx := context.Background()
+
+		// Track which resource type endpoints were called
+		calledEndpoints := make(map[string]bool)
+		var mu sync.Mutex
+
+		mux := http.NewServeMux()
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		// Response with an Endpoint that should be discovered
+		// Must have the correct payloadType coding to be recognized as an mCSD directory
+		discoveredEndpointBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": [{
+				"fullUrl": "http://example.com/Endpoint/discovered-endpoint",
+				"resource": {
+					"resourceType": "Endpoint",
+					"id": "discovered-endpoint",
+					"status": "active",
+					"connectionType": {
+						"system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
+						"code": "hl7-fhir-rest"
+					},
+					"address": "` + server.URL + `/fhir/discovered",
+					"payloadType": [{
+						"coding": [{
+							"system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities",
+							"code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"
+						}]
+					}]
+				},
+				"request": {
+					"method": "POST",
+					"url": "Endpoint"
+				}
+			}]
+		}`
+
+		emptyBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": []
+		}`
+
+		// Set up handlers that track which endpoints are called
+		// All potential resource types
+		allResourceTypes := []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
+		for _, rt := range allResourceTypes {
+			resourceType := rt // capture for closure
+			mux.HandleFunc("/fhir/"+resourceType+"/_history", func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				calledEndpoints[resourceType] = true
+				mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				// Return discovered endpoint only for Endpoint queries
+				if resourceType == "Endpoint" {
+					w.Write([]byte(discoveredEndpointBundle))
+				} else {
+					w.Write([]byte(emptyBundle))
+				}
+			})
+			// Handler for discovered directory
+			mux.HandleFunc("/fhir/discovered/"+resourceType+"/_history", func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				calledEndpoints["discovered/"+resourceType] = true
+				mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				w.Write([]byte(emptyBundle))
+			})
+		}
+
+		// Create component with custom DirectoryResourceTypes that includes Practitioner
+		customResourceTypes := []string{"Organization", "Endpoint", "Practitioner"}
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{
+			FHIRBaseURL: "http://example.com/local/fhir",
+		}
+		config.DirectoryResourceTypes = customResourceTypes
+		component, err := New(config)
+		require.NoError(t, err)
+
+		// Verify the component stored the custom resource types
+		assert.Equal(t, customResourceTypes, component.directoryResourceTypes)
+
+		capturingClient := &test.StubFHIRClient{}
+		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+			if strings.HasPrefix(baseURL.String(), server.URL) {
+				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
+			}
+			if baseURL.String() == "http://example.com/local/fhir" {
+				return capturingClient
+			}
+			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
+		}
+
+		// Register the root directory (which will query using rootDirectoryResourceTypes: Organization, Endpoint)
+		err = component.registerAdministrationDirectory(ctx, server.URL+"/fhir", rootDirectoryResourceTypes, true, "")
+		require.NoError(t, err)
+
+		// First update should discover the endpoint from root directory and immediately query it
+		// because the update() loop processes newly discovered directories in the same iteration
+		_, err = component.update(ctx)
+		require.NoError(t, err)
+
+		mu.Lock()
+		defer mu.Unlock()
+
+		// Verify root directory queries (uses rootDirectoryResourceTypes)
+		assert.True(t, calledEndpoints["Organization"], "Root directory should query Organization")
+		assert.True(t, calledEndpoints["Endpoint"], "Root directory should query Endpoint")
+
+		// Verify discovered directory queries (uses component.directoryResourceTypes which is customResourceTypes)
+		assert.True(t, calledEndpoints["discovered/Organization"], "Discovered directory should query Organization (in customResourceTypes)")
+		assert.True(t, calledEndpoints["discovered/Endpoint"], "Discovered directory should query Endpoint (in customResourceTypes)")
+		assert.True(t, calledEndpoints["discovered/Practitioner"], "Discovered directory should query Practitioner (in customResourceTypes)")
+
+		// Verify that resource types NOT in customResourceTypes were NOT queried for discovered directory
+		assert.False(t, calledEndpoints["discovered/Location"], "Discovered directory should NOT query Location (not in customResourceTypes)")
+		assert.False(t, calledEndpoints["discovered/HealthcareService"], "Discovered directory should NOT query HealthcareService (not in customResourceTypes)")
+		assert.False(t, calledEndpoints["discovered/PractitionerRole"], "Discovered directory should NOT query PractitionerRole (not in customResourceTypes)")
+	})
+
+	t.Run("uses default DirectoryResourceTypes when not configured", func(t *testing.T) {
+		// This test verifies that when using DefaultConfig(),
+		// the default resource types are set.
+
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{
+			FHIRBaseURL: "http://example.com/local/fhir",
+		}
+		component, err := New(config)
+		require.NoError(t, err)
+
+		// Verify the component uses default resource types
+		expectedDefaults := []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
+		assert.Equal(t, expectedDefaults, component.directoryResourceTypes)
+	})
 }
 
 func startMockServer(t *testing.T, filesToServe map[string]string) *httptest.Server {
@@ -767,6 +1000,8 @@ func startMockServer(t *testing.T, filesToServe map[string]string) *httptest.Ser
 		"/fhir/Organization/_history":      &emptyResponseStr,
 		"/fhir/Location/_history":          &emptyResponseStr,
 		"/fhir/HealthcareService/_history": &emptyResponseStr,
+		"/fhir/PractitionerRole/_history":  &emptyResponseStr,
+		"/fhir/Practitioner/_history":      &emptyResponseStr,
 	}
 	for path, filename := range filesToServe {
 		data, err := os.ReadFile(filename)
@@ -781,11 +1016,9 @@ func startMockServer(t *testing.T, filesToServe map[string]string) *httptest.Ser
 
 func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	t.Run("excludes administration directory by exact URL match", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"http://example.com/fhir",
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{"http://example.com/fhir"}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "")
@@ -795,11 +1028,11 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("excludes administration directory with trailing slash trimmed", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"http://example.com/fhir",
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{
+			"http://example.com/fhir",
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Try to register with trailing slash - should still be excluded
@@ -810,11 +1043,11 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("matches exclusion list entries with trailing slashes", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"http://example.com/fhir/", // Exclusion list has trailing slash
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{
+			"http://example.com/fhir/", // Exclusion list has trailing slash
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Try to register without trailing slash - should still be excluded due to trimming
@@ -825,11 +1058,11 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("matches with both having trailing slashes", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"http://example.com/fhir/", // Both have trailing slash
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{
+			"http://example.com/fhir/", // Both have trailing slash
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir/", []string{"Organization"}, false, "")
@@ -839,11 +1072,11 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("allows administration directory not in exclusion list", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"http://excluded.com/fhir",
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{
+			"http://excluded.com/fhir",
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		err = component.registerAdministrationDirectory(context.Background(), "http://allowed.com/fhir", []string{"Organization"}, false, "")
@@ -855,14 +1088,14 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 
 	t.Run("excludes own query directory from being registered as admin directory", func(t *testing.T) {
 		ownFHIRBaseURL := "http://localhost:8080/fhir"
-		component, err := New(Config{
-			QueryDirectory: DirectoryConfig{
-				FHIRBaseURL: ownFHIRBaseURL,
-			},
-			ExcludeAdminDirectories: []string{
-				ownFHIRBaseURL,
-			},
-		})
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{
+			FHIRBaseURL: ownFHIRBaseURL,
+		}
+		config.ExcludeAdminDirectories = []string{
+			ownFHIRBaseURL,
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Try to register the same URL as admin directory - should be excluded
@@ -873,13 +1106,13 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("excludes multiple directories", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"http://excluded1.com/fhir",
-				"http://excluded2.com/fhir",
-				"http://excluded3.com/fhir",
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{
+			"http://excluded1.com/fhir",
+			"http://excluded2.com/fhir",
+			"http://excluded3.com/fhir",
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Try to register excluded directories
@@ -898,9 +1131,9 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("empty exclusion list allows all directories", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "")
@@ -910,11 +1143,11 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 	})
 
 	t.Run("invalid URL returns error even if in exclusion list", func(t *testing.T) {
-		component, err := New(Config{
-			ExcludeAdminDirectories: []string{
-				"not-a-valid-url",
-			},
-		})
+		config := DefaultConfig()
+		config.ExcludeAdminDirectories = []string{
+			"not-a-valid-url",
+		}
+		component, err := New(config)
 		require.NoError(t, err)
 
 		// Invalid URL should return error, not silently skip

@@ -17,10 +17,10 @@ func TestComponent_Start(t *testing.T) {
 		p2, _ := netutil.FreeTCPPort()
 		cfg := Config{
 			InternalInterface: InterfaceConfig{
-				Listener: ":" + strconv.Itoa(p1),
+				Address: ":" + strconv.Itoa(p1),
 			},
 			PublicInterface: InterfaceConfig{
-				Listener: ":" + strconv.Itoa(p2),
+				Address: ":" + strconv.Itoa(p2),
 			},
 		}
 		instance1 := New(cfg, mux, mux)

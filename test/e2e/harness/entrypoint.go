@@ -10,6 +10,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
+	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
@@ -32,6 +33,13 @@ type MITZDetails struct {
 	MockMITZ                 *MockMITZServer
 }
 
+type PEPDetails struct {
+	KnooppuntPDPBaseURL *url.URL
+	HAPIBaseURL         *url.URL
+	PEPBaseURL          *url.URL
+	MockMitzXACML       *MockXACMLMitzServer
+}
+
 // Start starts the full test harness with all components (MCSD, NVI, MITZ).
 func Start(t *testing.T) Details {
 	t.Helper()
@@ -47,23 +55,21 @@ func Start(t *testing.T) Details {
 	testData, err := vectors.Load(hapiBaseURL)
 	require.NoError(t, err, "failed to load test data into HAPI FHIR server")
 
-	knooppuntInternalURL := startKnooppunt(t, cmd.Config{
-		HTTP: http.TestConfig(),
-		MCSD: mcsd.Config{
-			AdministrationDirectories: map[string]mcsd.DirectoryConfig{
-				"lrza": {
-					FHIRBaseURL: testData.LRZa.FHIRBaseURL.String(),
-				},
-			},
-			QueryDirectory: mcsd.DirectoryConfig{
-				FHIRBaseURL: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
-			},
+	config := cmd.DefaultConfig()
+	config.HTTP = http.TestConfig()
+	config.MCSD.AdministrationDirectories = map[string]mcsd.DirectoryConfig{
+		"lrza": {
+			FHIRBaseURL: testData.LRZa.FHIRBaseURL.String(),
 		},
-		NVI: nvi.Config{
-			FHIRBaseURL: testData.NVI.FHIRBaseURL.String(),
-			Audience:    "nvi",
-		},
-	})
+	}
+	config.MCSD.QueryDirectory = mcsd.DirectoryConfig{
+		FHIRBaseURL: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
+	}
+	config.NVI = nvi.Config{
+		FHIRBaseURL: testData.NVI.FHIRBaseURL.String(),
+		Audience:    "nvi",
+	}
+	knooppuntInternalURL := startKnooppunt(t, config)
 
 	return Details{
 		KnooppuntInternalBaseURL: knooppuntInternalURL,
@@ -98,5 +104,45 @@ func StartMITZ(t *testing.T) MITZDetails {
 	return MITZDetails{
 		KnooppuntInternalBaseURL: knooppuntInternalURL,
 		MockMITZ:                 mockMITZ,
+	}
+}
+
+// StartPEP starts a minimal harness for PEP e2e tests with HAPI, Knooppunt PDP, mock XACML Mitz, and PEP nginx.
+func StartPEP(t *testing.T, pepConfig PEPConfig) PEPDetails {
+	t.Helper()
+
+	// Create mock XACML Mitz server
+	mockMitz := NewMockXACMLMitzServer(t)
+
+	// Start HAPI FHIR server
+	hapiBaseURL := startHAPI(t, "")
+
+	// Start Knooppunt with PDP and MITZ enabled
+	knooppuntPDPURL := startKnooppunt(t, cmd.Config{
+		HTTP: http.TestConfig(),
+		PDP: pdp.Config{
+			Enabled: true,
+		},
+		MITZ: mitz.Config{
+			MitzBase:      mockMitz.GetURL(),
+			GatewaySystem: "test-gateway",
+			SourceSystem:  "test-source",
+		},
+	})
+
+	// Configure PEP to point to HAPI and Knooppunt
+	pepConfig.FHIRBackendHost = "host.docker.internal"
+	pepConfig.FHIRBackendPort = hapiBaseURL.Port()
+	pepConfig.KnooppuntPDPHost = "host.docker.internal"
+	pepConfig.KnooppuntPDPPort = knooppuntPDPURL.Port()
+
+	// Start PEP container
+	pepBaseURL := startPEP(t, pepConfig)
+
+	return PEPDetails{
+		KnooppuntPDPBaseURL: knooppuntPDPURL,
+		HAPIBaseURL:         hapiBaseURL,
+		PEPBaseURL:          pepBaseURL,
+		MockMitzXACML:       mockMitz,
 	}
 }

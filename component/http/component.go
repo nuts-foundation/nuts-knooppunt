@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/rs/zerolog/log"
@@ -27,19 +28,25 @@ type Config struct {
 }
 
 type InterfaceConfig struct {
-	Listener string `koanf:"listener"`
-	BaseURL  string `koanf:"url"`
+	Address string `koanf:"address"`
+	BaseURL string `koanf:"url"`
 }
 
 func (c InterfaceConfig) URL() *url.URL {
 	u := c.BaseURL
 	if u == "" {
-		hostname, err := os.Hostname()
-		if err != nil {
-			log.Warn().Err(err).Msg("Failed to get hostname, defaulting to localhost")
-			hostname = "localhost"
+		if strings.HasPrefix(c.Address, ":") {
+			// E.g. :8080
+			hostname, err := os.Hostname()
+			if err != nil {
+				log.Warn().Err(err).Msg("Failed to get hostname, defaulting to localhost")
+				hostname = "localhost"
+			}
+			u = "http://" + hostname + c.Address
+		} else {
+			// E.g. localhost:8080
+			u = "http://" + c.Address
 		}
-		u = "http://" + hostname + c.Listener
 	}
 	result, _ := url.Parse(u)
 	return result
@@ -48,10 +55,10 @@ func (c InterfaceConfig) URL() *url.URL {
 func DefaultConfig() Config {
 	return Config{
 		InternalInterface: InterfaceConfig{
-			Listener: ":8081",
+			Address: ":8081",
 		},
 		PublicInterface: InterfaceConfig{
-			Listener: ":8080",
+			Address: ":8080",
 		},
 	}
 }
@@ -74,8 +81,8 @@ func New(config Config, publicMux *http.ServeMux, internalMux *http.ServeMux) *C
 }
 
 func (c *Component) Start() error {
-	publicAddr := c.config.PublicInterface.Listener
-	internalAddr := c.config.InternalInterface.Listener
+	publicAddr := c.config.PublicInterface.Address
+	internalAddr := c.config.InternalInterface.Address
 	log.Info().Msgf("Starting HTTP servers (public-address: %s, internal-address: %s)", publicAddr, internalAddr)
 	var err error
 	c.publicServer, err = createServer(publicAddr, c.publicMux)
