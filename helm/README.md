@@ -12,9 +12,24 @@ This directory contains Helm charts for nuts-knooppunt and its components.
 
 Different charts have different versioning strategies:
 
-- **helm-nuts-knooppunt**: Coupled to git tags (auto-versioned on release)
-- **helm-fhir**: Independent versioning (follows HAPI FHIR version, published on changes)
-- **helm-pep**: Independent versioning (manual versioning, published on changes)
+- **helm-nuts-knooppunt**: Automatic versioning (set by git tag)
+- **helm-fhir**: Manual versioning (set in Chart.yaml)
+- **helm-pep**: Manual versioning (set in Chart.yaml)
+
+**Why automatic for nuts-knooppunt?**
+
+This chart is only published on git tags, which by definition indicate app changes. Automatically coupling chart version to git tag simplifies versioning: `helm install --version 0.2.0` always deploys app v0.2.0.
+
+**Why manual for fhir/pep?**
+
+These components have independent release cycles from nuts-knooppunt:
+- **PEP**: Reference implementation, changes infrequently
+- **FHIR**: Third-party HAPI server, follows HAPI release schedule
+
+Following Helm best practices (Bitnami, Prometheus, etc.), chart version is managed manually and tracks chart development separately from app version. This allows:
+- Chart bug fixes without app version changes (0.1.0 → 0.1.1)
+- App upgrades with chart version bump (0.2.0 → 0.3.0 when upgrading HAPI 7.2.0 → 7.4.0)
+- Flexibility to release chart improvements independent of app releases
 
 ### Releasing nuts-knooppunt
 
@@ -39,46 +54,51 @@ GitHub Actions automatically:
 
 These charts are published automatically when their directories change on the `main` branch.
 
+**⚠️ CRITICAL: Always bump chart version when changing image tags or config. OCI registries are immutable - publishing the same version twice overwrites the existing chart.**
+
+**Semantic versioning guide:**
+- **Patch (0.1.0 → 0.1.1)**: Chart bug fixes, config tweaks, same app version
+- **Minor (0.1.0 → 0.2.0)**: New app version, backwards compatible
+- **Major (0.1.0 → 1.0.0)**: Breaking chart changes (renamed values, removed features)
+
 **Example: Upgrading HAPI FHIR**
 
 1. Update `helm/fhir/Chart.yaml`:
    ```yaml
-   version: 7.4.0        # Match HAPI version
-   appVersion: "7.4.0"
+   version: 0.2.0        # Bump minor (new HAPI version)
+   appVersion: "7.4.0"   # New HAPI version
    ```
 
 2. Update `helm/fhir/values.yaml`:
    ```yaml
    image:
-     tag: v7.4.0         # New HAPI FHIR image version
+     tag: v7.4.0         # New HAPI FHIR image
    ```
 
 3. Update `helm/nuts-knooppunt/Chart.yaml` dependency:
    ```yaml
    dependencies:
      - name: helm-fhir
-       version: "7.4.0"  # Reference new chart version
+       version: "0.2.0"  # Reference new chart version
    ```
 
-4. Create PR, merge to `main` → workflow automatically publishes helm-fhir
+4. Create PR, merge to `main` → workflow automatically publishes helm-fhir:0.2.0
 
 5. Create new nuts-knooppunt release (e.g., `v0.2.1`) to include the new FHIR version
 
-**Same process for helm-pep**: Update `Chart.yaml` version and `appVersion`, merge to main.
+**Example: Chart config fix (no HAPI upgrade)**
 
-### Why These Versioning Strategies?
+1. Update `helm/fhir/Chart.yaml`:
+   ```yaml
+   version: 0.1.1        # Bump patch (config fix only)
+   appVersion: "7.2.0"   # Same HAPI version
+   ```
 
-**nuts-knooppunt (coupled):**
-- ✅ Git tag version = chart version = app version
-- ✅ Every release is immediately installable via Helm
-- ✅ Users see `v0.3.0` on GitHub → can install with `--version 0.3.0`
-- ✅ No manual version synchronization needed
+2. Fix config in templates or values.yaml
 
-**fhir/pep (independent):**
-- ✅ FHIR chart version follows HAPI FHIR version (semantic clarity)
-- ✅ PEP has its own release cycle independent of nuts-knooppunt
-- ✅ Only published when actually changed (efficiency)
-- ✅ nuts-knooppunt dependencies explicitly declare which versions they need
+3. Merge to `main` → workflow publishes helm-fhir:0.1.1
+
+**Same process for helm-pep**: Always bump chart version when changing anything.
 
 ## Published Charts
 
