@@ -63,5 +63,18 @@ mitz:
   # CA certificate to trust MITZ server (if not in system trust store)
   #tlscafile: "/path/to/ca-file"
 
+http:
+  internal:
+    url: http://localhost:8081
+  public:
+    url: http://localhost:8080
+
+authn:
+  clients:
+    - id: "local"
+      secret: "local-secret"
+      redirecturls:
+        - "http://localhost:8080/auth/test-callback"
+
 pdp:
   enabled: true

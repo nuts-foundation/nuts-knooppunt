@@ -2,12 +2,16 @@ package authn
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"fmt"
 	"net/http"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/nuts-foundation/nuts-knooppunt/cmd/core"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/component/authn/html"
 	httpComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
@@ -16,9 +20,12 @@ import (
 var _ component.Lifecycle = (*Component)(nil)
 
 const (
-	tokenEndpointPath              = "/auth/token"
-	tokenIntrospectionEndpointPath = "/auth/introspect"
-	authorizationEndpointPath      = "/auth/authorize"
+	keysEndpointPath                  = "/auth/keys"
+	tokenEndpointPath                 = "/auth/token"
+	tokenIntrospectionEndpointPath    = "/auth/introspect"
+	authorizationEndpointPath         = "/auth/authorize"
+	authorizationCallbackEndpointPath = "/auth/authorize/callback"
+	loginFormEndpointPath             = "/auth/login"
 )
 
 type Config struct {
@@ -31,8 +38,10 @@ var endpointConfig = struct {
 }{
 	publicEndpoints: []string{
 		authorizationEndpointPath,
+		authorizationCallbackEndpointPath,
 	},
 	internalEndpoints: []string{
+		keysEndpointPath,
 		tokenEndpointPath,
 		tokenIntrospectionEndpointPath,
 		"/.well-known/openid-configuration",
@@ -45,6 +54,7 @@ var endpointConfig = struct {
 // This also means only confidential clients (clients capable of keeping a secret) are supported (https://oauth.net/2/client-types/).
 type Component struct {
 	provider        *op.Provider
+	config          Config
 	callbackURLFunc func(context.Context, string) string
 	storage         *Storage
 	strictMode      bool
@@ -62,8 +72,17 @@ func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *
 	for _, endpoint := range endpointConfig.publicEndpoints {
 		publicMux.Handle(endpoint, c.provider)
 	}
+	publicMux.HandleFunc("GET "+loginFormEndpointPath, html.RenderLogin)
+	publicMux.HandleFunc("POST "+loginFormEndpointPath, html.HandleLoginSubmit(op.AuthCallbackURL(c.provider), func(authRequestID string, deziToken string) error {
+		return c.storage.AuthenticateUser(authRequestID, deziToken)
+	}))
 	for _, endpoint := range endpointConfig.internalEndpoints {
 		internalMux.Handle(endpoint, c.provider)
+	}
+	// In non-strict mode, enable the test auth endpoints for testing
+	if !c.strictMode && len(c.config.Clients) > 0 && len(c.config.Clients[0].RedirectURLs[0]) > 0 {
+		publicMux.HandleFunc("GET /auth/test", html.RenderTestStartAuthn)
+		publicMux.HandleFunc("GET /auth/test-callback", html.RenderTestCallback(op.DefaultEndpoints.Token.Absolute(""), c.config.Clients[0].RedirectURLs[0]))
 	}
 }
 
@@ -73,9 +92,21 @@ func New(config Config, httpInterfaces httpComponent.InterfaceInfo, coreConfig c
 		extraOptions = append(extraOptions, op.WithAllowInsecure())
 	}
 
+	// Generate signing key for the OpenID Provider, used to sign the id_token
+	// TODO: Might want to change this to a configurable key
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, fmt.Errorf("generate private key: %w", err)
+	}
 	storage := &Storage{
-		clients: make(map[string]Client),
-		tokens:  &sync.Map{},
+		clients:      make(map[string]Client),
+		authRequests: &sync.Map{},
+		tokens:       &sync.Map{},
+		signingKey: SigningKey{
+			id:           uuid.NewString(),
+			sigAlgorithm: "RS256",
+			key:          privateKey,
+		},
 	}
 	for _, client := range config.Clients {
 		if _, exists := storage.clients[client.ID]; exists {
@@ -93,28 +124,19 @@ func New(config Config, httpInterfaces httpComponent.InterfaceInfo, coreConfig c
 		provider:        provider,
 		storage:         storage,
 		callbackURLFunc: op.AuthCallbackURL(provider),
+		config:          config,
 	}, nil
 }
 
 func newOIDCProvider(storage op.Storage, httpInterfaces httpComponent.InterfaceInfo, extraOptions []op.Option) (*op.Provider, error) {
 	config := &op.Config{
-		// enable code_challenge_method S256 for PKCE (and therefore PKCE in general)
 		CodeMethodS256: true,
-
-		// enables additional client_id/client_secret authentication by form post (not only HTTP Basic Auth)
 		AuthMethodPost: true,
-
-		// enables use of the `request` Object parameter
-		RequestObjectSupported: true,
-
 		// TODO: This depends on whatever is supported through GF AuthN
 		SupportedScopes: []string{
 			oidc.ScopeOpenID,
 			oidc.ScopeProfile,
-			oidc.ScopeEmail,
 		},
-
-		// TODO: This depends on whatever is supported through GF AuthN
 		SupportedClaims: []string{
 			"sub",
 			"aud",
@@ -128,33 +150,33 @@ func newOIDCProvider(storage op.Storage, httpInterfaces httpComponent.InterfaceI
 			"scopes",
 			"client_id",
 			"name",
-			"email",
 		},
 	}
 
 	internalBaseURL := httpInterfaces.Internal().URL()
+	publicBaseURL := httpInterfaces.Public().URL()
 	op.DefaultEndpoints = &op.Endpoints{
 		// Privately available endpoints
 		Token:         op.NewEndpointWithURL(tokenEndpointPath, internalBaseURL.JoinPath(tokenEndpointPath).String()),
 		Introspection: op.NewEndpointWithURL(tokenIntrospectionEndpointPath, internalBaseURL.JoinPath(tokenIntrospectionEndpointPath).String()),
+		JwksURI:       op.NewEndpointWithURL(keysEndpointPath, internalBaseURL.JoinPath(keysEndpointPath).String()),
 		// Publicly available endpoints
-		Authorization: op.NewEndpointWithURL(authorizationEndpointPath, internalBaseURL.JoinPath(authorizationEndpointPath).String()),
+		Authorization: op.NewEndpointWithURL(authorizationEndpointPath, publicBaseURL.JoinPath(authorizationEndpointPath).String()),
 		// Unsupported endpoints (for now)
 		Revocation:          op.DefaultEndpoints.Revocation,
 		Userinfo:            op.DefaultEndpoints.Userinfo,
 		EndSession:          op.DefaultEndpoints.EndSession,
-		JwksURI:             op.DefaultEndpoints.JwksURI,
 		DeviceAuthorization: op.DefaultEndpoints.DeviceAuthorization,
 	}
 
 	opts := append([]op.Option{
-		// TODO
+		// Do this when switched to slog
 		//op.WithLogger(logrus.StandardLogger()),
 	}, extraOptions...)
 	handler, err := op.NewProvider(config, storage,
 		func(insecure bool) (op.IssuerFromRequest, error) {
 			return func(r *http.Request) string {
-				return httpInterfaces.Public().URL().JoinPath("auth").String()
+				return httpInterfaces.Internal().URL().JoinPath("auth").String()
 			}, nil
 		}, opts...)
 	if err != nil {

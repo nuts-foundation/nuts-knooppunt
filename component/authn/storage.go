@@ -4,14 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
+
+const AuthRequestLifetime = 5 * time.Minute
 
 const subjectTokenType = "urn:ietf:params:oauth:token-type:id_token"
 const nutsSubjectIDTokenType = "nuts-subject-id"
@@ -22,10 +26,27 @@ var _ op.TokenExchangeStorage = (*Storage)(nil)
 
 const TokenLifetime = 5 * time.Minute
 
+// Storage implements the op.Storage interface using in-memory maps.
+// TODO: Change to persistent token storage
 type Storage struct {
-	clients map[string]Client
-	// TODO: Change to GF AuthN tokens
-	tokens *sync.Map
+	clients      map[string]Client
+	authRequests *sync.Map
+	tokens       *sync.Map
+	signingKey   SigningKey
+}
+
+func (o Storage) AuthenticateUser(authRequestID string, deziToken string) error {
+	authRequestRaw, ok := o.authRequests.Load(authRequestID)
+	if !ok {
+		return errors.New("auth request not found")
+	}
+	authRequest := authRequestRaw.(AuthRequest)
+	if err := authRequest.Authenticate(deziToken); err != nil {
+		return err
+	}
+	o.authRequests.Store(authRequestID, authRequest)
+	log.Ctx(context.Background()).Info().Msgf("OIDC: AuthRequest %s authenticated", authRequestID)
+	return nil
 }
 
 func (o Storage) ValidateTokenExchangeRequest(ctx context.Context, request op.TokenExchangeRequest) error {
@@ -58,28 +79,71 @@ func (o Storage) SetUserinfoFromTokenExchangeRequest(ctx context.Context, userin
 	panic("SetUserinfoFromTokenExchangeRequest(): implement me")
 }
 
-func (o Storage) CreateAuthRequest(ctx context.Context, request *oidc.AuthRequest, _ string) (op.AuthRequest, error) {
-	return nil, errors.New("CreateAuthRequest(): not implemented")
+func (o Storage) CreateAuthRequest(ctx context.Context, request *oidc.AuthRequest, userID string) (op.AuthRequest, error) {
+	if len(userID) != 0 {
+		return nil, errors.New("token refresh not supported")
+	}
+	log.Ctx(ctx).Info().Msgf("OIDC: AuthRequest received (client: %s)", request.ClientID)
+	authRequestID := uuid.NewString()
+	req := AuthRequest{
+		ID:             authRequestID,
+		AuthRequest:    *request,
+		ExpirationTime: time.Now().Add(AuthRequestLifetime),
+	}
+	o.authRequests.Store(authRequestID, req)
+	return &req, nil
 }
 
 func (o Storage) AuthRequestByID(ctx context.Context, id string) (op.AuthRequest, error) {
-	return nil, errors.New("AuthRequestByID(): not implemented")
+	authRequestRaw, ok := o.authRequests.Load(id)
+	if !ok {
+		return nil, errors.New("auth request not found")
+	}
+	authRequest, _ := authRequestRaw.(AuthRequest)
+	if time.Now().After(authRequest.ExpirationTime) {
+		o.authRequests.Delete(id)
+		return nil, errors.New("auth request expired")
+	}
+	return &authRequest, nil
 }
 
 func (o Storage) AuthRequestByCode(ctx context.Context, code string) (op.AuthRequest, error) {
-	return nil, errors.New("AuthRequestByCode(): not implemented")
+	var authRequest *AuthRequest
+	o.authRequests.Range(func(key, value any) bool {
+		curr := value.(AuthRequest)
+		if curr.Code == code {
+			authRequest = &curr
+			return false
+		}
+		return true
+	})
+	if authRequest == nil {
+		return nil, errors.New("auth request not found")
+	}
+	if time.Now().After(authRequest.ExpirationTime) {
+		return nil, errors.New("auth request expired")
+	}
+	return authRequest, nil
 }
 
 func (o Storage) SaveAuthCode(ctx context.Context, id string, code string) error {
-	return errors.New("SaveAuthCode(): not implemented")
+	reqRaw, err := o.AuthRequestByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	req := reqRaw.(*AuthRequest)
+	req.Code = code
+	o.authRequests.Store(id, *req)
+	return nil
 }
 
 func (o Storage) DeleteAuthRequest(ctx context.Context, id string) error {
-	return errors.New("DeleteAuthRequest(): not implemented")
+	o.authRequests.Delete(id)
+	return nil
 }
 
 func (o Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest) (accessTokenID string, expiration time.Time, err error) {
-	_, ok := request.(op.TokenExchangeRequest)
+	_, ok := request.(*AuthRequest)
 	if !ok {
 		return "", time.Time{}, fmt.Errorf("invalid token request: %T", request)
 	}
@@ -96,21 +160,18 @@ func (o Storage) CreateAccessToken(ctx context.Context, request op.TokenRequest)
 }
 
 func (o Storage) SigningKey(ctx context.Context) (op.SigningKey, error) {
-	// TODO
-	return nil, errors.New("SigningKey(): not implemented")
+	return o.signingKey, nil
 }
 
 func (o Storage) SignatureAlgorithms(ctx context.Context) ([]jose.SignatureAlgorithm, error) {
-	// TODO
 	return []jose.SignatureAlgorithm{
-		//o.signingKey.SignatureAlgorithm(),
+		o.signingKey.SignatureAlgorithm(),
 	}, nil
 }
 
 func (o Storage) KeySet(ctx context.Context) ([]op.Key, error) {
 	return []op.Key{
-		// TODO
-		//o.signingKey.Public(),
+		o.signingKey.Public(),
 	}, nil
 }
 
@@ -142,11 +203,30 @@ func (o Storage) AuthorizeClientIDSecret(ctx context.Context, clientID, clientSe
 // Since we don't want to store the userinfo in the database, we just return nil here.
 // User info should then be set through SetUserinfoFromRequest
 func (o Storage) SetUserinfoFromScopes(ctx context.Context, userinfo *oidc.UserInfo, userID, clientID string, scopes []string) error {
-	return errors.New("SetUserinfoFromScopes(): not implemented")
+	return nil
 }
 
 func (o Storage) SetUserinfoFromRequest(ctx context.Context, userinfo *oidc.UserInfo, request op.IDTokenRequest, scopes []string) error {
-	return errors.New("SetUserinfoFromRequest(): not implemented")
+	authRequest := request.(*AuthRequest)
+	deziTokenClaims := (*authRequest.ParsedDEZIToken).PrivateClaims()
+	userinfo.Subject = authRequest.Subject
+	userinfo.FamilyName = formatName(deziTokenClaims["voorvoegsel"].(string), deziTokenClaims["achternaam"].(string))
+	userinfo.GivenName = deziTokenClaims["voorletters"].(string)
+	userinfo.Name = formatName(userinfo.GivenName, userinfo.FamilyName)
+	// copy all DEZI token claims into userinfo claims
+	userinfo.AppendClaims("dezi_token", authRequest.DEZIToken)
+	userinfo.AppendClaims("dezi_claims", deziTokenClaims)
+	return nil
+}
+
+func formatName(parts ...string) string {
+	nameParts := []string{}
+	for _, part := range parts {
+		if strings.TrimSpace(part) != "" {
+			nameParts = append(nameParts, part)
+		}
+	}
+	return strings.Join(nameParts, " ")
 }
 
 func (o Storage) SetUserinfoFromToken(ctx context.Context, userInfo *oidc.UserInfo, tokenID, subject, origin string) error {

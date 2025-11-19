@@ -18,7 +18,7 @@ func Test_RequestToken(t *testing.T) {
 	p2, _ := netutil.FreeTCPPort()
 	internalMux := http.NewServeMux()
 	publicMux := http.NewServeMux()
-	httpConfig := httpComponent.DefaultConfig()
+	httpConfig := httpComponent.TestConfig()
 	httpConfig.InternalInterface = httpComponent.InterfaceConfig{
 		Address: ":" + strconv.Itoa(p1),
 		BaseURL: "http://localhost:" + strconv.Itoa(p1),
@@ -31,6 +31,9 @@ func Test_RequestToken(t *testing.T) {
 			{
 				ID:     "test-client",
 				Secret: "test-secret",
+				RedirectURLs: []string{
+					"http://localhost/callback",
+				},
 			},
 		},
 	}
@@ -52,7 +55,10 @@ func Test_RequestToken(t *testing.T) {
 		require.NoError(t, json.Unmarshal(responseData, &data))
 
 		require.Equal(t, data["token_endpoint"], httpService.Internal().URL().JoinPath("/auth/token").String())
-		require.Equal(t, data["issuer"], httpService.Public().URL().JoinPath("/auth").String())
+		require.Equal(t, data["issuer"], httpService.Internal().URL().JoinPath("/auth").String())
+	})
+	t.Run("Authorization Code Flow", func(t *testing.T) {
+
 	})
 	//t.Run("Client Credentials grant type", func(t *testing.T) {
 	//	httpResponse, err := http.PostForm(httpService.Internal().URL().JoinPath("/auth/token").String(), map[string][]string{
