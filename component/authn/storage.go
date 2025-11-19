@@ -244,7 +244,6 @@ func (o Storage) ValidateJWTProfileScopes(ctx context.Context, userID string, sc
 }
 
 func (o Storage) GetPrivateClaimsFromScopes(ctx context.Context, userID, clientID string, scopes []string) (map[string]any, error) {
-	// No private claims
 	return nil, nil
 }
 

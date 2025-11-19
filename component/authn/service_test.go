@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd/core"
@@ -23,7 +25,10 @@ func Test_RequestToken(t *testing.T) {
 		Address: ":" + strconv.Itoa(p1),
 		BaseURL: "http://localhost:" + strconv.Itoa(p1),
 	}
-	httpConfig.PublicInterface.Address = ":" + strconv.Itoa(p2)
+	httpConfig.PublicInterface = httpComponent.InterfaceConfig{
+		Address: ":" + strconv.Itoa(p2),
+		BaseURL: "http://localhost:" + strconv.Itoa(p2),
+	}
 	httpService := httpComponent.New(httpConfig, publicMux, internalMux)
 
 	config := Config{
@@ -58,41 +63,131 @@ func Test_RequestToken(t *testing.T) {
 		require.Equal(t, data["issuer"], httpService.Internal().URL().JoinPath("/auth").String())
 	})
 	t.Run("Authorization Code Flow", func(t *testing.T) {
+		// Step 1: Initiate authorization request
+		authURL := httpService.Public().URL().JoinPath("/auth/authorize")
+		query := authURL.Query()
+		query.Set("client_id", "test-client")
+		query.Set("redirect_uri", "http://localhost/callback")
+		query.Set("response_type", "code")
+		query.Set("scope", "openid profile")
+		query.Set("state", "test-state-123")
+		authURL.RawQuery = query.Encode()
 
+		// Make authorization request (should redirect to login page)
+		httpClient := &http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse // Don't follow redirects
+			},
+		}
+
+		authResponse, err := httpClient.Get(authURL.String())
+		require.NoError(t, err)
+		defer authResponse.Body.Close()
+		data, _ := io.ReadAll(authResponse.Body)
+		println(string(data))
+
+		// Should redirect to login page with authRequestID
+		require.Equal(t, http.StatusFound, authResponse.StatusCode)
+		loginLocation, err := authResponse.Location()
+		require.NoError(t, err)
+		require.Contains(t, loginLocation.Path, "/auth/login")
+
+		authRequestID := loginLocation.Query().Get("authRequestID")
+		require.NotEmpty(t, authRequestID)
+
+		// Step 2: Simulate user authentication by posting to login form
+		loginURL := httpService.Public().URL().JoinPath("/auth/login")
+		loginResponse, err := httpClient.PostForm(loginURL.String(), map[string][]string{
+			"authRequestID":  {authRequestID},
+			"action":         {"allow"},
+			"loa_dezi":       {"http://eidas.europe.eu/LoA/high"},
+			"verklaring_id":  {"8539f75d-634c-47db-bb41-28791dfd1f8d"},
+			"dezi_nummer":    {"123456789"},
+			"voorletters":    {"A.B."},
+			"voorvoegsel":    {"van"},
+			"achternaam":     {"Tester"},
+			"abonnee_nummer": {"987654321"},
+			"abonnee_naam":   {"Test Zorgaanbieder"},
+			"rol_code":       {"01.000"},
+			"rol_naam":       {"Arts"},
+			"rol_code_bron":  {"http://www.dezi.nl/rol_code_bron/big"},
+		})
+		require.NoError(t, err)
+		defer loginResponse.Body.Close()
+
+		// Should redirect to OIDC provider callback first
+		require.Equal(t, http.StatusFound, loginResponse.StatusCode)
+		providerCallbackLocation, err := loginResponse.Location()
+		require.NoError(t, err)
+		require.Contains(t, providerCallbackLocation.Path, "/auth/authorize/callback")
+
+		// Follow the redirect to get the authorization code
+		providerCallbackResponse, err := httpClient.Get(providerCallbackLocation.String())
+		require.NoError(t, err)
+		defer providerCallbackResponse.Body.Close()
+
+		// Should now redirect to client callback URL with authorization code
+		require.Equal(t, http.StatusFound, providerCallbackResponse.StatusCode)
+		callbackLocation, err := providerCallbackResponse.Location()
+		require.NoError(t, err)
+		require.Equal(t, "localhost", callbackLocation.Host)
+		require.Equal(t, "/callback", callbackLocation.Path)
+
+		authCode := callbackLocation.Query().Get("code")
+		require.NotEmpty(t, authCode)
+		require.Equal(t, "test-state-123", callbackLocation.Query().Get("state"))
+
+		// Step 3: Exchange authorization code for tokens
+		tokenResponse, err := httpClient.PostForm(httpService.Internal().URL().JoinPath("/auth/token").String(), map[string][]string{
+			"grant_type":    {"authorization_code"},
+			"code":          {authCode},
+			"redirect_uri":  {"http://localhost/callback"},
+			"client_id":     {"test-client"},
+			"client_secret": {"test-secret"},
+		})
+		require.NoError(t, err)
+		defer tokenResponse.Body.Close()
+		require.Equal(t, http.StatusOK, tokenResponse.StatusCode)
+
+		tokenData, err := io.ReadAll(tokenResponse.Body)
+		require.NoError(t, err)
+		var tokens map[string]any
+		require.NoError(t, json.Unmarshal(tokenData, &tokens))
+
+		// Verify token response
+		require.NotEmpty(t, tokens["access_token"])
+		require.NotEmpty(t, tokens["id_token"])
+		require.NotEmpty(t, tokens["expires_in"])
+		require.Equal(t, "Bearer", tokens["token_type"])
+
+		t.Run("Introspect Access Token", func(t *testing.T) {
+			introspectURL := httpService.Internal().URL().JoinPath("/auth/introspect").String()
+
+			// Create form data
+			form := url.Values{}
+			form.Set("token", tokens["access_token"].(string))
+
+			req, err := http.NewRequest("POST", introspectURL, strings.NewReader(form.Encode()))
+			require.NoError(t, err)
+			req.SetBasicAuth("test-client", "test-secret")
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+			introspectResponse, err := httpClient.Do(req)
+			require.NoError(t, err)
+			defer introspectResponse.Body.Close()
+
+			if introspectResponse.StatusCode != http.StatusOK {
+				bodyData, _ := io.ReadAll(introspectResponse.Body)
+				t.Logf("Introspection failed with status %d: %s", introspectResponse.StatusCode, string(bodyData))
+			}
+			require.Equal(t, http.StatusOK, introspectResponse.StatusCode)
+
+			introspectData, err := io.ReadAll(introspectResponse.Body)
+			require.NoError(t, err)
+			var introspection map[string]any
+			require.NoError(t, json.Unmarshal(introspectData, &introspection))
+
+			require.Equal(t, true, introspection["active"])
+		})
 	})
-	//t.Run("Client Credentials grant type", func(t *testing.T) {
-	//	httpResponse, err := http.PostForm(httpService.Internal().URL().JoinPath("/auth/token").String(), map[string][]string{
-	//		"grant_type":    {"client_credentials"},
-	//		"client_id":     {"test-client"},
-	//		"client_secret": {"test-secret"},
-	//		"scope":         {"openid"},
-	//	})
-	//	require.NoError(t, err)
-	//	defer httpResponse.Body.Close()
-	//	data, err := from.JSONResponse[map[string]any](httpResponse)
-	//	require.NoError(t, err)
-	//
-	//	require.NotEmpty(t, data["access_token"])
-	//	require.NotEmpty(t, data["expires_in"])
-	//	require.Equal(t, data["token_type"], "Bearer")
-	//	require.Equal(t, data["scope"], "openid")
-	//
-	//	t.Run("introspect token", func(t *testing.T) {
-	//		httpRequest, _ := http.NewRequest(http.MethodPost, httpService.Internal().URL().JoinPath("/auth/introspect").String(), strings.NewReader(url.Values{
-	//			"token": {data["access_token"].(string)},
-	//		}.Encode()))
-	//		httpRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	//		httpRequest.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("test-client:test-secret")))
-	//
-	//		httpResponse, err := http.DefaultClient.Do(httpRequest)
-	//		require.NoError(t, err)
-	//		defer httpResponse.Body.Close()
-	//		response, err := from.JSONResponse[map[string]any](httpResponse)
-	//
-	//		require.NoError(t, err)
-	//		require.Equal(t, true, response["active"])
-	//		require.Equal(t, "openid", response["scope"])
-	//		require.Equal(t, []interface{}{"TODO(audience)"}, response["aud"])
-	//	})
-	//})
 }
