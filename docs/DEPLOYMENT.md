@@ -14,6 +14,9 @@ The diagrams on this page were created using [Structurizr](https://structurizr.c
 ### GF Localization
 ![structurizr-GF_Localization_ContainerDiagram.svg](images/structurizr-GF_Localization_ContainerDiagram.svg)
 
+### Authentication
+![structurizr-Authentication_ContainerDiagram.svg](images/structurizr-Authentication_ContainerDiagram.svg)
+
 ### Handling inbound data requests
 ![structurizr-DataExchange_ContainerDiagram.svg](images/structurizr-DataExchange_ContainerDiagram.svg)
 

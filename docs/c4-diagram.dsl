@@ -13,15 +13,20 @@ workspace "Knooppunt" "Description" {
         }
 
         group "External Systems" {
-            group "National Generic Function Systems" {
-                lrza = softwareSystem "LRZa mCSD Administration Directory" "Authority of combination URA and the mCSD Directory" {
-                    tags "External System,addressing"
+            group "National Systems" {
+                group "Generic Functions" {
+                    lrza = softwareSystem "LRZa mCSD Administration Directory" "Authority of combination URA and the mCSD Directory" {
+                        tags "External System,addressing"
+                    }
+                    nvi = softwareSystem "NVI" "Nationale Verwijs Index, contains entries with URA and patient" {
+                        tags "External System,localization"
+                    }
+                    otv = softwareSystem "OTV" "Mitz national system, containing patient consents" "External System" {
+                        tags "External System,consent"
+                    }
                 }
-                nvi = softwareSystem "NVI" "Nationale Verwijs Index, contains entries with URA and patient" {
-                    tags "External System,localization"
-                }
-                otv = softwareSystem "OTV" "Mitz national system, containing patient consents" "External System" {
-                    tags "External System,consent"
+                dezi = softwareSystem "Dezi" "National Care Giver authentication service ('DE ZorgIdentiteit')" {
+                    tags "External System,authentication"
                 }
             }
 
@@ -50,7 +55,7 @@ workspace "Knooppunt" "Description" {
 
             xis = softwareSystem "XIS" "Local XIS consisting of EHR and Knooppunt services" {
                 ehr = container "EHR" {
-                    tags "addressing,localization,dataexchange"
+                    tags "addressing,localization,dataexchange,authentication"
                     localizationClient = component "Localization Client" "Publishing and localizing patient localization data" {
                         tags "localization"
                     }
@@ -61,7 +66,7 @@ workspace "Knooppunt" "Description" {
                 }
 
                 kp = container "Knooppunt" {
-                    tags "addressing,localization,consent,dataexchange"
+                    tags "addressing,localization,consent,dataexchange,authentication"
 
                     mcsdSyncer = component "mCSD Update client" "Syncing data from remote mCSD directory and consolidate into a Query Directory" {
                         tags "addressing"
@@ -81,6 +86,10 @@ workspace "Knooppunt" "Description" {
 
                     pdp = component "Policy Decision Point" "Makes authorization decisions for data exchange requests" {
                         tags "dataexchange"
+                    }
+
+                    oidcProvider = component "OIDC Provider" "Authenticate users against Dezi" {
+                        tags "authentication"
                     }
                 }
 
@@ -162,6 +171,19 @@ workspace "Knooppunt" "Description" {
         xis.pep -> xis.ehr "Forward authorized request" "FHIR" {
             tags "dataexchange"
         }
+
+        #
+        # Authentication transactions
+        #
+        xis.ehr -> xis.kp "Log in user" "OIDC" {
+            tags "authentication"
+        }
+        xis.ehr -> xis.kp.oidcProvider "Log in user" "OIDC" {
+            tags "authentication"
+        }
+        xis.kp.oidcProvider -> dezi "Authenticate user" "OIDC" {
+            tags "authentication"
+        }
     }
 
     views {
@@ -180,20 +202,25 @@ workspace "Knooppunt" "Description" {
             title "XIS Perspective: containers, systems and databases involved in GF Addressing"
             include "element.tag==addressing || relationship.tag==addressing"
             exclude "relationship.tag==localization"
+            exclude "relationship.tag==authentication"
         }
         component xis.kp "GF_Addressing_ComponentDiagram" {
             title "Knooppunt perspective: component diagram of systems and transactions involved in GF Addressing"
             include "element.tag==addressing || relationship.tag==addressing"
+            exclude "relationship.tag==localization"
+            exclude "relationship.tag==authentication"
         }
 
         # GF Localization
         container xis "GF_Localization_ContainerDiagram" {
             title "XIS Perspective: containers, systems and databases involved in GF Localization"
             include "element.tag==localization || relationship.tag==localization"
+            exclude "relationship.tag==authentication"
         }
         component xis.kp "GF_Localization_ComponentDiagram" {
             title "Knooppunt perspective: component diagram of systems and transactions involved in GF Localization"
             include "element.tag==localization || relationship.tag==localization"
+            exclude "relationship.tag==authentication"
         }
 
         # Data exchange
@@ -202,11 +229,25 @@ workspace "Knooppunt" "Description" {
             include "element.tag==dataexchange || relationship.tag==dataexchange"
             include "element.tag==consent || relationship.tag==consent"
             exclude "relationship.tag==localization"
+            exclude "relationship.tag==authentication"
         }
         component xis.kp "DataExchange_ComponentDiagram" {
             title "Knooppunt perspective: component diagram of systems and transactions involved in Data Exchange"
             include "element.tag==dataexchange || relationship.tag==dataexchange"
             include "element.tag==consent || relationship.tag==consent"
+            exclude "relationship.tag==localization"
+            exclude "relationship.tag==authentication"
+        }
+
+        # Authentication
+        container xis "Authentication_ContainerDiagram" {
+            title "XIS Perspective: containers, systems and databases involved in Authentication"
+            include "element.tag==authentication || relationship.tag==authentication"
+            exclude "relationship.tag==localization"
+        }
+        component xis.kp "Authentication_ComponentDiagram" {
+            title "Knooppunt perspective: component diagram of systems and transactions involved in Authentication"
+            include "element.tag==authentication || relationship.tag==authentication"
             exclude "relationship.tag==localization"
         }
 

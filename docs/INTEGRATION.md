@@ -239,10 +239,12 @@ Register clients and their redirect URLs in the Knooppunt configuration (`knoopp
 
 ### ID Tokens
 
-The `id_token` returned by the Knooppunt wraps the GF Authentication DEZI token, providing standard OIDC claims as well as DEZI-specific claims;
+The `id_token` returned by the Knooppunt wraps the DEZI token, providing standard OIDC claims as well as DEZI-specific claims;
 
 - The decoded DEZI token claims can be found in the `dezi_claims` field.
 - The original DEZI token is available in the `dezi_token` field.
+
+The `id_token` can later be used to acquire GF Authentication access tokens.
 
 ```json
 {
