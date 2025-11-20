@@ -227,9 +227,10 @@ The Knooppunt acts as OpenID Connect (OIDC) Provider, abstracting the complexity
 
 This OIDC Provider supports the following OIDC features:
 
-- Authorization Code Flow
-- Discovery (on internal API: `http://localhost:8081/.well-known/openid-configuration`)
-- Client authentication using `client_secret`
+- [Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth)
+- [Discovery using well-known metadata](https://openid.net/specs/openid-connect-discovery-1_0.html) (on internal API: `http://localhost:8081/.well-known/openid-configuration`)
+- [Client authentication using `client_secret`](https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication)
+- [PKCE using S256](https://www.rfc-editor.org/rfc/rfc7636)
 
 To use the Knooppunt as OIDC Provider:
 
