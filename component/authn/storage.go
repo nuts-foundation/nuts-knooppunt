@@ -235,7 +235,7 @@ func (o Storage) SetUserinfoFromToken(ctx context.Context, userInfo *oidc.UserIn
 
 func (o Storage) GetKeyByIDAndClientID(ctx context.Context, keyID, clientID string) (*jose.JSONWebKey, error) {
 	//TODO implement me
-	panic("GetKeyByIDAndClientID")
+	return nil, errors.New("GetKeyByIDAndClientID(): not implemented")
 }
 
 func (o Storage) ValidateJWTProfileScopes(ctx context.Context, userID string, scopes []string) ([]string, error) {
