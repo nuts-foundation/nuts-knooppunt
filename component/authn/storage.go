@@ -240,7 +240,7 @@ func (o Storage) GetKeyByIDAndClientID(ctx context.Context, keyID, clientID stri
 
 func (o Storage) ValidateJWTProfileScopes(ctx context.Context, userID string, scopes []string) ([]string, error) {
 	//TODO implement me
-	panic("ValidateJWTProfileScopes")
+	return nil, errors.New("ValidateJWTProfileScopes: not implemented")
 }
 
 func (o Storage) GetPrivateClaimsFromScopes(ctx context.Context, userID, clientID string, scopes []string) (map[string]any, error) {
