@@ -9,7 +9,7 @@ fi
 # Ensure required directories exist before running Docker to avoid root-owned auto-creation
 mkdir -p "${PWD}/images_im" "${PWD}/images"
 docker run --rm -v "${PWD}:/docs:ro" -v "${PWD}/images_im:/diagrams" \
-  structurizr/cli:latest \
+  structurizr/cli:2025.05.28 \
   export \
   -workspace /docs/c4-diagram.dsl \
   -format plantuml/c4plantuml \
@@ -19,5 +19,5 @@ docker run --rm -v "${PWD}:/docs:ro" -v "${PWD}/images_im:/diagrams" \
 # This will look for files with .puml or .plantuml extensions under docs/diagrams
 # and run PlantUML to produce .svg files alongside them.
 cp "${PWD}/"*.puml "${PWD}/images_im/"
-docker run --rm -v "${PWD}/images_im:/diagrams:ro" -v "${PWD}/images:/images" plantuml/plantuml:latest \
+docker run --rm -v "${PWD}/images_im:/diagrams:ro" -v "${PWD}/images:/images" plantuml/plantuml:sha-162ede3 \
  plantuml -verbose -tsvg  -o /images /diagrams
