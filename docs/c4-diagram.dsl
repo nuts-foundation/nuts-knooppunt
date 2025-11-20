@@ -178,10 +178,10 @@ workspace "Knooppunt" "Description" {
         xis.ehr -> xis.kp "Log in user" "OIDC" {
             tags "authentication"
         }
-        xis.ehr -> xis.kp.oidcProvider "Log in user" "OIDC" {
+        xis.ehr -> xis.kp.oidcProvider "Log in user" "OIDC AuthZ Code" {
             tags "authentication"
         }
-        xis.kp.oidcProvider -> dezi "Authenticate user" "OIDC" {
+        xis.kp.oidcProvider -> dezi "Authenticate user" "OIDC AuthZ Code" {
             tags "authentication"
         }
     }
