@@ -160,7 +160,6 @@ func validateInput(input MainPolicyInput) bool {
 		input.DataHolderOrganizationUra,
 		input.DataHolderFacilityType,
 		input.PurposeOfUse,
-		input.ResourceId,
 		input.ResourceType,
 	}
 	if slices.Contains(requiredValues, "") {
