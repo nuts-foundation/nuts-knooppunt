@@ -76,7 +76,7 @@ func (o Storage) GetPrivateClaimsFromTokenExchangeRequest(ctx context.Context, r
 }
 
 func (o Storage) SetUserinfoFromTokenExchangeRequest(ctx context.Context, userinfo *oidc.UserInfo, request op.TokenExchangeRequest) error {
-	panic("SetUserinfoFromTokenExchangeRequest(): implement me")
+	return errors.New("SetUserinfoFromTokenExchangeRequest: not implemented")
 }
 
 func (o Storage) CreateAuthRequest(ctx context.Context, request *oidc.AuthRequest, userID string) (op.AuthRequest, error) {
