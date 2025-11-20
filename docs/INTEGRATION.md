@@ -218,11 +218,11 @@ When consent changes occur, MITZ sends notifications to the configured endpoint.
 ## Authentication
 
 This chapter describes how to use the Knooppunt to authenticate users through GF Authentication.
-The Knooppunt acts as OpenID Connect (OIDC) Provider, abstracting the complexity of DEZI integration:
+The Knooppunt acts as OpenID Connect (OIDC) Provider, abstracting the complexity of Dezi integration:
 
-- Decrypting the envelope containing the DEZI token
+- Decrypting the envelope containing the Dezi token
 - Performing revocation checking
-- Validating the token according to the business rules of DEZI
+- Validating the token according to the business rules of Dezi
 - Providing an OIDC `id_token` that follows standard OIDC claims
 
 This OIDC Provider supports the following OIDC features:
@@ -239,10 +239,10 @@ Register clients and their redirect URLs in the Knooppunt configuration (`knoopp
 
 ### ID Tokens
 
-The `id_token` returned by the Knooppunt wraps the DEZI token, providing standard OIDC claims as well as DEZI-specific claims;
+The `id_token` returned by the Knooppunt wraps the Dezi token, providing standard OIDC claims as well as Dezi-specific claims;
 
-- The decoded DEZI token claims can be found in the `dezi_claims` field.
-- The original DEZI token is available in the `dezi_token` field.
+- The decoded Dezi token claims can be found in the `dezi_claims` field.
+- The original Dezi token is available in the `dezi_token` field.
 
 The `id_token` can later be used to acquire GF Authentication access tokens.
 

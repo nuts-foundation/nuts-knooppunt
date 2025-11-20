@@ -49,10 +49,10 @@ func HandleLoginSubmit(callbackURLFunc func(context.Context, string) string, com
 			return
 		}
 
-		// Build JWT token with DEZI claims
+		// Build JWT token with Dezi claims
 		token := jwt.New()
 
-		// Set DEZI claims
+		// Set Dezi claims
 		verklaringID := uuid.NewString()
 		_ = token.Set("verklaring_id", verklaringID)
 		_ = token.Set("loa_dezi", httpRequest.FormValue("loa_dezi"))
@@ -70,7 +70,7 @@ func HandleLoginSubmit(callbackURLFunc func(context.Context, string) string, com
 		serializer := jwt.NewSerializer().Sign(jwt.WithKey(jwa.RS256, sigingKey))
 		deziTokenBytes, err := serializer.Serialize(token)
 		if err != nil {
-			log.Ctx(httpRequest.Context()).Err(err).Msg("Failed to serialize DEZI token")
+			log.Ctx(httpRequest.Context()).Err(err).Msg("Failed to serialize Dezi token")
 			http.Error(httpResponse, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}

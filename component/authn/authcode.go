@@ -17,8 +17,8 @@ type AuthRequest struct {
 	ID string
 
 	Subject         string
-	DEZIToken       string
-	ParsedDEZIToken *jwt.Token
+	DeziToken       string
+	ParsedDeziToken *jwt.Token
 	AuthTime        time.Time
 	AuthDone        bool
 	Code            string
@@ -31,21 +31,21 @@ func (a *AuthRequest) Authenticate(deziToken string) error {
 	if a.AuthDone {
 		return errors.New("already authenticated")
 	}
-	// Parse DEZI token
-	// TODO: Need to actually verify when really supporting DEZI
+	// Parse Dezi token
+	// TODO: Need to actually verify when really supporting Dezi
 	parsedToken, err := jwt.Parse([]byte(deziToken), jwt.WithVerify(false))
 	if err != nil {
-		return fmt.Errorf("parse DEZI token: %w", err)
+		return fmt.Errorf("parse Dezi token: %w", err)
 	}
-	// Resolve subject from DEZI token
+	// Resolve subject from Dezi token
 	var ok bool
 	a.Subject, ok = parsedToken.PrivateClaims()["dezi_nummer"].(string)
 	if !ok {
-		return errors.New("dezi_nummer claim missing or invalid in DEZI token")
+		return errors.New("dezi_nummer claim missing or invalid in Dezi token")
 	}
 
-	a.ParsedDEZIToken = &parsedToken
-	a.DEZIToken = deziToken
+	a.ParsedDeziToken = &parsedToken
+	a.DeziToken = deziToken
 	a.AuthDone = true
 	a.AuthTime = time.Now()
 	return nil

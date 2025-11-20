@@ -19,7 +19,7 @@ func TestAuthRequest_Authenticate(t *testing.T) {
 			AuthDone: false,
 		}
 
-		// Create a valid DEZI token
+		// Create a valid Dezi token
 		token := jwt.New()
 		_ = token.Set("dezi_nummer", "123456789")
 		_ = token.Set("voorletters", "A.B.")
@@ -37,13 +37,13 @@ func TestAuthRequest_Authenticate(t *testing.T) {
 		// Verify the auth request was updated correctly
 		assert.True(t, authReq.AuthDone)
 		assert.Equal(t, "123456789", authReq.Subject)
-		assert.Equal(t, string(deziToken), authReq.DEZIToken)
-		assert.NotNil(t, authReq.ParsedDEZIToken)
+		assert.Equal(t, string(deziToken), authReq.DeziToken)
+		assert.NotNil(t, authReq.ParsedDeziToken)
 		assert.False(t, authReq.AuthTime.IsZero())
 		assert.WithinDuration(t, time.Now(), authReq.AuthTime, 1*time.Second)
 
 		// Verify parsed token contains claims
-		claims := (*authReq.ParsedDEZIToken).PrivateClaims()
+		claims := (*authReq.ParsedDeziToken).PrivateClaims()
 		assert.Equal(t, "123456789", claims["dezi_nummer"])
 		assert.Equal(t, "A.B.", claims["voorletters"])
 		assert.Equal(t, "Test", claims["achternaam"])
@@ -76,7 +76,7 @@ func TestAuthRequest_Authenticate(t *testing.T) {
 		// Invalid JWT
 		err := authReq.Authenticate("invalid.jwt.token")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "parse DEZI token")
+		assert.Contains(t, err.Error(), "parse Dezi token")
 
 		// Auth should not be marked as done
 		assert.False(t, authReq.AuthDone)

@@ -208,13 +208,13 @@ func (o Storage) SetUserinfoFromScopes(ctx context.Context, userinfo *oidc.UserI
 
 func (o Storage) SetUserinfoFromRequest(ctx context.Context, userinfo *oidc.UserInfo, request op.IDTokenRequest, scopes []string) error {
 	authRequest := request.(*AuthRequest)
-	deziTokenClaims := (*authRequest.ParsedDEZIToken).PrivateClaims()
+	deziTokenClaims := (*authRequest.ParsedDeziToken).PrivateClaims()
 	userinfo.Subject = authRequest.Subject
 	userinfo.FamilyName = formatName(deziTokenClaims["voorvoegsel"].(string), deziTokenClaims["achternaam"].(string))
 	userinfo.GivenName = deziTokenClaims["voorletters"].(string)
 	userinfo.Name = formatName(userinfo.GivenName, userinfo.FamilyName)
-	// copy all DEZI token claims into userinfo claims
-	userinfo.AppendClaims("dezi_token", authRequest.DEZIToken)
+	// copy all Dezi token claims into userinfo claims
+	userinfo.AppendClaims("dezi_token", authRequest.DeziToken)
 	userinfo.AppendClaims("dezi_claims", deziTokenClaims)
 	return nil
 }
