@@ -94,7 +94,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := context.Background()
+	ctx := r.Context()
 	mitzComp := *c.Mitz
 	consentReq := xacmlFromInput(input)
 	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)

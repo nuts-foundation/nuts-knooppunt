@@ -12,6 +12,7 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
@@ -90,11 +91,9 @@ func New(config Config) (*Component, error) {
 	}, nil
 }
 
-// createHTTPClient creates an HTTP client with optional mTLS configuration
+// createHTTPClient creates an HTTP client with optional mTLS configuration and OpenTelemetry instrumentation
 func createHTTPClient(config Config) (*http.Client, error) {
-	client := &http.Client{
-		Transport: http.DefaultTransport,
-	}
+	var transport http.RoundTripper = http.DefaultTransport
 
 	// If TLS certificate is configured, set up mTLS
 	if config.TLSCertFile != "" {
@@ -110,7 +109,7 @@ func createHTTPClient(config Config) (*http.Client, error) {
 		}
 
 		// Create transport with TLS config
-		client.Transport = &http.Transport{
+		transport = &http.Transport{
 			TLSClientConfig: tlsConfig,
 		}
 		log.Info().Str("certFile", config.TLSCertFile).Msg("Successfully configured mTLS for MITZ connection")
@@ -118,7 +117,9 @@ func createHTTPClient(config Config) (*http.Client, error) {
 		log.Info().Msg("No TLS certificate configured, using plain HTTP client for MITZ connection")
 	}
 
-	return client, nil
+	return &http.Client{
+		Transport: tracing.WrapTransport(transport),
+	}, nil
 }
 
 // RegisterHttpHandlers registers the HTTP handlers for the MITZ component
