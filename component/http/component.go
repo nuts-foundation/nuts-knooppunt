@@ -12,6 +12,7 @@ import (
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/rs/zerolog/log"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 var _ component.Lifecycle = (*Component)(nil)
@@ -84,12 +85,17 @@ func (c *Component) Start() error {
 	publicAddr := c.config.PublicInterface.Address
 	internalAddr := c.config.InternalInterface.Address
 	log.Info().Msgf("Starting HTTP servers (public-address: %s, internal-address: %s)", publicAddr, internalAddr)
+
+	// Wrap muxes with OpenTelemetry instrumentation for automatic span creation
+	publicHandler := otelhttp.NewHandler(c.publicMux, "public-api")
+	internalHandler := otelhttp.NewHandler(c.internalMux, "internal-api")
+
 	var err error
-	c.publicServer, err = createServer(publicAddr, c.publicMux)
+	c.publicServer, err = createServer(publicAddr, publicHandler)
 	if err != nil {
 		return fmt.Errorf("create public HTTP server: %w", err)
 	}
-	c.internalServer, err = createServer(internalAddr, c.internalMux)
+	c.internalServer, err = createServer(internalAddr, internalHandler)
 	if err != nil {
 		return fmt.Errorf("create internal HTTP server: %w", err)
 	}
