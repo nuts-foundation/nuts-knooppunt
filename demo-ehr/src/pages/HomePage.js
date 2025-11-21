@@ -59,9 +59,9 @@ function HomePage() {
                   Access and manage patient health records securely through the
                   Nuts Knooppunt infrastructure.
                 </p>
-                <p style={{ marginTop: '15px', fontSize: '14px', color: '#999' }}>
-                  (Feature coming soon)
-                </p>
+                <a href="/patients" className="button" style={{ marginTop: '15px', display: 'inline-block' }}>
+                  View Patients
+                </a>
               </div>
 
               <div className="card">
