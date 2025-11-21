@@ -2,6 +2,32 @@
 
 Implementation of the Nuts Knooppunt specifications.
 
+## Demo EHR
+
+A simple demo Electronic Health Record (EHR) application is provided in the `demo-ehr/` folder. This React-based SPA demonstrates:
+
+- **OIDC Authentication** - Login using Knooppunt's OIDC Provider
+- **User Dashboard** - Display authenticated user information
+- **Foundation for Data Exchange** - Ready to integrate with Knooppunt's data exchange features
+
+### Quick Start
+
+```shell
+# Run the quickstart script
+./demo-ehr-quickstart.sh
+
+# Or manually:
+# Terminal 1: Start Knooppunt
+./nuts-knooppunt
+
+# Terminal 2: Start Demo EHR
+cd demo-ehr && npm start
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+📖 See [demo-ehr/SETUP.md](demo-ehr/SETUP.md) for detailed instructions.
+
 ## Endpoints
 
 - Health check endpoint: [http://localhost:8081/status](http://localhost:8081/status)
@@ -12,6 +38,7 @@ Implementation of the Nuts Knooppunt specifications.
   - Search endpoint:
     - [POST http://localhost:8081/nvi/DocumentReference/_search](http://localhost:8081/nvi/DocumentReference/_search)
     - [GET http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
+- Demo EHR Application: [http://localhost:3000](http://localhost:3000)
 
 ## Configuration
 
