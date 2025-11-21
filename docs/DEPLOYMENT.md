@@ -14,6 +14,9 @@ The diagrams on this page were created using [Structurizr](https://structurizr.c
 ### GF Localization
 ![structurizr-GF_Localization_ContainerDiagram.svg](images/structurizr-GF_Localization_ContainerDiagram.svg)
 
+### Authentication
+![structurizr-Authentication_ContainerDiagram.svg](images/structurizr-Authentication_ContainerDiagram.svg)
+
 ### Handling inbound data requests
 ![structurizr-DataExchange_ContainerDiagram.svg](images/structurizr-DataExchange_ContainerDiagram.svg)
 
@@ -83,6 +86,11 @@ An example PEP using NGINX [can be found here](../pep).
 
 ### Authentication
 
+You can use the OIDC Provider in the Knooppunt for user authentication, which abstracts intricacies of Dezi.
+
+Otherwise, you need to directly integrate with Dezi yourself.
+
+#### Nuts node
 The Knooppunt can be deployed with an embedded Nuts node. If a vendor has an existing Nuts node,
 or wants to have the Nuts node deployed separately, the Knooppunt can use that Nuts node instead.
 
