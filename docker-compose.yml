@@ -166,6 +166,21 @@ services:
       start_period: 10s
     profiles:
       - pep
+  demo-ehr:
+    build:
+      context: ./demo-ehr
+      dockerfile: Dockerfile
+    image: demo-ehr:latest
+    container_name: demo-ehr
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./demo-ehr/src:/app/src
+      - ./demo-ehr/public:/app/public
+    environment:
+      - CHOKIDAR_USEPOLLING=true  # For hot reload on some systems
+      - REACT_APP_AUTHORITY=http://localhost:8080/auth
+    tty: true
 
 volumes:
   #postgres-data:
