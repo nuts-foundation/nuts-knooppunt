@@ -75,6 +75,10 @@ authn:
       secret: "local-secret"
       redirecturls:
         - "http://localhost:8080/auth/test-callback"
+    - id: "demo-ehr"
+      secret: "demo-ehr-secret"
+      redirecturls:
+        - "http://localhost:3000/callback"
 
 pdp:
   enabled: true
