@@ -105,6 +105,22 @@
   color: #0052a3;
 }
 
+.button-danger {
+  background: #cc0022;
+  border: 2px solid #cc0022;
+  color: #fff;
+}
+
+.button-danger:hover {
+  background: #a5001b;
+  border-color: #a5001b;
+}
+
+.button-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .dashboard {
   display: grid;
   gap: 20px;
@@ -204,3 +220,240 @@
   color: #cc0000;
 }
 
+/* Patients Page Styles */
+.patients-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.patients-header h2 {
+  margin: 0;
+  color: #333;
+  font-size: 28px;
+}
+
+.search-box {
+  flex: 1;
+  max-width: 400px;
+  min-width: 250px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: all 0.3s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
+.patients-count {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 15px;
+}
+
+.patients-table-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.patients-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.patients-table thead {
+  background: linear-gradient(135deg, #0066cc 0%, #0052a3 100%);
+  color: white;
+}
+
+.patients-table th {
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.patients-table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+  transition: background-color 0.2s ease;
+}
+
+.patients-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.patients-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.patients-table td {
+  padding: 16px;
+  color: #333;
+}
+
+.bsn-cell {
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-weight: 500;
+}
+
+.bsn-badge {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.name-cell {
+  font-weight: 500;
+  color: #0066cc;
+}
+
+.gender-cell {
+  text-transform: capitalize;
+}
+
+.gender-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.text-muted {
+  color: #999;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.empty-state p {
+  font-size: 18px;
+  margin-bottom: 20px;
+}
+
+.loading-container {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.error-container {
+  display: flex;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 60px 20px;
+  z-index: 1000;
+}
+.modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  padding: 30px 32px 28px;
+  position: relative;
+  animation: modalFade .25s ease;
+}
+@keyframes modalFade { from { opacity: 0; transform: translateY(10px);} to { opacity:1; transform: translateY(0);} }
+.new-patient-form .form-row {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+}
+.new-patient-form label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 6px;
+  color: #333;
+}
+.new-patient-form input,
+.new-patient-form select {
+  padding: 12px 14px;
+  font-size: 15px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  transition: border-color .2s, box-shadow .2s;
+}
+.new-patient-form input:focus,
+.new-patient-form select:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 3px rgba(0,102,204,0.15);
+}
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 10px;
+}
+.form-error {
+  background: #fff5f5;
+  border: 1px solid #ffb3b3;
+  color: #c40000;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-top: -4px;
+  margin-bottom: 12px;
+}
+.bsn-validation { color: #666; }
+/* Responsive Design */
+@media (max-width: 768px) {
+  .patients-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-box {
+    max-width: 100%;
+  }
+
+  .patients-table-container {
+    overflow-x: auto;
+  }
+
+  .patients-table {
+    min-width: 600px;
+  }
+
+  .patients-table th,
+  .patients-table td {
+    padding: 12px 8px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width:600px) {
+  .modal { padding: 24px 22px; }
+}

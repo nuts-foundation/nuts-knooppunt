@@ -193,6 +193,8 @@ services:
     environment:
       - CHOKIDAR_USEPOLLING=true  # For hot reload on some systems
       - REACT_APP_AUTHORITY=http://localhost:8080/auth
+      - REACT_APP_FHIR_BASE_URL=http://localhost:7050/fhir/sunflower-patients
+    stdin_open: true
     tty: true
 
   # Aspire Dashboard - unified observability for traces, logs, and metrics

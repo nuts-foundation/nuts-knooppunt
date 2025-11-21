@@ -75,6 +75,23 @@ See [README_DOCKER.md](README_DOCKER.md) for detailed Docker instructions.
 5. Complete the authentication flow
 6. You'll be redirected back to the EHR dashboard
 
+## New Patient Feature
+
+You can create a new patient via the Patients Overview page:
+
+1. Navigate to `/patients` (click View Patients on dashboard)
+2. Click the "New Patient" button
+3. Fill in:
+   - BSN (optional, 9 digits)
+   - Given name(s)
+   - Family name
+   - Prefix(es) (optional)
+   - Birth date (YYYY-MM-DD)
+   - Gender (male/female/other/unknown)
+4. Click Create to POST a FHIR Patient resource to the configured FHIR server.
+
+The new patient appears at the top of the list immediately after creation.
+
 ## Architecture
 
 - **React** - UI framework
@@ -94,4 +111,3 @@ This demo application provides a foundation for:
 - Data exchange with other healthcare providers via Knooppunt
 - Document reference search and retrieval
 - FHIR resource integration
-
