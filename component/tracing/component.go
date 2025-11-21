@@ -7,6 +7,7 @@ import (
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/rs/zerolog/log"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
@@ -118,4 +119,21 @@ func (c *Component) Stop(ctx context.Context) error {
 
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	// Tracing component doesn't expose HTTP endpoints
+}
+
+// WrapTransport wraps an http.RoundTripper with OpenTelemetry instrumentation.
+// If transport is nil, http.DefaultTransport is used.
+// This wrapper centralizes tracing configuration for outbound HTTP calls,
+// allowing future additions like custom options or sampling without changing callers.
+func WrapTransport(transport http.RoundTripper) http.RoundTripper {
+	return otelhttp.NewTransport(transport)
+}
+
+// NewHTTPClient creates an http.Client with OpenTelemetry instrumentation.
+// This wrapper centralizes tracing configuration for outbound HTTP calls,
+// allowing future additions like custom options or sampling without changing callers.
+func NewHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: otelhttp.NewTransport(nil),
+	}
 }

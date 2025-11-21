@@ -13,6 +13,7 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	formdata "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/formdata"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/static"
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
@@ -46,7 +47,7 @@ func New(config Config) *Component {
 		return nil
 	}
 
-	client = fhirclient.New(baseURL, http.DefaultClient, fhirutil.ClientConfig())
+	client = fhirclient.New(baseURL, tracing.NewHTTPClient(), fhirutil.ClientConfig())
 
 	return &Component{
 		config:     config,
