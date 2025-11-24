@@ -117,6 +117,11 @@ services:
       hapi.fhir.tester.nvi.server_address: http://localhost:7050/fhir/nvi
       hapi.fhir.tester.nvi.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.nvi.fhir_version: R4
+      
+      hapi.fhir.tester.pip.name: PIP
+      hapi.fhir.tester.pip.server_address: http://localhost:7050/fhir/policy-information-point
+      hapi.fhir.tester.pip.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.pip.fhir_version: R4
 
       # Enable partitioning and allow string tenant identifiers
       hapi.fhir.partitioning.allow_references_across_partitions: false

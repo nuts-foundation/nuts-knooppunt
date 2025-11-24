@@ -1,4 +1,20 @@
-### Testing valid request
+### Testing valid MCSD request
+
+POST http://localhost:8081/pdp/v1/data/knooppunt/authz
+Content-Type: application/json
+
+{
+  "input": {
+    "method": "GET",
+    "path": ["fhir", "Organization", "987612"],
+    "resource_id": "987612",
+    "resource_type": "Organization",
+    "requesting_organization_ura": "00000666",
+    "data_holder_organization_ura": "00000659"
+  }
+}
+
+### Testing "gesloten vraag" request
 
 POST http://localhost:8081/pdp/v1/data/knooppunt/authz
 Content-Type: application/json
