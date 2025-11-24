@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-//go:embed *.json
+//go:embed capabilities/*
 var FS embed.FS
 
 func readCapability(fileName string) (fhir.CapabilityStatement, error) {
@@ -30,35 +29,35 @@ func readCapability(fileName string) (fhir.CapabilityStatement, error) {
 
 func capabilityForScope(scope string) (fhir.CapabilityStatement, bool) {
 	switch scope {
-	case "mcsd-update-client":
-		cap, err := readCapability("nl-gf-admin-directory-update-client.json")
-		return cap, err == nil
+	case "mcsd_update":
+		capa, err := readCapability("nl-gf-admin-directory-update-client.json")
+		return capa, err == nil
 	default:
 		return fhir.CapabilityStatement{}, false
 	}
 }
 
-func EvalCapabilityPolicy(input pdp.MainPolicyInput) pdp.PolicyResult {
-	out := pdp.PolicyResult{
+func EvalCapabilityPolicy(input MainPolicyInput) PolicyResult {
+	out := PolicyResult{
 		Allow: false,
 	}
 
 	if input.Scope == "" {
-		reason := pdp.ResultReason{
+		reason := ResultReason{
 			Code:        "missing_required_value",
 			Description: "missing required value for scope field",
 		}
-		out.Reasons = []pdp.ResultReason{reason}
+		out.Reasons = []ResultReason{reason}
 		return out
 	}
 
 	statement, ok := capabilityForScope(input.Scope)
 	if !ok {
-		reason := pdp.ResultReason{
+		reason := ResultReason{
 			Code:        "unexpected_input",
 			Description: "unexpected input, no capability statement known for scope",
 		}
-		out.Reasons = []pdp.ResultReason{reason}
+		out.Reasons = []ResultReason{reason}
 		return out
 	}
 
@@ -69,7 +68,7 @@ func evalInteraction(
 	statement fhir.CapabilityStatement,
 	resourceType fhir.ResourceType,
 	interaction fhir.TypeRestfulInteraction,
-) pdp.PolicyResult {
+) PolicyResult {
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
 	for _, rest := range statement.Rest {
 		for _, res := range rest.Resource {
@@ -89,9 +88,9 @@ func evalInteraction(
 	}
 
 	if !allowInteraction {
-		return pdp.PolicyResult{
+		return PolicyResult{
 			Allow: false,
-			Reasons: []pdp.ResultReason{
+			Reasons: []ResultReason{
 				{
 					Code:        "not_allowed",
 					Description: "not allowed, capability statement does not allow interaction",
@@ -100,7 +99,7 @@ func evalInteraction(
 		}
 	}
 
-	return pdp.PolicyResult{
+	return PolicyResult{
 		Allow: true,
 	}
 }

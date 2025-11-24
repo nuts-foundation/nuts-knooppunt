@@ -5,8 +5,8 @@ Content-Type: application/json
 
 {
   "input": {
-    "method": "GET",
-    "path": ["fhir", "Organization", "987612"],
+    "scope": "mcsd_update",
+    "interaction_type": "read",
     "resource_id": "987612",
     "resource_type": "Organization",
     "requesting_organization_ura": "00000666",

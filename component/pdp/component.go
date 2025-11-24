@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
+	"github.com/rs/zerolog/log"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 func DefaultConfig() Config {
@@ -50,8 +53,65 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Step 1: Providing a scope is required for every PDP request
+	// FUTURE: We are considering allowing more than one scope
+	if input.Scope == "" {
+		res := PolicyResult{
+			Allow: false,
+			Reasons: []ResultReason{
+				{
+					Code:        "missing_required_value",
+					Description: "missing required value, no scope defined",
+				},
+			},
+		}
+		writeResp(w, res)
+		return
+	}
+
+	// Step 2: Check the request adheres to the capability statement for this scope
+	res := EvalCapabilityPolicy(input)
+	if !res.Allow {
+		writeResp(w, res)
+		return
+	}
+
+	// Step 3: Check if we are authorized to see the underlying data
+	// FUTURE: We want to use OPA policies here ...
+	// ... but for now we only have two example scopes hardcoded.
+	switch input.Scope {
+	case "mcsd_update":
+		validTypes := []fhir.ResourceType{
+			fhir.ResourceTypeOrganization,
+			fhir.ResourceTypeLocation,
+			fhir.ResourceTypeHealthcareService,
+			fhir.ResourceTypeEndpoint,
+			fhir.ResourceTypePractitionerRole,
+			fhir.ResourceTypeOrganizationAffiliation,
+			fhir.ResourceTypePractitioner,
+		}
+		if !slices.Contains(validTypes, input.ResourceType) {
+			writeResp(w, Deny(ResultReason{
+				Code:        "not_allowed",
+				Description: "not allowed to request this resources during update",
+			}))
+		}
+		writeResp(w, Allow())
+	case "patient_example":
+		writeResp(w, EvalMitzPolicy(c, input))
+	default:
+		writeResp(w, Deny(
+			ResultReason{
+				Code:        "not_implemented",
+				Description: fmt.Sprintf("scope %s not implemeted", input.Scope),
+			},
+		))
+	}
+}
+
+func writeResp(w http.ResponseWriter, result PolicyResult) {
 	resp := MainPolicyResponse{
-		EvalMitzPolicy(c, input),
+		Result: result,
 	}
 
 	b, err := json.Marshal(resp)
@@ -61,7 +121,10 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(b)
+	_, err = w.Write(b)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to write response to ResponseWriter")
+	}
 }
 
 func (c Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
