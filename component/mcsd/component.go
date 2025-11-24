@@ -283,9 +283,11 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 
 	// Find parent organizations with URA identifier and all organizations linked to them
 	// This is used when validating organizations that don't have their own URA identifier
-	parentOrganizationsMap, err := findParentOrganizationWithURA(ctx, deduplicatedEntries)
+	// If no parent organizations are found in deduplicatedEntries, queries all organizations from the directory
+	parentOrganizationsMap, err := c.ensureParentOrganizationsMap(ctx, fhirBaseURLRaw, remoteAdminDirectoryFHIRClient, deduplicatedEntries)
+
 	if err != nil {
-		return DirectoryUpdateReport{}, fmt.Errorf("failed to find parent organization: %w", err)
+		return DirectoryUpdateReport{}, fmt.Errorf("failed to build parent organization map: %w", err)
 	}
 
 	// Build transaction with deterministic conditional references
@@ -511,6 +513,37 @@ func findOrganizationKeyByID(orgMap map[string]*fhir.Organization, orgID string)
 // findParentOrganizationWithURA finds a parent organization with a URA identifier and all organizations linked to it.
 // It loops through ALL entries to find organizations with URA identifiers, then selects the one with the most
 // organizations linked to it (directly or indirectly through their partOf chain).
+// ensureParentOrganizationsMap builds the parent organizations map from deduplicatedEntries.
+// If no parent organizations with URA are found, it queries all organizations from the directory as a fallback.
+// Returns an empty map if no parent organizations are found (not an error condition).
+func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseURLRaw string, remoteAdminDirectoryFHIRClient fhirclient.Client, deduplicatedEntries []fhir.BundleEntry) (ParentOrganizationMap, error) {
+	// First try to find parent organizations from deduplicatedEntries
+	parentOrganizationsMap, err := findParentOrganizationWithURA(ctx, deduplicatedEntries)
+	if err != nil {
+		return nil, err
+	}
+
+	// If no parent organizations with URA were found, query all organizations from the directory
+	if len(parentOrganizationsMap) == 0 {
+		log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Msg("No parent organizations with URA found in deduplicatedEntries, querying all organizations")
+		orgEntries, _, err := c.queryHistory(ctx, remoteAdminDirectoryFHIRClient, "Organization", url.Values{
+			"_count": []string{strconv.Itoa(searchPageSize)},
+		})
+		if err != nil {
+			log.Ctx(ctx).Warn().Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to query all organizations, continuing without parent organization map")
+			return parentOrganizationsMap, nil
+		}
+
+		parentOrganizationsMap, err = findParentOrganizationWithURA(ctx, orgEntries)
+		if err != nil {
+			log.Ctx(ctx).Warn().Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to build parent organization map from all organizations, continuing without parent organization map")
+			return make(ParentOrganizationMap), nil
+		}
+	}
+
+	return parentOrganizationsMap, nil
+}
+
 // If no organization with URA is found directly, it traverses each organization's partOf chain to find a parent with URA.
 // Returns the parent organization with the most linked organizations and a slice of all organizations whose
 // partOf chain leads to the parent.
