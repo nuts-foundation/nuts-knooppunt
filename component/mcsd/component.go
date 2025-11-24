@@ -26,6 +26,9 @@ var _ component.Lifecycle = &Component{}
 var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
 var defaultDirectoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
 
+// ParentOrganizationMap maps parent organizations (with URA identifier) to their linked child organizations
+type ParentOrganizationMap map[*fhir.Organization][]*fhir.Organization
+
 // clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
 // to account for potential clock differences between client and FHIR server
 var clockSkewBuffer = 2 * time.Second
@@ -278,6 +281,13 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		c.processEndpointDeletes(ctx, deduplicatedEntries)
 	}
 
+	// Find parent organizations with URA identifier and all organizations linked to them
+	// This is used when validating organizations that don't have their own URA identifier
+	parentOrganizationsMap, err := findParentOrganizationWithURA(ctx, deduplicatedEntries)
+	if err != nil {
+		return DirectoryUpdateReport{}, fmt.Errorf("failed to find parent organization: %w", err)
+	}
+
 	// Build transaction with deterministic conditional references
 	tx := fhir.Bundle{
 		Type:  fhir.BundleTypeTransaction,
@@ -292,7 +302,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			continue
 		}
 		log.Ctx(ctx).Trace().Str("fhir_server", fhirBaseURLRaw).Msgf("Processing entry: %s", entry.Request.Url)
-		resourceType, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes}, allowDiscovery, fhirBaseURLRaw)
+		resourceType, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes}, parentOrganizationsMap, allowDiscovery, fhirBaseURLRaw)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
@@ -472,4 +482,139 @@ func extractResourceIDFromURL(entry fhir.BundleEntry) string {
 	}
 
 	return ""
+}
+
+// buildOrganizationKey creates a composite key from organization ID and VersionId for deduplication.
+// The key includes both the ID and VersionId (if available) to differentiate between versions.
+func buildOrganizationKey(org *fhir.Organization) string {
+	if org == nil || org.Id == nil {
+		return ""
+	}
+	key := *org.Id
+	if org.Meta != nil && org.Meta.VersionId != nil {
+		key = key + ":" + *org.Meta.VersionId
+	}
+	return key
+}
+
+// findOrganizationKeyByID builds a map of organization keys by their ID to help with partOf reference lookups.
+// This is needed because partOf references typically only contain the ID, not the VersionId.
+func findOrganizationKeyByID(orgMap map[string]*fhir.Organization, orgID string) string {
+	for key, org := range orgMap {
+		if org.Id != nil && *org.Id == orgID {
+			return key
+		}
+	}
+	return ""
+}
+
+// findParentOrganizationWithURA finds a parent organization with a URA identifier and all organizations linked to it.
+// It loops through ALL entries to find organizations with URA identifiers, then selects the one with the most
+// organizations linked to it (directly or indirectly through their partOf chain).
+// If no organization with URA is found directly, it traverses each organization's partOf chain to find a parent with URA.
+// Returns the parent organization with the most linked organizations and a slice of all organizations whose
+// partOf chain leads to the parent.
+// Returns (nil, nil, nil) if no organization with URA identifier is found (not an error condition).
+func findParentOrganizationWithURA(ctx context.Context, entries []fhir.BundleEntry) (ParentOrganizationMap, error) {
+	result := make(ParentOrganizationMap)
+
+	// Build a map of all organizations for efficient lookup using ID and VersionId as composite key
+	orgMap := make(map[string]*fhir.Organization)
+	for _, entry := range entries {
+		if entry.Resource == nil {
+			continue
+		}
+		var org fhir.Organization
+		if err := json.Unmarshal(entry.Resource, &org); err != nil {
+			continue
+		}
+		if org.Id != nil {
+			key := buildOrganizationKey(&org)
+			orgMap[key] = &org
+		}
+	}
+
+	// Loop through all organizations to find all with URA identifier
+	for _, org := range orgMap {
+		uraIdentifiers := libfhir.FilterIdentifiersBySystem(org.Identifier, coding.URANamingSystem)
+		if len(uraIdentifiers) > 0 {
+			// Found an organization with URA, find all organizations linked to it
+			linkedOrgs := findOrganizationsLinkedToParent(orgMap, org)
+			result[org] = linkedOrgs
+		}
+	}
+
+	return result, nil
+}
+
+// findOrganizationsLinkedToParent returns all organizations whose partOf chain leads to the parent organization.
+// It excludes the parent organization itself from the returned slice.
+// Returns an empty slice (not nil) if no organizations are linked to the parent.
+func findOrganizationsLinkedToParent(orgMap map[string]*fhir.Organization, parentOrg *fhir.Organization) []*fhir.Organization {
+	linked := make([]*fhir.Organization, 0)
+
+	for _, org := range orgMap {
+		// Skip the parent organization itself
+		if org.Id != nil && parentOrg.Id != nil && *org.Id == *parentOrg.Id {
+			continue
+		}
+
+		// Check if this organization's partOf chain leads to the parent
+		if organizationLinksToParent(orgMap, org, parentOrg) {
+			linked = append(linked, org)
+		}
+	}
+
+	return linked
+}
+
+// organizationLinksToParent checks if an organization's partOf chain eventually leads to the parent organization.
+// It handles circular references by tracking visited organizations.
+func organizationLinksToParent(orgMap map[string]*fhir.Organization, org *fhir.Organization, parentOrg *fhir.Organization) bool {
+	const maxDepth = 10
+	visited := make(map[string]bool)
+	return organizationLinksToParentRecursive(orgMap, org, parentOrg, visited, 0, maxDepth)
+}
+
+// organizationLinksToParentRecursive is the recursive helper for organizationLinksToParent.
+func organizationLinksToParentRecursive(orgMap map[string]*fhir.Organization, org *fhir.Organization, parentOrg *fhir.Organization, visited map[string]bool, depth int, maxDepth int) bool {
+	if depth > maxDepth {
+		return false // Depth exceeded
+	}
+
+	if org.Id != nil {
+		if visited[*org.Id] {
+			return false // Circular reference detected
+		}
+		visited[*org.Id] = true
+
+		// Check if we found the parent
+		if parentOrg.Id != nil && *org.Id == *parentOrg.Id {
+			return true
+		}
+	}
+
+	// Check if this organization has a partOf reference
+	if org.PartOf == nil || org.PartOf.Reference == nil {
+		return false // No more parents in the chain
+	}
+
+	// Extract the parent ID from the reference
+	ref := *org.PartOf.Reference
+	var parentID string
+	if strings.Contains(ref, "/") {
+		parts := strings.Split(ref, "/")
+		parentID = parts[len(parts)-1]
+	} else {
+		parentID = ref
+	}
+
+	// Look up the parent organization
+	nextOrg, exists := orgMap[parentID]
+	if !exists {
+		return false // Parent not found in map
+	}
+
+	// Recursively check the parent's chain
+	return organizationLinksToParentRecursive(orgMap, nextOrg, parentOrg, visited, depth+1, maxDepth)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -197,11 +198,12 @@ func TestComponent_update(t *testing.T) {
 		require.Empty(t, thisReport.Errors)
 		// Root directory: only mCSD directory endpoints should be synced, other resources should be filtered out
 		t.Run("warnings", func(t *testing.T) {
-			require.Len(t, thisReport.Warnings, 2)
+			require.Len(t, thisReport.Warnings, 3)
 			// Check that both expected warnings are present (order may vary due to deduplication)
 			warnings := strings.Join(thisReport.Warnings, " ")
 			require.Contains(t, warnings, "failed to register discovered mCSD Directory at file:///etc/passwd: invalid FHIR base URL (url=file:///etc/passwd)")
 			require.Contains(t, warnings, "resource type Something-else not allowed")
+			require.Contains(t, warnings, "endpoint must be referenced in at least one organization's endpoint field (endpoint ID: non-dir-endpoint)")
 		})
 		require.Equal(t, 4, thisReport.CountCreated) // 4 mCSD directory endpoints should be created
 		require.Equal(t, 0, thisReport.CountUpdated)
@@ -663,6 +665,44 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			}]
 		}`
 
+		orgBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": [{
+				"fullUrl": "http://test.example.org/fhir/Organization/org",
+				 "resource": {
+					"resourceType": "Organization",
+					"id": "org-4",
+					"meta": {
+					  "versionId": "1",
+					  "lastUpdated": "2025-08-01T14:31:31.987+00:00"
+					},
+					"identifier": [
+					  {
+						"use": "official",
+						"system": "http://fhir.nl/fhir/NamingSystem/ura",
+						"value": "444"
+					  }
+					],
+					"active": true,
+					"endpoint": [
+					  {
+						"reference": "Endpoint/test-endpoint"
+					  }
+					],
+					"name": "Organization 4"
+				 },
+				 "request": {
+					"method": "POST",
+					"url": "Organization/org"
+				 },
+				 "response": {
+					"status": "201 Created",
+					"etag": "W/\"1\""
+				 }
+			}]
+		}`
+
 		// Create a mock server that returns the initial bundle first, then the delete bundle
 		callCount := 0
 		mux := http.NewServeMux()
@@ -680,7 +720,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		})
 		mux.HandleFunc("/fhir/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
+			w.Write([]byte(orgBundle))
 		})
 		mux.HandleFunc("/fhir/Location/_history", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -724,7 +764,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		}
 
 		// First update - should discover and register the Endpoint
-		report1, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint"}, true)
+		report1, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint", "Organization"}, true)
 		require.NoError(t, err)
 		require.Empty(t, report1.Errors)
 		require.Equal(t, 1, report1.CountCreated, "Should have created 1 Endpoint")
@@ -748,7 +788,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		assert.Equal(t, "http://test.example.org/fhir/Endpoint/test-endpoint", registeredFullUrl, "Registered Endpoint should have fullUrl from Bundle entry")
 
 		// Second update - should process DELETE and unregister the Endpoint
-		report2, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint"}, true)
+		report2, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint", "Organization"}, true)
 		require.NoError(t, err)
 		require.Empty(t, report2.Errors)
 
@@ -886,6 +926,43 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 				}
 			}]
 		}`
+		discoveredOrganizationBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": [{
+				"fullUrl": "http://test.example.org/fhir/Organization/org",
+				 "resource": {
+					"resourceType": "Organization",
+					"id": "org-4",
+					"meta": {
+					  "versionId": "1",
+					  "lastUpdated": "2025-08-01T14:31:31.987+00:00"
+					},
+					"identifier": [
+					  {
+						"use": "official",
+						"system": "http://fhir.nl/fhir/NamingSystem/ura",
+						"value": "444"
+					  }
+					],
+					"active": true,
+					"endpoint": [
+					  {
+						"reference": "Endpoint/discovered-endpoint"
+					  }
+					],
+					"name": "Organization 4"
+				 },
+				 "request": {
+					"method": "POST",
+					"url": "Organization/org"
+				 },
+				 "response": {
+					"status": "201 Created",
+					"etag": "W/\"1\""
+				 }
+			}]
+		}`
 
 		emptyBundle := `{
 			"resourceType": "Bundle",
@@ -906,6 +983,8 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 				// Return discovered endpoint only for Endpoint queries
 				if resourceType == "Endpoint" {
 					w.Write([]byte(discoveredEndpointBundle))
+				} else if resourceType == "Organization" {
+					w.Write([]byte(discoveredOrganizationBundle))
 				} else {
 					w.Write([]byte(emptyBundle))
 				}
@@ -1157,4 +1236,271 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid FHIR base URL")
 		assert.Len(t, component.administrationDirectories, 0, "Invalid URL should not be registered")
 	})
+}
+
+func TestFindParentOrganizationWithURA(t *testing.T) {
+	tests := []struct {
+		name                 string
+		entries              []fhir.BundleEntry
+		expectedParentID     *string
+		expectedLinkedOrgIDs []string
+		description          string
+	}{
+		{
+			name: "finds organization with URA identifier directly",
+			entries: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org1"),
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("12345"),
+							},
+						},
+					}),
+				},
+			},
+			expectedParentID:     to.Ptr("org1"),
+			expectedLinkedOrgIDs: []string{},
+			description:          "should find and return organization with URA identifier with no linked orgs",
+		},
+		{
+			name:                 "returns nil when no organization has URA",
+			entries:              []fhir.BundleEntry{},
+			expectedParentID:     nil,
+			expectedLinkedOrgIDs: nil,
+			description:          "should return nil when no entries or no URA found",
+		},
+		{
+			name: "traverses partOf chain to find parent with URA",
+			entries: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org2"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/org1"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org1"),
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("12345"),
+							},
+						},
+					}),
+				},
+			},
+			expectedParentID:     to.Ptr("org1"),
+			expectedLinkedOrgIDs: []string{"org2"},
+			description:          "should traverse partOf chain to find parent with URA and include org2 as linked",
+		},
+		{
+			name: "traverses multi-level partOf chain",
+			entries: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org3"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/org2"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org2"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/org1"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org1"),
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("99999"),
+							},
+						},
+					}),
+				},
+			},
+			expectedParentID:     to.Ptr("org1"),
+			expectedLinkedOrgIDs: []string{"org2", "org3"},
+			description:          "should traverse multi-level partOf chain and include all linked orgs",
+		},
+		{
+			name: "handles entries with non-Organization resources",
+			entries: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalResource(&fhir.Location{
+						Id: to.Ptr("loc1"),
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org1"),
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("12345"),
+							},
+						},
+					}),
+				},
+			},
+			expectedParentID:     to.Ptr("org1"),
+			expectedLinkedOrgIDs: []string{},
+			description:          "should skip non-Organization resources and find Organization with URA",
+		},
+		{
+			name: "excludes organizations not linked to parent",
+			entries: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org1"),
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("12345"),
+							},
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org2"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/org1"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org3"),
+						// No partOf reference - not linked to parent
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org4"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/org5"),
+						},
+						// References org5 which doesn't exist - not linked to parent
+					}),
+				},
+			},
+			expectedParentID:     to.Ptr("org1"),
+			expectedLinkedOrgIDs: []string{"org2"},
+			description:          "should exclude organizations not linked to parent through partOf",
+		},
+		{
+			name: "handles organizations in different order",
+			entries: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org2"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/org1"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org3"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/org2"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org1"),
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("12345"),
+							},
+						},
+					}),
+				},
+			},
+			expectedParentID:     to.Ptr("org1"),
+			expectedLinkedOrgIDs: []string{"org2", "org3"},
+			description:          "should work even when parent is not first in entries",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			parentOrgMap, err := findParentOrganizationWithURA(ctx, tt.entries)
+
+			require.NoError(t, err, tt.description)
+
+			if tt.expectedParentID == nil {
+				require.Empty(t, parentOrgMap, tt.description)
+			} else {
+				require.NotEmpty(t, parentOrgMap, tt.description)
+				require.Len(t, parentOrgMap, 1, "should have exactly one parent organization")
+
+				// Extract the single parent organization and its linked orgs
+				var parent *fhir.Organization
+				var orgs []*fhir.Organization
+				for p, linked := range parentOrgMap {
+					parent = p
+					orgs = linked
+				}
+
+				require.NotNil(t, parent, tt.description)
+				require.Equal(t, *tt.expectedParentID, *parent.Id, "parent should have expected ID")
+
+				// Verify the parent has a URA identifier
+				uraFound := false
+				for _, ident := range parent.Identifier {
+					if ident.System != nil && *ident.System == "http://fhir.nl/fhir/NamingSystem/ura" {
+						uraFound = true
+						break
+					}
+				}
+				require.True(t, uraFound, "parent organization should have URA identifier")
+
+				// Verify linked organizations
+				require.NotNil(t, orgs, "linked orgs should not be nil when parent found")
+				require.Equal(t, len(tt.expectedLinkedOrgIDs), len(orgs), fmt.Sprintf("expected %d linked orgs, got %d", len(tt.expectedLinkedOrgIDs), len(orgs)))
+
+				// Check that all linked org IDs match expected
+				linkedOrgIDs := make(map[string]bool)
+				for _, org := range orgs {
+					require.NotNil(t, org.Id, "linked org should have an ID")
+					linkedOrgIDs[*org.Id] = true
+				}
+
+				for _, expectedID := range tt.expectedLinkedOrgIDs {
+					require.True(t, linkedOrgIDs[expectedID], fmt.Sprintf("expected linked org %s not found in results", expectedID))
+				}
+
+				// Verify parent organization is not in linked orgs
+				for _, org := range orgs {
+					require.NotEqual(t, *parent.Id, *org.Id, "parent organization should not be in linked orgs list")
+				}
+			}
+		})
+	}
+}
+
+// mustMarshalResource marshals a resource to JSON bytes, panicking on error.
+// Used in tests to quickly create bundle entries with resources.
+func mustMarshalResource(resource any) []byte {
+	data, err := json.Marshal(resource)
+	if err != nil {
+		panic(err)
+	}
+	return data
 }
