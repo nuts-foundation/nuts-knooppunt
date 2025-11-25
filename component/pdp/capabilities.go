@@ -9,10 +9,11 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-//go:embed capabilities/*
+//go:embed capabilities/*.json
 var FS embed.FS
 
-func readCapability(fileName string) (fhir.CapabilityStatement, error) {
+func readCapability(name string) (fhir.CapabilityStatement, error) {
+	fileName := fmt.Sprintf("capabilities/%s.json", name)
 	data, err := FS.ReadFile(fileName)
 	if err != nil {
 		return fhir.CapabilityStatement{}, err
@@ -30,7 +31,7 @@ func readCapability(fileName string) (fhir.CapabilityStatement, error) {
 func capabilityForScope(scope string) (fhir.CapabilityStatement, bool) {
 	switch scope {
 	case "mcsd_update":
-		capa, err := readCapability("nl-gf-admin-directory-update-client.json")
+		capa, err := readCapability("nl-gf-admin-directory-update-client")
 		return capa, err == nil
 	default:
 		return fhir.CapabilityStatement{}, false
