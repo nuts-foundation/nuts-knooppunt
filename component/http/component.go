@@ -87,8 +87,16 @@ func (c *Component) Start() error {
 	log.Info().Msgf("Starting HTTP servers (public-address: %s, internal-address: %s)", publicAddr, internalAddr)
 
 	// Wrap muxes with OpenTelemetry instrumentation for automatic span creation
-	publicHandler := otelhttp.NewHandler(c.publicMux, "public-api")
-	internalHandler := otelhttp.NewHandler(c.internalMux, "internal-api")
+	// Filter out health check endpoints to avoid polluting traces
+	healthCheckFilter := otelhttp.WithFilter(func(r *http.Request) bool {
+		return r.URL.Path != "/status" && r.URL.Path != "/health"
+	})
+	// Format span names to include HTTP method and path for better discernibility
+	spanNameFormatter := otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
+		return fmt.Sprintf("%s %s", r.Method, r.URL.Path)
+	})
+	publicHandler := otelhttp.NewHandler(c.publicMux, "public-api", healthCheckFilter, spanNameFormatter)
+	internalHandler := otelhttp.NewHandler(c.internalMux, "internal-api", healthCheckFilter, spanNameFormatter)
 
 	var err error
 	c.publicServer, err = createServer(publicAddr, publicHandler)
