@@ -92,6 +92,36 @@ You can create a new patient via the Patients Overview page:
 
 The new patient appears at the top of the list immediately after creation.
 
+## Patient Consent Management
+
+Navigate to `/consents` to manage FHIR R4 Consent resources.
+
+Features:
+- List existing consents (from the patients tenant FHIR endpoint)
+- Create new consent (status, performer organizations, provision actors, category codes)
+- Edit consent (update fields)
+- Delete consent
+- Organizations listed in performer/provision actor inputs are sourced from the mCSD Query Directory (`http://localhost:7050/fhir/knpt-mcsd-query`) via FHIR Organization search.
+
+Environment variables (optional overrides):
+- `REACT_APP_FHIR_CONSENT_BASE_URL` (default: http://localhost:7050/fhir/sunflower-patients)
+- `REACT_APP_FHIR_MCSD_QUERY_BASE_URL` (default: http://localhost:7050/fhir/knpt-mcsd-query)
+
+### CORS Configuration
+
+The FHIR server (HAPI FHIR) is configured to allow CORS requests from browser-based clients. If you encounter CORS errors:
+
+1. Ensure the HAPI FHIR service in `docker-compose.yml` includes:
+   ```yaml
+   hapi.fhir.cors.allowed_origin: "*"
+   hapi.fhir.cors.allow_credentials: true
+   ```
+
+2. Restart the services:
+   ```bash
+   docker-compose restart hapi-fhir
+   ```
+
 ## Architecture
 
 - **React** - UI framework

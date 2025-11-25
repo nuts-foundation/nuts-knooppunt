@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../AuthProvider';
-import { fhirApi } from '../api/fhirApi';
+import { patientApi } from '../api/patientApi';
 
 function PatientsPage() {
   const { isAuthenticated, logout } = useAuth();
@@ -34,7 +34,7 @@ function PatientsPage() {
     setLoading(true);
     setError(null);
     try {
-      const patientData = await fhirApi.getPatients();
+      const patientData = await patientApi.list();
       setPatients(patientData);
     } catch (err) {
       setError(err.message);
@@ -46,8 +46,8 @@ function PatientsPage() {
   const filteredPatients = patients.filter(patient => {
     if (!searchTerm) return true;
 
-    const name = fhirApi.getPatientName(patient).toLowerCase();
-    const bsn = fhirApi.getBSN(patient) || '';
+    const name = patientApi.formatName(patient).toLowerCase();
+    const bsn = patientApi.getByBSN(patient) || '';
     const search = searchTerm.toLowerCase();
 
     return name.includes(search) || bsn.includes(search);
@@ -74,7 +74,7 @@ function PatientsPage() {
 
   const startEdit = (patient) => {
     setEditingPatient(patient);
-    setForm(fhirApi.toForm(patient));
+    setForm(patientApi.toForm(patient));
     setShowNewPatient(true); // reuse modal for edit
   };
   const isEditMode = !!editingPatient;
@@ -89,7 +89,7 @@ function PatientsPage() {
     if (isEditMode) {
       setEditing(true);
       try {
-        const updated = await fhirApi.updatePatient(editingPatient.id, {
+        const updated = await patientApi.update(editingPatient.id, {
           bsn: form.bsn || null,
           given: form.given.trim().split(/\s+/),
           family: form.family.trim(),
@@ -111,7 +111,7 @@ function PatientsPage() {
     // create new
     setCreating(true);
     try {
-      const created = await fhirApi.createPatient({
+      const created = await patientApi.create({
         bsn: form.bsn || null,
         given: form.given.trim().split(/\s+/),
         family: form.family.trim(),
@@ -135,7 +135,7 @@ function PatientsPage() {
     setDeleteError(null);
     setDeleting(true);
     try {
-      await fhirApi.deletePatient(editingPatient.id);
+      await patientApi.delete(editingPatient.id);
       setPatients(prev => prev.filter(p => p.id !== editingPatient.id));
       cancelModal();
     } catch (err) {
@@ -293,10 +293,10 @@ function PatientsPage() {
                   </thead>
                   <tbody>
                     {filteredPatients.map((patient) => {
-                      const bsn = fhirApi.getBSN(patient);
-                      const name = fhirApi.getPatientName(patient);
-                      const birthDate = fhirApi.getBirthDate(patient);
-                      const gender = fhirApi.getGender(patient);
+                      const bsn = patientApi.getByBSN(patient);
+                      const name = patientApi.formatName(patient);
+                      const birthDate = patientApi.formatBirthDate(patient);
+                      const gender = patientApi.formatGender(patient);
 
                       // Calculate age
                       let age = '-';
