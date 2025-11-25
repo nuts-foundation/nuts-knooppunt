@@ -31,26 +31,26 @@ export const consentApi = {
         if (!res.ok && res.status !== 204) throw new Error('Delete consent failed: ' + res.status + ' ' + res.statusText);
         return true;
     }, toEditable(consent) {
-        return {
-            id: consent.id,
-            status: consent.status,
-            patientReference: consent.patient?.reference || '',
-            provisionActorsOrgURAs: (consent.provision?.actor || []).map(a => a.reference?.identifier?.value || a.reference?.reference || ''),
-            dateTime: consent.dateTime || '',
-            categoryCodes: (consent.category || []).flatMap(c => (c.coding || []).map(cd => ({
-                system: cd.system, code: cd.code, display: cd.display
-            })))
-        };
+        // copy consent, set the following fields;
+        consent.provisionActorsOrgURAs = (consent.provision?.actor || []).map(a => a.reference?.identifier?.value || a.reference?.reference || '');
+        consent.patientReference = consent.patient?.reference || '';
+        consent.dateTime = consent.dateTime || '';
+        return consent;
     }, toResource(form) {
         return {
             resourceType: 'Consent',
             status: form.status || 'active',
             scope: {coding: [{system: 'http://terminology.hl7.org/CodeSystem/consentscope', code: 'patient-privacy'}]},
-            category: (form.categoryCodes || []).map(c => ({
-                coding: [{
-                    system: c.system || 'http://loinc.org', code: c.code, display: c.display
-                }]
-            })),
+            category: [
+                {
+                    coding: [
+                        {
+                            system: "http://loinc.org",
+                            code: "59284-0"
+                        }
+                    ]
+                }
+            ],
             patient: {reference: form.patientReference},
             dateTime: new Date(form.dateTime).toISOString(),
             controller: [{
