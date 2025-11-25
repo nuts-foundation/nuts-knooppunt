@@ -12,46 +12,15 @@ export const consentApi = {
         if (!res.ok) throw new Error('List consents failed: ' + res.statusText);
         const bundle = await res.json();
         return (bundle.entry || []).map(e => e.resource).filter(r => r.resourceType === 'Consent');
-    },
-    async create({
-                     status,
-                     scope,
-                     categoryCodes,
-                     patientReference,
-                     provisionType,
-                     provisionActorsOrgRefs,
-                     dateTime
-                 }) {
+    }, async create(form) {
         // Minimal FHIR R4 Consent structure
-        const resource = {
-            resourceType: 'Consent',
-            status: status || 'active',
-            scope: scope || {
-                coding: [{
-                    system: 'http://terminology.hl7.org/CodeSystem/consentscope', code: 'patient-privacy'
-                }]
-            },
-            category: (categoryCodes || []).map(c => ({
-                coding: [{
-                    system: c.system || 'http://loinc.org', code: c.code, display: c.display
-                }]
-            })),
-            patient: {reference: patientReference},
-            dateTime: new Date(dateTime).toISOString(),
-            provision: {
-                type: provisionType || 'permit', actor: provisionActorsOrgRefs.map(orgRef => ({
-                    role: {coding: [{system: 'http://terminology.hl7.org/CodeSystem/consentaction', code: 'access'}]},
-                    reference: {reference: orgRef}
-                }))
-            }
-        };
+        const resource = this.toResource(form)
         const res = await fetch(`${config.fhirBaseURL}/Consent`, {
             method: 'POST', headers, body: JSON.stringify(resource)
         });
         if (!res.ok) throw new Error('Create consent failed: ' + res.status + ' ' + res.statusText);
         return await res.json();
-    },
-    async update(id, updated) {
+    }, async update(id, updated) {
         const res = await fetch(`${config.fhirBaseURL}/Consent/${id}`, {
             method: 'PUT', headers, body: JSON.stringify(updated)
         });
@@ -66,15 +35,13 @@ export const consentApi = {
             id: consent.id,
             status: consent.status,
             patientReference: consent.patient?.reference || '',
-            provisionType: consent.provision?.type || 'permit',
-            provisionActorsOrgRefs: (consent.provision?.actor || []).map(a => a.reference?.reference),
+            provisionActorsOrgURAs: (consent.provision?.actor || []).map(a => a.reference?.identifier?.value || a.reference?.reference || ''),
             dateTime: consent.dateTime || '',
             categoryCodes: (consent.category || []).flatMap(c => (c.coding || []).map(cd => ({
                 system: cd.system, code: cd.code, display: cd.display
             })))
         };
-    },
-    toResource(form) {
+    }, toResource(form) {
         return {
             resourceType: 'Consent',
             status: form.status || 'active',
@@ -85,21 +52,24 @@ export const consentApi = {
                 }]
             })),
             patient: {reference: form.patientReference},
-            dateTime: form.dateTime || new Date().toISOString(),
-            controller: [
-                {
-                    type: 'Organization',
-                    identifier: {
-                        system: 'http://fhir.nl/fhir/NamingSystem/ura',
-                        value: config.organizationURA,
-                    }
+            dateTime: new Date(form.dateTime).toISOString(),
+            controller: [{
+                type: 'Organization', identifier: {
+                    system: 'http://fhir.nl/fhir/NamingSystem/ura', value: config.organizationURA,
                 }
-            ],
+            }],
             provision: {
-                type: form.provisionType || 'permit', actor: (form.provisionActorsOrgRefs || []).map(orgRef => ({
+                type: 'permit',
+                actor: (form.provisionActorsOrgURAs || []).map(ura => ({
                     role: {coding: [{system: 'http://terminology.hl7.org/CodeSystem/consentaction', code: 'access'}]},
-                    reference: {reference: orgRef}
-                }))
+                    reference: {
+                        type: 'Organization',
+                        identifier: {
+                            system: 'http://fhir.nl/fhir/NamingSystem/ura',
+                            value: ura
+                        }
+                    }
+                })),
             }
         };
     }
