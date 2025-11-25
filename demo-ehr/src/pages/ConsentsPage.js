@@ -24,7 +24,6 @@ function ConsentsPage() {
         provisionType: 'permit',
         provisionActorsOrgURAs: [],
         dateTime: new Date().toISOString().slice(0, 16), // for datetime-local
-        categoryCodes: []
     });
     const [form, setForm] = useState(emptyForm());
 
@@ -252,14 +251,6 @@ function ConsentsPage() {
                                     <label>Date/Time</label>
                                     <input type="datetime-local" value={form.dateTime}
                                            onChange={e => setForm(f => ({...f, dateTime: e.target.value}))}/>
-                                </div>
-                                <div className="form-row">
-                                    <label>Category Codes (comma separated codes)</label>
-                                    <input type="text" value={form.categoryCodes.map(c => c.code).join(',')}
-                                           onChange={e => {
-                                               const codes = e.target.value.split(',').map(c => c.trim()).filter(Boolean);
-                                               setForm(f => ({...f, categoryCodes: codes.map(code => ({code}))}));
-                                           }} placeholder="e.g. 34133-9, 64292-6"/>
                                 </div>
                                 {formError && <div className="form-error">{formError}</div>}
                                 {deleteError && <div className="form-error">{deleteError}</div>}
