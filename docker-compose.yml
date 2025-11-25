@@ -9,7 +9,6 @@ services:
       KNPT_MCSD_QUERY_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-query
       KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL: http://hapi-fhir:7050/fhir/lrza-mcsd-admin
       KNPT_NVI_BASEURL: http://hapi-fhir:7050/fhir/nvi
-      KNPT_TRACING_ENABLED: ${KNPT_TRACING_ENABLED:-true}
       KNPT_TRACING_OTLPENDPOINT: ${KNPT_TRACING_OTLPENDPOINT:-jaeger:4318}
     volumes:
       - ./config:/app/config:ro
