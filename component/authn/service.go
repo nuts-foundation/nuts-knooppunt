@@ -79,11 +79,6 @@ func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *
 	for _, endpoint := range endpointConfig.internalEndpoints {
 		internalMux.Handle(endpoint, c.provider)
 	}
-	// In non-strict mode, enable the test auth endpoints for testing
-	if !c.strictMode && len(c.config.Clients) > 0 && len(c.config.Clients[0].RedirectURLs[0]) > 0 {
-		publicMux.HandleFunc("GET /auth/test", html.RenderTestStartAuthn)
-		publicMux.HandleFunc("GET /auth/test-callback", html.RenderTestCallback(op.DefaultEndpoints.Token.Absolute(""), c.config.Clients[0].RedirectURLs[0]))
-	}
 }
 
 func New(config Config, httpInterfaces httpComponent.InterfaceInfo, coreConfig core.Config) (*Component, error) {
