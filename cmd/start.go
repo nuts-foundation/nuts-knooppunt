@@ -27,6 +27,7 @@ func Start(ctx context.Context, config Config) error {
 	internalMux := http.NewServeMux()
 
 	// Tracing component must be first to capture spans from other components
+	config.Tracing.ServiceVersion = status.Version()
 	tracingComponent := tracing.New(config.Tracing)
 
 	mcsdUpdateClient, err := mcsd.New(config.MCSD)
