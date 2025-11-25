@@ -65,6 +65,14 @@ function HomePage() {
               </div>
 
               <div className="card">
+                <h3>📝 Patient Consents</h3>
+                <p>Manage consent records that grant or deny access to patient data for organizations.</p>
+                <a href="/consents" className="button" style={{ marginTop: '15px', display: 'inline-block' }}>
+                  Manage Consents
+                </a>
+              </div>
+
+              <div className="card">
                 <h3>🔄 Data Exchange</h3>
                 <p>
                   Share and receive patient data with other healthcare providers
@@ -107,4 +115,3 @@ function HomePage() {
 }
 
 export default HomePage;
-

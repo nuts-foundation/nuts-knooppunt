@@ -68,8 +68,12 @@ services:
       hapi.fhir.allow_cascading_deletes: true
       # Lets the server generate UUIDs for resources instead of integers
       hapi.fhir.server_id_strategy: UUID
-      # Allow storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
+      # Allows storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
       hapi.fhir.store_meta_source_information: SOURCE_URI
+
+      # Enable CORS for browser-based clients (demo-ehr)
+      hapi.fhir.cors.allowed_origin: "*"
+      hapi.fhir.cors.allow_credentials: true
 
       NVI_AUDIENCE: nvi
       NVI_TENANT: nvi
@@ -181,6 +185,7 @@ services:
       - CHOKIDAR_USEPOLLING=true  # For hot reload on some systems
       - REACT_APP_AUTHORITY=http://localhost:8080/auth
       - REACT_APP_FHIR_BASE_URL=http://localhost:7050/fhir/sunflower-patients
+      - REACT_APP_FHIR_MCSD_QUERY_BASE_URL=http://localhost:7050/fhir/knpt-mcsd-query
     stdin_open: true
     tty: true
 
