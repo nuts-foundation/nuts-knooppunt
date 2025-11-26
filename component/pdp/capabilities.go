@@ -74,6 +74,8 @@ func evalInteraction(
 	resourceType fhir.ResourceType,
 	interaction fhir.TypeRestfulInteraction,
 ) PolicyResult {
+	// FUTURE: This is a pretty naive implementation - we can make it more efficient at a later point.
+
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
 	for _, rest := range statement.Rest {
 		for _, res := range rest.Resource {
