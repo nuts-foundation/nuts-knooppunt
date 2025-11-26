@@ -10,7 +10,7 @@ import (
 func TestComponent_disallow_interaction(t *testing.T) {
 	input := MainPolicyInput{
 		Scope:                     "mcsd_update",
-		InteractionType:           fhir.TypeRestfulInteractionRead,
+		InteractionType:           fhir.TypeRestfulInteractionUpdate,
 		ResourceId:                "118876",
 		ResourceType:              fhir.ResourceTypeOrganization,
 		RequestingOrganizationUra: "00000666",
