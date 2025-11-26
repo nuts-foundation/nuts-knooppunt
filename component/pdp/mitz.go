@@ -2,7 +2,6 @@ package pdp
 
 import (
 	"context"
-	"net/http"
 	"slices"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
@@ -72,7 +71,6 @@ func xacmlFromInput(input MainPolicyInput) xacml.AuthzRequest {
 func validateMitzInput(input MainPolicyInput) bool {
 	requiredValues := []string{
 		input.Scope,
-		input.Method,
 		input.PatientBSN,
 		input.RequestingUziRoleCode,
 		input.RequestingPractitionerIdentifier,
@@ -83,11 +81,6 @@ func validateMitzInput(input MainPolicyInput) bool {
 		input.PurposeOfUse,
 	}
 	if slices.Contains(requiredValues, "") {
-		return false
-	}
-
-	validMethods := []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPatch}
-	if !slices.Contains(validMethods, input.Method) {
 		return false
 	}
 

@@ -30,8 +30,12 @@ func readCapability(name string) (fhir.CapabilityStatement, error) {
 
 func capabilityForScope(scope string) (fhir.CapabilityStatement, bool) {
 	switch scope {
+	// FUTURE: Should be made configurable or packaged up with some policy
 	case "mcsd_update":
 		capa, err := readCapability("nl-gf-admin-directory-update-client")
+		return capa, err == nil
+	case "patient_example":
+		capa, err := readCapability("patient-example")
 		return capa, err == nil
 	default:
 		return fhir.CapabilityStatement{}, false

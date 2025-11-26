@@ -21,8 +21,7 @@ Content-Type: application/json
 
 {
   "input": {
-    "method": "GET",
-    "path": ["fhir", "Patient", "118876"],
+    "scope": "patient_example",
     "resource_id": "123445",
     "resource_type": "Patient",
     "patient_bsn": "900186021",
