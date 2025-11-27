@@ -26,8 +26,8 @@ var _ component.Lifecycle = &Component{}
 var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
 var defaultDirectoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
 
-// ParentOrganizationMap maps parent organizations (with URA identifier) to their linked child organizations
-type ParentOrganizationMap map[*fhir.Organization][]*fhir.Organization
+// parentOrganizationMap maps parent organizations (with URA identifier) to their linked child organizations
+type parentOrganizationMap map[*fhir.Organization][]*fhir.Organization
 
 // clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
 // to account for potential clock differences between client and FHIR server
@@ -81,10 +81,11 @@ type DirectoryConfig struct {
 type UpdateReport map[string]DirectoryUpdateReport
 
 type administrationDirectory struct {
-	fhirBaseURL   string
-	resourceTypes []string
-	discover      bool
-	sourceURL     string // The fullUrl from the Bundle entry that created this Endpoint, used for unregistration on DELETE
+	fhirBaseURL      string
+	resourceTypes    []string
+	discover         bool
+	sourceURL        string // The fullUrl from the Bundle entry that created this Endpoint, used for unregistration on DELETE
+	authoritativeUra string // URA of the organization that is authoritative for this directory
 }
 
 type DirectoryUpdateReport struct {
@@ -108,7 +109,7 @@ func New(config Config) (*Component, error) {
 		updateMux:              &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.AdministrationDirectories {
-		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true, ""); err != nil {
+		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true, "", ""); err != nil {
 			return nil, fmt.Errorf("register root administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
 		}
 	}
@@ -141,7 +142,7 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 	})
 }
 
-func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool, sourceURL string) error {
+func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool, sourceURL string, authoritativeUra string) error {
 	// Must be a valid http or https URL
 	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
 	if err != nil {
@@ -168,10 +169,11 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 		return nil
 	}
 	c.administrationDirectories = append(c.administrationDirectories, administrationDirectory{
-		resourceTypes: resourceTypes,
-		fhirBaseURL:   fhirBaseURL,
-		discover:      discover,
-		sourceURL:     sourceURL,
+		resourceTypes:    resourceTypes,
+		fhirBaseURL:      fhirBaseURL,
+		discover:         discover,
+		sourceURL:        sourceURL,
+		authoritativeUra: authoritativeUra,
 	})
 	log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURL).Msgf("Registered mCSD Directory (discover=%v)", discover)
 	return nil
@@ -212,7 +214,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	result := make(UpdateReport)
 	for i := 0; i < len(c.administrationDirectories); i++ {
 		adminDirectory := c.administrationDirectories[i]
-		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover)
+		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover, adminDirectory.authoritativeUra)
 		if err != nil {
 			log.Ctx(ctx).Err(err).Str("fhir_server", adminDirectory.fhirBaseURL).Msg("mCSD Directory update failed")
 			report.Errors = append(report.Errors, err.Error())
@@ -229,7 +231,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	return result, nil
 }
 
-func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool) (DirectoryUpdateReport, error) {
+func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool, authoritativeUra string) (DirectoryUpdateReport, error) {
 	log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURLRaw).Msg("Updating from mCSD Directory (discover=" + fmt.Sprint(allowDiscovery) + ", resourceTypes=" + strings.Join(allowedResourceTypes, ",") + ")")
 	remoteAdminDirectoryFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
@@ -284,10 +286,16 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// Find parent organizations with URA identifier and all organizations linked to them
 	// This is used when validating organizations that don't have their own URA identifier
 	// If no parent organizations are found in deduplicatedEntries, queries all organizations from the directory
-	parentOrganizationsMap, err := c.ensureParentOrganizationsMap(ctx, fhirBaseURLRaw, remoteAdminDirectoryFHIRClient, deduplicatedEntries)
+	// If authoritativeUra is provided, filters to only include parent organizations with that URA
+	parentOrganizationsMap, err := c.ensureParentOrganizationsMap(ctx, fhirBaseURLRaw, remoteAdminDirectoryFHIRClient, deduplicatedEntries, authoritativeUra)
 
 	if err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("failed to build parent organization map: %w", err)
+	}
+
+	// Validate all parent organizations once before processing resources
+	if err := ValidateParentOrganizations(parentOrganizationsMap); err != nil {
+		return DirectoryUpdateReport{}, fmt.Errorf("parent organization (one that supposedly has ura identifier - and only only) validation failed: %w", err)
 	}
 
 	// Build transaction with deterministic conditional references
@@ -331,7 +339,20 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 					continue
 				}
 				log.Ctx(ctx).Debug().Msgf("Discovered mCSD Directory: %s", endpoint.Address)
-				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, *entry.FullUrl)
+
+				// Extract URA identifier from first parent organization (for systems where we're allowed to discover from, there should only be 1 parent organization)
+				var authoritativeUra string
+				for parentOrg := range parentOrganizationsMap {
+					if parentOrg != nil {
+						uraIdentifiers := libfhir.FilterIdentifiersBySystem(parentOrg.Identifier, coding.URANamingSystem)
+						if len(uraIdentifiers) > 0 {
+							authoritativeUra = *uraIdentifiers[0].Value
+						}
+					}
+					break // Only take the first (and only) parent organization
+				}
+
+				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, *entry.FullUrl, authoritativeUra)
 				if err != nil {
 					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
 				}
@@ -489,9 +510,6 @@ func extractResourceIDFromURL(entry fhir.BundleEntry) string {
 // buildOrganizationKey creates a composite key from organization ID and VersionId for deduplication.
 // The key includes both the ID and VersionId (if available) to differentiate between versions.
 func buildOrganizationKey(org *fhir.Organization) string {
-	if org == nil || org.Id == nil {
-		return ""
-	}
 	key := *org.Id
 	if org.Meta != nil && org.Meta.VersionId != nil {
 		key = key + ":" + *org.Meta.VersionId
@@ -499,26 +517,14 @@ func buildOrganizationKey(org *fhir.Organization) string {
 	return key
 }
 
-// findOrganizationKeyByID builds a map of organization keys by their ID to help with partOf reference lookups.
-// This is needed because partOf references typically only contain the ID, not the VersionId.
-func findOrganizationKeyByID(orgMap map[string]*fhir.Organization, orgID string) string {
-	for key, org := range orgMap {
-		if org.Id != nil && *org.Id == orgID {
-			return key
-		}
-	}
-	return ""
-}
-
-// findParentOrganizationWithURA finds a parent organization with a URA identifier and all organizations linked to it.
-// It loops through ALL entries to find organizations with URA identifiers, then selects the one with the most
-// organizations linked to it (directly or indirectly through their partOf chain).
+// findParentOrganizationsWithURA finds a parent organization with a URA identifier and all organizations linked to it.
+// It loops through ALL entries to find organizations with URA identifiers
 // ensureParentOrganizationsMap builds the parent organizations map from deduplicatedEntries.
 // If no parent organizations with URA are found, it queries all organizations from the directory as a fallback.
-// Returns an empty map if no parent organizations are found (not an error condition).
-func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseURLRaw string, remoteAdminDirectoryFHIRClient fhirclient.Client, deduplicatedEntries []fhir.BundleEntry) (ParentOrganizationMap, error) {
+// If authoritativeUra is provided, filters the map to only include parent organizations with that URA identifier.
+func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseURLRaw string, remoteAdminDirectoryFHIRClient fhirclient.Client, deduplicatedEntries []fhir.BundleEntry, authoritativeUra string) (parentOrganizationMap, error) {
 	// First try to find parent organizations from deduplicatedEntries
-	parentOrganizationsMap, err := findParentOrganizationWithURA(ctx, deduplicatedEntries)
+	parentOrganizationsMap, err := findParentOrganizationsWithURA(ctx, deduplicatedEntries)
 	if err != nil {
 		return nil, err
 	}
@@ -530,15 +536,30 @@ func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseUR
 			"_count": []string{strconv.Itoa(searchPageSize)},
 		})
 		if err != nil {
-			log.Ctx(ctx).Warn().Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to query all organizations, continuing without parent organization map")
-			return parentOrganizationsMap, nil
+			log.Ctx(ctx).Err(err).Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to query all organizations, aborting parent organization map build")
+			return nil, err
 		}
 
-		parentOrganizationsMap, err = findParentOrganizationWithURA(ctx, orgEntries)
+		parentOrganizationsMap, err = findParentOrganizationsWithURA(ctx, orgEntries)
 		if err != nil {
-			log.Ctx(ctx).Warn().Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to build parent organization map from all organizations, continuing without parent organization map")
-			return make(ParentOrganizationMap), nil
+			log.Ctx(ctx).Err(err).Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to build parent organization map from all organizations, aborting parent organization map build")
+			return nil, err
 		}
+	}
+
+	// Filter to only include parent organizations matching the authoritative URA if provided
+	if authoritativeUra != "" {
+		filtered := make(parentOrganizationMap)
+		for parentOrg, linkedOrgs := range parentOrganizationsMap {
+			uraIdentifiers := libfhir.FilterIdentifiersBySystem(parentOrg.Identifier, coding.URANamingSystem)
+			for _, ura := range uraIdentifiers {
+				if ura.Value != nil && *ura.Value == authoritativeUra {
+					filtered[parentOrg] = linkedOrgs
+					break
+				}
+			}
+		}
+		parentOrganizationsMap = filtered
 	}
 
 	return parentOrganizationsMap, nil
@@ -547,9 +568,9 @@ func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseUR
 // If no organization with URA is found directly, it traverses each organization's partOf chain to find a parent with URA.
 // Returns the parent organization with the most linked organizations and a slice of all organizations whose
 // partOf chain leads to the parent.
-// Returns (nil, nil, nil) if no organization with URA identifier is found (not an error condition).
-func findParentOrganizationWithURA(ctx context.Context, entries []fhir.BundleEntry) (ParentOrganizationMap, error) {
-	result := make(ParentOrganizationMap)
+// Returns (nil, nil) if no organization with URA identifier is found (not an error condition).
+func findParentOrganizationsWithURA(ctx context.Context, entries []fhir.BundleEntry) (parentOrganizationMap, error) {
+	result := make(parentOrganizationMap)
 
 	// Build a map of all organizations for efficient lookup using ID and VersionId as composite key
 	orgMap := make(map[string]*fhir.Organization)

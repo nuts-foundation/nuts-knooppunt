@@ -17,6 +17,16 @@ type ValidationRules struct {
 	AllowedResourceTypes []string
 }
 
+// ValidateParentOrganizations validates all parent organizations in the map.
+func ValidateParentOrganizations(parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
+	for parentOrg := range parentOrganizationMap {
+		if err := validateOrganizationResource(parentOrg); err != nil {
+			return fmt.Errorf("parent organization failed to validate: %w", err)
+		}
+	}
+	return nil
+}
+
 // ValidateUpdate validates a FHIR resource create/update from a mCSD Administration Directory,
 // according to the rules specified by https://nuts-foundation.github.io/nl-generic-functions-ig/care-services.html#update-client
 func ValidateUpdate(ctx context.Context, rules ValidationRules, resourceJSON []byte, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
@@ -34,14 +44,9 @@ func ValidateUpdate(ctx context.Context, rules ValidationRules, resourceJSON []b
 		return fmt.Errorf("resource type %s not allowed", resourceType)
 	}
 
-	// Validate all parent organizations
-	for parentOrg := range parentOrganizationMap {
-		if err := validateOrganizationResource(parentOrg); err != nil {
-			return fmt.Errorf("parent organization failed to validate: %w", err)
-		}
-	}
-
 	switch resourceType {
+	case "Organization":
+		return unmarshalAndVisitOrganizationResource(resourceJSON)
 	case "Location":
 		return unmarshalAndVisitResource[fhir.Location](ctx, resourceJSON, parentOrganizationMap, validateLocationResource)
 	case "PractitionerRole":
@@ -60,6 +65,14 @@ func unmarshalAndVisitResource[ResType any](ctx context.Context, resourceJSON []
 		return fmt.Errorf("failed to unmarshal resource JSON: %w", err)
 	}
 	return visitor(ctx, resource, parentOrganizationMap)
+}
+
+func unmarshalAndVisitOrganizationResource(resourceJSON []byte) error {
+	resource := new(fhir.Organization)
+	if err := json.Unmarshal(resourceJSON, resource); err != nil {
+		return fmt.Errorf("failed to unmarshal resource JSON: %w", err)
+	}
+	return validateOrganizationResource(resource)
 }
 
 func validateOrganizationResource(resource *fhir.Organization) error {
@@ -188,16 +201,6 @@ func assertReferencePointsToValidOrganization(ref *fhir.Reference, parentOrganiz
 			}
 		}
 
-		// If we get here, the reference doesn't point to a valid organization
-		validOrgIDs := []string{}
-		if parentOrganization != nil && parentOrganization.Id != nil {
-			validOrgIDs = append(validOrgIDs, *parentOrganization.Id)
-		}
-		for _, org := range allOrganizations {
-			if org.Id != nil {
-				validOrgIDs = append(validOrgIDs, *org.Id)
-			}
-		}
 	}
 
 	return fmt.Errorf("%s must reference a valid organization (got %s)", fieldName, refID)
