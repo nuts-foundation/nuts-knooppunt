@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../AuthProvider';
+import { useNavigate } from 'react-router-dom';
 import { patientApi } from '../api/patientApi';
 
 function PatientsPage() {
   const { isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -289,6 +291,7 @@ function PatientsPage() {
                       <th>Gender</th>
                       <th>Birth Date</th>
                       <th>Age</th>
+                      <th style={{ width: '100px' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -307,7 +310,7 @@ function PatientsPage() {
                       }
 
                       return (
-                        <tr key={patient.id} onClick={() => startEdit(patient)} style={{ cursor: 'pointer' }} title="Click to edit">
+                        <tr key={patient.id} onClick={() => navigate(`/patients/${patient.id}`)} style={{ cursor: 'pointer' }} title="Click to view details">
                           <td className="bsn-cell">
                             {bsn ? (
                               <span className="bsn-badge">{bsn}</span>
@@ -323,6 +326,19 @@ function PatientsPage() {
                           </td>
                           <td>{formatDate(birthDate)}</td>
                           <td>{age}</td>
+                          <td>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEdit(patient);
+                              }}
+                              className="button button-secondary"
+                              style={{ padding: '6px 12px', fontSize: '13px' }}
+                              title="Edit patient"
+                            >
+                              ✏️ Edit
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}

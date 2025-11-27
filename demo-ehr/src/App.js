@@ -4,6 +4,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import CallbackPage from './pages/CallbackPage';
 import PatientsPage from './pages/PatientsPage';
+import PatientPage from './pages/PatientPage';
 import ConsentsPage from './pages/ConsentsPage';
 import './App.css';
 
@@ -15,6 +16,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/callback" element={<CallbackPage />} />
           <Route path="/patients" element={<PatientsPage />} />
+          <Route path="/patients/:patientId" element={<PatientPage />} />
           <Route path="/consents" element={<ConsentsPage />} />
         </Routes>
       </Router>
