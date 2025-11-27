@@ -64,3 +64,15 @@ func TestComponent_reject_search_param(t *testing.T) {
 	resp := evalCapabilityPolicy(input)
 	assert.False(t, resp.Allow)
 }
+
+func TestComponent_reject_interaction_type(t *testing.T) {
+	input := MainPolicyInput{
+		Scope:                     "mcsd_update",
+		InteractionType:           fhir.TypeRestfulInteractionSearchSystem,
+		RequestingOrganizationUra: "00000666",
+		DataHolderOrganizationUra: "00000659",
+	}
+
+	resp := evalCapabilityPolicy(input)
+	assert.False(t, resp.Allow)
+}

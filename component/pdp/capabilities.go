@@ -66,6 +66,28 @@ func evalInteraction(
 	input MainPolicyInput,
 ) PolicyResult {
 	// FUTURE: This is a pretty naive implementation - we can make it more efficient at a later point.
+	var supported = []fhir.TypeRestfulInteraction{
+		fhir.TypeRestfulInteractionRead,
+		fhir.TypeRestfulInteractionVread,
+		fhir.TypeRestfulInteractionUpdate,
+		fhir.TypeRestfulInteractionPatch,
+		fhir.TypeRestfulInteractionDelete,
+		fhir.TypeRestfulInteractionHistoryInstance,
+		fhir.TypeRestfulInteractionHistoryType,
+		fhir.TypeRestfulInteractionCreate,
+		fhir.TypeRestfulInteractionSearchType,
+	}
+	if !slices.Contains(supported, input.InteractionType) {
+		return PolicyResult{
+			Allow: false,
+			Reasons: []ResultReason{
+				{
+					Code:        "not_implemented",
+					Description: "restful interaction type not supported",
+				},
+			},
+		}
+	}
 
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
 	for _, rest := range statement.Rest {
