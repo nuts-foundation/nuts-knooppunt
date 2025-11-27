@@ -231,6 +231,71 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	return result, nil
 }
 
+// discoverAndRegisterEndpoints processes endpoint discovery and registration for the given parent organizations.
+// It finds endpoints from the entries that match parent organization endpoint references and registers them.
+func (c *Component) discoverAndRegisterEndpoints(ctx context.Context, entries []fhir.BundleEntry, parentOrganizationsMap parentOrganizationMap, report DirectoryUpdateReport) DirectoryUpdateReport {
+	if parentOrganizationsMap == nil {
+		return report
+	}
+
+	for parentOrg := range parentOrganizationsMap {
+		uraIdentifiers := libfhir.FilterIdentifiersBySystem(parentOrg.Identifier, coding.URANamingSystem)
+		if len(uraIdentifiers) == 0 || uraIdentifiers[0].Value == nil {
+			continue
+		}
+		authoritativeUra := *uraIdentifiers[0].Value
+
+		if parentOrg.Endpoint == nil || len(parentOrg.Endpoint) == 0 {
+			continue
+		}
+
+		// find endpoint in entries
+		endpoints := make(map[string]*fhir.Endpoint)
+		for _, entry := range entries {
+			if entry.Resource == nil {
+				continue
+			}
+			var endpoint fhir.Endpoint
+			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
+				continue
+			}
+			// find all Endpoint resources from entries that reference the parent organization's Endpoint resources'
+			if endpoint.Id != nil {
+				endpointID := *endpoint.Id
+				for _, parentEndpoint := range parentOrg.Endpoint {
+					if parentEndpoint.Reference != nil {
+						refID := extractReferenceID(parentEndpoint.Reference)
+						if endpointID == refID {
+							if entry.FullUrl != nil {
+								endpoints[*entry.FullUrl] = &endpoint
+							}
+							break // Found a match, move to next entry
+						}
+					}
+				}
+			}
+		}
+
+		payloadCoding := fhir.Coding{
+			System: to.Ptr(coding.MCSDPayloadTypeSystem),
+			Code:   to.Ptr(coding.MCSDPayloadTypeDirectoryCode),
+		}
+
+		for fullUrl, endpoint := range endpoints {
+			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
+				log.Ctx(ctx).Debug().Msgf("Discovered mCSD Directory: %s", endpoint.Address)
+
+				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, fullUrl, authoritativeUra)
+				if err != nil {
+					report.Warnings = append(report.Warnings, fmt.Sprintf("failed to register discovered mCSD Directory at %s: %s", endpoint.Address, err.Error()))
+				}
+			}
+		}
+	}
+
+	return report
+}
+
 func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool, authoritativeUra string) (DirectoryUpdateReport, error) {
 	log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURLRaw).Msg("Updating from mCSD Directory (discover=" + fmt.Sprint(allowDiscovery) + ", resourceTypes=" + strings.Join(allowedResourceTypes, ",") + ")")
 	remoteAdminDirectoryFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
@@ -320,62 +385,8 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 
 	// Handle Endpoint discovery and registration
-	if allowDiscovery && parentOrganizationsMap != nil {
-		for parentOrg := range parentOrganizationsMap {
-
-			authoritativeUra := *libfhir.FilterIdentifiersBySystem(parentOrg.Identifier, coding.URANamingSystem)[0].Value
-
-			if parentOrg.Endpoint == nil || len(parentOrg.Endpoint) == 0 {
-				// this should never be the case?
-				continue
-			}
-			// find endpoint in entries
-			endpoints := make(map[string]*fhir.Endpoint)
-			for _, entry := range entries {
-				if entry.Resource == nil {
-					continue
-				}
-				var endpoint fhir.Endpoint
-				if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
-					continue
-				}
-				// find all Endpoint resources from entries that reference the parent organization's Endpoint resources'
-				if endpoint.Id != nil {
-					endpointID := *endpoint.Id
-					for _, parentEndpoint := range parentOrg.Endpoint {
-						if parentEndpoint.Reference != nil {
-							refID := extractReferenceID(parentEndpoint.Reference)
-							if endpointID == refID {
-								if entry.FullUrl != nil {
-									endpoints[*entry.FullUrl] = &endpoint
-								}
-								break // Found a match, move to next entry
-							}
-						}
-					}
-				}
-			}
-
-			var payloadCoding = fhir.Coding{
-				System: to.Ptr(coding.MCSDPayloadTypeSystem),
-				Code:   to.Ptr(coding.MCSDPayloadTypeDirectoryCode),
-			}
-
-			for fullUrl, endpoint := range endpoints {
-				if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
-					// Use the fullUrl from the Bundle entry to track this Endpoint
-					// The fullUrl uniquely identifies the resource and can be used for later unregistration
-
-					log.Ctx(ctx).Debug().Msgf("Discovered mCSD Directory: %s", endpoint.Address)
-
-					err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, fullUrl, authoritativeUra)
-					if err != nil {
-						report.Warnings = append(report.Warnings, fmt.Sprintf("failed to register discovered mCSD Directory at %s: %s", endpoint.Address, err.Error()))
-					}
-				}
-
-			}
-		}
+	if allowDiscovery {
+		report = c.discoverAndRegisterEndpoints(ctx, entries, parentOrganizationsMap, report)
 	}
 
 	log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Msgf("Got %d mCSD entries", len(tx.Entry))
