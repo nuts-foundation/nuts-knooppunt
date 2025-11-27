@@ -312,18 +312,48 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			continue
 		}
 		log.Ctx(ctx).Trace().Str("fhir_server", fhirBaseURLRaw).Msgf("Processing entry: %s", entry.Request.Url)
-		resourceType, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes}, parentOrganizationsMap, allowDiscovery, fhirBaseURLRaw)
+		_, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes}, parentOrganizationsMap, allowDiscovery, fhirBaseURLRaw)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
 		}
+	}
 
-		// Handle Endpoint discovery and registration
-		if allowDiscovery && resourceType == "Endpoint" && entry.Resource != nil {
-			var endpoint fhir.Endpoint
-			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
-				report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to unmarshal Endpoint resource: %s", i, err.Error()))
+	// Handle Endpoint discovery and registration
+	if allowDiscovery && parentOrganizationsMap != nil {
+		for parentOrg := range parentOrganizationsMap {
+
+			authoritativeUra := *libfhir.FilterIdentifiersBySystem(parentOrg.Identifier, coding.URANamingSystem)[0].Value
+
+			if parentOrg.Endpoint == nil || len(parentOrg.Endpoint) == 0 {
+				// this should never be the case?
 				continue
+			}
+			// find endpoint in entries
+			endpoints := make(map[string]*fhir.Endpoint)
+			for _, entry := range entries {
+				if entry.Resource == nil {
+					continue
+				}
+				var endpoint fhir.Endpoint
+				if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
+					continue
+				}
+				// find all Endpoint resources from entries that reference the parent organization's Endpoint resources'
+				if endpoint.Id != nil {
+					endpointID := *endpoint.Id
+					for _, parentEndpoint := range parentOrg.Endpoint {
+						if parentEndpoint.Reference != nil {
+							refID := extractReferenceID(parentEndpoint.Reference)
+							if endpointID == refID {
+								if entry.FullUrl != nil {
+									endpoints[*entry.FullUrl] = &endpoint
+								}
+								break // Found a match, move to next entry
+							}
+						}
+					}
+				}
 			}
 
 			var payloadCoding = fhir.Coding{
@@ -331,31 +361,19 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 				Code:   to.Ptr(coding.MCSDPayloadTypeDirectoryCode),
 			}
 
-			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
-				// Use the fullUrl from the Bundle entry to track this Endpoint
-				// The fullUrl uniquely identifies the resource and can be used for later unregistration
-				if entry.FullUrl == nil {
-					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: Endpoint missing fullUrl", i))
-					continue
-				}
-				log.Ctx(ctx).Debug().Msgf("Discovered mCSD Directory: %s", endpoint.Address)
+			for fullUrl, endpoint := range endpoints {
+				if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
+					// Use the fullUrl from the Bundle entry to track this Endpoint
+					// The fullUrl uniquely identifies the resource and can be used for later unregistration
 
-				// Extract URA identifier from first parent organization (for systems where we're allowed to discover from, there should only be 1 parent organization)
-				var authoritativeUra string
-				for parentOrg := range parentOrganizationsMap {
-					if parentOrg != nil {
-						uraIdentifiers := libfhir.FilterIdentifiersBySystem(parentOrg.Identifier, coding.URANamingSystem)
-						if len(uraIdentifiers) > 0 {
-							authoritativeUra = *uraIdentifiers[0].Value
-						}
+					log.Ctx(ctx).Debug().Msgf("Discovered mCSD Directory: %s", endpoint.Address)
+
+					err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, fullUrl, authoritativeUra)
+					if err != nil {
+						report.Warnings = append(report.Warnings, fmt.Sprintf("failed to register discovered mCSD Directory at %s: %s", endpoint.Address, err.Error()))
 					}
-					break // Only take the first (and only) parent organization
 				}
 
-				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, *entry.FullUrl, authoritativeUra)
-				if err != nil {
-					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
-				}
 			}
 		}
 	}
