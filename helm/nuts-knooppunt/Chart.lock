@@ -1,9 +1,9 @@
 dependencies:
-- name: fhir
-  repository: file://../fhir
+- name: helm-fhir
+  repository: oci://ghcr.io/nuts-foundation
   version: 0.1.0
 - name: nuts-node-chart
   repository: https://nuts-foundation.github.io/nuts-node/
   version: 0.0.6
-digest: sha256:f2f74a65adf4eb1c904fda043fcf11ad7d29803c368575c623b064be88921fb4
-generated: "2025-10-31T13:12:41.463572+01:00"
+digest: sha256:6e7f70c7d8edae18899db995121e561da1f37853cb993649a108b47e746f7ec4
+generated: "2025-11-03T12:13:17.673569+01:00"

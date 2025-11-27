@@ -12,6 +12,8 @@ import (
 
 var _ op.AuthRequest = (*AuthRequest)(nil)
 
+// AuthRequest represents an authentication request in the authorized code flow.
+// It's also used for storage.
 type AuthRequest struct {
 	oidc.AuthRequest
 	ID string
