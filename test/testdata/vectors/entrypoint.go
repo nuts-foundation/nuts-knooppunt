@@ -11,7 +11,6 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
-	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pip"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
@@ -52,7 +51,6 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	sunflowerAdminHAPITenant := sunflower.AdminHAPITenant()
 	sunflowerPatientHAPITenant := sunflower.PatientsHAPITenant()
 	nviTenant := nvi.HAPITenant()
-	pipTenant := pip.HAPITenant()
 
 	hapiDefaultFHIRClient := fhirclient.New(hapiBaseURL, http.DefaultClient, nil)
 
@@ -75,7 +73,6 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 		sunflowerAdminHAPITenant,
 		sunflowerPatientHAPITenant,
 		nviTenant,
-		pipTenant,
 	} {
 		if err := hapi.CreateTenant(ctx, tenant, hapiDefaultFHIRClient); err != nil {
 			return nil, fmt.Errorf("create HAPI tenant: %w", err)
@@ -115,16 +112,6 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	for _, resource := range sunflower.PatientsResources() {
 		if err := sunflowerMCSDPatientFHIRClient.UpdateWithContext(ctx, caramel.ResourceType(resource)+"/"+*resource.GetId(), resource, nil); err != nil {
 			return nil, fmt.Errorf("create sunflower patients resource: %w", err)
-		}
-	}
-
-	//
-	// Pip Tenant
-	//
-	pipFHIRClient := pipTenant.FHIRClient(hapiBaseURL)
-	for _, resource := range pip.Resources() {
-		if err := pipFHIRClient.UpdateWithContext(ctx, caramel.ResourceType(resource)+"/"+*resource.GetId(), resource, nil); err != nil {
-			return nil, fmt.Errorf("create pip resource: %w", err)
 		}
 	}
 
