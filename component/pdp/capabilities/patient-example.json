@@ -1,0 +1,56 @@
+{
+  "resourceType": "CapabilityStatement",
+  "id": "patient-example",
+  "url": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client",
+  "version": "0.0.1",
+  "title": "Example statement for testing Mitz",
+  "status": "active",
+  "experimental": true,
+  "date": "2025-11-26",
+  "publisher": "Stichting Nuts",
+  "contact": [
+    {
+      "name": "Stichting Nuts",
+      "telecom": [
+        {
+          "system": "url",
+          "value": "https://www.nuts.nl"
+        }
+      ]
+    }
+  ],
+  "description": "Proofile for testing Mitz.",
+  "jurisdiction": [
+    {
+      "coding": [
+        {
+          "system": "urn:iso:std:iso:3166",
+          "code": "NL",
+          "display": "Netherlands"
+        }
+      ]
+    }
+  ],
+  "kind": "requirements",
+  "fhirVersion": "4.0.1",
+  "format": [
+    "application/fhir+json"
+  ],
+  "rest": [
+    {
+      "mode": "server",
+      "documentation": "Dutch profile of the IHE ITI mCSD ITI-91 endpoint",
+      "resource": [
+        {
+          "type": "Patient",
+          "interaction": [
+            {
+              "code": "read"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+    
