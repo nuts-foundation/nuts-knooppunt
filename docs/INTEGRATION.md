@@ -237,14 +237,14 @@ To use the Knooppunt as OIDC Provider:
 1. Register your client (e.g. EHR) in the Knooppunt configuration (see below).
 2. Configure your Dezi client in the Knooppunt (coming later).
 
-### Client Registration
+### Client Authentication
 
 Clients to the Knooppunt OIDC Provider must:
 
 - be authenticated using `client_secret`
 - have its redirect URLs registered for the authorization code flow.
 
-Register clients and their redirect URLs in the Knooppunt configuration (`knooppunt.yml`).
+Configure clients and their redirect URLs in the Knooppunt configuration (`knooppunt.yml`).
 
 ### ID Tokens
 

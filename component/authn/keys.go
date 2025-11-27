@@ -9,6 +9,7 @@ import (
 
 var _ op.Key = (*PublicKey)(nil)
 
+// PublicKey represents a public key that is used for signing ID tokens.
 type PublicKey struct {
 	id           string
 	key          crypto.PublicKey
@@ -33,6 +34,7 @@ func (p PublicKey) Key() any {
 
 var _ op.SigningKey = (*SigningKey)(nil)
 
+// SigningKey represents a key pair that is used to sign ID tokens.
 type SigningKey struct {
 	id           string
 	sigAlgorithm jose.SignatureAlgorithm

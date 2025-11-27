@@ -145,6 +145,10 @@ func newOIDCProvider(storage op.Storage, httpInterfaces httpComponent.InterfaceI
 			"scopes",
 			"client_id",
 			"name",
+			"family_name",
+			"given_name",
+			"dezi_claims",
+			"dezi_token",
 		},
 	}
 

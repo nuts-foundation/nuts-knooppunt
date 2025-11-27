@@ -1,6 +1,7 @@
 package authn
 
 import (
+	"slices"
 	"time"
 
 	"github.com/zitadel/oidc/v3/pkg/oidc"
@@ -11,6 +12,14 @@ import (
 // TODO: Adjust this if needed
 const IDTokenLifetime = time.Hour
 
+var scopes = []string{
+	"openid",
+	"profile",
+}
+
+// Client represents an OAuth2/OIDC client application.
+// It is used to configure client-specific settings such as redirect URIs,
+// authentication methods, grant types, and token lifetimes.
 type Client struct {
 	ID           string   `koanf:"id"`
 	Secret       string   `koanf:"secret"`
@@ -79,7 +88,7 @@ func (c Client) RestrictAdditionalAccessTokenScopes() func(scopes []string) []st
 }
 
 func (c Client) IsScopeAllowed(scope string) bool {
-	return true
+	return slices.Contains(scopes, scope)
 }
 
 func (c Client) IDTokenUserinfoClaimsAssertion() bool {
