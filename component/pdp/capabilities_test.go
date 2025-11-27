@@ -7,7 +7,7 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-func TestComponent_disallow_interaction(t *testing.T) {
+func TestComponent_reject_interaction(t *testing.T) {
 	input := MainPolicyInput{
 		Scope:                     "mcsd_update",
 		InteractionType:           fhir.TypeRestfulInteractionUpdate,
@@ -33,4 +33,34 @@ func TestComponent_allow_interaction(t *testing.T) {
 
 	resp := evalCapabilityPolicy(input)
 	assert.True(t, resp.Allow)
+}
+
+func TestComponent_allow_search_param(t *testing.T) {
+	input := MainPolicyInput{
+		Scope:                     "mcsd_update",
+		InteractionType:           fhir.TypeRestfulInteractionSearchType,
+		SearchParams:              []string{"_since"},
+		ResourceId:                "118876",
+		ResourceType:              fhir.ResourceTypeOrganization,
+		RequestingOrganizationUra: "00000666",
+		DataHolderOrganizationUra: "00000659",
+	}
+
+	resp := evalCapabilityPolicy(input)
+	assert.True(t, resp.Allow)
+}
+
+func TestComponent_reject_search_param(t *testing.T) {
+	input := MainPolicyInput{
+		Scope:                     "mcsd_update",
+		InteractionType:           fhir.TypeRestfulInteractionSearchType,
+		SearchParams:              []string{"_foo", "_since"},
+		ResourceId:                "118876",
+		ResourceType:              fhir.ResourceTypeOrganization,
+		RequestingOrganizationUra: "00000666",
+		DataHolderOrganizationUra: "00000659",
+	}
+
+	resp := evalCapabilityPolicy(input)
+	assert.False(t, resp.Allow)
 }
