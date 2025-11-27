@@ -6,7 +6,24 @@ Content-Type: application/json
 {
   "input": {
     "scope": "mcsd_update",
+    "interaction_type": "history-type",
+    "resource_id": "987612",
+    "resource_type": "Organization",
+    "requesting_organization_ura": "00000666",
+    "data_holder_organization_ura": "00000659"
+  }
+}
+
+### Testing search type request with invalid param
+
+POST http://localhost:8081/pdp/v1/data/knooppunt/authz
+Content-Type: application/json
+
+{
+  "input": {
+    "scope": "mcsd_update",
     "interaction_type": "search-type",
+    "search_params": ["_since", "foo"],
     "resource_id": "987612",
     "resource_type": "Organization",
     "requesting_organization_ura": "00000666",

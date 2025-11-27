@@ -19,6 +19,7 @@ type MainPolicyInput struct {
 	RequestingUziRoleCode            string                      `json:"requesting_uzi_role_code"`
 	InteractionType                  fhir.TypeRestfulInteraction `json:"interaction_type"`
 	ResourceType                     fhir.ResourceType           `json:"resource_type"`
+	SearchParams                     []string                    `json:"search_params"`
 	ResourceId                       string                      `json:"resource_id"`
 }
 

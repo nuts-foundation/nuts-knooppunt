@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -57,20 +58,19 @@ func evalCapabilityPolicy(input MainPolicyInput) PolicyResult {
 		return out
 	}
 
-	return evalInteraction(statement, input.ResourceType, input.InteractionType)
+	return evalInteraction(statement, input)
 }
 
 func evalInteraction(
 	statement fhir.CapabilityStatement,
-	resourceType fhir.ResourceType,
-	interaction fhir.TypeRestfulInteraction,
+	input MainPolicyInput,
 ) PolicyResult {
 	// FUTURE: This is a pretty naive implementation - we can make it more efficient at a later point.
 
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
 	for _, rest := range statement.Rest {
 		for _, res := range rest.Resource {
-			if res.Type == resourceType {
+			if res.Type == input.ResourceType {
 				resourceDescriptions = append(resourceDescriptions, res)
 			}
 		}
@@ -79,7 +79,7 @@ func evalInteraction(
 	allowInteraction := false
 	for _, des := range resourceDescriptions {
 		for _, inter := range des.Interaction {
-			if inter.Code == interaction {
+			if inter.Code == input.InteractionType {
 				allowInteraction = true
 			}
 		}
@@ -91,9 +91,44 @@ func evalInteraction(
 			Reasons: []ResultReason{
 				{
 					Code:        "not_allowed",
-					Description: "not allowed, capability statement does not allow interaction",
+					Description: "capability statement does not allow interaction",
 				},
 			},
+		}
+	}
+
+	allowParams := false
+	rejectedSearchParams := make([]string, 0, 10)
+	if input.InteractionType == fhir.TypeRestfulInteractionSearchType {
+		allowedParams := make([]string, 0, 10)
+		for _, des := range resourceDescriptions {
+			for _, param := range des.SearchParam {
+				allowedParams = append(allowedParams, param.Name)
+			}
+		}
+
+		for _, param := range input.SearchParams {
+			if !slices.Contains(allowedParams, param) {
+				rejectedSearchParams = append(rejectedSearchParams, param)
+			}
+		}
+	}
+	if len(rejectedSearchParams) == 0 {
+		allowParams = true
+	}
+
+	if !allowParams {
+		reasons := make([]ResultReason, 0, 10)
+		for _, param := range rejectedSearchParams {
+			reason := ResultReason{
+				Code:        "not_allowed",
+				Description: fmt.Sprintf("search parameter %s is not allowed", param),
+			}
+			reasons = append(reasons, reason)
+		}
+		return PolicyResult{
+			Allow:   false,
+			Reasons: reasons,
 		}
 	}
 
