@@ -42,18 +42,9 @@ func capabilityForScope(scope string) (fhir.CapabilityStatement, bool) {
 	}
 }
 
-func EvalCapabilityPolicy(input MainPolicyInput) PolicyResult {
+func evalCapabilityPolicy(input MainPolicyInput) PolicyResult {
 	out := PolicyResult{
 		Allow: false,
-	}
-
-	if input.Scope == "" {
-		reason := ResultReason{
-			Code:        "missing_required_value",
-			Description: "missing required value for scope field",
-		}
-		out.Reasons = []ResultReason{reason}
-		return out
 	}
 
 	statement, ok := capabilityForScope(input.Scope)

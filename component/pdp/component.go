@@ -70,7 +70,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 2: Check the request adheres to the capability statement for this scope
-	res := EvalCapabilityPolicy(input)
+	res := evalCapabilityPolicy(input)
 	if !res.Allow {
 		writeResp(w, res)
 		return

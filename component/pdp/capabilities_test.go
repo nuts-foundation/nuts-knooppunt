@@ -17,7 +17,7 @@ func TestComponent_disallow_interaction(t *testing.T) {
 		DataHolderOrganizationUra: "00000659",
 	}
 
-	resp := EvalCapabilityPolicy(input)
+	resp := evalCapabilityPolicy(input)
 	assert.False(t, resp.Allow)
 }
 
@@ -31,6 +31,6 @@ func TestComponent_allow_interaction(t *testing.T) {
 		DataHolderOrganizationUra: "00000659",
 	}
 
-	resp := EvalCapabilityPolicy(input)
+	resp := evalCapabilityPolicy(input)
 	assert.True(t, resp.Allow)
 }
