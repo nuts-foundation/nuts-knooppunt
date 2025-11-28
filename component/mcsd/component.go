@@ -351,8 +351,6 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 
 	// Find parent organizations with URA identifier and all organizations linked to them
 	// This is used when validating organizations that don't have their own URA identifier
-	// If no parent organizations are found in deduplicatedEntries, queries all organizations from the directory
-	// If authoritativeUra is provided, filters to only include parent organizations with that URA
 	parentOrganizationsMap, err := c.ensureParentOrganizationsMap(ctx, fhirBaseURLRaw, remoteAdminDirectoryFHIRClient, authoritativeUra)
 
 	if err != nil {
@@ -573,10 +571,6 @@ func buildOrganizationKey(org *fhir.Organization) string {
 }
 
 // findParentOrganizationsWithURA finds a parent organization with a URA identifier and all organizations linked to it.
-// It loops through ALL entries to find organizations with URA identifiers
-// ensureParentOrganizationsMap builds the parent organizations map from deduplicatedEntries.
-// If no parent organizations with URA are found, it queries all organizations from the directory as a fallback.
-// If authoritativeUra is provided, filters the map to only include parent organizations with that URA identifier.
 func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseURLRaw string, remoteAdminDirectoryFHIRClient fhirclient.Client, authoritativeUra string) (parentOrganizationMap, error) {
 	// First try to find parent organizations from deduplicatedEntries
 	log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Msg("Querying organizations for authoritative check (parent organization map build)")
