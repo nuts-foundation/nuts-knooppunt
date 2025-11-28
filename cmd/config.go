@@ -19,6 +19,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 )
 
 type Config struct {
@@ -31,6 +32,7 @@ type Config struct {
 	MITZ        mitz.Config      `koanf:"mitz"`
 	HTTP        http.Config      `koanf:"http"`
 	AuthN       authn.Config     `koanf:"authn"`
+	Tracing     tracing.Config   `koanf:"tracing"`
 }
 
 func DefaultConfig() Config {
@@ -45,6 +47,7 @@ func DefaultConfig() Config {
 		PDP:       pdp.DefaultConfig(),
 		MITZ:      mitz.Config{},
 		HTTP:      http.DefaultConfig(),
+		Tracing:   tracing.DefaultConfig(),
 	}
 }
 

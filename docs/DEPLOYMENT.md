@@ -95,3 +95,13 @@ The Knooppunt can be deployed with an embedded Nuts node. If a vendor has an exi
 or wants to have the Nuts node deployed separately, the Knooppunt can use that Nuts node instead.
 
 Use [`nuts.enabled`](./CONFIGURATION.md) to configure the embedded or existing Nuts node.
+
+### Tracing
+
+The Knooppunt supports distributed tracing using OpenTelemetry. Traces can be sent to any OTLP-compatible collector (e.g. Jaeger, Grafana Tempo, or a vendor's existing observability platform).
+
+To enable tracing, set [`tracing.otlpendpoint`](./CONFIGURATION.md) to the address of your OTLP collector.
+
+Span names are formatted as `METHOD /path` (e.g. `POST /mcsd/update`). The component can be identified from the path prefix (`/mcsd/*`, `/nvi/*`, `/pdp/*`) and filtered using the `http.target` tag.
+
+See [CONFIGURATION.md](./CONFIGURATION.md) for all tracing options.

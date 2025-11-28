@@ -14,6 +14,7 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/rs/zerolog/log"
@@ -96,7 +97,7 @@ func New(config Config) (*Component, error) {
 	result := &Component{
 		config: config,
 		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
-			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{
+			return fhirclient.New(baseURL, tracing.NewHTTPClient(), &fhirclient.Config{
 				UsePostSearch: false,
 			})
 		},

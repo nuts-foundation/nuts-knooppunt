@@ -39,3 +39,7 @@ dependencies:
     condition: nuts.enabled
     repository: https://nuts-foundation.github.io/nuts-node/
     version: "0.0.6"
+  - name: jaeger
+    condition: jaeger.enabled
+    repository: https://jaegertracing.github.io/helm-charts
+    version: "3.4.1"

@@ -14,6 +14,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -29,12 +30,18 @@ func Start(ctx context.Context, config Config) error {
 
 	publicMux := http.NewServeMux()
 	internalMux := http.NewServeMux()
+
+	// Tracing component must be first to capture spans from other components
+	config.Tracing.ServiceVersion = status.Version()
+	tracingComponent := tracing.New(config.Tracing)
+
 	mcsdUpdateClient, err := mcsd.New(config.MCSD)
 	if err != nil {
 		return errors.Wrap(err, "failed to create mCSD Update Client")
 	}
 	httpComponent := libHTTPComponent.New(config.HTTP, publicMux, internalMux)
 	components := []component.Lifecycle{
+		tracingComponent,
 		mcsdUpdateClient,
 		mcsdadmin.New(config.MCSDAdmin),
 		status.New(),
