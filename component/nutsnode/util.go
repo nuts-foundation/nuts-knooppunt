@@ -26,7 +26,7 @@ func (a logrusSlogBridgeHook) Fire(entry *logrus.Entry) error {
 	}
 
 	// Build slog attributes from logrus fields
-	attrs := make([]any, 0, len(entry.Data)*2+2)
+	attrs := make([]any, 0, len(entry.Data)*2+2) // *2 because slog takes key-value as separate args, +2 for the component field
 	attrs = append(attrs, "component", "nutsnode")
 	for k, v := range entry.Data {
 		attrs = append(attrs, k, v)
