@@ -73,7 +73,7 @@ func (c *Component) Start() error {
 		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr.Host,
 		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr.Host,
 		"NUTS_DATADIR":               dataDir,
-		"NUTS_VERBOSITY":             "debug", //slog doesn't provide levels, can be set from config here when we support that
+		"NUTS_VERBOSITY":             GetLogrusLevel(slog.LevelDebug), // TODO: use configured log level when supported
 		"NUTS_STRICTMODE":            strconv.FormatBool(c.coreConfig.StrictMode),
 	}
 	// Only set NUTS_CONFIGFILE if the config file exists

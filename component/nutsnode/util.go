@@ -54,3 +54,17 @@ type devNullWriter struct{}
 func (d devNullWriter) Write(in []byte) (n int, _ error) {
 	return len(in), nil
 }
+
+// Uses <= comparisons to handle custom log levels (e.g. trace as LevelDebug-4).
+func GetLogrusLevel(level slog.Level) string {
+	switch {
+	case level <= slog.LevelDebug:
+		return logrus.DebugLevel.String()
+	case level <= slog.LevelInfo:
+		return logrus.InfoLevel.String()
+	case level <= slog.LevelWarn:
+		return logrus.WarnLevel.String()
+	default:
+		return logrus.ErrorLevel.String()
+	}
+}
