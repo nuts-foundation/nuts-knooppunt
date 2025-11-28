@@ -1,12 +1,11 @@
 package formdata
 
 import (
-	"fmt"
+	"log/slog"
 	"net/url"
 	"regexp"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
-	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -15,7 +14,7 @@ var keyExp regexp.Regexp
 func init() {
 	exp, err := regexp.Compile(`(\w+)\[(\d*)\]\[(\w+)\]`)
 	if err != nil {
-		log.Error().Err(err).Msg("could not parse regular expression")
+		slog.Error("could not parse regular expression", "error", err)
 		return
 	}
 	keyExp = *exp
@@ -50,7 +49,7 @@ func ParseMaps(postform url.Values, fieldName string) []map[string]string {
 		}
 
 		if len(val) > 1 {
-			log.Warn().Msg(fmt.Sprintf("conflicting values found for key: %s", fk))
+			slog.Warn("conflicting values found for key", "key", fk)
 		}
 		partial[propKeyMatch] = val[0]
 	}

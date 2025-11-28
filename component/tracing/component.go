@@ -3,14 +3,18 @@ package tracing
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
-	"github.com/rs/zerolog/log"
+	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
@@ -35,6 +39,7 @@ func DefaultConfig() Config {
 type Component struct {
 	config         Config
 	tracerProvider *trace.TracerProvider
+	loggerProvider *log.LoggerProvider
 	shutdownFuncs  []func(context.Context) error
 }
 
@@ -47,7 +52,7 @@ func New(cfg Config) *Component {
 
 func (c *Component) Start() error {
 	if c.config.OTLPEndpoint == "" {
-		log.Info().Msg("No OTLP endpoint configured, tracing disabled")
+		slog.Info("No OTLP endpoint configured, tracing disabled")
 		return nil
 	}
 
@@ -92,10 +97,40 @@ func (c *Component) Start() error {
 	c.shutdownFuncs = append(c.shutdownFuncs, c.tracerProvider.Shutdown)
 	otel.SetTracerProvider(c.tracerProvider)
 
-	log.Info().
-		Str("endpoint", c.config.OTLPEndpoint).
-		Str("service", c.config.ServiceName).
-		Msg("OpenTelemetry tracing initialized")
+	// Set up OTLP log exporter
+	logOpts := []otlploghttp.Option{
+		otlploghttp.WithEndpoint(c.config.OTLPEndpoint),
+	}
+	if c.config.Insecure {
+		logOpts = append(logOpts, otlploghttp.WithInsecure())
+	}
+	logExporter, err := otlploghttp.New(ctx, logOpts...)
+	if err != nil {
+		return err
+	}
+	c.shutdownFuncs = append(c.shutdownFuncs, logExporter.Shutdown)
+
+	// Set up log provider with batch processor
+	c.loggerProvider = log.NewLoggerProvider(
+		log.WithProcessor(log.NewBatchProcessor(logExporter)),
+		log.WithResource(res),
+	)
+	c.shutdownFuncs = append(c.shutdownFuncs, c.loggerProvider.Shutdown)
+
+	// Configure slog to use otelslog bridge, sending logs via OTLP.
+	// When OTLP is enabled, all logs go to the collector for centralized viewing.
+	slogHandler := otelslog.NewHandler(c.config.ServiceName,
+		otelslog.WithLoggerProvider(c.loggerProvider),
+	)
+	slog.SetDefault(slog.New(slogHandler))
+
+	// Print a message to stdout to inform users where to find logs.
+	fmt.Printf("OpenTelemetry enabled: logs and traces are sent to %s\n", c.config.OTLPEndpoint)
+	fmt.Println("View application logs and traces in your OTLP collector (e.g. at http://localhost:18888)")
+
+	slog.Info("OpenTelemetry tracing and logging initialized",
+		"endpoint", c.config.OTLPEndpoint,
+		"service", c.config.ServiceName)
 
 	return nil
 }
@@ -105,7 +140,7 @@ func (c *Component) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	log.Info().Msg("Shutting down OpenTelemetry tracing")
+	slog.Info("Shutting down OpenTelemetry tracing")
 
 	var errs error
 	for _, fn := range c.shutdownFuncs {

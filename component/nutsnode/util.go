@@ -1,43 +1,48 @@
 package nutsnode
 
 import (
-	"github.com/rs/zerolog"
-	"github.com/sirupsen/logrus"
+	"context"
 	"io"
+	"log/slog"
+
+	"github.com/sirupsen/logrus"
 )
 
-var _ logrus.Hook = (*logrusZerologBridgeHook)(nil)
+var _ logrus.Hook = (*logrusSlogBridgeHook)(nil)
 
-// logrusZerologBridgeHook is a logrus hook that bridges logrus logs to zerolog.
-type logrusZerologBridgeHook struct {
+// logrusSlogBridgeHook is a logrus hook that bridges logrus logs to slog.
+type logrusSlogBridgeHook struct {
 }
 
-func (a logrusZerologBridgeHook) Levels() []logrus.Level {
+func (a logrusSlogBridgeHook) Levels() []logrus.Level {
 	return logrus.AllLevels
 }
 
-func (a logrusZerologBridgeHook) Fire(entry *logrus.Entry) error {
-	entry.Data["component"] = "nutsnode"
-	fields := map[string]interface{}(entry.Data)
-	logger := zerolog.DefaultContextLogger
+func (a logrusSlogBridgeHook) Fire(entry *logrus.Entry) error {
+	// Use entry.Context if available to preserve trace correlation
+	ctx := entry.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	// Build slog attributes from logrus fields
+	attrs := make([]any, 0, len(entry.Data)*2+2) // *2 because slog takes key-value as separate args, +2 for the component field
+	attrs = append(attrs, "component", "nutsnode")
+	for k, v := range entry.Data {
+		attrs = append(attrs, k, v)
+	}
+
 	switch entry.Level {
-	case logrus.TraceLevel:
-		logger.Trace().Fields(fields).Msg(entry.Message)
-	case logrus.DebugLevel:
-		logger.Debug().Fields(fields).Msg(entry.Message)
+	case logrus.TraceLevel, logrus.DebugLevel:
+		slog.DebugContext(ctx, entry.Message, attrs...)
 	case logrus.InfoLevel:
-		logger.Info().Fields(fields).Msg(entry.Message)
+		slog.InfoContext(ctx, entry.Message, attrs...)
 	case logrus.WarnLevel:
-		logger.Warn().Fields(fields).Msg(entry.Message)
-	case logrus.ErrorLevel:
-		logger.Error().Fields(fields).Msg(entry.Message)
-	case logrus.FatalLevel:
-		logger.Fatal().Fields(fields).Msg(entry.Message)
-	case logrus.PanicLevel:
-		logger.Panic().Fields(fields).Msg(entry.Message)
+		slog.WarnContext(ctx, entry.Message, attrs...)
+	case logrus.ErrorLevel, logrus.FatalLevel, logrus.PanicLevel:
+		slog.ErrorContext(ctx, entry.Message, attrs...)
 	default:
-		// For any other level, we just log it as info.
-		logger.Info().Fields(fields).Msg(entry.Message)
+		slog.InfoContext(ctx, entry.Message, attrs...)
 	}
 	return nil
 }
@@ -48,4 +53,18 @@ type devNullWriter struct{}
 
 func (d devNullWriter) Write(in []byte) (n int, _ error) {
 	return len(in), nil
+}
+
+// Uses <= comparisons to handle custom log levels (e.g. trace as LevelDebug-4).
+func GetLogrusLevel(level slog.Level) string {
+	switch {
+	case level <= slog.LevelDebug:
+		return logrus.DebugLevel.String()
+	case level <= slog.LevelInfo:
+		return logrus.InfoLevel.String()
+	case level <= slog.LevelWarn:
+		return logrus.WarnLevel.String()
+	default:
+		return logrus.ErrorLevel.String()
+	}
 }
