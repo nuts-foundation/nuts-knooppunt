@@ -63,7 +63,12 @@
           }
         ],
         "active": true,
-        "name": "Organization 2"
+        "name": "Organization 2",
+        "endpoint": [
+          {
+            "reference": "Endpoint/dir1-org2-assoc"
+          }
+        ]
       },
       "request": {
         "method": "POST",
@@ -124,6 +129,11 @@
           }
         ],
         "active": true,
+        "endpoint": [
+          {
+            "reference": "Endpoint/dir2-org4-assoc"
+          }
+        ],
         "name": "Organization 4"
       },
       "request": {
