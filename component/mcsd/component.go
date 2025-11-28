@@ -51,6 +51,7 @@ const searchPageSize = 100
 //   - exist in the root mCSD Directory (link by identifier, name must be the same)
 //   - have the same mcsd-directory-endpoint as the directory being queried
 //   - These are mitigating measures to prevent an attacker to spoof another care organization.
+//   - The organization's mcsd-directory-endpoint must be discoverable through the root mCSD Directory.'
 type Component struct {
 	config       Config
 	fhirClientFn func(baseURL *url.URL) fhirclient.Client
