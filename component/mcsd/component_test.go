@@ -22,7 +22,7 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-func mockHistoryEndpoints(mux *http.ServeMux, responses map[string]*string) {
+func mockEndpoints(mux *http.ServeMux, responses map[string]*string) {
 	for endpoint, responsePtr := range responses {
 		responsePtr := responsePtr // Capture the pointer in the loop scope
 		mux.HandleFunc(endpoint, func(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +36,8 @@ func mockHistoryEndpoints(mux *http.ServeMux, responses map[string]*string) {
 func TestComponent_update_regression(t *testing.T) {
 	organizationHistoryResponse, err := os.ReadFile("test/regression_lrza_organization_history_response.json")
 	require.NoError(t, err)
+	organizationResponse, err := os.ReadFile("test/regression_lrza_organization_response.json")
+	require.NoError(t, err)
 	endpointHistoryResponse, err := os.ReadFile("test/regression_lrza_endpoint_history_response.json")
 	require.NoError(t, err)
 	locationHistoryResponse, err := os.ReadFile("test/regression_lrza_location_history_response.json")
@@ -48,12 +50,14 @@ func TestComponent_update_regression(t *testing.T) {
 	endpointHistoryResponseStr := string(endpointHistoryResponse)
 	locationHistoryResponseStr := string(locationHistoryResponse)
 	organizationHistoryResponseStr := string(organizationHistoryResponse)
+	organizationResponseStr := string(organizationResponse)
 	emptyResponseStr := string(emptyResponse)
 
-	mockHistoryEndpoints(mux, map[string]*string{
+	mockEndpoints(mux, map[string]*string{
 		"/Endpoint/_history":          &endpointHistoryResponseStr,
 		"/Location/_history":          &locationHistoryResponseStr,
 		"/Organization/_history":      &organizationHistoryResponseStr,
+		"/Organization":               &organizationResponseStr,
 		"/HealthcareService/_history": &emptyResponseStr,
 		"/PractitionerRole/_history":  &emptyResponseStr,
 	})
@@ -108,9 +112,10 @@ func TestComponent_update(t *testing.T) {
 	// Convert []byte responses to strings for pointer approach
 	emptyResponseStr := string(emptyResponse)
 
-	mockHistoryEndpoints(rootDirMux, map[string]*string{
+	mockEndpoints(rootDirMux, map[string]*string{
 		"/Endpoint/_history":          &rootDirEndpointHistoryResponse,
 		"/Organization/_history":      &rootDirOrganizationHistoryResponse,
+		"/Organization":               &rootDirOrganizationHistoryResponse,
 		"/HealthcareService/_history": &emptyResponseStr,
 		"/Location/_history":          &emptyResponseStr,
 		"/PractitionerRole/_history":  &emptyResponseStr,
@@ -138,9 +143,10 @@ func TestComponent_update(t *testing.T) {
 
 	org1DirMux := http.NewServeMux()
 
-	mockHistoryEndpoints(org1DirMux, map[string]*string{
+	mockEndpoints(org1DirMux, map[string]*string{
 		"/fhir/Endpoint/_history":           &org1DirEndpointHistoryPage1Response,
 		"/fhir/Organization/_history":       &org1DirOrganizationHistoryPage1Response,
+		"/fhir/Organization":                &org1DirOrganizationHistoryPage1Response,
 		"/fhir/Endpoint/_history_page2":     &org1DirEndpointHistoryPage2Response,
 		"/fhir/Organization/_history_page2": &org1DirOrganizationHistoryPage2Response,
 		"/fhir/Location/_history":           &emptyResponseStr,
@@ -273,6 +279,12 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(testDataJSONOrg)
 	})
+	rootDirMux.HandleFunc("/Organization", func(w http.ResponseWriter, r *http.Request) {
+		// FHIR client configured to use GET, parameters are in query string
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(testDataJSONOrg)
+	})
 	rootDirMux.HandleFunc("/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
 		// FHIR client configured to use GET, parameters are in query string
 		since := r.URL.Query().Get("_since")
@@ -285,7 +297,7 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	// Convert []byte responses to strings for pointer approach
 	emptyResponseStr2 := string(emptyResponse)
 
-	mockHistoryEndpoints(rootDirMux, map[string]*string{
+	mockEndpoints(rootDirMux, map[string]*string{
 		"/Location/_history":          &emptyResponseStr2,
 		"/HealthcareService/_history": &emptyResponseStr2,
 		"/PractitionerRole/_history":  &emptyResponseStr2,
@@ -722,6 +734,10 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(orgBundle))
 		})
+		mux.HandleFunc("/fhir/Organization", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(orgBundle))
+		})
 		mux.HandleFunc("/fhir/Location/_history", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"resourceType": "Bundle", "type": "history", "entry": []}`))
@@ -843,6 +859,13 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 				w.Write([]byte(emptyBundle))
 			})
 		}
+
+		mux.HandleFunc("/fhir/Organization", func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(emptyBundle))
+		})
 
 		config := DefaultConfig()
 		config.QueryDirectory = DirectoryConfig{
@@ -999,6 +1022,13 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			})
 		}
 
+		mux.HandleFunc("/fhir/Organization", func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(discoveredOrganizationBundle))
+		})
+
 		// Create component with custom DirectoryResourceTypes that includes Practitioner
 		customResourceTypes := []string{"Organization", "Endpoint", "Practitioner"}
 		config := DefaultConfig()
@@ -1077,6 +1107,7 @@ func startMockServer(t *testing.T, filesToServe map[string]string) *httptest.Ser
 	pathsToServe := map[string]*string{
 		"/fhir/Endpoint/_history":          &emptyResponseStr,
 		"/fhir/Organization/_history":      &emptyResponseStr,
+		"/fhir/Organization":               &emptyResponseStr,
 		"/fhir/Location/_history":          &emptyResponseStr,
 		"/fhir/HealthcareService/_history": &emptyResponseStr,
 		"/fhir/PractitionerRole/_history":  &emptyResponseStr,
@@ -1089,7 +1120,7 @@ func startMockServer(t *testing.T, filesToServe map[string]string) *httptest.Ser
 		pathsToServe[path] = &dataStr
 	}
 
-	mockHistoryEndpoints(mux, pathsToServe)
+	mockEndpoints(mux, pathsToServe)
 	return server
 }
 

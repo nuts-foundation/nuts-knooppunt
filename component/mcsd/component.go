@@ -353,7 +353,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// This is used when validating organizations that don't have their own URA identifier
 	// If no parent organizations are found in deduplicatedEntries, queries all organizations from the directory
 	// If authoritativeUra is provided, filters to only include parent organizations with that URA
-	parentOrganizationsMap, err := c.ensureParentOrganizationsMap(ctx, fhirBaseURLRaw, remoteAdminDirectoryFHIRClient, deduplicatedEntries, authoritativeUra)
+	parentOrganizationsMap, err := c.ensureParentOrganizationsMap(ctx, fhirBaseURLRaw, remoteAdminDirectoryFHIRClient, authoritativeUra)
 
 	if err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("failed to build parent organization map: %w", err)
@@ -436,15 +436,31 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	return report, nil
 }
 
-func (c *Component) queryHistory(ctx context.Context, remoteAdminDirectoryFHIRClient fhirclient.Client, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
+// queryFHIR performs a FHIR search query with pagination and returns all matching entries.
+// If includeHistory is true, it queries the _history endpoint to get resource versions.
+func (c *Component) queryFHIR(ctx context.Context, client fhirclient.Client, resourceType string, searchParams url.Values, includeHistory bool) ([]fhir.BundleEntry, fhir.Bundle, error) {
 	var searchSet fhir.Bundle
-	// First, collect all resources from _history
-	err := remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath(resourceType+"/_history"))
-	if err != nil {
-		return nil, fhir.Bundle{}, fmt.Errorf("_history search failed: %w", err)
+	var path string
+	var searchErrMsg string
+	var paginationErrMsg string
+
+	if includeHistory {
+		path = resourceType + "/_history"
+		searchErrMsg = "_history search failed"
+		paginationErrMsg = "pagination of _history search failed"
+	} else {
+		path = resourceType
+		searchErrMsg = "query failed"
+		paginationErrMsg = "pagination of search failed"
 	}
+
+	err := client.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath(path))
+	if err != nil {
+		return nil, fhir.Bundle{}, fmt.Errorf("%s: %w", searchErrMsg, err)
+	}
+
 	var entries []fhir.BundleEntry
-	err = fhirclient.Paginate(ctx, remoteAdminDirectoryFHIRClient, searchSet, func(searchSet *fhir.Bundle) (bool, error) {
+	err = fhirclient.Paginate(ctx, client, searchSet, func(searchSet *fhir.Bundle) (bool, error) {
 		entries = append(entries, searchSet.Entry...)
 		if len(entries) >= maxUpdateEntries {
 			return false, fmt.Errorf("too many entries (%d), aborting update to prevent excessive memory usage", len(entries))
@@ -452,9 +468,18 @@ func (c *Component) queryHistory(ctx context.Context, remoteAdminDirectoryFHIRCl
 		return true, nil
 	})
 	if err != nil {
-		return nil, fhir.Bundle{}, fmt.Errorf("pagination of _history search failed: %w", err)
+		return nil, fhir.Bundle{}, fmt.Errorf("%s: %w", paginationErrMsg, err)
 	}
+
 	return entries, searchSet, nil
+}
+
+func (c *Component) queryHistory(ctx context.Context, remoteAdminDirectoryFHIRClient fhirclient.Client, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
+	return c.queryFHIR(ctx, remoteAdminDirectoryFHIRClient, resourceType, searchParams, true)
+}
+
+func (c *Component) query(ctx context.Context, remoteAdminDirectoryFHIRClient fhirclient.Client, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
+	return c.queryFHIR(ctx, remoteAdminDirectoryFHIRClient, resourceType, searchParams, false)
 }
 
 // deduplicateHistoryEntries keeps only the most recent version of each resource
@@ -552,29 +577,21 @@ func buildOrganizationKey(org *fhir.Organization) string {
 // ensureParentOrganizationsMap builds the parent organizations map from deduplicatedEntries.
 // If no parent organizations with URA are found, it queries all organizations from the directory as a fallback.
 // If authoritativeUra is provided, filters the map to only include parent organizations with that URA identifier.
-func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseURLRaw string, remoteAdminDirectoryFHIRClient fhirclient.Client, deduplicatedEntries []fhir.BundleEntry, authoritativeUra string) (parentOrganizationMap, error) {
+func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseURLRaw string, remoteAdminDirectoryFHIRClient fhirclient.Client, authoritativeUra string) (parentOrganizationMap, error) {
 	// First try to find parent organizations from deduplicatedEntries
-	parentOrganizationsMap, err := findParentOrganizationsWithURA(ctx, deduplicatedEntries)
+	log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Msg("Querying organizations for authoritative check (parent organization map build)")
+	orgEntries, _, err := c.query(ctx, remoteAdminDirectoryFHIRClient, "Organization", url.Values{
+		"_count": []string{strconv.Itoa(searchPageSize)},
+	})
 	if err != nil {
+		log.Ctx(ctx).Err(err).Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to query all organizations, aborting parent organization map build")
 		return nil, err
 	}
 
-	// If no parent organizations with URA were found, query all organizations from the directory
-	if len(parentOrganizationsMap) == 0 {
-		log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Msg("No parent organizations with URA found in deduplicatedEntries, querying all organizations")
-		orgEntries, _, err := c.queryHistory(ctx, remoteAdminDirectoryFHIRClient, "Organization", url.Values{
-			"_count": []string{strconv.Itoa(searchPageSize)},
-		})
-		if err != nil {
-			log.Ctx(ctx).Err(err).Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to query all organizations, aborting parent organization map build")
-			return nil, err
-		}
-
-		parentOrganizationsMap, err = findParentOrganizationsWithURA(ctx, orgEntries)
-		if err != nil {
-			log.Ctx(ctx).Err(err).Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to build parent organization map from all organizations, aborting parent organization map build")
-			return nil, err
-		}
+	parentOrganizationsMap, err := findParentOrganizationsWithURA(ctx, orgEntries)
+	if err != nil {
+		log.Ctx(ctx).Err(err).Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to build parent organization map from all organizations, aborting parent organization map build")
+		return nil, err
 	}
 
 	// Filter to only include parent organizations matching the authoritative URA if provided
