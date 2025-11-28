@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
 	libHTTPComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
@@ -22,6 +23,10 @@ import (
 func Start(ctx context.Context, config Config) error {
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	zerolog.DefaultContextLogger = &log.Logger
+
+	if !config.StrictMode {
+		log.Ctx(ctx).Warn().Msgf("Strict mode is disabled. This is NOT recommended for production environments!")
+	}
 
 	publicMux := http.NewServeMux()
 	internalMux := http.NewServeMux()
@@ -52,6 +57,13 @@ func Start(ctx context.Context, config Config) error {
 	} else {
 		log.Ctx(ctx).Info().Msg("Nuts node is disabled")
 	}
+
+	// Create AuthN component
+	authnComponent, err := authn.New(config.AuthN, httpComponent, config.Config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create AuthN component")
+	}
+	components = append(components, authnComponent)
 
 	// Create MITZ component
 	if config.MITZ.Enabled() {
