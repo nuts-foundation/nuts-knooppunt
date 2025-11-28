@@ -9,14 +9,14 @@ import (
 	"os"
 	"strconv"
 
+	"log/slog"
+
 	knooppuntCore "github.com/nuts-foundation/nuts-knooppunt/cmd/core"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/netutil"
 	"github.com/nuts-foundation/nuts-node/cmd"
 	"github.com/nuts-foundation/nuts-node/core"
 	httpEngine "github.com/nuts-foundation/nuts-node/http"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 )
@@ -24,8 +24,8 @@ import (
 var _ component.Lifecycle = (*Component)(nil)
 
 func New(config Config) (*Component, error) {
-	// Nuts node uses logrus, register a hook to convert logrus logs to zerolog.
-	logrus.AddHook(&logrusZerologBridgeHook{})
+	// Nuts node uses logrus, register a hook to convert logrus logs to slog.
+	logrus.AddHook(&logrusSlogBridgeHook{})
 	// set nil logger to avoid logrus output
 	logrus.StandardLogger().SetOutput(&devNullWriter{})
 
@@ -73,7 +73,7 @@ func (c *Component) Start() error {
 		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr.Host,
 		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr.Host,
 		"NUTS_DATADIR":               dataDir,
-		"NUTS_VERBOSITY":             zerolog.GlobalLevel().String(),
+		"NUTS_VERBOSITY":             "debug", //slog doesn't provide levels, can be set from config here when we support that
 		"NUTS_STRICTMODE":            strconv.FormatBool(c.coreConfig.StrictMode),
 	}
 	// Only set NUTS_CONFIGFILE if the config file exists
@@ -86,11 +86,11 @@ func (c *Component) Start() error {
 		}
 	}
 
-	log.Debug().Msgf("Starting Nuts node (internal-address: %s, public-address: %s)", c.internalAddr, c.publicAddr)
+	slog.Debug("Starting Nuts node", "internal-address", c.internalAddr, "public-address", c.publicAddr)
 
 	c.system = cmd.CreateSystem(func() {
 		// Not sure how to handle this
-		log.Warn().Msg("Nuts node signaled exit.")
+		slog.Warn("Nuts node signaled exit.")
 	})
 	if err := c.system.Load(&pflag.FlagSet{}); err != nil {
 		return fmt.Errorf("load Nuts node config: %w", err)

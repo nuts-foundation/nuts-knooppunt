@@ -1,10 +1,10 @@
 package fhirutil
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/SanteonNL/go-fhir-client"
-	"github.com/rs/zerolog/log"
 )
 
 func ClientConfig() *fhirclient.Config {
@@ -15,7 +15,11 @@ func ClientConfig() *fhirclient.Config {
 		}),
 	}
 	config.Non2xxStatusHandler = func(response *http.Response, responseBody []byte) {
-		log.Debug().Msgf("Non-2xx status code from FHIR server (%s %s, status=%d), content: %s", response.Request.Method, response.Request.URL, response.StatusCode, string(responseBody))
+		slog.DebugContext(response.Request.Context(), "Non-2xx status code from FHIR server",
+			"method", response.Request.Method,
+			"url", response.Request.URL,
+			"status", response.StatusCode,
+			"content", string(responseBody))
 	}
 	return &config
 }

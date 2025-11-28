@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
-	"github.com/rs/zerolog/log"
 	"github.com/zitadel/oidc/v3/pkg/oidc"
 	"github.com/zitadel/oidc/v3/pkg/op"
 )
@@ -35,7 +35,7 @@ type Storage struct {
 	signingKey   SigningKey
 }
 
-func (o Storage) AuthenticateUser(authRequestID string, deziToken string) error {
+func (o Storage) AuthenticateUser(ctx context.Context, authRequestID string, deziToken string) error {
 	authRequestRaw, ok := o.authRequests.Load(authRequestID)
 	if !ok {
 		return errors.New("auth request not found")
@@ -45,7 +45,7 @@ func (o Storage) AuthenticateUser(authRequestID string, deziToken string) error 
 		return err
 	}
 	o.authRequests.Store(authRequestID, authRequest)
-	log.Ctx(context.Background()).Info().Msgf("OIDC: AuthRequest %s authenticated", authRequestID)
+	slog.InfoContext(ctx, "OIDC: AuthRequest authenticated", "authRequestID", authRequestID)
 	return nil
 }
 
@@ -83,7 +83,7 @@ func (o Storage) CreateAuthRequest(ctx context.Context, request *oidc.AuthReques
 	if len(userID) != 0 {
 		return nil, errors.New("token refresh not supported")
 	}
-	log.Ctx(ctx).Info().Msgf("OIDC: AuthRequest received (client: %s)", request.ClientID)
+	slog.InfoContext(ctx, "OIDC: AuthRequest received", "clientID", request.ClientID)
 	authRequestID := uuid.NewString()
 	req := AuthRequest{
 		ID:             authRequestID,

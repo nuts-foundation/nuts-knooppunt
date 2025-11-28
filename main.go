@@ -2,20 +2,23 @@ package main
 
 import (
 	"context"
-
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd"
-	"github.com/rs/zerolog/log"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 )
 
 func main() {
+	logging.Init()
+
 	// Load configuration
 	config, err := cmd.LoadConfig()
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to load configuration")
+		slog.Error("Failed to load configuration", "error", err)
+		os.Exit(1)
 	}
 
 	// Listen for interrupt signals (CTRL/CMD+C, OS instructing the process to stop) to cancel context.

@@ -6,16 +6,11 @@ import (
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestComponent_Start(t *testing.T) {
-	// Ensure zerolog.DefaultContextLogger is initialized to avoid nil pointer panic
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	zerolog.DefaultContextLogger = &log.Logger
 
 	t.Run("without config file", func(t *testing.T) {
 		_ = test.TempDir(t) // Change to tmp dir to avoid writing to repository root

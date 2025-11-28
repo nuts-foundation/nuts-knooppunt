@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -11,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
-	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -40,7 +40,7 @@ func (c InterfaceConfig) URL() *url.URL {
 			// E.g. :8080
 			hostname, err := os.Hostname()
 			if err != nil {
-				log.Warn().Err(err).Msg("Failed to get hostname, defaulting to localhost")
+				slog.Warn("Failed to get hostname, defaulting to localhost", "error", err)
 				hostname = "localhost"
 			}
 			u = "http://" + hostname + c.Address
@@ -84,7 +84,7 @@ func New(config Config, publicMux *http.ServeMux, internalMux *http.ServeMux) *C
 func (c *Component) Start() error {
 	publicAddr := c.config.PublicInterface.Address
 	internalAddr := c.config.InternalInterface.Address
-	log.Info().Msgf("Starting HTTP servers (public-address: %s, internal-address: %s)", publicAddr, internalAddr)
+	slog.Info("Starting HTTP servers", "public-address", publicAddr, "internal-address", internalAddr)
 
 	// Wrap muxes with OpenTelemetry instrumentation for automatic span creation
 	// Filter out health check endpoints to avoid polluting traces
@@ -148,7 +148,7 @@ func createServer(addr string, handler http.Handler) (*http.Server, error) {
 	go func() {
 		if err := server.Serve(listener); err != nil {
 			if !errors.Is(err, http.ErrServerClosed) {
-				log.Err(err).Msgf("Failed to start HTTP server (address: %s)", addr)
+				slog.Error("Failed to start HTTP server", "address", addr, "error", err)
 			}
 		}
 	}()

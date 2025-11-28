@@ -19,10 +19,11 @@ import (
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"log/slog"
+
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
-	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -43,7 +44,7 @@ var client fhirclient.Client
 func New(config Config) *Component {
 	baseURL, err := url.Parse(config.FHIRBaseURL)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to start MCSD admin component, invalid FHIRBaseURL")
+		slog.Error("Failed to start MCSD admin component, invalid FHIRBaseURL", "error", err)
 		return nil
 	}
 
@@ -204,7 +205,7 @@ func newOrganization(w http.ResponseWriter, r *http.Request) {
 }
 
 func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
-	log.Debug().Msg("New post for organization resource")
+	slog.DebugContext(r.Context(), "New post for organization resource")
 
 	err := r.ParseForm()
 	if err != nil {
@@ -430,7 +431,7 @@ func newEndpoint(w http.ResponseWriter, _ *http.Request) {
 }
 
 func newEndpointPost(w http.ResponseWriter, r *http.Request) {
-	log.Debug().Msg("New post for Endpoint resource")
+	slog.DebugContext(r.Context(), "New post for Endpoint resource")
 
 	err := r.ParseForm()
 	if err != nil {
@@ -594,7 +595,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	if len(typeCode) > 0 {
 		locType, ok := valuesets.CodableFrom(valuesets.LocationTypeCodings, typeCode)
 		if !ok {
-			log.Warn().Msg("Could not find selected location type")
+			slog.WarnContext(r.Context(), "Could not find selected location type")
 		} else {
 			location.Type = []fhir.CodeableConcept{locType}
 		}
@@ -605,7 +606,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		location.Status = &status
 	} else {
-		log.Warn().Msg("Could not find location status")
+		slog.WarnContext(r.Context(), "Could not find location status")
 	}
 
 	var address fhir.Address
@@ -642,7 +643,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	if len(physicalCode) > 0 {
 		physical, ok := valuesets.CodableFrom(valuesets.LocationPhysicalTypeCodings, physicalCode)
 		if !ok {
-			log.Warn().Msg("Could not find selected physical location type")
+			slog.WarnContext(r.Context(), "Could not find selected physical location type")
 		} else {
 			location.PhysicalType = &physical
 		}
@@ -925,7 +926,7 @@ func respondErrorPage(w http.ResponseWriter, text string, httpcode int) {
 }
 
 func internalError(w http.ResponseWriter, r *http.Request, msg string, err error) {
-	log.Error().Err(err).Msg(msg)
+	slog.ErrorContext(r.Context(), msg, "error", err)
 
 	isHtmxRequest := r.Header.Get("HX-Request") == "true"
 	if isHtmxRequest {
@@ -941,7 +942,7 @@ func badRequest(w http.ResponseWriter, r *http.Request, msg string, errs ...erro
 	hasError := len(errs) > 0
 	if hasError {
 		err := errs[0]
-		log.Warn().Err(err).Msg(msg)
+		slog.WarnContext(r.Context(), msg, "error", err)
 	}
 
 	isHtmxRequest := r.Header.Get("HX-Request") == "true"
