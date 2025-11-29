@@ -198,6 +198,15 @@ config:
   # pdp:
   #   enabled: true
 
+  # OpenTelemetry tracing configuration
+  # Set otlpendpoint to enable tracing.
+  # When jaeger.enabled is true, the collector service is: <helm-release-name>-jaeger-collector:4318
+  # The helm release name is what you pass to "helm install <release-name> ..."
+  tracing:
+    otlpendpoint: ""  # e.g., "my-release-jaeger-collector:4318"
+    insecure: true
+    servicename: "nuts-knooppunt"
+
 # Hapi FHIR configuration
 fhir:
   enabled: false
@@ -257,3 +266,22 @@ nuts:
   database:
     storage:
       size: 5Gi
+
+# Jaeger configuration for distributed tracing
+# Set enabled: true to deploy Jaeger for trace collection and visualization
+jaeger:
+  enabled: false
+  # Use all-in-one deployment strategy for simplicity (suitable for dev/test)
+  # For production, consider using a production deployment with separate components
+  provisionDataStore:
+    cassandra: false
+  allInOne:
+    enabled: true
+  agent:
+    enabled: false  # Not needed when using all-in-one
+  collector:
+    enabled: false  # Not needed when using all-in-one
+  query:
+    enabled: false  # Not needed when using all-in-one, query is built into all-in-one
+  storage:
+    type: memory  # Use "memory" for dev, "cassandra" or "elasticsearch" for production
