@@ -2,14 +2,15 @@
 
 ## Context and Problem Statement
 
-We need to decide if, and how, EHRs will interact with the Knooppunt for authentication towards remote EHR systems.
+We need to decide how clients and end-users authenticate to the Knooppunt,
+and what features the Knooppunt offers to vendors to ease integration of GF Authentication.
 
-It could be used for the following use cases:
+This ADR addresses the following scenarios:
 
-1. Machine-to-machine authentication of a care organization, for usage in data exchanges with other care organizations.
-2. End-user authentication of a caregiver using DEZI, for:
-    - Logging into the local EHR, and
-    - Data exchanges with other care organizations.
+- Logging in: end-user authenticates to the local EHR using Dezi.
+- Data exchange: EHR performing data exchange with external system, using care organization identity.
+- Data exchange: EHR performing data exchange with external system, using both care organization and end-user identity from Dezi.
+- API authentication: EHR using Knooppunt APIs.
 
 ### Design Goals
 
@@ -20,39 +21,44 @@ Key design goals are:
 
 - **Pluggability**: Should be as easy as possible to integrate, e.g. with existing client library support.
 - Existing Nuts implementations could be leveraged, if possible.
+- **Security**: Should promote secure deployments.
+- **Simplicity**: Should be as simple as possible to implement and deploy.
+
+## Decision outcome
+
+We embrace OAuth2 and OpenID Connect, and leverage existing Nuts APIs:
+
+- Logging in:
+  - Introduce OpenID Connect Provider for logging in users through Dezi. It will be an abstraction for Dezi.
+  - It'll return an `id_token` with standard claims, derived from the Dezi `id_token`.
+  - The `id_token` can be used directly in APIs to authenticate the data exchanges.
+- Data exchange:
+  - We extend the existing Nuts Auth v2 API
+  - The EHR can then pass in the Dezi `id_token` when obtaining access tokens for remote EHR systems.
+- API authentication:
+  - We introduce an optional OAuth2 Client Credentials flow for EHRs to authenticate to the Knooppunt APIs.
 
 ## Considered Options
 
 This section describes the considered options.
 
-### No Knooppunt authentication API
+### Logging in
 
-In this option, the Knooppunt does not provide any authentication API.
+This section describes options for EHRs logging in end-users using Dezi.
 
-EHR vendors will have to integrate the Nuts node v2 authentication API and DEZI directly in their EHR systems.
+#### Logging in: no authentication API
 
-### Nuts v2 auth API
+In this option, the Knooppunt does not provide an end-user authentication API.
 
-If the GF Authentication specifies Nuts as authentication mechanism, the EHR can use the Nuts v2 authentication API to
-obtain access tokens for remote EHR systems.
+EHR vendors will have to integrate the Nuts node v2 authentication API and Dezi directly in their EHR systems.
 
-It's a tailor-made REST API of the Nuts node, but can be used to
+#### Logging in: OpenID Connect Provider as Dezi abstraction
 
-Advantages:
+The Knooppunt could expose an OpenID Connect (OIDC) API for end-user authentication, using standardized protocols.
 
-- Vendors with existing Nuts node implementations can use their existing implementation.
-
-Disadvantages:
-
-- Tailor-made API, so requires custom client implementation.
-- Only works for Nuts-based authentication.
-- The EHR will still need to integrate DEZI (an OpenID Connect API) for caregiver authentication.
-- The DEZI id_token will have to be wrapped in a Verifiable Credential for usage in Nuts, adding complexity.
-
-### OAuth2 / OpenID Connect
-
-The Knooppunt could expose an OAuth2 / OpenID Connect (OIDC) API for end-user, and machine-to-machine authentication,
-using standardized protocols
+Although Dezi looks like a standard OpenID Connect Provider implementation, it has non-standard claims,
+and requires the client to decrypt `id_token`s and perform non-standard token validation checks (LoA claim level and revocation checking).
+The Knooppunt can offload this complexity from the EHR.
 
 Advantages:
 
@@ -64,28 +70,34 @@ Disadvantages:
 - More complexity in the Knooppunt and deployment; it requires the Knooppunt to implement an OAuth2 / OIDC Provider,
   and the vendor to configure OAuth2/OIDC clients in their EHR systems and Knooppunt.
 
-#### End-user authentication
-
-For end-user authentication, the **OIDC Authorization Code** flow can be used to authenticate caregivers using DEZI.
-
-Although DEZI looks like a standard OpenID Connect Provider implementation, it could do heavy lifting like decrypting
-the `id_token`.
-
-Note: supporting this OIDC flow is optional; the EHR could choose to directly integrate with DEZI, using the decrypted
+Note: supporting this OIDC flow is optional; the EHR could choose to directly integrate with Dezi, using the decrypted
 `id_token` for machine-to-machine authentication.
 
-#### Machine-to-machine authentication
 
-In machine-to-machine authentication, the care organization is always authenticated.
-In cases the data exchange requires a user identity, the pre-authenticated end-user is also included in the form of a
-decrypted DEZI `id_token`.
+### Data exchange
 
-There are several OAuth2 grant types that can be used for machine-to-machine authentication:
+This section describes options for EHRs performing data exchange with remote EHR systems, using a care organization identity
+and optional end-user identity from Dezi.
 
-##### OAuth2 Client Credentials
+#### Data Exchange: Nuts v2 auth API
+
+If Nuts aligns with the GF Authentication, the EHR can use the embedded Nuts v2 authentication API to obtain access tokens for remote EHR systems.
+
+Advantages:
+
+- Vendors with existing Nuts node implementations can use their existing implementation.
+
+Disadvantages:
+
+- Tailor-made API, so requires custom client implementation.
+- Only works for Nuts-based authentication.
+- The Dezi id_token will have to be wrapped in a Verifiable Credential for usage in Nuts, adding complexity,
+- or: the Nuts API will have to be extended to support Dezi id_tokens directly.
+
+#### Data Exchange: OAuth2 Client Credentials
 
 The EHR authenticates to the Knooppunt using its `client_id` and static `client_secret` to obtain an access token,
-providing a custom parameter for the end-user DEZI `id_token` if needed.
+providing a custom parameter for the end-user Dezi `id_token` if needed.
 
 Example token exchange request:
 
@@ -94,7 +106,7 @@ grant_type=client_credentials
  &scope=<requested scopes>
  &client_id=<EHR client ID>
  &client_secret=<EHR client secret>
- &dezi_id_token=<DEZI id_token> (optional)
+ &dezi_id_token=<Dezi id_token> (optional)
  &nuts_subject_id=<Nuts subject ID>
 ```
 
@@ -111,14 +123,14 @@ Disadvantages:
 - Static credentials: requires secure management of client secrets,
   which can be hard in distributed or multi-tenant systems.
 - No built-in user context: can't represent a caregiver or end-user identity unless additional tokens
-  (e.g., DEZI `id_token`s) are manually encoded and included.
+  (e.g., Dezi `id_token`s) are manually encoded and included.
 - Limited delegation model: No standard way to represent "on behalf of" relationships or token chaining between systems.
 
-##### OAuth2 JWT Bearer Grant (RFC7523)
+#### Data Exchange: OAuth2 JWT Bearer Grant (RFC7523)
 
 Using this grant type EHR authenticates to the Knooppunt using a signed JWT assertion, which can include both the care
 organization
-and end-user identity (from the DEZI `id_token`).
+and end-user identity (from the Dezi `id_token`).
 
 Semantically identical to Client Credentials, but uses a signed JWT for authentication instead of static client secrets,
 which makes it a bit easier to include end-user identity (a JSON object) in the JWT claims.
@@ -132,16 +144,16 @@ Advantages:
 
 Disadvantages:
 
-- Increased complexity: requires JWT creation and signing logic, which may not be natively supported in all OAuth2
-  libraries.
+- Another endpoint for the same task; the Nuts node already has an API for this (or existing integrations have to migrate).
+- Increased complexity: requires JWT creation and signing logic, which may not be natively supported in all OAuth2 libraries.
 - Still limited delegation model: while more flexible than Client Credentials, it still lacks standardized support for
   complex "on behalf of" scenarios.
 
-##### OAuth 2.0 Token Exchange (RFC8693)
+#### Data Exchange: OAuth 2.0 Token Exchange (RFC8693)
 
 [OAuth 2.0 Token Exchange](https://www.rfc-editor.org/rfc/rfc8693.html) is a newer OAuth2 grant type that allows one token to be exchanged for another,
 supporting "on behalf of" scenarios.
-Using this flow, the EHR can exchange the DEZI `id_token` at the Knooppunt for an access token to a remote EHR system,
+Using this flow, the EHR can exchange the Dezi `id_token` at the Knooppunt for an access token to a remote EHR system,
 representing both the care organization and the authenticated caregiver.
 
 The `subject_token` parameter is optional and can be omitted if no user is present.
@@ -151,7 +163,7 @@ Example token exchange request:
 ```
 grant_type=urn:ietf:params:oauth:grant-type:token-exchange
  &audience=<remote EHR system (remote OAuth2 issuer URL)>
- &subject_token=<DEZI id_token>
+ &subject_token=<Dezi id_token>
  &subject_token_type=urn:ietf:params:oauth:token-type:id_token
  &actor_token=<Nuts subject ID>
  &actor_token_type=nuts-subject-id
@@ -168,14 +180,47 @@ Advantages:
 
 Disadvantages:
 
-- Limited library support: being a newer specification, it may not be widely supported in existing OAuth2 libraries and
-  frameworks.
+- Another endpoint for the same task; the Nuts node already has an API for this (or existing integrations have to migrate).
+- Limited library support: being a newer specification, it may not be widely supported in existing OAuth2 libraries and frameworks.
+- Depends heavily on unspecified semantics of `actor` and `subject` tokens, which might not be easier to integrate than a custom API in practice.
 
-## Decision Outcome
+### API authentication
 
-Proposal:
+This section describes options for EHRs authenticating to their local Knooppunt APIs.
 
-- Optional OIDC Provider in the Knooppunt for end-user authentication using DEZI.
-- OAuth2 API in the Knooppunt for machine-to-machine authentication, supporting at least:
-    - OAuth2 Client Credentials grant.
-    - OAuth2 Token Exchange if supported by enough vendors.
+#### API authentication: OAuth2 Client Credentials
+
+The EHR authenticates to the Knooppunt using its `client_id` and secret (can be static at first, JWT-based later) to obtain an access token.
+
+This makes it easier to deploy the Knooppunt in a secure way, since vendors need to worry less about API security.
+
+We could introduce multiple scope types for different API areas/clients, e.g.:
+
+- Proxies/Policy Enforcement Points need access to:
+  - Token Introspection API
+  - Policy Decision Point API
+- EHRs need access to the Knooppunt FHIR APIs, but not the ones above.
+
+Advantages:
+
+- Standard protocol, with existing client libraries for many programming languages.
+- Fine-grained access control using scopes.
+
+Disadvantages:
+
+- More complexity in the Knooppunt and deployment; it requires the Knooppunt to implement an OAuth2 Provider,
+  and the vendor to configure OAuth2 clients in their EHR systems and Knooppunt.
+
+#### API authentication: no authentication
+
+EHR vendors would have to secure the Knooppunt APIs in some other way, e.g. by restricting network access.
+
+Advantages:
+
+- Simplicity: no additional authentication mechanisms to implement or manage.
+- Easier EHR integration: no need to implement OAuth2 client logic in the EHR systems.
+
+Disadvantages:
+
+- Security risks: without proper authentication, the Knooppunt APIs could be exposed to unauthorized access.
+  This increases deployment complexity, as vendors need to ensure secure network configurations.
