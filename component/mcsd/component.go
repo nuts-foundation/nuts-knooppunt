@@ -570,9 +570,7 @@ func buildOrganizationKey(org *fhir.Organization) string {
 	return key
 }
 
-// findParentOrganizationsWithURA finds a parent organization with a URA identifier and all organizations linked to it.
 func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseURLRaw string, remoteAdminDirectoryFHIRClient fhirclient.Client, authoritativeUra string) (parentOrganizationMap, error) {
-	// First try to find parent organizations from deduplicatedEntries
 	log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Msg("Querying organizations for authoritative check (parent organization map build)")
 	orgEntries, _, err := c.query(ctx, remoteAdminDirectoryFHIRClient, "Organization", url.Values{
 		"_count": []string{strconv.Itoa(searchPageSize)},
@@ -582,7 +580,7 @@ func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseUR
 		return nil, err
 	}
 
-	parentOrganizationsMap, err := findParentOrganizationsWithURA(ctx, orgEntries)
+	parentOrganizationsMap, err := createOrganizationTree(orgEntries)
 	if err != nil {
 		log.Ctx(ctx).Err(err).Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to build parent organization map from all organizations, aborting parent organization map build")
 		return nil, err
@@ -610,7 +608,7 @@ func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseUR
 // Returns the parent organization with the most linked organizations and a slice of all organizations whose
 // partOf chain leads to the parent.
 // Returns (nil, nil) if no organization with URA identifier is found (not an error condition).
-func findParentOrganizationsWithURA(ctx context.Context, entries []fhir.BundleEntry) (parentOrganizationMap, error) {
+func createOrganizationTree(entries []fhir.BundleEntry) (parentOrganizationMap, error) {
 	result := make(parentOrganizationMap)
 
 	// Build a map of all organizations for efficient lookup using ID and VersionId as composite key

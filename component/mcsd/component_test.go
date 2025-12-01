@@ -1470,8 +1470,7 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-			parentOrgMap, err := findParentOrganizationsWithURA(ctx, tt.entries)
+			parentOrgMap, err := createOrganizationTree(tt.entries)
 
 			require.NoError(t, err, tt.description)
 
