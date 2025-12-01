@@ -1,4 +1,4 @@
-import {headers} from "./fhir";
+import {headers, headersWithContentType} from "./fhir";
 import {config} from "../config";
 
 export const consentApi = {
@@ -16,13 +16,13 @@ export const consentApi = {
         // Minimal FHIR R4 Consent structure
         const resource = this.toResource(form)
         const res = await fetch(`${config.fhirBaseURL}/Consent`, {
-            method: 'POST', headers, body: JSON.stringify(resource)
+            method: 'POST', headers: headersWithContentType, body: JSON.stringify(resource)
         });
         if (!res.ok) throw new Error('Create consent failed: ' + res.status + ' ' + res.statusText);
         return await res.json();
     }, async update(id, updated) {
         const res = await fetch(`${config.fhirBaseURL}/Consent/${id}`, {
-            method: 'PUT', headers, body: JSON.stringify(updated)
+            method: 'PUT', headers: headersWithContentType, body: JSON.stringify(updated)
         });
         if (!res.ok) throw new Error('Update consent failed: ' + res.status + ' ' + res.statusText);
         return await res.json();

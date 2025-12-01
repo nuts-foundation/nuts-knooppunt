@@ -8,7 +8,7 @@ import { nviApi } from '../api/nviApi';
 function PatientPage() {
   const { patientId } = useParams();
   const navigate = useNavigate();
-  const { isAuthenticated, logout } = useAuth();
+  const { isAuthenticated, logout, user } = useAuth();
 
   const [patient, setPatient] = useState(null);
   const [medicationRequests, setMedicationRequests] = useState([]);
@@ -101,7 +101,9 @@ function PatientPage() {
     setCareNetworkLoading(true);
     setCareNetworkError(null);
     try {
-      const organizations = await nviApi.searchOrganizationsByPatient(bsn);
+      // Extract abonnee_nummer from the OIDC token (stored in 'sub' claim)
+      const abonneeNummer = user?.profile?.sub;
+      const organizations = await nviApi.searchOrganizationsByPatient(bsn, abonneeNummer);
       setCareNetworkOrganizations(organizations);
     } catch (err) {
       setCareNetworkError(err.message);

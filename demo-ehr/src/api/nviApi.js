@@ -6,9 +6,10 @@ export const nviApi = {
     /**
      * Search for DocumentReferences by patient BSN to find organizations that have data
      * @param {string} bsn - Patient BSN identifier
+     * @param {string} abonneeNummer - Abonnee nummer from token for tenant identification
      * @returns {Promise<Array>} Array of unique organizations with their URA and name
      */
-    async searchOrganizationsByPatient(bsn) {
+    async searchOrganizationsByPatient(bsn, abonneeNummer) {
         if (!bsn) {
             return [];
         }
@@ -20,11 +21,15 @@ export const nviApi = {
                 '_count': '100', // Get up to 100 results
             });
 
+            console.log("adding header:","X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|"+abonneeNummer)
             const response = await fetch(
-                `${config.knooppuntURL}/nvi/DocumentReference?${searchParams}`,
+                `/api/knooppunt/nvi/DocumentReference?${searchParams}`,
                 {
                     method: 'GET',
-                    headers,
+                    headers: {
+                        ...headers,
+                        'X-Tenant-ID': 'http://fhir.nl/fhir/NamingSystem/ura|'+abonneeNummer,
+                    },
                 }
             );
 
