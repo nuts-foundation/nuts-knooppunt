@@ -98,7 +98,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		}
 		writeResp(w, Allow())
 	case "patient_example":
-		writeResp(w, EvalMitzPolicy(c, input))
+		writeResp(w, EvalMitzPolicy(c, r.Context(), input))
 	default:
 		writeResp(w, Deny(
 			ResultReason{

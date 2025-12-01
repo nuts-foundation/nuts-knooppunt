@@ -7,7 +7,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 )
 
-func EvalMitzPolicy(c Component, input MainPolicyInput) PolicyResult {
+func EvalMitzPolicy(c Component, ctx context.Context, input MainPolicyInput) PolicyResult {
 	// TODO: make this return more detailed information for what fields are missing
 	ok := validateMitzInput(input)
 	if !ok {
@@ -17,7 +17,6 @@ func EvalMitzPolicy(c Component, input MainPolicyInput) PolicyResult {
 		})
 	}
 
-	ctx := context.Background()
 	mitzComp := *c.Mitz
 	consentReq := xacmlFromInput(input)
 	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
