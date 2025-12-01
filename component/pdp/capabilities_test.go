@@ -76,3 +76,33 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 	resp := evalCapabilityPolicy(input)
 	assert.False(t, resp.Allow)
 }
+
+func TestComponent_allow_include(t *testing.T) {
+	input := MainPolicyInput{
+		Scope:                     "mcsd_query",
+		InteractionType:           fhir.TypeRestfulInteractionRead,
+		ResourceId:                "88716123",
+		ResourceType:              fhir.ResourceTypeLocation,
+		Include:                   []string{"Location:organization"},
+		RequestingOrganizationUra: "00000666",
+		DataHolderOrganizationUra: "00000659",
+	}
+
+	resp := evalCapabilityPolicy(input)
+	assert.True(t, resp.Allow)
+}
+
+func TestComponent_reject_include(t *testing.T) {
+	input := MainPolicyInput{
+		Scope:                     "mcsd_query",
+		InteractionType:           fhir.TypeRestfulInteractionRead,
+		ResourceId:                "88716123",
+		ResourceType:              fhir.ResourceTypeEndpoint,
+		Include:                   []string{"Endpoint:organization"},
+		RequestingOrganizationUra: "00000666",
+		DataHolderOrganizationUra: "00000659",
+	}
+
+	resp := evalCapabilityPolicy(input)
+	assert.False(t, resp.Allow)
+}

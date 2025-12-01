@@ -35,6 +35,9 @@ func capabilityForScope(scope string) (fhir.CapabilityStatement, bool) {
 	case "mcsd_update":
 		capa, err := readCapability("nl-gf-admin-directory-update-client")
 		return capa, err == nil
+	case "mcsd_query":
+		capa, err := readCapability("nl-gf-query-directory-query-client")
+		return capa, err == nil
 	case "patient_example":
 		capa, err := readCapability("patient-example")
 		return capa, err == nil
@@ -145,6 +148,38 @@ func evalInteraction(
 			reason := ResultReason{
 				Code:        "not_allowed",
 				Description: fmt.Sprintf("search parameter %s is not allowed", param),
+			}
+			reasons = append(reasons, reason)
+		}
+		return PolicyResult{
+			Allow:   false,
+			Reasons: reasons,
+		}
+	}
+
+	allowIncludes := false
+	rejectedIncludes := make([]string, 0, 10)
+	allowedIncludes := make([]string, 0, 10)
+	for _, des := range resourceDescriptions {
+		for _, include := range des.SearchInclude {
+			allowedIncludes = append(allowedIncludes, include)
+		}
+	}
+	for _, inc := range input.Include {
+		if !slices.Contains(allowedIncludes, inc) {
+			rejectedIncludes = append(rejectedIncludes, inc)
+		}
+	}
+	if len(rejectedIncludes) == 0 {
+		allowIncludes = true
+	}
+
+	if !allowIncludes {
+		reasons := make([]ResultReason, 0, 10)
+		for _, inc := range rejectedIncludes {
+			reason := ResultReason{
+				Code:        "not_allowed",
+				Description: fmt.Sprintf("include %s is not allowed", inc),
 			}
 			reasons = append(reasons, reason)
 		}

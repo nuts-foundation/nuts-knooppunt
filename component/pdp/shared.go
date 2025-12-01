@@ -21,6 +21,8 @@ type MainPolicyInput struct {
 	ResourceType                     fhir.ResourceType           `json:"resource_type"`
 	SearchParams                     []string                    `json:"search_params"`
 	ResourceId                       string                      `json:"resource_id"`
+	Include                          []string                    `json:"include"`
+	Revinclude                       []string                    `json:"revinclude"`
 }
 
 type MainPolicyRequest struct {

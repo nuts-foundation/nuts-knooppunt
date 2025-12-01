@@ -97,6 +97,9 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 			}))
 		}
 		writeResp(w, Allow())
+	case "mcsd_query":
+		// Dummy should be replaced with the actual OPA policy
+		writeResp(w, Allow())
 	case "patient_example":
 		writeResp(w, EvalMitzPolicy(c, r.Context(), input))
 	default:
