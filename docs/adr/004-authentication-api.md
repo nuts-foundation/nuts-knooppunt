@@ -99,7 +99,7 @@ Disadvantages:
 The EHR authenticates to the Knooppunt using its `client_id` and static `client_secret` to obtain an access token,
 providing a custom parameter for the end-user Dezi `id_token` if needed.
 
-Example token exchange request:
+Example token exchange request (formatted for readability; actual requests are URL-encoded):
 
 ```
 grant_type=client_credentials
@@ -158,7 +158,7 @@ representing both the care organization and the authenticated caregiver.
 
 The `subject_token` parameter is optional and can be omitted if no user is present.
 
-Example token exchange request:
+Example token exchange request (formatted for readability; actual requests are URL-encoded):
 
 ```
 grant_type=urn:ietf:params:oauth:grant-type:token-exchange
