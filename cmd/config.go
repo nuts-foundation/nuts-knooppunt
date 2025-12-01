@@ -10,6 +10,8 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/structs"
 	"github.com/knadh/koanf/v2"
+	"github.com/nuts-foundation/nuts-knooppunt/cmd/core"
+	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
 	"github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
@@ -17,21 +19,26 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 )
 
 type Config struct {
-	MCSD      mcsd.Config      `koanf:"mcsd"`
-	MCSDAdmin mcsdadmin.Config `koanf:"mcsdadmin"`
-	Nuts      nutsnode.Config  `koanf:"nuts"`
-	NVI       nvi.Config       `koanf:"nvi"`
-	PDP       pdp.Config       `koanf:"pdp"`
-	MITZ      mitz.Config      `koanf:"mitz"`
-	HTTP      http.Config      `koanf:"http"`
+	core.Config `koanf:",squash"`
+	MCSD        mcsd.Config      `koanf:"mcsd"`
+	MCSDAdmin   mcsdadmin.Config `koanf:"mcsdadmin"`
+	Nuts        nutsnode.Config  `koanf:"nuts"`
+	NVI         nvi.Config       `koanf:"nvi"`
+	PDP         pdp.Config       `koanf:"pdp"`
+	MITZ        mitz.Config      `koanf:"mitz"`
+	HTTP        http.Config      `koanf:"http"`
+	AuthN       authn.Config     `koanf:"authn"`
+	Tracing     tracing.Config   `koanf:"tracing"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		MCSD: mcsd.DefaultConfig(),
+		Config: core.DefaultConfig(),
+		MCSD:   mcsd.DefaultConfig(),
 		Nuts: nutsnode.Config{
 			Enabled: false,
 		},
@@ -40,6 +47,7 @@ func DefaultConfig() Config {
 		PDP:       pdp.DefaultConfig(),
 		MITZ:      mitz.Config{},
 		HTTP:      http.DefaultConfig(),
+		Tracing:   tracing.DefaultConfig(),
 	}
 }
 

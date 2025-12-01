@@ -1,0 +1,54 @@
+---
+name: "Publish Helm Chart - fhir"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "helm/fhir/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-fhir:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package and push helm-fhir chart
+        run: |
+          # Package helm-fhir
+          helm package helm/fhir -d .helm-packages
+
+          # Push to GHCR
+          helm push .helm-packages/helm-fhir-*.tgz oci://ghcr.io/${{ github.repository_owner }}
+
+      - name: Output published chart
+        run: |
+          FHIR_VERSION=$(grep "^version:" helm/fhir/Chart.yaml | awk '{print $2}')
+
+          echo "Published Helm chart:"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-fhir:$FHIR_VERSION"
+          echo ""
+          echo "Install with:"
+          echo "  helm install my-fhir oci://ghcr.io/${{ github.repository_owner }}/helm-fhir --version $FHIR_VERSION"

@@ -10,6 +10,7 @@ import (
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonimization"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
@@ -51,7 +52,7 @@ func New(config Config) (*Component, error) {
 		return nil, fmt.Errorf("audience must be configured when NVI component is enabled")
 	}
 	return &Component{
-		client:        fhirclient.New(baseURL, http.DefaultClient, fhirutil.ClientConfig()),
+		client:        fhirclient.New(baseURL, tracing.NewHTTPClient(), fhirutil.ClientConfig()),
 		pseudonymizer: &pseudonimization.Component{},
 		audience:      config.Audience,
 	}, nil

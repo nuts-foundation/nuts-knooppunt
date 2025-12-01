@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
 	libHTTPComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
@@ -13,6 +14,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -22,14 +24,24 @@ func Start(ctx context.Context, config Config) error {
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	zerolog.DefaultContextLogger = &log.Logger
 
+	if !config.StrictMode {
+		log.Ctx(ctx).Warn().Msgf("Strict mode is disabled. This is NOT recommended for production environments!")
+	}
+
 	publicMux := http.NewServeMux()
 	internalMux := http.NewServeMux()
+
+	// Tracing component must be first to capture spans from other components
+	config.Tracing.ServiceVersion = status.Version()
+	tracingComponent := tracing.New(config.Tracing)
+
 	mcsdUpdateClient, err := mcsd.New(config.MCSD)
 	if err != nil {
 		return errors.Wrap(err, "failed to create mCSD Update Client")
 	}
 	httpComponent := libHTTPComponent.New(config.HTTP, publicMux, internalMux)
 	components := []component.Lifecycle{
+		tracingComponent,
 		mcsdUpdateClient,
 		mcsdadmin.New(config.MCSDAdmin),
 		status.New(),
@@ -45,6 +57,13 @@ func Start(ctx context.Context, config Config) error {
 	} else {
 		log.Ctx(ctx).Info().Msg("Nuts node is disabled")
 	}
+
+	// Create AuthN component
+	authnComponent, err := authn.New(config.AuthN, httpComponent, config.Config)
+	if err != nil {
+		return errors.Wrap(err, "failed to create AuthN component")
+	}
+	components = append(components, authnComponent)
 
 	// Create MITZ component
 	if config.MITZ.Enabled() {

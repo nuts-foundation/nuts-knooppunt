@@ -9,6 +9,7 @@ services:
       KNPT_MCSD_QUERY_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-query
       KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL: http://hapi-fhir:7050/fhir/lrza-mcsd-admin
       KNPT_NVI_BASEURL: http://hapi-fhir:7050/fhir/nvi
+      KNPT_TRACING_OTLPENDPOINT: ${KNPT_TRACING_OTLPENDPOINT:-jaeger:4318}
     volumes:
       - ./config:/app/config:ro
   init:
@@ -73,6 +74,12 @@ services:
 
       NVI_AUDIENCE: nvi
       NVI_TENANT: nvi
+      # OpenTelemetry tracing - enables full trace visibility into HAPI FHIR
+      JAVA_TOOL_OPTIONS: "-javaagent:/app/opentelemetry-javaagent.jar"
+      OTEL_SERVICE_NAME: "hapi-fhir"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://jaeger:4318"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+      OTEL_PROPAGATORS: "tracecontext,baggage"
 
       #
       # Local development properties (not to be used when deploying to test/production)
@@ -171,6 +178,16 @@ services:
       start_period: 10s
     profiles:
       - pep
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
 
 volumes:
   #postgres-data:

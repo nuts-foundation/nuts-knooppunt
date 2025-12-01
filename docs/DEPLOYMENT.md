@@ -14,6 +14,9 @@ The diagrams on this page were created using [Structurizr](https://structurizr.c
 ### GF Localization
 ![structurizr-GF_Localization_ContainerDiagram.svg](images/structurizr-GF_Localization_ContainerDiagram.svg)
 
+### Authentication
+![structurizr-Authentication_ContainerDiagram.svg](images/structurizr-Authentication_ContainerDiagram.svg)
+
 ### Handling inbound data requests
 ![structurizr-DataExchange_ContainerDiagram.svg](images/structurizr-DataExchange_ContainerDiagram.svg)
 
@@ -83,7 +86,22 @@ An example PEP using NGINX [can be found here](../pep).
 
 ### Authentication
 
+You can use the OIDC Provider in the Knooppunt for user authentication, which abstracts intricacies of Dezi.
+
+Otherwise, you need to directly integrate with Dezi yourself.
+
+#### Nuts node
 The Knooppunt can be deployed with an embedded Nuts node. If a vendor has an existing Nuts node,
 or wants to have the Nuts node deployed separately, the Knooppunt can use that Nuts node instead.
 
 Use [`nuts.enabled`](./CONFIGURATION.md) to configure the embedded or existing Nuts node.
+
+### Tracing
+
+The Knooppunt supports distributed tracing using OpenTelemetry. Traces can be sent to any OTLP-compatible collector (e.g. Jaeger, Grafana Tempo, or a vendor's existing observability platform).
+
+To enable tracing, set [`tracing.otlpendpoint`](./CONFIGURATION.md) to the address of your OTLP collector.
+
+Span names are formatted as `METHOD /path` (e.g. `POST /mcsd/update`). The component can be identified from the path prefix (`/mcsd/*`, `/nvi/*`, `/pdp/*`) and filtered using the `http.target` tag.
+
+See [CONFIGURATION.md](./CONFIGURATION.md) for all tracing options.
