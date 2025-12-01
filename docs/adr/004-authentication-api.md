@@ -101,14 +101,11 @@ providing a custom parameter for the end-user Dezi `id_token` if needed.
 
 Example token exchange request:
 
-```
-grant_type=client_credentials
- &scope=<requested scopes>
- &client_id=<EHR client ID>
- &client_secret=<EHR client secret>
- &dezi_id_token=<Dezi id_token> (optional)
- &nuts_subject_id=<Nuts subject ID>
-```
+```http
+POST /token HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&scope=<requested scopes>&client_id=<EHR client ID>&client_secret=<EHR client secret>&dezi_id_token=<Dezi id_token> (optional)&nuts_subject_id=<Nuts subject ID>
 
 Advantages:
 
