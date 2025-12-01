@@ -50,7 +50,7 @@ This section describes options for EHRs logging in end-users using Dezi.
 
 In this option, the Knooppunt does not provide an end-user authentication API.
 
-EHR vendors will have to integrate the Nuts node v2 authentication API and Dezi directly in their EHR systems.
+EHR vendors will have to integrate the Nuts Auth v2 API and Dezi directly in their EHR systems.
 
 #### Logging in: OpenID Connect Provider as Dezi abstraction
 
