@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 func TestComponent_map_input_xacml(t *testing.T) {
@@ -11,7 +12,7 @@ func TestComponent_map_input_xacml(t *testing.T) {
 		Method:                           "GET",
 		Path:                             []string{"fhir", "Patient", "118876"},
 		ResourceId:                       "118876",
-		ResourceType:                     "Patient",
+		ResourceType:                     fhir.ResourceTypePatient,
 		PatientBSN:                       "900186021",
 		RequestingUziRoleCode:            "01.015",
 		RequestingPractitionerIdentifier: "000095254",

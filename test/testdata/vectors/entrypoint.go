@@ -65,7 +65,15 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	}, nil, fhirclient.AtPath("/$expunge"))
 
 	// Create tenants
-	for _, tenant := range []hapi.Tenant{knptMCSDQueryHAPITenant, knptMCSDAdminHAPITenant, lrzaMCSDAdminHAPITenant, care2CureAdminHAPITenant, sunflowerAdminHAPITenant, sunflowerPatientHAPITenant, nviTenant} {
+	for _, tenant := range []hapi.Tenant{
+		knptMCSDQueryHAPITenant,
+		knptMCSDAdminHAPITenant,
+		lrzaMCSDAdminHAPITenant,
+		care2CureAdminHAPITenant,
+		sunflowerAdminHAPITenant,
+		sunflowerPatientHAPITenant,
+		nviTenant,
+	} {
 		if err := hapi.CreateTenant(ctx, tenant, hapiDefaultFHIRClient); err != nil {
 			return nil, fmt.Errorf("create HAPI tenant: %w", err)
 		}

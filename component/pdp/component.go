@@ -9,12 +9,9 @@ import (
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
-	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
+	"github.com/rs/zerolog/log"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
-
-type Config struct {
-	Enabled bool
-}
 
 func DefaultConfig() Config {
 	return Config{
@@ -23,11 +20,6 @@ func DefaultConfig() Config {
 }
 
 var _ component.Lifecycle = (*Component)(nil)
-
-type Component struct {
-	Config Config
-	Mitz   *mitz.Component
-}
 
 // New creates an instance of the pdp component, which provides a simple policy decision endpoint.
 func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
@@ -52,33 +44,6 @@ func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *h
 	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", http.HandlerFunc(c.HandlePolicy))
 }
 
-type MainPolicyInput struct {
-	DataHolderFacilityType           string   `json:"data_holder_facility_type"`
-	DataHolderOrganizationUra        string   `json:"data_holder_organization_ura"`
-	Method                           string   `json:"method"`
-	Path                             []string `json:"path"`
-	PatientBSN                       string   `json:"patient_bsn"`
-	PurposeOfUse                     string   `json:"purpose_of_use"`
-	RequestingFacilityType           string   `json:"requesting_facility_type"`
-	RequestingOrganizationUra        string   `json:"requesting_organization_ura"`
-	RequestingPractitionerIdentifier string   `json:"requesting_practitioner_identifier"`
-	RequestingUziRoleCode            string   `json:"requesting_uzi_role_code"`
-	ResourceId                       string   `json:"resource_id"`
-	ResourceType                     string   `json:"resource_type"`
-}
-
-type MainPolicyRequest struct {
-	Input MainPolicyInput `json:"input"`
-}
-
-type MainPolicyResponse struct {
-	Result MainPolicyResult `json:"result"`
-}
-
-type MainPolicyResult struct {
-	Allow bool `json:"allow"`
-}
-
 func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	var reqBody MainPolicyRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
@@ -88,30 +53,65 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ok := validateInput(input)
-	if !ok {
-		http.Error(w, "input not valid", http.StatusBadRequest)
+	// Step 1: Providing a scope is required for every PDP request
+	// FUTURE: We are considering allowing more than one scope
+	if input.Scope == "" {
+		res := PolicyResult{
+			Allow: false,
+			Reasons: []ResultReason{
+				{
+					Code:        "missing_required_value",
+					Description: "missing required value, no scope defined",
+				},
+			},
+		}
+		writeResp(w, res)
 		return
 	}
 
-	ctx := r.Context()
-	mitzComp := *c.Mitz
-	consentReq := xacmlFromInput(input)
-	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
-	if err != nil {
-		http.Error(w, "could not complete the consent check", http.StatusInternalServerError)
+	// Step 2: Check the request adheres to the capability statement for this scope
+	res := evalCapabilityPolicy(input)
+	if !res.Allow {
+		writeResp(w, res)
 		return
 	}
 
-	allow := false
-	if consentResp.Decision == xacml.DecisionPermit {
-		allow = true
+	// Step 3: Check if we are authorized to see the underlying data
+	// FUTURE: We want to use OPA policies here ...
+	// ... but for now we only have two example scopes hardcoded.
+	switch input.Scope {
+	case "mcsd_update":
+		validTypes := []fhir.ResourceType{
+			fhir.ResourceTypeOrganization,
+			fhir.ResourceTypeLocation,
+			fhir.ResourceTypeHealthcareService,
+			fhir.ResourceTypeEndpoint,
+			fhir.ResourceTypePractitionerRole,
+			fhir.ResourceTypeOrganizationAffiliation,
+			fhir.ResourceTypePractitioner,
+		}
+		if !slices.Contains(validTypes, input.ResourceType) {
+			writeResp(w, Deny(ResultReason{
+				Code:        "not_allowed",
+				Description: "not allowed to request this resources during update",
+			}))
+		}
+		writeResp(w, Allow())
+	case "patient_example":
+		writeResp(w, EvalMitzPolicy(c, r.Context(), input))
+	default:
+		writeResp(w, Deny(
+			ResultReason{
+				Code:        "not_implemented",
+				Description: fmt.Sprintf("scope %s not implemeted", input.Scope),
+			},
+		))
 	}
+}
 
+func writeResp(w http.ResponseWriter, result PolicyResult) {
 	resp := MainPolicyResponse{
-		Result: MainPolicyResult{
-			Allow: allow,
-		},
+		Result: result,
 	}
 
 	b, err := json.Marshal(resp)
@@ -121,60 +121,10 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(b)
-}
-
-func xacmlFromInput(input MainPolicyInput) xacml.AuthzRequest {
-	var purpose string
-	switch input.PurposeOfUse {
-	case "treatment":
-		purpose = "TREAT"
-	case "secondary":
-		purpose = "COC"
-	default:
-		purpose = "TREAT"
+	_, err = w.Write(b)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to write response to ResponseWriter")
 	}
-
-	return xacml.AuthzRequest{
-		PatientBSN:             input.PatientBSN,
-		HealthcareFacilityType: input.DataHolderFacilityType,
-		AuthorInstitutionID:    input.DataHolderOrganizationUra,
-		// This code is always the same, it's the code for _de gesloten vraag_
-		EventCode:              "GGC002",
-		SubjectRole:            input.RequestingUziRoleCode,
-		ProviderID:             input.RequestingPractitionerIdentifier,
-		ProviderInstitutionID:  input.RequestingOrganizationUra,
-		ConsultingFacilityType: input.RequestingFacilityType,
-		PurposeOfUse:           purpose,
-	}
-}
-
-func validateInput(input MainPolicyInput) bool {
-	requiredValues := []string{
-		input.Method,
-		input.PatientBSN,
-		input.RequestingUziRoleCode,
-		input.RequestingPractitionerIdentifier,
-		input.RequestingOrganizationUra,
-		input.RequestingFacilityType,
-		input.DataHolderOrganizationUra,
-		input.DataHolderFacilityType,
-		input.PurposeOfUse,
-		input.ResourceId,
-		input.ResourceType,
-	}
-	if slices.Contains(requiredValues, "") {
-		return false
-	}
-
-	validMethods := []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPatch}
-	if !slices.Contains(validMethods, input.Method) {
-		return false
-	}
-
-	// Add more validations here once we agreed upon a contract
-
-	return true
 }
 
 func (c Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
