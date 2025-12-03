@@ -81,15 +81,11 @@ func evalInteraction(
 		fhir.TypeRestfulInteractionSearchType,
 	}
 	if !slices.Contains(supported, input.InteractionType) {
-		return PolicyResult{
-			Allow: false,
-			Reasons: []ResultReason{
-				{
-					Code:        TypeResultCodeNotImplemented,
-					Description: "restful interaction type not supported",
-				},
-			},
-		}
+		return Deny(
+			ResultReason{
+				Code:        TypeResultCodeNotImplemented,
+				Description: "restful interaction type not supported",
+			})
 	}
 
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
@@ -111,15 +107,11 @@ func evalInteraction(
 	}
 
 	if !allowInteraction {
-		return PolicyResult{
-			Allow: false,
-			Reasons: []ResultReason{
-				{
-					Code:        TypeResultCodeNotAllowed,
-					Description: "capability statement does not allow interaction",
-				},
-			},
-		}
+		return Deny(
+			ResultReason{
+				Code:        TypeResultCodeNotAllowed,
+				Description: "capability statement does not allow interaction",
+			})
 	}
 
 	allowParams := false
@@ -144,13 +136,7 @@ func evalInteraction(
 
 	if !allowParams {
 		reasons := make([]ResultReason, 0, 10)
-		for _, param := range rejectedSearchParams {
-			reason := ResultReason{
-				Code:        TypeResultCodeMissingRequiredValue,
-				Description: fmt.Sprintf("search parameter %s is not allowed", param),
-			}
-			reasons = append(reasons, reason)
-		}
+		ManyReasons(&reasons, rejectedSearchParams, "search parameter %s is not allowed", TypeResultCodeMissingRequiredValue)
 		return PolicyResult{
 			Allow:   false,
 			Reasons: reasons,
@@ -176,20 +162,12 @@ func evalInteraction(
 
 	if !allowIncludes {
 		reasons := make([]ResultReason, 0, 10)
-		for _, inc := range rejectedIncludes {
-			reason := ResultReason{
-				Code:        TypeResultCodeNotAllowed,
-				Description: fmt.Sprintf("include %s is not allowed", inc),
-			}
-			reasons = append(reasons, reason)
-		}
+		ManyReasons(&reasons, rejectedIncludes, "include %s is not allowed", TypeResultCodeNotAllowed)
 		return PolicyResult{
 			Allow:   false,
 			Reasons: reasons,
 		}
 	}
 
-	return PolicyResult{
-		Allow: true,
-	}
+	return Allow()
 }

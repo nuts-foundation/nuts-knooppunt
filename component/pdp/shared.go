@@ -65,6 +65,17 @@ func Deny(reason ResultReason) PolicyResult {
 	}
 }
 
+// ManyReasons Helper for easily adding multiple of reasons of the same type
+func ManyReasons(target *[]ResultReason, input []string, format string, code TypeResultCode) {
+	for _, str := range input {
+		reason := ResultReason{
+			Code:        code,
+			Description: fmt.Sprintf(format, str),
+		}
+		*target = append(*target, reason)
+	}
+}
+
 type TypeResultCode int
 
 const (

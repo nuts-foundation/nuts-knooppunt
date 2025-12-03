@@ -106,3 +106,18 @@ func TestComponent_reject_include(t *testing.T) {
 	resp := evalCapabilityPolicy(input)
 	assert.False(t, resp.Allow)
 }
+
+func TestComponent_reject_revinclude(t *testing.T) {
+	input := MainPolicyInput{
+		Scope:                     "mcsd_query",
+		InteractionType:           fhir.TypeRestfulInteractionRead,
+		ResourceId:                "88716123",
+		ResourceType:              fhir.ResourceTypePractitioner,
+		Revinclude:                []string{"Location:organization"},
+		RequestingOrganizationUra: "00000666",
+		DataHolderOrganizationUra: "00000659",
+	}
+
+	resp := evalCapabilityPolicy(input)
+	assert.False(t, resp.Allow)
+}
