@@ -43,6 +43,8 @@ spec:
           env:
           - name: DATABASE_URL
             value: {{ .Values.env.databaseUrl | quote }}
+          - name: ISSUER_HOSTNAME
+            value: {{ .Values.env.issuerHostname | quote }}
           - name: CREDENTIAL_VALIDITY_DAYS
             value: {{ .Values.env.credentialValidityDays | quote }}
           - name: ACCESS_TOKEN_EXPIRY_SECONDS

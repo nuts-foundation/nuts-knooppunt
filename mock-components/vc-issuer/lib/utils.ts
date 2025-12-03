@@ -2,26 +2,8 @@ import { NextRequest } from 'next/server';
 import { generateDidWeb } from './crypto/did-web';
 
 /**
- * Get the base URL from request headers, falling back to environment variable
- */
-export function getBaseUrl(req?: NextRequest): string {
-  if (req) {
-    const host = req.headers.get('host') || req.headers.get('x-forwarded-host');
-    if (host) {
-      const protocol = req.headers.get('x-forwarded-proto') || 'https';
-      return `${protocol}://${host}`;
-    }
-  }
-
-  if (process.env.NEXT_PUBLIC_BASE_URL) {
-    return process.env.NEXT_PUBLIC_BASE_URL;
-  }
-
-  return 'http://localhost:3000';
-}
-
-/**
- * Get the issuer hostname from request headers, falling back to environment variable
+ * Get the issuer hostname from request headers, falling back to environment variable.
+ * This is the single source of truth for the issuer's identity.
  */
 export function getIssuerHostname(req?: NextRequest): string {
   if (req) {
@@ -32,6 +14,26 @@ export function getIssuerHostname(req?: NextRequest): string {
   }
 
   return process.env.ISSUER_HOSTNAME || 'localhost:3000';
+}
+
+/**
+ * Get the base URL from request headers, falling back to ISSUER_HOSTNAME env var.
+ * Protocol is determined from x-forwarded-proto header or defaults to https.
+ */
+export function getBaseUrl(req?: NextRequest): string {
+  if (req) {
+    const host = req.headers.get('host') || req.headers.get('x-forwarded-host');
+    if (host) {
+      const protocol = req.headers.get('x-forwarded-proto') || 'https';
+      return `${protocol}://${host}`;
+    }
+  }
+
+  // Fall back to ISSUER_HOSTNAME with https protocol
+  const hostname = process.env.ISSUER_HOSTNAME || 'localhost:3000';
+  const isLocalhost = hostname.startsWith('localhost');
+  const protocol = isLocalhost ? 'http' : 'https';
+  return `${protocol}://${hostname}`;
 }
 
 /**

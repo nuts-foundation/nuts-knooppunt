@@ -57,8 +57,10 @@ Tests are in `lib/**/*.test.ts`. Run with `npm test`.
 
 ```
 DATABASE_URL=file:./dev.db
-NEXT_PUBLIC_BASE_URL=http://localhost:3000  # Fallback only
+ISSUER_HOSTNAME=localhost:3000  # Used for DID:web identity and base URL derivation
 CREDENTIAL_VALIDITY_DAYS=365
 ACCESS_TOKEN_EXPIRY_SECONDS=86400
 C_NONCE_EXPIRY_SECONDS=86400
 ```
+
+Note: `ISSUER_HOSTNAME` is the single source of truth for the issuer's identity. The base URL is derived from it (https for non-localhost, http for localhost). In production, request headers (`host`, `x-forwarded-host`, `x-forwarded-proto`) take precedence.

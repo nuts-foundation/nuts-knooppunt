@@ -17,6 +17,9 @@ image:
 env:
   # Database URL for SQLite (file path inside container)
   databaseUrl: "file:/app/data/vc-issuer.db"
+  # Issuer hostname - used for DID:web identity and base URL
+  # Should match the ingress/service hostname
+  issuerHostname: "vc-issuer.local"
   # Credential validity in days
   credentialValidityDays: "365"
   # Access token expiry in seconds

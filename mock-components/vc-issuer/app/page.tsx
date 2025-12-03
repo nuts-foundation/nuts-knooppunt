@@ -1,5 +1,9 @@
 export default function Home() {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+  // Derive base URL from ISSUER_HOSTNAME (the single source of truth)
+  const hostname = process.env.ISSUER_HOSTNAME || 'localhost:3000';
+  const isLocalhost = hostname.startsWith('localhost');
+  const protocol = isLocalhost ? 'http' : 'https';
+  const baseUrl = `${protocol}://${hostname}`;
 
   return (
     <div className="min-h-screen bg-gray-100">
