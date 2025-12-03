@@ -6,10 +6,8 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
-RUN npm ci
-
-# Prisma generate
 COPY prisma ./prisma
+RUN npm ci
 RUN npx prisma generate
 
 # Builder stage
@@ -19,7 +17,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+# Skip prisma generate in build since it's already done in deps stage
+RUN npx next build
 
 # Runner stage
 FROM base AS runner
