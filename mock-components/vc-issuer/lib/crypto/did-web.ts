@@ -19,11 +19,15 @@ export function didWebToUrl(did: string): string {
   }
 
   const identifier = did.slice('did:web:'.length);
-  // Decode the identifier
-  const decoded = identifier.replace(/%3A/g, ':').replace(/:/g, '/');
+  // First convert path separators (colons to slashes), then decode port numbers
+  // This order matters: %3A represents literal colons (like port numbers)
+  // while unencoded colons represent path separators
+  const withPaths = identifier.replace(/:/g, '/');
+  const decoded = decodeURIComponent(withPaths);
 
-  // Check if it has a path
-  if (decoded.includes('/')) {
+  // Check if it has a path (more than just hostname:port)
+  const pathStart = decoded.indexOf('/', decoded.indexOf(':') + 1);
+  if (pathStart !== -1 || (decoded.includes('/') && !decoded.includes(':'))) {
     return `https://${decoded}/did.json`;
   }
 
