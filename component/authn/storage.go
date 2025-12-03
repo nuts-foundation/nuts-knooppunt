@@ -45,7 +45,7 @@ func (o Storage) AuthenticateUser(ctx context.Context, authRequestID string, dez
 		return err
 	}
 	o.authRequests.Store(authRequestID, authRequest)
-	slog.InfoContext(ctx, "OIDC: AuthRequest authenticated", "authRequestID", authRequestID)
+	slog.InfoContext(ctx, "OIDC: AuthRequest authenticated", slog.String("authRequestID", authRequestID))
 	return nil
 }
 
@@ -83,7 +83,7 @@ func (o Storage) CreateAuthRequest(ctx context.Context, request *oidc.AuthReques
 	if len(userID) != 0 {
 		return nil, errors.New("token refresh not supported")
 	}
-	slog.InfoContext(ctx, "OIDC: AuthRequest received", "clientID", request.ClientID)
+	slog.InfoContext(ctx, "OIDC: AuthRequest received", slog.String("clientID", request.ClientID))
 	authRequestID := uuid.NewString()
 	req := AuthRequest{
 		ID:             authRequestID,

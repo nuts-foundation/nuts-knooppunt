@@ -40,7 +40,7 @@ func LoadClientCertificate(certFile, keyFile, password string) (tls.Certificate,
 		if err != nil {
 			return tls.Certificate{}, fmt.Errorf("failed to load PKCS#12: %w", err)
 		}
-		slog.Info("Loaded client certificate from PKCS#12", "p12File", certFile)
+		slog.Info("Loaded client certificate from PKCS#12", slog.String("p12File", certFile))
 		return cert, nil
 	}
 
@@ -52,7 +52,7 @@ func LoadClientCertificate(certFile, keyFile, password string) (tls.Certificate,
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("failed to load certificate: %w", err)
 	}
-	slog.Info("Loaded client certificate from PEM", "certFile", certFile, "keyFile", keyFile)
+	slog.Info("Loaded client certificate from PEM", slog.String("certFile", certFile), slog.String("keyFile", keyFile))
 	return cert, nil
 }
 
@@ -72,7 +72,7 @@ func LoadCACertPool(caFile string) (*x509.CertPool, error) {
 		return nil, fmt.Errorf("failed to parse CA certificate")
 	}
 
-	slog.Info("Loaded CA certificate", "caFile", caFile)
+	slog.Info("Loaded CA certificate", slog.String("caFile", caFile))
 	return caCertPool, nil
 }
 

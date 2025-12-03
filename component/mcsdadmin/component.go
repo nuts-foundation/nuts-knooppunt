@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -13,15 +14,14 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
-	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	formdata "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/formdata"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/static"
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
-	"log/slog"
-
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
@@ -44,7 +44,7 @@ var client fhirclient.Client
 func New(config Config) *Component {
 	baseURL, err := url.Parse(config.FHIRBaseURL)
 	if err != nil {
-		slog.Error("Failed to start MCSD admin component, invalid FHIRBaseURL", "error", err)
+		slog.Error("Failed to start MCSD admin component, invalid FHIRBaseURL", logging.Error(err))
 		return nil
 	}
 
@@ -926,7 +926,7 @@ func respondErrorPage(w http.ResponseWriter, text string, httpcode int) {
 }
 
 func internalError(w http.ResponseWriter, r *http.Request, msg string, err error) {
-	slog.ErrorContext(r.Context(), msg, "error", err)
+	slog.ErrorContext(r.Context(), msg, logging.Error(err))
 
 	isHtmxRequest := r.Header.Get("HX-Request") == "true"
 	if isHtmxRequest {
@@ -942,7 +942,7 @@ func badRequest(w http.ResponseWriter, r *http.Request, msg string, errs ...erro
 	hasError := len(errs) > 0
 	if hasError {
 		err := errs[0]
-		slog.WarnContext(r.Context(), msg, "error", err)
+		slog.WarnContext(r.Context(), msg, logging.Error(err))
 	}
 
 	isHtmxRequest := r.Header.Get("HX-Request") == "true"

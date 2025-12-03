@@ -8,13 +8,14 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 // SendErrorResponse will send the given error as OperationOutcome to the FHIR client.
 // If the error isn't an Error instance, it will send a generic error back to the FHIR client, to avoid leaking sensitive internals.
 func SendErrorResponse(ctx context.Context, httpResponse http.ResponseWriter, err error) {
-	slog.ErrorContext(ctx, "FHIR API error", "error", err)
+	slog.ErrorContext(ctx, "FHIR API error", logging.Error(err))
 	statusCode := http.StatusInternalServerError
 	var responseResource any
 	var fhirError *Error
@@ -56,7 +57,7 @@ func SendErrorResponse(ctx context.Context, httpResponse http.ResponseWriter, er
 func SendResponse(ctx context.Context, httpResponse http.ResponseWriter, httpStatus int, resource interface{}) {
 	data, err := json.MarshalIndent(resource, "", "  ")
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to marshal response", "error", err)
+		slog.ErrorContext(ctx, "Failed to marshal response", logging.Error(err))
 		httpStatus = http.StatusInternalServerError
 		data = []byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"processing","diagnostics":"Failed to marshal response"}]}`)
 	}
@@ -65,6 +66,6 @@ func SendResponse(ctx context.Context, httpResponse http.ResponseWriter, httpSta
 	httpResponse.WriteHeader(httpStatus)
 	_, err = httpResponse.Write(data)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to write response", "error", err, "data", string(data))
+		slog.ErrorContext(ctx, "Failed to write response", logging.Error(err), slog.String("data", string(data)))
 	}
 }

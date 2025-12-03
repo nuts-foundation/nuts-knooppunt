@@ -17,6 +17,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/pkg/errors"
 )
 
@@ -105,11 +106,11 @@ func Start(ctx context.Context, config Config) error {
 
 	// Components: Start()
 	for _, cmp := range components {
-		slog.DebugContext(ctx, "Starting component", "component", fmt.Sprintf("%T", cmp))
+		slog.DebugContext(ctx, "Starting component", logging.Component(cmp))
 		if err := cmp.Start(); err != nil {
 			return errors.Wrapf(err, "failed to start component: %T", cmp)
 		}
-		slog.DebugContext(ctx, "Component started", "component", fmt.Sprintf("%T", cmp))
+		slog.DebugContext(ctx, "Component started", logging.Component(cmp))
 	}
 
 	slog.DebugContext(ctx, "System started, waiting for shutdown...")
@@ -118,11 +119,11 @@ func Start(ctx context.Context, config Config) error {
 	// Components: Stop()
 	slog.DebugContext(ctx, "Shutdown signalled, stopping components...")
 	for _, cmp := range components {
-		slog.DebugContext(ctx, "Stopping component", "component", fmt.Sprintf("%T", cmp))
+		slog.DebugContext(ctx, "Stopping component", logging.Component(cmp))
 		if err := cmp.Stop(ctx); err != nil {
-			slog.ErrorContext(ctx, "Error stopping component", "component", fmt.Sprintf("%T", cmp), "error", err)
+			slog.ErrorContext(ctx, "Error stopping component", logging.Component(cmp), logging.Error(err))
 		}
-		slog.DebugContext(ctx, "Component stopped", "component", fmt.Sprintf("%T", cmp))
+		slog.DebugContext(ctx, "Component stopped", logging.Component(cmp))
 	}
 	slog.InfoContext(ctx, "Goodbye!")
 

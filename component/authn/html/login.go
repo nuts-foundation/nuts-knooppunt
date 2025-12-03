@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 )
 
 func RenderLogin(httpResponse http.ResponseWriter, httpRequest *http.Request) {
@@ -20,7 +21,7 @@ func RenderLogin(httpResponse http.ResponseWriter, httpRequest *http.Request) {
 		AuthRequestID: httpRequest.URL.Query().Get("authRequestID"),
 	})
 	if err != nil {
-		slog.ErrorContext(httpRequest.Context(), "Failed to render login template", "error", err)
+		slog.ErrorContext(httpRequest.Context(), "Failed to render login template", logging.Error(err))
 		http.Error(httpResponse, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -29,7 +30,7 @@ func HandleLoginSubmit(callbackURLFunc func(context.Context, string) string, com
 	signingKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	return func(httpResponse http.ResponseWriter, httpRequest *http.Request) {
 		if err := httpRequest.ParseForm(); err != nil {
-			slog.ErrorContext(httpRequest.Context(), "Failed to parse login form", "error", err)
+			slog.ErrorContext(httpRequest.Context(), "Failed to parse login form", logging.Error(err))
 			http.Error(httpResponse, "Bad Request", http.StatusBadRequest)
 			return
 		}
@@ -70,13 +71,13 @@ func HandleLoginSubmit(callbackURLFunc func(context.Context, string) string, com
 		serializer := jwt.NewSerializer().Sign(jwt.WithKey(jwa.RS256, signingKey))
 		deziTokenBytes, err := serializer.Serialize(token)
 		if err != nil {
-			slog.ErrorContext(httpRequest.Context(), "Failed to serialize Dezi token", "error", err)
+			slog.ErrorContext(httpRequest.Context(), "Failed to serialize Dezi token", logging.Error(err))
 			http.Error(httpResponse, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
 
 		if err := completeLoginFunc(httpRequest.Context(), authRequestID, string(deziTokenBytes)); err != nil {
-			slog.ErrorContext(httpRequest.Context(), "Failed to complete login", "error", err)
+			slog.ErrorContext(httpRequest.Context(), "Failed to complete login", logging.Error(err))
 			http.Error(httpResponse, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}

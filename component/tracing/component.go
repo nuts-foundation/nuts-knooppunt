@@ -129,8 +129,8 @@ func (c *Component) Start() error {
 	fmt.Println("View application logs and traces in your OTLP collector (e.g. at http://localhost:18888)")
 
 	slog.Info("OpenTelemetry tracing and logging initialized",
-		"endpoint", c.config.OTLPEndpoint,
-		"service", c.config.ServiceName)
+		slog.String("endpoint", c.config.OTLPEndpoint),
+		slog.String("service", c.config.ServiceName))
 
 	return nil
 }

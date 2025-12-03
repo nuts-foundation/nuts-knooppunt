@@ -4,19 +4,19 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
-	"log/slog"
-
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -113,7 +113,7 @@ func createHTTPClient(config Config) (*http.Client, error) {
 		transport = &http.Transport{
 			TLSClientConfig: tlsConfig,
 		}
-		slog.Info("Successfully configured mTLS for MITZ connection", "certFile", config.TLSCertFile)
+		slog.Info("Successfully configured mTLS for MITZ connection", slog.String("certFile", config.TLSCertFile))
 	} else {
 		slog.Info("No TLS certificate configured, using plain HTTP client for MITZ connection")
 	}
@@ -165,8 +165,8 @@ func (c *Component) CheckConsent(ctx context.Context, authzReq xacml.AuthzReques
 
 	// Log the XML request
 	slog.InfoContext(ctx, "Sending consent check request to MITZ",
-		"endpoint", c.consentCheckEndpoint,
-		"xmlPayload", authnDecisionQueryXml)
+		slog.String("endpoint", c.consentCheckEndpoint),
+		slog.String("xmlPayload", authnDecisionQueryXml))
 
 	// Create HTTP request with XML payload
 	httpReq, err := http.NewRequestWithContext(
@@ -185,7 +185,7 @@ func (c *Component) CheckConsent(ctx context.Context, authzReq xacml.AuthzReques
 	// Send request using mTLS-configured HTTP client
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to send consent check request to MITZ", "error", err)
+		slog.ErrorContext(ctx, "Failed to send consent check request to MITZ", logging.Error(err))
 		return nil, fmt.Errorf("failed to send consent check request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -193,14 +193,14 @@ func (c *Component) CheckConsent(ctx context.Context, authzReq xacml.AuthzReques
 	// Read response body
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to read consent check response", "error", err)
+		slog.ErrorContext(ctx, "Failed to read consent check response", logging.Error(err))
 		return nil, fmt.Errorf("failed to read consent check response: %w", err)
 	}
 
 	// Log response
 	slog.InfoContext(ctx, "Received consent check response from MITZ",
-		"statusCode", resp.StatusCode,
-		"responseBody", string(responseBody))
+		slog.Int("statusCode", resp.StatusCode),
+		slog.String("responseBody", string(responseBody)))
 
 	// Check for non-2xx status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -210,11 +210,11 @@ func (c *Component) CheckConsent(ctx context.Context, authzReq xacml.AuthzReques
 	// Parse the XACML response to extract the decision
 	xacmlResp, err := xacml.ParseXACMLResponse(responseBody)
 	if err != nil {
-		slog.ErrorContext(ctx, "Failed to parse XACML response", "error", err)
+		slog.ErrorContext(ctx, "Failed to parse XACML response", logging.Error(err))
 		return nil, fmt.Errorf("failed to parse XACML response: %w", err)
 	}
 
-	slog.InfoContext(ctx, "Consent check decision", "decision", xacmlResp.Decision.String())
+	slog.InfoContext(ctx, "Consent check decision", slog.String("decision", xacmlResp.Decision.String()))
 
 	return xacmlResp, nil
 }
@@ -301,7 +301,7 @@ func validateMITZSubscription(subscription fhir.Subscription) *fhirapi.Error {
 func (c *Component) addConfigExtensions(ctx context.Context, subscription *fhir.Subscription) {
 	// Gateway system extension
 	if c.gatewaySystem != "" {
-		slog.DebugContext(ctx, "Adding GatewaySystem from configuration", "oid", c.gatewaySystem)
+		slog.DebugContext(ctx, "Adding GatewaySystem from configuration", slog.String("oid", c.gatewaySystem))
 		subscription.Extension = append(subscription.Extension, fhir.Extension{
 			Url:      "http://fhir.nl/StructureDefinition/GatewaySystem",
 			ValueOid: to.Ptr(c.gatewaySystem),
@@ -310,7 +310,7 @@ func (c *Component) addConfigExtensions(ctx context.Context, subscription *fhir.
 
 	// Source system extension
 	if c.sourceSystem != "" {
-		slog.DebugContext(ctx, "Adding SourceSystem from configuration", "oid", c.sourceSystem)
+		slog.DebugContext(ctx, "Adding SourceSystem from configuration", slog.String("oid", c.sourceSystem))
 		subscription.Extension = append(subscription.Extension, fhir.Extension{
 			Url:      "http://fhir.nl/StructureDefinition/SourceSystem",
 			ValueOid: to.Ptr(c.sourceSystem),
@@ -339,19 +339,19 @@ func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpReques
 	// Set default payload if not provided
 	if resource.Channel.Payload == nil || *resource.Channel.Payload == "" {
 		resource.Channel.Payload = to.Ptr(fhirJSONContentType)
-		slog.DebugContext(httpRequest.Context(), "Set default channel payload", "payload", fhirJSONContentType)
+		slog.DebugContext(httpRequest.Context(), "Set default channel payload", slog.String("payload", fhirJSONContentType))
 	}
 
 	// Use endpoint from configuration if not already provided in the request
 	if resource.Channel.Endpoint == nil || *resource.Channel.Endpoint == "" {
 		if c.notifyEndpoint != "" {
 			resource.Channel.Endpoint = to.Ptr(c.notifyEndpoint)
-			slog.DebugContext(httpRequest.Context(), "Set subscription channel endpoint from configuration", "endpoint", c.notifyEndpoint)
+			slog.DebugContext(httpRequest.Context(), "Set subscription channel endpoint from configuration", slog.String("endpoint", c.notifyEndpoint))
 		} else {
 			slog.WarnContext(httpRequest.Context(), "No subscription notify endpoint configured")
 		}
 	} else {
-		slog.DebugContext(httpRequest.Context(), "Using channel endpoint from incoming subscription", "endpoint", *resource.Channel.Endpoint)
+		slog.DebugContext(httpRequest.Context(), "Using channel endpoint from incoming subscription", slog.String("endpoint", *resource.Channel.Endpoint))
 	}
 
 	// Send subscription to configured FHIR endpoint

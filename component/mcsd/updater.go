@@ -58,7 +58,7 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 
 		// Add conditional DELETE to transaction bundle
 		// Use _source parameter to find and delete the resource in the query directory
-		slog.DebugContext(ctx, "Deleting resource", "full_url", *entry.FullUrl)
+		slog.DebugContext(ctx, "Deleting resource", slog.String("full_url", *entry.FullUrl))
 		tx.Entry = append(tx.Entry, fhir.BundleEntry{
 			Request: &fhir.BundleEntryRequest{
 				Url: resourceType + "?" + url.Values{
@@ -131,7 +131,7 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 		return "", err
 	}
 
-	slog.DebugContext(ctx, "Updating resource", "full_url", *entry.FullUrl)
+	slog.DebugContext(ctx, "Updating resource", slog.String("full_url", *entry.FullUrl))
 	tx.Entry = append(tx.Entry, fhir.BundleEntry{
 		Resource: resourceJSON,
 		Request: &fhir.BundleEntryRequest{

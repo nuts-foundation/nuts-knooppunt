@@ -86,7 +86,7 @@ func (c *Component) Start() error {
 		}
 	}
 
-	slog.Debug("Starting Nuts node", "internal-address", c.internalAddr, "public-address", c.publicAddr)
+	slog.Debug("Starting Nuts node", slog.String("internal-address", c.internalAddr.String()), slog.String("public-address", c.publicAddr.String()))
 
 	c.system = cmd.CreateSystem(func() {
 		// Not sure how to handle this
