@@ -25,7 +25,7 @@ import (
 //
 // Resources are only synced to the query directory if they come from non-discoverable directories.
 // Discoverable directories are for discovery only and their resources should not be synced.
-func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, allowedResourceTypes []string, isDiscoverableDirectory bool, sourceBaseURL string) (string, error) {
+func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, validationRules ValidationRules, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, isDiscoverableDirectory bool, sourceBaseURL string) (string, error) {
 	if entry.FullUrl == nil {
 		return "", errors.New("missing 'fullUrl' field")
 	}
@@ -46,7 +46,7 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 		// If it's a history URL (_history/version), we still use the resource ID (parts[1])
 
 		// Check if this resource type is allowed
-		if !slices.Contains(allowedResourceTypes, resourceType) {
+		if !slices.Contains(validationRules.AllowedResourceTypes, resourceType) {
 			return "", fmt.Errorf("resource type %s not allowed", resourceType)
 		}
 
@@ -83,8 +83,9 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 	if !ok {
 		return "", fmt.Errorf("not a valid resourceType (fullUrl=%s)", to.EmptyString(entry.FullUrl))
 	}
-	if !slices.Contains(allowedResourceTypes, resourceType) {
-		return "", fmt.Errorf("resource type %s not allowed", resourceType)
+
+	if err := ValidateUpdate(ctx, validationRules, entry.Resource, parentOrganizationMap); err != nil {
+		return "", err
 	}
 
 	// Only sync resources from non-discoverable directories to the query directory

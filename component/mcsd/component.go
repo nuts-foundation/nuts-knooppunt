@@ -28,6 +28,9 @@ var _ component.Lifecycle = &Component{}
 var rootDirectoryResourceTypes = []string{"Organization", "Endpoint"}
 var defaultDirectoryResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
 
+// parentOrganizationMap maps parent organizations (with URA identifier) to their linked child organizations
+type parentOrganizationMap map[*fhir.Organization][]*fhir.Organization
+
 // clockSkewBuffer is subtracted from local time when Bundle meta.lastUpdated is not available
 // to account for potential clock differences between client and FHIR server
 var clockSkewBuffer = 2 * time.Second
@@ -50,6 +53,7 @@ const searchPageSize = 100
 //   - exist in the root mCSD Directory (link by identifier, name must be the same)
 //   - have the same mcsd-directory-endpoint as the directory being queried
 //   - These are mitigating measures to prevent an attacker to spoof another care organization.
+//   - The organization's mcsd-directory-endpoint must be discoverable through the root mCSD Directory.'
 type Component struct {
 	config       Config
 	fhirClientFn func(baseURL *url.URL) fhirclient.Client
@@ -80,10 +84,11 @@ type DirectoryConfig struct {
 type UpdateReport map[string]DirectoryUpdateReport
 
 type administrationDirectory struct {
-	fhirBaseURL   string
-	resourceTypes []string
-	discover      bool
-	sourceURL     string // The fullUrl from the Bundle entry that created this Endpoint, used for unregistration on DELETE
+	fhirBaseURL      string
+	resourceTypes    []string
+	discover         bool
+	sourceURL        string // The fullUrl from the Bundle entry that created this Endpoint, used for unregistration on DELETE
+	authoritativeUra string // URA of the organization that is authoritative for this directory
 }
 
 type DirectoryUpdateReport struct {
@@ -107,7 +112,7 @@ func New(config Config) (*Component, error) {
 		updateMux:              &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.AdministrationDirectories {
-		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true, ""); err != nil {
+		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true, "", ""); err != nil {
 			return nil, fmt.Errorf("register root administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
 		}
 	}
@@ -140,7 +145,7 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 	})
 }
 
-func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool, sourceURL string) error {
+func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool, sourceURL string, authoritativeUra string) error {
 	// Must be a valid http or https URL
 	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
 	if err != nil {
@@ -167,10 +172,11 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 		return nil
 	}
 	c.administrationDirectories = append(c.administrationDirectories, administrationDirectory{
-		resourceTypes: resourceTypes,
-		fhirBaseURL:   fhirBaseURL,
-		discover:      discover,
-		sourceURL:     sourceURL,
+		resourceTypes:    resourceTypes,
+		fhirBaseURL:      fhirBaseURL,
+		discover:         discover,
+		sourceURL:        sourceURL,
+		authoritativeUra: authoritativeUra,
 	})
 	slog.InfoContext(ctx, "Registered mCSD Directory", logging.FHIRServer(fhirBaseURL), slog.Bool("discover", discover))
 	return nil
@@ -211,7 +217,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	result := make(UpdateReport)
 	for i := 0; i < len(c.administrationDirectories); i++ {
 		adminDirectory := c.administrationDirectories[i]
-		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover)
+		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover, adminDirectory.authoritativeUra)
 		if err != nil {
 			slog.ErrorContext(ctx, "mCSD Directory update failed", logging.FHIRServer(adminDirectory.fhirBaseURL), logging.Error(err))
 			report.Errors = append(report.Errors, err.Error())
@@ -228,7 +234,72 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	return result, nil
 }
 
-func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool) (DirectoryUpdateReport, error) {
+// discoverAndRegisterEndpoints processes endpoint discovery and registration for the given parent organizations.
+// It finds endpoints from the entries that match parent organization endpoint references and registers them.
+func (c *Component) discoverAndRegisterEndpoints(ctx context.Context, entries []fhir.BundleEntry, parentOrganizationsMap parentOrganizationMap, report DirectoryUpdateReport) DirectoryUpdateReport {
+	if parentOrganizationsMap == nil {
+		return report
+	}
+
+	for parentOrg := range parentOrganizationsMap {
+		uraIdentifiers := libfhir.FilterIdentifiersBySystem(parentOrg.Identifier, coding.URANamingSystem)
+		if len(uraIdentifiers) == 0 || uraIdentifiers[0].Value == nil {
+			continue
+		}
+		authoritativeUra := *uraIdentifiers[0].Value
+
+		if parentOrg.Endpoint == nil || len(parentOrg.Endpoint) == 0 {
+			continue
+		}
+
+		// find endpoint in entries
+		endpoints := make(map[string]*fhir.Endpoint)
+		for _, entry := range entries {
+			if entry.Resource == nil {
+				continue
+			}
+			var endpoint fhir.Endpoint
+			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
+				continue
+			}
+			// find all Endpoint resources from entries that reference the parent organization's Endpoint resources'
+			if endpoint.Id != nil {
+				endpointID := *endpoint.Id
+				for _, parentEndpoint := range parentOrg.Endpoint {
+					if parentEndpoint.Reference != nil {
+						refID := extractReferenceID(parentEndpoint.Reference)
+						if endpointID == refID {
+							if entry.FullUrl != nil {
+								endpoints[*entry.FullUrl] = &endpoint
+							}
+							break // Found a match, move to next entry
+						}
+					}
+				}
+			}
+		}
+
+		payloadCoding := fhir.Coding{
+			System: to.Ptr(coding.MCSDPayloadTypeSystem),
+			Code:   to.Ptr(coding.MCSDPayloadTypeDirectoryCode),
+		}
+
+		for fullUrl, endpoint := range endpoints {
+			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
+				slog.DebugContext(ctx, "Discovered mCSD Directory", slog.String("address", endpoint.Address))
+
+				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, fullUrl, authoritativeUra)
+				if err != nil {
+					report.Warnings = append(report.Warnings, fmt.Sprintf("failed to register discovered mCSD Directory at %s: %s", endpoint.Address, err.Error()))
+				}
+			}
+		}
+	}
+
+	return report
+}
+
+func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool, authoritativeUra string) (DirectoryUpdateReport, error) {
 	slog.InfoContext(ctx, "Updating from mCSD Directory", logging.FHIRServer(fhirBaseURLRaw), slog.Bool("discover", allowDiscovery), slog.String("resourceTypes", strings.Join(allowedResourceTypes, ",")))
 	remoteAdminDirectoryFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
@@ -280,6 +351,19 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		c.processEndpointDeletes(ctx, deduplicatedEntries)
 	}
 
+	// Find parent organizations with URA identifier and all organizations linked to them
+	// This is used when validating organizations that don't have their own URA identifier
+	parentOrganizationsMap, err := c.ensureParentOrganizationsMap(ctx, fhirBaseURLRaw, remoteAdminDirectoryFHIRClient, authoritativeUra)
+
+	if err != nil {
+		return DirectoryUpdateReport{}, fmt.Errorf("failed to build parent organization map: %w", err)
+	}
+
+	// Validate all parent organizations once before processing resources
+	if err := ValidateParentOrganizations(parentOrganizationsMap); err != nil {
+		return DirectoryUpdateReport{}, fmt.Errorf("parent organization (one that supposedly has ura identifier - and only only) validation failed: %w", err)
+	}
+
 	// Build transaction with deterministic conditional references
 	tx := fhir.Bundle{
 		Type:  fhir.BundleTypeTransaction,
@@ -294,39 +378,16 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			continue
 		}
 		slog.DebugContext(ctx, "Processing entry", logging.FHIRServer(fhirBaseURLRaw), slog.String("url", entry.Request.Url))
-		resourceType, err := buildUpdateTransaction(ctx, &tx, entry, allowedResourceTypes, allowDiscovery, fhirBaseURLRaw)
+		_, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes}, parentOrganizationsMap, allowDiscovery, fhirBaseURLRaw)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
 		}
+	}
 
-		// Handle Endpoint discovery and registration
-		if allowDiscovery && resourceType == "Endpoint" && entry.Resource != nil {
-			var endpoint fhir.Endpoint
-			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
-				report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to unmarshal Endpoint resource: %s", i, err.Error()))
-				continue
-			}
-
-			var payloadCoding = fhir.Coding{
-				System: to.Ptr(coding.MCSDPayloadTypeSystem),
-				Code:   to.Ptr(coding.MCSDPayloadTypeDirectoryCode),
-			}
-
-			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
-				// Use the fullUrl from the Bundle entry to track this Endpoint
-				// The fullUrl uniquely identifies the resource and can be used for later unregistration
-				if entry.FullUrl == nil {
-					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: Endpoint missing fullUrl", i))
-					continue
-				}
-				slog.DebugContext(ctx, "Discovered mCSD Directory", slog.String("address", endpoint.Address))
-				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, *entry.FullUrl)
-				if err != nil {
-					report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: failed to register discovered mCSD Directory at %s: %s", i, endpoint.Address, err.Error()))
-				}
-			}
-		}
+	// Handle Endpoint discovery and registration
+	if allowDiscovery {
+		report = c.discoverAndRegisterEndpoints(ctx, entries, parentOrganizationsMap, report)
 	}
 
 	slog.DebugContext(ctx, "Got mCSD entries", logging.FHIRServer(fhirBaseURLRaw), slog.Int("count", len(tx.Entry)))
@@ -375,15 +436,31 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	return report, nil
 }
 
-func (c *Component) queryHistory(ctx context.Context, remoteAdminDirectoryFHIRClient fhirclient.Client, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
+// queryFHIR performs a FHIR search query with pagination and returns all matching entries.
+// If includeHistory is true, it queries the _history endpoint to get resource versions.
+func (c *Component) queryFHIR(ctx context.Context, client fhirclient.Client, resourceType string, searchParams url.Values, includeHistory bool) ([]fhir.BundleEntry, fhir.Bundle, error) {
 	var searchSet fhir.Bundle
-	// First, collect all resources from _history
-	err := remoteAdminDirectoryFHIRClient.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath(resourceType+"/_history"))
-	if err != nil {
-		return nil, fhir.Bundle{}, fmt.Errorf("_history search failed: %w", err)
+	var path string
+	var searchErrMsg string
+	var paginationErrMsg string
+
+	if includeHistory {
+		path = resourceType + "/_history"
+		searchErrMsg = "_history search failed"
+		paginationErrMsg = "pagination of _history search failed"
+	} else {
+		path = resourceType
+		searchErrMsg = "query failed"
+		paginationErrMsg = "pagination of search failed"
 	}
+
+	err := client.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath(path))
+	if err != nil {
+		return nil, fhir.Bundle{}, fmt.Errorf("%s: %w", searchErrMsg, err)
+	}
+
 	var entries []fhir.BundleEntry
-	err = fhirclient.Paginate(ctx, remoteAdminDirectoryFHIRClient, searchSet, func(searchSet *fhir.Bundle) (bool, error) {
+	err = fhirclient.Paginate(ctx, client, searchSet, func(searchSet *fhir.Bundle) (bool, error) {
 		entries = append(entries, searchSet.Entry...)
 		if len(entries) >= maxUpdateEntries {
 			return false, fmt.Errorf("too many entries (%d), aborting update to prevent excessive memory usage", len(entries))
@@ -391,9 +468,18 @@ func (c *Component) queryHistory(ctx context.Context, remoteAdminDirectoryFHIRCl
 		return true, nil
 	})
 	if err != nil {
-		return nil, fhir.Bundle{}, fmt.Errorf("pagination of _history search failed: %w", err)
+		return nil, fhir.Bundle{}, fmt.Errorf("%s: %w", paginationErrMsg, err)
 	}
+
 	return entries, searchSet, nil
+}
+
+func (c *Component) queryHistory(ctx context.Context, remoteAdminDirectoryFHIRClient fhirclient.Client, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
+	return c.queryFHIR(ctx, remoteAdminDirectoryFHIRClient, resourceType, searchParams, true)
+}
+
+func (c *Component) query(ctx context.Context, remoteAdminDirectoryFHIRClient fhirclient.Client, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
+	return c.queryFHIR(ctx, remoteAdminDirectoryFHIRClient, resourceType, searchParams, false)
 }
 
 // deduplicateHistoryEntries keeps only the most recent version of each resource
@@ -474,4 +560,156 @@ func extractResourceIDFromURL(entry fhir.BundleEntry) string {
 	}
 
 	return ""
+}
+
+// buildOrganizationKey creates a composite key from organization ID and VersionId for deduplication.
+// The key includes both the ID and VersionId (if available) to differentiate between versions.
+func buildOrganizationKey(org *fhir.Organization) string {
+	key := *org.Id
+	if org.Meta != nil && org.Meta.VersionId != nil {
+		key = key + ":" + *org.Meta.VersionId
+	}
+	return key
+}
+
+func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseURLRaw string, remoteAdminDirectoryFHIRClient fhirclient.Client, authoritativeUra string) (parentOrganizationMap, error) {
+	slog.DebugContext(ctx, "Querying organizations for authoritative check (parent organization map build)", logging.FHIRServer(fhirBaseURLRaw))
+	orgEntries, _, err := c.query(ctx, remoteAdminDirectoryFHIRClient, "Organization", url.Values{
+		"_count": []string{strconv.Itoa(searchPageSize)},
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to query all organizations, aborting parent organization map build", logging.FHIRServer(fhirBaseURLRaw), logging.Error(err))
+		return nil, err
+	}
+
+	parentOrganizationsMap, err := createOrganizationTree(orgEntries)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to build parent organization map from all organizations, aborting parent organization map build", logging.FHIRServer(fhirBaseURLRaw), logging.Error(err))
+		return nil, err
+	}
+
+	// Filter to only include parent organizations matching the authoritative URA if provided
+	if authoritativeUra != "" {
+		filtered := make(parentOrganizationMap)
+		for parentOrg, linkedOrgs := range parentOrganizationsMap {
+			uraIdentifiers := libfhir.FilterIdentifiersBySystem(parentOrg.Identifier, coding.URANamingSystem)
+			for _, ura := range uraIdentifiers {
+				if ura.Value != nil && *ura.Value == authoritativeUra {
+					filtered[parentOrg] = linkedOrgs
+					break
+				}
+			}
+		}
+		parentOrganizationsMap = filtered
+	}
+
+	return parentOrganizationsMap, nil
+}
+
+// If no organization with URA is found directly, it traverses each organization's partOf chain to find a parent with URA.
+// Returns the parent organization with the most linked organizations and a slice of all organizations whose
+// partOf chain leads to the parent.
+// Returns (nil, nil) if no organization with URA identifier is found (not an error condition).
+func createOrganizationTree(entries []fhir.BundleEntry) (parentOrganizationMap, error) {
+	result := make(parentOrganizationMap)
+
+	// Build a map of all organizations for efficient lookup using ID and VersionId as composite key
+	orgMap := make(map[string]*fhir.Organization)
+	for _, entry := range entries {
+		if entry.Resource == nil {
+			continue
+		}
+		var org fhir.Organization
+		if err := json.Unmarshal(entry.Resource, &org); err != nil {
+			continue
+		}
+		if org.Id != nil {
+			key := buildOrganizationKey(&org)
+			orgMap[key] = &org
+		}
+	}
+
+	// Loop through all organizations to find all with URA identifier
+	for _, org := range orgMap {
+		uraIdentifiers := libfhir.FilterIdentifiersBySystem(org.Identifier, coding.URANamingSystem)
+		if len(uraIdentifiers) > 0 {
+			// Found an organization with URA, find all organizations linked to it
+			linkedOrgs := findOrganizationsLinkedToParent(orgMap, org)
+			result[org] = linkedOrgs
+		}
+	}
+
+	return result, nil
+}
+
+// findOrganizationsLinkedToParent returns all organizations whose partOf chain leads to the parent organization.
+// It excludes the parent organization itself from the returned slice.
+// Returns an empty slice (not nil) if no organizations are linked to the parent.
+func findOrganizationsLinkedToParent(orgMap map[string]*fhir.Organization, parentOrg *fhir.Organization) []*fhir.Organization {
+	linked := make([]*fhir.Organization, 0)
+
+	for _, org := range orgMap {
+		// Skip the parent organization itself
+		if org.Id != nil && parentOrg.Id != nil && *org.Id == *parentOrg.Id {
+			continue
+		}
+
+		// Check if this organization's partOf chain leads to the parent
+		if organizationLinksToParent(orgMap, org, parentOrg) {
+			linked = append(linked, org)
+		}
+	}
+
+	return linked
+}
+
+// organizationLinksToParent checks if an organization's partOf chain eventually leads to the parent organization.
+// It handles circular references by tracking visited organizations.
+func organizationLinksToParent(orgMap map[string]*fhir.Organization, org *fhir.Organization, parentOrg *fhir.Organization) bool {
+	const maxDepth = 10
+	visited := make(map[string]bool)
+	return organizationLinksToParentRecursive(orgMap, org, parentOrg, visited, 0, maxDepth)
+}
+
+// organizationLinksToParentRecursive is the recursive helper for organizationLinksToParent.
+func organizationLinksToParentRecursive(orgMap map[string]*fhir.Organization, org *fhir.Organization, parentOrg *fhir.Organization, visited map[string]bool, depth int, maxDepth int) bool {
+	if depth > maxDepth {
+		return false // Depth exceeded
+	}
+
+	if org.Id != nil {
+		if visited[*org.Id] {
+			return false // Circular reference detected
+		}
+		visited[*org.Id] = true
+
+		// Check if we found the parent
+		if parentOrg.Id != nil && *org.Id == *parentOrg.Id {
+			return true
+		}
+	}
+
+	// Check if this organization has a partOf reference
+	if org.PartOf == nil || org.PartOf.Reference == nil {
+		return false // No more parents in the chain
+	}
+
+	// Extract the parent ID from the reference
+	ref := *org.PartOf.Reference
+	var parentID string
+	if strings.Contains(ref, "/") {
+		parts := strings.Split(ref, "/")
+		parentID = parts[len(parts)-1]
+	} else {
+		parentID = ref
+	}
+
+	// Look up the parent organization
+	nextOrg, exists := orgMap[parentID]
+	if !exists {
+		return false // Parent not found in map
+	}
+
+	// Recursively check the parent's chain
+	return organizationLinksToParentRecursive(orgMap, nextOrg, parentOrg, visited, depth+1, maxDepth)
 }
