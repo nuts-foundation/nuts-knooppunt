@@ -60,7 +60,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 			Allow: false,
 			Reasons: []ResultReason{
 				{
-					Code:        "missing_required_value",
+					Code:        TypeResultCodeMissingRequiredValue,
 					Description: "missing required value, no scope defined",
 				},
 			},
@@ -92,7 +92,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		}
 		if !slices.Contains(validTypes, input.ResourceType) {
 			writeResp(w, Deny(ResultReason{
-				Code:        "not_allowed",
+				Code:        TypeResultCodeNotAllowed,
 				Description: "not allowed to request this resources during update",
 			}))
 		}
@@ -105,7 +105,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeResp(w, Deny(
 			ResultReason{
-				Code:        "not_implemented",
+				Code:        TypeResultCodeNotImplemented,
 				Description: fmt.Sprintf("scope %s not implemeted", input.Scope),
 			},
 		))

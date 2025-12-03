@@ -54,7 +54,7 @@ func evalCapabilityPolicy(input MainPolicyInput) PolicyResult {
 	statement, ok := capabilityForScope(input.Scope)
 	if !ok {
 		reason := ResultReason{
-			Code:        "unexpected_input",
+			Code:        TypeResultCodeUnexpectedInput,
 			Description: "unexpected input, no capability statement known for scope",
 		}
 		out.Reasons = []ResultReason{reason}
@@ -85,7 +85,7 @@ func evalInteraction(
 			Allow: false,
 			Reasons: []ResultReason{
 				{
-					Code:        "not_implemented",
+					Code:        TypeResultCodeNotImplemented,
 					Description: "restful interaction type not supported",
 				},
 			},
@@ -115,7 +115,7 @@ func evalInteraction(
 			Allow: false,
 			Reasons: []ResultReason{
 				{
-					Code:        "not_allowed",
+					Code:        TypeResultCodeNotAllowed,
 					Description: "capability statement does not allow interaction",
 				},
 			},
@@ -146,7 +146,7 @@ func evalInteraction(
 		reasons := make([]ResultReason, 0, 10)
 		for _, param := range rejectedSearchParams {
 			reason := ResultReason{
-				Code:        "not_allowed",
+				Code:        TypeResultCodeMissingRequiredValue,
 				Description: fmt.Sprintf("search parameter %s is not allowed", param),
 			}
 			reasons = append(reasons, reason)
@@ -178,7 +178,7 @@ func evalInteraction(
 		reasons := make([]ResultReason, 0, 10)
 		for _, inc := range rejectedIncludes {
 			reason := ResultReason{
-				Code:        "not_allowed",
+				Code:        TypeResultCodeNotAllowed,
 				Description: fmt.Sprintf("include %s is not allowed", inc),
 			}
 			reasons = append(reasons, reason)
