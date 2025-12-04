@@ -135,8 +135,8 @@ func evalInteraction(
 	}
 
 	if !allowParams {
-		reasons := make([]ResultReason, 0, 10)
-		ManyReasons(&reasons, rejectedSearchParams, "search parameter %s is not allowed", TypeResultCodeMissingRequiredValue)
+		reasons := make([]ResultReason, 0, len(rejectedSearchParams))
+		ManyReasons(&reasons, rejectedSearchParams, "search parameter %s is not allowed", TypeResultCodeNotAllowed)
 		return PolicyResult{
 			Allow:   false,
 			Reasons: reasons,
@@ -144,13 +144,14 @@ func evalInteraction(
 	}
 
 	allowIncludes := false
-	rejectedIncludes := make([]string, 0, 10)
 	allowedIncludes := make([]string, 0, 10)
 	for _, des := range resourceDescriptions {
 		for _, include := range des.SearchInclude {
 			allowedIncludes = append(allowedIncludes, include)
 		}
 	}
+
+	rejectedIncludes := make([]string, 0, len(allowedIncludes))
 	for _, inc := range input.Include {
 		if !slices.Contains(allowedIncludes, inc) {
 			rejectedIncludes = append(rejectedIncludes, inc)
@@ -161,8 +162,35 @@ func evalInteraction(
 	}
 
 	if !allowIncludes {
-		reasons := make([]ResultReason, 0, 10)
+		reasons := make([]ResultReason, 0, len(rejectedIncludes))
 		ManyReasons(&reasons, rejectedIncludes, "include %s is not allowed", TypeResultCodeNotAllowed)
+		return PolicyResult{
+			Allow:   false,
+			Reasons: reasons,
+		}
+	}
+
+	allowRevincludes := false
+	allowedRevincludes := make([]string, 0, 10)
+	for _, des := range resourceDescriptions {
+		for _, revinclude := range des.SearchRevInclude {
+			allowedRevincludes = append(allowedRevincludes, revinclude)
+		}
+	}
+
+	rejectedRevincludes := make([]string, 0, len(allowedRevincludes))
+	for _, inc := range input.Revinclude {
+		if !slices.Contains(allowedRevincludes, inc) {
+			rejectedRevincludes = append(rejectedRevincludes, inc)
+		}
+	}
+	if len(rejectedRevincludes) == 0 {
+		allowRevincludes = true
+	}
+
+	if !allowRevincludes {
+		reasons := make([]ResultReason, 0, len(rejectedRevincludes))
+		ManyReasons(&reasons, rejectedRevincludes, "Revinclude %s is not allowed", TypeResultCodeNotAllowed)
 		return PolicyResult{
 			Allow:   false,
 			Reasons: reasons,
