@@ -87,9 +87,7 @@ func (c *Component) Start() error {
 	// won't overwrite the global TracerProvider (knooppunt owns that).
 	if c.config.TracingConfig.OTLPEndpoint != "" {
 		envVars["NUTS_TRACING_ENDPOINT"] = c.config.TracingConfig.OTLPEndpoint
-		if c.config.TracingConfig.Insecure {
-			envVars["NUTS_TRACING_INSECURE"] = "true"
-		}
+		envVars["NUTS_TRACING_INSECURE"] = strconv.FormatBool(c.config.TracingConfig.Insecure)
 	}
 	// Only set NUTS_CONFIGFILE if the config file exists
 	if _, err := os.Stat(configFile); err == nil {
