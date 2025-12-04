@@ -130,10 +130,8 @@ func evalInteraction(
 			}
 		}
 	}
-	if len(rejectedSearchParams) == 0 {
-		allowParams = true
-	}
 
+	allowParams = len(rejectedSearchParams) == 0
 	if !allowParams {
 		reasons := make([]ResultReason, 0, len(rejectedSearchParams))
 		ManyReasons(&reasons, rejectedSearchParams, "search parameter %s is not allowed", TypeResultCodeNotAllowed)
@@ -157,10 +155,8 @@ func evalInteraction(
 			rejectedIncludes = append(rejectedIncludes, inc)
 		}
 	}
-	if len(rejectedIncludes) == 0 {
-		allowIncludes = true
-	}
 
+	allowIncludes = len(rejectedIncludes) == 0
 	if !allowIncludes {
 		reasons := make([]ResultReason, 0, len(rejectedIncludes))
 		ManyReasons(&reasons, rejectedIncludes, "include %s is not allowed", TypeResultCodeNotAllowed)
@@ -184,10 +180,8 @@ func evalInteraction(
 			rejectedRevincludes = append(rejectedRevincludes, inc)
 		}
 	}
-	if len(rejectedRevincludes) == 0 {
-		allowRevincludes = true
-	}
 
+	allowRevincludes = len(rejectedRevincludes) == 0
 	if !allowRevincludes {
 		reasons := make([]ResultReason, 0, len(rejectedRevincludes))
 		ManyReasons(&reasons, rejectedRevincludes, "Revinclude %s is not allowed", TypeResultCodeNotAllowed)

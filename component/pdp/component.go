@@ -30,7 +30,7 @@ func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
 }
 
 func (c Component) Start() error {
-	// Nothing to do
+
 	return nil
 }
 
