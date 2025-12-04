@@ -5,11 +5,11 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/rs/zerolog/log"
 	"software.sslmate.com/src/go-pkcs12"
 )
 
@@ -40,7 +40,7 @@ func LoadClientCertificate(certFile, keyFile, password string) (tls.Certificate,
 		if err != nil {
 			return tls.Certificate{}, fmt.Errorf("failed to load PKCS#12: %w", err)
 		}
-		log.Info().Str("p12File", certFile).Msg("Loaded client certificate from PKCS#12")
+		slog.Info("Loaded client certificate from PKCS#12", slog.String("p12File", certFile))
 		return cert, nil
 	}
 
@@ -52,7 +52,7 @@ func LoadClientCertificate(certFile, keyFile, password string) (tls.Certificate,
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("failed to load certificate: %w", err)
 	}
-	log.Info().Str("certFile", certFile).Str("keyFile", keyFile).Msg("Loaded client certificate from PEM")
+	slog.Info("Loaded client certificate from PEM", slog.String("certFile", certFile), slog.String("keyFile", keyFile))
 	return cert, nil
 }
 
@@ -72,7 +72,7 @@ func LoadCACertPool(caFile string) (*x509.CertPool, error) {
 		return nil, fmt.Errorf("failed to parse CA certificate")
 	}
 
-	log.Info().Str("caFile", caFile).Msg("Loaded CA certificate")
+	slog.Info("Loaded CA certificate", slog.String("caFile", caFile))
 	return caCertPool, nil
 }
 

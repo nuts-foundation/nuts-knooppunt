@@ -9,10 +9,11 @@ import (
 	"slices"
 	"strings"
 
+	"log/slog"
+
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
-	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -57,7 +58,7 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 
 		// Add conditional DELETE to transaction bundle
 		// Use _source parameter to find and delete the resource in the query directory
-		log.Ctx(ctx).Debug().Msgf("Deleting resource %s", *entry.FullUrl)
+		slog.DebugContext(ctx, "Deleting resource", slog.String("full_url", *entry.FullUrl))
 		tx.Entry = append(tx.Entry, fhir.BundleEntry{
 			Request: &fhir.BundleEntryRequest{
 				Url: resourceType + "?" + url.Values{
@@ -131,7 +132,7 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 		return "", err
 	}
 
-	log.Ctx(ctx).Debug().Msgf("Updating resource %s", *entry.FullUrl)
+	slog.DebugContext(ctx, "Updating resource", slog.String("full_url", *entry.FullUrl))
 	tx.Entry = append(tx.Entry, fhir.BundleEntry{
 		Resource: resourceJSON,
 		Request: &fhir.BundleEntryRequest{

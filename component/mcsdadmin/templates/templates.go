@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log/slog"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
-	"github.com/rs/zerolog/log"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -19,7 +20,7 @@ var partialTemplates = []string{}
 func init() {
 	files, err := tmplFS.ReadDir(".")
 	if err != nil {
-		log.Error().Msg("could not initiate template files")
+		slog.Error("could not initiate template files", logging.Error(err))
 	}
 
 	for _, file := range files {
@@ -40,13 +41,13 @@ func RenderWithBase(w io.Writer, name string, data any) {
 
 	ts, err := template.ParseFS(tmplFS, files...)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to parse template")
+		slog.Error("Failed to parse template", logging.Error(err))
 		return
 	}
 
 	err = ts.ExecuteTemplate(w, "base", data)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to execute template")
+		slog.Error("Failed to execute template", logging.Error(err))
 		return
 	}
 }
@@ -55,13 +56,13 @@ func RenderPartial(w io.Writer, name string, data any) {
 	filename := fmt.Sprintf("%s.html", name)
 	ts, err := template.ParseFS(tmplFS, filename)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to parse template")
+		slog.Error("Failed to parse template", logging.Error(err))
 		return
 	}
 
 	err = ts.ExecuteTemplate(w, name, data)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to execute template")
+		slog.Error("Failed to execute template", logging.Error(err))
 		return
 	}
 }

@@ -73,8 +73,8 @@ func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *
 		publicMux.Handle(endpoint, c.provider)
 	}
 	publicMux.HandleFunc("GET "+loginFormEndpointPath, html.RenderLogin)
-	publicMux.HandleFunc("POST "+loginFormEndpointPath, html.HandleLoginSubmit(op.AuthCallbackURL(c.provider), func(authRequestID string, deziToken string) error {
-		return c.storage.AuthenticateUser(authRequestID, deziToken)
+	publicMux.HandleFunc("POST "+loginFormEndpointPath, html.HandleLoginSubmit(op.AuthCallbackURL(c.provider), func(ctx context.Context, authRequestID string, deziToken string) error {
+		return c.storage.AuthenticateUser(ctx, authRequestID, deziToken)
 	}))
 	for _, endpoint := range endpointConfig.internalEndpoints {
 		internalMux.Handle(endpoint, c.provider)

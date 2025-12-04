@@ -1,6 +1,7 @@
 package pdp
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,7 +18,7 @@ func TestComponent_reject_interaction(t *testing.T) {
 		DataHolderOrganizationUra: "00000659",
 	}
 
-	resp := evalCapabilityPolicy(input)
+	resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
 }
 
@@ -31,7 +32,7 @@ func TestComponent_allow_interaction(t *testing.T) {
 		DataHolderOrganizationUra: "00000659",
 	}
 
-	resp := evalCapabilityPolicy(input)
+	resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
 }
 
@@ -46,7 +47,7 @@ func TestComponent_allow_search_param(t *testing.T) {
 		DataHolderOrganizationUra: "00000659",
 	}
 
-	resp := evalCapabilityPolicy(input)
+	resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
 }
 
@@ -61,7 +62,7 @@ func TestComponent_reject_search_param(t *testing.T) {
 		DataHolderOrganizationUra: "00000659",
 	}
 
-	resp := evalCapabilityPolicy(input)
+	resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
 }
 
@@ -73,7 +74,7 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 		DataHolderOrganizationUra: "00000659",
 	}
 
-	resp := evalCapabilityPolicy(input)
+	resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
 }
 

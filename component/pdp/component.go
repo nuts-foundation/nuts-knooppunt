@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"slices"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
-	"github.com/rs/zerolog/log"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -30,7 +31,7 @@ func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
 }
 
 func (c Component) Start() error {
-
+	// Nothing to do
 	return nil
 }
 
@@ -65,14 +66,14 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 				},
 			},
 		}
-		writeResp(w, res)
+		writeResp(r.Context(), w, res)
 		return
 	}
 
 	// Step 2: Check the request adheres to the capability statement for this scope
-	res := evalCapabilityPolicy(input)
+	res := evalCapabilityPolicy(r.Context(), input)
 	if !res.Allow {
-		writeResp(w, res)
+		writeResp(r.Context(), w, res)
 		return
 	}
 
@@ -91,19 +92,19 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 			fhir.ResourceTypePractitioner,
 		}
 		if !slices.Contains(validTypes, input.ResourceType) {
-			writeResp(w, Deny(ResultReason{
+			writeResp(r.Context(), w, Deny(ResultReason{
 				Code:        TypeResultCodeNotAllowed,
 				Description: "not allowed to request this resources during update",
 			}))
 		}
-		writeResp(w, Allow())
+		writeResp(r.Context(), w, Allow())
 	case "mcsd_query":
 		// Dummy should be replaced with the actual OPA policy
-		writeResp(w, Allow())
+		writeResp(r.Context(), w, Allow())
 	case "patient_example":
-		writeResp(w, EvalMitzPolicy(c, r.Context(), input))
+		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), input))
 	default:
-		writeResp(w, Deny(
+		writeResp(r.Context(), w, Deny(
 			ResultReason{
 				Code:        TypeResultCodeNotImplemented,
 				Description: fmt.Sprintf("scope %s not implemeted", input.Scope),
@@ -112,7 +113,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func writeResp(w http.ResponseWriter, result PolicyResult) {
+func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) {
 	resp := MainPolicyResponse{
 		Result: result,
 	}
@@ -126,7 +127,7 @@ func writeResp(w http.ResponseWriter, result PolicyResult) {
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(b)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to write response to ResponseWriter")
+		slog.ErrorContext(ctx, "failed to write response to ResponseWriter", logging.Error(err))
 	}
 }
 

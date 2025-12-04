@@ -1,19 +1,21 @@
 package pdp
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"slices"
 
-	"github.com/rs/zerolog/log"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 //go:embed capabilities/*.json
 var FS embed.FS
 
-func readCapability(name string) (fhir.CapabilityStatement, error) {
+func readCapability(ctx context.Context, name string) (fhir.CapabilityStatement, error) {
 	fileName := fmt.Sprintf("capabilities/%s.json", name)
 	data, err := FS.ReadFile(fileName)
 	if err != nil {
@@ -22,36 +24,36 @@ func readCapability(name string) (fhir.CapabilityStatement, error) {
 
 	var capability fhir.CapabilityStatement
 	if err := json.Unmarshal(data, &capability); err != nil {
-		log.Warn().Err(err).Msg(fmt.Sprintf("unable to read JSON in %s", fileName))
+		slog.WarnContext(ctx, "unable to read JSON", slog.String("file", fileName), logging.Error(err))
 		return fhir.CapabilityStatement{}, err
 	}
 
 	return capability, nil
 }
 
-func capabilityForScope(scope string) (fhir.CapabilityStatement, bool) {
+func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityStatement, bool) {
 	switch scope {
 	// FUTURE: Should be made configurable or packaged up with some policy
 	case "mcsd_update":
-		capa, err := readCapability("nl-gf-admin-directory-update-client")
+		capa, err := readCapability(ctx, "nl-gf-admin-directory-update-client")
 		return capa, err == nil
 	case "mcsd_query":
 		capa, err := readCapability("nl-gf-query-directory-query-client")
 		return capa, err == nil
 	case "patient_example":
-		capa, err := readCapability("patient-example")
+		capa, err := readCapability(ctx, "patient-example")
 		return capa, err == nil
 	default:
 		return fhir.CapabilityStatement{}, false
 	}
 }
 
-func evalCapabilityPolicy(input MainPolicyInput) PolicyResult {
+func evalCapabilityPolicy(ctx context.Context, input MainPolicyInput) PolicyResult {
 	out := PolicyResult{
 		Allow: false,
 	}
 
-	statement, ok := capabilityForScope(input.Scope)
+	statement, ok := capabilityForScope(ctx, input.Scope)
 	if !ok {
 		reason := ResultReason{
 			Code:        TypeResultCodeUnexpectedInput,
