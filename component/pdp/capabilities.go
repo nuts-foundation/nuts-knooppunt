@@ -70,6 +70,10 @@ func evalInteraction(
 	statement fhir.CapabilityStatement,
 	input MainPolicyInput,
 ) PolicyResult {
+	policyResult := PolicyResult{
+		Allow: false,
+	}
+
 	// FUTURE: This is a pretty naive implementation - we can make it more efficient at a later point.
 	var supported = []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionRead,
@@ -135,12 +139,8 @@ func evalInteraction(
 
 	allowParams = len(rejectedSearchParams) == 0
 	if !allowParams {
-		reasons := make([]ResultReason, 0, len(rejectedSearchParams))
-		ManyReasons(&reasons, rejectedSearchParams, "search parameter %s is not allowed", TypeResultCodeNotAllowed)
-		return PolicyResult{
-			Allow:   false,
-			Reasons: reasons,
-		}
+		policyResult.AddReasons(rejectedSearchParams, "search parameter %s is not allowed", TypeResultCodeNotAllowed)
+		return policyResult
 	}
 
 	allowIncludes := false
@@ -160,12 +160,8 @@ func evalInteraction(
 
 	allowIncludes = len(rejectedIncludes) == 0
 	if !allowIncludes {
-		reasons := make([]ResultReason, 0, len(rejectedIncludes))
-		ManyReasons(&reasons, rejectedIncludes, "include %s is not allowed", TypeResultCodeNotAllowed)
-		return PolicyResult{
-			Allow:   false,
-			Reasons: reasons,
-		}
+		policyResult.AddReasons(rejectedIncludes, "include %s is not allowed", TypeResultCodeNotAllowed)
+		return policyResult
 	}
 
 	allowRevincludes := false
@@ -185,12 +181,8 @@ func evalInteraction(
 
 	allowRevincludes = len(rejectedRevincludes) == 0
 	if !allowRevincludes {
-		reasons := make([]ResultReason, 0, len(rejectedRevincludes))
-		ManyReasons(&reasons, rejectedRevincludes, "Revinclude %s is not allowed", TypeResultCodeNotAllowed)
-		return PolicyResult{
-			Allow:   false,
-			Reasons: reasons,
-		}
+		policyResult.AddReasons(rejectedRevincludes, "Revinclude %s is not allowed", TypeResultCodeNotAllowed)
+		return policyResult
 	}
 
 	return Allow()

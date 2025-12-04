@@ -48,6 +48,26 @@ type ResultReason struct {
 	Description string         `json:"description"`
 }
 
+func (p *PolicyResult) AddReasons(input []string, format string, code TypeResultCode) {
+	isNewSlice := cap(p.Reasons) == 0
+	if isNewSlice {
+		p.Reasons = make([]ResultReason, len(input))
+	}
+
+	for i, str := range input {
+		reason := ResultReason{
+			Code:        code,
+			Description: fmt.Sprintf(format, str),
+		}
+
+		if isNewSlice {
+			p.Reasons[i] = reason
+		} else {
+			p.Reasons = append(p.Reasons, reason)
+		}
+	}
+}
+
 // Allow helper for creating an allowed result without reasons
 func Allow() PolicyResult {
 	return PolicyResult{
@@ -62,17 +82,6 @@ func Deny(reason ResultReason) PolicyResult {
 		Reasons: []ResultReason{
 			reason,
 		},
-	}
-}
-
-// ManyReasons Helper for easily adding multiple of reasons of the same type
-func ManyReasons(target *[]ResultReason, input []string, format string, code TypeResultCode) {
-	for _, str := range input {
-		reason := ResultReason{
-			Code:        code,
-			Description: fmt.Sprintf(format, str),
-		}
-		*target = append(*target, reason)
 	}
 }
 
