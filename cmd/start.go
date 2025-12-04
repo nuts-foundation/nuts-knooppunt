@@ -51,6 +51,11 @@ func Start(ctx context.Context, config Config) error {
 	}
 
 	if config.Nuts.Enabled {
+		// Pass tracing config to nuts-node so it can create its own TracerProvider
+		config.Nuts.TracingConfig = nutsnode.TracingConfig{
+			OTLPEndpoint: config.Tracing.OTLPEndpoint,
+			Insecure:     config.Tracing.Insecure,
+		}
 		nutsNode, err := nutsnode.New(config.Nuts)
 		if err != nil {
 			return errors.Wrap(err, "failed to create nuts node component")

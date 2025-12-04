@@ -63,7 +63,13 @@ type Component struct {
 }
 
 type Config struct {
-	Enabled bool `koanf:"enabled"`
+	Enabled        bool   `koanf:"enabled"`
+	TracingConfig  TracingConfig
+}
+
+type TracingConfig struct {
+	OTLPEndpoint string
+	Insecure     bool
 }
 
 func (c *Component) Start() error {
@@ -75,6 +81,13 @@ func (c *Component) Start() error {
 		"NUTS_DATADIR":               dataDir,
 		"NUTS_VERBOSITY":             GetLogrusLevel(slog.LevelDebug), // TODO: use configured log level when supported
 		"NUTS_STRICTMODE":            strconv.FormatBool(c.coreConfig.StrictMode),
+	}
+	// Pass tracing config to nuts-node so it creates its own TracerProvider
+	// with service.name="nuts-node". It will use the same OTLP endpoint but
+	// won't overwrite the global TracerProvider (knooppunt owns that).
+	if c.config.TracingConfig.OTLPEndpoint != "" {
+		envVars["NUTS_TRACING_ENDPOINT"] = c.config.TracingConfig.OTLPEndpoint
+		envVars["NUTS_TRACING_INSECURE"] = strconv.FormatBool(c.config.TracingConfig.Insecure)
 	}
 	// Only set NUTS_CONFIGFILE if the config file exists
 	if _, err := os.Stat(configFile); err == nil {
