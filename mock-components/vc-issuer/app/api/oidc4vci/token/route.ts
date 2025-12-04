@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import { verifyCodeChallenge, generateCNonce } from '@/lib/oid4vci/pkce';
 import { signAccessToken } from '@/lib/crypto/signing';
-import { getIssuerDid, getAccessTokenExpirySeconds, getCNonceExpirySeconds } from '@/lib/utils';
+import { getIssuerDid, getAccessTokenExpirySeconds, getCNonceExpirySeconds, jsonResponse } from '@/lib/utils';
 
 /**
  * Token endpoint for OID4VCI
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
   // Validate grant type
   if (grantType !== 'authorization_code') {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'unsupported_grant_type', error_description: 'Only authorization_code grant type is supported' },
       { status: 400 }
     );
@@ -27,21 +27,21 @@ export async function POST(req: NextRequest) {
 
   // Validate required parameters
   if (!code) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'code is required' },
       { status: 400 }
     );
   }
 
   if (!codeVerifier) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'code_verifier is required' },
       { status: 400 }
     );
   }
 
   if (!clientId) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'client_id is required' },
       { status: 400 }
     );
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (!authRequest) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_grant', error_description: 'Authorization code not found' },
       { status: 400 }
     );
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
 
   // Check if expired
   if (new Date() > authRequest.expiresAt) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_grant', error_description: 'Authorization code has expired' },
       { status: 400 }
     );
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
 
   // Check if already used
   if (authRequest.isUsed) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_grant', error_description: 'Authorization code has already been used' },
       { status: 400 }
     );
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
 
   // Validate client_id matches
   if (authRequest.clientId !== clientId) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_grant', error_description: 'client_id does not match' },
       { status: 400 }
     );
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
 
   // Validate redirect_uri matches (if provided)
   if (redirectUri && authRequest.redirectUri !== redirectUri) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_grant', error_description: 'redirect_uri does not match' },
       { status: 400 }
     );
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
   );
 
   if (!validChallenge) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_grant', error_description: 'code_verifier does not match code_challenge' },
       { status: 400 }
     );
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json({
+  return jsonResponse({
     access_token: accessToken,
     token_type: 'bearer',
     expires_in: expiresIn,

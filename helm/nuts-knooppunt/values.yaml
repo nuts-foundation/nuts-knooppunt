@@ -267,11 +267,11 @@ nuts:
     storage:
       size: 5Gi
 
-# VC Issuer configuration (OID4VCI Credential Issuer)
-# Set enabled: true to deploy the Verifiable Credential issuer for VektisOrgCredentials
-vc-issuer:
+# Mock VC Issuer configuration (OID4VCI Credential Issuer for testing)
+# Set enabled: true to deploy the mock Verifiable Credential issuer for VektisOrgCredentials
+mock-vc-issuer:
   enabled: false
-  fullnameOverride: vc-issuer
+  fullnameOverride: mock-vc-issuer
   # Override environment variables if needed
   # env:
   #   credentialValidityDays: "365"
@@ -280,7 +280,7 @@ vc-issuer:
   # ingress:
   #   enabled: true
   #   hosts:
-  #     - host: vc-issuer.example.com
+  #     - host: mock-vc-issuer.example.com
   #       paths:
   #         - path: /
   #           pathType: Prefix

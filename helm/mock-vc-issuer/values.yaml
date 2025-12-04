@@ -1,4 +1,4 @@
-# Default values for vc-issuer.
+# Default values for mock-vc-issuer.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
@@ -7,7 +7,7 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: ghcr.io/nuts-foundation/vc-issuer
+  repository: ghcr.io/nuts-foundation/mock-vc-issuer
   # This sets the pull policy for images.
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
@@ -16,10 +16,10 @@ image:
 # VC Issuer configuration environment variables
 env:
   # Database URL for SQLite (file path inside container)
-  databaseUrl: "file:/app/data/vc-issuer.db"
+  databaseUrl: "file:/app/data/mock-vc-issuer.db"
   # Issuer hostname - used for DID:web identity and base URL
   # Should match the ingress/service hostname
-  issuerHostname: "vc-issuer.local"
+  issuerHostname: "mock-vc-issuer.local"
   # Credential validity in days
   credentialValidityDays: "365"
   # Access token expiry in seconds
@@ -78,14 +78,14 @@ ingress:
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
-    - host: vc-issuer.local
+    - host: mock-vc-issuer.local
       paths:
         - path: /
           pathType: ImplementationSpecific
   tls: []
-  #  - secretName: vc-issuer-tls
+  #  - secretName: mock-vc-issuer-tls
   #    hosts:
-  #      - vc-issuer.local
+  #      - mock-vc-issuer.local
 
 # -- Expose the service via gateway-api HTTPRoute
 # Requires Gateway API resources and suitable controller installed within the cluster
@@ -102,7 +102,7 @@ httpRoute:
     # namespace: default
   # Hostnames matching HTTP header.
   hostnames:
-  - vc-issuer.local
+  - mock-vc-issuer.local
   # List of rules and filters applied.
   rules:
   - matches:

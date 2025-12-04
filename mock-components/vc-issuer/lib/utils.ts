@@ -67,3 +67,20 @@ export function getCNonceExpirySeconds(): number {
   const seconds = process.env.C_NONCE_EXPIRY_SECONDS;
   return seconds ? parseInt(seconds, 10) : 86400;
 }
+
+/**
+ * Create a JSON response with pretty-printed output
+ */
+export function jsonResponse(
+  data: unknown,
+  options: { status?: number; headers?: Record<string, string> } = {}
+): Response {
+  const { status = 200, headers = {} } = options;
+  return new Response(JSON.stringify(data, null, 2), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers,
+    },
+  });
+}

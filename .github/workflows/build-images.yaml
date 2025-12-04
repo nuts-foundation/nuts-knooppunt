@@ -151,7 +151,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
 
-  docker-vc-issuer:
+  docker-mock-vc-issuer:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -182,7 +182,7 @@ jobs:
         id: docker_meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/nuts-foundation/vc-issuer
+          images: ghcr.io/nuts-foundation/mock-vc-issuer
           tags: |
             type=ref,event=branch,enable={{is_default_branch}},prefix=
             type=semver,pattern={{version}}

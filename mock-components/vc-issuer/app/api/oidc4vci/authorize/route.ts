@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { generateAuthorizationCode, generateState } from '@/lib/oid4vci/pkce';
-import { getBaseUrl } from '@/lib/utils';
+import { getBaseUrl, jsonResponse } from '@/lib/utils';
 
 /**
  * Authorization endpoint for OID4VCI
@@ -22,42 +22,42 @@ export async function GET(req: NextRequest) {
 
   // Validate required parameters
   if (responseType !== 'code') {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'unsupported_response_type', error_description: 'Only code response type is supported' },
       { status: 400 }
     );
   }
 
   if (!clientId) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'client_id is required' },
       { status: 400 }
     );
   }
 
   if (!redirectUri) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'redirect_uri is required' },
       { status: 400 }
     );
   }
 
   if (!codeChallenge) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'code_challenge is required (PKCE)' },
       { status: 400 }
     );
   }
 
   if (codeChallengeMethod !== 'S256' && codeChallengeMethod !== 'plain') {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'code_challenge_method must be S256 or plain' },
       { status: 400 }
     );
   }
 
   if (!authorizationDetailsStr) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'authorization_details is required' },
       { status: 400 }
     );
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
   try {
     authorizationDetails = JSON.parse(authorizationDetailsStr);
   } catch {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'Invalid authorization_details JSON' },
       { status: 400 }
     );

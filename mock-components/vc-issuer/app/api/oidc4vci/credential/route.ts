@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '@/lib/prisma';
 import { signCredential, getSubjectDidFromProof, verifyAccessToken } from '@/lib/crypto/signing';
 import { generateCNonce } from '@/lib/oid4vci/pkce';
-import { getIssuerDid, getBaseUrl, getCredentialValidityDays, getCNonceExpirySeconds } from '@/lib/utils';
+import { getIssuerDid, getBaseUrl, getCredentialValidityDays, getCNonceExpirySeconds, jsonResponse } from '@/lib/utils';
 
 interface AuthenticatedOrg {
   id: string;
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const authorization = req.headers.get('Authorization');
   if (!authorization || !authorization.startsWith('Bearer ')) {
     console.log('[Credential] ERROR: Missing or invalid Authorization header');
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_token', error_description: 'Missing or invalid Authorization header' },
       { status: 401 }
     );
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 
   if (!tokenResponse) {
     console.log('[Credential] ERROR: Access token not found in database');
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_token', error_description: 'Access token not found' },
       { status: 401 }
     );
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
   // Check if token is expired
   if (new Date() > tokenResponse.expiresAt) {
     console.log('[Credential] ERROR: Access token has expired. ExpiresAt:', tokenResponse.expiresAt);
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_token', error_description: 'Access token has expired' },
       { status: 401 }
     );
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
   // Check if token is revoked
   if (tokenResponse.isRevoked) {
     console.log('[Credential] ERROR: Access token has been revoked');
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_token', error_description: 'Access token has been revoked' },
       { status: 401 }
     );
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     console.log('[Credential] Access token signature verified');
   } catch (err) {
     console.log('[Credential] ERROR: Access token signature verification failed:', err);
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_token', error_description: 'Access token signature verification failed' },
       { status: 401 }
     );
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     console.log('[Credential] Request body:', JSON.stringify(credentialRequest, null, 2));
   } catch (err) {
     console.log('[Credential] ERROR: Failed to parse request body:', err);
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'Invalid JSON in request body' },
       { status: 400 }
     );
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
   // Validate format
   if (format !== 'jwt_vc_json') {
     console.log('[Credential] ERROR: Unsupported format:', format);
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'unsupported_credential_format', error_description: 'Only jwt_vc_json format is supported' },
       { status: 400 }
     );
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
   // Validate proof
   if (!credentialRequest.proof || !credentialRequest.proof.jwt) {
     console.log('[Credential] ERROR: Missing proof or proof.jwt. proof:', JSON.stringify(credentialRequest.proof));
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_proof', error_description: 'Proof JWT is required' },
       { status: 400 }
     );
@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
   const subjectDid = getSubjectDidFromProof(credentialRequest.proof.jwt);
   if (!subjectDid) {
     console.log('[Credential] ERROR: Could not extract subject DID from proof JWT');
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_proof', error_description: 'Could not extract subject DID from proof' },
       { status: 400 }
     );
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
   // Get authenticated organization from token response
   if (!tokenResponse.authenticatedOrg) {
     console.log('[Credential] ERROR: No organization data found for token. authenticatedOrg:', tokenResponse.authenticatedOrg);
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'No organization data found for this token' },
       { status: 400 }
     );
@@ -195,7 +195,7 @@ export async function POST(req: NextRequest) {
     console.log('[Credential] Credential signed successfully');
   } catch (err) {
     console.log('[Credential] ERROR: Failed to sign credential:', err);
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'server_error', error_description: 'Failed to sign credential' },
       { status: 500 }
     );
@@ -233,7 +233,8 @@ export async function POST(req: NextRequest) {
   });
 
   console.log('[Credential] SUCCESS: Credential issued for', authenticatedOrg.name, 'to subject', subjectDid);
-  return NextResponse.json({
+
+  return jsonResponse({
     format: 'jwt_vc_json',
     credential: signedCredential,
     c_nonce: newCNonce,

@@ -1,12 +1,12 @@
 ---
-name: "Publish Helm Chart - vc-issuer"
+name: "Publish Helm Chart - mock-vc-issuer"
 
 on:
   push:
     branches:
       - main
     paths:
-      - "helm/vc-issuer/**"
+      - "helm/mock-vc-issuer/**"
   workflow_dispatch:
 
 concurrency:
@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  publish-vc-issuer:
+  publish-mock-vc-issuer:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -35,20 +35,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Package and push helm-vc-issuer chart
+      - name: Package and push helm-mock-vc-issuer chart
         run: |
-          # Package helm-vc-issuer
-          helm package helm/vc-issuer -d .helm-packages
+          # Package helm-mock-vc-issuer
+          helm package helm/mock-vc-issuer -d .helm-packages
 
           # Push to GHCR
-          helm push .helm-packages/helm-vc-issuer-*.tgz oci://ghcr.io/${{ github.repository_owner }}
+          helm push .helm-packages/helm-mock-vc-issuer-*.tgz oci://ghcr.io/${{ github.repository_owner }}
 
       - name: Output published chart
         run: |
-          VC_ISSUER_VERSION=$(grep "^version:" helm/vc-issuer/Chart.yaml | awk '{print $2}')
+          MOCK_VC_ISSUER_VERSION=$(grep "^version:" helm/mock-vc-issuer/Chart.yaml | awk '{print $2}')
 
           echo "Published Helm chart:"
-          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-vc-issuer:$VC_ISSUER_VERSION"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-mock-vc-issuer:$MOCK_VC_ISSUER_VERSION"
           echo ""
           echo "Install with:"
-          echo "  helm install my-vc-issuer oci://ghcr.io/${{ github.repository_owner }}/helm-vc-issuer --version $VC_ISSUER_VERSION"
+          echo "  helm install my-mock-vc-issuer oci://ghcr.io/${{ github.repository_owner }}/helm-mock-vc-issuer --version $MOCK_VC_ISSUER_VERSION"

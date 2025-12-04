@@ -1,6 +1,6 @@
 apiVersion: v2
-name: helm-vc-issuer
-description: A Helm chart for the OID4VCI Verifiable Credential Issuer
+name: helm-mock-vc-issuer
+description: A Helm chart for the Mock OID4VCI Verifiable Credential Issuer (for testing only)
 
 # A chart can be either an 'application' or a 'library' chart.
 #

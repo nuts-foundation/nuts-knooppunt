@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getOrganizationById } from '@/lib/mock-data/organizations';
+import { jsonResponse } from '@/lib/utils';
 
 /**
  * Callback endpoint after e-Herkenning authentication
@@ -13,14 +14,14 @@ export async function GET(req: NextRequest) {
   const orgId = searchParams.get('org');
 
   if (!state) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'state is required' },
       { status: 400 }
     );
   }
 
   if (!orgId) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'org is required' },
       { status: 400 }
     );
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
   });
 
   if (!authRequest) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'Authorization request not found' },
       { status: 400 }
     );
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
 
   // Check if expired
   if (new Date() > authRequest.expiresAt) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'Authorization request has expired' },
       { status: 400 }
     );
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
 
   // Check if already used
   if (authRequest.isUsed) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'Authorization request has already been used' },
       { status: 400 }
     );
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
   // Get the selected organization
   const organization = getOrganizationById(orgId);
   if (!organization) {
-    return NextResponse.json(
+    return jsonResponse(
       { error: 'invalid_request', error_description: 'Organization not found' },
       { status: 400 }
     );

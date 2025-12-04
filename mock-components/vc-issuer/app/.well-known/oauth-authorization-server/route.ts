@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getAuthorizationServerMetadata } from '@/lib/oid4vci/metadata';
-import { getBaseUrl } from '@/lib/utils';
+import { getBaseUrl, jsonResponse } from '@/lib/utils';
 
 /**
  * OAuth 2.0 Authorization Server Metadata (RFC 8414)
@@ -11,13 +11,9 @@ import { getBaseUrl } from '@/lib/utils';
  */
 export async function GET(req: NextRequest) {
   const baseUrl = getBaseUrl(req);
-
   const metadata = getAuthorizationServerMetadata(baseUrl);
 
-  return NextResponse.json(metadata, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Cache-Control': 'public, max-age=3600',
-    },
+  return jsonResponse(metadata, {
+    headers: { 'Cache-Control': 'public, max-age=3600' },
   });
 }
