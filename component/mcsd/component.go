@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -17,7 +18,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
-	"github.com/rs/zerolog/log"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -134,7 +135,7 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 		ctx := r.Context()
 		result, err := c.update(ctx)
 		if err != nil {
-			log.Ctx(ctx).Error().Err(err).Msg("mCSD update failed")
+			slog.ErrorContext(ctx, "mCSD update failed", logging.Error(err))
 			http.Error(w, "Failed to update mCSD: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -159,7 +160,7 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 	trimmedFHIRBaseURL := strings.TrimRight(fhirBaseURL, "/")
 	for _, excludedURL := range c.config.ExcludeAdminDirectories {
 		if strings.TrimRight(excludedURL, "/") == trimmedFHIRBaseURL {
-			log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURL).Msg("Skipping administration directory registration: excluded by configuration")
+			slog.InfoContext(ctx, "Skipping administration directory registration: excluded by configuration", logging.FHIRServer(fhirBaseURL))
 			return nil
 		}
 	}
@@ -177,7 +178,7 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 		sourceURL:        sourceURL,
 		authoritativeUra: authoritativeUra,
 	})
-	log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURL).Msgf("Registered mCSD Directory (discover=%v)", discover)
+	slog.InfoContext(ctx, "Registered mCSD Directory", logging.FHIRServer(fhirBaseURL), slog.Bool("discover", discover))
 	return nil
 }
 
@@ -190,7 +191,7 @@ func (c *Component) unregisterAdministrationDirectory(ctx context.Context, fullU
 		return dir.sourceURL == fullUrl
 	})
 	if len(c.administrationDirectories) < initialCount {
-		log.Ctx(ctx).Info().Str("full_url", fullUrl).Msg("Unregistered mCSD Directory after Endpoint deletion")
+		slog.InfoContext(ctx, "Unregistered mCSD Directory after Endpoint deletion", slog.String("full_url", fullUrl))
 	}
 }
 
@@ -218,7 +219,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		adminDirectory := c.administrationDirectories[i]
 		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover, adminDirectory.authoritativeUra)
 		if err != nil {
-			log.Ctx(ctx).Err(err).Str("fhir_server", adminDirectory.fhirBaseURL).Msg("mCSD Directory update failed")
+			slog.ErrorContext(ctx, "mCSD Directory update failed", logging.FHIRServer(adminDirectory.fhirBaseURL), logging.Error(err))
 			report.Errors = append(report.Errors, err.Error())
 		}
 		// Return empty slices instead of null ones, makes a nicer REST API
@@ -285,7 +286,7 @@ func (c *Component) discoverAndRegisterEndpoints(ctx context.Context, entries []
 
 		for fullUrl, endpoint := range endpoints {
 			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
-				log.Ctx(ctx).Debug().Msgf("Discovered mCSD Directory: %s", endpoint.Address)
+				slog.DebugContext(ctx, "Discovered mCSD Directory", slog.String("address", endpoint.Address))
 
 				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, fullUrl, authoritativeUra)
 				if err != nil {
@@ -299,7 +300,7 @@ func (c *Component) discoverAndRegisterEndpoints(ctx context.Context, entries []
 }
 
 func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool, authoritativeUra string) (DirectoryUpdateReport, error) {
-	log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURLRaw).Msg("Updating from mCSD Directory (discover=" + fmt.Sprint(allowDiscovery) + ", resourceTypes=" + strings.Join(allowedResourceTypes, ",") + ")")
+	slog.InfoContext(ctx, "Updating from mCSD Directory", logging.FHIRServer(fhirBaseURLRaw), slog.Bool("discover", allowDiscovery), slog.Any("resourceTypes", allowedResourceTypes))
 	remoteAdminDirectoryFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
@@ -323,9 +324,9 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	}
 	if hasLastUpdate {
 		searchParams.Set("_since", lastUpdate)
-		log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Str("_since", lastUpdate).Msg("Using _since parameter for incremental sync from FHIR server")
+		slog.DebugContext(ctx, "Using _since parameter for incremental sync from FHIR server", logging.FHIRServer(fhirBaseURLRaw), slog.String("_since", lastUpdate))
 	} else {
-		log.Ctx(ctx).Info().Str("fhir_server", fhirBaseURLRaw).Msg("No last update time, doing full sync from FHIR server")
+		slog.InfoContext(ctx, "No last update time, doing full sync from FHIR server", logging.FHIRServer(fhirBaseURLRaw))
 	}
 
 	var entries []fhir.BundleEntry
@@ -376,7 +377,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			report.Warnings = append(report.Warnings, msg)
 			continue
 		}
-		log.Ctx(ctx).Trace().Str("fhir_server", fhirBaseURLRaw).Msgf("Processing entry: %s", entry.Request.Url)
+		slog.DebugContext(ctx, "Processing entry", logging.FHIRServer(fhirBaseURLRaw), slog.String("url", entry.Request.Url))
 		_, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes}, parentOrganizationsMap, allowDiscovery, fhirBaseURLRaw)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
@@ -389,7 +390,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		report = c.discoverAndRegisterEndpoints(ctx, entries, parentOrganizationsMap, report)
 	}
 
-	log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Msgf("Got %d mCSD entries", len(tx.Entry))
+	slog.DebugContext(ctx, "Got mCSD entries", logging.FHIRServer(fhirBaseURLRaw), slog.Int("count", len(tx.Entry)))
 	if len(tx.Entry) == 0 {
 		return report, nil
 	}
@@ -428,7 +429,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	} else {
 		// Fallback to local time with buffer to account for potential clock skew
 		nextSyncTime = queryStartTime.Add(-clockSkewBuffer).Format(time.RFC3339Nano)
-		log.Ctx(ctx).Warn().Str("fhir_server", fhirBaseURLRaw).Msg("Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues")
+		slog.WarnContext(ctx, "Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues", logging.FHIRServer(fhirBaseURLRaw))
 	}
 	c.lastUpdateTimes[fhirBaseURLRaw] = nextSyncTime
 
@@ -572,18 +573,18 @@ func buildOrganizationKey(org *fhir.Organization) string {
 }
 
 func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseURLRaw string, remoteAdminDirectoryFHIRClient fhirclient.Client, authoritativeUra string) (parentOrganizationMap, error) {
-	log.Ctx(ctx).Debug().Str("fhir_server", fhirBaseURLRaw).Msg("Querying organizations for authoritative check (parent organization map build)")
+	slog.DebugContext(ctx, "Querying organizations for authoritative check (parent organization map build)", logging.FHIRServer(fhirBaseURLRaw))
 	orgEntries, _, err := c.query(ctx, remoteAdminDirectoryFHIRClient, "Organization", url.Values{
 		"_count": []string{strconv.Itoa(searchPageSize)},
 	})
 	if err != nil {
-		log.Ctx(ctx).Err(err).Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to query all organizations, aborting parent organization map build")
+		slog.ErrorContext(ctx, "Failed to query all organizations, aborting parent organization map build", logging.FHIRServer(fhirBaseURLRaw), logging.Error(err))
 		return nil, err
 	}
 
 	parentOrganizationsMap, err := createOrganizationTree(orgEntries)
 	if err != nil {
-		log.Ctx(ctx).Err(err).Str("fhir_server", fhirBaseURLRaw).Err(err).Msg("Failed to build parent organization map from all organizations, aborting parent organization map build")
+		slog.ErrorContext(ctx, "Failed to build parent organization map from all organizations, aborting parent organization map build", logging.FHIRServer(fhirBaseURLRaw), logging.Error(err))
 		return nil, err
 	}
 

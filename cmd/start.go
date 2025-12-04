@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
@@ -15,25 +17,26 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/pkg/errors"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 )
 
 func Start(ctx context.Context, config Config) error {
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	zerolog.DefaultContextLogger = &log.Logger
-
 	if !config.StrictMode {
-		log.Ctx(ctx).Warn().Msgf("Strict mode is disabled. This is NOT recommended for production environments!")
+		slog.WarnContext(ctx, "Strict mode is disabled. This is NOT recommended for production environments!")
 	}
 
 	publicMux := http.NewServeMux()
 	internalMux := http.NewServeMux()
 
-	// Tracing component must be first to capture spans from other components
+	// Tracing component must be started first to capture logs and spans from other components.
+	// We start it immediately (not in the component loop) so that logs from other component
+	// constructors (New functions) are also captured via OTLP.
 	config.Tracing.ServiceVersion = status.Version()
 	tracingComponent := tracing.New(config.Tracing)
+	if err := tracingComponent.Start(); err != nil {
+		return errors.Wrap(err, "failed to start tracing component")
+	}
 
 	mcsdUpdateClient, err := mcsd.New(config.MCSD)
 	if err != nil {
@@ -41,7 +44,6 @@ func Start(ctx context.Context, config Config) error {
 	}
 	httpComponent := libHTTPComponent.New(config.HTTP, publicMux, internalMux)
 	components := []component.Lifecycle{
-		tracingComponent,
 		mcsdUpdateClient,
 		mcsdadmin.New(config.MCSDAdmin),
 		status.New(),
@@ -55,7 +57,7 @@ func Start(ctx context.Context, config Config) error {
 		}
 		components = append(components, nutsNode)
 	} else {
-		log.Ctx(ctx).Info().Msg("Nuts node is disabled")
+		slog.InfoContext(ctx, "Nuts node is disabled")
 	}
 
 	// Create AuthN component
@@ -83,7 +85,7 @@ func Start(ctx context.Context, config Config) error {
 		}
 
 	} else {
-		log.Ctx(ctx).Info().Msg("MITZ component is disabled")
+		slog.InfoContext(ctx, "MITZ component is disabled")
 	}
 
 	// Create NVI component
@@ -94,7 +96,7 @@ func Start(ctx context.Context, config Config) error {
 		}
 		components = append(components, nviComponent)
 	} else {
-		log.Ctx(ctx).Info().Msg("NVI component is disabled")
+		slog.InfoContext(ctx, "NVI component is disabled")
 	}
 
 	// Components: RegisterHandlers()
@@ -104,25 +106,31 @@ func Start(ctx context.Context, config Config) error {
 
 	// Components: Start()
 	for _, cmp := range components {
-		log.Trace().Msgf("Starting component: %T", cmp)
+		slog.DebugContext(ctx, "Starting component", logging.Component(cmp))
 		if err := cmp.Start(); err != nil {
 			return errors.Wrapf(err, "failed to start component: %T", cmp)
 		}
-		log.Trace().Msgf("Component started: %T", cmp)
+		slog.DebugContext(ctx, "Component started", logging.Component(cmp))
 	}
 
-	log.Debug().Msgf("System started, waiting for shutdown...")
+	slog.DebugContext(ctx, "System started, waiting for shutdown...")
 	<-ctx.Done()
 
 	// Components: Stop()
-	log.Trace().Msgf("Shutdown signalled, stopping components...")
+	slog.DebugContext(ctx, "Shutdown signalled, stopping components...")
 	for _, cmp := range components {
-		log.Trace().Msgf("Stopping component: %T", cmp)
+		slog.DebugContext(ctx, "Stopping component", logging.Component(cmp))
 		if err := cmp.Stop(ctx); err != nil {
-			log.Error().Err(err).Msgf("Error stopping component: %T", cmp)
+			slog.ErrorContext(ctx, "Error stopping component", logging.Component(cmp), logging.Error(err))
 		}
-		log.Trace().Msgf("Component stopped: %T", cmp)
+		slog.DebugContext(ctx, "Component stopped", logging.Component(cmp))
 	}
-	log.Info().Msg("Goodbye!")
+	slog.InfoContext(ctx, "Goodbye!")
+
+	// Stop tracing last to ensure all shutdown logs are captured
+	if err := tracingComponent.Stop(ctx); err != nil {
+		// Can't use slog here as the handler may already be shut down
+		fmt.Printf("Error stopping tracing component: %v\n", err)
+	}
 	return nil
 }
