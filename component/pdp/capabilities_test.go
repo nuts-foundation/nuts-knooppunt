@@ -89,7 +89,7 @@ func TestComponent_allow_include(t *testing.T) {
 		DataHolderOrganizationUra: "00000659",
 	}
 
-	resp := evalCapabilityPolicy(input)
+	resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
 }
 
@@ -104,7 +104,7 @@ func TestComponent_reject_include(t *testing.T) {
 		DataHolderOrganizationUra: "00000659",
 	}
 
-	resp := evalCapabilityPolicy(input)
+	resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
 }
 
@@ -119,7 +119,7 @@ func TestComponent_reject_revinclude(t *testing.T) {
 		DataHolderOrganizationUra: "00000659",
 	}
 
-	resp := evalCapabilityPolicy(input)
+	resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
 }
 
@@ -134,6 +134,6 @@ func TestComponent_allow_revinclude(t *testing.T) {
 		DataHolderOrganizationUra: "00000659",
 	}
 
-	resp := evalCapabilityPolicy(input)
+	resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
 }
