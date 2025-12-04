@@ -267,6 +267,24 @@ nuts:
     storage:
       size: 5Gi
 
+# Mock VC Issuer configuration (OID4VCI Credential Issuer for testing)
+# Set enabled: true to deploy the mock Verifiable Credential issuer for VektisOrgCredentials
+mock-vc-issuer:
+  enabled: false
+  fullnameOverride: mock-vc-issuer
+  # Override environment variables if needed
+  # env:
+  #   credentialValidityDays: "365"
+  #   accessTokenExpirySeconds: "86400"
+  # Ingress configuration
+  # ingress:
+  #   enabled: true
+  #   hosts:
+  #     - host: mock-vc-issuer.example.com
+  #       paths:
+  #         - path: /
+  #           pathType: Prefix
+
 # Jaeger configuration for distributed tracing
 # Set enabled: true to deploy Jaeger for trace collection and visualization
 jaeger:
