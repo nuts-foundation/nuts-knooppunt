@@ -72,10 +72,6 @@ services:
       # Allows storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
       hapi.fhir.store_meta_source_information: SOURCE_URI
 
-      # Enable CORS for browser-based clients (demo-ehr)
-      hapi.fhir.cors.allowed_origin: "*"
-      hapi.fhir.cors.allow_credentials: true
-
       NVI_AUDIENCE: nvi
       NVI_TENANT: nvi
       # OpenTelemetry tracing - enables full trace visibility into HAPI FHIR
@@ -132,6 +128,30 @@ services:
       # Enable partitioning and allow string tenant identifiers
       hapi.fhir.partitioning.allow_references_across_partitions: false
     restart: unless-stopped
+
+  hapi-fhir-dstu3:
+    image: hapiproject/hapi:v8.2.0-2
+    container_name: hapi-fhir-server-dstu3
+    ports:
+      - "7051:7051"
+    environment:
+      hapi.fhir.server_address: http://localhost:7051/fhir
+      hapi.fhir.fhir_version: DSTU3
+      # Prevents encoding of the pipe char in queries
+      server.tomcat.relaxed-query-chars: "|"
+      server.port: 7051
+      # should be an ADR? How does this behave?
+      hapi.fhir.allow_cascading_deletes: true
+      # Lets the server generate UUIDs for resources instead of integers
+      hapi.fhir.server_id_strategy: UUID
+      # Allows storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
+      hapi.fhir.store_meta_source_information: SOURCE_URI
+
+      # Enable partitioning and allow string tenant identifiers
+      hapi.fhir.partitioning.allow_references_across_partitions: false
+      hapi.fhir.allow_external_references: true
+    restart: unless-stopped
+
   hapi-fhir-healthcheck:
     image: curlimages/curl:7.87.0
     depends_on:
@@ -192,6 +212,7 @@ services:
       - CHOKIDAR_USEPOLLING=true  # For hot reload on some systems
       - REACT_APP_AUTHORITY=http://localhost:8080/auth
       - REACT_APP_FHIR_BASE_URL=http://localhost:7050/fhir/sunflower-patients
+      - REACT_APP_FHIR_STU3_BASE_URL=http://localhost:7051/fhir/DEFAULT
       - REACT_APP_FHIR_MCSD_QUERY_BASE_URL=http://localhost:7050/fhir/knpt-mcsd-query
     stdin_open: true
     tty: true
