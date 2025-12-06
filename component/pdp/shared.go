@@ -1,10 +1,7 @@
 package pdp
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -85,56 +82,15 @@ func Deny(reason ResultReason) PolicyResult {
 	}
 }
 
-type TypeResultCode int
+type TypeResultCode string
 
 const (
-	TypeResultCodeMissingRequiredValue TypeResultCode = iota
-	TypeResultCodeUnexpectedInput
-	TypeResultCodeNotAllowed
-	TypeResultCodeNotImplemented
-	TypeResultCodeInternalError
+	TypeResultCodeMissingRequiredValue TypeResultCode = "missing_required_value"
+	TypeResultCodeUnexpectedInput      TypeResultCode = "unexpected_input"
+	TypeResultCodeNotAllowed           TypeResultCode = "not_allowed"
+	TypeResultCodeNotImplemented       TypeResultCode = "not_implemented"
+	TypeResultCodeInternalError        TypeResultCode = "internal_error"
 )
-
-func (code TypeResultCode) MarshalJSON() ([]byte, error) {
-	buffer := bytes.Buffer{}
-	enc := json.NewEncoder(&buffer)
-	enc.SetEscapeHTML(false)
-	err := enc.Encode(code.Code())
-	return buffer.Bytes(), err
-}
-func (code TypeResultCode) Code() string {
-	switch code {
-	case TypeResultCodeMissingRequiredValue:
-		return "missing_required_value"
-	case TypeResultCodeUnexpectedInput:
-		return "unexpected_input"
-	case TypeResultCodeNotAllowed:
-		return "not_allowed"
-	case TypeResultCodeNotImplemented:
-		return "not_implemented"
-	case TypeResultCodeInternalError:
-		return "internal_error"
-	}
-	return "<unknown>"
-}
-func (code *TypeResultCode) UnmarshalJSON(json []byte) error {
-	s := strings.Trim(string(json), "\"")
-	switch s {
-	case "missing_required_value":
-		*code = TypeResultCodeMissingRequiredValue
-	case "unexpected_input":
-		*code = TypeResultCodeUnexpectedInput
-	case "not_allowed":
-		*code = TypeResultCodeNotAllowed
-	case "not_implemented":
-		*code = TypeResultCodeNotImplemented
-	case "internal_error":
-		*code = TypeResultCodeInternalError
-	default:
-		return fmt.Errorf("unknown TypeRestfulInteraction code `%s`", s)
-	}
-	return nil
-}
 
 type Config struct {
 	Enabled bool
