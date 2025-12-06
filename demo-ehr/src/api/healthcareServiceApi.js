@@ -18,7 +18,7 @@ export const healthcareServiceApi = {
 
     // Helper to check if service is active
     isActive(service) {
-        return service.active === true;
+        return service.active === true || service.active === undefined;
     },
 
     // Group services by name

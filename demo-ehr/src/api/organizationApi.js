@@ -51,7 +51,7 @@ export const organizationApi = {
     },
 
     isActive(org) {
-        return org.active === true;
+        return org.active === true || org.active === undefined;
     },
 
     // Get URA identifier
@@ -130,11 +130,11 @@ export const organizationApi = {
 
     // Get endpoint for organization, traversing up partOf hierarchy if needed
     // Returns endpoint with payloadType.code='eOverdracht-notification'
-    async getEndpoint(orgId) {
+    async getEndpoint(orgId, notificationType) {
         try {
             let currentOrg = await this.getById(orgId);
             if (!currentOrg) {
-                return null;
+                return null; // Twiin-TA-notification
             }
 
             const visited = new Set([orgId]); // Prevent infinite loops
@@ -155,17 +155,17 @@ export const organizationApi = {
                         if (res.ok) {
                             const endpoint = await res.json();
 
-                            // Check if endpoint has payloadType with code='eOverdracht-notification'
+                            // Check if endpoint has payloadType with code= that of argument
                             if (endpoint.payloadType && Array.isArray(endpoint.payloadType)) {
                                 const hasCorrectPayloadType = endpoint.payloadType.some(pt => {
                                     if (pt.coding && Array.isArray(pt.coding)) {
-                                        return pt.coding.some(coding => coding.code === 'eOverdracht-notification');
+                                        return pt.coding.some(coding => coding.code === notificationType);
                                     }
                                     return false;
                                 });
 
                                 if (hasCorrectPayloadType) {
-                                    console.log('Found endpoint with eOverdracht-notification payloadType');
+                                    console.log('Found endpoint with '+notificationType+' payloadType');
                                     return endpoint;
                                 }
                             }
@@ -192,7 +192,7 @@ export const organizationApi = {
                 }
             }
 
-            console.warn('No endpoint with eOverdracht-notification payloadType found');
+            console.warn('No endpoint with '+notificationType+' payloadType found');
             return null;
         } catch (err) {
             console.error('Error getting endpoint for organization:', orgId, err);

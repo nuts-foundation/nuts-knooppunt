@@ -1,0 +1,68 @@
+{
+  "resourceType": "Task",
+  "groupIdentifier": {
+    "system": "urn:ietf:rfc:3986",
+    "value": "urn:uuid:484639e6-e647-464c-8722-6e8a73cda4e0"
+  },
+  "identifier": [
+    {
+      "system": "urn:ietf:rfc:3986",
+      "value": "urn:uuid:6128cfe7-0e89-4d37-ba90-e4ca3b3fcbbe"
+    }
+  ],
+  "status": "requested",
+  "intent": "proposal",
+  "code": {
+    "coding": [
+      {
+        "system": "http://fhir.nl/fhir/NamingSystem/TaskCode",
+        "code": "pull-notification"
+      }
+    ]
+  },
+  "restriction": {
+    "period": {
+      "end": "2023-10-14T15:36:05+02:00"
+    }
+  },
+  "for": {
+    "identifier": {
+      "system": "http://fhir.nl/fhir/NamingSystem/bsn",
+      "value": "172642863"
+    }
+  },
+  "authoredOn": "2023-04-13T15:01:54+02:00",
+  "requester": {
+    "agent": {
+      "identifier": {
+        "system": "http://example.com/fhir/NamingSystem/dummy",
+        "value": "sending-ehr-system-id"
+      }
+    },
+    "onBehalfOf": {
+      "identifier": {
+        "system": "http://example.com/fhir/NamingSystem/dummy",
+        "value": "sending-organization-id"
+      }
+    }
+  },
+  "owner": {
+    "identifier": {
+      "system": "http://example.com/fhir/NamingSystem/dummy",
+      "value": "receiving-organization-id"
+    }
+  },
+  "input": [
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://fhir.nl/fhir/NamingSystem/TaskParameter",
+            "code": "authorization-base"
+          }
+        ]
+      },
+      "valueString": "ZGFhNDFjY2MtZGFmMi00YjZkLThiNDYtN2JlZDk1MWEyYzk2"
+    }
+  ]
+}
