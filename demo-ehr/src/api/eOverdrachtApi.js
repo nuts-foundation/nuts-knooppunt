@@ -1,7 +1,7 @@
 import {headers, headersWithContentType} from "./fhir";
 import {config} from "../config";
 
-export const taskApi = {
+export const eOverdrachtApi = {
     async getEOverdrachtTasks(patientId) {
         // Query Tasks by code (308292007 = "Overdracht van zorg") from STU3 server
         const url = `${config.fhirStu3BaseURL}/Task?code=308292007${patientId ? `&patient=http://localhost:7050/fhir/sunflower-patients/Patient/${patientId}` : ''}`;
@@ -111,21 +111,5 @@ export const taskApi = {
         }
 
         return await res.json();
-    },
-
-    async deleteTask(taskId) {
-        // Delete a Task from the STU3 server
-        const url = `${config.fhirStu3BaseURL}/Task/${taskId}`;
-        const res = await fetch(url, {
-            method: 'DELETE',
-            headers: headers
-        });
-
-        if (!res.ok) {
-            console.error(`Failed to delete task ${taskId}: ${res.statusText}`);
-            // Don't throw - deletion failure shouldn't block error handling
-        }
-
-        console.log('Task deleted:', taskId);
     }
-}
+};
