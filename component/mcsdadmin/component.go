@@ -456,7 +456,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	codables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.EndpointPayloadTypeCodings, "payload-type")
+	codables, ok := formdata.CodablesFromFormWithCustom(r.PostForm, valuesets.EndpointPayloadTypeCodings, "payload-type")
 	if !ok {
 		badRequest(w, r, "could not find all type codes")
 		return

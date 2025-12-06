@@ -69,6 +69,53 @@ func CodablesFromForm(postform url.Values, set []fhir.Coding, key string) ([]fhi
 	return valuesets.CodablesFrom(set, nonEmpty)
 }
 
+// CodablesFromFormWithCustom handles codables from form, including custom "other" option
+func CodablesFromFormWithCustom(postform url.Values, set []fhir.Coding, key string) ([]fhir.CodeableConcept, bool) {
+	nonEmpty := filterEmpty(postform[key])
+	codables := make([]fhir.CodeableConcept, 0, len(nonEmpty))
+	allOk := true
+
+	for _, code := range nonEmpty {
+		if code == "other" {
+			// Handle custom coding
+			customSystem := postform.Get("custom-system")
+			customCode := postform.Get("custom-code")
+			customDisplay := postform.Get("custom-display")
+
+			if customSystem == "" || customCode == "" {
+				allOk = false
+				continue
+			}
+
+			coding := fhir.Coding{
+				System: &customSystem,
+				Code:   &customCode,
+			}
+			if customDisplay != "" {
+				coding.Display = &customDisplay
+			}
+
+			codable := fhir.CodeableConcept{
+				Coding: []fhir.Coding{coding},
+			}
+			if customDisplay != "" {
+				codable.Text = &customDisplay
+			}
+			codables = append(codables, codable)
+		} else {
+			// Handle standard coding from valueset
+			codable, ok := valuesets.CodableFrom(set, code)
+			if !ok {
+				allOk = false
+			} else {
+				codables = append(codables, codable)
+			}
+		}
+	}
+
+	return codables, allOk
+}
+
 func filterEmpty(multiStrings []string) []string {
 	out := make([]string, 0, len(multiStrings))
 	for _, str := range multiStrings {
