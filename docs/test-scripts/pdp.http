@@ -38,7 +38,7 @@ Content-Type: application/json
 
 {
   "input": {
-    "scope": "patient_example",
+    "scope": "bgz_professional",
     "resource_id": "123445",
     "resource_type": "Patient",
     "patient_bsn": "900186021",
