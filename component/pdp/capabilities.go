@@ -40,8 +40,11 @@ func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityState
 	case "mcsd_query":
 		capa, err := readCapability(ctx, "nl-gf-query-directory-query-client")
 		return capa, err == nil
-	case "patient_example":
-		capa, err := readCapability(ctx, "patient-example")
+	case "bgz_patient":
+		capa, err := readCapability(ctx, "bgz-patient")
+		return capa, err == nil
+	case "bgz_professional":
+		capa, err := readCapability(ctx, "bgz-professional")
 		return capa, err == nil
 	default:
 		return fhir.CapabilityStatement{}, false
