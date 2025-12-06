@@ -1,5 +1,6 @@
 [
   {
+    "system" : "http://terminology.hl7.org/CodeSystem/v3-ActReason",
     "code" : "HMARKT",
     "display" : "healthcare marketing",
     "definition" : "To perform one or more operations on information for marketing services and products related to health care.",
@@ -19,6 +20,7 @@
     ]
   },
   {
+    "system" : "http://terminology.hl7.org/CodeSystem/v3-ActReason",
     "code" : "HOPERAT",
     "display" : "healthcare operations",
     "definition" : "To perform one or more operations on information used for conducting administrative and contractual activities related to the provision of health care.",
@@ -38,6 +40,7 @@
     ]
   },
   {
+    "system" : "http://terminology.hl7.org/CodeSystem/v3-ActReason",
     "code" : "HPAYMT",
     "display" : "healthcare payment",
     "definition" : "To perform one or more operations on information for conducting financial or contractual activities related to payment for provision of health care.",
@@ -57,6 +60,7 @@
     ]
   },
   {
+    "system" : "http://terminology.hl7.org/CodeSystem/v3-ActReason",
     "code" : "HRESCH",
     "display" : "healthcare research",
     "definition" : "To perform one or more operations on information for conducting scientific investigations to obtain health care knowledge. Use of the data iincludes basic and applied research such as biomedical, population origin or ancestry, translational research, and disease, discipline, specialty specific healthcare research and clinical trial research.",
@@ -76,6 +80,7 @@
     ]
   },
   {
+    "system" : "http://terminology.hl7.org/CodeSystem/v3-ActReason",
     "code" : "PATRQT",
     "display" : "patient requested",
     "definition" : "To perform one or more operations on information in response to a patient's request.",
@@ -95,6 +100,7 @@
     ]
   },
   {
+    "system" : "http://terminology.hl7.org/CodeSystem/v3-ActReason",
     "code" : "PUBHLTH",
     "display" : "public health",
     "definition" : "To perform one or more operations on information for conducting public health activities, such as the reporting of notifiable conditions.",
@@ -114,6 +120,7 @@
     ]
   },
   {
+    "system" : "http://terminology.hl7.org/CodeSystem/v3-ActReason",
     "code" : "TREAT",
     "display" : "treatment",
     "definition" : "To perform one or more operations on information for provision of health care.",

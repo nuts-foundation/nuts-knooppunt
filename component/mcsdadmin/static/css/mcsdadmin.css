@@ -66,3 +66,88 @@ legend {
 #edit-associations label {
     margin: 10px;
 }
+
+/* Custom Modal Styles */
+.custom-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1050;
+}
+
+.custom-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1040;
+}
+
+.custom-modal-dialog {
+    position: relative;
+    width: auto;
+    max-width: 500px;
+    margin: 1.75rem auto;
+    z-index: 1060;
+}
+
+.custom-modal-content {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.custom-modal .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.custom-modal .modal-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 500;
+}
+
+.custom-modal .modal-body {
+    position: relative;
+    flex: 1 1 auto;
+    padding: 1.25rem;
+}
+
+.custom-modal .modal-footer {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 1rem;
+    border-top: 1px solid #dee2e6;
+    gap: 0.5rem;
+}
+
+.custom-modal .btn-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+    color: #000;
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+}
+
+.custom-modal .btn-close:hover {
+    opacity: 0.75;
+}

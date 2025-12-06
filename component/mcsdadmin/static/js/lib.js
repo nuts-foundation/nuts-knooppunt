@@ -58,6 +58,76 @@ function dismissAlert(elementId) {
     elm.hidden = true;
 }
 
+function handlePayloadTypeChange(selectElement) {
+    if (selectElement.value === 'other') {
+        // Show the modal
+        showCustomPayloadModal();
+
+        // Reset the select to previous value (will be set after modal submission)
+        selectElement.value = '';
+    }
+}
+
+function showCustomPayloadModal() {
+    const modal = document.getElementById('customPayloadModal');
+    modal.style.display = 'block';
+    document.body.style.overflow = 'hidden'; // Prevent background scrolling
+}
+
+function closeCustomPayloadModal() {
+    const modal = document.getElementById('customPayloadModal');
+    modal.style.display = 'none';
+    document.body.style.overflow = ''; // Restore scrolling
+
+    // Clear modal fields
+    document.getElementById('modal-custom-system').value = '';
+    document.getElementById('modal-custom-code').value = '';
+    document.getElementById('modal-custom-display').value = '';
+}
+
+function addCustomPayloadType() {
+    const modalSystem = document.getElementById('modal-custom-system');
+    const modalCode = document.getElementById('modal-custom-code');
+    const modalDisplay = document.getElementById('modal-custom-display');
+
+    // Validate required fields
+    if (!modalSystem.value || !modalCode.value) {
+        alert('System and Code are required fields');
+        return;
+    }
+
+    // Get the select element
+    const select = document.getElementById('payload-type');
+
+    // Create display text (use display if provided, otherwise use code)
+    const displayText = modalDisplay.value || modalCode.value;
+    const fullDisplayText = `${displayText} (custom: ${modalSystem.value})`;
+
+    // Add new option to select with a unique identifier
+    const customOptionId = 'custom_' + Date.now();
+    const newOption = document.createElement('option');
+    newOption.value = 'other';
+    newOption.textContent = fullDisplayText;
+    newOption.id = customOptionId;
+    newOption.selected = true;
+
+    // Insert before the "other" option
+    const otherOption = Array.from(select.options).find(opt => opt.value === 'other' && opt.text.includes('specify custom'));
+    if (otherOption) {
+        select.insertBefore(newOption, otherOption);
+    } else {
+        select.appendChild(newOption);
+    }
+
+    // Set the hidden form fields with custom values
+    document.getElementById('custom-system').value = modalSystem.value;
+    document.getElementById('custom-code').value = modalCode.value;
+    document.getElementById('custom-display').value = modalDisplay.value;
+
+    // Close the modal
+    closeCustomPayloadModal();
+}
+
 window.onload = function(){
     htmx.config.responseHandling = [
         // 204 - No Content by default does nothing, but is not an error
