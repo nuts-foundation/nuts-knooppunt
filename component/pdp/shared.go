@@ -1,6 +1,8 @@
 package pdp
 
 import (
+	"fmt"
+
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -21,6 +23,8 @@ type MainPolicyInput struct {
 	ResourceType                     fhir.ResourceType           `json:"resource_type"`
 	SearchParams                     []string                    `json:"search_params"`
 	ResourceId                       string                      `json:"resource_id"`
+	Include                          []string                    `json:"include"`
+	Revinclude                       []string                    `json:"revinclude"`
 }
 
 type MainPolicyRequest struct {
@@ -37,8 +41,28 @@ type PolicyResult struct {
 }
 
 type ResultReason struct {
-	Code        string `json:"code"`
-	Description string `json:"description"`
+	Code        TypeResultCode `json:"code"`
+	Description string         `json:"description"`
+}
+
+func (p *PolicyResult) AddReasons(input []string, format string, code TypeResultCode) {
+	isNewSlice := cap(p.Reasons) == 0
+	if isNewSlice {
+		p.Reasons = make([]ResultReason, len(input))
+	}
+
+	for i, str := range input {
+		reason := ResultReason{
+			Code:        code,
+			Description: fmt.Sprintf(format, str),
+		}
+
+		if isNewSlice {
+			p.Reasons[i] = reason
+		} else {
+			p.Reasons = append(p.Reasons, reason)
+		}
+	}
 }
 
 // Allow helper for creating an allowed result without reasons
@@ -58,14 +82,15 @@ func Deny(reason ResultReason) PolicyResult {
 	}
 }
 
-// TODO: Turn this into an enum
-var resultCodes = []string{
-	"missing_required_value",
-	"unexpected_input",
-	"not_allowed",
-	"not_implemented",
-	"internal_error",
-}
+type TypeResultCode string
+
+const (
+	TypeResultCodeMissingRequiredValue TypeResultCode = "missing_required_value"
+	TypeResultCodeUnexpectedInput      TypeResultCode = "unexpected_input"
+	TypeResultCodeNotAllowed           TypeResultCode = "not_allowed"
+	TypeResultCodeNotImplemented       TypeResultCode = "not_implemented"
+	TypeResultCodeInternalError        TypeResultCode = "internal_error"
+)
 
 type Config struct {
 	Enabled bool
