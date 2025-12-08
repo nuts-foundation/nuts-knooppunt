@@ -2,29 +2,53 @@ package pdp
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
+type AuthData struct {
+	Scope                            string `json:"scope"`
+	RequestingUra                    string `json:"requesting_ura"`
+	RequestingFacilityType           string `json:"requesting_facility_type"`
+	RequestingPractitionerIdentifier string `json:"requesting_practitioner_identifier"`
+	RequestingUziRoleCode            string `json:"requesting_uzi_role_code"`
+}
+
+type HTTPRequest struct {
+	Method      string              `json:"method"`
+	Protocol    string              `json:"protocol"` // "HTTP/1.0"
+	Path        string              `json:"path"`
+	QueryParams map[string][]string `json:"query_params"`
+	Header      http.Header         `json:"header"`
+	Body        string              `json:"body"`
+}
+
+type PolicyContext struct {
+	DataHolderUra          string `json:"data_holder_ura"`
+	DataHolderFacilityType string `json:"data_holder_facility_type"`
+}
+
+type PDPInput struct {
+	AuthData
+	HTTPRequest
+	PolicyContext
+}
+
+type FHIRRequest struct {
+	InteractionType fhir.TypeRestfulInteraction `json:"interaction_type"`
+	ResourceType    fhir.ResourceType           `json:"resource_type"`
+	SearchParams    []string                    `json:"search_params"`
+	ResourceId      string                      `json:"resource_id"`
+	Include         []string                    `json:"include"`
+	Revinclude      []string                    `json:"revinclude"`
+}
+
 type MainPolicyInput struct {
-	Scope                            string                      `json:"scope"`
-	Method                           string                      `json:"method"`
-	Path                             []string                    `json:"path"`
-	PatientBSN                       string                      `json:"patient_bsn"`
-	PurposeOfUse                     string                      `json:"purpose_of_use"`
-	DataHolderFacilityType           string                      `json:"data_holder_facility_type"`
-	DataHolderOrganizationUra        string                      `json:"data_holder_organization_ura"`
-	RequestingFacilityType           string                      `json:"requesting_facility_type"`
-	RequestingOrganizationUra        string                      `json:"requesting_organization_ura"`
-	RequestingPractitionerIdentifier string                      `json:"requesting_practitioner_identifier"`
-	RequestingUziRoleCode            string                      `json:"requesting_uzi_role_code"`
-	InteractionType                  fhir.TypeRestfulInteraction `json:"interaction_type"`
-	ResourceType                     fhir.ResourceType           `json:"resource_type"`
-	SearchParams                     []string                    `json:"search_params"`
-	ResourceId                       string                      `json:"resource_id"`
-	Include                          []string                    `json:"include"`
-	Revinclude                       []string                    `json:"revinclude"`
+	AuthData
+	FHIRRequest
+	PolicyContext
 }
 
 type MainPolicyRequest struct {
