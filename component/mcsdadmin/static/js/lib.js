@@ -12,9 +12,19 @@ function addOption(elementId) {
             let incrName = incrementIndex(name);
             child.name = incrName
             child.id = incrName
-            
+
             if (child.tagName === "INPUT") {
                 child.value = ""
+            }
+
+            // Remove custom options from cloned select elements
+            if (child.tagName === "SELECT") {
+                let customOptions = Array.from(child.options).filter(opt =>
+                    opt.value === 'other' && opt.hasAttribute('data-custom-system')
+                );
+                customOptions.forEach(opt => opt.remove());
+                // Reset to default empty selection
+                child.selectedIndex = 0;
             }
         })
 
@@ -26,12 +36,12 @@ function addOption(elementId) {
     option.parentElement.appendChild(newOption);
 }
 
-const indexRe = /.+\[(\d+)\].+/;
+const indexRe = /.+\[(\d+)\]/;
 
 function incrementIndex (name) {
     if (typeof name === "string") {
         let match = name.match(indexRe)
-        if (match.length > 1) {
+        if (match && match.length > 1) {
             let target = `[${match[1]}]`
             let replacementInt = parseInt(match[1]) +1
             let replacement = `[${replacementInt}]`
@@ -58,8 +68,14 @@ function dismissAlert(elementId) {
     elm.hidden = true;
 }
 
+// Track which select element triggered the modal
+let currentPayloadTypeSelect = null;
+
 function handlePayloadTypeChange(selectElement) {
     if (selectElement.value === 'other') {
+        // Store reference to the select that triggered the modal
+        currentPayloadTypeSelect = selectElement;
+
         // Show the modal
         showCustomPayloadModal();
 
@@ -96,8 +112,21 @@ function addCustomPayloadType() {
         return;
     }
 
-    // Get the select element
-    const select = document.getElementById('payload-type');
+    // Ensure we have a reference to the select that triggered the modal
+    if (!currentPayloadTypeSelect) {
+        alert('Error: No select element reference found');
+        return;
+    }
+
+    const select = currentPayloadTypeSelect;
+
+    // Extract the index from the select's name (e.g., "payload-type[0]" -> "0")
+    const indexMatch = select.name.match(/\[(\d+)\]/);
+    if (!indexMatch) {
+        alert('Error: Could not determine select index');
+        return;
+    }
+    const index = indexMatch[1];
 
     // Create display text (use display if provided, otherwise use code)
     const displayText = modalDisplay.value || modalCode.value;
@@ -111,6 +140,11 @@ function addCustomPayloadType() {
     newOption.id = customOptionId;
     newOption.selected = true;
 
+    // Store custom values as data attributes on the option element
+    newOption.setAttribute('data-custom-system', modalSystem.value);
+    newOption.setAttribute('data-custom-code', modalCode.value);
+    newOption.setAttribute('data-custom-display', modalDisplay.value);
+
     // Insert before the "other" option
     const otherOption = Array.from(select.options).find(opt => opt.value === 'other' && opt.text.includes('specify custom'));
     if (otherOption) {
@@ -119,10 +153,8 @@ function addCustomPayloadType() {
         select.appendChild(newOption);
     }
 
-    // Set the hidden form fields with custom values
-    document.getElementById('custom-system').value = modalSystem.value;
-    document.getElementById('custom-code').value = modalCode.value;
-    document.getElementById('custom-display').value = modalDisplay.value;
+    // Clear the reference
+    currentPayloadTypeSelect = null;
 
     // Close the modal
     closeCustomPayloadModal();
@@ -140,4 +172,38 @@ window.onload = function(){
         // catch all for any other response code
         {code:"...", swap: false}
     ]
+
+    // Add form submit handler to populate hidden fields from selected custom options
+    const form = document.querySelector('form[method="post"]');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            // Find all payload-type selects
+            const selects = document.querySelectorAll('select[name^="payload-type["]');
+
+            selects.forEach(function(select) {
+                // Extract index from select name (e.g., "payload-type[0]" -> "0")
+                const indexMatch = select.name.match(/\[(\d+)\]/);
+                if (!indexMatch) return;
+                const index = indexMatch[1];
+
+                // Get the selected option
+                const selectedOption = select.options[select.selectedIndex];
+
+                // If it's a custom option with data attributes, populate hidden fields
+                if (selectedOption && selectedOption.value === 'other' &&
+                    selectedOption.hasAttribute('data-custom-system')) {
+
+                    const customSystemField = document.getElementById(`custom-system[${index}]`);
+                    const customCodeField = document.getElementById(`custom-code[${index}]`);
+                    const customDisplayField = document.getElementById(`custom-display[${index}]`);
+
+                    if (customSystemField && customCodeField && customDisplayField) {
+                        customSystemField.value = selectedOption.getAttribute('data-custom-system');
+                        customCodeField.value = selectedOption.getAttribute('data-custom-code');
+                        customDisplayField.value = selectedOption.getAttribute('data-custom-display') || '';
+                    }
+                }
+            });
+        });
+    }
 };

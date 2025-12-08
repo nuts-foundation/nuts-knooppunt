@@ -10,20 +10,22 @@
                 <input id="address" type="text" name="address" class="form-control" placeholder="https://" required>
             </div>
             <div class="mb-3">
-                <div id="option-type" class="option">
-                    <label for="payload-type" class="form-label">Payload Type:</label>
-                    <select name="payload-type" id="payload-type" class="form-select" required onchange="handlePayloadTypeChange(this)">
-                        <option value="" disabled selected>--Please choose an option--</option>
-                        {{range .PayloadTypes }}
-                        <option value="{{ .Code }}">{{ .Display }}</option>
-                        {{ end }}
-                    </select>
+                <div id="payload-types-container">
+                    <div id="option-type" class="option">
+                        <label for="payload-type[0]" class="form-label">Payload Type:</label>
+                        <select name="payload-type[0]" id="payload-type[0]" class="form-select" required onchange="handlePayloadTypeChange(this)">
+                            <option value="" disabled selected>--Please choose an option--</option>
+                            {{range .PayloadTypes }}
+                            <option value="{{ .Code }}">{{ .Display }}</option>
+                            {{ end }}
+                        </select>
+                        <!-- Hidden fields for custom coding (cloned and re-indexed with the select) -->
+                        <input type="hidden" name="custom-system[0]" id="custom-system[0]" value="">
+                        <input type="hidden" name="custom-code[0]" id="custom-code[0]" value="">
+                        <input type="hidden" name="custom-display[0]" id="custom-display[0]" value="">
+                    </div>
                 </div>
-                <!-- Hidden fields for custom coding (populated by modal) -->
-                <input type="hidden" id="custom-system" name="custom-system">
-                <input type="hidden" id="custom-code" name="custom-code">
-                <input type="hidden" id="custom-display" name="custom-display">
-                <button onclick='addOption("payload-type");' type="button" class="btn btn-secondary btn-sm">Add type
+                <button onclick='addOption("option-type");' type="button" class="btn btn-secondary btn-sm mt-2">Add type
                 </button>
             </div>
             <div class="mb-3">

@@ -451,14 +451,13 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint.Address = address
 
-	if len(r.PostForm["payload-type"]) < 1 {
-		badRequest(w, r, "missing payload type")
-		return
-	}
-
 	codables, ok := formdata.CodablesFromFormWithCustom(r.PostForm, valuesets.EndpointPayloadTypeCodings, "payload-type")
 	if !ok {
 		badRequest(w, r, "could not find all type codes")
+		return
+	}
+	if len(codables) < 1 {
+		badRequest(w, r, "missing payload type")
 		return
 	}
 	endpoint.PayloadType = codables
