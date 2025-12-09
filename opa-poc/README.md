@@ -1,10 +1,5 @@
-```shell
-curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_darwin_arm64
-chmod +x opa
-```
-
-Running:
+You need opa CLI to run the policies:
 
 ```shell
-./opa eval -i input.json -d example.rego "data.example.violation[x]"
+brew install opa
 ```

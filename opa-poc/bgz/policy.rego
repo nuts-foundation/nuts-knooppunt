@@ -1,33 +1,34 @@
 package bgz
 
+required_client_qualification := "bgz-requester"
+required_subject_role := "arts"
+
 default allow = false
 
-allow {
+allow if {
     allowed_by_capabilitystatement
     client_is_qualified
     practitioner_is_authorized
     has_consent
 }
 
-allowed_by_capabilitystatement {
+allowed_by_capabilitystatement if {
     input.capabilitystatement.checked
 }
 
-client_is_qualified {
-    input.client.qualifications["bgz-requester"]
+client_is_qualified if {
+    required_client_qualification in input.client.qualifications
 }
 
-practitioner_is_authorized {
-    input.subject.properties.subject_role == "arts"
+practitioner_is_authorized if {
+    input.subject.properties.subject_role == required_subject_role
 }
 
-has_consent {
-    some consent
+has_consent if {
     consent := input.consent[_]
     # Check if consent actor FHIR identifier matches subject organization ID (FHIR token)
-    some actorIdentifier
     actorIdentifier := consent.provision.actor.identifier[_]
-    subjectOrganizationIDParts := {x | x := split(input.subject.properties.subject_organization_id, "|")[_]}
+    subjectOrganizationIDParts := split(input.subject.properties.subject_organization_id, "|")
     actorIdentifier.system == subjectOrganizationIDParts[0]
     actorIdentifier.value == subjectOrganizationIDParts[1]
 }

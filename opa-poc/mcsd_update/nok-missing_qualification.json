@@ -1,0 +1,9 @@
+{
+  "capabilitystatement": {
+    "checked": true
+  },
+  "client": {
+    "qualifications": ["some-other-qualification"]
+  }
+}
+

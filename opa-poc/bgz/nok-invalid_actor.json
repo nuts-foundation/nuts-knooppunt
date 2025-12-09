@@ -3,14 +3,12 @@
     "checked": true
   },
   "client": {
-    "qualifications": {
-      "bgz-requester": true
-    }
+    "qualifications": ["bgz-requester"]
   },
   "subject": {
     "properties": {
       "subject_role": "arts",
-      "subject_organization_id": "http://fhir.nl/fhir/NamingSystem/ura|12345678"
+      "subject_organization_id": "http://fhir.nl/fhir/NamingSystem/ura|4321"
     }
   },
   "consent": [
