@@ -1,0 +1,31 @@
+{
+  "capabilitystatement": {
+    "checked": true
+  },
+  "client": {
+    "qualifications": {
+      "bgz-requester": true
+    }
+  },
+  "subject": {
+    "properties": {
+      "subject_role": "arts",
+      "subject_organization_id": "http://fhir.nl/fhir/NamingSystem/ura|12345678"
+    }
+  },
+  "consent": [
+    {
+      "provision": {
+        "actor": {
+          "identifier": [
+            {
+              "system": "http://fhir.nl/fhir/NamingSystem/ura",
+              "value": "12345678"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
+
