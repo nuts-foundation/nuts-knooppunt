@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "vc-issuer.fullname" . }}
+  name: {{ include "mock-vc-issuer.fullname" . }}
   labels:
-    {{- include "vc-issuer.labels" . | nindent 4 }}
+    {{- include "mock-vc-issuer.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "vc-issuer.selectorLabels" . | nindent 6 }}
+      {{- include "mock-vc-issuer.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -18,7 +18,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "vc-issuer.labels" . | nindent 8 }}
+        {{- include "mock-vc-issuer.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -27,7 +27,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "vc-issuer.serviceAccountName" . }}
+      serviceAccountName: {{ include "mock-vc-issuer.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -79,7 +79,7 @@ spec:
         {{- if .Values.persistence.enabled }}
         - name: data
           persistentVolumeClaim:
-            claimName: {{ include "vc-issuer.fullname" . }}-data
+            claimName: {{ include "mock-vc-issuer.fullname" . }}-data
         {{- end }}
         {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}

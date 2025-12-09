@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "vc-issuer.fullname" . }}
+  name: {{ include "mock-vc-issuer.fullname" . }}
   labels:
-    {{- include "vc-issuer.labels" . | nindent 4 }}
+    {{- include "mock-vc-issuer.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
@@ -12,4 +12,4 @@ spec:
       protocol: TCP
       name: http
   selector:
-    {{- include "vc-issuer.selectorLabels" . | nindent 4 }}
+    {{- include "mock-vc-issuer.selectorLabels" . | nindent 4 }}

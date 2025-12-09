@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "vc-issuer.fullname" . }}
+  name: {{ include "mock-vc-issuer.fullname" . }}
   labels:
-    {{- include "vc-issuer.labels" . | nindent 4 }}
+    {{- include "mock-vc-issuer.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -33,7 +33,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "vc-issuer.fullname" $ }}
+                name: {{ include "mock-vc-issuer.fullname" $ }}
                 port:
                   number: {{ $.Values.service.port }}
           {{- end }}
