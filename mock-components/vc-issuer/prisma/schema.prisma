@@ -2,7 +2,11 @@
 // OID4VCI-compliant credential issuance
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // native: local development (Apple Silicon)
+  // linux-musl-openssl-3.0.x: Alpine x86_64 (typical k8s deployment)
+  // linux-musl-arm64-openssl-3.0.x: Alpine ARM64 (local Docker on Apple Silicon)
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
 }
 
 datasource db {

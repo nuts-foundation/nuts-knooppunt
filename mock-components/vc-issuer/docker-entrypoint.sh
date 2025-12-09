@@ -1,7 +1,7 @@
 #!/bin/sh
 
 echo "Running database migrations..."
-npx prisma migrate deploy
+node ./node_modules/prisma/build/index.js migrate deploy
 
 if [ $? -ne 0 ]; then
     echo "Migration failed"
