@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage';
 import CallbackPage from './pages/CallbackPage';
 import PatientsPage from './pages/PatientsPage';
 import PatientPage from './pages/PatientPage';
+import PatientContextLaunchPage from './pages/PatientContextLaunchPage';
 import ConsentsPage from './pages/ConsentsPage';
 import './App.css';
 
@@ -17,6 +18,7 @@ function App() {
           <Route path="/callback" element={<CallbackPage />} />
           <Route path="/patients" element={<PatientsPage />} />
           <Route path="/patients/:patientId" element={<PatientPage />} />
+          <Route path="/patients/:patientId/context-launch" element={<PatientContextLaunchPage />} />
           <Route path="/consents" element={<ConsentsPage />} />
         </Routes>
       </Router>

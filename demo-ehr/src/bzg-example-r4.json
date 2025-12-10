@@ -5,6 +5,15 @@
     {
       "resource": {
         "resourceType": "Consent",
+        "scope": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+              "code": "patient-privacy",
+              "display": "Patient Privacy"
+            }
+          ]
+        },
         "meta": {
           "profile": [
             "http://nictiz.nl/fhir/StructureDefinition/zib-TreatmentDirective"
@@ -97,6 +106,15 @@
     {
       "resource": {
         "resourceType": "Consent",
+        "scope": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+              "code": "patient-privacy",
+              "display": "Patient Privacy"
+            }
+          ]
+        },
         "meta": {
           "profile": [
             "http://nictiz.nl/fhir/StructureDefinition/zib-TreatmentDirective"
@@ -179,7 +197,12 @@
           {
             "uri": "http://wetten.overheid.nl/"
           }
-        ]
+        ],
+        "provision": {
+          "period": {
+            "start": "2023-02-24"
+          }
+        }
       },
       "request": {
         "method": "POST",
@@ -189,6 +212,15 @@
     {
       "resource": {
         "resourceType": "Consent",
+        "scope": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+              "code": "patient-privacy",
+              "display": "Patient Privacy"
+            }
+          ]
+        },
         "meta": {
           "profile": [
             "http://nictiz.nl/fhir/StructureDefinition/zib-TreatmentDirective"
@@ -281,6 +313,15 @@
     {
       "resource": {
         "resourceType": "Consent",
+        "scope": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+              "code": "patient-privacy",
+              "display": "Patient Privacy"
+            }
+          ]
+        },
         "meta": {
           "profile": [
             "http://nictiz.nl/fhir/StructureDefinition/zib-TreatmentDirective"
@@ -373,6 +414,15 @@
     {
       "resource": {
         "resourceType": "Consent",
+        "scope": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+              "code": "patient-privacy",
+              "display": "Patient Privacy"
+            }
+          ]
+        },
         "meta": {
           "profile": [
             "http://nictiz.nl/fhir/StructureDefinition/zib-TreatmentDirective"
@@ -455,7 +505,12 @@
           {
             "uri": "http://wetten.overheid.nl/"
           }
-        ]
+        ],
+        "provision": {
+          "period": {
+            "start": "2023-02-24"
+          }
+        }
       },
       "request": {
         "method": "POST",
@@ -465,6 +520,15 @@
     {
       "resource": {
         "resourceType": "Consent",
+        "scope": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+              "code": "patient-privacy",
+              "display": "Patient Privacy"
+            }
+          ]
+        },
         "meta": {
           "profile": [
             "http://nictiz.nl/fhir/StructureDefinition/zib-TreatmentDirective"
@@ -557,6 +621,15 @@
     {
       "resource": {
         "resourceType": "Consent",
+        "scope": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+              "code": "patient-privacy",
+              "display": "Patient Privacy"
+            }
+          ]
+        },
         "meta": {
           "profile": [
             "http://nictiz.nl/fhir/StructureDefinition/zib-TreatmentDirective"
@@ -649,6 +722,15 @@
     {
       "resource": {
         "resourceType": "Consent",
+        "scope": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+              "code": "patient-privacy",
+              "display": "Patient Privacy"
+            }
+          ]
+        },
         "meta": {
           "profile": [
             "http://nictiz.nl/fhir/StructureDefinition/zib-TreatmentDirective"
@@ -741,6 +823,15 @@
     {
       "resource": {
         "resourceType": "Consent",
+        "scope": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+              "code": "patient-privacy",
+              "display": "Patient Privacy"
+            }
+          ]
+        },
         "meta": {
           "profile": [
             "http://nictiz.nl/fhir/StructureDefinition/zib-TreatmentDirective"
@@ -2100,6 +2191,11 @@
             }
           ]
         },
+        "note": [
+          {
+            "text": "Test DrugUse note 1"
+          }
+        ],
         "component": [
           {
             "code": {
@@ -2498,6 +2594,11 @@
             }
           ]
         },
+        "note": [
+          {
+            "text": "Test DrugUse note 2"
+          }
+        ],
         "component": [
           {
             "code": {
@@ -2566,8 +2667,7 @@
             "http://nictiz.nl/fhir/StructureDefinition/zib-Problem"
           ]
         },
-        "clinicalStatus": "active",
-        "_clinicalStatus": {
+        "clinicalStatus": {
           "extension": [
             {
               "url": "http://nictiz.nl/fhir/StructureDefinition/code-specification",
@@ -2581,10 +2681,15 @@
                 ]
               }
             }
+          ],
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
           ]
         },
-        "verificationStatus": "confirmed",
-        "_verificationStatus": {
+        "verificationStatus": {
           "extension": [
             {
               "url": "http://nictiz.nl/fhir/StructureDefinition/code-specification",
@@ -2597,6 +2702,12 @@
                   }
                 ]
               }
+            }
+          ],
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed"
             }
           ]
         },
@@ -2643,8 +2754,7 @@
             "http://nictiz.nl/fhir/StructureDefinition/zib-Problem"
           ]
         },
-        "clinicalStatus": "active",
-        "_clinicalStatus": {
+        "clinicalStatus": {
           "extension": [
             {
               "url": "http://nictiz.nl/fhir/StructureDefinition/code-specification",
@@ -2658,10 +2768,15 @@
                 ]
               }
             }
+          ],
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
           ]
         },
-        "verificationStatus": "confirmed",
-        "_verificationStatus": {
+        "verificationStatus": {
           "extension": [
             {
               "url": "http://nictiz.nl/fhir/StructureDefinition/code-specification",
@@ -2674,6 +2789,12 @@
                   }
                 ]
               }
+            }
+          ],
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed"
             }
           ]
         },
@@ -2720,7 +2841,6 @@
             "http://nictiz.nl/fhir/StructureDefinition/zib-Problem"
           ]
         },
-        "verificationStatus": "entered-in-error",
         "category": [
           {
             "coding": [
@@ -2764,9 +2884,7 @@
             "http://nictiz.nl/fhir/StructureDefinition/zib-Problem"
           ]
         },
-        "verificationStatus": "confirmed",
-        "clinicalStatus": "active",
-        "_clinicalStatus": {
+        "clinicalStatus": {
           "extension": [
             {
               "url": "http://nictiz.nl/fhir/StructureDefinition/code-specification",
@@ -2780,9 +2898,15 @@
                 ]
               }
             }
+          ],
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
           ]
         },
-        "_verificationStatus": {
+        "verificationStatus": {
           "extension": [
             {
               "url": "http://nictiz.nl/fhir/StructureDefinition/code-specification",
@@ -2795,6 +2919,12 @@
                   }
                 ]
               }
+            }
+          ],
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed"
             }
           ]
         },
@@ -2841,8 +2971,7 @@
             "http://nictiz.nl/fhir/StructureDefinition/zib-Problem"
           ]
         },
-        "clinicalStatus": "inactive",
-        "_clinicalStatus": {
+        "clinicalStatus": {
           "extension": [
             {
               "url": "http://nictiz.nl/fhir/StructureDefinition/code-specification",
@@ -2850,16 +2979,21 @@
                 "coding": [
                   {
                     "system": "http://snomed.info/sct",
-                    "code": "73425007",
-                    "display": "Niet actueel"
+                    "code": "55561003",
+                    "display": "Actueel"
                   }
                 ]
               }
             }
+          ],
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "inactive"
+            }
           ]
         },
-        "verificationStatus": "confirmed",
-        "_verificationStatus": {
+        "verificationStatus": {
           "extension": [
             {
               "url": "http://nictiz.nl/fhir/StructureDefinition/code-specification",
@@ -2872,6 +3006,12 @@
                   }
                 ]
               }
+            }
+          ],
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed"
             }
           ]
         },
@@ -2919,7 +3059,6 @@
             "http://nictiz.nl/fhir/StructureDefinition/zib-Problem"
           ]
         },
-        "clinicalStatus": "inactive",
         "category": [
           {
             "coding": [
@@ -2943,6 +3082,28 @@
         "subject": {
           "reference": "Patient/3df6fa1f-64c6-4d60-bf0a-6a002fc7c603"
         },
+        "clinicalStatus": {
+          "extension": [
+            {
+              "url": "http://nictiz.nl/fhir/StructureDefinition/code-specification",
+              "valueCodeableConcept": {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "55561003",
+                    "display": "Actueel"
+                  }
+                ]
+              }
+            }
+          ],
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "inactive"
+            }
+          ]
+        },
         "onsetDateTime": "2017-05-04",
         "abatementDateTime": "2017-05-07",
         "note": [
@@ -2960,7 +3121,6 @@
       "resource": {
         "resourceType": "Condition",
         "id": "b164c409-8c71-439c-87d5-6740c07676ca",
-        "verificationStatus": "entered-in-error",
         "meta": {
           "versionId": "ddeb0a65-dad4-48ec-86af-4910a4efad76",
           "lastUpdated": "2023-11-30T11:38:01.828+00:00",
@@ -3011,8 +3171,7 @@
             "http://nictiz.nl/fhir/StructureDefinition/zib-Problem"
           ]
         },
-        "clinicalStatus": "active",
-        "_clinicalStatus": {
+        "clinicalStatus": {
           "extension": [
             {
               "url": "http://nictiz.nl/fhir/StructureDefinition/code-specification",
@@ -3026,9 +3185,15 @@
                 ]
               }
             }
+          ],
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
           ]
         },
-        "_verificationStatus": {
+        "verificationStatus": {
           "extension": [
             {
               "url": "http://nictiz.nl/fhir/StructureDefinition/code-specification",
@@ -3042,9 +3207,14 @@
                 ]
               }
             }
+          ],
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed"
+            }
           ]
         },
-        "verificationStatus": "confirmed",
         "category": [
           {
             "coding": [
@@ -3110,7 +3280,12 @@
               "display": "Appartement of flatwoning"
             }
           ]
-        }
+        },
+        "note": [
+          {
+            "text": "Geen lift"
+          }
+        ]
       },
       "request": {
         "method": "POST",
@@ -3197,7 +3372,12 @@
               "display": "Denies alcohol use"
             }
           ]
-        }
+        },
+        "note": [
+          {
+            "text": "Test AlcoholUse note 2"
+          }
+        ]
       },
       "request": {
         "method": "POST",
@@ -3307,6 +3487,11 @@
             }
           ]
         },
+        "note": [
+          {
+            "text": "Test AlcoholUse note 1"
+          }
+        ],
         "component": [
           {
             "code": {

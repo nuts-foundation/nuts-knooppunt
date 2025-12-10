@@ -19,7 +19,7 @@ export const bgzVisualizationApi = {
     },
 
     async getPatientSummary(patientId) {
-        const base = config.fhirBaseURL;
+        const base = config.fhirStu3BaseURL;
         const patientParam = this.buildPatientParam(patientId);
 
         const summary = {

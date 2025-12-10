@@ -10,6 +10,8 @@ function PatientsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  const [searching, setSearching] = useState(false);
   const [showNewPatient, setShowNewPatient] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(null);
@@ -32,6 +34,36 @@ function PatientsPage() {
     }
   }, [isAuthenticated]);
 
+  // Search by BSN when search term changes
+  useEffect(() => {
+    const searchByBSN = async () => {
+      const trimmed = searchTerm.trim();
+
+      // Check if search term looks like a BSN (contains only digits)
+      const isBSNLike = /^\d+$/.test(trimmed);
+
+      if (isBSNLike && trimmed.length > 0) {
+        setSearching(true);
+        try {
+          const results = await patientApi.searchByBSN(trimmed);
+          setSearchResults(results);
+        } catch (err) {
+          console.error('Error searching by BSN:', err);
+          setSearchResults([]);
+        } finally {
+          setSearching(false);
+        }
+      } else {
+        // Clear search results if not a BSN
+        setSearchResults(null);
+      }
+    };
+
+    // Debounce the search
+    const timeoutId = setTimeout(searchByBSN, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
   const loadPatients = async () => {
     setLoading(true);
     setError(null);
@@ -45,7 +77,8 @@ function PatientsPage() {
     }
   };
 
-  const filteredPatients = patients.filter(patient => {
+  // Use search results if BSN search was performed, otherwise use client-side filter
+  const filteredPatients = searchResults !== null ? searchResults : patients.filter(patient => {
     if (!searchTerm) return true;
 
     const name = patientApi.formatName(patient).toLowerCase();
@@ -243,6 +276,7 @@ function PatientsPage() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="search-input"
               />
+              {searching && <span style={{ marginLeft: '10px', color: '#666' }}>Searching...</span>}
             </div>
             <button type="button" className="button" onClick={openNewPatient}>
               ➕ New Patient
@@ -269,7 +303,8 @@ function PatientsPage() {
           <>
             <div className="patients-count">
               {filteredPatients.length} patient{filteredPatients.length !== 1 ? 's' : ''} found
-              {searchTerm && ` (filtered from ${patients.length})`}
+              {searchTerm && searchResults !== null && ' (searched by BSN in FHIR server)'}
+              {searchTerm && searchResults === null && ` (filtered from ${patients.length})`}
             </div>
 
             {filteredPatients.length === 0 ? (

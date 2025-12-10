@@ -32,7 +32,7 @@ export const bgzApi = {
         replacePatientReferences(bundle);
 
         // POST the bundle to the FHIR server
-        const url = config.fhirBaseURL;
+        const url = config.fhirStu3BaseURL;
         const res = await fetch(url, {
             method: 'POST',
             headers: headersWithContentType,

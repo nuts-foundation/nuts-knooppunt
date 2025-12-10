@@ -1,5 +1,6 @@
 import {headers, headersWithContentType} from "./fhir";
 import {config} from "../config";
+import {organizationApi} from "./organizationApi";
 
 // Helper function to get BGZ FHIR query parameter inputs
 const getBgzFhirQueryInputs = () => [
@@ -150,7 +151,7 @@ const getBgzFhirQueryInputs = () => [
 ];
 
 export const bgzVerweijzingApi = {
-    async createBgZWorkflowTask(patientId, patientName, userId, userName, departmentOrgId, departmentOrgName) {
+    async createBgZWorkflowTask(bsn, patientName, userId, userName, departmentOrgId, departmentOrgName) {
         // Create BgZ Workflow Task (Verwijzing)
         const task = {
             resourceType: "Task",
@@ -178,8 +179,10 @@ export const bgzVerweijzingApi = {
                 }
             },
             for: {
-                reference: `http://localhost:7050/fhir/sunflower-patients/Patient/${patientId}`,
-                display: patientName
+                identifier: {
+                    system: 'http://fhir.nl/fhir/NamingSystem/bsn',
+                    value: bsn
+                }
             },
             owner: {
                 reference: `${config.mcsdQueryBaseURL}/Organization/${departmentOrgId}`,
@@ -203,14 +206,32 @@ export const bgzVerweijzingApi = {
         return await res.json();
     },
 
-    async createBgZNotificatonTask(patientBsn, workflowTaskId, authorizationBase, userId, departmentOrgId,
-        notificationEndpoint) {
+    async createBgZNotificatonTask(patientBsn, workflowTaskId, authorizationBase, user, departmentOrgId,
+        notificationEndpoint, selectedOrganization) {
         // Create BgZ Notification Task
         const uuid = () => {
             try {
                 return (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null;
             } catch (e) { return null; }
         };
+
+        // Get logged-in user's organization URA from user profile or config
+        const loggedInOrgURA = user?.profile?.sub;
+
+        console.log('Logged-in user organization URA:', loggedInOrgURA);
+
+        // Get receiving organization URA from selectedOrganization
+        let receivingOrgURA = null;
+        if (selectedOrganization) {
+            receivingOrgURA = organizationApi.getURA(selectedOrganization);
+            console.log('Receiving organization URA:', receivingOrgURA);
+
+            if (!receivingOrgURA) {
+                console.warn('Could not extract URA from selected organization:', selectedOrganization.id);
+            }
+        } else {
+            console.warn('No selected organization provided');
+        }
 
         const now = new Date();
         const authoredOn = now.toISOString();
@@ -254,20 +275,20 @@ export const bgzVerweijzingApi = {
                 agent: {
                     identifier: {
                         system: "http://example.com/fhir/NamingSystem/dummy",
-                        value: String(userId)
+                        value: "demo-ehr-app" // system identifier for demo-ehr-app
                     }
                 },
                 onBehalfOf: {
                     identifier: {
-                        system: "http://example.com/fhir/NamingSystem/dummy",
-                        value: String(departmentOrgId)
+                        system: "http://fhir.nl/fhir/NamingSystem/ura",
+                        value: loggedInOrgURA
                     }
                 }
             },
             owner: {
                 identifier: {
-                    system: "http://example.com/fhir/NamingSystem/dummy",
-                    value: String(departmentOrgId)
+                    system: "http://fhir.nl/fhir/NamingSystem/ura",
+                    value: receivingOrgURA || String(departmentOrgId) // fallback to departmentOrgId if URA not found
                 }
             },
             ...(workflowTaskId && {
@@ -305,10 +326,21 @@ export const bgzVerweijzingApi = {
             ]
         };
 
-        const url = `${notificationEndpoint}/Task`;
+        // Use dynamic proxy to handle any endpoint address
+        // Extract the base URL from the endpoint and append /Task
+        const endpointAddress = notificationEndpoint.address || notificationEndpoint;
+
+        console.log('Sending notification task to endpoint:', endpointAddress);
+
+        const url = '/api/dynamic-proxy/Task';
+        const headers = {
+            ...headersWithContentType,
+            'X-Target-URL': endpointAddress
+        };
+
         const res = await fetch(url, {
             method: 'POST',
-            headers: headersWithContentType,
+            headers: headers,
             body: JSON.stringify(task)
         });
 

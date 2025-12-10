@@ -65,6 +65,9 @@ function PatientPage() {
   const [bgzDeleteError, setBgzDeleteError] = useState(null);
   const [isBgzReferral, setIsBgzReferral] = useState(false);
   const [createWorkflowTask, setCreateWorkflowTask] = useState(true);
+  const [contextLaunchEndpoint, setContextLaunchEndpoint] = useState(null);
+  const [workflowTaskId, setWorkflowTaskId] = useState(null);
+  const [contextLaunchBSN, setContextLaunchBSN] = useState(null);
 
   useEffect(() => {
     if (isAuthenticated && patientId) {
@@ -130,7 +133,34 @@ function PatientPage() {
     setBgzSummaryLoading(true);
     setBgzSummaryError(null);
     try {
-      const summary = await bgzVisualizationApi.getPatientSummary(patientId);
+      // Get the patient's BSN to look up the STU3 patient
+      const response = await fetch(`${require('../config').config.fhirBaseURL}/Patient/${patientId}`, {
+        method: 'GET',
+        headers: require('../api/fhir').headers,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch patient');
+      }
+
+      const patientData = await response.json();
+      const bsn = patientApi.getByBSN(patientData);
+
+      if (!bsn) {
+        throw new Error('Patient does not have a BSN identifier');
+      }
+
+      // Search for the patient on STU3 endpoint by BSN
+      const stu3Patients = await patientApi.searchByBSNOnStu3(bsn);
+
+      if (stu3Patients.length === 0) {
+        // No STU3 patient found, no BGZ summary available
+        setBgzSummary(null);
+        return;
+      }
+
+      const stu3PatientId = stu3Patients[0].id;
+      const summary = await bgzVisualizationApi.getPatientSummary(stu3PatientId);
       setBgzSummary(summary);
     } catch (err) {
       setBgzSummaryError(err.message);
@@ -373,6 +403,9 @@ function PatientPage() {
       setTaskSuccess(false);
       setIsBgzReferral(false);
       setCreateWorkflowTask(true);
+      setContextLaunchEndpoint(null);
+      setWorkflowTaskId(null);
+      setContextLaunchBSN(null);
     }, 300); // Delay to allow modal animation to complete
   };
 
@@ -424,8 +457,40 @@ function PatientPage() {
     setBgzSuccess(false);
 
     try {
-      console.log('Generating BGZ for patient:', patientId);
-      await bgzApi.generateBGZ(patientId);
+      // Get patient's BSN
+      const bsn = patientApi.getByBSN(patient);
+      if (!bsn) {
+        throw new Error('Patient does not have a BSN identifier');
+      }
+
+      console.log('Checking if patient exists on STU3 endpoint with BSN:', bsn);
+
+      // Search for patient by BSN on STU3 endpoint
+      let stu3Patients = await patientApi.searchByBSNOnStu3(bsn);
+      let stu3PatientId;
+
+      if (stu3Patients.length === 0) {
+        console.log('Patient not found on STU3 endpoint, creating patient');
+
+        // Patient doesn't exist on STU3, create it
+        const patientFormData = patientApi.toForm(patient);
+        const createdPatient = await patientApi.createOnStu3({
+          bsn: patientFormData.bsn,
+          given: patientFormData.given.split(' ').filter(n => n),
+          family: patientFormData.family,
+          prefix: patientFormData.prefix ? patientFormData.prefix.split(' ').filter(n => n) : [],
+          birthDate: patientFormData.birthDate,
+          gender: patientFormData.gender,
+        });
+        stu3PatientId = createdPatient.id;
+        console.log('Patient created on STU3 endpoint with ID:', stu3PatientId);
+      } else {
+        stu3PatientId = stu3Patients[0].id;
+        console.log('Patient found on STU3 endpoint with ID:', stu3PatientId);
+      }
+
+      console.log('Generating BGZ for patient:', stu3PatientId);
+      await bgzApi.generateBGZ(stu3PatientId);
       console.log('BGZ generated successfully');
       setBgzSuccess(true);
 
@@ -456,6 +521,21 @@ function PatientPage() {
 
     try {
       console.log('Deleting BGZ data for patient:', patientId);
+
+      // Get the patient's BSN to find the STU3 patient
+      const bsn = patientApi.getByBSN(patient);
+      if (!bsn) {
+        throw new Error('Patient does not have a BSN identifier');
+      }
+
+      // Search for the STU3 patient by BSN
+      const stu3Patients = await patientApi.searchByBSNOnStu3(bsn);
+      let stu3PatientId = null;
+
+      if (stu3Patients.length > 0) {
+        stu3PatientId = stu3Patients[0].id;
+        console.log('Found STU3 patient with ID:', stu3PatientId);
+      }
 
       // Collect all resource IDs to delete (except patient)
       const resourcesToDelete = [];
@@ -503,7 +583,7 @@ function PatientPage() {
 
       // Delete all resources
       const deletePromises = resourcesToDelete.map(async ({ id, type }) => {
-        const url = `${require('../config').config.fhirBaseURL}/${type}/${id}`;
+        const url = `${require('../config').config.fhirStu3BaseURL}/${type}/${id}`;
         const response = await fetch(url, {
           method: 'DELETE',
           headers: {
@@ -518,7 +598,26 @@ function PatientPage() {
       });
 
       await Promise.all(deletePromises);
-      console.log('BGZ data deleted successfully');
+      console.log('BGZ resources deleted successfully');
+
+      // Delete the STU3 patient if it exists
+      if (stu3PatientId) {
+        console.log('Deleting STU3 patient:', stu3PatientId);
+        const patientDeleteUrl = `${require('../config').config.fhirStu3BaseURL}/Patient/${stu3PatientId}`;
+        const patientDeleteResponse = await fetch(patientDeleteUrl, {
+          method: 'DELETE',
+          headers: {
+            'Accept': 'application/fhir+json',
+            'Content-Type': 'application/fhir+json',
+          },
+        });
+
+        if (!patientDeleteResponse.ok && patientDeleteResponse.status !== 204) {
+          console.warn(`Failed to delete STU3 patient ${stu3PatientId}: ${patientDeleteResponse.statusText}`);
+        } else {
+          console.log('STU3 patient deleted successfully');
+        }
+      }
 
       // Reload BGZ summary to update the display
       await loadBGZSummary(patientId);
@@ -544,10 +643,36 @@ function PatientPage() {
 
       // Get user information for display
       const userName = user?.profile?.name || user?.profile?.email || 'Unknown User';
-      const patientBSN = patientApi.getByBSN(patient);
+      const currentPatientBSN = patientApi.getByBSN(patient);
+
+      let hasContextLaunchEndpoint = false;
 
       if(isBgzReferralParam) {
-        await handleConfirmBgZVerwijzing(userName, patientBSN, createWorkflowTask);
+        const workflowTask = await handleConfirmBgZVerwijzing(userName, currentPatientBSN, createWorkflowTask);
+
+        // Store workflow task ID and BSN for context launch
+        if (workflowTask && workflowTask.id) {
+          setWorkflowTaskId(workflowTask.id);
+          console.log('Stored workflow task ID:', workflowTask.id);
+        }
+        setContextLaunchBSN(currentPatientBSN);
+
+        // After successful BgZ Verwijzing, search for context-launch endpoint
+        console.log('Searching for context-launch endpoint for organization:', selectedDepartment.id);
+        try {
+          const launchEndpoint = await organizationApi.getEndpoint(selectedDepartment.id, "context-launch");
+          if (launchEndpoint) {
+            console.log('Found context-launch endpoint:', launchEndpoint.address);
+            setContextLaunchEndpoint(launchEndpoint);
+            hasContextLaunchEndpoint = true;
+          } else {
+            console.log('No context-launch endpoint found');
+            setContextLaunchEndpoint(null);
+          }
+        } catch (err) {
+          console.warn('Error searching for context-launch endpoint:', err);
+          setContextLaunchEndpoint(null);
+        }
       } else {
         await handleConfirmEOverdracht(userName);
       }
@@ -557,10 +682,13 @@ function PatientPage() {
       // Reload tasks list
       loadEOverdrachtTasks(patientId);
 
-      // Show success message for 2 seconds, then close modal
-      setTimeout(() => {
-        handleCloseModal();
-      }, 2000);
+      // Only auto-close modal if no context-launch endpoint for BgZ Verwijzing
+      if (!isBgzReferralParam || !hasContextLaunchEndpoint) {
+        // Show success message for 2 seconds, then close modal
+        setTimeout(() => {
+          handleCloseModal();
+        }, 2000);
+      }
     } catch (err) {
       console.error('Error creating Task:', err);
       setTaskError(err.message);
@@ -606,6 +734,26 @@ function PatientPage() {
     }
   }
 
+  const handleContextLaunch = () => {
+    if (!contextLaunchEndpoint || !contextLaunchEndpoint.address) {
+      console.error('No context-launch endpoint available');
+      return;
+    }
+
+    // Build navigation URL with query parameters
+    const params = new URLSearchParams({
+      launchUrl: contextLaunchEndpoint.address,
+      ...(workflowTaskId && { workflow: workflowTaskId }),
+      ...(contextLaunchBSN && { patient: contextLaunchBSN })
+    });
+
+    const navigationUrl = `/patients/${patientId}/context-launch?${params.toString()}`;
+    console.log('Navigating to context launch page:', navigationUrl);
+
+    // Navigate to context launch page
+    navigate(navigationUrl);
+  };
+
   const handleConfirmBgZVerwijzing = async (userName, bsn, createWorkflowTaskFlag) => {
     console.log('Creating BgZ Verwijzing Task...');
     console.log('Create workflow task selected:', !!createWorkflowTaskFlag);
@@ -613,7 +761,7 @@ function PatientPage() {
     let createdWorkflowTask
     if(createWorkflowTaskFlag) {
       createdWorkflowTask = await bgzVerweijzingApi.createBgZWorkflowTask(
-          patientId,
+          bsn,
           patientName,
           practitionerId,
           userName,
@@ -642,7 +790,7 @@ function PatientPage() {
     console.log('Sending notification to receiving party...');
 
     try {
-      await bgzVerweijzingApi.createBgZNotificatonTask(bsn, createdWorkflowTask, '', user, '', endpoint);
+      await bgzVerweijzingApi.createBgZNotificatonTask(bsn, createdWorkflowTask, '', user, selectedDepartment, endpoint.address, selectedOrganization);
       console.log('Notification sent successfully');
     } catch (notifyErr) {
       // Notification failed - delete task and fail
@@ -653,6 +801,8 @@ function PatientPage() {
       throw new Error(`Failed to notify receiving party: ${notifyErr.message}`);
     }
 
+    // Return the workflow task ID for context launch
+    return createdWorkflowTask;
   }
 
   const formatDate = (dateString) => {
@@ -780,40 +930,50 @@ function PatientPage() {
   const patientBirthDate = patientApi.formatBirthDate(patient);
   const patientAge = calculateAge(patientBirthDate);
 
+  // Helper function to check if array has actual data (excluding OperationOutcome resources)
+  const hasActualData = (arr) => {
+    if (!arr || !Array.isArray(arr) || arr.length === 0) return false;
+    // Filter out OperationOutcome resources - they're just metadata, not actual patient data
+    const actualResources = arr.filter(item => item?.resourceType !== 'OperationOutcome');
+    return actualResources.length > 0;
+  };
+
   // Check if BGZ data exists (any section has data)
   // NOTE: Patient presence alone doesn't count as having BGZ data
-  const hasBgzData = bgzSummary && !bgzSummaryLoading && (
-    (bgzSummary.paymentDetails && bgzSummary.paymentDetails.length > 0) ||
-    (bgzSummary.treatmentDirectives && bgzSummary.treatmentDirectives.length > 0) ||
-    (bgzSummary.advanceDirectives && bgzSummary.advanceDirectives.length > 0) ||
-    (bgzSummary.functionalStatus && bgzSummary.functionalStatus.length > 0) ||
-    (bgzSummary.problems && bgzSummary.problems.length > 0) ||
-    (bgzSummary.socialHistory && (
-      bgzSummary.socialHistory.livingSituation?.length > 0 ||
-      bgzSummary.socialHistory.drugUse?.length > 0 ||
-      bgzSummary.socialHistory.alcoholUse?.length > 0 ||
-      bgzSummary.socialHistory.tobaccoUse?.length > 0 ||
-      bgzSummary.socialHistory.nutritionAdvice?.length > 0
-    )) ||
-    (bgzSummary.alerts && bgzSummary.alerts.length > 0) ||
-    (bgzSummary.allergies && bgzSummary.allergies.length > 0) ||
-    (bgzSummary.medication && (
-      bgzSummary.medication.medicationUse?.length > 0 ||
-      bgzSummary.medication.medicationAgreement?.length > 0 ||
-      bgzSummary.medication.administrationAgreement?.length > 0
-    )) ||
-    (bgzSummary.medicalAids && bgzSummary.medicalAids.length > 0) ||
-    (bgzSummary.vaccinations && bgzSummary.vaccinations.length > 0) ||
-    (bgzSummary.vitalSigns && (
-      bgzSummary.vitalSigns.bloodPressure?.length > 0 ||
-      bgzSummary.vitalSigns.bodyWeight?.length > 0 ||
-      bgzSummary.vitalSigns.bodyHeight?.length > 0
-    )) ||
-    (bgzSummary.results && bgzSummary.results.length > 0) ||
-    (bgzSummary.procedures && bgzSummary.procedures.length > 0) ||
-    (bgzSummary.encounters && bgzSummary.encounters.length > 0) ||
-    (bgzSummary.plannedCare && bgzSummary.plannedCare.length > 0)
-  );
+  const bgzDataChecks = bgzSummary && !bgzSummaryLoading ? {
+    paymentDetails: hasActualData(bgzSummary.paymentDetails),
+    treatmentDirectives: hasActualData(bgzSummary.treatmentDirectives),
+    advanceDirectives: hasActualData(bgzSummary.advanceDirectives),
+    functionalStatus: hasActualData(bgzSummary.functionalStatus),
+    problems: hasActualData(bgzSummary.problems),
+    socialHistory: bgzSummary.socialHistory && (
+      hasActualData(bgzSummary.socialHistory.livingSituation) ||
+      hasActualData(bgzSummary.socialHistory.drugUse) ||
+      hasActualData(bgzSummary.socialHistory.alcoholUse) ||
+      hasActualData(bgzSummary.socialHistory.tobaccoUse) ||
+      hasActualData(bgzSummary.socialHistory.nutritionAdvice)
+    ),
+    alerts: hasActualData(bgzSummary.alerts),
+    allergies: hasActualData(bgzSummary.allergies),
+    medication: bgzSummary.medication && (
+      hasActualData(bgzSummary.medication.medicationUse) ||
+      hasActualData(bgzSummary.medication.medicationAgreement) ||
+      hasActualData(bgzSummary.medication.administrationAgreement)
+    ),
+    medicalAids: hasActualData(bgzSummary.medicalAids),
+    vaccinations: hasActualData(bgzSummary.vaccinations),
+    vitalSigns: bgzSummary.vitalSigns && (
+      hasActualData(bgzSummary.vitalSigns.bloodPressure) ||
+      hasActualData(bgzSummary.vitalSigns.bodyWeight) ||
+      hasActualData(bgzSummary.vitalSigns.bodyHeight)
+    ),
+    results: hasActualData(bgzSummary.results),
+    procedures: hasActualData(bgzSummary.procedures),
+    encounters: hasActualData(bgzSummary.encounters),
+    plannedCare: hasActualData(bgzSummary.plannedCare)
+  } : {};
+
+  const hasBgzData = Object.values(bgzDataChecks).some(check => check === true);
 
   // Debug logging
   console.log('BGZ Summary State:', {
@@ -821,8 +981,19 @@ function PatientPage() {
     isLoading: bgzSummaryLoading,
     hasError: !!bgzSummaryError,
     hasBgzData: hasBgzData,
-    shouldShowGenerateButton: !hasBgzData && !bgzSummaryLoading
+    shouldShowGenerateButton: !hasBgzData && !bgzSummaryLoading,
+    bgzDataChecks: bgzDataChecks
   });
+
+  // Log sections that have data
+  if (bgzSummary && !bgzSummaryLoading) {
+    if (bgzSummary.paymentDetails?.length > 0) {
+      console.log('paymentDetails data:', bgzSummary.paymentDetails);
+    }
+    if (bgzSummary.medicalAids?.length > 0) {
+      console.log('medicalAids data:', bgzSummary.medicalAids);
+    }
+  }
 
   return (
     <div className="app-container">
@@ -2313,9 +2484,27 @@ function PatientPage() {
                       <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#d4edda', border: '1px solid #c3e6cb', borderRadius: '8px', color: '#155724' }}>
                         <strong>Success!</strong>
                         {isBgzReferral ? (
-                            " BgZ Referral flow has been finalized successfully. Closing..."
+                            contextLaunchEndpoint ? (
+                                " BgZ Referral flow has been finalized successfully."
+                            ) : (
+                                " BgZ Referral flow has been finalized successfully. Closing..."
+                            )
                         ) : (
                             " eOvedracht flow has been finalized successfully. Closing..."
+                        )}
+
+                        {/* Context launch button */}
+                        {isBgzReferral && contextLaunchEndpoint && (
+                          <div style={{ marginTop: '15px' }}>
+                            <button
+                              type="button"
+                              className="button"
+                              onClick={() => handleContextLaunch()}
+                              style={{ width: '100%' }}
+                            >
+                              🚀 Context Launch Receiving Application
+                            </button>
+                          </div>
                         )}
                       </div>
                     )}
@@ -2350,10 +2539,10 @@ function PatientPage() {
                         type="button"
                         className="button"
                         onClick={() => handleConfirmTask(isBgzReferral)}
-                        disabled={taskCreating}
+                        disabled={taskCreating || (taskSuccess && contextLaunchEndpoint)}
                         style={{
-                          backgroundColor: taskCreating ? '#6c757d' : '#28a745',
-                          borderColor: taskCreating ? '#6c757d' : '#28a745'
+                          backgroundColor: (taskCreating || (taskSuccess && contextLaunchEndpoint)) ? '#6c757d' : '#28a745',
+                          borderColor: (taskCreating || (taskSuccess && contextLaunchEndpoint)) ? '#6c757d' : '#28a745'
                         }}
                       >
                         {taskCreating ? 'Creating Task...' : 'Confirm & Create'}
