@@ -1511,11 +1511,11 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 						},
 						Identifier: []fhir.Identifier{
 							{
-								System: to.Ptr("http://keycloak.vitaly.parsek.com"),
+								System: to.Ptr("http://some.uri"),
 								Value:  to.Ptr("silver-river-memorial-hospital"),
 							},
 							{
-								System: to.Ptr("http://clinical.vitaly.parsek.com"),
+								System: to.Ptr("http://some.uri"),
 								Value:  to.Ptr("5139f7b9-bb82-45ea-b979-285a906d4e54"),
 							},
 						},
@@ -1531,11 +1531,11 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 						},
 						Identifier: []fhir.Identifier{
 							{
-								System: to.Ptr("http://keycloak.vitaly.parsek.com"),
+								System: to.Ptr("http://some.uri"),
 								Value:  to.Ptr("Goldriver-Hopsital"),
 							},
 							{
-								System: to.Ptr("http://clinical.vitaly.parsek.com"),
+								System: to.Ptr("http://some.uri"),
 								Value:  to.Ptr("e47e4672-affd-44c9-a4b2-4355efd1ac31"),
 							},
 						},
@@ -1551,7 +1551,7 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 						},
 						Identifier: []fhir.Identifier{
 							{
-								System: to.Ptr("http://keycloak.vitaly.parsek.com"),
+								System: to.Ptr("http://some.uri"),
 								Value:  to.Ptr("vallee-des-fleurs-clinique"),
 							},
 							{
@@ -1559,7 +1559,7 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 								Value:  to.Ptr("01234567"),
 							},
 							{
-								System: to.Ptr("http://clinical.vitaly.parsek.com"),
+								System: to.Ptr("http://some.uri"),
 								Value:  to.Ptr("8d194c7c-91d4-4947-9e93-540d49e28877"),
 							},
 						},
@@ -1579,7 +1579,7 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 						},
 						Identifier: []fhir.Identifier{
 							{
-								System: to.Ptr("http://clinical.vitaly.parsek.com"),
+								System: to.Ptr("http://some.uri"),
 								Value:  to.Ptr("65e98500-c3e1-416f-a7cd-24bd7105c5dc"),
 							},
 						},
@@ -1604,7 +1604,7 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 						},
 						Identifier: []fhir.Identifier{
 							{
-								System: to.Ptr("http://clinical.vitaly.parsek.com"),
+								System: to.Ptr("http://some.uri"),
 								Value:  to.Ptr("1326c27b-9c6f-4606-bd4b-f184b16cde99"),
 							},
 						},
@@ -1629,7 +1629,7 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 						},
 						Identifier: []fhir.Identifier{
 							{
-								System: to.Ptr("http://clinical.vitaly.parsek.com"),
+								System: to.Ptr("http://some.uri"),
 								Value:  to.Ptr("e82b5ff7-ccda-4d8a-9a2b-8f6a34ec0aa6"),
 							},
 						},
@@ -1654,7 +1654,7 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 						},
 						Identifier: []fhir.Identifier{
 							{
-								System: to.Ptr("http://clinical.vitaly.parsek.com"),
+								System: to.Ptr("http://some.uri"),
 								Value:  to.Ptr("21f4ea25-7982-4f5b-a629-62f68e5a1b81"),
 							},
 						},
@@ -1679,7 +1679,7 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 						},
 						Identifier: []fhir.Identifier{
 							{
-								System: to.Ptr("http://clinical.vitaly.parsek.com"),
+								System: to.Ptr("http://some.uri"),
 								Value:  to.Ptr("6da8ec8a-3aa1-4dfc-a474-ab6de3f46576"),
 							},
 						},
@@ -1704,7 +1704,7 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 						},
 						Identifier: []fhir.Identifier{
 							{
-								System: to.Ptr("http://clinical.vitaly.parsek.com"),
+								System: to.Ptr("http://some.uri"),
 								Value:  to.Ptr("5ff0484d-3342-413f-bddb-e40d2d66f542"),
 							},
 						},
