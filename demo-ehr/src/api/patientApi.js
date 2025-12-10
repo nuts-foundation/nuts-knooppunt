@@ -33,6 +33,41 @@ export const patientApi = {
     },
 
     /**
+     * Search for patients by BSN
+     * @param {string} bsn - BSN to search for
+     * @returns {Promise<Array>} Array of matching patient objects
+     */
+    async searchByBSN(bsn) {
+        if (!bsn || bsn.trim() === '') {
+            return [];
+        }
+
+        try {
+            const searchUrl = `${config.fhirBaseURL}/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|${encodeURIComponent(bsn.trim())}`;
+            const response = await fetch(searchUrl, {
+                method: 'GET',
+                headers,
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to search patients by BSN: ${response.statusText}`);
+            }
+
+            const bundle = await response.json();
+
+            if (bundle.resourceType !== 'Bundle') {
+                throw new Error('Invalid response: expected a Bundle');
+            }
+
+            // Extract patient resources from the bundle
+            return (bundle.entry || []).map(entry => entry.resource).filter(r => r.resourceType === 'Patient');
+        } catch (error) {
+            console.error('Error searching patients by BSN:', error);
+            throw error;
+        }
+    },
+
+    /**
      * Extract BSN (Dutch citizen service number) from patient identifiers
      * @param {Object} patient - FHIR Patient resource
      * @returns {string|null} BSN or null if not found
@@ -182,5 +217,73 @@ export const patientApi = {
             throw new Error(`Delete patient failed: ${response.status} ${response.statusText} - ${text}`);
         }
         return true;
+    },
+
+    /**
+     * Search for patients by BSN on STU3 endpoint
+     * @param {string} bsn - BSN to search for
+     * @returns {Promise<Array>} Array of matching patient objects
+     */
+    async searchByBSNOnStu3(bsn) {
+        if (!bsn || bsn.trim() === '') {
+            return [];
+        }
+
+        try {
+            const searchUrl = `${config.fhirStu3BaseURL}/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|${encodeURIComponent(bsn.trim())}`;
+            const response = await fetch(searchUrl, {
+                method: 'GET',
+                headers,
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to search patients by BSN on STU3: ${response.statusText}`);
+            }
+
+            const bundle = await response.json();
+
+            if (bundle.resourceType !== 'Bundle') {
+                throw new Error('Invalid response: expected a Bundle');
+            }
+
+            // Extract patient resources from the bundle
+            return (bundle.entry || []).map(entry => entry.resource).filter(r => r.resourceType === 'Patient');
+        } catch (error) {
+            console.error('Error searching patients by BSN on STU3:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Create a new Patient resource on STU3 endpoint
+     */
+    async createOnStu3({bsn, given, family, prefix = [], birthDate, gender}) {
+        const resource = {
+            resourceType: 'Patient',
+            identifier: bsn ? [{system: 'http://fhir.nl/fhir/NamingSystem/bsn', value: bsn}] : [],
+            name: [
+                {
+                    use: 'official',
+                    family,
+                    given,
+                    ...(prefix.length ? {prefix} : {}),
+                },
+            ],
+            gender,
+            birthDate,
+        };
+        const response = await fetch(`${config.fhirStu3BaseURL}/Patient`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/fhir+json',
+                'Accept': 'application/fhir+json',
+            },
+            body: JSON.stringify(resource),
+        });
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`Create patient on STU3 failed: ${response.status} ${response.statusText} - ${text}`);
+        }
+        return await response.json();
     },
 };
