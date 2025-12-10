@@ -221,12 +221,19 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	name := r.PostForm.Get("name")
 	org.Name = &name
 	uraString := r.PostForm.Get("identifier")
-	if uraString == "" {
-		badRequest(w, r, "missing URA identifier")
+	partOf := r.PostForm.Get("part-of")
+
+	// Validate: organization must have either URA identifier or partOf reference
+	if uraString == "" && partOf == "" {
+		badRequest(w, r, "organization must have either a URA identifier or a parent organization (part-of)")
 		return
 	}
-	org.Identifier = []fhir.Identifier{
-		uraIdentifier(uraString),
+
+	// Set identifier if provided
+	if uraString != "" {
+		org.Identifier = []fhir.Identifier{
+			uraIdentifier(uraString),
+		}
 	}
 
 	codables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.OrganizationTypeCodings, "type")
@@ -239,7 +246,6 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	active := r.PostForm.Get("active") == "true"
 	org.Active = &active
 
-	partOf := r.PostForm.Get("part-of")
 	if len(partOf) > 0 {
 		reference := "Organization/" + partOf
 		org.PartOf = &fhir.Reference{
