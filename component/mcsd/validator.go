@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -82,10 +83,12 @@ func validateOrganizationResource(resource *fhir.Organization) error {
 
 	uraIdentifiers := fhirutil.FilterIdentifiersBySystem(resource.Identifier, coding.URANamingSystem)
 	if len(uraIdentifiers) > 1 {
+		slog.Warn("Organization has multiple URA identifiers", slog.String("system", coding.URANamingSystem), slog.Int("count", len(uraIdentifiers)))
 		return fmt.Errorf("organization can't have multiple identifiers with system %s", coding.URANamingSystem)
 	}
 
 	if len(uraIdentifiers) == 0 && resource.PartOf == nil {
+		slog.Warn("Organization missing URA identifier and partOf reference", slog.String("system", coding.URANamingSystem))
 		return fmt.Errorf("organization must have an identifier with system %s or refer to another organization through 'partOf'", coding.URANamingSystem)
 	}
 
@@ -94,6 +97,7 @@ func validateOrganizationResource(resource *fhir.Organization) error {
 
 func validateHealthcareServiceResource(ctx context.Context, resource *fhir.HealthcareService, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
 	if resource.ProvidedBy == nil {
+		slog.WarnContext(ctx, "Healthcare service missing providedBy reference")
 		return fmt.Errorf("healthcare service must have a 'providedBy' referencing an Organization")
 	}
 
@@ -102,6 +106,7 @@ func validateHealthcareServiceResource(ctx context.Context, resource *fhir.Healt
 
 func validatePractitionerRoleResource(ctx context.Context, resource *fhir.PractitionerRole, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
 	if resource.Organization == nil {
+		slog.WarnContext(ctx, "Practitioner role missing organization reference")
 		return fmt.Errorf("practitioner role must have an organization reference")
 	}
 
@@ -119,6 +124,7 @@ func validateEndpointResource(ctx context.Context, resource *fhir.Endpoint, pare
 
 func validateLocationResource(ctx context.Context, resource *fhir.Location, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
 	if resource.ManagingOrganization == nil {
+		slog.WarnContext(ctx, "Location missing managingOrganization reference")
 		return fmt.Errorf("location must have a 'managingOrganization' referencing an Organization")
 	}
 
@@ -149,6 +155,7 @@ func assertOrganizationHasEndpointReference(endpointID *string, parentOrganizati
 	}
 
 	// No organization has this endpoint
+	slog.Warn("Endpoint not referenced by any organization", slog.String("endpointID", *endpointID))
 	return fmt.Errorf("endpoint must be referenced in at least one organization's endpoint field (endpoint ID: %s)", *endpointID)
 }
 
@@ -203,6 +210,7 @@ func assertReferencePointsToValidOrganization(ref *fhir.Reference, parentOrganiz
 
 	}
 
+	slog.Warn("Reference does not point to a valid organization", slog.String("field", fieldName), slog.String("referenceID", refID))
 	return fmt.Errorf("%s must reference a valid organization (got %s)", fieldName, refID)
 }
 
