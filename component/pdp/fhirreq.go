@@ -26,14 +26,17 @@ var definitions = []Definition{
 }
 
 type Tokens struct {
-	Definition   Definition
-	ResourceType fhir.ResourceType
-	ResourceId   string
-	Operation    string
+	Definition      Definition
+	InteractionType fhir.TypeRestfulInteraction
+	ResourceType    fhir.ResourceType
+	ResourceId      string
+	Operation       string
 }
 
 func parseDefinition(def Definition, req HTTPRequest) (Tokens, bool) {
 	var out Tokens
+
+	// Preprocesses the path for easier manipulation
 	strPath := req.Path
 	if strings.HasPrefix(strPath, "/") {
 		strPath = strPath[1:]
@@ -63,7 +66,7 @@ func parseDefinition(def Definition, req HTTPRequest) (Tokens, bool) {
 
 		isLiteral := !isToken
 		if isLiteral {
-			if path[idx] == part {
+			if path[idx] != part {
 				return Tokens{}, false
 			}
 			continue
@@ -71,6 +74,7 @@ func parseDefinition(def Definition, req HTTPRequest) (Tokens, bool) {
 	}
 
 	out.Definition = def
+	out.InteractionType = def.Interaction
 	return out, true
 }
 
