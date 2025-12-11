@@ -23,6 +23,16 @@ var definitions = []Definition{
 		PathDef:     []string{"_history"},
 		Verb:        "GET",
 	},
+	{
+		Interaction: fhir.TypeRestfulInteractionSearchType,
+		PathDef:     []string{"[type]?"},
+		Verb:        "GET",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionSearchType,
+		PathDef:     []string{"[type]", "_search?"},
+		Verb:        "POST",
+	},
 }
 
 type Tokens struct {
@@ -35,6 +45,10 @@ type Tokens struct {
 
 func parseDefinition(def Definition, req HTTPRequest) (Tokens, bool) {
 	var out Tokens
+
+	if def.Verb != req.Method {
+		return Tokens{}, false
+	}
 
 	// Preprocesses the path for easier manipulation
 	strPath := req.Path
@@ -54,6 +68,16 @@ func parseDefinition(def Definition, req HTTPRequest) (Tokens, bool) {
 		case "[type]":
 			var t fhir.ResourceType
 			err := t.UnmarshalJSON([]byte(path[idx]))
+			if err != nil {
+				return Tokens{}, false
+			}
+			out.ResourceType = t
+			continue
+		case "[type]?":
+			str := strings.TrimSuffix(path[idx], "?")
+
+			var t fhir.ResourceType
+			err := t.UnmarshalJSON([]byte(str))
 			if err != nil {
 				return Tokens{}, false
 			}
