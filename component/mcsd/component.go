@@ -562,16 +562,6 @@ func extractResourceIDFromURL(entry fhir.BundleEntry) string {
 	return ""
 }
 
-// buildOrganizationKey creates a composite key from organization ID and VersionId for deduplication.
-// The key includes both the ID and VersionId (if available) to differentiate between versions.
-func buildOrganizationKey(org *fhir.Organization) string {
-	key := *org.Id
-	if org.Meta != nil && org.Meta.VersionId != nil {
-		key = key + ":" + *org.Meta.VersionId
-	}
-	return key
-}
-
 func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseURLRaw string, remoteAdminDirectoryFHIRClient fhirclient.Client, authoritativeUra string) (parentOrganizationMap, error) {
 	slog.DebugContext(ctx, "Querying organizations for authoritative check (parent organization map build)", logging.FHIRServer(fhirBaseURLRaw))
 	orgEntries, _, err := c.query(ctx, remoteAdminDirectoryFHIRClient, "Organization", url.Values{
@@ -613,7 +603,7 @@ func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseUR
 func createOrganizationTree(entries []fhir.BundleEntry) (parentOrganizationMap, error) {
 	result := make(parentOrganizationMap)
 
-	// Build a map of all organizations for efficient lookup using ID and VersionId as composite key
+	// Build a map of all organizations for efficient lookup using ID as key
 	orgMap := make(map[string]*fhir.Organization)
 	for _, entry := range entries {
 		if entry.Resource == nil {
@@ -624,8 +614,7 @@ func createOrganizationTree(entries []fhir.BundleEntry) (parentOrganizationMap, 
 			continue
 		}
 		if org.Id != nil {
-			key := buildOrganizationKey(&org)
-			orgMap[key] = &org
+			orgMap[*org.Id] = &org
 		}
 	}
 

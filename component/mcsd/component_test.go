@@ -1466,6 +1466,269 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 			expectedLinkedOrgIDs: []string{"org2", "org3"},
 			description:          "should work even when parent is not first in entries",
 		},
+		{
+			name: "handles organizations with VersionId in Meta",
+			entries: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org1"),
+						Meta: &fhir.Meta{
+							VersionId: to.Ptr("2"),
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("12345"),
+							},
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org2"),
+						Meta: &fhir.Meta{
+							VersionId: to.Ptr("1"),
+						},
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/org1"),
+						},
+					}),
+				},
+			},
+			expectedParentID:     to.Ptr("org1"),
+			expectedLinkedOrgIDs: []string{"org2"},
+			description:          "should handle organizations with VersionId in Meta",
+		},
+		{
+			name: "handles real-world Vitaly FHIR bundle with multiple departments",
+			entries: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("5139f7b9-bb82-45ea-b979-285a906d4e54"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("1"),
+							LastUpdated: to.Ptr("2019-06-09T10:42:57.140+02:00"),
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("silver-river-memorial-hospital"),
+							},
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("5139f7b9-bb82-45ea-b979-285a906d4e54"),
+							},
+						},
+						Name: to.Ptr("Silver river memorial hospital"),
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("e47e4672-affd-44c9-a4b2-4355efd1ac31"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("1"),
+							LastUpdated: to.Ptr("2025-12-09T14:18:38.250+01:00"),
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("Goldriver-Hopsital"),
+							},
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("e47e4672-affd-44c9-a4b2-4355efd1ac31"),
+							},
+						},
+						Name: to.Ptr("Goldriver Hopsital"),
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("8d194c7c-91d4-4947-9e93-540d49e28877"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("6"),
+							LastUpdated: to.Ptr("2025-12-10T12:41:33.137+01:00"),
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("vallee-des-fleurs-clinique"),
+							},
+							{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("01234567"),
+							},
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("8d194c7c-91d4-4947-9e93-540d49e28877"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique"),
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("65e98500-c3e1-416f-a7cd-24bd7105c5dc"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("2"),
+							LastUpdated: to.Ptr("2025-12-10T11:06:27.336+01:00"),
+							Profile: []string{
+								"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization",
+							},
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("65e98500-c3e1-416f-a7cd-24bd7105c5dc"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique - Gyn. Oncology Department"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/8d194c7c-91d4-4947-9e93-540d49e28877"),
+							Type:      to.Ptr("Organization"),
+							Display:   to.Ptr("Vallee des fleurs clinique"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("1326c27b-9c6f-4606-bd4b-f184b16cde99"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("2"),
+							LastUpdated: to.Ptr("2025-12-10T20:10:42.165+01:00"),
+							Profile: []string{
+								"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization",
+							},
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("1326c27b-9c6f-4606-bd4b-f184b16cde99"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique - HPB Oncology Department"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/8d194c7c-91d4-4947-9e93-540d49e28877"),
+							Type:      to.Ptr("Organization"),
+							Display:   to.Ptr("Vallee des fleurs clinique"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("e82b5ff7-ccda-4d8a-9a2b-8f6a34ec0aa6"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("2"),
+							LastUpdated: to.Ptr("2025-12-10T20:12:45.030+01:00"),
+							Profile: []string{
+								"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization",
+							},
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("e82b5ff7-ccda-4d8a-9a2b-8f6a34ec0aa6"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique - Maternal obstetrics Department"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/8d194c7c-91d4-4947-9e93-540d49e28877"),
+							Type:      to.Ptr("Organization"),
+							Display:   to.Ptr("Vallee des fleurs clinique"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("21f4ea25-7982-4f5b-a629-62f68e5a1b81"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("2"),
+							LastUpdated: to.Ptr("2025-12-10T20:12:08.333+01:00"),
+							Profile: []string{
+								"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization",
+							},
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("21f4ea25-7982-4f5b-a629-62f68e5a1b81"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique - Infectious endocarditis Cardiology Department"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/8d194c7c-91d4-4947-9e93-540d49e28877"),
+							Type:      to.Ptr("Organization"),
+							Display:   to.Ptr("Vallee des fleurs clinique"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("6da8ec8a-3aa1-4dfc-a474-ab6de3f46576"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("2"),
+							LastUpdated: to.Ptr("2025-12-10T20:11:26.385+01:00"),
+							Profile: []string{
+								"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization",
+							},
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("6da8ec8a-3aa1-4dfc-a474-ab6de3f46576"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique - CRC Oncology Department"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/8d194c7c-91d4-4947-9e93-540d49e28877"),
+							Type:      to.Ptr("Organization"),
+							Display:   to.Ptr("Vallee des fleurs clinique"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("5ff0484d-3342-413f-bddb-e40d2d66f542"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("2"),
+							LastUpdated: to.Ptr("2025-12-10T20:13:36.241+01:00"),
+							Profile: []string{
+								"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization",
+							},
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("5ff0484d-3342-413f-bddb-e40d2d66f542"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique - Pulmonary Oncology Department"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/8d194c7c-91d4-4947-9e93-540d49e28877"),
+							Type:      to.Ptr("Organization"),
+							Display:   to.Ptr("Vallee des fleurs clinique"),
+						},
+					}),
+				},
+			},
+			expectedParentID: to.Ptr("8d194c7c-91d4-4947-9e93-540d49e28877"),
+			expectedLinkedOrgIDs: []string{
+				"65e98500-c3e1-416f-a7cd-24bd7105c5dc", // Gyn. Oncology Department
+				"1326c27b-9c6f-4606-bd4b-f184b16cde99", // HPB Oncology Department
+				"e82b5ff7-ccda-4d8a-9a2b-8f6a34ec0aa6", // Maternal obstetrics Department
+				"21f4ea25-7982-4f5b-a629-62f68e5a1b81", // Infectious endocarditis Cardiology Department
+				"6da8ec8a-3aa1-4dfc-a474-ab6de3f46576", // CRC Oncology Department
+				"5ff0484d-3342-413f-bddb-e40d2d66f542", // Pulmonary Oncology Department
+			},
+			description: "should handle real Vitaly bundle with parent org (URA) and 6 departments, excluding 2 unrelated orgs",
+		},
 	}
 
 	for _, tt := range tests {
