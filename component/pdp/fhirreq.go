@@ -34,7 +34,11 @@ type Tokens struct {
 
 func parseDefinition(def Definition, req HTTPRequest) (Tokens, bool) {
 	var out Tokens
-	path := strings.Split(req.Path, "/")
+	strPath := req.Path
+	if strings.HasPrefix(strPath, "/") {
+		strPath = strPath[1:]
+	}
+	path := strings.Split(strPath, "/")
 
 	// Early return if the path has a different length than this definition
 	if len(path) != len(def.PathDef) {
