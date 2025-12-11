@@ -46,6 +46,21 @@ export const organizationApi = {
         return (bundle.entry || []).map(e => e.resource).filter(r => r.resourceType === 'Organization');
     },
 
+    async getByURA(ura) {
+        // Query Organization by URA identifier
+        const url = `${config.mcsdQueryBaseURL}/Organization?identifier=http://fhir.nl/fhir/NamingSystem/ura|${ura}`;
+        const res = await fetch(url, {headers});
+        if (!res.ok) {
+            if (res.status === 404) {
+                return null;
+            }
+            throw new Error('Get organization by URA failed: ' + res.statusText);
+        }
+        const bundle = await res.json();
+        const orgs = (bundle.entry || []).map(e => e.resource).filter(r => r.resourceType === 'Organization');
+        return orgs.length > 0 ? orgs[0] : null;
+    },
+
     formatName(org) {
         return org.name || 'Unnamed Organization';
     },
