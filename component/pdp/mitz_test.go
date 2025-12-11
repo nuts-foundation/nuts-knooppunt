@@ -17,9 +17,9 @@ func TestComponent_map_input_xacml(t *testing.T) {
 			},
 		},
 		Context: PolicyContext{
-			PatientBSN:             "900186021",
-			DataHolderFacilityType: "Z3",
-			DataHolderUra:          "00000659",
+			PatientBSN:               "900186021",
+			DataHolderFacilityType:   "Z3",
+			DataHolderOrganizationId: "00000659",
 		},
 	}
 

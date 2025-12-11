@@ -46,7 +46,7 @@ func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
 	return xacml.AuthzRequest{
 		PatientBSN:             input.Context.PatientBSN,
 		HealthcareFacilityType: input.Context.DataHolderFacilityType,
-		AuthorInstitutionID:    input.Context.DataHolderUra,
+		AuthorInstitutionID:    input.Context.DataHolderOrganizationId,
 		// This code is always the same, it's the code for _de gesloten vraag_
 		EventCode:              "GGC002",
 		SubjectRole:            input.Subject.Properties.SubjectRole,
@@ -61,7 +61,7 @@ func validateMitzInput(input PolicyInput) bool {
 	requiredValues := []string{
 		input.Context.PatientBSN,
 		input.Context.DataHolderFacilityType,
-		input.Context.DataHolderUra,
+		input.Context.DataHolderOrganizationId,
 		input.Subject.Properties.SubjectRole,
 		input.Subject.Properties.SubjectId,
 		input.Subject.Properties.SubjectOrganizationId,

@@ -40,8 +40,8 @@ type HTTPRequest struct {
 }
 
 type PDPContext struct {
-	DataHolderUra          string `json:"data_holder_ura"`
-	DataHolderFacilityType string `json:"data_holder_facility_type"`
+	DataHolderOrganizationId string `json:"data_holder_organization_id"`
+	DataHolderFacilityType   string `json:"data_holder_facility_type"`
 }
 
 type PolicyInput struct {
@@ -57,8 +57,7 @@ type PolicyResource struct {
 }
 
 type PolicyResourceProperties struct {
-	ResourceId   *string            `json:"resource_id"`
-	ResourceType *fhir.ResourceType `json:"resource_type"`
+	ResourceId string `json:"resource_id"`
 }
 
 type PolicyAction struct {
@@ -75,10 +74,10 @@ type PolicyActionProperties struct {
 }
 
 type PolicyContext struct {
-	DataHolderUra          string `json:"data_holder_ura"`
-	DataHolderFacilityType string `json:"data_holder_facility_type"`
-	PatientBSN             string `json:"patient_bsn"`
-	PurposeOfUse           string `json:"purpose_of_use"`
+	DataHolderOrganizationId string `json:"data_holder_organization_id"`
+	DataHolderFacilityType   string `json:"data_holder_facility_type"`
+	PatientBSN               string `json:"patient_bsn"`
+	PurposeOfUse             string `json:"purpose_of_use"`
 }
 
 type PDPRequest struct {
