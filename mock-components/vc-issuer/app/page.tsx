@@ -1,6 +1,10 @@
+import { getIssuerHostname } from '@/lib/utils';
+
+export const dynamic = 'force-dynamic';
+
 export default function Home() {
   // Derive base URL from ISSUER_HOSTNAME (the single source of truth)
-  const hostname = process.env.ISSUER_HOSTNAME || 'localhost:3000';
+  const hostname = getIssuerHostname();
   const isLocalhost = hostname.startsWith('localhost');
   const protocol = isLocalhost ? 'http' : 'https';
   const baseUrl = `${protocol}://${hostname}`;
