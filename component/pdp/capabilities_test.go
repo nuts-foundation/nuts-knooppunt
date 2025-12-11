@@ -9,13 +9,13 @@ import (
 )
 
 func TestComponent_reject_interaction(t *testing.T) {
-	input := MainPolicyInput{
-		Scope:                     "mcsd_update",
-		InteractionType:           fhir.TypeRestfulInteractionUpdate,
-		ResourceId:                "118876",
-		ResourceType:              fhir.ResourceTypeOrganization,
-		RequestingOrganizationUra: "00000666",
-		DataHolderOrganizationUra: "00000659",
+	input = PolicyInput{
+		Scope:           "mcsd_update",
+		InteractionType: fhir.TypeRestfulInteractionUpdate,
+		ResourceId:      "118876",
+		ResourceType:    fhir.ResourceTypeOrganization,
+		RequestingUra:   "00000666",
+		DataHolderUra:   "00000659",
 	}
 
 	resp := evalCapabilityPolicy(context.Background(), input)
@@ -23,7 +23,7 @@ func TestComponent_reject_interaction(t *testing.T) {
 }
 
 func TestComponent_allow_interaction(t *testing.T) {
-	input := MainPolicyInput{
+	input := PolicyInput{
 		Scope:                     "mcsd_update",
 		InteractionType:           fhir.TypeRestfulInteractionHistoryType,
 		ResourceId:                "118876",
@@ -37,7 +37,7 @@ func TestComponent_allow_interaction(t *testing.T) {
 }
 
 func TestComponent_allow_search_param(t *testing.T) {
-	input := MainPolicyInput{
+	input := PolicyInput{
 		Scope:                     "mcsd_update",
 		InteractionType:           fhir.TypeRestfulInteractionSearchType,
 		SearchParams:              []string{"_since"},
@@ -52,7 +52,7 @@ func TestComponent_allow_search_param(t *testing.T) {
 }
 
 func TestComponent_reject_search_param(t *testing.T) {
-	input := MainPolicyInput{
+	input := PolicyInput{
 		Scope:                     "mcsd_update",
 		InteractionType:           fhir.TypeRestfulInteractionSearchType,
 		SearchParams:              []string{"_foo", "_since"},
@@ -67,7 +67,7 @@ func TestComponent_reject_search_param(t *testing.T) {
 }
 
 func TestComponent_reject_interaction_type(t *testing.T) {
-	input := MainPolicyInput{
+	input := PolicyInput{
 		Scope:                     "mcsd_update",
 		InteractionType:           fhir.TypeRestfulInteractionSearchSystem,
 		RequestingOrganizationUra: "00000666",
@@ -79,7 +79,7 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 }
 
 func TestComponent_allow_include(t *testing.T) {
-	input := MainPolicyInput{
+	input := PolicyInput{
 		Scope:                     "mcsd_query",
 		InteractionType:           fhir.TypeRestfulInteractionRead,
 		ResourceId:                "88716123",
@@ -94,7 +94,7 @@ func TestComponent_allow_include(t *testing.T) {
 }
 
 func TestComponent_reject_include(t *testing.T) {
-	input := MainPolicyInput{
+	input := PolicyInput{
 		Scope:                     "mcsd_query",
 		InteractionType:           fhir.TypeRestfulInteractionRead,
 		ResourceId:                "88716123",
@@ -109,7 +109,7 @@ func TestComponent_reject_include(t *testing.T) {
 }
 
 func TestComponent_reject_revinclude(t *testing.T) {
-	input := MainPolicyInput{
+	input := PolicyInput{
 		Scope:                     "mcsd_query",
 		InteractionType:           fhir.TypeRestfulInteractionRead,
 		ResourceId:                "88716123",
@@ -124,7 +124,7 @@ func TestComponent_reject_revinclude(t *testing.T) {
 }
 
 func TestComponent_allow_revinclude(t *testing.T) {
-	input := MainPolicyInput{
+	input := PolicyInput{
 		Scope:                     "mcsd_query",
 		InteractionType:           fhir.TypeRestfulInteractionRead,
 		ResourceId:                "88716123",

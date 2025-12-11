@@ -51,12 +51,14 @@ func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityState
 	}
 }
 
-func evalCapabilityPolicy(ctx context.Context, input MainPolicyInput) PolicyResult {
+func evalCapabilityPolicy(ctx context.Context, input PolicyInput) PolicyResult {
 	out := PolicyResult{
 		Allow: false,
 	}
 
-	statement, ok := capabilityForScope(ctx, input.Scope)
+	scope := input.Subject.Properties.ClientQualifications[0]
+
+	statement, ok := capabilityForScope(ctx, scope)
 	if !ok {
 		reason := ResultReason{
 			Code:        TypeResultCodeUnexpectedInput,
@@ -71,7 +73,7 @@ func evalCapabilityPolicy(ctx context.Context, input MainPolicyInput) PolicyResu
 
 func evalInteraction(
 	statement fhir.CapabilityStatement,
-	input MainPolicyInput,
+	input PolicyInput,
 ) PolicyResult {
 	policyResult := PolicyResult{
 		Allow: false,
@@ -89,7 +91,10 @@ func evalInteraction(
 		fhir.TypeRestfulInteractionCreate,
 		fhir.TypeRestfulInteractionSearchType,
 	}
-	if !slices.Contains(supported, input.InteractionType) {
+
+	props := input.Action.Properties
+
+	if !slices.Contains(supported, props.InteractionType) {
 		return Deny(
 			ResultReason{
 				Code:        TypeResultCodeNotImplemented,
@@ -100,7 +105,7 @@ func evalInteraction(
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
 	for _, rest := range statement.Rest {
 		for _, res := range rest.Resource {
-			if res.Type == input.ResourceType {
+			if res.Type == *input.Resource.Properties.ResourceType {
 				resourceDescriptions = append(resourceDescriptions, res)
 			}
 		}
@@ -109,7 +114,7 @@ func evalInteraction(
 	allowInteraction := false
 	for _, des := range resourceDescriptions {
 		for _, inter := range des.Interaction {
-			if inter.Code == input.InteractionType {
+			if inter.Code == props.InteractionType {
 				allowInteraction = true
 			}
 		}
@@ -125,7 +130,7 @@ func evalInteraction(
 
 	allowParams := false
 	rejectedSearchParams := make([]string, 0, 10)
-	if input.InteractionType == fhir.TypeRestfulInteractionSearchType {
+	if props.InteractionType == fhir.TypeRestfulInteractionSearchType {
 		allowedParams := make([]string, 0, 10)
 		for _, des := range resourceDescriptions {
 			for _, param := range des.SearchParam {
@@ -133,7 +138,7 @@ func evalInteraction(
 			}
 		}
 
-		for _, param := range input.SearchParams {
+		for _, param := range props.SearchParams {
 			if !slices.Contains(allowedParams, param) {
 				rejectedSearchParams = append(rejectedSearchParams, param)
 			}
@@ -155,7 +160,7 @@ func evalInteraction(
 	}
 
 	rejectedIncludes := make([]string, 0, len(allowedIncludes))
-	for _, inc := range input.Include {
+	for _, inc := range props.Include {
 		if !slices.Contains(allowedIncludes, inc) {
 			rejectedIncludes = append(rejectedIncludes, inc)
 		}
@@ -176,7 +181,7 @@ func evalInteraction(
 	}
 
 	rejectedRevincludes := make([]string, 0, len(allowedRevincludes))
-	for _, inc := range input.Revinclude {
+	for _, inc := range props.Revinclude {
 		if !slices.Contains(allowedRevincludes, inc) {
 			rejectedRevincludes = append(rejectedRevincludes, inc)
 		}

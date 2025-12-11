@@ -8,12 +8,25 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-type AuthData struct {
-	Scope                            string `json:"scope"`
-	RequestingUra                    string `json:"requesting_ura"`
-	RequestingFacilityType           string `json:"requesting_facility_type"`
-	RequestingPractitionerIdentifier string `json:"requesting_practitioner_identifier"`
-	RequestingUziRoleCode            string `json:"requesting_uzi_role_code"`
+type PDPInput struct {
+	Subject Subject     `json:"subject"`
+	Request HTTPRequest `json:"request"`
+	Context PDPContext  `json:"context"`
+}
+
+type Subject struct {
+	Type       string            `json:"type"`
+	Id         string            `json:"id"`
+	Properties SubjectProperties `json:"properties"`
+}
+
+type SubjectProperties struct {
+	ClientId              string   `json:"client_id"`
+	ClientQualifications  []string `json:"client_qualifications"`
+	SubjectId             string   `json:"subject_id"`
+	SubjectOrganizationId string   `json:"subject_organization_id"`
+	SubjectOrganization   string   `json:"subject_organization"`
+	SubjectRole           string   `json:"subject_role"`
 }
 
 type HTTPRequest struct {
@@ -25,37 +38,51 @@ type HTTPRequest struct {
 	Body        string              `json:"body"`
 }
 
-type PolicyContext struct {
+type PDPContext struct {
 	DataHolderUra          string `json:"data_holder_ura"`
 	DataHolderFacilityType string `json:"data_holder_facility_type"`
 }
 
-type PDPInput struct {
-	AuthData
-	HTTPRequest
-	PolicyContext
+type PolicyInput struct {
+	Subject  Subject        `json:"subject"`
+	Resource PolicyResource `json:"resource"`
+	Action   PolicyAction   `json:"action"`
+	Context  PolicyContext  `json:"context"`
 }
 
-type FHIRRequest struct {
+type PolicyResource struct {
+	Type       fhir.ResourceType        `json:"type"`
+	Properties PolicyResourceProperties `json:"properties"`
+}
+
+type PolicyResourceProperties struct {
+	ResourceId   *string            `json:"resource_id"`
+	ResourceType *fhir.ResourceType `json:"resource_type"`
+}
+
+type PolicyAction struct {
+	Name       string                 `json:"name"`
+	Properties PolicyActionProperties `json:"properties"`
+}
+
+type PolicyActionProperties struct {
 	InteractionType fhir.TypeRestfulInteraction `json:"interaction_type"`
-	ResourceType    fhir.ResourceType           `json:"resource_type"`
+	Operation       *string                     `json:"operation"`
 	SearchParams    []string                    `json:"search_params"`
-	ResourceId      string                      `json:"resource_id"`
 	Include         []string                    `json:"include"`
 	Revinclude      []string                    `json:"revinclude"`
 }
 
-type MainPolicyInput struct {
-	AuthData
-	FHIRRequest
-	PolicyContext
+type PolicyContext struct {
+	PDPContext
+	PatientBSN string
 }
 
-type MainPolicyRequest struct {
-	Input MainPolicyInput `json:"input"`
+type PDPRequest struct {
+	Input PDPInput `json:"input"`
 }
 
-type MainPolicyResponse struct {
+type PDPResponse struct {
 	Result PolicyResult `json:"result"`
 }
 

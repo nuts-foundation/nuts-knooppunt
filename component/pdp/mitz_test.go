@@ -8,7 +8,7 @@ import (
 )
 
 func TestComponent_map_input_xacml(t *testing.T) {
-	input := MainPolicyInput{
+	input := PolicyInput{
 		Method:                           "GET",
 		Path:                             []string{"fhir", "Patient", "118876"},
 		ResourceId:                       "118876",

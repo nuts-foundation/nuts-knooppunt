@@ -7,7 +7,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 )
 
-func EvalMitzPolicy(c Component, ctx context.Context, input MainPolicyInput) PolicyResult {
+func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) PolicyResult {
 	// TODO: make this return more detailed information for what fields are missing
 	ok := validateMitzInput(input)
 	if !ok {
@@ -42,42 +42,31 @@ func EvalMitzPolicy(c Component, ctx context.Context, input MainPolicyInput) Pol
 	return Allow()
 }
 
-func xacmlFromInput(input MainPolicyInput) xacml.AuthzRequest {
-	var purpose string
-	switch input.PurposeOfUse {
-	case "treatment":
-		purpose = "TREAT"
-	case "secondary":
-		purpose = "COC"
-	default:
-		purpose = "TREAT"
-	}
-
+func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
 	return xacml.AuthzRequest{
 		PatientBSN:             input.PatientBSN,
 		HealthcareFacilityType: input.DataHolderFacilityType,
-		AuthorInstitutionID:    input.DataHolderOrganizationUra,
+		AuthorInstitutionID:    input.DataHolderUra,
 		// This code is always the same, it's the code for _de gesloten vraag_
 		EventCode:              "GGC002",
 		SubjectRole:            input.RequestingUziRoleCode,
 		ProviderID:             input.RequestingPractitionerIdentifier,
-		ProviderInstitutionID:  input.RequestingOrganizationUra,
+		ProviderInstitutionID:  input.RequestingUra,
 		ConsultingFacilityType: input.RequestingFacilityType,
-		PurposeOfUse:           purpose,
+		PurposeOfUse:           "TREAT",
 	}
 }
 
-func validateMitzInput(input MainPolicyInput) bool {
+func validateMitzInput(input PolicyInput) bool {
 	requiredValues := []string{
 		input.Scope,
 		input.PatientBSN,
 		input.RequestingUziRoleCode,
 		input.RequestingPractitionerIdentifier,
-		input.RequestingOrganizationUra,
+		input.RequestingUra,
 		input.RequestingFacilityType,
-		input.DataHolderOrganizationUra,
+		input.DataHolderUra,
 		input.DataHolderFacilityType,
-		input.PurposeOfUse,
 	}
 	if slices.Contains(requiredValues, "") {
 		return false

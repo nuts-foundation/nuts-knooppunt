@@ -44,7 +44,7 @@ func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *h
 }
 
 func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
-	var reqBody MainPolicyRequest
+	var reqBody PDPRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	input := reqBody.Input
 	if err != nil {
@@ -52,9 +52,10 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	qualifications := input.Subject.Properties.ClientQualifications
+
 	// Step 1: Providing a scope is required for every PDP request
-	// FUTURE: We are considering allowing more than one scope
-	if input.Scope == "" {
+	if len(qualifications) == 0 {
 		res := PolicyResult{
 			Allow: false,
 			Reasons: []ResultReason{
@@ -68,17 +69,37 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 2: Check the request adheres to the capability statement for this scope
-	res := evalCapabilityPolicy(r.Context(), input)
+	if len(qualifications) > 1 {
+		res := PolicyResult{
+			Allow: false,
+			Reasons: []ResultReason{
+				{
+					Code:        TypeResultCodeNotImplemented,
+					Description: "providing multiple qualifications is not yet implemented",
+				},
+			},
+		}
+		writeResp(r.Context(), w, res)
+		return
+	}
+
+	scope := qualifications[0]
+
+	// Step 2: Parse the PDP input and translate to the policy input
+	// TODO!!
+	policyInput := PolicyInput{}
+
+	// Step 3: Check the request adheres to the capability statement for this scope
+	res := evalCapabilityPolicy(r.Context(), policyInput)
 	if !res.Allow {
 		writeResp(r.Context(), w, res)
 		return
 	}
 
-	// Step 3: Check if we are authorized to see the underlying data
+	// Step 4: Check if we are authorized to see the underlying data
 	// FUTURE: We want to use OPA policies here ...
 	// ... but for now we only have two example scopes hardcoded.
-	switch input.Scope {
+	switch scope {
 	case "mcsd_update":
 		// Dummy should be replaced with the actual OPA policy
 		writeResp(r.Context(), w, Allow())
@@ -87,22 +108,22 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		writeResp(r.Context(), w, Allow())
 	case "bgz_patient":
 		// Dummy should be replaced with the actual OPA policy
-		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), input))
+		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), policyInput))
 	case "bgz_professional":
 		// Dummy should be replaced with the actual OPA policy
-		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), input))
+		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), policyInput))
 	default:
 		writeResp(r.Context(), w, Deny(
 			ResultReason{
 				Code:        TypeResultCodeNotImplemented,
-				Description: fmt.Sprintf("scope %s not implemeted", input.Scope),
+				Description: fmt.Sprintf("scope %s not implemeted", policyInput),
 			},
 		))
 	}
 }
 
 func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) {
-	resp := MainPolicyResponse{
+	resp := PDPResponse{
 		Result: result,
 	}
 
