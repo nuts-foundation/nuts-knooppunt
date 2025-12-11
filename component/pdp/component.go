@@ -116,7 +116,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		writeResp(r.Context(), w, Deny(
 			ResultReason{
 				Code:        TypeResultCodeNotImplemented,
-				Description: fmt.Sprintf("scope %s not implemeted", policyInput),
+				Description: fmt.Sprintf("scope %s not implemeted", scope),
 			},
 		))
 	}

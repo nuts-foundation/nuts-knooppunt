@@ -44,29 +44,28 @@ func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) PolicyR
 
 func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
 	return xacml.AuthzRequest{
-		PatientBSN:             input.PatientBSN,
-		HealthcareFacilityType: input.DataHolderFacilityType,
-		AuthorInstitutionID:    input.DataHolderUra,
+		PatientBSN:             input.Context.PatientBSN,
+		HealthcareFacilityType: input.Context.DataHolderFacilityType,
+		AuthorInstitutionID:    input.Context.DataHolderUra,
 		// This code is always the same, it's the code for _de gesloten vraag_
 		EventCode:              "GGC002",
-		SubjectRole:            input.RequestingUziRoleCode,
-		ProviderID:             input.RequestingPractitionerIdentifier,
-		ProviderInstitutionID:  input.RequestingUra,
-		ConsultingFacilityType: input.RequestingFacilityType,
+		SubjectRole:            input.Subject.Properties.SubjectRole,
+		ProviderID:             input.Subject.Properties.SubjectId,
+		ProviderInstitutionID:  input.Subject.Properties.SubjectOrganizationId,
+		ConsultingFacilityType: input.Subject.Properties.SubjectFacilityType,
 		PurposeOfUse:           "TREAT",
 	}
 }
 
 func validateMitzInput(input PolicyInput) bool {
 	requiredValues := []string{
-		input.Scope,
-		input.PatientBSN,
-		input.RequestingUziRoleCode,
-		input.RequestingPractitionerIdentifier,
-		input.RequestingUra,
-		input.RequestingFacilityType,
-		input.DataHolderUra,
-		input.DataHolderFacilityType,
+		input.Context.PatientBSN,
+		input.Context.DataHolderFacilityType,
+		input.Context.DataHolderUra,
+		input.Subject.Properties.SubjectRole,
+		input.Subject.Properties.SubjectId,
+		input.Subject.Properties.SubjectOrganizationId,
+		input.Subject.Properties.SubjectFacilityType,
 	}
 	if slices.Contains(requiredValues, "") {
 		return false

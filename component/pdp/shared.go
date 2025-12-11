@@ -26,6 +26,7 @@ type SubjectProperties struct {
 	SubjectId             string   `json:"subject_id"`
 	SubjectOrganizationId string   `json:"subject_organization_id"`
 	SubjectOrganization   string   `json:"subject_organization"`
+	SubjectFacilityType   string   `json:"subject_facility_type"`
 	SubjectRole           string   `json:"subject_role"`
 }
 
@@ -74,8 +75,10 @@ type PolicyActionProperties struct {
 }
 
 type PolicyContext struct {
-	PDPContext
-	PatientBSN string
+	DataHolderUra          string `json:"data_holder_ura"`
+	DataHolderFacilityType string `json:"data_holder_facility_type"`
+	PatientBSN             string `json:"patient_bsn"`
+	PurposeOfUse           string `json:"purpose_of_use"`
 }
 
 type PDPRequest struct {
