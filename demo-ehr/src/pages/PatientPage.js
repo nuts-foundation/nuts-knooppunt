@@ -37,6 +37,7 @@ function PatientPage() {
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [healthcareServices, setHealthcareServices] = useState([]);
   const [groupedHealthcareServices, setGroupedHealthcareServices] = useState([]);
+  const [serviceFilterText, setServiceFilterText] = useState('');
   const [healthcareServicesLoading, setHealthcareServicesLoading] = useState(false);
   const [healthcareServicesError, setHealthcareServicesError] = useState(null);
   const [organizations, setOrganizations] = useState([]);
@@ -51,6 +52,9 @@ function PatientPage() {
   const [eOverdrachtTasks, setEOverdrachtTasks] = useState([]);
   const [eOverdrachtTasksLoading, setEOverdrachtTasksLoading] = useState(true);
   const [eOverdrachtTasksError, setEOverdrachtTasksError] = useState(null);
+  const [bgzWorkflowTasks, setBgzWorkflowTasks] = useState([]);
+  const [bgzWorkflowTasksLoading, setBgzWorkflowTasksLoading] = useState(true);
+  const [bgzWorkflowTasksError, setBgzWorkflowTasksError] = useState(null);
   const [taskOrganizations, setTaskOrganizations] = useState({});
   const [expandedTaskJson, setExpandedTaskJson] = useState(null);
   const [bgzGenerating, setBgzGenerating] = useState(false);
@@ -119,6 +123,13 @@ function PatientPage() {
 
       // Load eOvedracht tasks
       loadEOverdrachtTasks(patientId);
+
+      // Load BGZ workflow tasks
+      if (patientBSN) {
+        loadBgzWorkflowTasks(patientBSN);
+      } else {
+        setBgzWorkflowTasksLoading(false);
+      }
 
       // Load BGZ summary
       loadBGZSummary(patientId);
@@ -201,8 +212,41 @@ function PatientPage() {
     try {
       // Extract abonnee_nummer from the OIDC token (stored in 'sub' claim)
       const abonneeNummer = user?.profile?.sub;
-      const organizations = await nviApi.searchOrganizationsByPatient(bsn, abonneeNummer);
-      setCareNetworkOrganizations(organizations);
+      const nviOrgs = await nviApi.searchOrganizationsByPatient(bsn, abonneeNummer);
+
+      // Fetch full organization details from query directory for each URA
+      const enrichedOrgs = await Promise.all(
+        nviOrgs.map(async (nviOrg) => {
+          try {
+            const fullOrg = await organizationApi.getByURA(nviOrg.ura);
+            if (fullOrg) {
+              // Check for context-launch endpoint
+              let contextLaunchEndpoint = null;
+              try {
+                contextLaunchEndpoint = await organizationApi.getEndpoint(fullOrg.id, "context-launch");
+              } catch (err) {
+                console.warn(`Failed to fetch context-launch endpoint for org ${fullOrg.id}:`, err);
+              }
+
+              // Merge NVI data (document count and timestamp) with full organization details
+              return {
+                ...fullOrg,
+                documentCount: nviOrg.documentCount,
+                lastDocumentTimestamp: nviOrg.lastDocumentTimestamp,
+                ura: nviOrg.ura,
+                contextLaunchEndpoint
+              };
+            }
+            // Fallback to NVI data if organization not found in query directory
+            return nviOrg;
+          } catch (err) {
+            console.warn(`Failed to fetch organization details for URA ${nviOrg.ura}:`, err);
+            return nviOrg;
+          }
+        })
+      );
+
+      setCareNetworkOrganizations(enrichedOrgs);
     } catch (err) {
       setCareNetworkError(err.message);
     } finally {
@@ -270,6 +314,89 @@ function PatientPage() {
       setEOverdrachtTasksError(err.message);
     } finally {
       setEOverdrachtTasksLoading(false);
+    }
+  };
+
+  const loadBgzWorkflowTasks = async (patientBsn) => {
+    setBgzWorkflowTasksLoading(true);
+    setBgzWorkflowTasksError(null);
+    try {
+      const tasks = await bgzVerweijzingApi.getBgZWorkflowTasks(patientBsn);
+      setBgzWorkflowTasks(tasks);
+
+      // Load organization details for each task
+      const orgMap = { ...taskOrganizations };
+      for (const task of tasks) {
+        if (task.owner?.reference) {
+          try {
+            // Extract organization ID from reference (format: Organization/id or full URL)
+            const ref = task.owner.reference;
+            const orgId = ref.includes('/') ? ref.split('/').pop() : ref;
+
+            // Skip if we already have this organization
+            if (orgMap[orgId]) continue;
+
+            // Fetch organization details
+            let org = await organizationApi.getById(orgId);
+            if (org) {
+              // Traverse up the partOf hierarchy to find the root organization
+              let rootOrg = org;
+              const visited = new Set(); // Prevent infinite loops
+
+              while (rootOrg.partOf && rootOrg.partOf.reference) {
+                const parentRef = rootOrg.partOf.reference;
+                const parentId = parentRef.includes('/') ? parentRef.split('/').pop() : parentRef;
+
+                // Check for circular references
+                if (visited.has(parentId)) {
+                  console.warn('Circular partOf reference detected for organization:', parentId);
+                  break;
+                }
+                visited.add(parentId);
+
+                try {
+                  const parentOrg = await organizationApi.getById(parentId);
+                  if (parentOrg) {
+                    rootOrg = parentOrg;
+                  } else {
+                    break;
+                  }
+                } catch (err) {
+                  console.warn('Failed to load parent organization:', parentId, err);
+                  break;
+                }
+              }
+
+              // Store the root organization
+              orgMap[orgId] = rootOrg;
+            }
+          } catch (err) {
+            console.warn('Failed to load organization for BGZ task:', task.id, err);
+          }
+        }
+      }
+      setTaskOrganizations(orgMap);
+    } catch (err) {
+      setBgzWorkflowTasksError(err.message);
+    } finally {
+      setBgzWorkflowTasksLoading(false);
+    }
+  };
+
+  const handleDeleteBgzWorkflowTask = async (taskId) => {
+    // Optimistically remove the task from UI immediately
+    setBgzWorkflowTasks(prev => prev.filter(task => task.id !== taskId));
+
+    // Delete in background
+    try {
+      await taskShared.deleteTask(taskId);
+    } catch (err) {
+      console.error('Failed to delete BGZ workflow task:', err);
+      // Reload the list to restore the task if deletion failed
+      const patientBSN = patient ? patientApi.getByBSN(patient) : null;
+      if (patientBSN) {
+        loadBgzWorkflowTasks(patientBSN);
+      }
     }
   };
 
@@ -383,8 +510,32 @@ function PatientPage() {
 
   const handleOrganizationSelect = async (org) => {
     setSelectedOrganization(org);
-    setEOverdrachtStep('departments');
-    await loadDepartments(org.id);
+
+    // Load departments first
+    setDepartmentsLoading(true);
+    setDepartmentsError(null);
+    try {
+      const deps = await organizationApi.getSubOrganizations(org.id);
+      setDepartments(deps);
+
+      // If no departments, skip to confirmation and use organization as department
+      if (deps.length === 0) {
+        setSelectedDepartment(org);
+        setEOverdrachtStep('confirmation');
+        setTaskError(null);
+        setTaskSuccess(false);
+        setCreateWorkflowTask(true);
+      } else {
+        // Has departments, go to department selection
+        setEOverdrachtStep('departments');
+      }
+    } catch (err) {
+      setDepartmentsError(err.message);
+      // On error, still go to departments step to show error
+      setEOverdrachtStep('departments');
+    } finally {
+      setDepartmentsLoading(false);
+    }
   };
 
   const handleCloseModal = () => {
@@ -395,6 +546,7 @@ function PatientPage() {
       setSelectedServiceGroup(null);
       setSelectedOrganization(null);
       setSelectedDepartment(null);
+      setServiceFilterText('');
       setOrganizations([]);
       setOrganizationsError(null);
       setDepartments([]);
@@ -438,7 +590,13 @@ function PatientPage() {
   };
 
   const handleBackToDepartments = () => {
-    setEOverdrachtStep('departments');
+    // If no departments, go back to organizations instead
+    if (departments.length === 0) {
+      setEOverdrachtStep('organizations');
+      setSelectedOrganization(null);
+    } else {
+      setEOverdrachtStep('departments');
+    }
     setSelectedDepartment(null);
     setTaskError(null);
     setTaskSuccess(false);
@@ -681,6 +839,9 @@ function PatientPage() {
 
       // Reload tasks list
       loadEOverdrachtTasks(patientId);
+      if (currentPatientBSN) {
+        loadBgzWorkflowTasks(currentPatientBSN);
+      }
 
       // Only auto-close modal if no context-launch endpoint for BgZ Verwijzing
       if (!isBgzReferralParam || !hasContextLaunchEndpoint) {
@@ -698,6 +859,22 @@ function PatientPage() {
   };
 
   const handleConfirmEOverdracht = async (userName) => {
+    // Step 1: Check if organization supports eOverdracht server capabilities
+    console.log('Checking for eOverdracht server capabilities...');
+    const capabilityEndpoint = await organizationApi.getEndpoint(
+        selectedDepartment.id,
+        "http://nictiz.nl/fhir/CapabilityStatement/eOverdracht-servercapabilities"
+    );
+
+    if (!capabilityEndpoint) {
+      throw new Error(
+          'The selected organization does not support eOverdracht. ' +
+          'No endpoint with eOverdracht server capabilities found.'
+      );
+    }
+    console.log('Found eOverdracht capabilities endpoint:', capabilityEndpoint.address);
+
+    // Step 2: Create eOverdracht Task
     console.log('Creating eOverdracht Task...');
     const createdTask = await eOverdrachtApi.createEOverdrachtTask(
         patientId,
@@ -709,7 +886,7 @@ function PatientPage() {
     );
     console.log('Created Task:', createdTask);
 
-    // Step 2: Find endpoint and notify receiving party
+    // Step 3: Find endpoint and notify receiving party
     console.log('Finding endpoint for organization:', selectedDepartment.id);
     const endpoint = await organizationApi.getEndpoint(selectedDepartment.id, "eOverdracht-notification");
 
@@ -749,6 +926,27 @@ function PatientPage() {
 
     const navigationUrl = `/patients/${patientId}/context-launch?${params.toString()}`;
     console.log('Navigating to context launch page:', navigationUrl);
+
+    // Navigate to context launch page
+    navigate(navigationUrl);
+  };
+
+  const handleCareNetworkContextLaunch = (endpoint) => {
+    if (!endpoint || !endpoint.address) {
+      console.error('No context-launch endpoint available');
+      return;
+    }
+
+    const patientBSN = patient ? patientApi.getByBSN(patient) : null;
+
+    // Build navigation URL with only patient parameter (no workflow)
+    const params = new URLSearchParams({
+      launchUrl: endpoint.address,
+      ...(patientBSN && { patient: patientBSN })
+    });
+
+    const navigationUrl = `/patients/${patientId}/context-launch?${params.toString()}`;
+    console.log('Launching context from care network:', navigationUrl);
 
     // Navigate to context launch page
     navigate(navigationUrl);
@@ -1136,16 +1334,78 @@ function PatientPage() {
               ) : (
                 <div className="care-network-list">
                   {careNetworkOrganizations.map((org, idx) => (
-                    <div key={org.ura || idx} className="care-network-item">
-                      <div className="care-network-item-header">
-                        <span className="care-network-org-name">{org.name}</span>
-                        <span className="care-network-doc-count">
-                          {org.documentCount} document{org.documentCount !== 1 ? 's' : ''}
+                    <div key={org.ura || org.id || idx} className="care-network-item">
+                      <div className="care-network-item-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span className="care-network-org-name">
+                          {organizationApi.formatName(org)}
                         </span>
+                        {org.contextLaunchEndpoint && (
+                          <button
+                            onClick={() => handleCareNetworkContextLaunch(org.contextLaunchEndpoint)}
+                            style={{
+                              fontSize: '12px',
+                              padding: '4px 8px',
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              color: '#9ca3af',
+                              transition: 'color 0.2s',
+                              textDecoration: 'none'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.color = '#3b82f6';
+                              e.currentTarget.style.textDecoration = 'underline';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.color = '#9ca3af';
+                              e.currentTarget.style.textDecoration = 'none';
+                            }}
+                            title="This organization has endpoint with payload type context-launch available"
+                          >
+                            open in context
+                          </button>
+                        )}
                       </div>
-                      <div className="care-network-ura">
-                        <span className="care-network-ura-label">URA:</span>
-                        <span className="care-network-ura-value">{nviApi.formatURA(org.ura)}</span>
+
+                      {/* DocumentReference Info */}
+                      {(org.documentCount || org.lastDocumentTimestamp) && (
+                        <div style={{ marginTop: '8px', fontSize: '13px', color: '#666', fontStyle: 'italic' }}>
+                          {org.documentCount && (
+                            <span>
+                              {org.documentCount} document{org.documentCount !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                          {org.documentCount && org.lastDocumentTimestamp && <span> · </span>}
+                          {org.lastDocumentTimestamp && (
+                            <span>
+                              last: {new Date(org.lastDocumentTimestamp).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Organization Details */}
+                      <div style={{ marginTop: '10px', fontSize: '13px', color: '#666' }}>
+                        {org.ura && (
+                          <div style={{ marginBottom: '5px' }}>
+                            <strong>URA:</strong> {nviApi.formatURA(org.ura)}
+                          </div>
+                        )}
+                        {organizationApi.formatAddress(org) !== '-' && (
+                          <div style={{ marginBottom: '5px' }}>
+                            <strong>Address:</strong> {organizationApi.formatAddress(org)}
+                          </div>
+                        )}
+                        {organizationApi.formatType(org) !== '-' && (
+                          <div style={{ marginBottom: '5px' }}>
+                            <strong>Type:</strong> {organizationApi.formatType(org)}
+                          </div>
+                        )}
+                        {organizationApi.formatTelecomString(org) !== '-' && (
+                          <div style={{ marginBottom: '5px' }}>
+                            <strong>Contact:</strong> {organizationApi.formatTelecomString(org)}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1241,6 +1501,170 @@ function PatientPage() {
                               hour: '2-digit',
                               minute: '2-digit'
                             })}
+                          </div>
+                        )}
+
+                        {/* Task ID */}
+                        {task.id && (
+                          <div
+                            onClick={() => setExpandedTaskJson(expandedTaskJson === task.id ? null : task.id)}
+                            style={{
+                              fontSize: '12px',
+                              color: '#2563eb',
+                              marginTop: '5px',
+                              cursor: 'pointer',
+                              padding: '4px 8px',
+                              backgroundColor: '#f0f4ff',
+                              borderRadius: '4px',
+                              display: 'inline-block',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = '#dbeafe';
+                              e.currentTarget.style.textDecoration = 'underline';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = '#f0f4ff';
+                              e.currentTarget.style.textDecoration = 'none';
+                            }}
+                          >
+                            Task ID: {task.id} {expandedTaskJson === task.id ? '▼' : '▶'}
+                          </div>
+                        )}
+
+                        {/* Task JSON Display */}
+                        {expandedTaskJson === task.id && (
+                          <div style={{ marginTop: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px', padding: '10px' }}>
+                            <div style={{ fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', color: '#333' }}>
+                              Task JSON:
+                            </div>
+                            <pre style={{
+                              backgroundColor: '#2d2d2d',
+                              color: '#f8f8f2',
+                              padding: '12px',
+                              borderRadius: '4px',
+                              fontSize: '12px',
+                              overflow: 'auto',
+                              maxHeight: '400px',
+                              margin: 0,
+                              fontFamily: 'Monaco, Consolas, "Courier New", monospace'
+                            }}>
+                              {JSON.stringify(task, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* BGZ Workflow Tasks Card */}
+            <div className="card" style={{ marginTop: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <h2 style={{ marginTop: 0, marginBottom: 0 }}>🏥 BGZ Workflow Tasks</h2>
+                <button
+                  onClick={() => { setIsBgzReferral(true); setShowEOverdrachtModal(true); }}
+                  className="button"
+                  style={{ fontSize: '14px', padding: '8px 16px' }}
+                  disabled={!hasBgzData}
+                  title={!hasBgzData ? 'BGZ data must be available first. Please generate BGZ in the Patient Summary section.' : 'Create a new BGZ referral'}
+                >
+                  BGZ Verwijzing
+                </button>
+              </div>
+              <p style={{ color: '#666', fontSize: '14px', marginBottom: '15px' }}>
+                BGZ referral workflow tasks for this patient
+              </p>
+
+              {bgzWorkflowTasksLoading ? (
+                <div className="loading-container" style={{ padding: '30px' }}>
+                  <div className="spinner"></div>
+                  <p>Loading BGZ workflow tasks...</p>
+                </div>
+              ) : bgzWorkflowTasksError ? (
+                <div className="error-message">
+                  <strong>Error loading BGZ workflow tasks</strong>
+                  <p>{bgzWorkflowTasksError}</p>
+                </div>
+              ) : bgzWorkflowTasks.length === 0 ? (
+                <div className="empty-state" style={{ padding: '30px' }}>
+                  <p>No BGZ workflow tasks found</p>
+                </div>
+              ) : (
+                <div className="care-network-list">
+                  {bgzWorkflowTasks.map((task, idx) => {
+                    // Extract organization ID from task owner reference
+                    const orgRef = task.owner?.reference;
+                    const orgId = orgRef ? (orgRef.includes('/') ? orgRef.split('/').pop() : orgRef) : null;
+                    const organization = orgId ? taskOrganizations[orgId] : null;
+
+                    return (
+                      <div key={task.id || idx} className="care-network-item">
+                        <div className="care-network-item-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
+                            <span className="care-network-org-name">
+                              {task.owner?.display || 'Unknown Organization'}
+                            </span>
+                            <span className={`status-badge ${task.status === 'in-progress' ? 'status-active' : task.status === 'completed' ? 'status-inactive' : task.status === 'requested' ? 'status-requested' : ''}`}>
+                              {task.status || 'unknown'}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteBgzWorkflowTask(task.id)}
+                            className="button button-secondary"
+                            style={{
+                              fontSize: '14px',
+                              padding: '4px 8px',
+                              minWidth: 'auto',
+                              backgroundColor: '#ef4444',
+                              borderColor: '#ef4444',
+                              color: 'white'
+                            }}
+                            title="Delete task"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+
+                        {/* Organization Details */}
+                        {organization && (
+                          <div style={{ marginTop: '10px', fontSize: '13px', color: '#666' }}>
+                            {organizationApi.getURA(organization) && (
+                              <div style={{ marginBottom: '5px' }}>
+                                <strong>URA:</strong> {organizationApi.getURA(organization)}
+                              </div>
+                            )}
+                            {organizationApi.formatAddress(organization) !== '-' && (
+                              <div style={{ marginBottom: '5px' }}>
+                                <strong>Address:</strong> {organizationApi.formatAddress(organization)}
+                              </div>
+                            )}
+                            {organizationApi.formatType(organization) !== '-' && (
+                              <div style={{ marginBottom: '5px' }}>
+                                <strong>Type:</strong> {organizationApi.formatType(organization)}
+                              </div>
+                            )}
+                            {organizationApi.formatTelecomString(organization) !== '-' && (
+                              <div style={{ marginBottom: '5px' }}>
+                                <strong>Contact:</strong> {organizationApi.formatTelecomString(organization)}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Requester Information */}
+                        {task.requester?.agent?.display && (
+                          <div style={{ fontSize: '13px', color: '#666', marginTop: '8px' }}>
+                            <strong>Requested by:</strong> {task.requester.agent.display}
+                          </div>
+                        )}
+
+                        {/* Task Code */}
+                        {task.code?.text && (
+                          <div style={{ fontSize: '13px', color: '#666', marginTop: '5px' }}>
+                            <strong>Type:</strong> {task.code.text}
                           </div>
                         )}
 
@@ -1404,34 +1828,22 @@ function PatientPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                 <h2 style={{ marginTop: 0, marginBottom: 0 }}>📋 Patient Summary (BGZ)</h2>
                 {hasBgzData && !bgzSummaryLoading && (
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      onClick={() => { setIsBgzReferral(true); setShowEOverdrachtModal(true); }}
-                      className="button"
-                      style={{
-                        fontSize: '13px',
-                        padding: '6px 12px'
-                      }}
-                    >
-                      BgZ verwijzing
-                    </button>
-                    <button
-                      onClick={handleShowBgzDelete}
-                      disabled={bgzDeleting}
-                      title={bgzDeleting ? 'Deleting BGZ data...' : 'Delete BGZ data'}
-                      className="button button-secondary"
-                      style={{
-                        fontSize: '16px',
-                        padding: '4px 8px',
-                        minWidth: 'auto',
-                        backgroundColor: '#ef4444',
-                        borderColor: '#ef4444',
-                        color: 'white'
-                      }}
-                    >
-                      {bgzDeleting ? '⏳' : '🗑️'}
-                    </button>
-                  </div>
+                  <button
+                    onClick={handleShowBgzDelete}
+                    disabled={bgzDeleting}
+                    title={bgzDeleting ? 'Deleting BGZ data...' : 'Delete BGZ data'}
+                    className="button button-secondary"
+                    style={{
+                      fontSize: '16px',
+                      padding: '4px 8px',
+                      minWidth: 'auto',
+                      backgroundColor: '#ef4444',
+                      borderColor: '#ef4444',
+                      color: 'white'
+                    }}
+                  >
+                    {bgzDeleting ? '⏳' : '🗑️'}
+                  </button>
                 )}
               </div>
 
@@ -2044,7 +2456,25 @@ function PatientPage() {
             <div className="modal" style={{ maxWidth: '1000px' }} onClick={(e) => e.stopPropagation()}>
               {eOverdrachtStep === 'services' ? (
                 <>
-                  <h3 style={{ marginTop: 0 }}>Step 1: Select Healthcare Service</h3>
+                  <h3 style={{ marginTop: 0 }}>Select Healthcare Service</h3>
+
+                  {/* Service Filter */}
+                  <div style={{ marginTop: '15px', marginBottom: '15px' }}>
+                    <input
+                      type="text"
+                      placeholder="Filter by service name..."
+                      value={serviceFilterText}
+                      onChange={(e) => setServiceFilterText(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        fontSize: '14px',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
 
                   <div style={{ marginTop: '20px' }}>
                     {healthcareServicesLoading ? (
@@ -2057,24 +2487,30 @@ function PatientPage() {
                         <strong>Error loading healthcare services</strong>
                         <p>{healthcareServicesError}</p>
                       </div>
-                    ) : groupedHealthcareServices.length === 0 ? (
-                      <div className="empty-state" style={{ padding: '30px' }}>
-                        <p>No healthcare services found</p>
-                      </div>
-                    ) : (
-                      <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                        <table className="resource-table">
-                          <thead>
-                            <tr>
-                              <th>Service Name</th>
-                              <th>Count</th>
-                              <th>Type(s)</th>
-                              <th>Status</th>
-                              <th>Action</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {groupedHealthcareServices.map((group, idx) => {
+                    ) : (() => {
+                      // Filter services by name
+                      const filteredServices = groupedHealthcareServices.filter(group =>
+                        group.name.toLowerCase().includes(serviceFilterText.toLowerCase())
+                      );
+
+                      return filteredServices.length === 0 ? (
+                        <div className="empty-state" style={{ padding: '30px' }}>
+                          <p>No healthcare services found matching "{serviceFilterText}"</p>
+                        </div>
+                      ) : (
+                        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                          <table className="resource-table">
+                            <thead>
+                              <tr>
+                                <th>Service Name</th>
+                                <th>Count</th>
+                                <th>Type(s)</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredServices.map((group, idx) => {
                               const types = group.types !== '-' ? group.types.split(', ') : ['-'];
 
                               return (
@@ -2114,11 +2550,12 @@ function PatientPage() {
                                   </td>
                                 </tr>
                               );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
@@ -2134,7 +2571,7 @@ function PatientPage() {
               ) : eOverdrachtStep === 'organizations' ? (
                 <>
                   <h3 style={{ marginTop: 0 }}>
-                    Step 2: Select Organization
+                    Select Organization
                     {selectedServiceGroup && (
                       <div style={{ fontSize: '14px', fontWeight: 'normal', color: '#666', marginTop: '8px' }}>
                         Service: {selectedServiceGroup.name}
@@ -2247,7 +2684,7 @@ function PatientPage() {
               ) : eOverdrachtStep === 'departments' ? (
                 <>
                   <h3 style={{ marginTop: 0 }}>
-                    Step 3: Select Department
+                    Select Department
                     {selectedOrganization && (
                       <div style={{ fontSize: '14px', fontWeight: 'normal', color: '#666', marginTop: '8px' }}>
                         Organization: {organizationApi.formatName(selectedOrganization)}
@@ -2524,7 +2961,7 @@ function PatientPage() {
                       onClick={handleBackToDepartments}
                       disabled={taskCreating}
                     >
-                      ← Back to Departments
+                      ← Back to {departments.length === 0 ? 'Organizations' : 'Departments'}
                     </button>
                     <div style={{ display: 'flex', gap: '10px' }}>
                       <button

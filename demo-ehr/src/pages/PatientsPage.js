@@ -27,10 +27,13 @@ function PatientsPage() {
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+  const [recentPatients, setRecentPatients] = useState([]);
+  const [showRecentDropdown, setShowRecentDropdown] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
       loadPatients();
+      loadRecentPatients();
     }
   }, [isAuthenticated]);
 
@@ -74,6 +77,50 @@ function PatientsPage() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load recent patients from sessionStorage
+  const loadRecentPatients = () => {
+    try {
+      const stored = sessionStorage.getItem('recentPatients');
+      if (stored) {
+        const recent = JSON.parse(stored);
+        setRecentPatients(recent);
+      }
+    } catch (err) {
+      console.error('Error loading recent patients:', err);
+    }
+  };
+
+  // Save a patient to recent list (max 5 recent patients)
+  const addToRecentPatients = (patient) => {
+    try {
+      const patientData = {
+        id: patient.id,
+        name: patientApi.formatName(patient),
+        bsn: patientApi.getByBSN(patient),
+        timestamp: Date.now()
+      };
+
+      // Load current recent patients
+      const stored = sessionStorage.getItem('recentPatients');
+      let recent = stored ? JSON.parse(stored) : [];
+
+      // Remove patient if already in list
+      recent = recent.filter(p => p.id !== patient.id);
+
+      // Add to front of list
+      recent.unshift(patientData);
+
+      // Keep only last 5
+      recent = recent.slice(0, 5);
+
+      // Save back to sessionStorage
+      sessionStorage.setItem('recentPatients', JSON.stringify(recent));
+      setRecentPatients(recent);
+    } catch (err) {
+      console.error('Error saving recent patient:', err);
     }
   };
 
@@ -267,7 +314,7 @@ function PatientsPage() {
       <main className="main-content">
         <div className="patients-header">
           <h2>Patients Overview</h2>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
             <div className="search-box">
               <input
                 type="text"
@@ -278,6 +325,100 @@ function PatientsPage() {
               />
               {searching && <span style={{ marginLeft: '10px', color: '#666' }}>Searching...</span>}
             </div>
+
+            {/* Recent Patients Dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() => setShowRecentDropdown(!showRecentDropdown)}
+                disabled={recentPatients.length === 0}
+                title={recentPatients.length === 0 ? 'No recent patients' : 'Show recent patients'}
+                style={{
+                  padding: '8px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                🕐 Recent {recentPatients.length > 0 && `(${recentPatients.length})`}
+              </button>
+
+              {showRecentDropdown && recentPatients.length > 0 && (
+                <>
+                  {/* Backdrop to close dropdown */}
+                  <div
+                    style={{
+                      position: 'fixed',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      zIndex: 999
+                    }}
+                    onClick={() => setShowRecentDropdown(false)}
+                  />
+
+                  {/* Dropdown Menu */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: '100%',
+                      left: 0,
+                      marginTop: '5px',
+                      backgroundColor: 'white',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                      minWidth: '300px',
+                      maxWidth: '400px',
+                      zIndex: 1000,
+                      overflow: 'hidden'
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: '10px 12px',
+                        borderBottom: '1px solid #eee',
+                        fontSize: '13px',
+                        fontWeight: 'bold',
+                        color: '#666',
+                        backgroundColor: '#f8f9fa'
+                      }}
+                    >
+                      Recent Patients
+                    </div>
+                    {recentPatients.map((recentPatient) => (
+                      <div
+                        key={recentPatient.id}
+                        onClick={() => {
+                          setShowRecentDropdown(false);
+                          navigate(`/patients/${recentPatient.id}`);
+                        }}
+                        style={{
+                          padding: '12px',
+                          cursor: 'pointer',
+                          borderBottom: '1px solid #f0f0f0',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                      >
+                        <div style={{ fontWeight: '500', marginBottom: '4px' }}>
+                          {recentPatient.name}
+                        </div>
+                        {recentPatient.bsn && (
+                          <div style={{ fontSize: '12px', color: '#666' }}>
+                            BSN: {recentPatient.bsn}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
             <button type="button" className="button" onClick={openNewPatient}>
               ➕ New Patient
             </button>
@@ -345,7 +486,7 @@ function PatientsPage() {
                       }
 
                       return (
-                        <tr key={patient.id} onClick={() => navigate(`/patients/${patient.id}`)} style={{ cursor: 'pointer' }} title="Click to view details">
+                        <tr key={patient.id} onClick={() => { addToRecentPatients(patient); navigate(`/patients/${patient.id}`); }} style={{ cursor: 'pointer' }} title="Click to view details">
                           <td className="bsn-cell">
                             {bsn ? (
                               <span className="bsn-badge">{bsn}</span>

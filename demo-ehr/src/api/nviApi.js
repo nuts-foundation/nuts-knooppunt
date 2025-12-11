@@ -66,17 +66,26 @@ export const nviApi = {
                         name = custodian.reference;
                     }
 
+                    // Extract document timestamp (prefer 'date' field, fallback to 'indexed')
+                    const docTimestamp = docRef.date || docRef.indexed || docRef.meta.lastUpdated;
+
                     // Only add if we have a URA
                     if (ura && !organizationsMap.has(ura)) {
                         organizationsMap.set(ura, {
                             ura,
                             name: name || 'Unknown Organization',
                             documentCount: 1,
+                            lastDocumentTimestamp: docTimestamp,
                         });
                     } else if (ura) {
-                        // Increment document count
+                        // Increment document count and update last timestamp if newer
                         const org = organizationsMap.get(ura);
                         org.documentCount += 1;
+
+                        // Update to the most recent timestamp
+                        if (docTimestamp && (!org.lastDocumentTimestamp || docTimestamp > org.lastDocumentTimestamp)) {
+                            org.lastDocumentTimestamp = docTimestamp;
+                        }
                     }
                 }
             });

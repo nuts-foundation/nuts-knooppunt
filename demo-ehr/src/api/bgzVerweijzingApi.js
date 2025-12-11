@@ -151,6 +151,28 @@ const getBgzFhirQueryInputs = () => [
 ];
 
 export const bgzVerweijzingApi = {
+    async getBgZWorkflowTasks(patientBsn) {
+        // Fetch all BGZ workflow tasks for a patient by BSN
+        const url = `${config.fhirStu3BaseURL}/Task?for:identifier=http://fhir.nl/fhir/NamingSystem/bsn|${patientBsn}&code=http://snomed.info/sct|3457005`;
+
+        const res = await fetch(url, {
+            method: 'GET',
+            headers: headers
+        });
+
+        if (!res.ok) {
+            throw new Error(`Failed to fetch BGZ workflow tasks: ${res.statusText}`);
+        }
+
+        const bundle = await res.json();
+        // Filter out OperationOutcome and other non-Task resources
+        return bundle.entry
+            ? bundle.entry
+                .map(e => e.resource)
+                .filter(resource => resource && resource.resourceType === 'Task')
+            : [];
+    },
+
     async createBgZWorkflowTask(bsn, patientName, userId, userName, departmentOrgId, departmentOrgName) {
         // Create BgZ Workflow Task (Verwijzing)
         const task = {
