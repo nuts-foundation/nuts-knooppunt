@@ -36,11 +36,9 @@ var definitions = []Definition{
 }
 
 type Tokens struct {
-	Definition      Definition
-	InteractionType fhir.TypeRestfulInteraction
-	ResourceType    fhir.ResourceType
-	ResourceId      string
-	Operation       string
+	ResourceType  fhir.ResourceType
+	ResourceId    string
+	OperationName string
 }
 
 func parseDefinition(def Definition, req HTTPRequest) (Tokens, bool) {
@@ -83,6 +81,9 @@ func parseDefinition(def Definition, req HTTPRequest) (Tokens, bool) {
 			}
 			out.ResourceType = t
 			continue
+		case "$[name]":
+			out.OperationName = strings.TrimPrefix(path[idx], "$")
+			continue
 		case "[id]":
 			out.ResourceId = path[idx]
 			continue
@@ -97,8 +98,6 @@ func parseDefinition(def Definition, req HTTPRequest) (Tokens, bool) {
 		}
 	}
 
-	out.Definition = def
-	out.InteractionType = def.Interaction
 	return out, true
 }
 

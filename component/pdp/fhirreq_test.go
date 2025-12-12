@@ -36,13 +36,12 @@ func TestComponent_parse_literals(t *testing.T) {
 		Method: "GET",
 		Path:   "/_history",
 	}
-	tokens, ok := parseDefinition(def, req)
+	_, ok := parseDefinition(def, req)
 
 	assert.True(t, ok)
-	assert.Equal(t, fhir.TypeRestfulInteractionHistorySystem, tokens.InteractionType)
 }
 
-func TestComponent_parse_trailing_question(t *testing.T) {
+func TestComponent_parse_trailing_question_mark(t *testing.T) {
 	var def = Definition{
 		Interaction: fhir.TypeRestfulInteractionSearchType,
 		PathDef:     []string{"[type]?"},
@@ -57,4 +56,21 @@ func TestComponent_parse_trailing_question(t *testing.T) {
 
 	assert.True(t, ok)
 	assert.Equal(t, fhir.ResourceTypeObservation, tokens.ResourceType)
+}
+
+func TestComponent_parse_leading_dollar(t *testing.T) {
+	var def = Definition{
+		Interaction: fhir.TypeRestfulInteractionOperation,
+		PathDef:     []string{"[type]", "[id]", "$[name]"},
+		Verb:        "GET",
+	}
+
+	var req = HTTPRequest{
+		Method: "GET",
+		Path:   "/Observation/123123/$validate",
+	}
+	tokens, ok := parseDefinition(def, req)
+
+	assert.True(t, ok)
+	assert.Equal(t, "validate", tokens.OperationName)
 }
