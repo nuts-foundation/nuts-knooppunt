@@ -1,7 +1,7 @@
 #!/bin/sh
 
 echo "Running database migrations..."
-node ./node_modules/prisma/build/index.js migrate deploy
+node ./node_modules/prisma/build/index.js db push --accept-data-loss
 
 if [ $? -ne 0 ]; then
     echo "Migration failed"
