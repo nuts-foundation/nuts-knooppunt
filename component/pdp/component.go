@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"slices"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
-	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 func DefaultConfig() Config {
@@ -61,7 +59,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 			Allow: false,
 			Reasons: []ResultReason{
 				{
-					Code:        "missing_required_value",
+					Code:        TypeResultCodeMissingRequiredValue,
 					Description: "missing required value, no scope defined",
 				},
 			},
@@ -82,28 +80,21 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	// ... but for now we only have two example scopes hardcoded.
 	switch input.Scope {
 	case "mcsd_update":
-		validTypes := []fhir.ResourceType{
-			fhir.ResourceTypeOrganization,
-			fhir.ResourceTypeLocation,
-			fhir.ResourceTypeHealthcareService,
-			fhir.ResourceTypeEndpoint,
-			fhir.ResourceTypePractitionerRole,
-			fhir.ResourceTypeOrganizationAffiliation,
-			fhir.ResourceTypePractitioner,
-		}
-		if !slices.Contains(validTypes, input.ResourceType) {
-			writeResp(r.Context(), w, Deny(ResultReason{
-				Code:        "not_allowed",
-				Description: "not allowed to request this resources during update",
-			}))
-		}
+		// Dummy should be replaced with the actual OPA policy
 		writeResp(r.Context(), w, Allow())
-	case "patient_example":
+	case "mcsd_query":
+		// Dummy should be replaced with the actual OPA policy
+		writeResp(r.Context(), w, Allow())
+	case "bgz_patient":
+		// Dummy should be replaced with the actual OPA policy
+		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), input))
+	case "bgz_professional":
+		// Dummy should be replaced with the actual OPA policy
 		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), input))
 	default:
 		writeResp(r.Context(), w, Deny(
 			ResultReason{
-				Code:        "not_implemented",
+				Code:        TypeResultCodeNotImplemented,
 				Description: fmt.Sprintf("scope %s not implemeted", input.Scope),
 			},
 		))

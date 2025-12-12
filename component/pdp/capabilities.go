@@ -37,8 +37,14 @@ func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityState
 	case "mcsd_update":
 		capa, err := readCapability(ctx, "nl-gf-admin-directory-update-client")
 		return capa, err == nil
-	case "patient_example":
-		capa, err := readCapability(ctx, "patient-example")
+	case "mcsd_query":
+		capa, err := readCapability(ctx, "nl-gf-query-directory-query-client")
+		return capa, err == nil
+	case "bgz_patient":
+		capa, err := readCapability(ctx, "bgz-patient")
+		return capa, err == nil
+	case "bgz_professional":
+		capa, err := readCapability(ctx, "bgz-professional")
 		return capa, err == nil
 	default:
 		return fhir.CapabilityStatement{}, false
@@ -53,7 +59,7 @@ func evalCapabilityPolicy(ctx context.Context, input MainPolicyInput) PolicyResu
 	statement, ok := capabilityForScope(ctx, input.Scope)
 	if !ok {
 		reason := ResultReason{
-			Code:        "unexpected_input",
+			Code:        TypeResultCodeUnexpectedInput,
 			Description: "unexpected input, no capability statement known for scope",
 		}
 		out.Reasons = []ResultReason{reason}
@@ -67,6 +73,10 @@ func evalInteraction(
 	statement fhir.CapabilityStatement,
 	input MainPolicyInput,
 ) PolicyResult {
+	policyResult := PolicyResult{
+		Allow: false,
+	}
+
 	// FUTURE: This is a pretty naive implementation - we can make it more efficient at a later point.
 	var supported = []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionRead,
@@ -80,15 +90,11 @@ func evalInteraction(
 		fhir.TypeRestfulInteractionSearchType,
 	}
 	if !slices.Contains(supported, input.InteractionType) {
-		return PolicyResult{
-			Allow: false,
-			Reasons: []ResultReason{
-				{
-					Code:        "not_implemented",
-					Description: "restful interaction type not supported",
-				},
-			},
-		}
+		return Deny(
+			ResultReason{
+				Code:        TypeResultCodeNotImplemented,
+				Description: "restful interaction type not supported",
+			})
 	}
 
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
@@ -110,15 +116,11 @@ func evalInteraction(
 	}
 
 	if !allowInteraction {
-		return PolicyResult{
-			Allow: false,
-			Reasons: []ResultReason{
-				{
-					Code:        "not_allowed",
-					Description: "capability statement does not allow interaction",
-				},
-			},
-		}
+		return Deny(
+			ResultReason{
+				Code:        TypeResultCodeNotAllowed,
+				Description: "capability statement does not allow interaction",
+			})
 	}
 
 	allowParams := false
@@ -137,26 +139,54 @@ func evalInteraction(
 			}
 		}
 	}
-	if len(rejectedSearchParams) == 0 {
-		allowParams = true
-	}
 
+	allowParams = len(rejectedSearchParams) == 0
 	if !allowParams {
-		reasons := make([]ResultReason, 0, 10)
-		for _, param := range rejectedSearchParams {
-			reason := ResultReason{
-				Code:        "not_allowed",
-				Description: fmt.Sprintf("search parameter %s is not allowed", param),
-			}
-			reasons = append(reasons, reason)
-		}
-		return PolicyResult{
-			Allow:   false,
-			Reasons: reasons,
+		policyResult.AddReasons(rejectedSearchParams, "search parameter %s is not allowed", TypeResultCodeNotAllowed)
+		return policyResult
+	}
+
+	allowIncludes := false
+	allowedIncludes := make([]string, 0, 10)
+	for _, des := range resourceDescriptions {
+		for _, include := range des.SearchInclude {
+			allowedIncludes = append(allowedIncludes, include)
 		}
 	}
 
-	return PolicyResult{
-		Allow: true,
+	rejectedIncludes := make([]string, 0, len(allowedIncludes))
+	for _, inc := range input.Include {
+		if !slices.Contains(allowedIncludes, inc) {
+			rejectedIncludes = append(rejectedIncludes, inc)
+		}
 	}
+
+	allowIncludes = len(rejectedIncludes) == 0
+	if !allowIncludes {
+		policyResult.AddReasons(rejectedIncludes, "include %s is not allowed", TypeResultCodeNotAllowed)
+		return policyResult
+	}
+
+	allowRevincludes := false
+	allowedRevincludes := make([]string, 0, 10)
+	for _, des := range resourceDescriptions {
+		for _, revinclude := range des.SearchRevInclude {
+			allowedRevincludes = append(allowedRevincludes, revinclude)
+		}
+	}
+
+	rejectedRevincludes := make([]string, 0, len(allowedRevincludes))
+	for _, inc := range input.Revinclude {
+		if !slices.Contains(allowedRevincludes, inc) {
+			rejectedRevincludes = append(rejectedRevincludes, inc)
+		}
+	}
+
+	allowRevincludes = len(rejectedRevincludes) == 0
+	if !allowRevincludes {
+		policyResult.AddReasons(rejectedRevincludes, "Revinclude %s is not allowed", TypeResultCodeNotAllowed)
+		return policyResult
+	}
+
+	return Allow()
 }
