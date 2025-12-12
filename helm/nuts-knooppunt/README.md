@@ -26,7 +26,8 @@ kubectl apply -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg
 ### Add Required Helm Repositories
 
 ```bash
-helm repo add nuts-node https://nuts-foundation.github.io/nuts-node/
+helm repo add nuts-foundation https://nuts-foundation.github.io/nuts-node/
+helm repo add jaegertracing https://jaegertracing.github.io/helm-charts
 helm repo update
 ```
 

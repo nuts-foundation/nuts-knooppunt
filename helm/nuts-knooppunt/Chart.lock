@@ -5,11 +5,14 @@ dependencies:
 - name: helm-pep
   repository: oci://ghcr.io/nuts-foundation
   version: 0.1.1
+- name: helm-mock-vc-issuer
+  repository: file://../mock-vc-issuer
+  version: 0.1.0
 - name: nuts-node-chart
   repository: https://nuts-foundation.github.io/nuts-node/
   version: 0.0.6
 - name: jaeger
   repository: https://jaegertracing.github.io/helm-charts
   version: 3.4.1
-digest: sha256:6dcf5b4d1b759d578def8241ae0f4bb766433b522b1bf0cb850d7edf8fb0385d
-generated: "2025-11-21T15:47:19.235785+01:00"
+digest: sha256:a622f3446777ec8e420411d38b96dedf7cb04d3d87c8f0a0e4f078a5f73054da
+generated: "2025-12-09T13:06:56.010496+01:00"
