@@ -13,6 +13,7 @@ type PathDef struct {
 	Verb        string
 }
 
+// https://hl7.org/fhir/R4/http.html
 var definitions = []PathDef{
 	{
 		Interaction: fhir.TypeRestfulInteractionRead,
@@ -21,8 +22,64 @@ var definitions = []PathDef{
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionVread,
-		PathDef:     []string{"[type]", "[id]", "_/history", "[vid]"},
+		PathDef:     []string{"[type]", "[id]", "_history", "[vid]"},
 		Verb:        "GET",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionUpdate,
+		PathDef:     []string{"[type]", "[id]"},
+		Verb:        "PUT",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionPatch,
+		PathDef:     []string{"[type]", "[id]"},
+		Verb:        "PATCH",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionDelete,
+		PathDef:     []string{"[type]", "[id]"},
+		Verb:        "DELETE",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionCreate,
+		PathDef:     []string{"[type]"},
+		Verb:        "POST",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionSearchType,
+		PathDef:     []string{"[type]?"},
+		Verb:        "GET",
+	},
+	// TODO: Do we need to parse body params?
+	{
+		Interaction: fhir.TypeRestfulInteractionSearchType,
+		PathDef:     []string{"[type]", "_search?"},
+		Verb:        "POST",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionSearchSystem,
+		PathDef:     []string{"?"},
+		Verb:        "GET",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionCapabilities,
+		PathDef:     []string{"metadata"},
+		Verb:        "GET",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionTransaction,
+		PathDef:     []string{},
+		Verb:        "POST",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionHistoryInstance,
+		PathDef:     []string{"[type]", "[id]", "_history"},
+		Verb:        "GET",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionHistoryType,
+		PathDef:     []string{},
+		Verb:        "POST",
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionHistorySystem,
@@ -30,13 +87,33 @@ var definitions = []PathDef{
 		Verb:        "GET",
 	},
 	{
-		Interaction: fhir.TypeRestfulInteractionSearchType,
-		PathDef:     []string{"[type]?"},
+		Interaction: fhir.TypeRestfulInteractionOperation,
+		PathDef:     []string{"$[name]"},
 		Verb:        "GET",
 	},
 	{
-		Interaction: fhir.TypeRestfulInteractionSearchType,
-		PathDef:     []string{"[type]", "_search?"},
+		Interaction: fhir.TypeRestfulInteractionOperation,
+		PathDef:     []string{"$[name]"},
+		Verb:        "POST",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionOperation,
+		PathDef:     []string{"[type]", "$[name]"},
+		Verb:        "GET",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionOperation,
+		PathDef:     []string{"[type]", "$[name]"},
+		Verb:        "POST",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionOperation,
+		PathDef:     []string{"[type]", "[id]", "$[name]"},
+		Verb:        "GET",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionOperation,
+		PathDef:     []string{"[type]", "[id]", "$[name]"},
 		Verb:        "POST",
 	},
 }
@@ -186,5 +263,3 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, bool) {
 
 	return policyInput, true
 }
-
-// https://hl7.org/fhir/R4/http.html
