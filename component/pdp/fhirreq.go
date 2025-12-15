@@ -62,7 +62,6 @@ func parsePath(def PathDef, req HTTPRequest) (Tokens, bool) {
 	}
 
 	for idx, part := range def.PathDef {
-		isToken := strings.HasPrefix(part, "[")
 		switch part {
 		case "[type]":
 			ptr, ok := parseResourceType(path[idx])
@@ -79,20 +78,16 @@ func parsePath(def PathDef, req HTTPRequest) (Tokens, bool) {
 			}
 			out.ResourceType = ptr
 			continue
-		case "$[name]":
-			out.OperationName = strings.TrimPrefix(path[idx], "$")
-			continue
 		case "[id]":
 			out.ResourceId = path[idx]
 			continue
+		case "$[name]":
+			out.OperationName = strings.TrimPrefix(path[idx], "$")
+			continue
 		}
 
-		isLiteral := !isToken
-		if isLiteral {
-			if path[idx] != part {
-				return Tokens{}, false
-			}
-			continue
+		if path[idx] != part {
+			return Tokens{}, false
 		}
 	}
 
