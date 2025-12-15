@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
+	"golang.org/x/exp/maps"
 )
 
 type PathDef struct {
@@ -123,6 +124,26 @@ func parseRequest(request HTTPRequest) (Tokens, bool) {
 	return tokens, true
 }
 
+type Params struct {
+	SearchParams []string
+	Revinclude   []string
+	Include      []string
+}
+
+func groupParams(queryParams map[string][]string) Params {
+	var params Params
+
+	params.Include = queryParams["_include"]
+	delete(queryParams, "_include")
+
+	params.Revinclude = queryParams["_revinclude"]
+	delete(queryParams, "_revinclude")
+
+	params.SearchParams = maps.Keys(queryParams)
+
+	return params
+}
+
 func NewPolicyInput(request PDPRequest) (PolicyInput, bool) {
 	var policyInput PolicyInput
 
@@ -146,7 +167,10 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, bool) {
 		policyInput.Action.Properties.Operation = &tokens.OperationName
 	}
 
-	// TODO: Place query params
+	params := groupParams(request.Input.Request.QueryParams)
+	policyInput.Action.Properties.Include = params.Include
+	policyInput.Action.Properties.Revinclude = params.Revinclude
+	policyInput.Action.Properties.SearchParams = params.SearchParams
 
 	return policyInput, true
 }

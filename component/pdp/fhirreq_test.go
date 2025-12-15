@@ -74,3 +74,22 @@ func TestComponent_parse_leading_dollar(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "validate", tokens.OperationName)
 }
+
+func TestComponent_group_params(t *testing.T) {
+	queryParams := map[string][]string{
+		"_since": {
+			"1985-04-01",
+		},
+		"_revinclude": {
+			"PractitionerRole:Location",
+		},
+		"_include": {
+			"Location:managingOrganization",
+		},
+	}
+
+	groupedParam := groupParams(queryParams)
+	assert.Contains(t, groupedParam.SearchParams, "_since")
+	assert.Contains(t, groupedParam.Include, "Location:managingOrganization")
+	assert.Contains(t, groupedParam.Revinclude, "PractitionerRole:Location")
+}
