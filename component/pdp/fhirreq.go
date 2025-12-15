@@ -20,6 +20,11 @@ var definitions = []PathDef{
 		Verb:        "GET",
 	},
 	{
+		Interaction: fhir.TypeRestfulInteractionVread,
+		PathDef:     []string{"[type]", "[id]", "_/history", "[vid]"},
+		Verb:        "GET",
+	},
+	{
 		Interaction: fhir.TypeRestfulInteractionHistorySystem,
 		PathDef:     []string{"_history"},
 		Verb:        "GET",
@@ -41,6 +46,7 @@ type Tokens struct {
 	ResourceType  *fhir.ResourceType
 	ResourceId    string
 	OperationName string
+	VersionId     string
 }
 
 func parsePath(def PathDef, req HTTPRequest) (Tokens, bool) {
@@ -81,6 +87,9 @@ func parsePath(def PathDef, req HTTPRequest) (Tokens, bool) {
 			continue
 		case "[id]":
 			out.ResourceId = path[idx]
+			continue
+		case "[vid]":
+			out.VersionId = path[idx]
 			continue
 		case "$[name]":
 			out.OperationName = strings.TrimPrefix(path[idx], "$")
@@ -156,6 +165,9 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, bool) {
 		policyInput.Resource.Type = *tokens.ResourceType
 		if tokens.ResourceId != "" {
 			policyInput.Resource.Properties.ResourceId = tokens.ResourceId
+		}
+		if tokens.VersionId != "" {
+			policyInput.Resource.Properties.VersionId = tokens.VersionId
 		}
 	}
 
