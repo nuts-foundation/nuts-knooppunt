@@ -1,6 +1,9 @@
 package pdp
 
 import (
+	"fmt"
+	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -224,6 +227,18 @@ var generalParams = []string{
 	"_elements",
 }
 
+var resultParams = []string{
+	"_sort",
+	"_count",
+	"_include",
+	"_revinclude",
+	"_summary",
+	"_total",
+	"_elements",
+	"_contained",
+	"_containedType",
+}
+
 func groupParams(queryParams map[string][]string) Params {
 	var params Params
 
@@ -238,12 +253,13 @@ func groupParams(queryParams map[string][]string) Params {
 	return params
 }
 
-func NewPolicyInput(request PDPRequest) (PolicyInput, bool) {
+func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	var policyInput PolicyInput
 
 	tokens, ok := parseRequestPath(request.Input.Request)
 	if !ok {
-		return PolicyInput{}, false
+		reason := ResultReason{Code: TypeResultCodeUnexpectedInput, Description: "Not a valid FHIR request path"}
+		return PolicyInput{}, Deny(reason)
 	}
 
 	if tokens.ResourceType != nil {
@@ -262,6 +278,23 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, bool) {
 
 	if tokens.OperationName != "" {
 		policyInput.Action.Properties.Operation = &tokens.OperationName
+	}
+
+	contentType := request.Input.Request.Header.Get("Content-Type")
+	hasFormData := contentType == "application/x-www-form-urlencoded"
+	interWithBody := []fhir.TypeRestfulInteraction{
+		fhir.TypeRestfulInteractionSearchType,
+		fhir.TypeRestfulInteractionOperation,
+	}
+	paramsInBody :=
+		slices.Contains(interWithBody, tokens.Interaction) &&
+			hasFormData
+
+	if paramsInBody {
+		values, err := url.ParseQuery(request.Input.Request.Body)
+		if err != nil {
+			return PolicyInput{}, false
+		}
 	}
 
 	params := groupParams(request.Input.Request.QueryParams)
