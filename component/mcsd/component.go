@@ -40,7 +40,7 @@ const maxUpdateEntries = 1000
 
 // searchPageSize is an arbitrary FHIR search result limit (per page), so we have deterministic behavior across FHIR servers,
 // and don't rely on server defaults (which may be very high or very low (Azure FHIR's default is 10)).
-const searchPageSize = 100
+const searchPageSize = 10000
 
 // Component implements a mCSD Update Client, which synchronizes mCSD FHIR resources from remote mCSD Directories to a local mCSD Directory for querying.
 // It is configured with a root mCSD Directory, which is used to discover organizations and their mCSD Directory endpoints.
