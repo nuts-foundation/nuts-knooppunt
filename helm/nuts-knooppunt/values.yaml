@@ -249,12 +249,13 @@ nuts:
   #           key: uri
   #
   # Example for release name "my-nuts-knooppunt":
-  extraEnv:
-    - name: NUTS_STORAGE_SQL_CONNECTION
-      valueFrom:
-        secretKeyRef:
-          name: RELEASE_NAME-nuts-db-fixed  # IMPORTANT: Update RELEASE_NAME to match your actual release name
-          key: uri
+  # extraEnv:
+  #   - name: NUTS_STORAGE_SQL_CONNECTION
+  #     valueFrom:
+  #       secretKeyRef:
+  #         name: my-nuts-knooppunt-nuts-db-fixed
+  #         key: uri
+  extraEnv: []
   nuts:
     config:
       url: https://nuts.example.com  # Public URL of the NUTS node
