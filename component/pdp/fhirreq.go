@@ -119,7 +119,8 @@ var definitions = []PathDef{
 }
 
 type Tokens struct {
-	Interaction   fhir.TypeRestfulInteraction
+	Interaction fhir.TypeRestfulInteraction
+
 	ResourceType  *fhir.ResourceType
 	ResourceId    string
 	OperationName string
@@ -190,7 +191,7 @@ func parseResourceType(str string) (*fhir.ResourceType, bool) {
 	return &t, true
 }
 
-func parseRequest(request HTTPRequest) (Tokens, bool) {
+func parseRequestPath(request HTTPRequest) (Tokens, bool) {
 	var tokens Tokens
 	var def PathDef
 	var ok bool
@@ -216,6 +217,13 @@ type Params struct {
 	Include      []string
 }
 
+var generalParams = []string{
+	"_format",
+	"_pretty",
+	"_summary",
+	"_elements",
+}
+
 func groupParams(queryParams map[string][]string) Params {
 	var params Params
 
@@ -233,7 +241,7 @@ func groupParams(queryParams map[string][]string) Params {
 func NewPolicyInput(request PDPRequest) (PolicyInput, bool) {
 	var policyInput PolicyInput
 
-	tokens, ok := parseRequest(request.Input.Request)
+	tokens, ok := parseRequestPath(request.Input.Request)
 	if !ok {
 		return PolicyInput{}, false
 	}
