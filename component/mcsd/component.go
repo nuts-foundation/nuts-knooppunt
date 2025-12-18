@@ -42,6 +42,15 @@ const maxUpdateEntries = 1000
 // and don't rely on server defaults (which may be very high or very low (Azure FHIR's default is 10)).
 const searchPageSize = 10000
 
+// makeDirectoryKey creates a composite key from fhirBaseURL and authoritativeUra for tracking sync state per directory.
+// This allows multiple directories with the same FHIR base URL but different authoritative URAs to maintain separate sync states.
+func makeDirectoryKey(fhirBaseURL, authoritativeUra string) string {
+	if authoritativeUra == "" {
+		return fhirBaseURL
+	}
+	return fhirBaseURL + "|" + authoritativeUra
+}
+
 // Component implements a mCSD Update Client, which synchronizes mCSD FHIR resources from remote mCSD Directories to a local mCSD Directory for querying.
 // It is configured with a root mCSD Directory, which is used to discover organizations and their mCSD Directory endpoints.
 // Organizations refer to Endpoints through Organization.endpoint references.
@@ -166,7 +175,7 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 	}
 
 	exists := slices.ContainsFunc(c.administrationDirectories, func(directory administrationDirectory) bool {
-		return directory.fhirBaseURL == fhirBaseURL
+		return directory.fhirBaseURL == fhirBaseURL && directory.authoritativeUra == authoritativeUra
 	})
 	if exists {
 		return nil
@@ -229,7 +238,8 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		if report.Errors == nil {
 			report.Errors = []string{}
 		}
-		result[adminDirectory.fhirBaseURL] = report
+		directoryKey := makeDirectoryKey(adminDirectory.fhirBaseURL, adminDirectory.authoritativeUra)
+		result[directoryKey] = report
 	}
 	return result, nil
 }
@@ -314,7 +324,8 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	queryDirectoryFHIRClient := c.fhirClientFn(queryDirectoryFHIRBaseURL)
 
 	// Get last update time for incremental sync
-	lastUpdate, hasLastUpdate := c.lastUpdateTimes[fhirBaseURLRaw]
+	directoryKey := makeDirectoryKey(fhirBaseURLRaw, authoritativeUra)
+	lastUpdate, hasLastUpdate := c.lastUpdateTimes[directoryKey]
 
 	// Capture query start time as fallback for servers that don't provide Bundle meta.lastUpdated.
 	queryStartTime := time.Now()
@@ -431,7 +442,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		nextSyncTime = queryStartTime.Add(-clockSkewBuffer).Format(time.RFC3339Nano)
 		slog.WarnContext(ctx, "Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues", logging.FHIRServer(fhirBaseURLRaw))
 	}
-	c.lastUpdateTimes[fhirBaseURLRaw] = nextSyncTime
+	c.lastUpdateTimes[directoryKey] = nextSyncTime
 
 	return report, nil
 }
