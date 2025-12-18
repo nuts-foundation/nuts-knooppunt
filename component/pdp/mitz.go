@@ -12,7 +12,7 @@ func EvalMitzPolicy(c Component, ctx context.Context, input MainPolicyInput) Pol
 	ok := validateMitzInput(input)
 	if !ok {
 		return Deny(ResultReason{
-			Code:        "input_not_valid",
+			Code:        TypeResultCodeUnexpectedInput,
 			Description: "input not valid, missing required fields",
 		})
 	}
@@ -22,7 +22,7 @@ func EvalMitzPolicy(c Component, ctx context.Context, input MainPolicyInput) Pol
 	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
 	if err != nil {
 		return Deny(ResultReason{
-			Code:        "internal_error",
+			Code:        TypeResultCodeInternalError,
 			Description: "internal error, could not complete consent check with Mitz",
 		})
 	}
@@ -34,7 +34,7 @@ func EvalMitzPolicy(c Component, ctx context.Context, input MainPolicyInput) Pol
 
 	if !allow {
 		return Deny(ResultReason{
-			Code:        "not_allowed",
+			Code:        TypeResultCodeInternalError,
 			Description: "not allowed, denied by Mitz",
 		})
 	}

@@ -66,7 +66,7 @@ function mockIntrospect(request) {
             requesting_uzi_role_code: parts[2],
             requesting_practitioner_identifier: parts[3],
             patient_bsn: parts[4],
-            scope: 'patient_example'
+            scope: 'bgz_professional'
         }));
 
     } catch (e) {
