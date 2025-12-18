@@ -216,7 +216,7 @@ func TestComponent_update(t *testing.T) {
 		require.Equal(t, 0, thisReport.CountDeleted)
 	})
 	t.Run("assert sync report from org1 directory", func(t *testing.T) {
-		thisReport := report[orgDir1BaseURL]
+		thisReport := report[makeDirectoryKey(orgDir1BaseURL, "111")]
 		require.Empty(t, thisReport.Errors)
 		require.Empty(t, thisReport.Warnings)
 		require.Equal(t, 3, thisReport.CountCreated) // 3 resources: Organization + 2 Endpoints
@@ -235,7 +235,7 @@ func TestComponent_update(t *testing.T) {
 		})
 	})
 	t.Run("assert sync report from non-existing FHIR server #1", func(t *testing.T) {
-		thisReport := report["https://directory1.example.org"]
+		thisReport := report[makeDirectoryKey("https://directory1.example.org", "222")]
 		require.Equal(t, "failed to query Organization history: _history search failed: 404 Not Found", strings.Join(thisReport.Errors, ""))
 		require.Empty(t, thisReport.Warnings)
 		require.Equal(t, 0, thisReport.CountCreated)
@@ -243,7 +243,7 @@ func TestComponent_update(t *testing.T) {
 		require.Equal(t, 0, thisReport.CountDeleted)
 	})
 	t.Run("assert sync report from non-existing FHIR server #2", func(t *testing.T) {
-		thisReport := report["https://directory2.example.org"]
+		thisReport := report[makeDirectoryKey("https://directory2.example.org", "444")]
 		require.Equal(t, "failed to query Organization history: _history search failed: 404 Not Found", strings.Join(thisReport.Errors, ""))
 		require.Empty(t, thisReport.Warnings)
 		require.Equal(t, 0, thisReport.CountCreated)
