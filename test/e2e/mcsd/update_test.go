@@ -28,7 +28,7 @@ func Test_mCSDUpdateClient(t *testing.T) {
 
 		t.Run("assert resource sync'd from LRZa Admin Directory", func(t *testing.T) {
 			// This is the root/discovery directory, so only mCSD Directory endpoints should be present
-			assert.Equalf(t, 2, mapEntrySuffix(response, "lrza-mcsd-admin").CountCreated, "created=2 in %v", response)
+			assert.Equalf(t, 2, mapEntryContains(response, "lrza-mcsd-admin").CountCreated, "created=2 in %v", response)
 		})
 
 		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
@@ -90,7 +90,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		t.Log("Second sync - should pick up updated endpoint via _since parameter")
 		updateReport := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-		care2CureReport := mapEntrySuffix(updateReport, "care2cure-admin")
+		care2CureReport := mapEntryContains(updateReport, "care2cure-admin")
 		require.Equal(t, 0, care2CureReport.CountCreated)
 		require.Equal(t, 1, care2CureReport.CountUpdated)
 
@@ -114,7 +114,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 
 		updateReport := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-		care2CureReport := mapEntrySuffix(updateReport, "care2cure-admin")
+		care2CureReport := mapEntryContains(updateReport, "care2cure-admin")
 		assert.Empty(t, care2CureReport.Warnings)
 		assert.Empty(t, care2CureReport.Errors)
 		assert.Equal(t, 0, care2CureReport.CountCreated)
@@ -140,7 +140,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		response1 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		// First sync should behave like Test_mCSDUpdateClient - LRZa should create 2 resources
-		lrzaReport1 := mapEntrySuffix(response1, "lrza-mcsd-admin")
+		lrzaReport1 := mapEntryContains(response1, "lrza-mcsd-admin")
 		require.NotNil(t, lrzaReport1, "LRZa report should exist in first sync")
 		assert.Equal(t, 2, lrzaReport1.CountCreated, "LRZa should create 2 resources in first sync")
 
@@ -193,7 +193,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		response2 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		// Second sync should find our test child organization via _since parameter
-		care2CureReport2 := mapEntrySuffix(response2, "care2cure-admin")
+		care2CureReport2 := mapEntryContains(response2, "care2cure-admin")
 		require.NotNil(t, care2CureReport2, "Care2Cure report should exist in second sync")
 		assert.Equal(t, 1, care2CureReport2.CountCreated, "Care2Cure should find exactly 1 resource (our test child organization) via _since parameter")
 
@@ -201,7 +201,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		response3 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		// Third sync should find 0 resources (nothing new since second sync)
-		care2CureReport3 := mapEntrySuffix(response3, "care2cure-admin")
+		care2CureReport3 := mapEntryContains(response3, "care2cure-admin")
 		require.NotNil(t, care2CureReport3, "Care2Cure report should exist in third sync")
 		assert.Equal(t, 0, care2CureReport3.CountCreated, "Care2Cure should find 0 resources in third sync (nothing new)")
 	})
@@ -241,9 +241,9 @@ func assertEndpoint(t *testing.T, fhirClient fhirclient.Client, organizationURA 
 	t.Errorf("no endpoint with connection type %s found for organization with URA %s", connectionType, organizationURA)
 }
 
-func mapEntrySuffix(r mcsd.UpdateReport, suffix string) *mcsd.DirectoryUpdateReport {
+func mapEntryContains(r mcsd.UpdateReport, contained string) *mcsd.DirectoryUpdateReport {
 	for key, value := range r {
-		if strings.HasSuffix(key, suffix) {
+		if strings.Contains(key, contained) {
 			return &value
 		}
 	}
@@ -324,7 +324,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		updateReport := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		// Check that no errors occurred during sync
-		care2CureReport := mapEntrySuffix(updateReport, "care2cure-admin")
+		care2CureReport := mapEntryContains(updateReport, "care2cure-admin")
 		require.NotNil(t, care2CureReport, "Care2Cure report should exist")
 		require.Empty(t, care2CureReport.Errors, "Should not have errors with conditional _source updates")
 
@@ -426,7 +426,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		// 4. Second sync - should process the deletion
 		updateReport := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-		care2CureReport2 := mapEntrySuffix(updateReport, "care2cure-admin")
+		care2CureReport2 := mapEntryContains(updateReport, "care2cure-admin")
 		require.NotNil(t, care2CureReport2, "Care2Cure report should exist after deletion")
 
 		// 5. Verify child organization is deleted from query directory
