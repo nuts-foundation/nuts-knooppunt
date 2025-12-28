@@ -1,7 +1,6 @@
 package pdp
 
 import (
-	"fmt"
 	"net/url"
 	"slices"
 	"strings"
@@ -53,7 +52,6 @@ var definitions = []PathDef{
 		PathDef:     []string{"[type]?"},
 		Verb:        "GET",
 	},
-	// TODO: Do we need to parse body params?
 	{
 		Interaction: fhir.TypeRestfulInteractionSearchType,
 		PathDef:     []string{"[type]", "_search?"},
@@ -199,7 +197,7 @@ func parseRequestPath(request HTTPRequest) (Tokens, bool) {
 	var def PathDef
 	var ok bool
 	for _, d := range definitions {
-		tokens, ok = parsePath(def, request)
+		tokens, ok = parsePath(d, request)
 		if ok {
 			def = d
 			break
@@ -280,6 +278,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 		policyInput.Action.Properties.Operation = &tokens.OperationName
 	}
 
+	var rawParams map[string][]string
 	contentType := request.Input.Request.Header.Get("Content-Type")
 	hasFormData := contentType == "application/x-www-form-urlencoded"
 	interWithBody := []fhir.TypeRestfulInteraction{
@@ -293,14 +292,21 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	if paramsInBody {
 		values, err := url.ParseQuery(request.Input.Request.Body)
 		if err != nil {
-			return PolicyInput{}, false
+			reason := ResultReason{
+				Code:        TypeResultCodeUnexpectedInput,
+				Description: "Could not parse form encoded data",
+			}
+			return PolicyInput{}, Deny(reason)
 		}
+		rawParams = values
+	} else {
+		rawParams = request.Input.Request.QueryParams
 	}
 
-	params := groupParams(request.Input.Request.QueryParams)
+	params := groupParams(rawParams)
 	policyInput.Action.Properties.Include = params.Include
 	policyInput.Action.Properties.Revinclude = params.Revinclude
 	policyInput.Action.Properties.SearchParams = params.SearchParams
 
-	return policyInput, true
+	return policyInput, Allow()
 }

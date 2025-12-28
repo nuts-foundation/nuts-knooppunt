@@ -1,6 +1,7 @@
 package pdp
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -92,4 +93,24 @@ func TestComponent_group_params(t *testing.T) {
 	assert.Contains(t, groupedParam.SearchParams, "_since")
 	assert.Contains(t, groupedParam.Include, "Location:managingOrganization")
 	assert.Contains(t, groupedParam.Revinclude, "PractitionerRole:Location")
+}
+
+func TestComponent_params_in_body(t *testing.T) {
+	pdpRequest := PDPRequest{
+		Input: PDPInput{
+			Request: HTTPRequest{
+				Method:   "POST",
+				Protocol: "HTTP/1.1",
+				Path:     "/Patient/_search?",
+				Header: http.Header{
+					"Content-Type": []string{"application/x-www-form-urlencoded"},
+				},
+				Body: "identifier=775645332",
+			},
+		},
+	}
+
+	policyInput, policyResult := NewPolicyInput(pdpRequest)
+	assert.True(t, policyResult.Allow)
+	assert.Contains(t, policyInput.Action.Properties.SearchParams, "identifier")
 }
