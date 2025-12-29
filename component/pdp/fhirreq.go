@@ -2,6 +2,7 @@ package pdp
 
 import (
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -79,8 +80,8 @@ var definitions = []PathDef{
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionHistoryType,
-		PathDef:     []string{},
-		Verb:        "POST",
+		PathDef:     []string{"[type]", "_history"},
+		Verb:        "GET",
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionHistorySystem,
@@ -118,6 +119,8 @@ var definitions = []PathDef{
 		Verb:        "POST",
 	},
 }
+
+var regexId = regexp.MustCompile(`^[A-Za-z0-9\-\.]{1,64}$`)
 
 type Tokens struct {
 	Interaction fhir.TypeRestfulInteraction
@@ -165,9 +168,17 @@ func parsePath(def PathDef, req HTTPRequest) (Tokens, bool) {
 			out.ResourceType = ptr
 			continue
 		case "[id]":
+			ok := regexId.MatchString(path[idx])
+			if !ok {
+				return Tokens{}, false
+			}
 			out.ResourceId = path[idx]
 			continue
 		case "[vid]":
+			ok := regexId.MatchString(path[idx])
+			if !ok {
+				return Tokens{}, false
+			}
 			out.VersionId = path[idx]
 			continue
 		case "$[name]":
@@ -307,6 +318,9 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Action.Properties.Include = params.Include
 	policyInput.Action.Properties.Revinclude = params.Revinclude
 	policyInput.Action.Properties.SearchParams = params.SearchParams
+	policyInput.Subject = request.Input.Subject
+	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
+	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
 
 	return policyInput, Allow()
 }

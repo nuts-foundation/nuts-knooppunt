@@ -86,8 +86,11 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	scope := qualifications[0]
 
 	// Step 2: Parse the PDP input and translate to the policy input
-	// TODO!!
-	policyInput := PolicyInput{}
+	policyInput, policyResult := NewPolicyInput(reqBody)
+	if !policyResult.Allow {
+		writeResp(r.Context(), w, policyResult)
+		return
+	}
 
 	// Step 3: Check the request adheres to the capability statement for this scope
 	res := evalCapabilityPolicy(r.Context(), policyInput)
@@ -98,7 +101,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Step 4: Check if we are authorized to see the underlying data
 	// FUTURE: We want to use OPA policies here ...
-	// ... but for now we only have two example scopes hardcoded.
+	// ... but for now we only have same example scopes hardcoded.
 	switch scope {
 	case "mcsd_update":
 		// Dummy should be replaced with the actual OPA policy
