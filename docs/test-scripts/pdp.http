@@ -22,20 +22,30 @@ Content-Type: application/json
   }
 }
 
-### Testing search type request with invalid param
+### Testing search type request with valid parameter
 
 POST http://localhost:8081/pdp/v1/data/knooppunt/authz
 Content-Type: application/json
 
 {
   "input": {
-    "scope": "mcsd_update",
-    "interaction_type": "search-type",
-    "search_params": ["_since", "foo"],
-    "resource_id": "987612",
-    "resource_type": "Organization",
-    "requesting_organization_ura": "00000666",
-    "data_holder_organization_ura": "00000659"
+    "subject": {
+      "properties": {
+        "subject_organization_id": "00000666",
+        "client_qualifications": ["mcsd_update"]
+      }
+    },
+    "request": {
+      "method": "GET",
+      "protocol": "HTTP/1.0",
+      "path": "/Organization?",
+      "query_params": {
+        "_since": ["foo"]
+      }
+    },
+    "context": {
+      "data_holder_organization_id": "00000659"
+    }
   }
 }
 
