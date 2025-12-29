@@ -114,3 +114,11 @@ func TestComponent_params_in_body(t *testing.T) {
 	assert.True(t, policyResult.Allow)
 	assert.Contains(t, policyInput.Action.Properties.SearchParams, "identifier")
 }
+
+func TestComponent_filter_result_param(t *testing.T) {
+	queryParams := map[string][]string{
+		"_total": {"10"},
+	}
+	params := groupParams(queryParams)
+	assert.NotContains(t, params.SearchParams, "_total")
+}

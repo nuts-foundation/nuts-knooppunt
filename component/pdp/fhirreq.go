@@ -262,6 +262,13 @@ func groupParams(queryParams map[string][]string) Params {
 	params.Revinclude = queryParams["_revinclude"]
 	delete(queryParams, "_revinclude")
 
+	for _, p := range generalParams {
+		delete(queryParams, p)
+	}
+	for _, p := range resultParams {
+		delete(queryParams, p)
+	}
+
 	params.SearchParams = maps.Keys(queryParams)
 
 	return params
