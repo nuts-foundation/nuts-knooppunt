@@ -121,6 +121,7 @@ var definitions = []PathDef{
 }
 
 var regexId = regexp.MustCompile(`^[A-Za-z0-9\-\.]{1,64}$`)
+var regexOperation = regexp.MustCompile(`^\$[a-z\-\.]+$`)
 
 type Tokens struct {
 	Interaction fhir.TypeRestfulInteraction
@@ -182,6 +183,10 @@ func parsePath(def PathDef, req HTTPRequest) (Tokens, bool) {
 			out.VersionId = path[idx]
 			continue
 		case "$[name]":
+			ok := regexOperation.MatchString(path[idx])
+			if !ok {
+				return Tokens{}, false
+			}
 			out.OperationName = strings.TrimPrefix(path[idx], "$")
 			continue
 		}
