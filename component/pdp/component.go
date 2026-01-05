@@ -102,6 +102,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	// Step 4: Check if we are authorized to see the underlying data
 	// FUTURE: We want to use OPA policies here ...
 	// ... but for now we only have same example scopes hardcoded.
+	// This section is very much work in progress
 	switch scope {
 	case "mcsd_update":
 		// Dummy should be replaced with the actual OPA policy
@@ -111,9 +112,11 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		writeResp(r.Context(), w, Allow())
 	case "bgz_patient":
 		// Dummy should be replaced with the actual OPA policy
+		// Currently this will always fail as we have no way of determining the BSN etc.
 		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), policyInput))
 	case "bgz_professional":
 		// Dummy should be replaced with the actual OPA policy
+		// Currently this will always fail as we have no way of determining the BSN etc.
 		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), policyInput))
 	default:
 		writeResp(r.Context(), w, Deny(
