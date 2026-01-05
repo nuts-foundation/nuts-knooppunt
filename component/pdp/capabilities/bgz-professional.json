@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "name": "BGZ2017Server",
   "status": "active",
-  "date": "2022-09-27",
+  "date": "2025-01-05",
   "publisher": "Nuts Foundation",
   "description": "This CapabilityStatement describes the minimal requirements for a server to expose the \"Basisgegevensset Zorg\" (Dutch Patient Summary) based the Dutch Health and Care Information models (Dutch: Zorginformatiebouwsteen or ZIB), release 2017.",
   "purpose": "This CapabilityStatement is informative in nature and does not represent the minimum or maximum set of capabilities the client or server should support. The aim is to design the CapabilityStatement as complete as possible, however for the exact set of capabilities the implementation guide of the corresponding information standard should be consulted.",

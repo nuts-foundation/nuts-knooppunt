@@ -1,178 +1,20 @@
 {
   "resourceType": "CapabilityStatement",
   "url": "http://nictiz.nl/fhir/CapabilityStatement/bgz2017-clientcapabilities",
-  "version": "1.1.1",
+  "version": "0.0.1",
   "name": "BGZ2017Client",
   "status": "active",
-  "date": "2022-09-27",
-  "publisher": "Nictiz",
-  "contact": [
-    {
-      "name": "Nictiz",
-      "telecom": [
-        {
-          "system": "url",
-          "value": "https://www.nictiz.nl",
-          "use": "work"
-        }
-      ]
-    }
-  ],
+  "date": "2022-01-05",
+  "publisher": "Nuts Foundation",
   "description": "This CapabilityStatement describes the minimal requirements for a client to retrieve the \"Basisgegevensset Zorg\" (Dutch Patient Summary) based the Dutch Health and Care Information models (Dutch: Zorginformatiebouwsteen or ZIB), release 2017.",
   "purpose": "This CapabilityStatement is informative in nature and does not represent the minimum or maximum set of capabilities the client or server should support. The aim is to design the CapabilityStatement as complete as possible, however for the exact set of capabilities the implementation guide of the corresponding information standard should be consulted.",
   "copyright": "CC0",
   "kind": "requirements",
-  "fhirVersion": "3.0.2",
+  "fhirVersion": "4.0.1",
   "acceptUnknown": "both",
   "format": [
     "xml",
     "json"
-  ],
-  "profile": [
-    {
-      "reference": "http://fhir.nl/fhir/StructureDefinition/nl-core-patient",
-      "display": "nl-core-patient"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-Payer",
-      "display": "zib-Payer"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-Problem",
-      "display": "zib-Problem"
-    },
-    {
-      "reference": "http://fhir.nl/fhir/StructureDefinition/nl-core-organization",
-      "display": "nl-core-organization"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-TreatmentDirective",
-      "display": "zib-TreatmentDirective"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-AdvanceDirective",
-      "display": "zib-AdvanceDirective"
-    },
-    {
-      "reference": "http://fhir.nl/fhir/StructureDefinition/nl-core-relatedperson",
-      "display": "nl-core-relatedperson"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-FunctionalOrMentalStatus",
-      "display": "zib-FunctionalOrMentalStatus"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-LivingSituation",
-      "display": "zib-LivingSituation"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-DrugUse",
-      "display": "zib-DrugUse"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-AlcoholUse",
-      "display": "zib-AlcoholUse"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-TobaccoUse",
-      "display": "zib-TobaccoUse"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-NutritionAdvice",
-      "display": "zib-NutritionAdvice"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-Alert",
-      "display": "zib-Alert"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-AllergyIntolerance",
-      "display": "zib-AllergyIntolerance"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-MedicationUse",
-      "display": "zib-MedicationUse"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-MedicationAgreement",
-      "display": "zib-MedicationAgreement"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-AdministrationAgreement",
-      "display": "zib-AdministrationAgreement"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-MedicalDeviceProduct",
-      "display": "zib-MedicalDeviceProduct"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-MedicalDevice",
-      "display": "zib-MedicalDevice"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-Vaccination",
-      "display": "zib-Vaccination"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-VaccinationRecommendation",
-      "display": "zib-VaccinationRecommendation"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-BloodPressure",
-      "display": "zib-BloodPressure"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-BodyWeight",
-      "display": "zib-BodyWeight"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-BodyHeight",
-      "display": "zib-BodyHeight"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-LaboratoryTestResult-Observation",
-      "display": "zib-LaboratoryTestResult-Observation"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-LaboratoryTestResult-DiagnosticReport",
-      "display": "zib-LaboratoryTestResult-DiagnosticReport"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-LaboratoryTestResult-Specimen",
-      "display": "zib-LaboratoryTestResult-Specimen"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-Procedure",
-      "display": "zib-Procedure"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-Encounter",
-      "display": "zib-Encounter"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-ProcedureRequest",
-      "display": "zib-ProcedureRequest"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-VaccinationRecommendation",
-      "display": "zib-VaccinationRecommendation"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/zib-MedicalDeviceRequest",
-      "display": "zib-MedicalDeviceRequest"
-    },
-    {
-      "reference": "http://nictiz.nl/fhir/StructureDefinition/eAfspraak-Appointment",
-      "display": "eAfspraak-Appointment"
-    },
-    {
-      "reference": "http://fhir.nl/fhir/StructureDefinition/nl-core-practitioner",
-      "display": "nl-core-practitioner"
-    },
-    {
-      "reference": "http://fhir.nl/fhir/StructureDefinition/nl-core-practitionerrole",
-      "display": "nl-core-practitionerrole"
-    }
   ],
   "rest": [
     {
@@ -180,6 +22,9 @@
       "resource": [
         {
           "type": "Patient",
+          "supportedProfile": [
+            "http://fhir.nl/fhir/StructureDefinition/nl-core-patient"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -191,6 +36,9 @@
         },
         {
           "type": "Coverage",
+          "supportedProfile": [
+            "http://nictiz.nl/fhir/StructureDefinition/zib-Payer"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -217,6 +65,18 @@
         },
         {
           "type": "Observation",
+          "supportedProfile": [
+            "http://nictiz.nl/fhir/StructureDefinition/zib-LaboratoryTestResult-Observation",
+            "http://nictiz.nl/fhir/StructureDefinition/zib-BloodPressure",
+            "http://nictiz.nl/fhir/StructureDefinition/zib-BodyWeight",
+            "http://nictiz.nl/fhir/StructureDefinition/zib-BodyHeight",
+            "http://nictiz.nl/fhir/StructureDefinition/zib-FunctionalOrMentalStatus",
+            "http://nictiz.nl/fhir/StructureDefinition/zib-LivingSituation",
+            "http://nictiz.nl/fhir/StructureDefinition/zib-DrugUse",
+            "http://nictiz.nl/fhir/StructureDefinition/zib-AlcoholUse",
+            "http://nictiz.nl/fhir/StructureDefinition/zib-TobaccoUse",
+            "http://nictiz.nl/fhir/StructureDefinition/zib-NutritionAdvice"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -239,6 +99,9 @@
         },
         {
           "type": "Condition",
+          "supportedProfile": [
+            "http://nictiz.nl/fhir/StructureDefinition/zib-Problem"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -263,6 +126,9 @@
         },
         {
           "type": "AllergyIntolerance",
+          "supportedProfile": [
+            "http://nictiz.nl/fhir/StructureDefinition/zib-AllergyIntolerance"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -271,6 +137,9 @@
         },
         {
           "type": "MedicationStatement",
+          "supportedProfile": [
+            "http://nictiz.nl/fhir/StructureDefinition/zib-MedicationUse"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -334,6 +203,9 @@
         },
         {
           "type": "Immunization",
+          "supportedProfile": [
+            "http://nictiz.nl/fhir/StructureDefinition/zib-Vaccination"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -348,6 +220,9 @@
         },
         {
           "type": "Procedure",
+          "supportedProfile": [
+            "http://nictiz.nl/fhir/StructureDefinition/zib-Procedure"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -362,6 +237,9 @@
         },
         {
           "type": "Encounter",
+          "supportedProfile": [
+            "http://nictiz.nl/fhir/StructureDefinition/zib-Encounter"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -375,7 +253,10 @@
           ]
         },
         {
-          "type": "ProcedureRequest",
+          "type": "ServiceRequest",
+          "supportedProfile": [
+            "http://nictiz.nl/fhir/StructureDefinition/zib-ProcedureRequest"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -390,6 +271,9 @@
         },
         {
           "type": "ImmunizationRecommendation",
+          "supportedProfile": [
+            "http://nictiz.nl/fhir/StructureDefinition/zib-VaccinationRecommendation"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -398,6 +282,9 @@
         },
         {
           "type": "DeviceRequest",
+          "supportedProfile": [
+            "http://nictiz.nl/fhir/StructureDefinition/zib-MedicalDeviceRequest"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -415,6 +302,9 @@
         },
         {
           "type": "Appointment",
+          "supportedProfile": [
+            "http://nictiz.nl/fhir/StructureDefinition/eAfspraak-Appointment"
+          ],
           "interaction": [
             {
               "code": "search-type"
@@ -431,10 +321,7 @@
       "operation": [
         {
           "name": "Last N Observations Query",
-          "definition": {
-            "reference": "http://hl7.org/fhir/OperationDefinition/Observation-lastn",
-            "display": "Observation-lastn"
-          }
+          "definition": "http://hl7.org/fhir/OperationDefinition/Observation-lastn"
         }
       ]
     }
