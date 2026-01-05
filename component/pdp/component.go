@@ -83,6 +83,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// TODO: Implement support for multiple scopes
 	scope := qualifications[0]
 
 	// Step 2: Parse the PDP input and translate to the policy input
