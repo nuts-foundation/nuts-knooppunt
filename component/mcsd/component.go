@@ -357,6 +357,19 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
 	deduplicatedEntries := deduplicateHistoryEntries(entries)
 
+	// Filter to only include HealthcareService resources
+	var allHealthcareServices []fhir.BundleEntry
+	for _, entry := range entries {
+		if entry.Resource == nil {
+			continue
+		}
+		var healthcareService fhir.HealthcareService
+		if err := json.Unmarshal(entry.Resource, &healthcareService); err == nil {
+			// Successfully unmarshaled as HealthcareService
+			allHealthcareServices = append(allHealthcareServices, entry)
+		}
+	}
+
 	// Pre-process Endpoint DELETEs to unregister administration directories
 	if allowDiscovery {
 		c.processEndpointDeletes(ctx, deduplicatedEntries)
@@ -389,7 +402,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			continue
 		}
 		slog.DebugContext(ctx, "Processing entry", logging.FHIRServer(fhirBaseURLRaw), slog.String("url", entry.Request.Url))
-		_, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes}, parentOrganizationsMap, allowDiscovery, fhirBaseURLRaw)
+		_, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes}, parentOrganizationsMap, allHealthcareServices, allowDiscovery, fhirBaseURLRaw)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue

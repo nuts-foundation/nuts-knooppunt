@@ -30,7 +30,7 @@ func ValidateParentOrganizations(parentOrganizationMap map[*fhir.Organization][]
 
 // ValidateUpdate validates a FHIR resource create/update from a mCSD Administration Directory,
 // according to the rules specified by https://nuts-foundation.github.io/nl-generic-functions-ig/care-services.html#update-client
-func ValidateUpdate(ctx context.Context, rules ValidationRules, resourceJSON []byte, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
+func ValidateUpdate(ctx context.Context, rules ValidationRules, resourceJSON []byte, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, allHealthcareServices []fhir.BundleEntry) error {
 	resourceAsMap := map[string]any{}
 	if err := json.Unmarshal(resourceJSON, &resourceAsMap); err != nil {
 		return fmt.Errorf("failed to unmarshal resource JSON: %w", err)
@@ -49,23 +49,23 @@ func ValidateUpdate(ctx context.Context, rules ValidationRules, resourceJSON []b
 	case "Organization":
 		return unmarshalAndVisitOrganizationResource(resourceJSON, parentOrganizationMap)
 	case "Location":
-		return unmarshalAndVisitResource[fhir.Location](ctx, resourceJSON, parentOrganizationMap, validateLocationResource)
+		return unmarshalAndVisitResource[fhir.Location](ctx, resourceJSON, parentOrganizationMap, allHealthcareServices, validateLocationResource)
 	case "PractitionerRole":
-		return unmarshalAndVisitResource[fhir.PractitionerRole](ctx, resourceJSON, parentOrganizationMap, validatePractitionerRoleResource)
+		return unmarshalAndVisitResource[fhir.PractitionerRole](ctx, resourceJSON, parentOrganizationMap, allHealthcareServices, validatePractitionerRoleResource)
 	case "HealthcareService":
-		return unmarshalAndVisitResource[fhir.HealthcareService](ctx, resourceJSON, parentOrganizationMap, validateHealthcareServiceResource)
+		return unmarshalAndVisitResource[fhir.HealthcareService](ctx, resourceJSON, parentOrganizationMap, allHealthcareServices, validateHealthcareServiceResource)
 	case "Endpoint":
-		return unmarshalAndVisitResource[fhir.Endpoint](ctx, resourceJSON, parentOrganizationMap, validateEndpointResource)
+		return unmarshalAndVisitResource[fhir.Endpoint](ctx, resourceJSON, parentOrganizationMap, allHealthcareServices, validateEndpointResource)
 	}
 	return nil
 }
 
-func unmarshalAndVisitResource[ResType any](ctx context.Context, resourceJSON []byte, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, visitor func(ctx context.Context, resource *ResType, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error) error {
+func unmarshalAndVisitResource[ResType any](ctx context.Context, resourceJSON []byte, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, allHealthcareServices []fhir.BundleEntry, visitor func(ctx context.Context, resource *ResType, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, allHealthcareServices []fhir.BundleEntry) error) error {
 	resource := new(ResType)
 	if err := json.Unmarshal(resourceJSON, resource); err != nil {
 		return fmt.Errorf("failed to unmarshal resource JSON: %w", err)
 	}
-	return visitor(ctx, resource, parentOrganizationMap)
+	return visitor(ctx, resource, parentOrganizationMap, allHealthcareServices)
 }
 
 func unmarshalAndVisitOrganizationResource(resourceJSON []byte, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
@@ -188,7 +188,7 @@ func validatePartOfChain(partOfRef *fhir.Reference, parentOrganizationMap map[*f
 	return fmt.Errorf("organization's partOf reference could not be validated (organization %s not found within authoritative organizations)", refID)
 }
 
-func validateHealthcareServiceResource(ctx context.Context, resource *fhir.HealthcareService, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
+func validateHealthcareServiceResource(ctx context.Context, resource *fhir.HealthcareService, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, allHealthcareServices []fhir.BundleEntry) error {
 	if resource.ProvidedBy == nil {
 		slog.WarnContext(ctx, "Healthcare service missing providedBy reference")
 		return fmt.Errorf("healthcare service must have a 'providedBy' referencing an Organization")
@@ -197,7 +197,7 @@ func validateHealthcareServiceResource(ctx context.Context, resource *fhir.Healt
 	return assertReferencePointsToValidOrganization(resource.ProvidedBy, parentOrganizationMap, "healthcareService.providedBy")
 }
 
-func validatePractitionerRoleResource(ctx context.Context, resource *fhir.PractitionerRole, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
+func validatePractitionerRoleResource(ctx context.Context, resource *fhir.PractitionerRole, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, allHealthcareServices []fhir.BundleEntry) error {
 	if resource.Organization == nil {
 		slog.WarnContext(ctx, "Practitioner role missing organization reference")
 		return fmt.Errorf("practitioner role must have an organization reference")
@@ -206,22 +206,64 @@ func validatePractitionerRoleResource(ctx context.Context, resource *fhir.Practi
 	return assertReferencePointsToValidOrganization(resource.Organization, parentOrganizationMap, "practitionerRole.organization")
 }
 
-func validateEndpointResource(ctx context.Context, resource *fhir.Endpoint, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
+func validateEndpointResource(ctx context.Context, resource *fhir.Endpoint, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, allHealthcareServices []fhir.BundleEntry) error {
 	if resource.Id == nil {
 		return fmt.Errorf("endpoint must have an ID")
 	}
 
-	// Check that at least one of the organizations has this endpoint in their endpoint references
-	return assertOrganizationHasEndpointReference(resource.Id, parentOrganizationMap)
+	// Check that at least one of the organizations or healthcare services has this endpoint in their endpoint references
+	return assertOrganizationOrHealthcareServiceHasEndpointReference(resource.Id, parentOrganizationMap, allHealthcareServices)
 }
 
-func validateLocationResource(ctx context.Context, resource *fhir.Location, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
+func validateLocationResource(ctx context.Context, resource *fhir.Location, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, allHealthcareServices []fhir.BundleEntry) error {
 	if resource.ManagingOrganization == nil {
 		slog.WarnContext(ctx, "Location missing managingOrganization reference")
 		return fmt.Errorf("location must have a 'managingOrganization' referencing an Organization")
 	}
 
 	return assertReferencePointsToValidOrganization(resource.ManagingOrganization, parentOrganizationMap, "location.managingOrganization")
+}
+
+// assertOrganizationOrHealthcareServiceHasEndpointReference validates that at least one of the organizations (parent or in allOrganizations)
+// or healthcare services has this endpoint ID in their endpoint references.
+func assertOrganizationOrHealthcareServiceHasEndpointReference(endpointID *string, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, allHealthcareServices []fhir.BundleEntry) error {
+	if endpointID == nil {
+		return fmt.Errorf("endpoint ID is nil")
+	}
+
+	// Check organizations first
+	for parentOrganization := range parentOrganizationMap {
+		// Check if parent organization has this endpoint
+		if parentOrganization != nil && organizationHasEndpointReference(parentOrganization, endpointID) {
+			return nil
+		}
+
+		allOrganizations := parentOrganizationMap[parentOrganization]
+
+		// Check if any organization in allOrganizations has this endpoint
+		for _, org := range allOrganizations {
+			if organizationHasEndpointReference(org, endpointID) {
+				return nil
+			}
+		}
+	}
+
+	// Check healthcare services
+	for _, entry := range allHealthcareServices {
+		if entry.Resource == nil {
+			continue
+		}
+		var healthcareService fhir.HealthcareService
+		if err := json.Unmarshal(entry.Resource, &healthcareService); err == nil {
+			if healthcareServiceHasEndpointReference(&healthcareService, endpointID) {
+				return nil
+			}
+		}
+	}
+
+	// No organization or healthcare service has this endpoint
+	slog.Warn("Endpoint not referenced by any organization or healthcare service", slog.String("endpointID", *endpointID))
+	return fmt.Errorf("endpoint must be referenced in at least one organization's or healthcare service's endpoint field (endpoint ID: %s)", *endpointID)
 }
 
 // assertOrganizationHasEndpointReference validates that at least one of the organizations (parent or in allOrganizations)
@@ -259,6 +301,27 @@ func organizationHasEndpointReference(org *fhir.Organization, endpointID *string
 	}
 
 	for _, endpointRef := range org.Endpoint {
+		if endpointRef.Reference == nil {
+			continue
+		}
+
+		// Extract the ID from the reference
+		refID := extractReferenceID(endpointRef.Reference)
+		if refID == *endpointID {
+			return true
+		}
+	}
+
+	return false
+}
+
+// healthcareServiceHasEndpointReference checks if a healthcareService has the given endpoint ID in its endpoint references.
+func healthcareServiceHasEndpointReference(healthcareService *fhir.HealthcareService, endpointID *string) bool {
+	if healthcareService == nil || endpointID == nil {
+		return false
+	}
+
+	for _, endpointRef := range healthcareService.Endpoint {
 		if endpointRef.Reference == nil {
 			continue
 		}
