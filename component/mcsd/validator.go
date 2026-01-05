@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -20,7 +21,7 @@ type ValidationRules struct {
 // ValidateParentOrganizations validates all parent organizations in the map.
 func ValidateParentOrganizations(parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
 	for parentOrg := range parentOrganizationMap {
-		if err := validateOrganizationResource(parentOrg); err != nil {
+		if err := validateOrganizationResource(parentOrg, parentOrganizationMap); err != nil {
 			return fmt.Errorf("parent organization failed to validate: %w", err)
 		}
 	}
@@ -46,7 +47,7 @@ func ValidateUpdate(ctx context.Context, rules ValidationRules, resourceJSON []b
 
 	switch resourceType {
 	case "Organization":
-		return unmarshalAndVisitOrganizationResource(resourceJSON)
+		return unmarshalAndVisitOrganizationResource(resourceJSON, parentOrganizationMap)
 	case "Location":
 		return unmarshalAndVisitResource[fhir.Location](ctx, resourceJSON, parentOrganizationMap, validateLocationResource)
 	case "PractitionerRole":
@@ -67,33 +68,129 @@ func unmarshalAndVisitResource[ResType any](ctx context.Context, resourceJSON []
 	return visitor(ctx, resource, parentOrganizationMap)
 }
 
-func unmarshalAndVisitOrganizationResource(resourceJSON []byte) error {
+func unmarshalAndVisitOrganizationResource(resourceJSON []byte, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
 	resource := new(fhir.Organization)
 	if err := json.Unmarshal(resourceJSON, resource); err != nil {
 		return fmt.Errorf("failed to unmarshal resource JSON: %w", err)
 	}
-	return validateOrganizationResource(resource)
+	return validateOrganizationResource(resource, parentOrganizationMap)
 }
 
-func validateOrganizationResource(resource *fhir.Organization) error {
+func validateOrganizationResource(resource *fhir.Organization, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
 	if resource == nil {
 		return nil // No validation needed if resource is nil
 	}
 
 	uraIdentifiers := fhirutil.FilterIdentifiersBySystem(resource.Identifier, coding.URANamingSystem)
 	if len(uraIdentifiers) > 1 {
+		// Only the authoritative organization should have a URA identifier, and only one
+		slog.Warn("Organization has multiple URA identifiers", slog.String("system", coding.URANamingSystem), slog.Int("count", len(uraIdentifiers)))
 		return fmt.Errorf("organization can't have multiple identifiers with system %s", coding.URANamingSystem)
 	}
 
-	if len(uraIdentifiers) == 0 && resource.PartOf == nil {
-		return fmt.Errorf("organization must have an identifier with system %s or refer to another organization through 'partOf'", coding.URANamingSystem)
+	// Collect all URA identifiers from parent organizations
+	parentURAIdentifiers := make(map[string]bool)
+	for parentOrg := range parentOrganizationMap {
+		if parentOrg != nil {
+			parentURAs := fhirutil.FilterIdentifiersBySystem(parentOrg.Identifier, coding.URANamingSystem)
+			for _, ura := range parentURAs {
+				if ura.Value != nil {
+					parentURAIdentifiers[*ura.Value] = true
+				}
+			}
+		}
+	}
+
+	if len(uraIdentifiers) > 0 {
+		// If the resource has a URA identifier, it must match one from the parent organizations
+		resourceURA := uraIdentifiers[0]
+		if resourceURA.Value == nil {
+			return fmt.Errorf("organization has a URA identifier with no value")
+		}
+		if !parentURAIdentifiers[*resourceURA.Value] {
+			slog.Warn("Organization URA identifier does not match any parent organization URA", slog.String("ura", *resourceURA.Value))
+			return fmt.Errorf("organization's URA identifier must match one of the authoritative parent organizations")
+		}
+	}
+
+	if len(uraIdentifiers) == 0 {
+		if resource.PartOf == nil {
+			slog.Warn("Organization missing URA identifier and partOf reference", slog.String("system", coding.URANamingSystem))
+			return fmt.Errorf("organization must have an identifier with system %s or refer to another organization through 'partOf'", coding.URANamingSystem)
+		}
+
+		// Validate that partOf references an authoritative organization (one with a URA identifier)
+		if err := validatePartOfReferencesAuthoritativeOrg(resource.PartOf, parentOrganizationMap); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
+// validatePartOfReferencesAuthoritativeOrg validates that the partOf reference eventually points to an organization with a URA identifier
+// by recursively following the partOf chain up the organization tree
+func validatePartOfReferencesAuthoritativeOrg(partOfRef *fhir.Reference, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
+	if partOfRef == nil {
+		return nil
+	}
+
+	visited := make(map[string]bool)
+	return validatePartOfChain(partOfRef, parentOrganizationMap, visited)
+}
+
+// validatePartOfChain recursively validates the partOf chain until it finds an organization with a URA identifier
+func validatePartOfChain(partOfRef *fhir.Reference, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, visited map[string]bool) error {
+	if partOfRef == nil {
+		return fmt.Errorf("reached end of partOf chain without finding an authoritative organization")
+	}
+
+	refID := extractReferenceID(partOfRef.Reference)
+	if refID == "" {
+		return fmt.Errorf("partOf reference does not contain a valid ID")
+	}
+
+	// Check for circular references
+	if visited[refID] {
+		return fmt.Errorf("circular reference detected in partOf chain at organization %s", refID)
+	}
+	visited[refID] = true
+
+	// Search for the referenced organization in the parent organization map
+	for parentOrg := range parentOrganizationMap {
+		if parentOrg != nil && parentOrg.Id != nil && *parentOrg.Id == refID {
+			// Check if this organization has a URA identifier (is authoritative)
+			uraIdentifiers := fhirutil.FilterIdentifiersBySystem(parentOrg.Identifier, coding.URANamingSystem)
+			if len(uraIdentifiers) > 0 {
+				return nil // Found an authoritative organization
+			}
+			// No URA identifier, follow the partOf chain
+			return validatePartOfChain(parentOrg.PartOf, parentOrganizationMap, visited)
+		}
+
+		// Also check in the allOrganizations list
+		allOrganizations := parentOrganizationMap[parentOrg]
+		for _, org := range allOrganizations {
+			if org != nil && org.Id != nil && *org.Id == refID {
+				// Check if this organization has a URA identifier (is authoritative)
+				uraIdentifiers := fhirutil.FilterIdentifiersBySystem(org.Identifier, coding.URANamingSystem)
+				if len(uraIdentifiers) > 0 {
+					return nil // Found an authoritative organization
+				}
+				// No URA identifier, follow the partOf chain
+				return validatePartOfChain(org.PartOf, parentOrganizationMap, visited)
+			}
+		}
+	}
+
+	// Referenced organization not found in parent organization map
+	slog.Warn("Organization partOf reference not found in parent organization map", slog.String("refID", refID))
+	return fmt.Errorf("organization's partOf reference could not be validated (organization %s not found within authoritative organizations)", refID)
+}
+
 func validateHealthcareServiceResource(ctx context.Context, resource *fhir.HealthcareService, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
 	if resource.ProvidedBy == nil {
+		slog.WarnContext(ctx, "Healthcare service missing providedBy reference")
 		return fmt.Errorf("healthcare service must have a 'providedBy' referencing an Organization")
 	}
 
@@ -102,6 +199,7 @@ func validateHealthcareServiceResource(ctx context.Context, resource *fhir.Healt
 
 func validatePractitionerRoleResource(ctx context.Context, resource *fhir.PractitionerRole, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
 	if resource.Organization == nil {
+		slog.WarnContext(ctx, "Practitioner role missing organization reference")
 		return fmt.Errorf("practitioner role must have an organization reference")
 	}
 
@@ -119,6 +217,7 @@ func validateEndpointResource(ctx context.Context, resource *fhir.Endpoint, pare
 
 func validateLocationResource(ctx context.Context, resource *fhir.Location, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization) error {
 	if resource.ManagingOrganization == nil {
+		slog.WarnContext(ctx, "Location missing managingOrganization reference")
 		return fmt.Errorf("location must have a 'managingOrganization' referencing an Organization")
 	}
 
@@ -149,6 +248,7 @@ func assertOrganizationHasEndpointReference(endpointID *string, parentOrganizati
 	}
 
 	// No organization has this endpoint
+	slog.Warn("Endpoint not referenced by any organization", slog.String("endpointID", *endpointID))
 	return fmt.Errorf("endpoint must be referenced in at least one organization's endpoint field (endpoint ID: %s)", *endpointID)
 }
 
@@ -203,6 +303,7 @@ func assertReferencePointsToValidOrganization(ref *fhir.Reference, parentOrganiz
 
 	}
 
+	slog.Warn("Reference does not point to a valid organization", slog.String("field", fieldName), slog.String("referenceID", refID))
 	return fmt.Errorf("%s must reference a valid organization (got %s)", fieldName, refID)
 }
 

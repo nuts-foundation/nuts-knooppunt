@@ -17,7 +17,7 @@ To verify the converted secret was created:
 {{- $expectedSecretName := printf "%s-nuts-db-fixed" (include "nuts-knooppunt.fullname" .) }}
 {{- $dbConfigCorrect := false }}
 {{- range .Values.nuts.extraEnv }}
-  {{- if eq .name "NUTS_STORAGE_SQL_CONNECTION" }}
+  {{- if and . .name (eq .name "NUTS_STORAGE_SQL_CONNECTION") }}
     {{- $hasDbConnection = true }}
     {{- if and .valueFrom .valueFrom.secretKeyRef }}
       {{- if eq .valueFrom.secretKeyRef.name $expectedSecretName }}

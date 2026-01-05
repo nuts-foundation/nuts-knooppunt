@@ -249,12 +249,13 @@ nuts:
   #           key: uri
   #
   # Example for release name "my-nuts-knooppunt":
-  extraEnv:
-    - name: NUTS_STORAGE_SQL_CONNECTION
-      valueFrom:
-        secretKeyRef:
-          name: RELEASE_NAME-nuts-db-fixed  # IMPORTANT: Update RELEASE_NAME to match your actual release name
-          key: uri
+  # extraEnv:
+  #   - name: NUTS_STORAGE_SQL_CONNECTION
+  #     valueFrom:
+  #       secretKeyRef:
+  #         name: my-nuts-knooppunt-nuts-db-fixed
+  #         key: uri
+  extraEnv: []
   nuts:
     config:
       url: https://nuts.example.com  # Public URL of the NUTS node
@@ -266,6 +267,24 @@ nuts:
   database:
     storage:
       size: 5Gi
+
+# Mock VC Issuer configuration (OID4VCI Credential Issuer for testing)
+# Set enabled: true to deploy the mock Verifiable Credential issuer for VektisOrgCredentials
+mock-vc-issuer:
+  enabled: false
+  fullnameOverride: mock-vc-issuer
+  # Override environment variables if needed
+  # env:
+  #   credentialValidityDays: "365"
+  #   accessTokenExpirySeconds: "86400"
+  # Ingress configuration
+  # ingress:
+  #   enabled: true
+  #   hosts:
+  #     - host: mock-vc-issuer.example.com
+  #       paths:
+  #         - path: /
+  #           pathType: Prefix
 
 # Jaeger configuration for distributed tracing
 # Set enabled: true to deploy Jaeger for trace collection and visualization

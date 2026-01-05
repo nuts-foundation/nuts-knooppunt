@@ -34,6 +34,11 @@ dependencies:
     condition: pep.enabled
     repository: oci://ghcr.io/nuts-foundation
     version: "0.1.1"
+  - name: helm-mock-vc-issuer
+    alias: mock-vc-issuer
+    condition: mock-vc-issuer.enabled
+    repository: file://../mock-vc-issuer
+    version: "0.1.0"
   - name: nuts-node-chart
     alias: nuts
     condition: nuts.enabled

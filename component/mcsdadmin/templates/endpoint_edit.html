@@ -10,16 +10,22 @@
                 <input id="address" type="text" name="address" class="form-control" placeholder="https://" required>
             </div>
             <div class="mb-3">
-                <div id="option-type" class="option">
-                    <label for="payload-type" class="form-label">Payload Type:</label>
-                    <select name="payload-type" id="payload-type" class="form-select" required>
-                        <option value="" disabled selected>--Please choose an option--</option>
-                        {{range .PayloadTypes }}
-                        <option value="{{ .Code }}">{{ .Display }}</option>
-                        {{ end }}
-                    </select>
+                <div id="payload-types-container">
+                    <div id="option-type" class="option">
+                        <label for="payload-type[0]" class="form-label">Payload Type:</label>
+                        <select name="payload-type[0]" id="payload-type[0]" class="form-select" required onchange="handlePayloadTypeChange(this)">
+                            <option value="" disabled selected>--Please choose an option--</option>
+                            {{range .PayloadTypes }}
+                            <option value="{{ .Code }}">{{ .Display }}</option>
+                            {{ end }}
+                        </select>
+                        <!-- Hidden fields for custom coding (cloned and re-indexed with the select) -->
+                        <input type="hidden" name="custom-system[0]" id="custom-system[0]" value="">
+                        <input type="hidden" name="custom-code[0]" id="custom-code[0]" value="">
+                        <input type="hidden" name="custom-display[0]" id="custom-display[0]" value="">
+                    </div>
                 </div>
-                <button onclick='addOption("payload-type");' type="button" class="btn btn-secondary btn-sm">Add type
+                <button onclick='addOption("option-type");' type="button" class="btn btn-secondary btn-sm mt-2">Add type
                 </button>
             </div>
             <div class="mb-3">
@@ -85,6 +91,42 @@
                 <button type="submit" class="btn btn-primary">Submit</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Modal for custom payload type -->
+<div id="customPayloadModal" class="custom-modal" style="display: none;">
+    <div class="custom-modal-backdrop" onclick="closeCustomPayloadModal()"></div>
+    <div class="custom-modal-dialog">
+        <div class="custom-modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Custom Payload Type</h5>
+                <button type="button" class="btn-close" onclick="closeCustomPayloadModal()" aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="customPayloadForm">
+                    <div class="mb-3">
+                        <label for="modal-custom-system" class="form-label">System <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="modal-custom-system" placeholder="http://..." required>
+                        <div class="form-text">The coding system URI (e.g., http://terminology.hl7.org/CodeSystem/...)</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modal-custom-code" class="form-label">Code <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="modal-custom-code" placeholder="code" required>
+                        <div class="form-text">The code value from the system</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="modal-custom-display" class="form-label">Display</label>
+                        <input type="text" class="form-control" id="modal-custom-display" placeholder="Display name">
+                        <div class="form-text">Optional: Human-readable display text</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeCustomPayloadModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="addCustomPayloadType()">Add</button>
+            </div>
+        </div>
     </div>
 </div>
 {{end}}

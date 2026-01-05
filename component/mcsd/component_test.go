@@ -216,7 +216,7 @@ func TestComponent_update(t *testing.T) {
 		require.Equal(t, 0, thisReport.CountDeleted)
 	})
 	t.Run("assert sync report from org1 directory", func(t *testing.T) {
-		thisReport := report[orgDir1BaseURL]
+		thisReport := report[makeDirectoryKey(orgDir1BaseURL, "111")]
 		require.Empty(t, thisReport.Errors)
 		require.Empty(t, thisReport.Warnings)
 		require.Equal(t, 3, thisReport.CountCreated) // 3 resources: Organization + 2 Endpoints
@@ -235,7 +235,7 @@ func TestComponent_update(t *testing.T) {
 		})
 	})
 	t.Run("assert sync report from non-existing FHIR server #1", func(t *testing.T) {
-		thisReport := report["https://directory1.example.org"]
+		thisReport := report[makeDirectoryKey("https://directory1.example.org", "222")]
 		require.Equal(t, "failed to query Organization history: _history search failed: 404 Not Found", strings.Join(thisReport.Errors, ""))
 		require.Empty(t, thisReport.Warnings)
 		require.Equal(t, 0, thisReport.CountCreated)
@@ -243,7 +243,7 @@ func TestComponent_update(t *testing.T) {
 		require.Equal(t, 0, thisReport.CountDeleted)
 	})
 	t.Run("assert sync report from non-existing FHIR server #2", func(t *testing.T) {
-		thisReport := report["https://directory2.example.org"]
+		thisReport := report[makeDirectoryKey("https://directory2.example.org", "444")]
 		require.Equal(t, "failed to query Organization history: _history search failed: 404 Not Found", strings.Join(thisReport.Errors, ""))
 		require.Empty(t, thisReport.Warnings)
 		require.Equal(t, 0, thisReport.CountCreated)
@@ -361,6 +361,219 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 
 	// Verify _since parameter matches the stored timestamp
 	require.Equal(t, lastUpdate, sinceParams[2], "_since parameter should match the stored lastUpdate timestamp")
+}
+
+func TestComponent_multipleDirsSameFHIRBaseURL(t *testing.T) {
+	t.Log("Test that multiple organizations can share the same fhirBaseURL with different authoritative URAs and sync independently")
+
+	// Setup shared directory server first (so we can reference its URL in test data)
+	sharedDirMux := http.NewServeMux()
+	sharedDirServer := httptest.NewServer(sharedDirMux)
+	defer sharedDirServer.Close()
+
+	// Common resource templates - define once, reuse for both shared and root directories
+	orgTemplate := `{
+		"resourceType": "Organization",
+		"id": "%s",
+		"meta": {"lastUpdated": "2025-12-18T09:00:00.000Z"},
+		"identifier": [{"system": "http://fhir.nl/fhir/NamingSystem/ura", "value": "%s"}],
+		"name": "%s"%s
+	}`
+
+	endpointTemplate := `{
+		"resourceType": "Endpoint",
+		"id": "shared-endpoint",
+		"meta": {"lastUpdated": "2025-12-18T09:00:00.000Z"},
+		"status": "active",
+		"payloadType": [{
+			"Coding": [{
+				"system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities",
+				"code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"
+			}]
+		}],
+		"name": "Shared Endpoint",
+		"address": "%s"
+	}`
+
+	endpointRef := `,"endpoint": [{"reference": "Endpoint/shared-endpoint"}]`
+	emptyHistory := `{"resourceType": "Bundle", "type": "history", "entry": []}`
+
+	// Shared directory responses
+	sharedOrgHistory := fmt.Sprintf(`{
+		"resourceType": "Bundle",
+		"type": "history",
+		"meta": {"lastUpdated": "2025-12-18T10:00:00.000Z"},
+		"entry": [
+			{
+				"fullUrl": "%s/Organization/org-a",
+				"resource": `+orgTemplate+`,
+				"request": {"method": "POST", "url": "Organization/org-a"},
+				"response": {"status": "201 Created"}
+			},
+			{
+				"fullUrl": "%s/Organization/org-b",
+				"resource": `+orgTemplate+`,
+				"request": {"method": "POST", "url": "Organization/org-b"},
+				"response": {"status": "201 Created"}
+			}
+		]
+	}`, sharedDirServer.URL, "org-a", "111", "Organization A", "",
+		sharedDirServer.URL, "org-b", "222", "Organization B", "")
+
+	sharedOrgSearchset := fmt.Sprintf(`{
+		"resourceType": "Bundle",
+		"type": "searchset",
+		"entry": [
+			{
+				"fullUrl": "%s/Organization/org-a",
+				"resource": `+orgTemplate+`
+			},
+			{
+				"fullUrl": "%s/Organization/org-b",
+				"resource": `+orgTemplate+`
+			}
+		]
+	}`, sharedDirServer.URL, "org-a", "111", "Organization A", endpointRef,
+		sharedDirServer.URL, "org-b", "222", "Organization B", endpointRef)
+
+	sharedEndpointHistory := fmt.Sprintf(`{
+		"resourceType": "Bundle",
+		"type": "history",
+		"meta": {"lastUpdated": "2025-12-18T10:00:00.000Z"},
+		"entry": [{
+			"fullUrl": "http://test.example.org/fhir/Endpoint/shared-endpoint",
+			"resource": `+endpointTemplate+`,
+			"request": {"method": "POST", "url": "Endpoint/shared-endpoint"},
+			"response": {"status": "201 Created"}
+		}]
+	}`, sharedDirServer.URL)
+
+	mockEndpoints(sharedDirMux, map[string]*string{
+		"/Organization/_history":      &sharedOrgHistory,
+		"/Organization":               &sharedOrgSearchset,
+		"/Endpoint/_history":          &sharedEndpointHistory,
+		"/Location/_history":          &emptyHistory,
+		"/HealthcareService/_history": &emptyHistory,
+		"/PractitionerRole/_history":  &emptyHistory,
+		"/Practitioner/_history":      &emptyHistory,
+	})
+
+	// Root directory responses - reusing same orgTemplate and endpointTemplate
+	rootOrgHistory := fmt.Sprintf(`{
+		"resourceType": "Bundle",
+		"type": "history",
+		"meta": {"lastUpdated": "2025-12-18T10:00:00.000Z"},
+		"entry": [
+			{
+				"fullUrl": "http://test.example.org/fhir/Organization/org-a",
+				"resource": `+orgTemplate+`,
+				"request": {"method": "POST", "url": "Organization/org-a"},
+				"response": {"status": "201 Created"}
+			},
+			{
+				"fullUrl": "http://test.example.org/fhir/Organization/org-b",
+				"resource": `+orgTemplate+`,
+				"request": {"method": "POST", "url": "Organization/org-b"},
+				"response": {"status": "201 Created"}
+			}
+		]
+	}`, "org-a", "111", "Organization A", endpointRef,
+		"org-b", "222", "Organization B", endpointRef)
+
+	rootEndpointHistory := fmt.Sprintf(`{
+		"resourceType": "Bundle",
+		"type": "history",
+		"meta": {"lastUpdated": "2025-12-18T10:00:00.000Z"},
+		"entry": [{
+			"fullUrl": "http://test.example.org/fhir/Endpoint/shared-endpoint",
+			"resource": `+endpointTemplate+`,
+			"request": {"method": "POST", "url": "Endpoint/shared-endpoint"},
+			"response": {"status": "201 Created"}
+		}]
+	}`, sharedDirServer.URL)
+
+	// Setup root directory server
+	rootDirMux := http.NewServeMux()
+	mockEndpoints(rootDirMux, map[string]*string{
+		"/Organization/_history":      &rootOrgHistory,
+		"/Organization":               &rootOrgHistory,
+		"/Endpoint/_history":          &rootEndpointHistory,
+		"/Endpoint":                   &rootEndpointHistory,
+		"/HealthcareService/_history": &emptyHistory,
+		"/Location/_history":          &emptyHistory,
+		"/PractitionerRole/_history":  &emptyHistory,
+		"/Practitioner/_history":      &emptyHistory,
+	})
+	rootDirServer := httptest.NewServer(rootDirMux)
+	defer rootDirServer.Close()
+
+	// Setup component
+	localClient := &test.StubFHIRClient{}
+	config := DefaultConfig()
+	config.AdministrationDirectories = map[string]DirectoryConfig{
+		"root": {FHIRBaseURL: rootDirServer.URL},
+	}
+	component, err := New(config)
+	require.NoError(t, err)
+
+	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+		urlStr := baseURL.String()
+		if urlStr == rootDirServer.URL || urlStr == sharedDirServer.URL {
+			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
+		}
+		return localClient
+	}
+
+	// Run update
+	ctx := context.Background()
+	report, err := component.update(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, report)
+
+	// Verify both shared directories were synced with different composite keys
+	sharedKeyOrgA := makeDirectoryKey(sharedDirServer.URL, "111")
+	sharedKeyOrgB := makeDirectoryKey(sharedDirServer.URL, "222")
+
+	reportOrgA, existsA := report[sharedKeyOrgA]
+	require.True(t, existsA, "Report for org A should exist with composite key")
+	require.Empty(t, reportOrgA.Errors)
+	require.Equal(t, 2, reportOrgA.CountCreated, "Should have created 2 resource for org A")
+
+	reportOrgB, existsB := report[sharedKeyOrgB]
+	require.True(t, existsB, "Report for org B should exist with composite key")
+	require.Empty(t, reportOrgB.Errors)
+	require.Equal(t, 2, reportOrgB.CountCreated, "Should have created 2 resource for org B")
+
+	// Verify both directories are registered
+	require.Len(t, component.administrationDirectories, 3, "Should have 3 directories: root + 2 shared with different URAs")
+
+	// Verify the directories have correct properties
+	var foundOrgA, foundOrgB bool
+	for _, dir := range component.administrationDirectories {
+		if dir.fhirBaseURL == sharedDirServer.URL && dir.authoritativeUra == "111" {
+			foundOrgA = true
+			require.Equal(t, sharedDirServer.URL, dir.fhirBaseURL, "Directory for org A should have shared fhirBaseURL")
+			require.False(t, dir.discover, "Discovered directories should not have discover=true")
+		}
+		if dir.fhirBaseURL == sharedDirServer.URL && dir.authoritativeUra == "222" {
+			foundOrgB = true
+			require.Equal(t, sharedDirServer.URL, dir.fhirBaseURL, "Directory for org B should have shared fhirBaseURL")
+			require.False(t, dir.discover, "Discovered directories should not have discover=true")
+		}
+	}
+	require.True(t, foundOrgA, "Directory for org A (URA 111) should be registered")
+	require.True(t, foundOrgB, "Directory for org B (URA 222) should be registered")
+
+	// Verify both directories share the same fhirBaseURL but have different URAs
+	var directoriesWithSharedURL []administrationDirectory
+	for _, dir := range component.administrationDirectories {
+		if dir.fhirBaseURL == sharedDirServer.URL {
+			directoriesWithSharedURL = append(directoriesWithSharedURL, dir)
+		}
+	}
+	require.Len(t, directoriesWithSharedURL, 2, "Should have exactly 2 directories with the shared fhirBaseURL")
+	require.Equal(t, directoriesWithSharedURL[0].fhirBaseURL, directoriesWithSharedURL[1].fhirBaseURL, "Both directories should have the same fhirBaseURL")
+	require.NotEqual(t, directoriesWithSharedURL[0].authoritativeUra, directoriesWithSharedURL[1].authoritativeUra, "Both directories should have different authoritativeUra values")
 }
 
 func TestExtractResourceIDFromURL(t *testing.T) {
@@ -1465,6 +1678,269 @@ func TestFindParentOrganizationWithURA(t *testing.T) {
 			expectedParentID:     to.Ptr("org1"),
 			expectedLinkedOrgIDs: []string{"org2", "org3"},
 			description:          "should work even when parent is not first in entries",
+		},
+		{
+			name: "handles organizations with VersionId in Meta",
+			entries: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org1"),
+						Meta: &fhir.Meta{
+							VersionId: to.Ptr("2"),
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("12345"),
+							},
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("org2"),
+						Meta: &fhir.Meta{
+							VersionId: to.Ptr("1"),
+						},
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/org1"),
+						},
+					}),
+				},
+			},
+			expectedParentID:     to.Ptr("org1"),
+			expectedLinkedOrgIDs: []string{"org2"},
+			description:          "should handle organizations with VersionId in Meta",
+		},
+		{
+			name: "handles real-world Vitaly FHIR bundle with multiple departments",
+			entries: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("5139f7b9-bb82-45ea-b979-285a906d4e54"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("1"),
+							LastUpdated: to.Ptr("2019-06-09T10:42:57.140+02:00"),
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("silver-river-memorial-hospital"),
+							},
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("5139f7b9-bb82-45ea-b979-285a906d4e54"),
+							},
+						},
+						Name: to.Ptr("Silver river memorial hospital"),
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("e47e4672-affd-44c9-a4b2-4355efd1ac31"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("1"),
+							LastUpdated: to.Ptr("2025-12-09T14:18:38.250+01:00"),
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("Goldriver-Hopsital"),
+							},
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("e47e4672-affd-44c9-a4b2-4355efd1ac31"),
+							},
+						},
+						Name: to.Ptr("Goldriver Hopsital"),
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("8d194c7c-91d4-4947-9e93-540d49e28877"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("6"),
+							LastUpdated: to.Ptr("2025-12-10T12:41:33.137+01:00"),
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("vallee-des-fleurs-clinique"),
+							},
+							{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("01234567"),
+							},
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("8d194c7c-91d4-4947-9e93-540d49e28877"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique"),
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("65e98500-c3e1-416f-a7cd-24bd7105c5dc"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("2"),
+							LastUpdated: to.Ptr("2025-12-10T11:06:27.336+01:00"),
+							Profile: []string{
+								"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization",
+							},
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("65e98500-c3e1-416f-a7cd-24bd7105c5dc"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique - Gyn. Oncology Department"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/8d194c7c-91d4-4947-9e93-540d49e28877"),
+							Type:      to.Ptr("Organization"),
+							Display:   to.Ptr("Vallee des fleurs clinique"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("1326c27b-9c6f-4606-bd4b-f184b16cde99"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("2"),
+							LastUpdated: to.Ptr("2025-12-10T20:10:42.165+01:00"),
+							Profile: []string{
+								"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization",
+							},
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("1326c27b-9c6f-4606-bd4b-f184b16cde99"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique - HPB Oncology Department"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/8d194c7c-91d4-4947-9e93-540d49e28877"),
+							Type:      to.Ptr("Organization"),
+							Display:   to.Ptr("Vallee des fleurs clinique"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("e82b5ff7-ccda-4d8a-9a2b-8f6a34ec0aa6"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("2"),
+							LastUpdated: to.Ptr("2025-12-10T20:12:45.030+01:00"),
+							Profile: []string{
+								"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization",
+							},
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("e82b5ff7-ccda-4d8a-9a2b-8f6a34ec0aa6"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique - Maternal obstetrics Department"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/8d194c7c-91d4-4947-9e93-540d49e28877"),
+							Type:      to.Ptr("Organization"),
+							Display:   to.Ptr("Vallee des fleurs clinique"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("21f4ea25-7982-4f5b-a629-62f68e5a1b81"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("2"),
+							LastUpdated: to.Ptr("2025-12-10T20:12:08.333+01:00"),
+							Profile: []string{
+								"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization",
+							},
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("21f4ea25-7982-4f5b-a629-62f68e5a1b81"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique - Infectious endocarditis Cardiology Department"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/8d194c7c-91d4-4947-9e93-540d49e28877"),
+							Type:      to.Ptr("Organization"),
+							Display:   to.Ptr("Vallee des fleurs clinique"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("6da8ec8a-3aa1-4dfc-a474-ab6de3f46576"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("2"),
+							LastUpdated: to.Ptr("2025-12-10T20:11:26.385+01:00"),
+							Profile: []string{
+								"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization",
+							},
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("6da8ec8a-3aa1-4dfc-a474-ab6de3f46576"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique - CRC Oncology Department"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/8d194c7c-91d4-4947-9e93-540d49e28877"),
+							Type:      to.Ptr("Organization"),
+							Display:   to.Ptr("Vallee des fleurs clinique"),
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalResource(&fhir.Organization{
+						Id: to.Ptr("5ff0484d-3342-413f-bddb-e40d2d66f542"),
+						Meta: &fhir.Meta{
+							VersionId:   to.Ptr("2"),
+							LastUpdated: to.Ptr("2025-12-10T20:13:36.241+01:00"),
+							Profile: []string{
+								"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization",
+							},
+						},
+						Identifier: []fhir.Identifier{
+							{
+								System: to.Ptr("http://some.uri"),
+								Value:  to.Ptr("5ff0484d-3342-413f-bddb-e40d2d66f542"),
+							},
+						},
+						Active: to.Ptr(true),
+						Name:   to.Ptr("Vallee des fleurs clinique - Pulmonary Oncology Department"),
+						PartOf: &fhir.Reference{
+							Reference: to.Ptr("Organization/8d194c7c-91d4-4947-9e93-540d49e28877"),
+							Type:      to.Ptr("Organization"),
+							Display:   to.Ptr("Vallee des fleurs clinique"),
+						},
+					}),
+				},
+			},
+			expectedParentID: to.Ptr("8d194c7c-91d4-4947-9e93-540d49e28877"),
+			expectedLinkedOrgIDs: []string{
+				"65e98500-c3e1-416f-a7cd-24bd7105c5dc", // Gyn. Oncology Department
+				"1326c27b-9c6f-4606-bd4b-f184b16cde99", // HPB Oncology Department
+				"e82b5ff7-ccda-4d8a-9a2b-8f6a34ec0aa6", // Maternal obstetrics Department
+				"21f4ea25-7982-4f5b-a629-62f68e5a1b81", // Infectious endocarditis Cardiology Department
+				"6da8ec8a-3aa1-4dfc-a474-ab6de3f46576", // CRC Oncology Department
+				"5ff0484d-3342-413f-bddb-e40d2d66f542", // Pulmonary Oncology Department
+			},
+			description: "should handle real Vitaly bundle with parent org (URA) and 6 departments, excluding 2 unrelated orgs",
 		},
 	}
 

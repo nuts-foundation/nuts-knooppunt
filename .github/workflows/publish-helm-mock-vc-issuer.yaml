@@ -1,0 +1,54 @@
+---
+name: "Publish Helm Chart - mock-vc-issuer"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "helm/mock-vc-issuer/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-mock-vc-issuer:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package and push helm-mock-vc-issuer chart
+        run: |
+          # Package helm-mock-vc-issuer
+          helm package helm/mock-vc-issuer -d .helm-packages
+
+          # Push to GHCR
+          helm push .helm-packages/helm-mock-vc-issuer-*.tgz oci://ghcr.io/${{ github.repository_owner }}
+
+      - name: Output published chart
+        run: |
+          MOCK_VC_ISSUER_VERSION=$(grep "^version:" helm/mock-vc-issuer/Chart.yaml | awk '{print $2}')
+
+          echo "Published Helm chart:"
+          echo "  - oci://ghcr.io/${{ github.repository_owner }}/helm-mock-vc-issuer:$MOCK_VC_ISSUER_VERSION"
+          echo ""
+          echo "Install with:"
+          echo "  helm install my-mock-vc-issuer oci://ghcr.io/${{ github.repository_owner }}/helm-mock-vc-issuer --version $MOCK_VC_ISSUER_VERSION"

@@ -12,7 +12,7 @@
             <div class="mb-3">
                 <label for="identifier" class="form-label">URA identifier:</label>
                 <input id="identifier" type="text" name="identifier" class="form-control"
-                       placeholder="Enter identifier here" required>
+                       placeholder="Enter identifier here">
             </div>
             <div class="mb-3 form-check">
                 <input type="checkbox" name="active" id="active" value="true" class="form-check-input">
@@ -51,4 +51,28 @@
         </form>
     </div>
 </div>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const identifierField = document.getElementById('identifier');
+        const partOfField = document.getElementById('part-of');
+
+        function updateIdentifierRequired() {
+            if (partOfField && partOfField.value) {
+                // Part-of is selected, identifier is not required
+                identifierField.removeAttribute('required');
+            } else {
+                // Part-of is not selected, identifier is required
+                identifierField.setAttribute('required', 'required');
+            }
+        }
+
+        // Update on page load
+        updateIdentifierRequired();
+
+        // Update when part-of selection changes
+        if (partOfField) {
+            partOfField.addEventListener('change', updateIdentifierRequired);
+        }
+    });
+</script>
 {{end}}
