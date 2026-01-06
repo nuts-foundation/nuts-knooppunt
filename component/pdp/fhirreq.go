@@ -44,6 +44,11 @@ var definitions = []PathDef{
 		Verb:        "DELETE",
 	},
 	{
+		Interaction: fhir.TypeRestfulInteractionDelete,
+		PathDef:     []string{"[type]?"},
+		Verb:        "DELETE",
+	},
+	{
 		Interaction: fhir.TypeRestfulInteractionCreate,
 		PathDef:     []string{"[type]"},
 		Verb:        "POST",
@@ -52,6 +57,11 @@ var definitions = []PathDef{
 		Interaction: fhir.TypeRestfulInteractionSearchType,
 		PathDef:     []string{"[type]?"},
 		Verb:        "GET",
+	},
+	{
+		Interaction: fhir.TypeRestfulInteractionUpdate,
+		PathDef:     []string{"[type]?"},
+		Verb:        "PUT",
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionSearchType,
