@@ -256,14 +256,19 @@ func assertOrganizationOrHealthcareServiceHasEndpointReference(endpointID *strin
 		var healthcareService fhir.HealthcareService
 		if err := json.Unmarshal(entry.Resource, &healthcareService); err == nil {
 			if healthcareServiceHasEndpointReference(&healthcareService, endpointID) {
-				return nil
+				// If the healthcare service references this endpoint, validate that the healthcare service itself is valid
+				if err := validateHealthcareServiceResource(context.Background(), &healthcareService, parentOrganizationMap, allHealthcareServices); err == nil {
+					// Found a valid healthcare service that references this endpoint
+					return nil
+				}
+				// Otherwise, continue checking other healthcare services or organizations
 			}
 		}
 	}
 
-	// No organization or healthcare service has this endpoint
-	slog.Warn("Endpoint not referenced by any organization or healthcare service", slog.String("endpointID", *endpointID))
-	return fmt.Errorf("endpoint must be referenced in at least one organization's or healthcare service's endpoint field (endpoint ID: %s)", *endpointID)
+	// No organization or valid healthcare service has this endpoint
+	slog.Warn("Endpoint not referenced by any organization or valid healthcare service", slog.String("endpointID", *endpointID))
+	return fmt.Errorf("endpoint must be referenced in at least one organization's or valid healthcare service's endpoint field (endpoint ID: %s)", *endpointID)
 }
 
 // assertOrganizationHasEndpointReference validates that at least one of the organizations (parent or in allOrganizations)

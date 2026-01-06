@@ -209,7 +209,7 @@ func TestComponent_update(t *testing.T) {
 			warnings := strings.Join(thisReport.Warnings, " ")
 			require.Contains(t, warnings, "failed to register discovered mCSD Directory at file:///etc/passwd: invalid FHIR base URL (url=file:///etc/passwd)")
 			require.Contains(t, warnings, "resource type Something-else not allowed")
-			require.Contains(t, warnings, "endpoint must be referenced in at least one organization's or healthcare service's endpoint field (endpoint ID: non-dir-endpoint)")
+			require.Contains(t, warnings, "endpoint must be referenced in at least one organization's or valid healthcare service's endpoint field (endpoint ID: non-dir-endpoint)")
 		})
 		require.Equal(t, 4, thisReport.CountCreated) // 4 mCSD directory endpoints should be created
 		require.Equal(t, 0, thisReport.CountUpdated)
