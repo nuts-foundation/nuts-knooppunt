@@ -4,23 +4,23 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 func TestComponent_map_input_xacml(t *testing.T) {
-	input := MainPolicyInput{
-		Method:                           "GET",
-		Path:                             []string{"fhir", "Patient", "118876"},
-		ResourceId:                       "118876",
-		ResourceType:                     fhir.ResourceTypePatient,
-		PatientBSN:                       "900186021",
-		RequestingUziRoleCode:            "01.015",
-		RequestingPractitionerIdentifier: "000095254",
-		RequestingOrganizationUra:        "00000666",
-		RequestingFacilityType:           "Z3",
-		DataHolderOrganizationUra:        "00000659",
-		DataHolderFacilityType:           "Z3",
-		PurposeOfUse:                     "treatment",
+	input := PolicyInput{
+		Subject: Subject{
+			Properties: SubjectProperties{
+				SubjectRole:           "01.015",
+				SubjectId:             "000095254",
+				SubjectOrganizationId: "00000666",
+				SubjectFacilityType:   "Z3",
+			},
+		},
+		Context: PolicyContext{
+			PatientBSN:               "900186021",
+			DataHolderFacilityType:   "Z3",
+			DataHolderOrganizationId: "00000659",
+		},
 	}
 
 	xacml := xacmlFromInput(input)

@@ -7,12 +7,12 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 )
 
-func EvalMitzPolicy(c Component, ctx context.Context, input MainPolicyInput) PolicyResult {
+func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) PolicyResult {
 	// TODO: make this return more detailed information for what fields are missing
 	ok := validateMitzInput(input)
 	if !ok {
 		return Deny(ResultReason{
-			Code:        "input_not_valid",
+			Code:        TypeResultCodeUnexpectedInput,
 			Description: "input not valid, missing required fields",
 		})
 	}
@@ -22,7 +22,7 @@ func EvalMitzPolicy(c Component, ctx context.Context, input MainPolicyInput) Pol
 	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
 	if err != nil {
 		return Deny(ResultReason{
-			Code:        "internal_error",
+			Code:        TypeResultCodeInternalError,
 			Description: "internal error, could not complete consent check with Mitz",
 		})
 	}
@@ -34,7 +34,7 @@ func EvalMitzPolicy(c Component, ctx context.Context, input MainPolicyInput) Pol
 
 	if !allow {
 		return Deny(ResultReason{
-			Code:        "not_allowed",
+			Code:        TypeResultCodeInternalError,
 			Description: "not allowed, denied by Mitz",
 		})
 	}
@@ -42,42 +42,30 @@ func EvalMitzPolicy(c Component, ctx context.Context, input MainPolicyInput) Pol
 	return Allow()
 }
 
-func xacmlFromInput(input MainPolicyInput) xacml.AuthzRequest {
-	var purpose string
-	switch input.PurposeOfUse {
-	case "treatment":
-		purpose = "TREAT"
-	case "secondary":
-		purpose = "COC"
-	default:
-		purpose = "TREAT"
-	}
-
+func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
 	return xacml.AuthzRequest{
-		PatientBSN:             input.PatientBSN,
-		HealthcareFacilityType: input.DataHolderFacilityType,
-		AuthorInstitutionID:    input.DataHolderOrganizationUra,
+		PatientBSN:             input.Context.PatientBSN,
+		HealthcareFacilityType: input.Context.DataHolderFacilityType,
+		AuthorInstitutionID:    input.Context.DataHolderOrganizationId,
 		// This code is always the same, it's the code for _de gesloten vraag_
 		EventCode:              "GGC002",
-		SubjectRole:            input.RequestingUziRoleCode,
-		ProviderID:             input.RequestingPractitionerIdentifier,
-		ProviderInstitutionID:  input.RequestingOrganizationUra,
-		ConsultingFacilityType: input.RequestingFacilityType,
-		PurposeOfUse:           purpose,
+		SubjectRole:            input.Subject.Properties.SubjectRole,
+		ProviderID:             input.Subject.Properties.SubjectId,
+		ProviderInstitutionID:  input.Subject.Properties.SubjectOrganizationId,
+		ConsultingFacilityType: input.Subject.Properties.SubjectFacilityType,
+		PurposeOfUse:           "TREAT",
 	}
 }
 
-func validateMitzInput(input MainPolicyInput) bool {
+func validateMitzInput(input PolicyInput) bool {
 	requiredValues := []string{
-		input.Scope,
-		input.PatientBSN,
-		input.RequestingUziRoleCode,
-		input.RequestingPractitionerIdentifier,
-		input.RequestingOrganizationUra,
-		input.RequestingFacilityType,
-		input.DataHolderOrganizationUra,
-		input.DataHolderFacilityType,
-		input.PurposeOfUse,
+		input.Context.PatientBSN,
+		input.Context.DataHolderFacilityType,
+		input.Context.DataHolderOrganizationId,
+		input.Subject.Properties.SubjectRole,
+		input.Subject.Properties.SubjectId,
+		input.Subject.Properties.SubjectOrganizationId,
+		input.Subject.Properties.SubjectFacilityType,
 	}
 	if slices.Contains(requiredValues, "") {
 		return false

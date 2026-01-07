@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"slices"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
-	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 func DefaultConfig() Config {
@@ -46,7 +44,7 @@ func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *h
 }
 
 func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
-	var reqBody MainPolicyRequest
+	var reqBody PDPRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	input := reqBody.Input
 	if err != nil {
@@ -54,14 +52,15 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	qualifications := input.Subject.Properties.ClientQualifications
+
 	// Step 1: Providing a scope is required for every PDP request
-	// FUTURE: We are considering allowing more than one scope
-	if input.Scope == "" {
+	if len(qualifications) == 0 {
 		res := PolicyResult{
 			Allow: false,
 			Reasons: []ResultReason{
 				{
-					Code:        "missing_required_value",
+					Code:        TypeResultCodeMissingRequiredValue,
 					Description: "missing required value, no scope defined",
 				},
 			},
@@ -70,48 +69,68 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 2: Check the request adheres to the capability statement for this scope
-	res := evalCapabilityPolicy(r.Context(), input)
+	if len(qualifications) > 1 {
+		res := PolicyResult{
+			Allow: false,
+			Reasons: []ResultReason{
+				{
+					Code:        TypeResultCodeNotImplemented,
+					Description: "providing multiple qualifications is not yet implemented",
+				},
+			},
+		}
+		writeResp(r.Context(), w, res)
+		return
+	}
+
+	// TODO: Implement support for multiple scopes
+	scope := qualifications[0]
+
+	// Step 2: Parse the PDP input and translate to the policy input
+	policyInput, policyResult := NewPolicyInput(reqBody)
+	if !policyResult.Allow {
+		writeResp(r.Context(), w, policyResult)
+		return
+	}
+
+	// Step 3: Check the request adheres to the capability statement for this scope
+	res := evalCapabilityPolicy(r.Context(), policyInput)
 	if !res.Allow {
 		writeResp(r.Context(), w, res)
 		return
 	}
 
-	// Step 3: Check if we are authorized to see the underlying data
+	// Step 4: Check if we are authorized to see the underlying data
 	// FUTURE: We want to use OPA policies here ...
-	// ... but for now we only have two example scopes hardcoded.
-	switch input.Scope {
+	// ... but for now we only have same example scopes hardcoded.
+	// This section is very much work in progress
+	switch scope {
 	case "mcsd_update":
-		validTypes := []fhir.ResourceType{
-			fhir.ResourceTypeOrganization,
-			fhir.ResourceTypeLocation,
-			fhir.ResourceTypeHealthcareService,
-			fhir.ResourceTypeEndpoint,
-			fhir.ResourceTypePractitionerRole,
-			fhir.ResourceTypeOrganizationAffiliation,
-			fhir.ResourceTypePractitioner,
-		}
-		if !slices.Contains(validTypes, input.ResourceType) {
-			writeResp(r.Context(), w, Deny(ResultReason{
-				Code:        "not_allowed",
-				Description: "not allowed to request this resources during update",
-			}))
-		}
+		// Dummy should be replaced with the actual OPA policy
 		writeResp(r.Context(), w, Allow())
-	case "patient_example":
-		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), input))
+	case "mcsd_query":
+		// Dummy should be replaced with the actual OPA policy
+		writeResp(r.Context(), w, Allow())
+	case "bgz_patient":
+		// Dummy should be replaced with the actual OPA policy
+		// Currently this will always fail as we have no way of determining the BSN etc.
+		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), policyInput))
+	case "bgz_professional":
+		// Dummy should be replaced with the actual OPA policy
+		// Currently this will always fail as we have no way of determining the BSN etc.
+		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), policyInput))
 	default:
 		writeResp(r.Context(), w, Deny(
 			ResultReason{
-				Code:        "not_implemented",
-				Description: fmt.Sprintf("scope %s not implemeted", input.Scope),
+				Code:        TypeResultCodeNotImplemented,
+				Description: fmt.Sprintf("scope %s not implemeted", scope),
 			},
 		))
 	}
 }
 
 func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) {
-	resp := MainPolicyResponse{
+	resp := PDPResponse{
 		Result: result,
 	}
 

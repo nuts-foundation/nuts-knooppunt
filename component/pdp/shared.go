@@ -1,33 +1,91 @@
 package pdp
 
 import (
+	"fmt"
+	"net/http"
+
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-type MainPolicyInput struct {
-	Scope                            string                      `json:"scope"`
-	Method                           string                      `json:"method"`
-	Path                             []string                    `json:"path"`
-	PatientBSN                       string                      `json:"patient_bsn"`
-	PurposeOfUse                     string                      `json:"purpose_of_use"`
-	DataHolderFacilityType           string                      `json:"data_holder_facility_type"`
-	DataHolderOrganizationUra        string                      `json:"data_holder_organization_ura"`
-	RequestingFacilityType           string                      `json:"requesting_facility_type"`
-	RequestingOrganizationUra        string                      `json:"requesting_organization_ura"`
-	RequestingPractitionerIdentifier string                      `json:"requesting_practitioner_identifier"`
-	RequestingUziRoleCode            string                      `json:"requesting_uzi_role_code"`
-	InteractionType                  fhir.TypeRestfulInteraction `json:"interaction_type"`
-	ResourceType                     fhir.ResourceType           `json:"resource_type"`
-	SearchParams                     []string                    `json:"search_params"`
-	ResourceId                       string                      `json:"resource_id"`
+type PDPInput struct {
+	Subject Subject     `json:"subject"`
+	Request HTTPRequest `json:"request"`
+	Context PDPContext  `json:"context"`
 }
 
-type MainPolicyRequest struct {
-	Input MainPolicyInput `json:"input"`
+type Subject struct {
+	Type       string            `json:"type"`
+	Id         string            `json:"id"`
+	Properties SubjectProperties `json:"properties"`
 }
 
-type MainPolicyResponse struct {
+type SubjectProperties struct {
+	ClientId              string   `json:"client_id"`
+	ClientQualifications  []string `json:"client_qualifications"`
+	SubjectId             string   `json:"subject_id"`
+	SubjectOrganizationId string   `json:"subject_organization_id"`
+	SubjectOrganization   string   `json:"subject_organization"`
+	SubjectFacilityType   string   `json:"subject_facility_type"`
+	SubjectRole           string   `json:"subject_role"`
+}
+
+type HTTPRequest struct {
+	Method      string              `json:"method"`
+	Protocol    string              `json:"protocol"` // "HTTP/1.0"
+	Path        string              `json:"path"`
+	QueryParams map[string][]string `json:"query_params"`
+	Header      http.Header         `json:"header"`
+	Body        string              `json:"body"`
+}
+
+type PDPContext struct {
+	DataHolderOrganizationId string `json:"data_holder_organization_id"`
+	DataHolderFacilityType   string `json:"data_holder_facility_type"`
+}
+
+type PolicyInput struct {
+	Subject  Subject        `json:"subject"`
+	Resource PolicyResource `json:"resource"`
+	Action   PolicyAction   `json:"action"`
+	Context  PolicyContext  `json:"context"`
+}
+
+type PolicyResource struct {
+	Type       fhir.ResourceType        `json:"type"`
+	Properties PolicyResourceProperties `json:"properties"`
+}
+
+type PolicyResourceProperties struct {
+	ResourceId string `json:"resource_id"`
+	VersionId  string `json:"version_id"`
+}
+
+type PolicyAction struct {
+	Name       string                 `json:"name"`
+	Properties PolicyActionProperties `json:"properties"`
+}
+
+type PolicyActionProperties struct {
+	InteractionType fhir.TypeRestfulInteraction `json:"interaction_type"`
+	Operation       *string                     `json:"operation"`
+	SearchParams    []string                    `json:"search_params"`
+	Include         []string                    `json:"include"`
+	Revinclude      []string                    `json:"revinclude"`
+}
+
+type PolicyContext struct {
+	DataHolderOrganizationId string `json:"data_holder_organization_id"`
+	DataHolderFacilityType   string `json:"data_holder_facility_type"`
+	PatientBSN               string `json:"patient_bsn"`
+	PurposeOfUse             string `json:"purpose_of_use"`
+}
+
+type PDPRequest struct {
+	Input PDPInput `json:"input"`
+}
+
+type PDPResponse struct {
 	Result PolicyResult `json:"result"`
 }
 
@@ -37,8 +95,28 @@ type PolicyResult struct {
 }
 
 type ResultReason struct {
-	Code        string `json:"code"`
-	Description string `json:"description"`
+	Code        TypeResultCode `json:"code"`
+	Description string         `json:"description"`
+}
+
+func (p *PolicyResult) AddReasons(input []string, format string, code TypeResultCode) {
+	isNewSlice := cap(p.Reasons) == 0
+	if isNewSlice {
+		p.Reasons = make([]ResultReason, len(input))
+	}
+
+	for i, str := range input {
+		reason := ResultReason{
+			Code:        code,
+			Description: fmt.Sprintf(format, str),
+		}
+
+		if isNewSlice {
+			p.Reasons[i] = reason
+		} else {
+			p.Reasons = append(p.Reasons, reason)
+		}
+	}
 }
 
 // Allow helper for creating an allowed result without reasons
@@ -58,14 +136,15 @@ func Deny(reason ResultReason) PolicyResult {
 	}
 }
 
-// TODO: Turn this into an enum
-var resultCodes = []string{
-	"missing_required_value",
-	"unexpected_input",
-	"not_allowed",
-	"not_implemented",
-	"internal_error",
-}
+type TypeResultCode string
+
+const (
+	TypeResultCodeMissingRequiredValue TypeResultCode = "missing_required_value"
+	TypeResultCodeUnexpectedInput      TypeResultCode = "unexpected_input"
+	TypeResultCodeNotAllowed           TypeResultCode = "not_allowed"
+	TypeResultCodeNotImplemented       TypeResultCode = "not_implemented"
+	TypeResultCodeInternalError        TypeResultCode = "internal_error"
+)
 
 type Config struct {
 	Enabled bool
