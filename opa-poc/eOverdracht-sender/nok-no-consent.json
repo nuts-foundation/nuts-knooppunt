@@ -1,0 +1,28 @@
+{
+  "action": {
+    "properties": {
+      "method": "POST"
+    }
+  },
+  "resource": {
+    "type": "Patient",
+    "properties": {
+      "id": "0fa227c1-9910-4852-8a5e-e03e928fafec"
+    }
+  },
+  "capabilitystatement": {
+    "checked": true
+  },
+  "client": {
+    "qualifications": [
+      "eoverdracht-sender"
+    ]
+  },
+  "subject": {
+    "properties": {
+      "subject_organization_id": "http://fhir.nl/fhir/NamingSystem/ura|12345678",
+      "subject_id": "DEZI|002"
+    }
+  }
+}
+

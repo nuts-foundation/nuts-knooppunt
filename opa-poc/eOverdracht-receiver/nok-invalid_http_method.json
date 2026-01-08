@@ -1,0 +1,16 @@
+{
+  "action": {
+    "properties": {
+      "method": "GET"
+    }
+  },
+  "client": {
+    "qualifications": ["eoverdracht-receiver"]
+  },
+  "subject": {
+    "properties": {
+      "subject_organization_id": "http://fhir.nl/fhir/NamingSystem/ura|87654321"
+    }
+  }
+}
+
