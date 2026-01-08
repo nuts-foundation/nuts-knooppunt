@@ -23,6 +23,11 @@ func createProxy(targetAddress *url.URL, rewriter ProxyRequestRewriter) *httputi
 		Rewrite: func(request *httputil.ProxyRequest) {
 			request.SetURL(targetAddress)
 			request.Out.Host = request.In.Host
+			if request.In.URL.RawPath != "" {
+				request.Out.URL.Path = request.In.URL.RawPath
+			} else {
+				request.Out.URL.Path = request.In.URL.Path
+			}
 			if rewriter != nil {
 				rewriter(request)
 			}
@@ -36,7 +41,10 @@ func createProxy(targetAddress *url.URL, rewriter ProxyRequestRewriter) *httputi
 
 func RemovePrefixRewriter(prefix string) ProxyRequestRewriter {
 	return func(request *httputil.ProxyRequest) {
-		inPath := request.In.URL.Path
+		inPath := request.In.URL.RawPath
+		if inPath == "" {
+			inPath = request.In.URL.Path
+		}
 		if prefix == "/" {
 			// Special case: root always matches
 			request.Out.URL.Path = inPath
