@@ -2,6 +2,7 @@ package pdp
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -121,4 +122,48 @@ func TestComponent_filter_result_param(t *testing.T) {
 	}
 	params := groupParams(queryParams)
 	assert.NotContains(t, params.SearchParams, "_total")
+}
+
+func TestComponent_parse_patient_id(t *testing.T) {
+	pdpRequest := PDPRequest{
+		Input: PDPInput{
+			Request: HTTPRequest{
+				Method:   "GET",
+				Protocol: "HTTP/1.1",
+				Path:     "/Patient/12345",
+			},
+		},
+	}
+	policyInput, _ := NewPolicyInput(pdpRequest)
+	assert.Equal(t, "12345", policyInput.Context.PatientId)
+
+	pdpRequest = PDPRequest{
+		Input: PDPInput{
+			Request: HTTPRequest{
+				Method:   "GET",
+				Protocol: "HTTP/1.1",
+				Path:     "/Patient?",
+				QueryParams: url.Values{
+					"_id": []string{"56789"},
+				},
+			},
+		},
+	}
+	policyInput, _ = NewPolicyInput(pdpRequest)
+	assert.Equal(t, "56789", policyInput.Context.PatientId)
+
+	pdpRequest = PDPRequest{
+		Input: PDPInput{
+			Request: HTTPRequest{
+				Method:   "GET",
+				Protocol: "HTTP/1.1",
+				Path:     "/Encounter?",
+				QueryParams: url.Values{
+					"patient": []string{"Patient/98765"},
+				},
+			},
+		},
+	}
+	policyInput, _ = NewPolicyInput(pdpRequest)
+	assert.Equal(t, "98765", policyInput.Context.PatientId)
 }
