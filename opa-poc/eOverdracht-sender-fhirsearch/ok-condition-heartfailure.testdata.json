@@ -1,0 +1,79 @@
+{
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:patient-001",
+      "request": {
+        "method": "PUT",
+        "url": "Patient/patient-001"
+      },
+      "resource": {
+        "resourceType": "Patient",
+        "id": "patient-001",
+        "name": [
+          {
+            "family": "Test",
+            "given": ["Patient"]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:condition-12345",
+      "request": {
+        "method": "PUT",
+        "url": "Condition/condition-12345"
+      },
+      "resource": {
+        "resourceType": "Condition",
+        "id": "condition-12345",
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active",
+              "display": "Active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed",
+              "display": "Confirmed"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                "code": "encounter-diagnosis",
+                "display": "Encounter Diagnosis"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://example.org/fhir/CodeSystem/condition-codes",
+              "code": "heartfailure",
+              "display": "Heart Failure"
+            }
+          ],
+          "text": "Heart Failure"
+        },
+        "subject": {
+          "reference": "Patient/patient-001"
+        },
+        "onsetDateTime": "2025-12-01T00:00:00Z",
+        "recordedDate": "2025-12-05T10:30:00Z"
+      }
+    }
+  ]
+}
+

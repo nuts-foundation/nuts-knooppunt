@@ -1,0 +1,80 @@
+{
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:patient-001",
+      "request": {
+        "method": "PUT",
+        "url": "Patient/patient-001"
+      },
+      "resource": {
+        "resourceType": "Patient",
+        "id": "patient-001",
+        "name": [
+          {
+            "family": "Test",
+            "given": ["Patient"]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:obs-wrong-code",
+      "request": {
+        "method": "PUT",
+        "url": "Observation/obs-wrong-code"
+      },
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-wrong-code",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://example.org/fhir/CodeSystem/observation-codes",
+              "code": "blood-pressure",
+              "display": "Blood Pressure"
+            }
+          ],
+          "text": "Blood Pressure"
+        },
+        "subject": {
+          "reference": "Patient/patient-001"
+        },
+        "effectiveDateTime": "2026-01-09T10:00:00Z",
+        "component": [
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8480-6",
+                  "display": "Systolic blood pressure"
+                }
+              ]
+            },
+            "valueQuantity": {
+              "value": 120,
+              "unit": "mmHg",
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+

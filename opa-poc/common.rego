@@ -116,39 +116,6 @@ subject_has_role(required_role) if {
     input.subject.properties.subject_role == required_role
 }
 
-# ---------------------------------------------------
-# Denial Reason Generators
-# ---------------------------------------------------
-
-# Generate denial reason for capability statement check failure
-# Usage: reason := common.denial_reason_capabilitystatement_failed
-denial_reason_capabilitystatement_failed := "CapabilityStatement check failed"
-denial_reason_client_not_qualified := "Client is not qualified"
-
-# Generate denial reason for consent check failure (detailed)
-# Usage: reason := common.denial_reason_no_consent_for_resource
-denial_reason_no_consent_for_resource := "No matching consent found for the requested resource"
-
-# Generate denial reason for consent check failure (simple)
-# Usage: reason := common.denial_reason_no_consent_for_organization
-denial_reason_no_consent_for_organization := "No matching consent found for subject organization"
-
-# Generate denial reason for user authentication failure
-# Usage: reason := common.denial_reason_user_not_authenticated
-denial_reason_user_not_authenticated := "User authentication required but subject_id is missing"
-
-# Generate denial reason for HTTP method mismatch
-# Usage: reason := common.denial_reason_invalid_http_method("POST", "GET")
-denial_reason_invalid_http_method(expected_method, actual_method) := reason if {
-    reason := sprintf("Invalid HTTP method: expected %s, got %s", [expected_method, actual_method])
-}
-
-# Generate denial reason for role mismatch
-# Usage: reason := common.denial_reason_invalid_role("arts")
-denial_reason_invalid_role(required_role) := reason if {
-    reason := sprintf("Subject does not have required role (required: %s)", [required_role])
-}
-
 
 
 

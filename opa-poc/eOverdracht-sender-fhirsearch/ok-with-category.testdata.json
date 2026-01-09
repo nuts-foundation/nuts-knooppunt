@@ -1,0 +1,67 @@
+{
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:patient-001",
+      "request": {
+        "method": "PUT",
+        "url": "Patient/patient-001"
+      },
+      "resource": {
+        "resourceType": "Patient",
+        "id": "patient-001",
+        "name": [
+          {
+            "family": "Test",
+            "given": ["Patient"]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:obs-12345",
+      "request": {
+        "method": "PUT",
+        "url": "Observation/obs-12345"
+      },
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-12345",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs",
+                "display": "Vital Signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://example.org/fhir/CodeSystem/observation-codes",
+              "code": "heart-measurement",
+              "display": "Heart Measurement"
+            }
+          ],
+          "text": "Heart Measurement"
+        },
+        "subject": {
+          "reference": "Patient/patient-001"
+        },
+        "effectiveDateTime": "2026-01-09T10:00:00Z",
+        "valueQuantity": {
+          "value": 72,
+          "unit": "beats/minute",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        }
+      }
+    }
+  ]
+}
+

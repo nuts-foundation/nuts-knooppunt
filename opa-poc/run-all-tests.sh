@@ -29,6 +29,76 @@ echo "Using OPA version:"
 opa version | head -1
 echo ""
 
+# Start HAPI FHIR server for testing
+echo "==========================================="
+echo "HAPI FHIR Server Setup"
+echo "==========================================="
+FHIR_CONTAINER_NAME="opa-test-fhir-server"
+
+# Check if container already exists and is running
+if docker ps --format '{{.Names}}' | grep -q "^${FHIR_CONTAINER_NAME}$"; then
+  echo "FHIR server container already running, reusing it..."
+  FHIR_CONTAINER_EXISTED=true
+elif docker ps -a --format '{{.Names}}' | grep -q "^${FHIR_CONTAINER_NAME}$"; then
+  echo "FHIR server container exists but is stopped, starting it..."
+  docker start "$FHIR_CONTAINER_NAME"
+  FHIR_CONTAINER_EXISTED=true
+else
+  echo "Starting new HAPI FHIR server on port 7623..."
+  docker run -d \
+    --name "$FHIR_CONTAINER_NAME" \
+    -p 7623:8080 \
+    -e hapi.fhir.default_encoding=json \
+    -e hapi.fhir.expunge_enabled=true \
+    -e hapi.fhir.allow_multiple_delete=true \
+    hapiproject/hapi:v8.6.0-1
+  FHIR_CONTAINER_EXISTED=false
+fi
+
+# Wait for FHIR server to be ready
+echo -n "Waiting for FHIR server to be ready"
+max_attempts=30
+attempt=0
+while [ $attempt -lt $max_attempts ]; do
+  if curl -s http://localhost:7623/fhir/metadata > /dev/null 2>&1; then
+    echo " ✅ Ready!"
+    break
+  fi
+  echo -n "."
+  sleep 2
+  ((attempt++))
+done
+
+if [ $attempt -eq $max_attempts ]; then
+  echo " ❌ Failed to start!"
+  if [ "$FHIR_CONTAINER_EXISTED" = false ]; then
+    docker rm -f "$FHIR_CONTAINER_NAME" 2>/dev/null || true
+  fi
+  exit 1
+fi
+
+echo ""
+
+# Function to purge all data from FHIR server using system-wide $expunge
+purge_fhir_server() {
+    # Use HAPI FHIR's system-wide $expunge operation to delete all data
+    curl -s -X POST \
+        "http://localhost:7623/fhir/\$expunge" \
+        -H "Content-Type: application/fhir+json" \
+        -d '{
+          "resourceType": "Parameters",
+          "parameter": [
+            {
+              "name": "expungeEverything",
+              "valueBoolean": true
+            }
+          ]
+        }' > /dev/null 2>&1 || true
+
+    # Small delay to ensure expunge completes
+    sleep 0.5
+}
+
 # Counters
 total_tests=0
 total_passed=0
@@ -50,8 +120,8 @@ for policy_dir in $policy_dirs; do
     echo "Testing: $policy_name"
     echo "==========================================="
 
-    # Find all JSON input files in the directory (excluding .expected.json files)
-    json_files=$(find "$policy_dir" -maxdepth 1 -name "*.json" -type f ! -name "*.expected.json" | sort)
+    # Find all JSON input files in the directory (excluding .expected.json and .testdata.json files)
+    json_files=$(find "$policy_dir" -maxdepth 1 -name "*.json" -type f ! -name "*.expected.json" ! -name "*.testdata.json" | sort)
 
     if [ -z "$json_files" ]; then
         echo "⚠️  No test input files found in $policy_dir"
@@ -75,18 +145,37 @@ for policy_dir in $policy_dirs; do
         echo -n "  Testing $filename ... "
         ((total_tests++))
 
+        # Check for FHIR transaction file to initialize test data
+        fhir_transaction_file="${input_file%.json}.testdata.json"
+        if [ -f "$fhir_transaction_file" ]; then
+            # Purge FHIR server to ensure clean state
+            purge_fhir_server
+
+            # Load test data into FHIR server
+            fhir_response=$(curl -s -X POST \
+                -H "Content-Type: application/fhir+json" \
+                -d @"$fhir_transaction_file" \
+                http://localhost:7623/fhir 2>&1)
+            # Wait for FHIR server to index the resources
+            sleep 2
+        fi
+
         # Check if there's an expected output file
         expected_file="${input_file%.json}.expected.json"
 
         if [ -f "$expected_file" ]; then
             # Enhanced verification with expected output
 
+            # Merge FHIR base URL into input JSON (create context if it doesn't exist)
+            temp_input=$(mktemp)
+            jq --arg fhir_url "http://localhost:7623/fhir" \
+                '.context = (.context // {}) | .context.fhir_base_url = $fhir_url' "$input_file" > "$temp_input"
+
             # Run OPA evaluation and get full output
-            if [ -f "common.rego" ]; then
-                result=$(opa eval -i "$input_file" -d "common.rego" -d "$policy_dir/policy.rego" "data.$package_name" --format pretty 2>&1)
-            else
-                result=$(opa eval -i "$input_file" -d "$policy_dir/policy.rego" "data.$package_name" --format pretty 2>&1)
-            fi
+            result=$(opa eval -i "$temp_input" -d "common.rego" -d "$policy_dir/policy.rego" "data.$package_name" --format pretty 2>&1)
+
+            # Clean up temp file
+            rm -f "$temp_input"
 
             # Check if evaluation failed
             if echo "$result" | grep -q "error occurred"; then
@@ -152,12 +241,16 @@ for policy_dir in $policy_dirs; do
                 continue
             fi
 
+            # Merge FHIR base URL into input JSON (create context if it doesn't exist)
+            temp_input=$(mktemp)
+            jq --arg fhir_url "http://localhost:7623/fhir" \
+                '.context = (.context // {}) | .context.fhir_base_url = $fhir_url' "$input_file" > "$temp_input"
+
             # Run OPA evaluation
-            if [ -f "common.rego" ]; then
-                result=$(opa eval -i "$input_file" -d "common.rego" -d "$policy_dir/policy.rego" "data.$package_name.allow" --format raw 2>&1 || echo "ERROR")
-            else
-                result=$(opa eval -i "$input_file" -d "$policy_dir/policy.rego" "data.$package_name.allow" --format raw 2>&1 || echo "ERROR")
-            fi
+            result=$(opa eval -i "$temp_input" -d "common.rego" -d "$policy_dir/policy.rego" "data.$package_name.allow" --format raw 2>&1 || echo "ERROR")
+
+            # Clean up temp file
+            rm -f "$temp_input"
 
             # Check result
             if [ "$result" == "ERROR" ] || [ -z "$result" ]; then
