@@ -20,6 +20,50 @@
       }
     },
     {
+      "fullUrl": "urn:uuid:task-001",
+      "request": {
+        "method": "PUT",
+        "url": "Task/task-001"
+      },
+      "resource": {
+        "resourceType": "Task",
+        "id": "task-001",
+        "meta": {
+          "tag": [
+            {
+              "system": "http://nictiz.nl/fhir/NamingSystem/eoverdracht-task-type",
+              "code": "eoverdracht"
+            }
+          ]
+        },
+        "status": "requested",
+        "intent": "order",
+        "code": {
+          "coding": [
+            {
+              "system": "http://nictiz.nl/fhir/NamingSystem/eoverdracht-task-type",
+              "code": "eoverdracht"
+            }
+          ]
+        },
+        "for": {
+          "reference": "Patient/patient-001"
+        },
+        "requester": {
+          "identifier": {
+            "system": "http://fhir.nl/fhir/NamingSystem/ura",
+            "value": "12345678"
+          }
+        },
+        "owner": {
+          "identifier": {
+            "system": "http://fhir.nl/fhir/NamingSystem/ura",
+            "value": "87654321"
+          }
+        }
+      }
+    },
+    {
       "fullUrl": "urn:uuid:condition-12345",
       "request": {
         "method": "PUT",
