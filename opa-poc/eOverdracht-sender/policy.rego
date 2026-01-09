@@ -1,44 +1,35 @@
 package eoverdracht.sender
 
+import data.common
+
 required_client_qualification := "eoverdracht-sender"
 
 default allow = false
 
 allow if {
-    allowed_by_capabilitystatement
-    client_is_qualified
-    user_is_authenticated_if_required
-    has_consent
+	common.allowed_by_capabilitystatement
+	common.client_has_qualification(required_client_qualification)
+	common.user_is_authenticated_if_required
+	common.has_consent_for_requested_resource
 }
 
-allowed_by_capabilitystatement if {
-    input.capabilitystatement.checked
+deny_reason := "operation not allowed by FHIR CapabilityStatement" if {
+	not allow
+	not common.allowed_by_capabilitystatement
 }
 
-client_is_qualified if {
-    required_client_qualification in input.client.qualifications
+deny_reason := "client is not qualified" if {
+	not allow
+	not common.client_has_qualification(required_client_qualification)
 }
 
-user_is_authenticated_if_required if {
-    # No user authentication required for Task resources (contains no medical data/PII)
-    input.resource.type == "Task"
+deny_reason := "no authenticated user" if {
+	not allow
+	not common.user_is_authenticated_if_required
 }
 
-user_is_authenticated_if_required if {
-    input.resource.type != "Task"
-    input.subject.properties.subject_id
-}
-
-has_consent if {
-    consent := input.context.consents[_]
-    # Check if consent actor FHIR identifier matches subject organization ID (FHIR token)
-    actorIdentifier := consent.provision.actor.identifier[_]
-    subjectOrganizationIDParts := split(input.subject.properties.subject_organization_id, "|")
-    actorIdentifier.system == subjectOrganizationIDParts[0]
-    actorIdentifier.value == subjectOrganizationIDParts[1]
-    # Check if consent data reference matches the requested resource
-    dataReference := consent.provision.data[_]
-    expectedReference := sprintf("%s/%s", [input.resource.type, input.resource.properties.id])
-    dataReference.reference.reference == expectedReference
+deny_reason := "missing patient consent" if {
+	not allow
+	not common.has_consent_for_requested_resource
 }
 

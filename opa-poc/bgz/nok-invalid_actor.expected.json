@@ -1,0 +1,4 @@
+{
+  "allow": false,
+  "deny_reason": "missing patient consent"
+}

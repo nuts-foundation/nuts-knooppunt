@@ -1,34 +1,37 @@
 package bgz
 
+import data.common
+
+# Configuration
 required_client_qualification := "bgz-requester"
 required_subject_role := "arts"
 
+# Policy decision
 default allow = false
 
 allow if {
-    allowed_by_capabilitystatement
-    client_is_qualified
-    practitioner_is_authorized
-    has_consent
+	common.allowed_by_capabilitystatement
+	common.client_has_qualification(required_client_qualification)
+	common.subject_has_role(required_subject_role)
+	common.has_consent_for_subject_organization_simple
 }
 
-allowed_by_capabilitystatement if {
-    input.capabilitystatement.checked
+deny_reason := "operation not allowed by FHIR CapabilityStatement" if {
+	not allow
+	not common.allowed_by_capabilitystatement
 }
 
-client_is_qualified if {
-    required_client_qualification in input.client.qualifications
+deny_reason := "client is not qualified" if {
+	not allow
+	not common.client_has_qualification(required_client_qualification)
 }
 
-practitioner_is_authorized if {
-    input.subject.properties.subject_role == required_subject_role
+deny_reason := "subject does not have required role" if {
+	not allow
+	not common.subject_has_role(required_subject_role)
 }
 
-has_consent if {
-    consent := input.consent[_]
-    # Check if consent actor FHIR identifier matches subject organization ID (FHIR token)
-    actorIdentifier := consent.provision.actor.identifier[_]
-    subjectOrganizationIDParts := split(input.subject.properties.subject_organization_id, "|")
-    actorIdentifier.system == subjectOrganizationIDParts[0]
-    actorIdentifier.value == subjectOrganizationIDParts[1]
+deny_reason := "missing patient consent" if {
+	not allow
+	not common.has_consent_for_subject_organization_simple
 }

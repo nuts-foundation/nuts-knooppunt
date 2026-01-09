@@ -1,22 +1,25 @@
 package eoverdracht.receiver
 
-# Required qualification for the client to receive eOverdracht data
-required_client_qualification := "eoverdracht-receiver"
+import data.common
 
+# Configuration
+required_client_qualification := "eoverdracht-receiver"
+expected_http_method := "POST"
+
+# Policy decision
 default allow = false
 
 allow if {
-    is_post_request
-    client_is_qualified
+	common.http_method_is(expected_http_method)
+	common.client_has_qualification(required_client_qualification)
 }
 
-# Verify that the HTTP method is POST
-is_post_request if {
-    input.action.properties.method == "POST"
+deny_reason := "invalid HTTP method" if {
+	not allow
+	not common.http_method_is(expected_http_method)
 }
 
-# Verify that the client has the required qualification
-client_is_qualified if {
-    required_client_qualification in input.client.qualifications
+deny_reason := "client is not qualified" if {
+	not allow
+	not common.client_has_qualification(required_client_qualification)
 }
-
