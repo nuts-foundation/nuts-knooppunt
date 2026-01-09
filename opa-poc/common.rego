@@ -6,14 +6,6 @@ package common
 # This file contains reusable policy components that can be
 # imported by specific use-case policies.
 
-# ---------------------------------------------------
-# CapabilityStatement Validation
-# ---------------------------------------------------
-
-# Check if the CapabilityStatement has been verified
-allowed_by_capabilitystatement if {
-    input.capabilitystatement.checked
-}
 
 # ---------------------------------------------------
 # Client Qualification Checks

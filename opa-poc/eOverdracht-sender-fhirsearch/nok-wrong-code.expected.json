@@ -1,4 +1,5 @@
 {
-  "allow": false
+  "allow": false,
+  "deny_reason": "resource category not allowed"
 }
 

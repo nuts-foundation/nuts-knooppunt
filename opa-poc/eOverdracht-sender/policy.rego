@@ -1,13 +1,14 @@
 package eoverdracht.sender
 
 import data.common
+import data.fhir
 
 required_client_qualification := "eoverdracht-sender"
 
 default allow = false
 
 allow if {
-	common.allowed_by_capabilitystatement
+	fhir.allowed_by_capabilitystatement
 	common.client_has_qualification(required_client_qualification)
 	common.user_is_authenticated_if_required
 	common.has_consent_for_requested_resource
@@ -15,7 +16,7 @@ allow if {
 
 deny_reason := "operation not allowed by FHIR CapabilityStatement" if {
 	not allow
-	not common.allowed_by_capabilitystatement
+	not fhir.allowed_by_capabilitystatement
 }
 
 deny_reason := "client is not qualified" if {

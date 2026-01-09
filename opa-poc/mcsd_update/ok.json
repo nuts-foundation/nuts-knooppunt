@@ -3,7 +3,7 @@
     "checked": true
   },
   "client": {
-    "qualifications": ["mcsd_update_client"]
+    "qualifications": ["mcsd-updater"]
   }
 }
 

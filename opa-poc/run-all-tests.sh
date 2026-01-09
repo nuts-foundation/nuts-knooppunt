@@ -94,9 +94,6 @@ purge_fhir_server() {
             }
           ]
         }' > /dev/null 2>&1 || true
-
-    # Small delay to ensure expunge completes
-    sleep 0.5
 }
 
 # Counters
@@ -104,6 +101,37 @@ total_tests=0
 total_passed=0
 total_failed=0
 total_errors=0
+
+# Verify OPA policies first
+echo "==========================================="
+echo "Verifying OPA Policies"
+echo "==========================================="
+
+# Find all policy.rego files and verify them with opa check
+policy_verification_failed=false
+
+for policy_dir in $(find . -maxdepth 2 -name "policy.rego" -exec dirname {} \; | sort); do
+    policy_name=$(basename "$policy_dir")
+    echo -n "  Verifying $policy_name ... "
+
+    # Run opa check to verify the policy syntax
+    if opa check common.rego fhir.rego "$policy_dir/policy.rego" > /dev/null 2>&1; then
+        echo "✅ PASS"
+    else
+        echo "❌ FAIL"
+        echo "     Running opa check for details:"
+        opa check common.rego fhir.rego "$policy_dir/policy.rego" 2>&1
+        policy_verification_failed=true
+    fi
+done
+
+if [ "$policy_verification_failed" = true ]; then
+    echo ""
+    echo "❌ Policy verification failed! Fix policy errors before running tests."
+    exit 1
+fi
+
+echo ""
 
 # Find all directories containing policy.rego files
 policy_dirs=$(find . -maxdepth 2 -name "policy.rego" -exec dirname {} \; | sort)
@@ -156,8 +184,6 @@ for policy_dir in $policy_dirs; do
                 -H "Content-Type: application/fhir+json" \
                 -d @"$fhir_transaction_file" \
                 http://localhost:7623/fhir 2>&1)
-            # Wait for FHIR server to index the resources
-            sleep 2
         fi
 
         # Check if there's an expected output file
@@ -172,7 +198,7 @@ for policy_dir in $policy_dirs; do
                 '.context = (.context // {}) | .context.fhir_base_url = $fhir_url' "$input_file" > "$temp_input"
 
             # Run OPA evaluation and get full output
-            result=$(opa eval -i "$temp_input" -d "common.rego" -d "$policy_dir/policy.rego" "data.$package_name" --format pretty 2>&1)
+            result=$(opa eval -i "$temp_input" -d "common.rego" -d "fhir.rego" -d "$policy_dir/policy.rego" "data.$package_name" --format pretty 2>&1)
 
             # Clean up temp file
             rm -f "$temp_input"
@@ -247,7 +273,7 @@ for policy_dir in $policy_dirs; do
                 '.context = (.context // {}) | .context.fhir_base_url = $fhir_url' "$input_file" > "$temp_input"
 
             # Run OPA evaluation
-            result=$(opa eval -i "$temp_input" -d "common.rego" -d "$policy_dir/policy.rego" "data.$package_name.allow" --format raw 2>&1 || echo "ERROR")
+            result=$(opa eval -i "$temp_input" -d "common.rego" -d "fhir.rego" -d "$policy_dir/policy.rego" "data.$package_name.allow" --format raw 2>&1 || echo "ERROR")
 
             # Clean up temp file
             rm -f "$temp_input"
