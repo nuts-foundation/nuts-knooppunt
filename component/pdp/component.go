@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 )
 
@@ -23,10 +26,25 @@ var _ component.Lifecycle = (*Component)(nil)
 
 // New creates an instance of the pdp component, which provides a simple policy decision endpoint.
 func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
-	return &Component{
+	comp := &Component{
 		Config: config,
 		Mitz:   mitzcomp,
-	}, nil
+	}
+
+	if config.PIPURL != "" {
+		url, err := url.Parse(config.PIPURL)
+		if err != nil {
+			return &Component{}, err
+		}
+		pipClient := fhirclient.New(url, tracing.NewHTTPClient(), &fhirclient.Config{
+			UsePostSearch: false,
+		})
+		comp.PIPClient = pipClient
+	} else {
+		slog.Warn("PIP address not configured, authorization limited to self contained policies")
+	}
+
+	return comp, nil
 }
 
 func (c Component) Start() error {

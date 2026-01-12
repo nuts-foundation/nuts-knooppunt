@@ -19,7 +19,7 @@ func PipPolicyInput(c Component, policyInput PolicyInput) PolicyInput {
 	// If we have a patientId try and fetch the BSN
 	patientId := policyInput.Context.PatientId
 	if patientId != "" {
-		client := *c.PIPClient
+		client := c.PIPClient
 
 		var patient fhir.Patient
 		path := fmt.Sprintf("Patient/%s", patientId)

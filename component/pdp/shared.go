@@ -156,5 +156,5 @@ type Config struct {
 type Component struct {
 	Config    Config
 	Mitz      *mitz.Component
-	PIPClient *fhirclient.Client
+	PIPClient fhirclient.Client
 }
