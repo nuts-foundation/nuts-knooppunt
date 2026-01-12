@@ -4,29 +4,47 @@ Implementation of the Nuts Knooppunt specifications.
 
 ## Demo EHR
 
-A simple demo Electronic Health Record (EHR) application is provided in the `demo-ehr/` folder. This React-based SPA demonstrates:
+A demonstration Electronic Health Record (EHR) application is provided in the `demo-ehr/` folder. This React-based application showcases Dutch healthcare data exchange use cases:
 
-- **OIDC Authentication** - Login using Knooppunt's OIDC Provider
-- **User Dashboard** - Display authenticated user information
-- **Foundation for Data Exchange** - Ready to integrate with Knooppunt's data exchange features
+### Key Features
 
-### Quick Start
+- **BGZ (Basisgegevensset Zorg) Exchange** - Share comprehensive patient health summaries using TA Notified Pull
+- **eOverdracht** - Care handover workflows between healthcare providers
+- **mCSD Integration** - Organization discovery and endpoint routing
+- **NVI Integration** - Patient care network discovery via DocumentReference queries
+- **SMART on FHIR** - OIDC/OAuth2 authentication and patient context launches
+
+### Quick Start with Docker Compose
+
+The easiest way to run the demo-ehr application is using Docker Compose:
 
 ```shell
-# Run the quickstart script
-./demo-ehr-quickstart.sh
+# Start the demo-ehr with all dependencies
+docker compose --profile demoehr up
 
-# Or manually:
-# Terminal 1: Start Knooppunt
-./nuts-knooppunt
-
-# Terminal 2: Start Demo EHR
-cd demo-ehr && npm start
+# Stop the application
+docker compose --profile demoehr down
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-📖 See [demo-ehr/SETUP.md](demo-ehr/SETUP.md) for detailed instructions.
+### Local Development
+
+For local development without Docker:
+
+```shell
+# Install dependencies
+cd demo-ehr
+npm install
+
+# Configure environment (create .env file)
+# See demo-ehr/README.md for environment variables
+
+# Start development server
+npm start
+```
+
+📖 See [demo-ehr/README.md](demo-ehr/README.md) for detailed documentation, configuration, and use case workflows.
 
 ## Endpoints
 
@@ -56,9 +74,6 @@ See [docs/INTEGRATION.md](docs/INTEGRATION.md) for how to integrate the Knooppun
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for an overview of the architecture and design of the Knooppunt (for Knooppunt developers).
 
-## Demo EHR
-If you want to set up a demo EHR, see [demo-ehr](demo-ehr) subdirectory for detailed instructions.
-
 ## Go toolchain
 
 It's a typical Go application, so:
@@ -80,12 +95,27 @@ For a complete overview of the deployment options, see [docs/DEPLOYMENT.md](docs
 
 A docker compose config is provided to run a set of services that are useful for development:
 
-- HAPI server, multi-tenancy enabled, using UUIDs, running on port 8080
-- PostgreSQL database, for the HAPI server
+- **Knooppunt** - Main application running on ports 8080 (API) and 8081 (internal)
+- **HAPI FHIR Server** - Multi-tenant FHIR R4 server with NVI support, running on port 7050
+- **Aspire Dashboard** - Observability dashboard for traces, logs, and metrics on port 18888
+- **Demo EHR** - Demo application (optional, use `--profile demoehr`)
+- **PEP (Policy Enforcement Point)** - NGINX-based reference implementation (optional, use `--profile pep`)
 
-Start the stack with:
+Start the base stack with:
 
 ```shell
 docker compose up --build
+```
+
+Start with demo-ehr:
+
+```shell
+docker compose --profile demoehr up --build
+```
+
+Start with PEP:
+
+```shell
+docker compose --profile pep up --build
 ```
 
