@@ -15,6 +15,7 @@ import (
 func DefaultConfig() Config {
 	return Config{
 		Enabled: true,
+		PIPURL:  "",
 	}
 }
 
@@ -93,14 +94,17 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 3: Check the request adheres to the capability statement for this scope
+	// Step 3: Enrich the policy input with data gathered from the policy information point
+	policyInput = PipPolicyInput(c, policyInput)
+
+	// Step 4: Check the request adheres to the capability statement for this scope
 	res := evalCapabilityPolicy(r.Context(), policyInput)
 	if !res.Allow {
 		writeResp(r.Context(), w, res)
 		return
 	}
 
-	// Step 4: Check if we are authorized to see the underlying data
+	// Step 5: Check if we are authorized to see the underlying data
 	// FUTURE: We want to use OPA policies here ...
 	// ... but for now we only have same example scopes hardcoded.
 	// This section is very much work in progress

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -148,10 +149,12 @@ const (
 )
 
 type Config struct {
-	Enabled bool
+	Enabled bool   `koanf:"enabled"`
+	PIPURL  string `koanf:"pipurl"`
 }
 
 type Component struct {
-	Config Config
-	Mitz   *mitz.Component
+	Config    Config
+	Mitz      *mitz.Component
+	PIPClient *fhirclient.Client
 }
