@@ -95,10 +95,7 @@ Content-Type: application/json
     "request": {
       "method": "GET",
       "protocol": "HTTP/1.0",
-      "path": "/Coverage?",
-      "query_params": {
-        "patient": ["foo"]
-      }
+      "path": "/Patient/178764"
     },
     "context": {
       "data_holder_organization_id": "00000659",

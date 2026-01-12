@@ -28,6 +28,9 @@
           "interaction": [
             {
               "code": "search-type"
+            },
+            {
+              "code": "read"
             }
           ],
           "searchInclude": [
