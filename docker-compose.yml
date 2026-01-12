@@ -8,7 +8,7 @@ services:
       KNPT_MCSDADMIN_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-admin
       KNPT_MCSD_QUERY_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-query
       KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL: https://knooppunt-test.nuts-services.nl/lrza/mcsd
-      KNPT_NVI_BASEURL: https://knooppunt-test.nuts-services.nl/nvi
+      KNPT_NVI_BASEURL: http://hapi-fhir:7050/fhir/nvi
       KNPT_TRACING_OTLPENDPOINT: ${KNPT_TRACING_OTLPENDPOINT:-aspire-dashboard:18890}
     volumes:
       - ./config:/app/config:ro
@@ -69,7 +69,7 @@ services:
       hapi.fhir.allow_cascading_deletes: true
       # Lets the server generate UUIDs for resources instead of integers
       hapi.fhir.server_id_strategy: UUID
-      # Allows storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
+      # Allow storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
       hapi.fhir.store_meta_source_information: SOURCE_URI
 
       NVI_AUDIENCE: nvi
@@ -95,7 +95,7 @@ services:
       hapi.fhir.tester.admin.server_address: http://localhost:7050/fhir/knpt-mcsd-admin
       hapi.fhir.tester.admin.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.admin.fhir_version: R4
-      
+
       hapi.fhir.tester.query.name: Local Query Directory
       hapi.fhir.tester.query.server_address: http://localhost:7050/fhir/knpt-mcsd-query
       hapi.fhir.tester.query.refuse_to_fetch_third_party_urls: false
@@ -110,12 +110,12 @@ services:
       hapi.fhir.tester.care2cure.server_address: http://localhost:7050/fhir/care2cure-admin
       hapi.fhir.tester.care2cure.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.care2cure.fhir_version: R4
-      
+
       hapi.fhir.tester.sunflower.name: Sunflower Admin Directory
       hapi.fhir.tester.sunflower.server_address: http://localhost:7050/fhir/sunflower-admin
       hapi.fhir.tester.sunflower.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.sunflower.fhir_version: R4
-      
+
       hapi.fhir.tester.sunflowerpatients.name: Sunflower Patients Directory
       hapi.fhir.tester.sunflowerpatients.server_address: http://localhost:7050/fhir/sunflower-patients
       hapi.fhir.tester.sunflowerpatients.refuse_to_fetch_third_party_urls: false
@@ -125,7 +125,7 @@ services:
       hapi.fhir.tester.nvi.server_address: http://localhost:7050/fhir/nvi
       hapi.fhir.tester.nvi.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.nvi.fhir_version: R4
-      
+
       hapi.fhir.tester.pip.name: PIP
       hapi.fhir.tester.pip.server_address: http://localhost:7050/fhir/policy-information-point
       hapi.fhir.tester.pip.refuse_to_fetch_third_party_urls: false
@@ -134,30 +134,6 @@ services:
       # Enable partitioning and allow string tenant identifiers
       hapi.fhir.partitioning.allow_references_across_partitions: false
     restart: unless-stopped
-
-#  hapi-fhir-dstu3:
-#    image: hapiproject/hapi:v8.2.0-2
-#    container_name: hapi-fhir-server-dstu3
-#    ports:
-#      - "7051:7051"
-#    environment:
-#      hapi.fhir.server_address: http://localhost:7051/fhir
-#      hapi.fhir.fhir_version: DSTU3
-#      # Prevents encoding of the pipe char in queries
-#      server.tomcat.relaxed-query-chars: "|"
-#      server.port: 7051
-#      # should be an ADR? How does this behave?
-#      hapi.fhir.allow_cascading_deletes: true
-#      # Lets the server generate UUIDs for resources instead of integers
-#      hapi.fhir.server_id_strategy: UUID
-#      # Allows storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
-#      hapi.fhir.store_meta_source_information: SOURCE_URI
-#
-#      # Enable partitioning and allow string tenant identifiers
-#      hapi.fhir.partitioning.allow_references_across_partitions: false
-#      hapi.fhir.allow_external_references: true
-#    restart: unless-stopped
-
   hapi-fhir-healthcheck:
     image: curlimages/curl:7.87.0
     depends_on:
@@ -203,11 +179,14 @@ services:
       start_period: 10s
     profiles:
       - pep
+
   demo-ehr:
     build:
       context: ./demo-ehr
       dockerfile: Dockerfile
     image: demo-ehr:latest
+    profiles:
+      - demoehr
     container_name: demo-ehr
     ports:
       - "3000:3000"
@@ -217,8 +196,8 @@ services:
     environment:
       - CHOKIDAR_USEPOLLING=true  # For hot reload on some systems
       - REACT_APP_AUTHORITY=http://localhost:8080/auth
-      - REACT_APP_FHIR_BASE_URL=https://server.fire.ly/R4
-      - REACT_APP_FHIR_STU3_BASE_URL=https://server.fire.ly/R3
+      - REACT_APP_FHIR_BASE_URL=https://server.fire.ly/R4      # adjust this to a local FHIR server or a different one if needed
+      - REACT_APP_FHIR_STU3_BASE_URL=https://server.fire.ly/R3 # adjust this to a local FHIR server or a different one if needed
       - REACT_APP_FHIR_MCSD_QUERY_BASE_URL=http://localhost:7050/fhir/knpt-mcsd-query
     stdin_open: true
     tty: true

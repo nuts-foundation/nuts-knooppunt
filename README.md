@@ -56,6 +56,9 @@ See [docs/INTEGRATION.md](docs/INTEGRATION.md) for how to integrate the Knooppun
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for an overview of the architecture and design of the Knooppunt (for Knooppunt developers).
 
+## Demo EHR
+If you want to set up a demo EHR, see [demo-ehr](demo-ehr) subdirectory for detailed instructions.
+
 ## Go toolchain
 
 It's a typical Go application, so:
