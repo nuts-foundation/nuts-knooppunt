@@ -263,6 +263,101 @@ OIDC settings are configured in `authConfig.js`:
 - **Redirect URI**: `http://localhost:3000/callback`
 - **Scopes**: `openid profile`
 
+### Knooppunt Configuration
+
+The demo-ehr application requires specific configuration in the Knooppunt server (`config/knooppunt.yml`). The following sections detail the required configuration changes:
+
+#### NVI Configuration
+
+Enable NVI (Notified Pull Index) with the FHIR base URL:
+
+```yaml
+nvi:
+  baseurl: "http://localhost:7050/fhir/nvi"
+```
+
+#### mCSD Configuration
+
+Configure mCSD directories for organization discovery and routing:
+
+```yaml
+mcsd:
+  # Root directories to synchronize from
+  admin:
+    "lrza":
+      fhirbaseurl: "https://knooppunt-test.nuts-services.nl/lrza/mcsd"
+
+  # Local FHIR directory configuration
+  query:
+    fhirbaseurl: "http://localhost:7050/fhir/knpt-mcsd-query"
+```
+
+**Key Points:**
+- `mcsd.admin` - Configures external mCSD directories to synchronize from (e.g., LRZA national registry)
+- `mcsd.query.fhirbaseurl` - Local query endpoint for organization and endpoint lookups
+- The query endpoint is used by the demo-ehr app via `REACT_APP_FHIR_MCSD_QUERY_BASE_URL`
+
+#### mCSD Admin Configuration
+
+Configure the admin interface FHIR endpoint:
+
+```yaml
+mcsdadmin:
+  # Base URL for FHIR server used by admin interface
+  fhirbaseurl: "http://localhost:7050/fhir/knpt-mcsd-admin"
+```
+
+#### OIDC Client Registration
+
+Register the demo-ehr application as an OIDC client:
+
+```yaml
+authn:
+  oidc:
+    # ... existing configuration ...
+    clients:
+      # ... existing clients ...
+      - id: "demo-ehr"
+        secret: "demo-ehr-secret"
+        redirecturls:
+          - "http://localhost:3000/callback"
+```
+
+**Important:** The client ID, secret, and redirect URL must match the values in `demo-ehr/src/authConfig.js`.
+
+#### Complete Configuration Example
+
+Here's a complete example of the required sections in `config/knooppunt.yml`:
+
+```yaml
+strictmode: false
+
+nvi:
+  baseurl: "http://localhost:7050/fhir/nvi"
+
+mcsd:
+  admin:
+    "lrza":
+      fhirbaseurl: "https://knooppunt-test.nuts-services.nl/lrza/mcsd"
+
+  query:
+    fhirbaseurl: "http://localhost:7050/fhir/knpt-mcsd-query"
+
+  exclude_admin_directories:
+    - "http://localhost:7050/fhir/knpt-mcsd-admin"
+
+mcsdadmin:
+  fhirbaseurl: "http://localhost:7050/fhir/knpt-mcsd-admin"
+
+authn:
+  oidc:
+    clients:
+      - id: "demo-ehr"
+        secret: "demo-ehr-secret"
+        redirecturls:
+          - "http://localhost:3000/callback"
+```
+
 ## FHIR Profiles and Standards
 
 ### BGZ (Basisgegevensset Zorg)
@@ -283,93 +378,3 @@ OIDC settings are configured in `authConfig.js`:
 - **BGZ Referral**: SNOMED CT 3457005 - "verwijzen van patiënt"
 - **eOverdracht**: SNOMED CT 308292007 - "Overdracht van zorg"
 - **Pull Notification**: `http://fhir.nl/fhir/NamingSystem/TaskCode|pull-notification`
-
-## Development
-
-### Prerequisites
-- Node.js 16+
-- npm or yarn
-- Docker and Docker Compose (for containerized deployment)
-- Access to FHIR servers and Nuts infrastructure
-
-### Running with Docker Compose (Recommended)
-
-The easiest way to run the demo-ehr application is using Docker Compose with the `demoehr` profile:
-
-```bash
-# From the project root directory
-docker compose --profile demoehr up
-```
-
-This will:
-- Build the demo-ehr Docker image
-- Start the application on `http://localhost:3000`
-- Mount source code for hot reload during development
-- Configure all required environment variables
-
-To stop the application:
-
-```bash
-docker compose --profile demoehr down
-```
-
-### Running Locally (Development)
-
-For local development without Docker:
-
-1. **Install dependencies**:
-   ```bash
-   cd demo-ehr
-   npm install
-   ```
-
-2. **Configure environment variables**:
-   Create a `.env` file in the `demo-ehr` directory (see Configuration section above)
-
-3. **Start the development server**:
-   ```bash
-   npm start
-   ```
-
-   The application will start on `http://localhost:3000` (default React dev server port).
-
-### Building for Production
-
-To create a production build:
-
-```bash
-npm run build
-```
-
-The build artifacts will be stored in the `build/` directory.
-
-### Docker Support
-
-The application includes full Docker support with a multi-stage Dockerfile:
-
-**Build the image**:
-```bash
-docker build -t demo-ehr .
-```
-
-**Run the container**:
-```bash
-docker run -p 3000:3000 \
-  -e REACT_APP_AUTHORITY=http://localhost:8080/auth \
-  -e REACT_APP_FHIR_BASE_URL=https://server.fire.ly/R4 \
-  -e REACT_APP_FHIR_STU3_BASE_URL=https://server.fire.ly/R3 \
-  -e REACT_APP_FHIR_MCSD_QUERY_BASE_URL=http://localhost:7050/fhir/knpt-mcsd-query \
-  demo-ehr
-```
-
-See `Dockerfile` and `.dockerignore` for container configuration details.
-
-## Routes
-
-- `/` - Home page with authentication
-- `/callback` - OIDC callback handler
-- `/patients` - Patient list
-- `/patients/:patientId` - Patient detail view
-- `/patients/:patientId/context-launch` - SMART on FHIR context launch
-- `/consents` - Consent management
-
