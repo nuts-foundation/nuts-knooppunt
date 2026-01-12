@@ -3,19 +3,11 @@
 
 strictmode: false
 
-nvi:
-  baseurl: "http://localhost:7050/fhir/nvi"
-
 # mCSD (Mobile Care Services Discovery) configuration
 mcsd:
-  # Root directories to synchronize from
-  admin:
-    "lrza":
-      fhirbaseurl: "https://knooppunt-test.nuts-services.nl/lrza/mcsd"
-
   # Local FHIR directory configuration
   query:
-    fhirbaseurl: "http://localhost:7050/fhir/knpt-mcsd-query"
+    fhirbaseurl: "http://localhost:8080/fhir"
 
   # Exclude administration directories from being registered
   # Use this to prevent your own FHIR server from being added as an admin directory
@@ -37,7 +29,7 @@ mcsd:
 # mCSD Admin configuration
 mcsdadmin:
   # Base URL for FHIR server used by admin interface
-  fhirbaseurl: "http://localhost:7050/fhir/knpt-mcsd-admin"
+  fhirbaseurl: "http://localhost:8080/fhir"
 
 # Nuts node configuration
 nuts:
@@ -76,10 +68,6 @@ authn:
       secret: "local-secret"
       redirecturls:
         - "http://localhost:8080/auth/test-callback"
-    - id: "demo-ehr"
-      secret: "demo-ehr-secret"
-      redirecturls:
-        - "http://localhost:3000/callback"
 
 pdp:
   enabled: true
