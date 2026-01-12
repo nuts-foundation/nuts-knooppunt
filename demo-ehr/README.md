@@ -378,3 +378,7 @@ authn:
 - **BGZ Referral**: SNOMED CT 3457005 - "verwijzen van patiënt"
 - **eOverdracht**: SNOMED CT 308292007 - "Overdracht van zorg"
 - **Pull Notification**: `http://fhir.nl/fhir/NamingSystem/TaskCode|pull-notification`
+
+## Acknowledgments
+
+This demonstration application was developed with significant assistance from Claude Code.
