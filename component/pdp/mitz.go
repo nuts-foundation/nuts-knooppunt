@@ -8,12 +8,11 @@ import (
 )
 
 func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) PolicyResult {
-	// TODO: make this return more detailed information for what fields are missing
 	ok := validateMitzInput(input)
 	if !ok {
 		return Deny(ResultReason{
-			Code:        TypeResultCodeUnexpectedInput,
-			Description: "input not valid, missing required fields",
+			Code:        TypeResultCodeInternalError,
+			Description: "internal error, could not complete consent check with Mitz",
 		})
 	}
 

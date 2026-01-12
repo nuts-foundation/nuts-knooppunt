@@ -27,10 +27,19 @@
           "interaction": [
             {
               "code": "search-type"
+            },
+            {
+              "code": "read"
             }
           ],
           "searchInclude": [
             "Patient:general-practitioner"
+          ],
+          "searchParam": [
+            {
+              "name": "_id",
+              "type": "string"
+            }
           ]
         },
         {
@@ -46,6 +55,12 @@
           "searchInclude": [
             "Coverage:payor:Patient",
             "Coverage:payor:Organization"
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
+            }
           ]
         },
         {
@@ -59,6 +74,10 @@
             {
               "name": "category",
               "type": "token"
+            },
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -93,6 +112,10 @@
             {
               "name": "code",
               "type": "token"
+            },
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -105,6 +128,12 @@
             {
               "code": "search-type"
             }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
+            }
           ]
         },
         {
@@ -113,6 +142,12 @@
             {
               "code": "search-type"
             }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
+            }
           ]
         },
         {
@@ -120,6 +155,12 @@
           "interaction": [
             {
               "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -131,6 +172,12 @@
           "interaction": [
             {
               "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -151,6 +198,10 @@
             {
               "name": "category",
               "type": "token"
+            },
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -168,6 +219,10 @@
             {
               "name": "category",
               "type": "token"
+            },
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -186,6 +241,10 @@
               "name": "category",
               "definition": "http://nictiz.nl/fhir/SearchParameter/Medications-category",
               "type": "token"
+            },
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -198,6 +257,12 @@
           ],
           "searchInclude": [
             "DeviceUseStatement:device"
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
+            }
           ]
         },
         {
@@ -214,6 +279,10 @@
             {
               "name": "status",
               "type": "token"
+            },
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -231,6 +300,10 @@
             {
               "name": "category",
               "type": "token"
+            },
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -248,6 +321,10 @@
             {
               "name": "class",
               "type": "token"
+            },
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -265,6 +342,10 @@
             {
               "name": "status",
               "type": "token"
+            },
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -276,6 +357,12 @@
           "interaction": [
             {
               "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -296,6 +383,10 @@
             {
               "name": "status",
               "type": "token"
+            },
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -313,6 +404,10 @@
             {
               "name": "status",
               "type": "token"
+            },
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -336,6 +431,12 @@
             {
               "code": "search-type"
             }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
+            }
           ]
         },
         {
@@ -346,6 +447,12 @@
           "interaction": [
             {
               "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -358,6 +465,12 @@
             {
               "code": "search-type"
             }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
+            }
           ]
         },
         {
@@ -368,6 +481,12 @@
           "interaction": [
             {
               "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         },
@@ -380,6 +499,12 @@
             {
               "code": "search-type"
             }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
+            }
           ]
         },
         {
@@ -391,6 +516,12 @@
           "interaction": [
             {
               "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
             }
           ]
         }

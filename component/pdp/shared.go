@@ -77,6 +77,7 @@ type PolicyActionProperties struct {
 type PolicyContext struct {
 	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
+	PatientId                string `json:"patient_id"`
 	PatientBSN               string `json:"patient_bsn"`
 	PurposeOfUse             string `json:"purpose_of_use"`
 }

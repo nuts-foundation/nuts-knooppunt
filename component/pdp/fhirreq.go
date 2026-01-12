@@ -263,7 +263,7 @@ var resultParams = []string{
 	"_containedType",
 }
 
-func groupParams(queryParams map[string][]string) Params {
+func groupParams(queryParams url.Values) Params {
 	var params Params
 
 	params.Include = queryParams["_include"]
@@ -282,6 +282,31 @@ func groupParams(queryParams map[string][]string) Params {
 	params.SearchParams = maps.Keys(queryParams)
 
 	return params
+}
+
+func derivePatientId(tokens Tokens, queryParams url.Values) (string, bool) {
+	// https://fhir.example.org/Patient/12345
+	typeInPath := tokens.ResourceType != nil && *tokens.ResourceType == fhir.ResourceTypePatient
+	idInPath := tokens.ResourceId != ""
+	if typeInPath && idInPath {
+		return tokens.ResourceId, true
+	}
+
+	// https://fhir.example.org/Patient?_id=12345
+	idInParams := len(queryParams["_id"]) > 0
+	if typeInPath && idInParams {
+		return queryParams["_id"][0], true
+	}
+
+	// https://fhir.example.org/Encounter?patient=Patient/12345
+	patientInParams := len(queryParams["patient"]) > 0
+	if patientInParams {
+		refStr := queryParams["patient"][0]
+		parts := strings.Split(refStr, "/")
+		return parts[len(parts)-1], true
+	}
+
+	return "", false
 }
 
 func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
@@ -311,7 +336,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 		policyInput.Action.Properties.Operation = &tokens.OperationName
 	}
 
-	var rawParams map[string][]string
+	var rawParams url.Values
 	contentType := request.Input.Request.Header.Get("Content-Type")
 	hasFormData := contentType == "application/x-www-form-urlencoded"
 	interWithBody := []fhir.TypeRestfulInteraction{
@@ -343,6 +368,9 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Subject = request.Input.Subject
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
+
+	patientId, _ := derivePatientId(tokens, rawParams)
+	policyInput.Context.PatientId = patientId
 
 	return policyInput, Allow()
 }

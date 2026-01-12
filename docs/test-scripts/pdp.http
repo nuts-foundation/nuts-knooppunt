@@ -76,3 +76,30 @@ Content-Type: application/json
     }
   }
 }
+
+### Testing request that parses a patient id
+POST http://localhost:8081/pdp/v1/data/knooppunt/authz
+Content-Type: application/json
+
+{
+  "input": {
+    "subject": {
+      "properties": {
+        "subject_id": "000095254",
+        "subject_role": "01.015",
+        "subject_organization_id": "00000666",
+        "subject_facility_type": "Z3",
+        "client_qualifications": ["bgz_professional"]
+      }
+    },
+    "request": {
+      "method": "GET",
+      "protocol": "HTTP/1.0",
+      "path": "/Patient/178764"
+    },
+    "context": {
+      "data_holder_organization_id": "00000659",
+      "data_holder_facility_type": "Z3"
+    }
+  }
+}
