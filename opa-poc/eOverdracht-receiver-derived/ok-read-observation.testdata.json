@@ -1,0 +1,104 @@
+{
+  "Task": {
+    "task-eoverdracht-123": {
+      "resourceType": "Task",
+      "id": "task-eoverdracht-123",
+      "status": "requested",
+      "intent": "order",
+      "code": {
+        "coding": [
+          {
+            "system": "http://nictiz.nl/fhir/NamingSystem/eoverdracht-task-type",
+            "code": "eoverdracht"
+          }
+        ]
+      },
+      "requester": {
+        "identifier": {
+          "system": "http://fhir.nl/fhir/NamingSystem/ura",
+          "value": "12345678"
+        }
+      },
+      "owner": {
+        "identifier": {
+          "system": "http://fhir.nl/fhir/NamingSystem/ura",
+          "value": "87654321"
+        }
+      },
+      "input": [
+        {
+          "type": {
+            "coding": [
+              {
+                "code": "composition"
+              }
+            ]
+          },
+          "valueReference": {
+            "reference": "Composition/comp-transfer-summary-456"
+          }
+        }
+      ]
+    }
+  },
+  "Composition": {
+    "comp-transfer-summary-456": {
+      "resourceType": "Composition",
+      "id": "comp-transfer-summary-456",
+      "status": "final",
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "60591-5",
+            "display": "Patient summary Document"
+          }
+        ]
+      },
+      "subject": {
+        "reference": "Patient/patient-789"
+      },
+      "section": [
+        {
+          "title": "Vital Signs",
+          "entry": [
+            {
+              "reference": "Observation/obs-blood-pressure-123"
+            },
+            {
+              "reference": "Observation/obs-heart-rate-456"
+            }
+          ]
+        },
+        {
+          "title": "Medications",
+          "entry": [
+            {
+              "reference": "MedicationStatement/med-statement-789"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "Observation": {
+    "obs-blood-pressure-123": {
+      "resourceType": "Observation",
+      "id": "obs-blood-pressure-123",
+      "status": "final",
+      "code": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "85354-9",
+            "display": "Blood pressure panel"
+          }
+        ]
+      },
+      "subject": {
+        "reference": "Patient/patient-789"
+      }
+    }
+  }
+}
+

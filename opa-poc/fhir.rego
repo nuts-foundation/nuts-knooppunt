@@ -94,6 +94,42 @@ fetch_resource(base_url, resource_type, resource_id) := response.body if {
 	response.status_code == 200
 }
 
+# Helper: find resources of a given type with search parameters
+# Parameters:
+#   - base_url: FHIR base URL
+#   - resource_type: Resource type (e.g., "Observation", "Condition")
+#   - parameters: a map/dictionary of FHIR search parameters (e.g., {"code": "value", "category": "vital-signs"})
+# Returns an array of matching resources
+find(base_url, resourceType, parameters) := resources if {
+    # Build query string from parameters map
+    query_params := [param_string |
+        some key, value in parameters
+        param_string := sprintf("%s=%s", [key, value])
+    ]
+    query_string := concat("&", query_params)
+
+    search_url := sprintf("%s/%s?%s", [
+        base_url,
+        resourceType,
+        query_string
+    ])
+
+    response := http.send({
+        "method": "GET",
+        "url": search_url,
+        "headers": {
+            "Accept": "application/fhir+json"
+        },
+        "raise_error": false,
+        "timeout": "5s"
+    })
+
+    response.status_code == 200
+    response.body.entry
+
+    resources := [entry.resource | entry := response.body.entry[_]]
+}
+
 # ---------------------------------------------------
 # FHIR Search Authorization
 # ---------------------------------------------------
