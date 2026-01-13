@@ -76,11 +76,12 @@ type PolicyActionProperties struct {
 }
 
 type PolicyContext struct {
-	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
-	PatientId                string `json:"patient_id"`
+	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	PatientBSN               string `json:"patient_bsn"`
+	PatientId                string `json:"patient_id"`
 	PurposeOfUse             string `json:"purpose_of_use"`
+	MitzConsent              bool   `json:"mitz_consent"`
 }
 
 type PDPRequest struct {

@@ -122,7 +122,10 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 5: Check if we are authorized to see the underlying data
+	// Step 5: Check the request adheres to the capability statement for this scope
+	policyInput, mitzPolicyResult := EvalMitzPolicy(c, r.Context(), policyInput)
+
+	// Step 6: Check if we are authorized to see the underlying data
 	// FUTURE: We want to use OPA policies here ...
 	// ... but for now we only have same example scopes hardcoded.
 	// This section is very much work in progress
@@ -135,12 +138,10 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		writeResp(r.Context(), w, Allow())
 	case "bgz_patient":
 		// Dummy should be replaced with the actual OPA policy
-		// Currently this will always fail as we have no way of determining the BSN etc.
-		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), policyInput))
+		writeResp(r.Context(), w, mitzPolicyResult)
 	case "bgz_professional":
 		// Dummy should be replaced with the actual OPA policy
-		// Currently this will always fail as we have no way of determining the BSN etc.
-		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), policyInput))
+		writeResp(r.Context(), w, mitzPolicyResult)
 	default:
 		writeResp(r.Context(), w, Deny(
 			ResultReason{
