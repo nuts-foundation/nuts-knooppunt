@@ -23,8 +23,8 @@ func PipPolicyInput(c Component, policyInput PolicyInput) PolicyInput {
 
 		var patient fhir.Patient
 		path := fmt.Sprintf("Patient/%s", patientId)
-		err := client.Read(path, patient)
-		if err == nil {
+		err := client.Read(path, &patient)
+		if err != nil {
 			slog.Warn("Failed to get patient record from PIP, policy input might not be complete", logging.Error(err))
 			return policyInput
 		}
