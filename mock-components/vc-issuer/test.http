@@ -1,0 +1,2 @@
+### Create subject in Nuts node
+POST http://localhost:8081/

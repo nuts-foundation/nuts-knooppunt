@@ -4,9 +4,12 @@ OID4VCI-compliant Verifiable Credential Issuer for VektisOrgCredentials.
 
 ## Overview
 
-This service implements the [OpenID for Verifiable Credential Issuance (OID4VCI)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) specification to issue VektisOrgCredentials to wallets. It uses the wallet-initiated Authorization Code Flow with PKCE.
+This service implements
+the [OpenID for Verifiable Credential Issuance (OID4VCI)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
+specification to issue VektisOrgCredentials to wallets. It uses the wallet-initiated Authorization Code Flow with PKCE.
 
-**Issue Reference:** [#196 - Implement Vektis-Organisatie-Type-Credential](https://github.com/nuts-foundation/nuts-knooppunt/issues/196)
+**Issue Reference:
+** [#196 - Implement Vektis-Organisatie-Type-Credential](https://github.com/nuts-foundation/nuts-knooppunt/issues/196)
 
 ## Features
 
@@ -17,6 +20,7 @@ This service implements the [OpenID for Verifiable Credential Issuance (OID4VCI)
 - JWT VC format (`jwt_vc_json`)
 - DID:web for issuer identity
 - PostgreSQL for data persistence
+- Optional Nuts node integration for credential issuance
 
 ## Quick Start
 
@@ -64,19 +68,19 @@ docker-compose up --build
 
 ### Discovery Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /.well-known/openid-credential-issuer` | Credential issuer metadata |
-| `GET /.well-known/openid-configuration` | OAuth2 authorization server metadata |
-| `GET /.well-known/did.json` | DID document for issuer identity |
+| Endpoint                                    | Description                          |
+|---------------------------------------------|--------------------------------------|
+| `GET /.well-known/openid-credential-issuer` | Credential issuer metadata           |
+| `GET /.well-known/openid-configuration`     | OAuth2 authorization server metadata |
+| `GET /.well-known/did.json`                 | DID document for issuer identity     |
 
 ### OID4VCI Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/oidc4vci/authorize` | GET | Authorization endpoint |
-| `/api/oidc4vci/token` | POST | Token endpoint |
-| `/api/oidc4vci/credential` | POST | Credential issuance endpoint |
+| Endpoint                   | Method | Description                  |
+|----------------------------|--------|------------------------------|
+| `/api/oidc4vci/authorize`  | GET    | Authorization endpoint       |
+| `/api/oidc4vci/token`      | POST   | Token endpoint               |
+| `/api/oidc4vci/credential` | POST   | Credential issuance endpoint |
 
 ## OID4VCI Flow
 
@@ -110,8 +114,13 @@ The issued credential contains:
 ```json
 {
   "vc": {
-    "@context": ["https://www.w3.org/2018/credentials/v1"],
-    "type": ["VerifiableCredential", "VektisOrgCredential"],
+    "@context": [
+      "https://www.w3.org/2018/credentials/v1"
+    ],
+    "type": [
+      "VerifiableCredential",
+      "VektisOrgCredential"
+    ],
     "credentialSubject": {
       "id": "did:web:wallet.example.com",
       "organizationName": "Apotheek De Zonnehoek",
@@ -129,25 +138,49 @@ The issued credential contains:
 
 Environment variables (see `.env.example`):
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | - |
-| `NEXT_PUBLIC_BASE_URL` | Public URL of the service | `http://localhost:3000` |
-| `ISSUER_HOSTNAME` | Hostname for DID:web | `localhost:3000` |
-| `CREDENTIAL_VALIDITY_DAYS` | Credential validity period | `365` |
-| `ACCESS_TOKEN_EXPIRY_SECONDS` | Access token TTL | `86400` |
-| `C_NONCE_EXPIRY_SECONDS` | c_nonce TTL | `86400` |
+| Variable                      | Description                                | Default                 |
+|-------------------------------|--------------------------------------------|-------------------------|
+| `DATABASE_URL`                | PostgreSQL connection string               | -                       |
+| `NEXT_PUBLIC_BASE_URL`        | Public URL of the service                  | `http://localhost:3000` |
+| `ISSUER_HOSTNAME`             | Hostname for DID:web                       | `localhost:3000`        |
+| `CREDENTIAL_VALIDITY_DAYS`    | Credential validity period                 | `365`                   |
+| `ACCESS_TOKEN_EXPIRY_SECONDS` | Access token TTL                           | `86400`                 |
+| `C_NONCE_EXPIRY_SECONDS`      | c_nonce TTL                                | `86400`                 |
+| `NUTS_NODE_INTERNAL_URL`      | (Optional) Nuts node internal API URL      | -                       |
+| `NUTS_ISSUER_DID`             | (Optional) Issuer DID when using Nuts node | -                       |
+
+### Nuts Node Integration
+
+By default, the issuer signs credentials locally using Ed25519 keys. However, you can optionally configure it to use a
+Nuts node for credential issuance:
+
+1. Set `NUTS_NODE_INTERNAL_URL` to the internal API endpoint of your Nuts node (e.g., `http://nuts-node:8081`)
+2. Set `NUTS_ISSUER_DID` to the DID that should be used as the issuer (e.g., `did:web:example.com:iam:org-a`)
+
+When both variables are configured, the issuer will delegate credential signing to the Nuts node instead of signing
+locally.
+
+**Example docker-compose configuration:**
+
+```yaml
+environment:
+  NUTS_NODE_INTERNAL_URL: http://nuts-node:8081
+  NUTS_ISSUER_DID: did:web:example.com:iam:org-a
+```
+
+**Note:** `NUTS_ISSUER_DID` is required when using Nuts node integration. If `NUTS_NODE_INTERNAL_URL` is set but
+`NUTS_ISSUER_DID` is not, credential issuance will fail.
 
 ## Mock Organizations
 
 The mock e-Herkenning provides these test organizations:
 
-| Name | Type | AGB Code | URA Number |
-|------|------|----------|------------|
-| Apotheek De Zonnehoek | Pharmacy | 06010713 | 32475534 |
-| Huisartsenpraktijk Centrum | General Practice | 01234567 | 12345678 |
-| Ziekenhuis Oost | Hospital | 98765432 | 87654321 |
-| Verpleeghuis De Rusthoeve | Care Home | 11223344 | 44332211 |
+| Name                       | Type             | AGB Code | URA Number |
+|----------------------------|------------------|----------|------------|
+| Apotheek De Zonnehoek      | Pharmacy         | 06010713 | 32475534   |
+| Huisartsenpraktijk Centrum | General Practice | 01234567 | 12345678   |
+| Ziekenhuis Oost            | Hospital         | 98765432 | 87654321   |
+| Verpleeghuis De Rusthoeve  | Care Home        | 11223344 | 44332211   |
 
 ## Development
 
