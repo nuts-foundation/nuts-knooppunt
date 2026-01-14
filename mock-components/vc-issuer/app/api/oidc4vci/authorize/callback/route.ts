@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  // Build form POST to redirect with authorization code
+  // Build form GET to redirect with authorization code
   const redirectUri = authRequest.redirectUri;
   const code = authRequest.generatedCode;
   const authState = authRequest.state;
@@ -125,7 +125,7 @@ export async function GET(req: NextRequest) {
       <body>
         <div class="container">
           <p>Redirecting...</p>
-          <form id="redirectForm" method="POST" action="${redirectUri}">
+          <form id="redirectForm" method="GET" action="${redirectUri}">
             <input type="hidden" name="code" value="${code}" />
             ${authState ? `<input type="hidden" name="state" value="${authState}" />` : ''}
             <button type="submit">Click here if you are not automatically redirected</button>
