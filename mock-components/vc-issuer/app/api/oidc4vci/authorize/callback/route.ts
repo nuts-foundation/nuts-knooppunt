@@ -79,12 +79,69 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  // Build redirect URL with authorization code
-  const redirectUrl = new URL(authRequest.redirectUri);
-  redirectUrl.searchParams.set('code', authRequest.generatedCode);
-  if (authRequest.state) {
-    redirectUrl.searchParams.set('state', authRequest.state);
-  }
+  // Build form POST to redirect with authorization code
+  const redirectUri = authRequest.redirectUri;
+  const code = authRequest.generatedCode;
+  const authState = authRequest.state;
 
-  return NextResponse.redirect(redirectUrl.toString());
+  // Return an HTML page with a form that auto-submits
+  const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <title>Redirecting...</title>
+        <style>
+          body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: #f5f5f5;
+          }
+          .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+          }
+          button {
+            margin-top: 1rem;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            background: #0070f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+          }
+          button:hover {
+            background: #0051cc;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <p>Redirecting...</p>
+          <form id="redirectForm" method="POST" action="${redirectUri}">
+            <input type="hidden" name="code" value="${code}" />
+            ${authState ? `<input type="hidden" name="state" value="${authState}" />` : ''}
+            <button type="submit">Click here if you are not automatically redirected</button>
+          </form>
+        </div>
+        <script>
+          document.getElementById('redirectForm').submit();
+        </script>
+      </body>
+    </html>
+  `;
+
+  return new NextResponse(html, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html',
+    },
+  });
 }
