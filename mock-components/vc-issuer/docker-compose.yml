@@ -11,22 +11,8 @@ services:
       # Uncomment to use Nuts node for credential issuance
       # NUTS_NODE_INTERNAL_URL: http://nuts-node:8081
       # NUTS_ISSUER_DID: did:web:example.com:iam:org-a
-      # Disable TLS certificate validation (for development only)
-      NODE_TLS_REJECT_UNAUTHORIZED: "0"
     volumes:
       - vc_issuer_data:/app/data
-  nutsnode:
-    image: nutsfoundation/nuts-node:master
-    ports:
-      - "8081:8081"
-      - "8080:8080"
-    environment:
-      NUTS_CRYPTO_STORAGE: fs
-      NUTS_HTTP_INTERNAL_ADDRESS: :8081
-      NUTS_URL: http://localhost:8080
-      NUTS_STRICTMODE: false
-      NUTS_AUTH_CONTRACTVALIDATORS: dummy
-      NUTS_AUTH_AUTHORIZATIONENDPOINT_ENABLED: true
 
 volumes:
   vc_issuer_data:
