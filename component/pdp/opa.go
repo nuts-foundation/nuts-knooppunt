@@ -16,7 +16,7 @@ var opaBundleBaseURL = "http://localhost:8081/pdp/bundles/"
 // createOPAService creates a new OPAService service with embedded policy bundles
 func createOPAService(ctx context.Context) (*sdk.OPA, error) {
 	configBundles := map[string]any{}
-	for bundleName, _ := range bundles.BundleMap {
+	for bundleName := range bundles.BundleMap {
 		configBundles[bundleName] = map[string]any{
 			"resource": fmt.Sprintf("%s.tar.gz", bundleName),
 		}
