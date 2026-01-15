@@ -114,6 +114,17 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	regoPolicyResult, err := c.evalRegoPolicy(r.Context(), scope, policyInput)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to evaluate rego policy", logging.Error(err), slog.String("policy", scope))
+		errorResult := PolicyResult{
+			Allow: false,
+			Reasons: []ResultReason{
+				{
+					Code:        TypeResultCodeNotImplemented,
+					Description: "failed to evaluate rego policy",
+				},
+			},
+		}
+		writeResp(r.Context(), w, errorResult)
+		return
 	}
 	writeResp(r.Context(), w, *regoPolicyResult)
 }
