@@ -12,11 +12,11 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-//go:embed capabilities/*.json
+//go:embed policies/*/fhir_capabilitystatement.json
 var FS embed.FS
 
 func readCapability(ctx context.Context, name string) (fhir.CapabilityStatement, error) {
-	fileName := fmt.Sprintf("capabilities/%s.json", name)
+	fileName := fmt.Sprintf("policies/%s/fhir_capabilitystatement.json", name)
 	data, err := FS.ReadFile(fileName)
 	if err != nil {
 		return fhir.CapabilityStatement{}, err
@@ -32,23 +32,12 @@ func readCapability(ctx context.Context, name string) (fhir.CapabilityStatement,
 }
 
 func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityStatement, bool) {
-	switch scope {
-	// FUTURE: Should be made configurable or packaged up with some policy
-	case "mcsd_update":
-		capa, err := readCapability(ctx, "nl-gf-admin-directory-update-client")
-		return capa, err == nil
-	case "mcsd_query":
-		capa, err := readCapability(ctx, "nl-gf-query-directory-query-client")
-		return capa, err == nil
-	case "bgz_patient":
-		capa, err := readCapability(ctx, "bgz-patient")
-		return capa, err == nil
-	case "bgz_professional":
-		capa, err := readCapability(ctx, "bgz-professional")
-		return capa, err == nil
-	default:
+	result, err := readCapability(ctx, scope)
+	if err != nil {
+		slog.WarnContext(ctx, "unable to read capability statement for scope", slog.String("scope", scope), logging.Error(err))
 		return fhir.CapabilityStatement{}, false
 	}
+	return result, true
 }
 
 func evalCapabilityPolicy(ctx context.Context, input PolicyInput) PolicyResult {

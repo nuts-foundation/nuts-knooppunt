@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
+	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/bundles"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
+	"golang.org/x/exp/maps"
 )
 
 func DefaultConfig() Config {
@@ -28,19 +31,26 @@ func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
 	}, nil
 }
 
-func (c Component) Start() error {
-	// Nothing to do
+func (c *Component) Start() error {
+	opaService, err := createOPAService(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to initialize opaService service: %w", err)
+	}
+	c.opaService = opaService
 	return nil
 }
 
 func (c Component) Stop(ctx context.Context) error {
-	// Nothing to do
+	c.opaService.Stop(ctx)
 	return nil
 }
 
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	internalMux.HandleFunc("POST /pdp", http.HandlerFunc(c.HandleMainPolicy))
-	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", http.HandlerFunc(c.HandlePolicy))
+	internalMux.HandleFunc("POST /pdp", c.HandleMainPolicy)
+	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", c.HandlePolicy)
+	// Serve opaService policy bundles
+	internalMux.HandleFunc("GET /pdp/bundles", c.HandleListBundles)
+	internalMux.HandleFunc("GET /pdp/bundles/{policyName}", c.HandleGetBundle)
 }
 
 func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
@@ -100,33 +110,12 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 4: Check if we are authorized to see the underlying data
-	// FUTURE: We want to use OPA policies here ...
-	// ... but for now we only have same example scopes hardcoded.
-	// This section is very much work in progress
-	switch scope {
-	case "mcsd_update":
-		// Dummy should be replaced with the actual OPA policy
-		writeResp(r.Context(), w, Allow())
-	case "mcsd_query":
-		// Dummy should be replaced with the actual OPA policy
-		writeResp(r.Context(), w, Allow())
-	case "bgz_patient":
-		// Dummy should be replaced with the actual OPA policy
-		// Currently this will always fail as we have no way of determining the BSN etc.
-		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), policyInput))
-	case "bgz_professional":
-		// Dummy should be replaced with the actual OPA policy
-		// Currently this will always fail as we have no way of determining the BSN etc.
-		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), policyInput))
-	default:
-		writeResp(r.Context(), w, Deny(
-			ResultReason{
-				Code:        TypeResultCodeNotImplemented,
-				Description: fmt.Sprintf("scope %s not implemeted", scope),
-			},
-		))
+	// Step 4: Evaluate using Open Policy Agent
+	regoPolicyResult, err := c.evalRegoPolicy(r.Context(), scope, policyInput)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to evaluate rego policy", logging.Error(err), slog.String("policy", scope))
 	}
+	writeResp(r.Context(), w, *regoPolicyResult)
 }
 
 func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) {
@@ -160,5 +149,42 @@ func (c Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
 		c.HandleMainPolicy(w, r)
 	default:
 		http.Error(w, fmt.Sprintf("unknown rule %s", policy), http.StatusBadRequest)
+	}
+}
+
+// HandleListBundles returns a list of available OPAService policy bundles
+func (c Component) HandleListBundles(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(maps.Keys(bundles.BundleMap)); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		slog.ErrorContext(r.Context(), "Failed to encode bundles list", logging.Error(err))
+	}
+}
+
+// HandleGetBundle serves an OPAService policy bundle for a specific scope
+func (c Component) HandleGetBundle(w http.ResponseWriter, r *http.Request) {
+	policyName := r.PathValue("policyName")
+	if policyName == "" {
+		// Shouldn't happen, but still...
+		http.Error(w, "policyName parameter is required", http.StatusBadRequest)
+		return
+	}
+	policyName = strings.TrimSuffix(policyName, ".tar.gz")
+
+	bundleData, found := bundles.BundleMap[policyName]
+	if !found {
+		http.Error(w, fmt.Sprintf("bundle not found: %s", policyName), http.StatusNotFound)
+		slog.WarnContext(r.Context(), "Bundle not found", slog.String("policyName", policyName))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.tar.gz", policyName))
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := w.Write(bundleData); err != nil {
+		slog.ErrorContext(r.Context(), "Failed to write bundle",
+			slog.String("policyName", policyName),
+			logging.Error(err))
 	}
 }

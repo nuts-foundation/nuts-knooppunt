@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
+	"github.com/open-policy-agent/opa/v1/sdk"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -152,6 +153,7 @@ type Config struct {
 }
 
 type Component struct {
-	Config Config
-	Mitz   *mitz.Component
+	Config     Config
+	Mitz       *mitz.Component
+	opaService *sdk.OPA
 }
