@@ -35,6 +35,7 @@ type Details struct {
 	Knooppunt KnooppuntSystemDetails
 	LRZa      FHIRAPIDetails
 	NVI       FHIRAPIDetails
+	PIP       FHIRAPIDetails
 }
 
 func Load(hapiBaseURL *url.URL) (*Details, error) {
@@ -140,6 +141,9 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 		},
 		NVI: FHIRAPIDetails{
 			FHIRBaseURL: nviTenant.BaseURL(hapiBaseURL),
+		},
+		PIP: FHIRAPIDetails{
+			FHIRBaseURL: pipTenant.BaseURL(hapiBaseURL),
 		},
 	}, nil
 }
