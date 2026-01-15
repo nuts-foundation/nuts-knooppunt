@@ -103,12 +103,3 @@ Content-Type: application/json
     }
   }
 }
-
-### Testing empty request
-POST http://localhost:8081/pdp/v1/data/knooppunt/authz
-Content-Type: application/json
-
-{
-  "input": {}
-}
-

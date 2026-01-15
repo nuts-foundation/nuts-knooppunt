@@ -8,6 +8,7 @@ import (
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,11 +21,26 @@ func Test_BGZAuthorization(t *testing.T) {
 	t.Run("authorize complete bgz request using the PDP", func(t *testing.T) {
 
 		pdpJSON := `{
-		"input": {
-			"subject": {},
-			"request": {},
-			"context": {}
-		}
+		  "input": {
+			"subject": {
+			  "properties": {
+				"subject_id": "000095254",
+				"subject_role": "01.015",
+				"subject_organization_id": "00000666",
+				"subject_facility_type": "Z3",
+				"client_qualifications": ["bgz_professional"]
+			  }
+			},
+			"request": {
+			  "method": "GET",
+			  "protocol": "HTTP/1.0",
+			  "path": "/Patient/3E439979-017F-40AA-594D-EBCF880FFD97"
+			},
+			"context": {
+			  "data_holder_organization_id": "00000659",
+			  "data_holder_facility_type": "Z3"
+			}
+		  }
 		}`
 
 		// Make request to PDP
@@ -41,6 +57,11 @@ func Test_BGZAuthorization(t *testing.T) {
 		var pdpResponse pdp.PDPResponse
 		err = json.NewDecoder(resp.Body).Decode(&pdpResponse)
 		require.NoError(t, err)
-		defer resp.Body.Close()
+
+		err = resp.Body.Close()
+		require.NoError(t, err)
+
+		assert.True(t, pdpResponse.Result.Allow)
+
 	})
 }
