@@ -8,6 +8,9 @@ default allow := false
 # Patient?_include=Patient%3Ageneral-practitioner
 allow if {
 	input.resource.type == "Patient"
-	input.request.query_params == {"_include": ["Patient:general-practitioner"]}
+	input.action.properties.include = ["Patient:general-practitioner"]
+	input.action.properties.interaction_type = "search-type"
+	input.action.properties.revinclude = []
+	input.action.properties.search_params = []
 }
 

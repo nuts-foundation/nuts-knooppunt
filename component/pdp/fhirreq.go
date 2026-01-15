@@ -268,9 +268,17 @@ func groupParams(queryParams url.Values) Params {
 
 	params.Include = queryParams["_include"]
 	delete(queryParams, "_include")
+	if params.Include == nil {
+		// init to empty slice for consistency
+		params.Include = []string{}
+	}
 
 	params.Revinclude = queryParams["_revinclude"]
 	delete(queryParams, "_revinclude")
+	if params.Revinclude == nil {
+		// init to empty slice for consistency
+		params.Revinclude = []string{}
+	}
 
 	for _, p := range generalParams {
 		delete(queryParams, p)
@@ -280,6 +288,10 @@ func groupParams(queryParams url.Values) Params {
 	}
 
 	params.SearchParams = maps.Keys(queryParams)
+	if params.SearchParams == nil {
+		// init to empty slice for consistency
+		params.SearchParams = []string{}
+	}
 
 	return params
 }
