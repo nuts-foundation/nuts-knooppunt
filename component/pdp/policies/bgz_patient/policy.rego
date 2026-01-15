@@ -10,7 +10,7 @@ allow if {
 	input.resource.type == "Patient"
 	input.action.properties.include = ["Patient:general-practitioner"]
 	input.action.properties.interaction_type = "search-type"
-	input.action.properties.revinclude = []
-	input.action.properties.search_params = []
+
+	mitz.has_consent(input)
 }
 

@@ -154,6 +154,6 @@ type Config struct {
 
 type Component struct {
 	Config     Config
-	Mitz       *mitz.Component
+	mitz       *mitz.Component
 	opaService *sdk.OPA
 }

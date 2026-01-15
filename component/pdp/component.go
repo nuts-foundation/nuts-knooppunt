@@ -24,15 +24,15 @@ func DefaultConfig() Config {
 var _ component.Lifecycle = (*Component)(nil)
 
 // New creates an instance of the pdp component, which provides a simple policy decision endpoint.
-func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
+func New(config Config, mitzComponent *mitz.Component) (*Component, error) {
 	return &Component{
 		Config: config,
-		Mitz:   mitzcomp,
+		mitz:   mitzComponent,
 	}, nil
 }
 
 func (c *Component) Start() error {
-	opaService, err := createOPAService(context.Background())
+	opaService, err := c.createOPAService(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to initialize opaService service: %w", err)
 	}
@@ -40,12 +40,12 @@ func (c *Component) Start() error {
 	return nil
 }
 
-func (c Component) Stop(ctx context.Context) error {
+func (c *Component) Stop(ctx context.Context) error {
 	c.opaService.Stop(ctx)
 	return nil
 }
 
-func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
+func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.HandleFunc("POST /pdp", c.HandleMainPolicy)
 	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", c.HandlePolicy)
 	// Serve opaService policy bundles
@@ -53,7 +53,7 @@ func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *h
 	internalMux.HandleFunc("GET /pdp/bundles/{policyName}", c.HandleGetBundle)
 }
 
-func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
+func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	var reqBody PDPRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	input := reqBody.Input
@@ -164,7 +164,7 @@ func (c Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleListBundles returns a list of available OPAService policy bundles
-func (c Component) HandleListBundles(w http.ResponseWriter, r *http.Request) {
+func (c *Component) HandleListBundles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(maps.Keys(bundles.BundleMap)); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
@@ -173,7 +173,7 @@ func (c Component) HandleListBundles(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleGetBundle serves an OPAService policy bundle for a specific scope
-func (c Component) HandleGetBundle(w http.ResponseWriter, r *http.Request) {
+func (c *Component) HandleGetBundle(w http.ResponseWriter, r *http.Request) {
 	policyName := r.PathValue("policyName")
 	if policyName == "" {
 		// Shouldn't happen, but still...

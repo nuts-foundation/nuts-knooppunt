@@ -7,7 +7,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 )
 
-func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) PolicyResult {
+func (c *Component) evalMitzPolicy(ctx context.Context, input PolicyInput) PolicyResult {
 	ok := validateMitzInput(input)
 	if !ok {
 		return Deny(ResultReason{
@@ -16,9 +16,8 @@ func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) PolicyR
 		})
 	}
 
-	mitzComp := *c.Mitz
 	consentReq := xacmlFromInput(input)
-	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
+	consentResp, err := c.mitz.CheckConsent(ctx, consentReq)
 	if err != nil {
 		return Deny(ResultReason{
 			Code:        TypeResultCodeInternalError,
