@@ -11,14 +11,14 @@ import (
 )
 
 func PipPolicyInput(c Component, policyInput PolicyInput) PolicyInput {
-	if c.PIPClient == nil {
+	if c.pipClient == nil {
 		slog.Warn("PIP client not configured")
 		return policyInput
 	}
 
 	// If we have a patientId try and fetch the BSN
 	if policyInput.Context.PatientId != "" {
-		client := c.PIPClient
+		client := c.pipClient
 
 		var patient fhir.Patient
 		path := fmt.Sprintf("Patient/%s", policyInput.Context.PatientId)

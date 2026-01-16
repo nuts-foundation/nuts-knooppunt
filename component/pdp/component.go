@@ -39,7 +39,7 @@ func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
 		pipClient := fhirclient.New(url, tracing.NewHTTPClient(), &fhirclient.Config{
 			UsePostSearch: false,
 		})
-		comp.PIPClient = pipClient
+		comp.pipClient = pipClient
 	} else {
 		slog.Warn("PIP address not configured, authorization limited to self contained policies")
 	}
