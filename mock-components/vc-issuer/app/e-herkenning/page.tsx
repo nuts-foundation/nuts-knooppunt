@@ -2,50 +2,15 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { getOrganizationTypeOptions, type CareOrganizationType } from '@/lib/vektis/care-organization-types';
 
 interface Organization {
   id: string;
   name: string;
-  type: string;
+  type: CareOrganizationType;
   typeLabel: string;
-  agbCode: string;
-  uraNumber: string;
 }
 
-const mockOrganizations: Organization[] = [
-  {
-    id: 'org-1',
-    name: 'Apotheek De Zonnehoek',
-    type: 'pharmacy',
-    typeLabel: 'Apotheek',
-    agbCode: '06010713',
-    uraNumber: '32475534',
-  },
-  {
-    id: 'org-2',
-    name: 'Huisartsenpraktijk Centrum',
-    type: 'general_practice',
-    typeLabel: 'Huisartsenpraktijk',
-    agbCode: '01234567',
-    uraNumber: '12345678',
-  },
-  {
-    id: 'org-3',
-    name: 'Ziekenhuis Oost',
-    type: 'hospital',
-    typeLabel: 'Ziekenhuis',
-    agbCode: '98765432',
-    uraNumber: '87654321',
-  },
-  {
-    id: 'org-4',
-    name: 'Verpleeghuis De Rusthoeve',
-    type: 'care_home',
-    typeLabel: 'Verpleeghuis',
-    agbCode: '11223344',
-    uraNumber: '44332211',
-  },
-];
 
 function EHerkenningContent() {
   const router = useRouter();
@@ -56,6 +21,16 @@ function EHerkenningContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<'login' | 'select' | 'consent'>('login');
   const [error, setError] = useState<string | null>(null);
+
+  // Get organization type options from the centralized list
+  const organizationTypeOptions = getOrganizationTypeOptions();
+
+  const [manualOrg, setManualOrg] = useState({
+    name: '',
+    type: organizationTypeOptions[0].code,
+    typeLabel: organizationTypeOptions[0].label,
+    typeLabelEn: organizationTypeOptions[0].label,
+  });
 
   useEffect(() => {
     if (!state) {
@@ -72,9 +47,33 @@ function EHerkenningContent() {
     }, 1500);
   };
 
-  const handleOrgSelect = (org: Organization) => {
-    setSelectedOrg(org);
+  const handleManualOrgSubmit = () => {
+    // Validate manual entry
+    if (!manualOrg.name.trim()) {
+      alert('Vul de naam van de organisatie in');
+      return;
+    }
+
+    // Create organization object with custom ID
+    const customOrg: Organization = {
+      id: `custom-${Date.now()}`,
+      name: manualOrg.name,
+      type: manualOrg.type,
+      typeLabel: manualOrg.typeLabel,
+    };
+
+    setSelectedOrg(customOrg);
     setStep('consent');
+  };
+
+  const handleTypeChange = (type: string) => {
+    const typeObj = organizationTypeOptions.find(t => t.code === type);
+    setManualOrg({
+      ...manualOrg,
+      type: type as CareOrganizationType,
+      typeLabel: typeObj?.label || type,
+      typeLabelEn: typeObj?.label || type,
+    });
   };
 
   const handleConsent = async () => {
@@ -82,8 +81,9 @@ function EHerkenningContent() {
 
     setIsLoading(true);
 
-    // Redirect to callback with state and selected org
-    const callbackUrl = `/api/oidc4vci/authorize/callback?state=${encodeURIComponent(state)}&org=${encodeURIComponent(selectedOrg.id)}`;
+    // Send only the organization type
+    const callbackUrl = `/api/oidc4vci/authorize/callback?state=${encodeURIComponent(state)}&organizationType=${encodeURIComponent(selectedOrg.type)}`;
+
     router.push(callbackUrl);
   };
 
@@ -91,8 +91,6 @@ function EHerkenningContent() {
     if (step === 'consent') {
       setStep('select');
       setSelectedOrg(null);
-    } else if (step === 'select') {
-      setStep('login');
     }
   };
 
@@ -231,24 +229,79 @@ function EHerkenningContent() {
             {step === 'select' && (
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                  Selecteer Organisatie
+                  Organisatiegegevens Invoeren
                 </h2>
                 <p className="text-gray-600 mb-4">
-                  Kies de organisatie waarvoor u een credential wilt aanvragen.
+                  Voer de gegevens van uw organisatie in.
                 </p>
-                <div className="space-y-2">
-                  {mockOrganizations.map((org) => (
-                    <button
-                      key={org.id}
-                      onClick={() => handleOrgSelect(org)}
-                      className="w-full p-4 text-left border-2 border-gray-200 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors"
+
+                {/* Suggested Organization Types Info Box */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="flex">
+                    <svg
+                      className="w-5 h-5 text-blue-500 mr-2 shrink-0 mt-0.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
                     >
-                      <div className="font-medium text-gray-900">{org.name}</div>
-                      <div className="text-sm text-gray-500 mt-1">
-                        {org.typeLabel} | AGB: {org.agbCode}
-                      </div>
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <div className="text-sm text-blue-700">
+                      <p className="font-medium mb-1">Veelgebruikte zorgaanbiedertypen:</p>
+                      <ul className="list-disc list-inside space-y-0.5">
+                        <li><strong>A1</strong> - Apotheek</li>
+                        <li><strong>H1</strong> - Huisartsinstelling</li>
+                        <li><strong>V4</strong> - Ziekenhuis</li>
+                        <li><strong>R5</strong> - Verpleeghuis</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Naam organisatie *
+                    </label>
+                    <input
+                      type="text"
+                      value={manualOrg.name}
+                      onChange={(e) => setManualOrg({ ...manualOrg, name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      placeholder="Bijv. Apotheek De Zonnehoek"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Zorgaanbiedertype *
+                    </label>
+                    <select
+                      value={manualOrg.type}
+                      onChange={(e) => handleTypeChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    >
+                      {organizationTypeOptions.map((type) => (
+                        <option key={type.code} value={type.code}>
+                          {type.code} - {type.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      onClick={handleManualOrgSubmit}
+                      className="w-full py-3 px-4 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors"
+                    >
+                      Doorgaan
                     </button>
-                  ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -260,7 +313,7 @@ function EHerkenningContent() {
                   Bevestig Credential Aanvraag
                 </h2>
                 <p className="text-gray-600 mb-4">
-                  U staat op het punt een VektisOrgCredential aan te maken voor:
+                  U staat op het punt een zorgorganisatie-type credential aan te maken voor:
                 </p>
 
                 <div className="bg-gray-50 rounded-lg p-4 mb-6">
@@ -271,19 +324,7 @@ function EHerkenningContent() {
                     <div className="flex justify-between">
                       <dt className="text-gray-500">Type:</dt>
                       <dd className="text-gray-900 font-medium">
-                        {selectedOrg.typeLabel}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-gray-500">AGB Code:</dt>
-                      <dd className="text-gray-900 font-medium">
-                        {selectedOrg.agbCode}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-gray-500">URA Nummer:</dt>
-                      <dd className="text-gray-900 font-medium">
-                        {selectedOrg.uraNumber}
+                        {selectedOrg.type} - {selectedOrg.typeLabel}
                       </dd>
                     </div>
                   </dl>
@@ -292,7 +333,7 @@ function EHerkenningContent() {
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                   <div className="flex">
                     <svg
-                      className="w-5 h-5 text-blue-500 mr-2 flex-shrink-0"
+                      className="w-5 h-5 text-blue-500 mr-2 shrink-0"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"

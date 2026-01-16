@@ -1,15 +1,12 @@
 # Vektis VC Issuer
 
-OID4VCI-compliant Verifiable Credential Issuer for VektisOrgCredentials.
+OID4VCI-compliant Verifiable Credential Issuer for HealthcareProviderTypeCredentials.
 
 ## Overview
 
-This service implements
-the [OpenID for Verifiable Credential Issuance (OID4VCI)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
-specification to issue VektisOrgCredentials to wallets. It uses the wallet-initiated Authorization Code Flow with PKCE.
+This service implements the [OpenID for Verifiable Credential Issuance (OID4VCI)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) specification to issue HealthcareProviderTypeCredentials to wallets. It uses the wallet-initiated Authorization Code Flow with PKCE.
 
-**Issue Reference:
-** [#196 - Implement Vektis-Organisatie-Type-Credential](https://github.com/nuts-foundation/nuts-knooppunt/issues/196)
+**Issue Reference:** [#196 - Implement Vektis-Organisatie-Type-Credential](https://github.com/nuts-foundation/nuts-knooppunt/issues/196)
 
 ## Features
 
@@ -107,26 +104,18 @@ Wallet                         Issuer                      e-Herkenning (Mock)
   │◄──── JWT VC ─────────────────│                              │
 ```
 
-## VektisOrgCredential
+## HealthcareProviderTypeCredential
 
 The issued credential contains:
 
 ```json
 {
   "vc": {
-    "@context": [
-      "https://www.w3.org/2018/credentials/v1"
-    ],
-    "type": [
-      "VerifiableCredential",
-      "VektisOrgCredential"
-    ],
+    "@context": ["https://www.w3.org/2018/credentials/v1"],
+    "type": ["VerifiableCredential", "HealthcareProviderTypeCredential"],
     "credentialSubject": {
       "id": "did:web:wallet.example.com",
-      "organizationName": "Apotheek De Zonnehoek",
-      "organizationType": "pharmacy",
-      "agbCode": "06010713",
-      "uraNumber": "32475534"
+      "organizationType": "A1"
     },
     "issuer": "did:web:issuer.example.com",
     "issuanceDate": "2024-12-01T12:00:00Z"
@@ -171,16 +160,45 @@ environment:
 **Note:** `NUTS_ISSUER_DID` is required when using Nuts node integration. If `NUTS_NODE_INTERNAL_URL` is set but
 `NUTS_ISSUER_DID` is not, credential issuance will fail.
 
-## Mock Organizations
+## Mock e-Herkenning
 
-The mock e-Herkenning provides these test organizations:
+The mock e-Herkenning allows you to manually enter organization details during the authentication flow.
 
-| Name                       | Type             | AGB Code | URA Number |
-|----------------------------|------------------|----------|------------|
-| Apotheek De Zonnehoek      | Pharmacy         | 06010713 | 32475534   |
-| Huisartsenpraktijk Centrum | General Practice | 01234567 | 12345678   |
-| Ziekenhuis Oost            | Hospital         | 98765432 | 87654321   |
-| Verpleeghuis De Rusthoeve  | Care Home        | 11223344 | 44332211   |
+### Suggested Organization Types
+
+For testing purposes, you can use any of the 98+ official Vektis healthcare provider categories. Common examples include:
+
+- **A1** - Apotheek (Pharmacy)
+- **H1** - Huisartsinstelling (General Practice)
+- **V4** - Ziekenhuis (Hospital)
+- **R5** - Verpleeghuis (Nursing Home)
+
+### Manual Organization Entry
+
+To create a credential during the e-Herkenning flow:
+
+1. Click "Handmatig invoeren" (Manual Entry) on the organization selection screen
+2. Fill in the organization details:
+   - **Naam organisatie** (Organization Name) - for display purposes only, not included in the credential
+   - **Zorgaanbiedertype** (Healthcare Provider Type) - select from dropdown with 98+ official Vektis categories
+3. Click "Doorgaan" (Continue) to proceed with the credential issuance
+
+The healthcare provider types are based on the official Vektis "Dossierhoudende zorgaanbiedercategorieën" (Dossier-holding healthcare provider categories).
+
+**Note:** The organization name is used for display purposes in the UI but is **not included** in the issued credential. The credential only contains the `organizationType` (e.g., "A1", "H1").
+
+Full list of healthcare provider categories (98+ types):
+- **H1** - Huisartsinstelling (General Practice)
+- **A1** - Apotheek (Pharmacy)
+- **V4** - Ziekenhuis (Hospital)
+- **R5** - Verpleeghuis (Nursing Home)
+- **G5** - Geestelijke gezondheidszorg (Mental Health Care)
+- **L1** - Laboratorium (Laboratory)
+- And 92+ more categories...
+
+Source: [Vektis - Dossierhoudende zorgaanbiedercategorieën](https://vzvz.atlassian.net/wiki/spaces/MA11/pages/828314634/Bijlage+Dossierhoudende+zorgaanbiedercategorie+n)
+
+This feature allows testing with custom organization data without modifying the code.
 
 ## Development
 

@@ -59,40 +59,19 @@ export function getCredentialIssuerMetadata(baseUrl: string, issuerDid: string):
       },
     ],
     credential_configurations_supported: {
-      VektisOrgCredential: {
+      HealthcareProviderTypeCredential: {
         format: 'jwt_vc_json',
-        scope: 'VektisOrgCredential',
+        scope: 'HealthcareProviderTypeCredential',
         cryptographic_binding_methods_supported: ['did:web', 'did:jwk'],
         credential_signing_alg_values_supported: ['EdDSA'],
         credential_definition: {
-          type: ['VerifiableCredential', 'VektisOrgCredential'],
+          type: ['VerifiableCredential', 'HealthcareProviderTypeCredential'],
           credentialSubject: {
-            organizationName: {
-              mandatory: true,
-              display: [
-                { name: 'Organisatie Naam', locale: 'nl-NL' },
-                { name: 'Organization Name', locale: 'en-US' },
-              ],
-            },
             organizationType: {
               mandatory: true,
               display: [
                 { name: 'Organisatie Type', locale: 'nl-NL' },
                 { name: 'Organization Type', locale: 'en-US' },
-              ],
-            },
-            agbCode: {
-              mandatory: true,
-              display: [
-                { name: 'AGB Code', locale: 'nl-NL' },
-                { name: 'AGB Code', locale: 'en-US' },
-              ],
-            },
-            uraNumber: {
-              mandatory: true,
-              display: [
-                { name: 'URA Nummer', locale: 'nl-NL' },
-                { name: 'URA Number', locale: 'en-US' },
               ],
             },
           },
@@ -165,7 +144,7 @@ export function getAuthorizationServerMetadata(baseUrl: string): AuthorizationSe
     grant_types_supported: ['authorization_code'],
     token_endpoint_auth_methods_supported: ['none'],
     code_challenge_methods_supported: ['S256'],
-    scopes_supported: ['VektisOrgCredential'],
+    scopes_supported: ['HealthcareProviderTypeCredential'],
 
     // OID4VCI extensions
     authorization_details_types_supported: ['openid_credential'],
