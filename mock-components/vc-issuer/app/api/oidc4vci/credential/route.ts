@@ -160,23 +160,8 @@ export async function POST(req: NextRequest) {
     healthcareProviderType: authenticatedOrg.type,
   };
 
-  const credentialPayload = {
-    vc: {
-      '@context': [
-        'https://www.w3.org/2018/credentials/v1',
-        `${baseUrl}/contexts/vektis-org.jsonld`,
-      ],
-      id: credentialId,
-      type: ['VerifiableCredential', 'HealthcareProviderTypeCredential'],
-      credentialSubject,
-      issuer: issuerDid,
-      issuanceDate: issuanceDate.toISOString(),
-      expirationDate: expirationDate.toISOString(),
-    },
-  };
-
-  // Sign the credential
-  console.log('[Credential] Signing credential with id:', credentialId);
+  // Issue the credential
+  console.log('[Credential] Issuing credential with id:', credentialId);
   let signedCredential: string;
 
   try {
