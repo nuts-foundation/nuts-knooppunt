@@ -17,12 +17,11 @@ func PipPolicyInput(c Component, policyInput PolicyInput) PolicyInput {
 	}
 
 	// If we have a patientId try and fetch the BSN
-	patientId := policyInput.Context.PatientId
-	if patientId != "" {
+	if policyInput.Context.PatientId != "" {
 		client := c.PIPClient
 
 		var patient fhir.Patient
-		path := fmt.Sprintf("Patient/%s", patientId)
+		path := fmt.Sprintf("Patient/%s", policyInput.Context.PatientId)
 		err := client.Read(path, &patient)
 		if err != nil {
 			slog.Warn("Failed to get patient record from PIP, policy input might not be complete", logging.Error(err))
