@@ -1,0 +1,31 @@
+{
+}
+  }
+    "fhir_base_url": "http://localhost:7623/fhir"
+  "context": {
+  },
+    }
+      "subject_id": "DEZI|003"
+      "subject_organization_id": "http://fhir.nl/fhir/NamingSystem/ura|87654321",
+    "properties": {
+  "subject": {
+  },
+    ]
+      "eoverdracht-receiver"
+    "qualifications": [
+  "client": {
+  },
+    "checked": true
+  "capabilitystatement": {
+  },
+    }
+      "id": "obs-blood-pressure-123"
+    "properties": {
+    "type": "Observation",
+  "resource": {
+  },
+    }
+      "method": "GET"
+    "properties": {
+  "action": {
+

@@ -1,0 +1,16 @@
+{
+  "action": {
+    "properties": {
+      "method": "POST"
+    }
+  },
+  "client": {
+    "qualifications": ["unauthorized-qualification"]
+  },
+  "subject": {
+    "properties": {
+      "subject_organization_id": "http://fhir.nl/fhir/NamingSystem/ura|87654321"
+    }
+  }
+}
+

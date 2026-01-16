@@ -1,0 +1,53 @@
+{
+  "action": {
+    "properties": {
+      "method": "POST"
+    }
+  },
+  "resource": {
+    "type": "Observation",
+    "properties": {
+      "id": "obs-12345",
+      "category": "vital-signs"
+    }
+  },
+  "capabilitystatement": {
+    "checked": true
+  },
+  "client": {
+    "qualifications": [
+      "eoverdracht-sender"
+    ]
+  },
+  "subject": {
+    "properties": {
+      "subject_organization_id": "http://fhir.nl/fhir/NamingSystem/ura|12345678",
+      "subject_id": "DEZI|002"
+    }
+  },
+  "context": {
+    "fhir_base_url": "http://localhost:7623/fhir",
+    "consents": [
+      {
+        "provision": {
+          "actor": {
+            "identifier": [
+              {
+                "system": "http://fhir.nl/fhir/NamingSystem/ura",
+                "value": "12345678"
+              }
+            ]
+          },
+          "data": [
+            {
+              "reference": {
+                "reference": "Observation/obs-12345"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
+

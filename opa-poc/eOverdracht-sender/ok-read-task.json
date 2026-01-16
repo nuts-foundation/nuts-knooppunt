@@ -1,0 +1,55 @@
+{
+  "action": {
+    "properties": {
+      "method": "POST"
+    }
+  },
+  "resource": {
+    "type": "Task",
+    "properties": {
+      "id": "ffc9e75f-93a3-488f-8b28-21bdc661eed2"
+    }
+  },
+  "capabilitystatement": {
+    "checked": true
+  },
+  "client": {
+    "qualifications": [
+      "eoverdracht-sender"
+    ]
+  },
+  "subject": {
+    "properties": {
+      "subject_organization_id": "http://fhir.nl/fhir/NamingSystem/ura|12345678"
+    }
+  },
+  "context": {
+    "consents": [
+      {
+        "provision": {
+          "actor": {
+            "identifier": [
+              {
+                "system": "http://fhir.nl/fhir/NamingSystem/ura",
+                "value": "12345678"
+              }
+            ]
+          },
+          "data": [
+            {
+              "reference": {
+                "reference": "Task/ffc9e75f-93a3-488f-8b28-21bdc661eed2"
+              }
+            },
+            {
+              "reference": {
+                "reference": "Patient/0fa227c1-9910-4852-8a5e-e03e928fafec"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
+
