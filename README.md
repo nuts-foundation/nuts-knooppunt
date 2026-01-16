@@ -44,7 +44,7 @@ npm install
 npm start
 ```
 
-📖 See [demo-ehr/README.md](demo-ehr/README.md) for detailed documentation, configuration, and use case workflows.
+📖 See [demo-ehr/README.md](mock-components/demo-ehr/README.md) for detailed documentation, configuration, and use case workflows.
 
 ## Endpoints
 
