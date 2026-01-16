@@ -218,14 +218,38 @@ function EHerkenningContent() {
                         d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                       />
                     </svg>
-                    <div className="text-sm text-blue-700">
-                      <p className="font-medium mb-1">Veelgebruikte zorgaanbiedertypen:</p>
-                      <ul className="list-disc list-inside space-y-0.5">
-                        <li><strong>A1</strong> - Apotheek</li>
-                        <li><strong>H1</strong> - Huisartsinstelling</li>
-                        <li><strong>V4</strong> - Ziekenhuis</li>
-                        <li><strong>R5</strong> - Verpleeghuis</li>
-                      </ul>
+                    <div className="text-sm text-blue-700 w-full">
+                      <p className="font-medium mb-2">Veelgebruikte zorgaanbiedertypen:</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleTypeChange('A1')}
+                          className="text-left px-3 py-2 bg-white border border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                        >
+                          <strong>A1</strong> - Apotheek
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleTypeChange('H1')}
+                          className="text-left px-3 py-2 bg-white border border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                        >
+                          <strong>H1</strong> - Huisartsinstelling
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleTypeChange('V4')}
+                          className="text-left px-3 py-2 bg-white border border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                        >
+                          <strong>V4</strong> - Ziekenhuis
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleTypeChange('R5')}
+                          className="text-left px-3 py-2 bg-white border border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                        >
+                          <strong>R5</strong> - Verpleeghuis
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
