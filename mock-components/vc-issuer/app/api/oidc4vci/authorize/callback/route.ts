@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { getOrganizationById } from '@/lib/mock-data/organizations';
+import { careOrganizationTypes } from '@/lib/vektis/care-organization-types';
 import { jsonResponse } from '@/lib/utils';
 
 /**
  * Callback endpoint after e-Herkenning authentication
- * Updates the authorization request with selected organization and redirects to wallet
+ * Updates the authorization request with selected organization type and redirects to wallet
  */
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
 
   const state = searchParams.get('state');
-  const orgId = searchParams.get('org');
+  const organizationType = searchParams.get('organizationType');
 
   if (!state) {
     return jsonResponse(
@@ -20,9 +20,17 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  if (!orgId) {
+  if (!organizationType) {
     return jsonResponse(
-      { error: 'invalid_request', error_description: 'org is required' },
+      { error: 'invalid_request', error_description: 'organizationType is required' },
+      { status: 400 }
+    );
+  }
+
+  // Validate organization type
+  if (!(organizationType in careOrganizationTypes)) {
+    return jsonResponse(
+      { error: 'invalid_request', error_description: 'Invalid organization type' },
       { status: 400 }
     );
   }
@@ -55,26 +63,12 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Get the selected organization
-  const organization = getOrganizationById(orgId);
-  if (!organization) {
-    return jsonResponse(
-      { error: 'invalid_request', error_description: 'Organization not found' },
-      { status: 400 }
-    );
-  }
-
-  // Update authorization request with authenticated organization
+  // Update authorization request with authenticated organization type
   await prisma.authorizationRequest.update({
     where: { state },
     data: {
       authenticatedOrg: JSON.stringify({
-        id: organization.id,
-        name: organization.name,
-        type: organization.type,
-        typeLabel: organization.typeLabel,
-        agbCode: organization.agbCode,
-        uraNumber: organization.uraNumber,
+        type: organizationType,
       }),
     },
   });

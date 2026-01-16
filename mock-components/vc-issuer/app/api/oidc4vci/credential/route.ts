@@ -7,12 +7,7 @@ import { getIssuerDid, getBaseUrl, getCredentialValidityDays, getCNonceExpirySec
 import { issueCredential } from '@/lib/credential';
 
 interface AuthenticatedOrg {
-  id: string;
-  name: string;
   type: string;
-  typeLabel: string;
-  agbCode: string;
-  uraNumber: string;
 }
 
 interface CredentialRequest {
@@ -29,7 +24,7 @@ interface CredentialRequest {
 
 /**
  * Credential endpoint for OID4VCI
- * Issues VektisOrgCredential to the wallet
+ * Issues HealthcareProviderTypeCredential to the wallet
  */
 export async function POST(req: NextRequest) {
   console.log('[Credential] POST request received');
@@ -152,7 +147,7 @@ export async function POST(req: NextRequest) {
     );
   }
   const authenticatedOrg = JSON.parse(tokenResponse.authenticatedOrg) as AuthenticatedOrg;
-  console.log('[Credential] Authenticated organization:', authenticatedOrg.name);
+  console.log('[Credential] Authenticated organization type:', authenticatedOrg.type);
 
   // Build credential
   const credentialId = `urn:uuid:${uuidv4()}`;
@@ -161,10 +156,8 @@ export async function POST(req: NextRequest) {
   const expirationDate = new Date(issuanceDate.getTime() + validityDays * 24 * 60 * 60 * 1000);
 
   const credentialSubject = {
-    organizationName: authenticatedOrg.name,
-    organizationType: authenticatedOrg.type,
-    agbCode: authenticatedOrg.agbCode,
-    uraNumber: authenticatedOrg.uraNumber,
+    id: subjectDid,
+    healthcareProviderType: authenticatedOrg.type,
   };
 
   // Issue the credential
@@ -181,7 +174,7 @@ export async function POST(req: NextRequest) {
         'https://www.w3.org/2018/credentials/v1',
         `${baseUrl}/contexts/vektis-org.jsonld`
       ],
-      type: ['VerifiableCredential', 'VektisOrgCredential'],
+      type: ['VerifiableCredential', 'HealthcareProviderTypeCredential'],
       issuanceDate,
       expirationDate,
     });
@@ -204,7 +197,7 @@ export async function POST(req: NextRequest) {
       credentialId,
       issuerDid,
       subjectDid,
-      credentialType: JSON.stringify(['VerifiableCredential', 'VektisOrgCredential']),
+      credentialType: JSON.stringify(['VerifiableCredential', 'HealthcareProviderTypeCredential']),
       format: 'jwt_vc_json',
       credentialSubject: JSON.stringify(credentialSubject),
       tokenResponseId: tokenResponse.id,
@@ -224,7 +217,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  console.log('[Credential] SUCCESS: Credential issued for', authenticatedOrg.name, 'to subject', subjectDid);
+  console.log('[Credential] SUCCESS: Credential issued for organization type', authenticatedOrg.type, 'to subject', subjectDid);
 
   const responseBody = {
     format: 'jwt_vc_json',
