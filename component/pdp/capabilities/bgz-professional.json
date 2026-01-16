@@ -524,6 +524,27 @@
               "type": "string"
             }
           ]
+        },
+        {
+          "type": "DocumentReference",
+          "interaction": [
+            {
+              "code": "search-type"
+            },
+            {
+              "code": "read"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "string"
+            },
+            {
+              "name": "status",
+              "type": "token"
+            }
+          ]
         }
       ],
       "operation": [
