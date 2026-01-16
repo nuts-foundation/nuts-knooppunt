@@ -67,11 +67,11 @@ export function getCredentialIssuerMetadata(baseUrl: string, issuerDid: string):
         credential_definition: {
           type: ['VerifiableCredential', 'HealthcareProviderTypeCredential'],
           credentialSubject: {
-            organizationType: {
+            healthcareProviderType: {
               mandatory: true,
               display: [
-                { name: 'Organisatie Type', locale: 'nl-NL' },
-                { name: 'Organization Type', locale: 'en-US' },
+                { name: 'Zorgaanbiedertype', locale: 'nl-NL' },
+                { name: 'Healthcare Provider Type', locale: 'en-US' },
               ],
             },
           },

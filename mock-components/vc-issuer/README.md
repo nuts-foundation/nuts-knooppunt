@@ -115,7 +115,7 @@ The issued credential contains:
     "type": ["VerifiableCredential", "HealthcareProviderTypeCredential"],
     "credentialSubject": {
       "id": "did:web:wallet.example.com",
-      "organizationType": "A1"
+      "healthcareProviderType": "A1"
     },
     "issuer": "did:web:issuer.example.com",
     "issuanceDate": "2024-12-01T12:00:00Z"
@@ -178,14 +178,12 @@ For testing purposes, you can use any of the 98+ official Vektis healthcare prov
 To create a credential during the e-Herkenning flow:
 
 1. Click "Handmatig invoeren" (Manual Entry) on the organization selection screen
-2. Fill in the organization details:
-   - **Naam organisatie** (Organization Name) - for display purposes only, not included in the credential
-   - **Zorgaanbiedertype** (Healthcare Provider Type) - select from dropdown with 98+ official Vektis categories
+2. Select the healthcare provider type from the dropdown with 98+ official Vektis categories
 3. Click "Doorgaan" (Continue) to proceed with the credential issuance
 
 The healthcare provider types are based on the official Vektis "Dossierhoudende zorgaanbiedercategorieën" (Dossier-holding healthcare provider categories).
 
-**Note:** The organization name is used for display purposes in the UI but is **not included** in the issued credential. The credential only contains the `organizationType` (e.g., "A1", "H1").
+**Note:** The credential only contains the `healthcareProviderType` code (e.g., "A1", "H1"). No organization name or other identifying information is included.
 
 Full list of healthcare provider categories (98+ types):
 - **H1** - Huisartsinstelling (General Practice)

@@ -4,20 +4,11 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getOrganizationTypeOptions, type CareOrganizationType } from '@/lib/vektis/care-organization-types';
 
-interface Organization {
-  id: string;
-  name: string;
-  type: CareOrganizationType;
-  typeLabel: string;
-}
-
-
 function EHerkenningContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const state = searchParams.get('state');
 
-  const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<'login' | 'select' | 'consent'>('login');
   const [error, setError] = useState<string | null>(null);
@@ -25,12 +16,8 @@ function EHerkenningContent() {
   // Get organization type options from the centralized list
   const organizationTypeOptions = getOrganizationTypeOptions();
 
-  const [manualOrg, setManualOrg] = useState({
-    name: '',
-    type: organizationTypeOptions[0].code,
-    typeLabel: organizationTypeOptions[0].label,
-    typeLabelEn: organizationTypeOptions[0].label,
-  });
+  const [selectedType, setSelectedType] = useState<CareOrganizationType>(organizationTypeOptions[0].code);
+  const [selectedTypeLabel, setSelectedTypeLabel] = useState(organizationTypeOptions[0].label);
 
   useEffect(() => {
     if (!state) {
@@ -47,42 +34,23 @@ function EHerkenningContent() {
     }, 1500);
   };
 
-  const handleManualOrgSubmit = () => {
-    // Validate manual entry
-    if (!manualOrg.name.trim()) {
-      alert('Vul de naam van de organisatie in');
-      return;
-    }
-
-    // Create organization object with custom ID
-    const customOrg: Organization = {
-      id: `custom-${Date.now()}`,
-      name: manualOrg.name,
-      type: manualOrg.type,
-      typeLabel: manualOrg.typeLabel,
-    };
-
-    setSelectedOrg(customOrg);
+  const handleSubmit = () => {
     setStep('consent');
   };
 
   const handleTypeChange = (type: string) => {
     const typeObj = organizationTypeOptions.find(t => t.code === type);
-    setManualOrg({
-      ...manualOrg,
-      type: type as CareOrganizationType,
-      typeLabel: typeObj?.label || type,
-      typeLabelEn: typeObj?.label || type,
-    });
+    setSelectedType(type as CareOrganizationType);
+    setSelectedTypeLabel(typeObj?.label || type);
   };
 
   const handleConsent = async () => {
-    if (!selectedOrg || !state) return;
+    if (!state) return;
 
     setIsLoading(true);
 
-    // Send only the organization type
-    const callbackUrl = `/api/oidc4vci/authorize/callback?state=${encodeURIComponent(state)}&organizationType=${encodeURIComponent(selectedOrg.type)}`;
+    // Send only the healthcare provider type
+    const callbackUrl = `/api/oidc4vci/authorize/callback?state=${encodeURIComponent(state)}&organizationType=${encodeURIComponent(selectedType)}`;
 
     router.push(callbackUrl);
   };
@@ -90,7 +58,6 @@ function EHerkenningContent() {
   const handleBack = () => {
     if (step === 'consent') {
       setStep('select');
-      setSelectedOrg(null);
     }
   };
 
@@ -225,14 +192,14 @@ function EHerkenningContent() {
               </div>
             )}
 
-            {/* Step 2: Select Organization */}
+            {/* Step 2: Select Healthcare Provider Type */}
             {step === 'select' && (
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                  Organisatiegegevens Invoeren
+                  Zorgaanbiedertype Selecteren
                 </h2>
                 <p className="text-gray-600 mb-4">
-                  Voer de gegevens van uw organisatie in.
+                  Selecteer het type zorgaanbieder.
                 </p>
 
                 {/* Suggested Organization Types Info Box */}
@@ -266,23 +233,10 @@ function EHerkenningContent() {
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Naam organisatie *
-                    </label>
-                    <input
-                      type="text"
-                      value={manualOrg.name}
-                      onChange={(e) => setManualOrg({ ...manualOrg, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                      placeholder="Bijv. Apotheek De Zonnehoek"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Zorgaanbiedertype *
                     </label>
                     <select
-                      value={manualOrg.type}
+                      value={selectedType}
                       onChange={(e) => handleTypeChange(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                     >
@@ -296,7 +250,7 @@ function EHerkenningContent() {
 
                   <div className="pt-2">
                     <button
-                      onClick={handleManualOrgSubmit}
+                      onClick={handleSubmit}
                       className="w-full py-3 px-4 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors"
                     >
                       Doorgaan
@@ -307,24 +261,21 @@ function EHerkenningContent() {
             )}
 
             {/* Step 3: Consent */}
-            {step === 'consent' && selectedOrg && (
+            {step === 'consent' && (
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-2">
                   Bevestig Credential Aanvraag
                 </h2>
                 <p className="text-gray-600 mb-4">
-                  U staat op het punt een zorgorganisatie-type credential aan te maken voor:
+                  U staat op het punt een HealthcareProviderTypeCredential aan te maken voor:
                 </p>
 
                 <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                  <h3 className="font-semibold text-gray-900 mb-3">
-                    {selectedOrg.name}
-                  </h3>
                   <dl className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <dt className="text-gray-500">Type:</dt>
+                      <dt className="text-gray-500">Zorgaanbiedertype:</dt>
                       <dd className="text-gray-900 font-medium">
-                        {selectedOrg.type} - {selectedOrg.typeLabel}
+                        {selectedType} - {selectedTypeLabel}
                       </dd>
                     </div>
                   </dl>

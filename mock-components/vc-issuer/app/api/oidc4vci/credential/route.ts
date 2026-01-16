@@ -157,7 +157,7 @@ export async function POST(req: NextRequest) {
 
   const credentialSubject = {
     id: subjectDid,
-    organizationType: authenticatedOrg.type,
+    healthcareProviderType: authenticatedOrg.type,
   };
 
   const credentialPayload = {
