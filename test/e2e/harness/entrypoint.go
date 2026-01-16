@@ -26,6 +26,7 @@ type Details struct {
 	SunflowerFHIRBaseURL     *url.URL
 	SunflowerURA             string
 	Care2CureURA             string
+	MockMitzXACML            *MockXACMLMitzServer
 }
 
 type MITZDetails struct {
@@ -69,6 +70,18 @@ func Start(t *testing.T) Details {
 		FHIRBaseURL: testData.NVI.FHIRBaseURL.String(),
 		Audience:    "nvi",
 	}
+	config.PDP = pdp.Config{
+		Enabled: true,
+		PIPURL:  testData.PIP.FHIRBaseURL.String(),
+	}
+
+	mockMitz := NewMockXACMLMitzServer(t)
+	config.MITZ = mitz.Config{
+		MitzBase:      mockMitz.GetURL(),
+		GatewaySystem: "test-gateway",
+		SourceSystem:  "test-source",
+	}
+
 	knooppuntInternalURL := startKnooppunt(t, config)
 
 	return Details{
@@ -80,6 +93,7 @@ func Start(t *testing.T) Details {
 		Care2CureFHIRBaseURL:     care2cure.AdminHAPITenant().BaseURL(hapiBaseURL),
 		Care2CureURA:             *care2cure.Organization().Identifier[0].Value,
 		Vectors:                  *testData,
+		MockMitzXACML:            mockMitz,
 	}
 }
 
