@@ -35,7 +35,8 @@ func PipPolicyInput(c Component, policyInput PolicyInput) PolicyInput {
 		}
 
 		if len(bsns) > 1 {
-			slog.Warn("Patient record has multiple BSN's, defaulting to the first one")
+			slog.Warn("Could not determine BSN, patient record has multiple BSN's")
+			return policyInput
 		}
 		bsn := bsns[0]
 
