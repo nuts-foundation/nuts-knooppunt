@@ -370,7 +370,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
 
 	patientId, _ := derivePatientId(tokens, rawParams)
-	policyInput.Context.PatientId = patientId
+	policyInput.Context.PatientID = patientId
 
 	return policyInput, Allow()
 }
