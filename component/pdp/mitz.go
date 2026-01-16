@@ -54,30 +54,46 @@ func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
 }
 
 func validateMitzInput(input PolicyInput) PolicyResult {
-	requiredValues := []string{
-		input.Context.PatientBSN,
-		input.Context.DataHolderFacilityType,
-		input.Context.DataHolderOrganizationId,
-		input.Subject.Properties.SubjectRole,
-		input.Subject.Properties.SubjectId,
-		input.Subject.Properties.SubjectOrganizationId,
-		input.Subject.Properties.SubjectFacilityType,
-	}
-	errorMessages := []string{
-		"Could not complete Mitz consent check: Missing data holder facility type",
-		"Could not complete Mitz consent check: Missing data holder organization ID",
-		"Could not complete Mitz consent check: Missing subject role",
-		"Could not complete Mitz consent check: Missing subject id",
-		"Could not complete Mitz consent check: Missing subject organization ID",
-		"Could not complete Mitz consent check: Missing subject facility type",
+	requiredData := []struct {
+		Value   string
+		Message string
+	}{
+		{
+			Value:   input.Context.PatientBSN,
+			Message: "Could not complete Mitz consent check: Missing BSN",
+		},
+		{
+			Value:   input.Context.DataHolderFacilityType,
+			Message: "Could not complete Mitz consent check: Missing data holder facility type",
+		},
+		{
+			Value:   input.Context.DataHolderOrganizationId,
+			Message: "Could not complete Mitz consent check: Missing data holder organization ID",
+		},
+		{
+			Value:   input.Subject.Properties.SubjectRole,
+			Message: "Could not complete Mitz consent check: Missing subject role",
+		},
+		{
+			Value:   input.Subject.Properties.SubjectId,
+			Message: "Could not complete Mitz consent check: Missing subject id",
+		},
+		{
+			Value:   input.Subject.Properties.SubjectOrganizationId,
+			Message: "Could not complete Mitz consent check: Missing subject organization ID",
+		},
+		{
+			Value:   input.Subject.Properties.SubjectFacilityType,
+			Message: "Could not complete Mitz consent check: Missing subject facility type",
+		},
 	}
 
-	errorReasons := make([]ResultReason, 0, len(requiredValues))
-	for idx, val := range requiredValues {
-		if val == "" {
+	errorReasons := make([]ResultReason, 0, len(requiredData))
+	for _, def := range requiredData {
+		if def.Value == "" {
 			errorReasons = append(errorReasons, ResultReason{
 				Code:        TypeResultCodeUnexpectedInput,
-				Description: errorMessages[idx],
+				Description: def.Message,
 			})
 		}
 	}
