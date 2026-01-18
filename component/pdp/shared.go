@@ -153,9 +153,13 @@ const (
 	TypeResultCodeInternalError        TypeResultCode = "internal_error"
 )
 
+type PIPConfig struct {
+	URL string
+}
+
 type Config struct {
-	Enabled bool   `koanf:"enabled"`
-	PIPURL  string `koanf:"pipurl"`
+	Enabled bool      `koanf:"enabled"`
+	PIP     PIPConfig `koanf:"pipurl"`
 }
 
 type Component struct {

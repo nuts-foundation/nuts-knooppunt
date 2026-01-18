@@ -18,7 +18,9 @@ import (
 func DefaultConfig() Config {
 	return Config{
 		Enabled: true,
-		PIPURL:  "",
+		PIP: PIPConfig{
+			URL: "",
+		},
 	}
 }
 
@@ -31,8 +33,8 @@ func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
 		Mitz:   mitzcomp,
 	}
 
-	if config.PIPURL != "" {
-		url, err := url.Parse(config.PIPURL)
+	if config.PIP.URL != "" {
+		url, err := url.Parse(config.PIP.URL)
 		if err != nil {
 			return &Component{}, err
 		}

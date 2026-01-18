@@ -72,7 +72,9 @@ func Start(t *testing.T) Details {
 	}
 	config.PDP = pdp.Config{
 		Enabled: true,
-		PIPURL:  testData.PIP.FHIRBaseURL.String(),
+		PIP: pdp.PIPConfig{
+			URL: testData.PIP.FHIRBaseURL.String(),
+		},
 	}
 
 	mockMitz := NewMockXACMLMitzServer(t)
