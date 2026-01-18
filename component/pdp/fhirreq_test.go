@@ -135,7 +135,7 @@ func TestComponent_parse_patient_id(t *testing.T) {
 		},
 	}
 	policyInput, _ := NewPolicyInput(pdpRequest)
-	assert.Equal(t, "12345", policyInput.Context.PatientID)
+	assert.Equal(t, "12345", policyInput.Context.Patients[0].PatientID)
 
 	pdpRequest = PDPRequest{
 		Input: PDPInput{
@@ -150,7 +150,7 @@ func TestComponent_parse_patient_id(t *testing.T) {
 		},
 	}
 	policyInput, _ = NewPolicyInput(pdpRequest)
-	assert.Equal(t, "56789", policyInput.Context.PatientID)
+	assert.Equal(t, "56789", policyInput.Context.Patients[0].PatientID)
 
 	pdpRequest = PDPRequest{
 		Input: PDPInput{
@@ -165,5 +165,5 @@ func TestComponent_parse_patient_id(t *testing.T) {
 		},
 	}
 	policyInput, _ = NewPolicyInput(pdpRequest)
-	assert.Equal(t, "98765", policyInput.Context.PatientID)
+	assert.Equal(t, "98765", policyInput.Context.Patients[0].PatientID)
 }

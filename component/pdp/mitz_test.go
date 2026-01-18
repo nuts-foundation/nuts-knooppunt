@@ -17,13 +17,18 @@ func TestComponent_map_input_xacml(t *testing.T) {
 			},
 		},
 		Context: PolicyContext{
-			PatientBSN:               "900186021",
+			Patients: []PolicyPatient{
+				{
+					PatientID:  "3E439979-017F-40AA-594D-EBCF880FFD97",
+					PatientBSN: "900186021",
+				},
+			},
 			DataHolderFacilityType:   "Z3",
 			DataHolderOrganizationId: "00000659",
 		},
 	}
 
-	xacml := xacmlFromInput(input)
+	xacml := xacmlFromInput(input, input.Context.Patients[0])
 	assert.Equal(t, "900186021", xacml.PatientBSN)
 	assert.Equal(t, "01.015", xacml.SubjectRole)
 	assert.Equal(t, "000095254", xacml.ProviderID)
