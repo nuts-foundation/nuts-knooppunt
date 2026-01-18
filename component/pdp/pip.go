@@ -16,7 +16,7 @@ func PipPolicyInput(c Component, policyInput PolicyInput) PolicyInput {
 		return policyInput
 	}
 
-	for _, patient := range policyInput.Context.Patients {
+	for idx, patient := range policyInput.Context.Patients {
 		// If we have a patientId try and fetch the BSN
 		if patient.PatientID != "" {
 			client := c.pipClient
@@ -45,7 +45,7 @@ func PipPolicyInput(c Component, policyInput PolicyInput) PolicyInput {
 				slog.Warn("BSN identifier is missing value")
 				continue
 			}
-			patient.PatientBSN = *bsn.Value
+			policyInput.Context.Patients[idx].PatientBSN = *bsn.Value
 		}
 	}
 	return policyInput
