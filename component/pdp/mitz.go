@@ -17,7 +17,7 @@ func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) (Policy
 	mitzComp := *c.Mitz
 	var errorReasons []ResultReason
 
-	for _, patient := range input.Context.Patients {
+	for idx, patient := range input.Context.Patients {
 		consentReq := xacmlFromInput(input, patient)
 		consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
 		if err != nil {
@@ -41,7 +41,7 @@ func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) (Policy
 			continue
 		}
 
-		patient.MitzConsent = true
+		input.Context.Patients[idx].MitzConsent = true
 	}
 
 	if len(errorReasons) > 0 {
