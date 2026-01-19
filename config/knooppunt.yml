@@ -71,4 +71,5 @@ authn:
 
 pdp:
   enabled: true
-  pipurl: "http://localhost:7050/fhir/policy-information-point"
+  pip: 
+    url: http://localhost:7050/fhir/policy-information-point
