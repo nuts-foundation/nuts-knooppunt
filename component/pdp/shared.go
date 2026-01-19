@@ -150,7 +150,7 @@ const (
 )
 
 type PIPConfig struct {
-	URL string
+	URL string `koanf:"url"`
 }
 
 type Config struct {
