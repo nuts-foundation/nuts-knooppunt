@@ -155,7 +155,7 @@ type PIPConfig struct {
 
 type Config struct {
 	Enabled bool      `koanf:"enabled"`
-	PIP     PIPConfig `koanf:"pipurl"`
+	PIP     PIPConfig `koanf:"pip"`
 }
 
 type Component struct {
