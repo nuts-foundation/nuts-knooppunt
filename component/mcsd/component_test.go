@@ -2010,3 +2010,305 @@ func mustMarshalResource(resource any) []byte {
 	}
 	return data
 }
+
+func TestCheckForURAIdentifierChanges(t *testing.T) {
+	t.Run("no URA identifier changes - returns false", func(t *testing.T) {
+		org := fhir.Organization{
+			Id: to.Ptr("org-1"),
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("12345678"),
+				},
+			},
+		}
+
+		entries := []fhir.BundleEntry{
+			{
+				Resource: mustMarshalResource(org),
+			},
+			{
+				Resource: mustMarshalResource(org), // Same org, same URA
+			},
+		}
+
+		result := checkForURAIdentifierChanges(entries)
+		assert.False(t, result, "should return false when URA identifier is consistent")
+	})
+
+	t.Run("URA identifier changed - returns true", func(t *testing.T) {
+		org1 := fhir.Organization{
+			Id: to.Ptr("org-1"),
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("12345678"),
+				},
+			},
+		}
+
+		org2 := fhir.Organization{
+			Id: to.Ptr("org-1"), // Same ID
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("87654321"), // Different URA
+				},
+			},
+		}
+
+		entries := []fhir.BundleEntry{
+			{
+				Resource: mustMarshalResource(org1),
+			},
+			{
+				Resource: mustMarshalResource(org2),
+			},
+		}
+
+		result := checkForURAIdentifierChanges(entries)
+		assert.True(t, result, "should return true when URA identifier changed")
+	})
+
+	t.Run("multiple organizations with different IDs - returns false", func(t *testing.T) {
+		org1 := fhir.Organization{
+			Id: to.Ptr("org-1"),
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("12345678"),
+				},
+			},
+		}
+
+		org2 := fhir.Organization{
+			Id: to.Ptr("org-2"), // Different ID
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("87654321"),
+				},
+			},
+		}
+
+		entries := []fhir.BundleEntry{
+			{
+				Resource: mustMarshalResource(org1),
+			},
+			{
+				Resource: mustMarshalResource(org2),
+			},
+		}
+
+		result := checkForURAIdentifierChanges(entries)
+		assert.False(t, result, "should return false when different organizations have different URAs")
+	})
+
+	t.Run("organization without URA identifier - returns false", func(t *testing.T) {
+		org := fhir.Organization{
+			Id: to.Ptr("org-1"),
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://example.com/other-system"),
+					Value:  to.Ptr("some-value"),
+				},
+			},
+		}
+
+		entries := []fhir.BundleEntry{
+			{
+				Resource: mustMarshalResource(org),
+			},
+		}
+
+		result := checkForURAIdentifierChanges(entries)
+		assert.False(t, result, "should return false when no URA identifiers present")
+	})
+
+	t.Run("mixed entries with non-Organization resources - returns false", func(t *testing.T) {
+		org := fhir.Organization{
+			Id: to.Ptr("org-1"),
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("12345678"),
+				},
+			},
+		}
+
+		endpoint := fhir.Endpoint{
+			Id:      to.Ptr("ep-1"),
+			Address: "https://example.com",
+		}
+
+		entries := []fhir.BundleEntry{
+			{
+				Resource: mustMarshalResource(org),
+			},
+			{
+				Resource: mustMarshalResource(endpoint),
+			},
+		}
+
+		result := checkForURAIdentifierChanges(entries)
+		assert.False(t, result, "should return false when no URA changes detected")
+	})
+
+	t.Run("organization with nil Resource - returns false", func(t *testing.T) {
+		entries := []fhir.BundleEntry{
+			{
+				Resource: nil,
+			},
+		}
+
+		result := checkForURAIdentifierChanges(entries)
+		assert.False(t, result, "should return false when entries have nil resources")
+	})
+
+	t.Run("organization with nil ID - returns false", func(t *testing.T) {
+		org := fhir.Organization{
+			Id: nil,
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("12345678"),
+				},
+			},
+		}
+
+		entries := []fhir.BundleEntry{
+			{
+				Resource: mustMarshalResource(org),
+			},
+		}
+
+		result := checkForURAIdentifierChanges(entries)
+		assert.False(t, result, "should return false when organization has nil ID")
+	})
+
+	t.Run("URA added in later version - returns true", func(t *testing.T) {
+		orgWithoutURA := fhir.Organization{
+			Id: to.Ptr("org-1"),
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://example.com/other-system"),
+					Value:  to.Ptr("some-value"),
+				},
+			},
+		}
+
+		orgWithURA := fhir.Organization{
+			Id: to.Ptr("org-1"), // Same ID
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://example.com/other-system"),
+					Value:  to.Ptr("some-value"),
+				},
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("12345678"), // URA added
+				},
+			},
+		}
+
+		entries := []fhir.BundleEntry{
+			{
+				Resource: mustMarshalResource(orgWithoutURA),
+			},
+			{
+				Resource: mustMarshalResource(orgWithURA),
+			},
+		}
+
+		result := checkForURAIdentifierChanges(entries)
+		assert.True(t, result, "should return true when URA identifier is added in a later version")
+	})
+
+	t.Run("URA removed in later version - returns true", func(t *testing.T) {
+		orgWithURA := fhir.Organization{
+			Id: to.Ptr("org-1"),
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("12345678"),
+				},
+			},
+		}
+
+		orgWithoutURA := fhir.Organization{
+			Id: to.Ptr("org-1"), // Same ID
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://example.com/other-system"),
+					Value:  to.Ptr("some-value"),
+				},
+			},
+		}
+
+		entries := []fhir.BundleEntry{
+			{
+				Resource: mustMarshalResource(orgWithURA),
+			},
+			{
+				Resource: mustMarshalResource(orgWithoutURA),
+			},
+		}
+
+		result := checkForURAIdentifierChanges(entries)
+		assert.True(t, result, "should return true when URA identifier is removed in a later version")
+	})
+
+	t.Run("multiple URA values for same organization - returns true", func(t *testing.T) {
+		org1 := fhir.Organization{
+			Id: to.Ptr("org-1"),
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("11111111"),
+				},
+			},
+		}
+
+		org2 := fhir.Organization{
+			Id: to.Ptr("org-1"), // Same ID
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("22222222"),
+				},
+			},
+		}
+
+		org3 := fhir.Organization{
+			Id: to.Ptr("org-1"), // Same ID
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("33333333"),
+				},
+			},
+		}
+
+		entries := []fhir.BundleEntry{
+			{
+				Resource: mustMarshalResource(org1),
+			},
+			{
+				Resource: mustMarshalResource(org2),
+			},
+			{
+				Resource: mustMarshalResource(org3),
+			},
+		}
+
+		result := checkForURAIdentifierChanges(entries)
+		assert.True(t, result, "should return true when multiple different URA values exist for same organization")
+	})
+
+	t.Run("empty entries - returns false", func(t *testing.T) {
+		entries := []fhir.BundleEntry{}
+
+		result := checkForURAIdentifierChanges(entries)
+		assert.False(t, result, "should return false for empty entries")
+	})
+}
