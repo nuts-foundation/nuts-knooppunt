@@ -1,6 +1,7 @@
 package pdp
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -10,7 +11,7 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-func enrichPolicyInputWithPIP(c Component, policyInput PolicyInput) PolicyInput {
+func enrichPolicyInputWithPIP(ctx context.Context, c Component, policyInput PolicyInput) PolicyInput {
 	if c.pipClient == nil {
 		slog.Warn("PIP client not configured")
 		return policyInput
@@ -24,24 +25,24 @@ func enrichPolicyInputWithPIP(c Component, policyInput PolicyInput) PolicyInput 
 		path := fmt.Sprintf("Patient/%s", policyInput.Context.PatientID)
 		err := client.Read(path, &patient)
 		if err != nil {
-			slog.Warn("Failed to get patient record from PIP, policy input might not be complete", logging.Error(err))
+			slog.WarnContext(ctx, "Failed to get patient record from PIP, policy input might not be complete", logging.Error(err))
 			return policyInput
 		}
 
 		bsns := fhirutil.FilterIdentifiersBySystem(patient.Identifier, coding.BSNNamingSystem)
 		if len(bsns) == 0 {
-			slog.Warn("Could not find BSN for patient record")
+			slog.WarnContext(ctx, "Could not find BSN for patient record")
 			return policyInput
 		}
 
 		if len(bsns) > 1 {
-			slog.Warn("Could not determine BSN, patient record has multiple BSN's")
+			slog.WarnContext(ctx, "Could not determine BSN, patient record has multiple BSN's")
 			return policyInput
 		}
 		bsn := bsns[0]
 
 		if bsn.Value == nil {
-			slog.Warn("BSN identifier is missing value")
+			slog.WarnContext(ctx, "BSN identifier is missing value")
 			return policyInput
 		}
 		policyInput.Context.PatientBSN = *bsn.Value
