@@ -181,10 +181,7 @@ services:
       - pep
 
   demo-ehr:
-    build:
-      context: mock-components/demo-ehr
-      dockerfile: Dockerfile
-    image: demo-ehr:latest
+    image: ghcr.io/nuts-foundation/demo-ehr:latest
     profiles:
       - demoehr
     container_name: demo-ehr

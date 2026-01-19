@@ -4,47 +4,9 @@ Implementation of the Nuts Knooppunt specifications.
 
 ## Demo EHR
 
-A demonstration Electronic Health Record (EHR) application is provided in the `demo-ehr/` folder. This React-based application showcases Dutch healthcare data exchange use cases:
+A demonstration Electronic Health Record (EHR) application showcasing Dutch healthcare data exchange use cases including BGZ exchange and eOverdracht workflows.
 
-### Key Features
-
-- **BGZ (Basisgegevensset Zorg) Exchange** - Share comprehensive patient health summaries using TA Notified Pull
-- **eOverdracht** - Care handover workflows between healthcare providers
-- **mCSD Integration** - Organization discovery and endpoint routing
-- **NVI Integration** - Patient care network discovery via DocumentReference queries
-- **SMART on FHIR** - OIDC/OAuth2 authentication and patient context launches
-
-### Quick Start with Docker Compose
-
-The easiest way to run the demo-ehr application is using Docker Compose:
-
-```shell
-# Start the demo-ehr with all dependencies
-docker compose --profile demoehr up
-
-# Stop the application
-docker compose --profile demoehr down
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-### Local Development
-
-For local development without Docker:
-
-```shell
-# Install dependencies
-cd demo-ehr
-npm install
-
-# Configure environment (create .env file)
-# See demo-ehr/README.md for environment variables
-
-# Start development server
-npm start
-```
-
-📖 See [demo-ehr/README.md](mock-components/demo-ehr/README.md) for detailed documentation, configuration, and use case workflows.
+See [mock-components/demo-ehr/README.md](mock-components/demo-ehr/README.md) for detailed documentation and setup instructions.
 
 ## Endpoints
 
@@ -111,11 +73,5 @@ Start with demo-ehr:
 
 ```shell
 docker compose --profile demoehr up --build
-```
-
-Start with PEP:
-
-```shell
-docker compose --profile pep up --build
 ```
 
