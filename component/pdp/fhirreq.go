@@ -284,33 +284,29 @@ func groupParams(queryParams url.Values) Params {
 	return params
 }
 
-func derivePatientIds(tokens Tokens, queryParams url.Values) []string {
+func derivePatientId(tokens Tokens, queryParams url.Values) (string, bool) {
 	// https://fhir.example.org/Patient/12345
 	typeInPath := tokens.ResourceType != nil && *tokens.ResourceType == fhir.ResourceTypePatient
 	idInPath := tokens.ResourceId != ""
 	if typeInPath && idInPath {
-		return []string{tokens.ResourceId}
+		return tokens.ResourceId, true
 	}
 
 	// https://fhir.example.org/Patient?_id=12345
 	idInParams := len(queryParams["_id"]) > 0
 	if typeInPath && idInParams {
-		return queryParams["_id"]
+		return queryParams["_id"][0], true
 	}
 
 	// https://fhir.example.org/Encounter?patient=Patient/12345
 	patientInParams := len(queryParams["patient"]) > 0
 	if patientInParams {
-		refStrs := queryParams["patient"]
-		var ids = make([]string, len(refStrs))
-		for i, refStr := range refStrs {
-			parts := strings.Split(refStr, "/")
-			ids[i] = parts[len(parts)-1]
-		}
-		return ids
+		refStr := queryParams["patient"][0]
+		parts := strings.Split(refStr, "/")
+		return parts[len(parts)-1], true
 	}
 
-	return []string{}
+	return "", false
 }
 
 func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
@@ -373,12 +369,8 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
 
-	patientIds := derivePatientIds(tokens, rawParams)
-	policyPatients := make([]PolicyPatient, len(patientIds))
-	for i, id := range patientIds {
-		policyPatients[i] = PolicyPatient{PatientID: id}
-	}
-	policyInput.Context.Patients = policyPatients
+	patientId, _ := derivePatientId(tokens, rawParams)
+	policyInput.Context.PatientID = patientId
 
 	return policyInput, Allow()
 }

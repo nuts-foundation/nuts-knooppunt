@@ -16,37 +16,35 @@ func PipPolicyInput(c Component, policyInput PolicyInput) PolicyInput {
 		return policyInput
 	}
 
-	for idx, patient := range policyInput.Context.Patients {
-		// If we have a patientId try and fetch the BSN
-		if patient.PatientID != "" {
-			client := c.pipClient
+	// If we have a patientId try and fetch the BSN
+	if policyInput.Context.PatientID != "" {
+		client := c.pipClient
 
-			var fhirPatient fhir.Patient
-			path := fmt.Sprintf("Patient/%s", patient.PatientID)
-			err := client.Read(path, &fhirPatient)
-			if err != nil {
-				slog.Warn("Failed to get patient record from PIP", logging.Error(err))
-				continue
-			}
-
-			bsns := fhirutil.FilterIdentifiersBySystem(fhirPatient.Identifier, coding.BSNNamingSystem)
-			if len(bsns) == 0 {
-				slog.Warn("Could not find BSN for patient record")
-				continue
-			}
-
-			if len(bsns) > 1 {
-				slog.Warn("Could not determine BSN, patient record has multiple BSN's")
-				continue
-			}
-			bsn := bsns[0]
-
-			if bsn.Value == nil {
-				slog.Warn("BSN identifier is missing value")
-				continue
-			}
-			policyInput.Context.Patients[idx].PatientBSN = *bsn.Value
+		var patient fhir.Patient
+		path := fmt.Sprintf("Patient/%s", policyInput.Context.PatientID)
+		err := client.Read(path, &patient)
+		if err != nil {
+			slog.Warn("Failed to get patient record from PIP, policy input might not be complete", logging.Error(err))
+			return policyInput
 		}
+
+		bsns := fhirutil.FilterIdentifiersBySystem(patient.Identifier, coding.BSNNamingSystem)
+		if len(bsns) == 0 {
+			slog.Warn("Could not find BSN for patient record")
+			return policyInput
+		}
+
+		if len(bsns) > 1 {
+			slog.Warn("Could not determine BSN, patient record has multiple BSN's")
+			return policyInput
+		}
+		bsn := bsns[0]
+
+		if bsn.Value == nil {
+			slog.Warn("BSN identifier is missing value")
+			return policyInput
+		}
+		policyInput.Context.PatientBSN = *bsn.Value
 	}
 	return policyInput
 }

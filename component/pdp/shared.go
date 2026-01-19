@@ -75,17 +75,13 @@ type PolicyActionProperties struct {
 	Revinclude      []string                    `json:"revinclude"`
 }
 
-type PolicyPatient struct {
-	PatientID   string `json:"patient_id"`
-	PatientBSN  string `json:"patient_bsn"`
-	MitzConsent bool   `json:"mitz_consent"`
-}
-
 type PolicyContext struct {
-	DataHolderFacilityType   string          `json:"data_holder_facility_type"`
-	DataHolderOrganizationId string          `json:"data_holder_organization_id"`
-	Patients                 []PolicyPatient `json:"patients"`
-	PurposeOfUse             string          `json:"purpose_of_use"`
+	DataHolderFacilityType   string `json:"data_holder_facility_type"`
+	DataHolderOrganizationId string `json:"data_holder_organization_id"`
+	PatientBSN               string `json:"patient_bsn"`
+	PatientID                string `json:"patient_id"`
+	PurposeOfUse             string `json:"purpose_of_use"`
+	MitzConsent              bool   `json:"mitz_consent"`
 }
 
 type PDPRequest struct {

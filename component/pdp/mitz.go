@@ -2,8 +2,6 @@ package pdp
 
 import (
 	"context"
-	"fmt"
-	"slices"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 )
@@ -15,48 +13,34 @@ func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) (Policy
 	}
 
 	mitzComp := *c.Mitz
-	var errorReasons []ResultReason
-
-	for idx, patient := range input.Context.Patients {
-		consentReq := xacmlFromInput(input, patient)
-		consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
-		if err != nil {
-			errorReasons = append(errorReasons, ResultReason{
-				Code:        TypeResultCodeInternalError,
-				Description: fmt.Sprintf("could not complete consent check with Mitz for patient %s", patient.PatientID),
-			})
-			continue
-		}
-
-		allow := false
-		if consentResp.Decision == xacml.DecisionPermit {
-			allow = true
-		}
-
-		if !allow {
-			errorReasons = append(errorReasons, ResultReason{
-				Code:        TypeResultCodeNotAllowed,
-				Description: fmt.Sprintf("not allowed, consent denied for %s by Mitz", patient.PatientID),
-			})
-			continue
-		}
-
-		input.Context.Patients[idx].MitzConsent = true
+	consentReq := xacmlFromInput(input)
+	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
+	if err != nil {
+		return input, Deny(ResultReason{
+			Code:        TypeResultCodeInternalError,
+			Description: "internal error, could not complete consent check with Mitz",
+		})
 	}
 
-	if len(errorReasons) > 0 {
-		return input, PolicyResult{
-			Allow:   false,
-			Reasons: errorReasons,
-		}
+	allow := false
+	if consentResp.Decision == xacml.DecisionPermit {
+		allow = true
 	}
 
+	if !allow {
+		return input, Deny(ResultReason{
+			Code:        TypeResultCodeInternalError,
+			Description: "not allowed, denied by Mitz",
+		})
+	}
+
+	input.Context.MitzConsent = true
 	return input, Allow()
 }
 
-func xacmlFromInput(input PolicyInput, patient PolicyPatient) xacml.AuthzRequest {
+func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
 	return xacml.AuthzRequest{
-		PatientBSN:             patient.PatientBSN,
+		PatientBSN:             input.Context.PatientBSN,
 		HealthcareFacilityType: input.Context.DataHolderFacilityType,
 		AuthorInstitutionID:    input.Context.DataHolderOrganizationId,
 		// This code is always the same, it's the code for _de gesloten vraag_
@@ -74,6 +58,10 @@ func validateMitzInput(input PolicyInput) PolicyResult {
 		Value   string
 		Message string
 	}{
+		{
+			Value:   input.Context.PatientBSN,
+			Message: "Could not complete Mitz consent check: Missing BSN",
+		},
 		{
 			Value:   input.Context.DataHolderFacilityType,
 			Message: "Could not complete Mitz consent check: Missing data holder facility type",
@@ -106,23 +94,6 @@ func validateMitzInput(input PolicyInput) PolicyResult {
 			errorReasons = append(errorReasons, ResultReason{
 				Code:        TypeResultCodeUnexpectedInput,
 				Description: def.Message,
-			})
-		}
-	}
-
-	if len(input.Context.Patients) < 0 {
-		errorReasons = append(errorReasons, ResultReason{
-			Code:        TypeResultCodeUnexpectedInput,
-			Description: "Could not complete Mitz consent check: Missing BSN",
-		})
-	} else {
-		anyBsn := slices.ContainsFunc(input.Context.Patients, func(p PolicyPatient) bool {
-			return p.PatientBSN != ""
-		})
-		if !anyBsn {
-			errorReasons = append(errorReasons, ResultReason{
-				Code:        TypeResultCodeUnexpectedInput,
-				Description: "Could not complete Mitz consent check: Missing BSN",
 			})
 		}
 	}
