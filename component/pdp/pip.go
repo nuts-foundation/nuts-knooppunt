@@ -18,7 +18,7 @@ func enrichPolicyInputWithPIP(ctx context.Context, c Component, policyInput Poli
 	}
 
 	// If we have a patientId try and fetch the BSN
-	if policyInput.Context.PatientID != "" {
+	if policyInput.Context.PatientID != "" && policyInput.Context.PatientBSN == "" {
 		client := c.pipClient
 
 		var patient fhir.Patient
