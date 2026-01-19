@@ -6,15 +6,21 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 )
 
 func DefaultConfig() Config {
 	return Config{
 		Enabled: true,
+		PIP: PIPConfig{
+			URL: "",
+		},
 	}
 }
 
@@ -22,10 +28,25 @@ var _ component.Lifecycle = (*Component)(nil)
 
 // New creates an instance of the pdp component, which provides a simple policy decision endpoint.
 func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
-	return &Component{
+	comp := &Component{
 		Config: config,
 		Mitz:   mitzcomp,
-	}, nil
+	}
+
+	if config.PIP.URL != "" {
+		url, err := url.Parse(config.PIP.URL)
+		if err != nil {
+			return &Component{}, err
+		}
+		pipClient := fhirclient.New(url, tracing.NewHTTPClient(), &fhirclient.Config{
+			UsePostSearch: false,
+		})
+		comp.pipClient = pipClient
+	} else {
+		slog.Warn("PIP address not configured, authorization limited to self contained policies")
+	}
+
+	return comp, nil
 }
 
 func (c Component) Start() error {
@@ -93,14 +114,20 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 3: Check the request adheres to the capability statement for this scope
+	// Step 3: Enrich the policy input with data gathered from the policy information point (if available)
+	policyInput = enrichPolicyInputWithPIP(r.Context(), c, policyInput)
+
+	// Step 4: Check the request adheres to the capability statement for this scope
 	res := evalCapabilityPolicy(r.Context(), policyInput)
 	if !res.Allow {
 		writeResp(r.Context(), w, res)
 		return
 	}
 
-	// Step 4: Check if we are authorized to see the underlying data
+	// Step 5: Check the request adheres to the capability statement for this scope
+	policyInput, mitzPolicyResult := EvalMitzPolicy(c, r.Context(), policyInput)
+
+	// Step 6: Check if we are authorized to see the underlying data
 	// FUTURE: We want to use OPA policies here ...
 	// ... but for now we only have same example scopes hardcoded.
 	// This section is very much work in progress
@@ -113,12 +140,10 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		writeResp(r.Context(), w, Allow())
 	case "bgz_patient":
 		// Dummy should be replaced with the actual OPA policy
-		// Currently this will always fail as we have no way of determining the BSN etc.
-		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), policyInput))
+		writeResp(r.Context(), w, mitzPolicyResult)
 	case "bgz_professional":
 		// Dummy should be replaced with the actual OPA policy
-		// Currently this will always fail as we have no way of determining the BSN etc.
-		writeResp(r.Context(), w, EvalMitzPolicy(c, r.Context(), policyInput))
+		writeResp(r.Context(), w, mitzPolicyResult)
 	default:
 		writeResp(r.Context(), w, Deny(
 			ResultReason{

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -42,6 +43,7 @@ type HTTPRequest struct {
 type PDPContext struct {
 	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
+	PatientBSN               string `json:"patient_bsn"`
 }
 
 type PolicyInput struct {
@@ -75,11 +77,12 @@ type PolicyActionProperties struct {
 }
 
 type PolicyContext struct {
-	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
-	PatientId                string `json:"patient_id"`
+	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	PatientBSN               string `json:"patient_bsn"`
+	PatientID                string `json:"patient_id"`
 	PurposeOfUse             string `json:"purpose_of_use"`
+	MitzConsent              bool   `json:"mitz_consent"`
 }
 
 type PDPRequest struct {
@@ -147,11 +150,17 @@ const (
 	TypeResultCodeInternalError        TypeResultCode = "internal_error"
 )
 
+type PIPConfig struct {
+	URL string `koanf:"url"`
+}
+
 type Config struct {
-	Enabled bool
+	Enabled bool      `koanf:"enabled"`
+	PIP     PIPConfig `koanf:"pip"`
 }
 
 type Component struct {
-	Config Config
-	Mitz   *mitz.Component
+	Config    Config
+	Mitz      *mitz.Component
+	pipClient fhirclient.Client
 }
