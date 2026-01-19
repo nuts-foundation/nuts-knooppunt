@@ -83,7 +83,10 @@
                 <select name="endpoint-for" id="endpoint-for" class="form-select">
                     <option value="" disabled selected>--Please choose an option--</option>
                     {{range .Organizations}}
-                    <option value="{{ .Id }}">{{ .Name }}</option>
+                    <option value="Organization/{{ .Id }}">Org: {{ .Name }}</option>
+                    {{ end }}
+                    {{range .HealthcareServices}}
+                    <option value="HealthcareService/{{ .Id }}">HlthService: {{ .Name }}</option>
                     {{ end }}
                 </select>
             </div>

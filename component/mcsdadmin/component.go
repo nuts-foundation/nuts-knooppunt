@@ -79,6 +79,9 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice", listServices)
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice/new", newService)
 	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", newServicePost)
+	mux.HandleFunc("GET /mcsdadmin/healthcareservice/{id}/endpoints", associateHealthcareServiceEndpoints)
+	mux.HandleFunc("POST /mcsdadmin/healthcareservice/{id}/endpoints", associateHealthcareServiceEndpointsPost)
+	mux.HandleFunc("DELETE /mcsdadmin/healthcareservice/{id}/endpoints", associateHealthcareServiceEndpointsDelete)
 	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
 	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
@@ -315,6 +318,49 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 	tmpls.RenderWithBase(w, "organization_endpoints.html", props)
 }
 
+func associateHealthcareServiceEndpoints(w http.ResponseWriter, req *http.Request) {
+	serviceId := req.PathValue("id")
+	path := fmt.Sprintf("HealthcareService/%s", serviceId)
+	var service fhir.HealthcareService
+	err := client.Read(path, &service)
+	if err != nil {
+		internalError(w, req, "could not read healthcare service resource", err)
+		return
+	}
+
+	endpoints := make([]fhir.Endpoint, 0, len(service.Endpoint))
+	for _, ref := range service.Endpoint {
+		var ep fhir.Endpoint
+		if ref.Reference == nil {
+			continue
+		}
+		err := client.Read(*ref.Reference, &ep)
+		if err != nil {
+			internalError(w, req, "could not read reference resource", err)
+			return
+		}
+		endpoints = append(endpoints, ep)
+	}
+
+	allEndpoints, err := findAll[fhir.Endpoint](client)
+	if err != nil {
+		internalError(w, req, "could not load endpoints", err)
+		return
+	}
+
+	props := struct {
+		HealthcareService fhir.HealthcareService
+		EndpointCards     []tmpls.HealthcareServiceEndpointCardProps
+		AllEndpoints      []fhir.Endpoint
+	}{
+		HealthcareService: service,
+		EndpointCards:     tmpls.MakeHealthcareServiceEndpointCards(endpoints, service),
+		AllEndpoints:      allEndpoints,
+	}
+	w.WriteHeader(http.StatusOK)
+	tmpls.RenderWithBase(w, "healthcareservice_endpoints.html", props)
+}
+
 func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
@@ -367,6 +413,58 @@ func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 	tmpls.RenderPartial(w, "_card_endpoint", props)
 }
 
+func associateHealthcareServiceEndpointsPost(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		badRequest(w, req, "invalid form input", err)
+		return
+	}
+
+	selectedId := req.PostForm.Get("selected-endpoint")
+	selected, err := findById[fhir.Endpoint](selectedId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	serviceId := req.PathValue("id")
+	service, err := findById[fhir.HealthcareService](serviceId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	foundIdx := slices.IndexFunc(service.Endpoint, func(ref fhir.Reference) bool {
+		epId := idFromRef(ref)
+		return epId == selectedId
+	})
+	if foundIdx > -1 {
+		http.Error(w, "endpoint already associated with healthcare service", http.StatusBadRequest)
+		return
+	}
+
+	selectedPath := fmt.Sprintf("Endpoint/%s", selectedId)
+	ref := fhir.Reference{
+		Reference: &selectedPath,
+	}
+	service.Endpoint = append(service.Endpoint, ref)
+
+	servicePath := fmt.Sprintf("HealthcareService/%s", serviceId)
+	var resultService fhir.HealthcareService
+	err = client.Update(servicePath, service, &resultService)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	props := tmpls.HealthcareServiceEndpointCardProps{
+		Endpoint:          selected,
+		HealthcareService: resultService,
+	}
+	tmpls.RenderPartial(w, "_card_endpoint_healthcareservice", props)
+}
+
 func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
@@ -406,6 +504,45 @@ func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func associateHealthcareServiceEndpointsDelete(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		badRequest(w, req, "invalid form input", err)
+		return
+	}
+
+	serviceId := req.PathValue("id")
+	service, err := findById[fhir.HealthcareService](serviceId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	epId := req.URL.Query().Get("endpointId")
+	epFound := false
+	for i, ref := range service.Endpoint {
+		refId := idFromRef(ref)
+		if refId == epId {
+			service.Endpoint = slices.Delete(service.Endpoint, i, i+1)
+			epFound = true
+		}
+	}
+	if !epFound {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	servicePath := fmt.Sprintf("HealthcareService/%s", serviceId)
+	var serviceResult fhir.HealthcareService
+	err = client.Update(servicePath, service, &serviceResult)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func listEndpoints(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
@@ -418,18 +555,26 @@ func newEndpoint(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
+	healthcareServices, err := findAll[fhir.HealthcareService](client)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	props := struct {
-		ConnectionTypes []fhir.Coding
-		Organizations   []fhir.Organization
-		PayloadTypes    []fhir.Coding
-		PurposeOfUse    []fhir.Coding
-		Status          []fhir.Coding
+		ConnectionTypes    []fhir.Coding
+		Organizations      []fhir.Organization
+		HealthcareServices []fhir.HealthcareService
+		PayloadTypes       []fhir.Coding
+		PurposeOfUse       []fhir.Coding
+		Status             []fhir.Coding
 	}{
-		ConnectionTypes: valuesets.EndpointConnectionTypeCodings,
-		Organizations:   organizations,
-		PayloadTypes:    valuesets.EndpointPayloadTypeCodings,
-		PurposeOfUse:    valuesets.PurposeOfUseCodings,
-		Status:          valuesets.EndpointStatusCodings,
+		ConnectionTypes:    valuesets.EndpointConnectionTypeCodings,
+		Organizations:      organizations,
+		HealthcareServices: healthcareServices,
+		PayloadTypes:       valuesets.EndpointPayloadTypeCodings,
+		PurposeOfUse:       valuesets.PurposeOfUseCodings,
+		Status:             valuesets.EndpointStatusCodings,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -534,22 +679,41 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	epRef.Type = to.Ptr("Endpoint")
 	epRef.Reference = to.Ptr("Endpoint/" + *resEp.Id)
 
-	forOrgStr := r.PostForm.Get("endpoint-for")
-	var owningOrg fhir.Organization
-	if len(forOrgStr) > 0 {
-		err = client.Read("Organization/"+forOrgStr, &owningOrg)
-		if err != nil {
-			http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
-			return
-		}
+	forResourceStr := r.PostForm.Get("endpoint-for")
+	if len(forResourceStr) > 0 {
+		// The value now contains the resource type prefix (e.g., "Organization/123" or "HealthcareService/456")
+		if strings.HasPrefix(forResourceStr, "Organization/") {
+			var owningOrg fhir.Organization
+			err = client.Read(forResourceStr, &owningOrg)
+			if err != nil {
+				http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
+				return
+			}
 
-		owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
+			owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
 
-		var updatedOrg fhir.Organization
-		err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			var updatedOrg fhir.Organization
+			err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		} else if strings.HasPrefix(forResourceStr, "HealthcareService/") {
+			var owningService fhir.HealthcareService
+			err = client.Read(forResourceStr, &owningService)
+			if err != nil {
+				http.Error(w, "bad request: could not find healthcare service", http.StatusBadRequest)
+				return
+			}
+
+			owningService.Endpoint = append(owningService.Endpoint, epRef)
+
+			var updatedService fhir.HealthcareService
+			err = client.Update("HealthcareService/"+*owningService.Id, owningService, &updatedService)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 

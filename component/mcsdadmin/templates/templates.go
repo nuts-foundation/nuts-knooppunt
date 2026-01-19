@@ -210,11 +210,12 @@ func MakeOrgListXsProps(orgs []fhir.Organization) []OrgListProps {
 }
 
 type ServiceListProps struct {
-	Id         string
-	Name       string
-	Type       string
-	Active     bool
-	ProvidedBy string
+	Id            string
+	Name          string
+	Type          string
+	Active        bool
+	ProvidedBy    string
+	EndpointCount string
 }
 
 func MakeServiceListProps(service fhir.HealthcareService) (out ServiceListProps) {
@@ -252,6 +253,9 @@ func MakeServiceListProps(service fhir.HealthcareService) (out ServiceListProps)
 	} else {
 		out.ProvidedBy = unknownStr
 	}
+
+	epCount := len(service.Endpoint)
+	out.EndpointCount = fmt.Sprint(epCount)
 
 	return out
 }
@@ -324,6 +328,22 @@ func MakeEndpointCards(endpoints []fhir.Endpoint, org fhir.Organization) []Endpo
 		cards[i] = EndpointCardProps{
 			Endpoint:     endp,
 			Organization: org,
+		}
+	}
+	return cards
+}
+
+type HealthcareServiceEndpointCardProps struct {
+	Endpoint          fhir.Endpoint
+	HealthcareService fhir.HealthcareService
+}
+
+func MakeHealthcareServiceEndpointCards(endpoints []fhir.Endpoint, service fhir.HealthcareService) []HealthcareServiceEndpointCardProps {
+	cards := make([]HealthcareServiceEndpointCardProps, len(endpoints))
+	for i, endp := range endpoints {
+		cards[i] = HealthcareServiceEndpointCardProps{
+			Endpoint:          endp,
+			HealthcareService: service,
 		}
 	}
 	return cards
