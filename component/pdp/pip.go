@@ -13,7 +13,7 @@ import (
 
 func enrichPolicyInputWithPIP(ctx context.Context, c Component, policyInput PolicyInput) PolicyInput {
 	if c.pipClient == nil {
-		slog.Warn("PIP client not configured")
+		slog.WarnContext(ctx, "PIP client not configured")
 		return policyInput
 	}
 
