@@ -115,7 +115,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 3: Enrich the policy input with data gathered from the policy information point (if available)
-	policyInput = PipPolicyInput(c, policyInput)
+	policyInput = enrichPolicyInputWithPIP(c, policyInput)
 
 	// Step 4: Check the request adheres to the capability statement for this scope
 	res := evalCapabilityPolicy(r.Context(), policyInput)
