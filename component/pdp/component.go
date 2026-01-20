@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/bundles"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"golang.org/x/exp/maps"
 )
@@ -18,17 +21,35 @@ import (
 func DefaultConfig() Config {
 	return Config{
 		Enabled: true,
+		PIP: PIPConfig{
+			URL: "",
+		},
 	}
 }
 
 var _ component.Lifecycle = (*Component)(nil)
 
 // New creates an instance of the pdp component, which provides a simple policy decision endpoint.
-func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
-	return &Component{
-		Config: config,
-		Mitz:   mitzcomp,
-	}, nil
+func New(config Config, consentChecker mitz.ConsentChecker) (*Component, error) {
+	comp := &Component{
+		Config:         config,
+		consentChecker: consentChecker,
+	}
+
+	if config.PIP.URL != "" {
+		url, err := url.Parse(config.PIP.URL)
+		if err != nil {
+			return &Component{}, err
+		}
+		pipClient := fhirclient.New(url, tracing.NewHTTPClient(), &fhirclient.Config{
+			UsePostSearch: false,
+		})
+		comp.pipClient = pipClient
+	} else {
+		slog.Warn("PIP address not configured, authorization limited to self contained policies")
+	}
+
+	return comp, nil
 }
 
 func (c *Component) Start() error {
@@ -103,14 +124,23 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Step 3: Check the request adheres to the capability statement for this scope
+	// Step 3: Enrich the policy input with data gathered from the policy information point (if available)
+	policyInput = enrichPolicyInputWithPIP(r.Context(), c, policyInput)
+
+	// Step 4: Check the request adheres to the capability statement for this scope
 	res := evalCapabilityPolicy(r.Context(), policyInput)
 	if !res.Allow {
 		writeResp(r.Context(), w, res)
 		return
 	}
 
-	// Step 4: Evaluate using Open Policy Agent
+	// Step 5: Check the request adheres to the capability statement for this scope
+	policyInput, policyResult = c.evalMitzPolicy(r.Context(), policyInput)
+	if !policyResult.Allow {
+		writeResp(r.Context(), w, policyResult)
+	}
+
+	// Step 6: Evaluate using Open Policy Agent
 	regoPolicyResult, err := c.evalRegoPolicy(r.Context(), scope, policyInput)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to evaluate rego policy", logging.Error(err), slog.String("policy", scope))

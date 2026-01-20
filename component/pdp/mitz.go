@@ -2,27 +2,22 @@ package pdp
 
 import (
 	"context"
-	"slices"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 )
 
-func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) PolicyResult {
-	ok := validateMitzInput(input)
-	if !ok {
-		return Deny(ResultReason{
-			Code:        TypeResultCodeInternalError,
-			Description: "internal error, could not complete consent check with Mitz",
-		})
+func (c *Component) evalMitzPolicy(ctx context.Context, input PolicyInput) (PolicyInput, PolicyResult) {
+	result := validateMitzInput(input)
+	if !result.Allow {
+		return input, result
 	}
 
-	mitzComp := *c.Mitz
 	consentReq := xacmlFromInput(input)
-	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
+	consentResp, err := c.consentChecker.CheckConsent(ctx, consentReq)
 	if err != nil {
-		return Deny(ResultReason{
+		return input, Deny(ResultReason{
 			Code:        TypeResultCodeInternalError,
-			Description: "internal error, could not complete consent check with Mitz",
+			Description: "internal error, could not complete consent check with consentChecker",
 		})
 	}
 
@@ -32,13 +27,14 @@ func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) PolicyR
 	}
 
 	if !allow {
-		return Deny(ResultReason{
+		return input, Deny(ResultReason{
 			Code:        TypeResultCodeInternalError,
-			Description: "not allowed, denied by Mitz",
+			Description: "not allowed, denied by consentChecker",
 		})
 	}
 
-	return Allow()
+	input.Context.MitzConsent = true
+	return input, Allow()
 }
 
 func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
@@ -56,19 +52,57 @@ func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
 	}
 }
 
-func validateMitzInput(input PolicyInput) bool {
-	requiredValues := []string{
-		input.Context.PatientBSN,
-		input.Context.DataHolderFacilityType,
-		input.Context.DataHolderOrganizationId,
-		input.Subject.Properties.SubjectRole,
-		input.Subject.Properties.SubjectId,
-		input.Subject.Properties.SubjectOrganizationId,
-		input.Subject.Properties.SubjectFacilityType,
-	}
-	if slices.Contains(requiredValues, "") {
-		return false
+func validateMitzInput(input PolicyInput) PolicyResult {
+	requiredData := []struct {
+		Value   string
+		Message string
+	}{
+		{
+			Value:   input.Context.PatientBSN,
+			Message: "Could not complete consentChecker consent check: Missing BSN",
+		},
+		{
+			Value:   input.Context.DataHolderFacilityType,
+			Message: "Could not complete consentChecker consent check: Missing data holder facility type",
+		},
+		{
+			Value:   input.Context.DataHolderOrganizationId,
+			Message: "Could not complete consentChecker consent check: Missing data holder organization ID",
+		},
+		{
+			Value:   input.Subject.Properties.SubjectRole,
+			Message: "Could not complete consentChecker consent check: Missing subject role",
+		},
+		{
+			Value:   input.Subject.Properties.SubjectId,
+			Message: "Could not complete consentChecker consent check: Missing subject id",
+		},
+		{
+			Value:   input.Subject.Properties.SubjectOrganizationId,
+			Message: "Could not complete consentChecker consent check: Missing subject organization ID",
+		},
+		{
+			Value:   input.Subject.Properties.SubjectFacilityType,
+			Message: "Could not complete consentChecker consent check: Missing subject facility type",
+		},
 	}
 
-	return true
+	errorReasons := make([]ResultReason, 0, len(requiredData))
+	for _, def := range requiredData {
+		if def.Value == "" {
+			errorReasons = append(errorReasons, ResultReason{
+				Code:        TypeResultCodeUnexpectedInput,
+				Description: def.Message,
+			})
+		}
+	}
+
+	if len(errorReasons) > 0 {
+		return PolicyResult{
+			Allow:   false,
+			Reasons: errorReasons,
+		}
+	}
+
+	return Allow()
 }

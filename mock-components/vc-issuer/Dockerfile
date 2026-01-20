@@ -30,6 +30,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Install OpenSSL for Prisma
 RUN apk add --no-cache openssl
 
+# Point Node.js to system CA certificates
+# Using NODE_OPTIONS as NODE_EXTRA_CA_CERTS doesn't work with fetch in Node 20
+ENV NODE_OPTIONS="--use-openssl-ca"
+ENV SSL_CERT_DIR=/etc/ssl/certs
+ENV SSL_CERT_FILE=/etc/ssl/cert.pem
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 

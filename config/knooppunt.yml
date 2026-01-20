@@ -71,3 +71,5 @@ authn:
 
 pdp:
   enabled: true
+  pip: 
+    url: http://localhost:7050/fhir/policy-information-point

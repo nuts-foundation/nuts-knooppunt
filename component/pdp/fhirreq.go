@@ -1,13 +1,13 @@
 package pdp
 
 import (
+	"fmt"
 	"net/url"
 	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
-	"golang.org/x/exp/maps"
 )
 
 type PathDef struct {
@@ -239,7 +239,7 @@ func parseRequestPath(request HTTPRequest) (Tokens, bool) {
 }
 
 type Params struct {
-	SearchParams []string
+	SearchParams map[string]string
 	Revinclude   []string
 	Include      []string
 }
@@ -287,38 +287,48 @@ func groupParams(queryParams url.Values) Params {
 		delete(queryParams, p)
 	}
 
-	params.SearchParams = maps.Keys(queryParams)
-	if params.SearchParams == nil {
-		// init to empty slice for consistency
-		params.SearchParams = []string{}
+	// Convert remaining query params to map
+	params.SearchParams = make(map[string]string)
+	for key, values := range queryParams {
+		// Join multiple values with comma
+		params.SearchParams[key] = strings.Join(values, ",")
 	}
 
 	return params
 }
 
-func derivePatientId(tokens Tokens, queryParams url.Values) (string, bool) {
+func derivePatientId(tokens Tokens, queryParams url.Values) (string, error) {
 	// https://fhir.example.org/Patient/12345
 	typeInPath := tokens.ResourceType != nil && *tokens.ResourceType == fhir.ResourceTypePatient
 	idInPath := tokens.ResourceId != ""
 	if typeInPath && idInPath {
-		return tokens.ResourceId, true
+		return tokens.ResourceId, nil
 	}
 
 	// https://fhir.example.org/Patient?_id=12345
-	idInParams := len(queryParams["_id"]) > 0
+	idInParams := len(queryParams["_id"]) == 1
 	if typeInPath && idInParams {
-		return queryParams["_id"][0], true
+		return queryParams["_id"][0], nil
+	}
+
+	multiIdInParams := len(queryParams["_id"]) > 1
+	if typeInPath && multiIdInParams {
+		return "", fmt.Errorf("multiple _id parameters found")
 	}
 
 	// https://fhir.example.org/Encounter?patient=Patient/12345
-	patientInParams := len(queryParams["patient"]) > 0
+	patientInParams := len(queryParams["patient"]) == 1
 	if patientInParams {
 		refStr := queryParams["patient"][0]
 		parts := strings.Split(refStr, "/")
-		return parts[len(parts)-1], true
+		return parts[len(parts)-1], nil
 	}
 
-	return "", false
+	if len(queryParams["patient"]) > 1 {
+		return "", fmt.Errorf("multiple patient parameters found")
+	}
+
+	return "", nil
 }
 
 func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
@@ -381,8 +391,16 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
 
-	patientId, _ := derivePatientId(tokens, rawParams)
-	policyInput.Context.PatientId = patientId
+	patientId, err := derivePatientId(tokens, rawParams)
+	if err != nil {
+		reason := ResultReason{
+			Code:        TypeResultCodeUnexpectedInput,
+			Description: "Multiple patient id's provided",
+		}
+		return PolicyInput{}, Deny(reason)
+	}
+	policyInput.Context.PatientID = patientId
+	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
 
 	return policyInput, Allow()
 }

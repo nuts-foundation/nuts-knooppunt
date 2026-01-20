@@ -1,16 +1,11 @@
 package bgz_patient
 
 import rego.v1
+import data.bgz
 
 default allow := false
 
-# Allow if the HTTP request matches the exact pattern:
-# Patient?_include=Patient%3Ageneral-practitioner
 allow if {
-	input.resource.type == "Patient"
-	input.action.properties.include = ["Patient:general-practitioner"]
-	input.action.properties.interaction_type = "search-type"
-	input.action.properties.revinclude = []
-	input.action.properties.search_params = []
+    input.context.mitz_consent
+    bgz.is_allowed_query
 }
-

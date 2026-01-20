@@ -1,7 +1,11 @@
 package bgz_professional
 
 import rego.v1
+import data.bgz
 
-# TODO: add more specific rules here later
-default allow := true
+default allow := false
 
+allow if {
+    input.context.mitz_consent
+    bgz.is_allowed_query
+}

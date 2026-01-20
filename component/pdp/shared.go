@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/open-policy-agent/opa/v1/sdk"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -43,6 +44,7 @@ type HTTPRequest struct {
 type PDPContext struct {
 	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
+	PatientBSN               string `json:"patient_bsn"`
 }
 
 type PolicyInput struct {
@@ -69,18 +71,19 @@ type PolicyAction struct {
 
 type PolicyActionProperties struct {
 	InteractionType fhir.TypeRestfulInteraction `json:"interaction_type"`
-	Operation       *string                     `json:"operation"`
-	SearchParams    []string                    `json:"search_params"`
+	Operation       *string                     `json:"operation_name"`
+	SearchParams    map[string]string           `json:"search_params"`
 	Include         []string                    `json:"include"`
 	Revinclude      []string                    `json:"revinclude"`
 }
 
 type PolicyContext struct {
-	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
-	PatientId                string `json:"patient_id"`
+	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	PatientBSN               string `json:"patient_bsn"`
+	PatientID                string `json:"patient_id"`
 	PurposeOfUse             string `json:"purpose_of_use"`
+	MitzConsent              bool   `json:"mitz_consent"`
 }
 
 type PDPRequest struct {
@@ -148,12 +151,18 @@ const (
 	TypeResultCodeInternalError        TypeResultCode = "internal_error"
 )
 
+type PIPConfig struct {
+	URL string `koanf:"url"`
+}
+
 type Config struct {
-	Enabled bool
+	Enabled bool      `koanf:"enabled"`
+	PIP     PIPConfig `koanf:"pip"`
 }
 
 type Component struct {
-	Config     Config
-	Mitz       *mitz.Component
-	opaService *sdk.OPA
+	Config         Config
+	consentChecker mitz.ConsentChecker
+	pipClient      fhirclient.Client
+	opaService     *sdk.OPA
 }

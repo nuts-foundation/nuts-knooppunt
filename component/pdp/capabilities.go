@@ -127,9 +127,9 @@ func evalInteraction(
 			}
 		}
 
-		for _, param := range props.SearchParams {
-			if !slices.Contains(allowedParams, param) {
-				rejectedSearchParams = append(rejectedSearchParams, param)
+		for paramName := range props.SearchParams {
+			if !slices.Contains(allowedParams, paramName) {
+				rejectedSearchParams = append(rejectedSearchParams, paramName)
 			}
 		}
 	}

@@ -8,6 +8,9 @@ services:
       NEXT_PUBLIC_BASE_URL: http://localhost:3000
       ISSUER_HOSTNAME: localhost:3000
       NODE_ENV: development
+      # Uncomment to use Nuts node for credential issuance
+      # NUTS_NODE_INTERNAL_URL: http://nuts-node:8081
+      # NUTS_ISSUER_DID: did:web:example.com:iam:org-a
     volumes:
       - vc_issuer_data:/app/data
 

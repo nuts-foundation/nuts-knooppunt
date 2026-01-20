@@ -81,7 +81,7 @@ func TestComponent_allow_search_param(t *testing.T) {
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
 				InteractionType: fhir.TypeRestfulInteractionSearchType,
-				SearchParams:    []string{"_since"},
+				SearchParams:    map[string]string{"_since": "2024-01-01"},
 			},
 		},
 		Context: PolicyContext{
@@ -110,7 +110,7 @@ func TestComponent_reject_search_param(t *testing.T) {
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
 				InteractionType: fhir.TypeRestfulInteractionSearchType,
-				SearchParams:    []string{"_foo", "_since"},
+				SearchParams:    map[string]string{"_foo": "bar", "_since": "2024-01-01"},
 			},
 		},
 		Context: PolicyContext{

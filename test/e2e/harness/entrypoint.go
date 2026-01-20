@@ -26,6 +26,7 @@ type Details struct {
 	SunflowerFHIRBaseURL     *url.URL
 	SunflowerURA             string
 	Care2CureURA             string
+	MockMitzXACML            *MockXACMLMitzServer
 }
 
 type MITZDetails struct {
@@ -69,6 +70,20 @@ func Start(t *testing.T) Details {
 		FHIRBaseURL: testData.NVI.FHIRBaseURL.String(),
 		Audience:    "nvi",
 	}
+	config.PDP = pdp.Config{
+		Enabled: true,
+		PIP: pdp.PIPConfig{
+			URL: testData.PIP.FHIRBaseURL.String(),
+		},
+	}
+
+	mockMitz := NewMockXACMLMitzServer(t)
+	config.MITZ = mitz.Config{
+		MitzBase:      mockMitz.GetURL(),
+		GatewaySystem: "test-gateway",
+		SourceSystem:  "test-source",
+	}
+
 	knooppuntInternalURL := startKnooppunt(t, config)
 
 	return Details{
@@ -80,6 +95,7 @@ func Start(t *testing.T) Details {
 		Care2CureFHIRBaseURL:     care2cure.AdminHAPITenant().BaseURL(hapiBaseURL),
 		Care2CureURA:             *care2cure.Organization().Identifier[0].Value,
 		Vectors:                  *testData,
+		MockMitzXACML:            mockMitz,
 	}
 }
 
@@ -107,11 +123,11 @@ func StartMITZ(t *testing.T) MITZDetails {
 	}
 }
 
-// StartPEP starts a minimal harness for PEP e2e tests with HAPI, Knooppunt PDP, mock XACML Mitz, and PEP nginx.
+// StartPEP starts a minimal harness for PEP e2e tests with HAPI, Knooppunt PDP, mock XACML consentChecker, and PEP nginx.
 func StartPEP(t *testing.T, pepConfig PEPConfig) PEPDetails {
 	t.Helper()
 
-	// Create mock XACML Mitz server
+	// Create mock XACML consentChecker server
 	mockMitz := NewMockXACMLMitzServer(t)
 
 	// Start HAPI FHIR server

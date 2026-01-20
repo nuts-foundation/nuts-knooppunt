@@ -318,7 +318,7 @@ func (c *Component) addConfigExtensions(ctx context.Context, subscription *fhir.
 	}
 }
 
-// handleSubscribe handles subscription creation requests where payload is already Mitz compliant Consent
+// handleSubscribe handles subscription creation requests where payload is already consentChecker compliant Consent
 func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpRequest *http.Request) {
 	fhirRequest, err := fhirapi.ParseRequest[fhir.Subscription](httpRequest)
 	if err != nil {
