@@ -6,17 +6,21 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/bundles"
+	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/policies"
 	"github.com/open-policy-agent/opa/v1/logging"
 	"github.com/open-policy-agent/opa/v1/sdk"
 )
 
 var opaBundleBaseURL = "http://localhost:8081/pdp/bundles/"
 
-// createOPAService creates a new OPAService service with embedded policy bundles
+// createOPAService creates a new Open Policy Agent instance with embedded policy bundles
 func createOPAService(ctx context.Context) (*sdk.OPA, error) {
 	configBundles := map[string]any{}
-	for bundleName := range bundles.BundleMap {
+	bundles, err := policies.Bundles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for bundleName := range bundles {
 		configBundles[bundleName] = map[string]any{
 			"resource": fmt.Sprintf("%s.tar.gz", bundleName),
 		}

@@ -12,7 +12,7 @@ import (
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
-	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/bundles"
+	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/policies"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"golang.org/x/exp/maps"
@@ -55,7 +55,7 @@ func New(config Config, consentChecker mitz.ConsentChecker) (*Component, error) 
 func (c *Component) Start() error {
 	opaService, err := createOPAService(context.Background())
 	if err != nil {
-		return fmt.Errorf("failed to initialize opaService service: %w", err)
+		return fmt.Errorf("failed to initialize Open Policy Agent service: %w", err)
 	}
 	c.opaService = opaService
 	return nil
@@ -69,7 +69,7 @@ func (c Component) Stop(ctx context.Context) error {
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.HandleFunc("POST /pdp", c.HandleMainPolicy)
 	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", c.HandlePolicy)
-	// Serve opaService policy bundles
+	// Serve OPA policy bundles
 	internalMux.HandleFunc("GET /pdp/bundles", c.HandleListBundles)
 	internalMux.HandleFunc("GET /pdp/bundles/{policyName}", c.HandleGetBundle)
 }
@@ -193,16 +193,22 @@ func (c Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleListBundles returns a list of available OPAService policy bundles
+// HandleListBundles returns a list of available OPA policy bundles
 func (c Component) HandleListBundles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(maps.Keys(bundles.BundleMap)); err != nil {
+	bundles, err := policies.Bundles(r.Context())
+	if err != nil {
+		http.Error(w, "failed to retrieve bundles", http.StatusInternalServerError)
+		slog.ErrorContext(r.Context(), "Failed to retrieve bundles", logging.Error(err))
+		return
+	}
+	if err := json.NewEncoder(w).Encode(maps.Keys(bundles)); err != nil {
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 		slog.ErrorContext(r.Context(), "Failed to encode bundles list", logging.Error(err))
 	}
 }
 
-// HandleGetBundle serves an OPAService policy bundle for a specific scope
+// HandleGetBundle serves an OPA policy bundle for a specific scope
 func (c Component) HandleGetBundle(w http.ResponseWriter, r *http.Request) {
 	policyName := r.PathValue("policyName")
 	if policyName == "" {
@@ -212,7 +218,13 @@ func (c Component) HandleGetBundle(w http.ResponseWriter, r *http.Request) {
 	}
 	policyName = strings.TrimSuffix(policyName, ".tar.gz")
 
-	bundleData, found := bundles.BundleMap[policyName]
+	bundles, err := policies.Bundles(r.Context())
+	if err != nil {
+		http.Error(w, "failed to retrieve bundles", http.StatusInternalServerError)
+		slog.ErrorContext(r.Context(), "Failed to retrieve bundles", logging.Error(err))
+		return
+	}
+	bundleData, found := bundles[policyName]
 	if !found {
 		http.Error(w, fmt.Sprintf("bundle not found: %s", policyName), http.StatusNotFound)
 		slog.WarnContext(r.Context(), "Bundle not found", slog.String("policyName", policyName))

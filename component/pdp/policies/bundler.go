@@ -1,30 +1,54 @@
-package main
+package policies
 
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
-func main() {
-	// Get the directory where this generator is located
-	// When run via go:generate, the working directory is the bundles package directory
-	policiesDir := "../policies"
-	bundlesDir := "."
+//go:embed */*
+var policies embed.FS
 
-	// Bundles will be written to current directory (bundles/)
+// bundles maps scope names to their embedded bundles
+// This is populated lazily when first accessed
+var bundles map[string][]byte
 
-	fmt.Println("Generating Open Policy Agent bundles...")
+func Bundles(ctx context.Context) (map[string][]byte, error) {
+	if bundles == nil {
+		if err := initBundles(ctx); err != nil {
+			return nil, fmt.Errorf("failed to initialize OPA bundles: %w", err)
+		}
+	}
+	return bundles, nil
+}
+
+func initBundles(ctx context.Context) error {
+	bundleDir, err := generateBundles(ctx)
+	if err != nil {
+		return err
+	}
+	return readBundles(bundleDir)
+}
+
+func generateBundles(ctx context.Context) (string, error) {
+	slog.DebugContext(ctx, "Generating Open Policy Agent bundles...")
+	bundlesDir, err := os.MkdirTemp("", "pdp-bundles-")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary bundles directory: %w", err)
+	}
 
 	// Find all policy directories (subdirectories of policies/)
-	entries, err := os.ReadDir(policiesDir)
+	entries, err := policies.ReadDir(".")
 	if err != nil {
-		log.Fatalf("Failed to read policies directory: %v", err)
+		return "", fmt.Errorf("failed to read policies directory: %w", err)
 	}
 
 	for _, entry := range entries {
@@ -34,26 +58,20 @@ func main() {
 		}
 
 		policyName := entry.Name()
-		policyDir := filepath.Join(policiesDir, policyName)
-		policyPath := filepath.Join(policyDir, "policy.rego")
+		policyPath := filepath.Join(policyName, "policy.rego")
 
 		// Check if policy.rego exists in this directory
-		if _, err := os.Stat(policyPath); os.IsNotExist(err) {
-			panic(fmt.Sprintf("policy.rego not found in %s", policyDir))
+		if h, err := policies.Open(policyPath); err != nil {
+			return "", fmt.Errorf("policy.rego not found in %s", policyName)
+		} else {
+			_ = h.Close()
 		}
-
 		bundlePath := filepath.Join(bundlesDir, policyName+".tar.gz")
-
-		fmt.Printf("  Building bundle: %s\n", policyName)
-
-		if err := generateBundle(policyDir, bundlePath, policyName); err != nil {
-			log.Fatalf("Failed to generate bundle %s: %v", policyName, err)
+		if err := generateBundle(policyName, bundlePath, policyName); err != nil {
+			return "", fmt.Errorf("failed to generate bundle for %s: %w", policyName, err)
 		}
-
-		fmt.Printf("    Created: %s\n", bundlePath)
 	}
-
-	fmt.Println("Bundle generation complete!")
+	return bundlesDir, nil
 }
 
 func generateBundle(policyDir, bundlePath, policyName string) error {
@@ -96,7 +114,7 @@ func generateBundle(policyDir, bundlePath, policyName string) error {
 	}
 
 	// Read all files in the policy directory
-	entries, err := os.ReadDir(policyDir)
+	entries, err := policies.ReadDir(policyDir)
 	if err != nil {
 		return fmt.Errorf("failed to read policy directory: %w", err)
 	}
@@ -112,7 +130,7 @@ func generateBundle(policyDir, bundlePath, policyName string) error {
 		filePath := filepath.Join(policyDir, fileName)
 
 		// Read file content
-		fileContent, err := os.ReadFile(filePath)
+		fileContent, err := policies.ReadFile(filePath)
 		if err != nil {
 			return fmt.Errorf("failed to read file %s: %w", fileName, err)
 		}
@@ -131,5 +149,34 @@ func generateBundle(policyDir, bundlePath, policyName string) error {
 		}
 	}
 
+	return nil
+}
+
+func readBundles(bundleDir string) error {
+	bundles = make(map[string][]byte)
+
+	// Read all bundle files from the embedded filesystem
+	entries, err := os.ReadDir(bundleDir)
+	if err != nil {
+		return fmt.Errorf("failed to read policies directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		entryPath := filepath.Join(bundleDir, entry.Name())
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tar.gz") {
+			continue
+		}
+
+		// Extract scope name from filename (remove .tar.gz extension)
+		scope := strings.TrimSuffix(entry.Name(), ".tar.gz")
+
+		// Read the bundle file
+		bundleData, err := os.ReadFile(entryPath)
+		if err != nil {
+			return fmt.Errorf("failed to read bundle %s: %w", entryPath, err)
+		}
+
+		bundles[scope] = bundleData
+	}
 	return nil
 }
