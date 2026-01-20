@@ -1,5 +1,5 @@
 ---
-name: 'Build Mock VC Issuer Docker images'
+name: 'Build Demo EHR Docker image'
 
 on:
   push:
@@ -11,8 +11,8 @@ on:
     branches:
       - main
     paths:
-      - mock-components/vc-issuer/**
-      - .github/workflows/build-mock-vc-issuer-images.yaml
+      - mock-components/demo-ehr/**
+      - .github/workflows/build-demo-ehr-images.yaml
 
 # cancel build action if superseded by new commit on same branch
 concurrency:
@@ -51,7 +51,7 @@ jobs:
         id: docker_meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/nuts-foundation/mock-vc-issuer
+          images: ghcr.io/nuts-foundation/demo-ehr
           tags: |
             type=ref,event=branch,enable={{is_default_branch}},prefix=
             type=semver,pattern={{version}}
@@ -75,8 +75,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./mock-components/vc-issuer
-          file: ./mock-components/vc-issuer/Dockerfile
+          context: ./mock-components/demo-ehr
+          file: ./mock-components/demo-ehr/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}

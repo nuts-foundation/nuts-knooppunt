@@ -1,5 +1,5 @@
 ---
-name: 'Build PEP Docker images'
+name: 'Build Mock VC Issuer Docker image'
 
 on:
   push:
@@ -11,7 +11,8 @@ on:
     branches:
       - main
     paths:
-      - pep/**
+      - mock-components/vc-issuer/**
+      - .github/workflows/build-mock-vc-issuer-images.yaml
 
 # cancel build action if superseded by new commit on same branch
 concurrency:
@@ -50,7 +51,7 @@ jobs:
         id: docker_meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/nuts-foundation/knooppunt-pep
+          images: ghcr.io/nuts-foundation/mock-vc-issuer
           tags: |
             type=ref,event=branch,enable={{is_default_branch}},prefix=
             type=semver,pattern={{version}}
@@ -74,8 +75,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./pep/nginx
-          file: ./pep/nginx/Dockerfile
+          context: ./mock-components/vc-issuer
+          file: ./mock-components/vc-issuer/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
