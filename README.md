@@ -2,6 +2,12 @@
 
 Implementation of the Nuts Knooppunt specifications.
 
+## Demo EHR
+
+A demonstration Electronic Health Record (EHR) application showcasing Dutch healthcare data exchange use cases including BGZ exchange and eOverdracht workflows.
+
+See [mock-components/demo-ehr/README.md](mock-components/demo-ehr/README.md) for detailed documentation and setup instructions.
+
 ## Endpoints
 
 - Health check endpoint: [http://localhost:8081/status](http://localhost:8081/status)
@@ -12,6 +18,7 @@ Implementation of the Nuts Knooppunt specifications.
   - Search endpoint:
     - [POST http://localhost:8081/nvi/DocumentReference/_search](http://localhost:8081/nvi/DocumentReference/_search)
     - [GET http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
+- Demo EHR Application: [http://localhost:3000](http://localhost:3000)
 
 ## Configuration
 
@@ -50,12 +57,21 @@ For a complete overview of the deployment options, see [docs/DEPLOYMENT.md](docs
 
 A docker compose config is provided to run a set of services that are useful for development:
 
-- HAPI server, multi-tenancy enabled, using UUIDs, running on port 8080
-- PostgreSQL database, for the HAPI server
+- **Knooppunt** - Main application running on ports 8080 (API) and 8081 (internal)
+- **HAPI FHIR Server** - Multi-tenant FHIR R4 server with NVI support, running on port 7050
+- **Aspire Dashboard** - Observability dashboard for traces, logs, and metrics on port 18888
+- **Demo EHR** - Demo application (optional, use `--profile demoehr`)
+- **PEP (Policy Enforcement Point)** - NGINX-based reference implementation (optional, use `--profile pep`)
 
-Start the stack with:
+Start the base stack with:
 
 ```shell
 docker compose up --build
+```
+
+Start with demo-ehr:
+
+```shell
+docker compose --profile demoehr up --build
 ```
 

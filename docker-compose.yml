@@ -95,7 +95,7 @@ services:
       hapi.fhir.tester.admin.server_address: http://localhost:7050/fhir/knpt-mcsd-admin
       hapi.fhir.tester.admin.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.admin.fhir_version: R4
-      
+
       hapi.fhir.tester.query.name: Local Query Directory
       hapi.fhir.tester.query.server_address: http://localhost:7050/fhir/knpt-mcsd-query
       hapi.fhir.tester.query.refuse_to_fetch_third_party_urls: false
@@ -110,12 +110,12 @@ services:
       hapi.fhir.tester.care2cure.server_address: http://localhost:7050/fhir/care2cure-admin
       hapi.fhir.tester.care2cure.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.care2cure.fhir_version: R4
-      
+
       hapi.fhir.tester.sunflower.name: Sunflower Admin Directory
       hapi.fhir.tester.sunflower.server_address: http://localhost:7050/fhir/sunflower-admin
       hapi.fhir.tester.sunflower.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.sunflower.fhir_version: R4
-      
+
       hapi.fhir.tester.sunflowerpatients.name: Sunflower Patients Directory
       hapi.fhir.tester.sunflowerpatients.server_address: http://localhost:7050/fhir/sunflower-patients
       hapi.fhir.tester.sunflowerpatients.refuse_to_fetch_third_party_urls: false
@@ -125,7 +125,7 @@ services:
       hapi.fhir.tester.nvi.server_address: http://localhost:7050/fhir/nvi
       hapi.fhir.tester.nvi.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.nvi.fhir_version: R4
-      
+
       hapi.fhir.tester.pip.name: PIP
       hapi.fhir.tester.pip.server_address: http://localhost:7050/fhir/policy-information-point
       hapi.fhir.tester.pip.refuse_to_fetch_third_party_urls: false
@@ -179,6 +179,25 @@ services:
       start_period: 10s
     profiles:
       - pep
+
+  demo-ehr:
+    image: ghcr.io/nuts-foundation/demo-ehr:latest
+    profiles:
+      - demoehr
+    container_name: demo-ehr
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./demo-ehr/src:/app/src
+      - ./demo-ehr/public:/app/public
+    environment:
+      - CHOKIDAR_USEPOLLING=true  # For hot reload on some systems
+      - REACT_APP_AUTHORITY=http://localhost:8080/auth
+      - REACT_APP_FHIR_BASE_URL=https://server.fire.ly/R4      # adjust this to a local FHIR server or a different one if needed
+      - REACT_APP_FHIR_STU3_BASE_URL=https://server.fire.ly/R3 # adjust this to a local FHIR server or a different one if needed
+      - REACT_APP_FHIR_MCSD_QUERY_BASE_URL=http://localhost:7050/fhir/knpt-mcsd-query
+    stdin_open: true
+    tty: true
 
   # Aspire Dashboard - unified observability for traces, logs, and metrics
   # UI available at http://localhost:18888
