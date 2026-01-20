@@ -164,7 +164,7 @@ func (c *Component) CheckConsent(ctx context.Context, authzReq xacml.AuthzReques
 	}
 
 	// Log the XML request
-	slog.InfoContext(ctx, "Sending consent check request to MITZ",
+	slog.DebugContext(ctx, "Sending consent check request to MITZ",
 		slog.String("endpoint", c.consentCheckEndpoint),
 		slog.String("xmlPayload", authnDecisionQueryXml))
 
@@ -198,7 +198,7 @@ func (c *Component) CheckConsent(ctx context.Context, authzReq xacml.AuthzReques
 	}
 
 	// Log response
-	slog.InfoContext(ctx, "Received consent check response from MITZ",
+	slog.DebugContext(ctx, "Received consent check response from MITZ",
 		slog.Int("statusCode", resp.StatusCode),
 		slog.String("responseBody", string(responseBody)))
 
@@ -214,7 +214,7 @@ func (c *Component) CheckConsent(ctx context.Context, authzReq xacml.AuthzReques
 		return nil, fmt.Errorf("failed to parse XACML response: %w", err)
 	}
 
-	slog.InfoContext(ctx, "Consent check decision", slog.String("decision", xacmlResp.Decision.String()))
+	slog.DebugContext(ctx, "Consent check decision", slog.String("decision", xacmlResp.Decision.String()))
 
 	return xacmlResp, nil
 }
@@ -318,7 +318,7 @@ func (c *Component) addConfigExtensions(ctx context.Context, subscription *fhir.
 	}
 }
 
-// handleSubscribe handles subscription creation requests where payload is already consentChecker compliant Consent
+// handleSubscribe handles subscription creation requests where payload is already Mitz compliant Consent
 func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpRequest *http.Request) {
 	fhirRequest, err := fhirapi.ParseRequest[fhir.Subscription](httpRequest)
 	if err != nil {

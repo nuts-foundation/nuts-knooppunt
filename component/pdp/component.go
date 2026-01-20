@@ -61,12 +61,12 @@ func (c *Component) Start() error {
 	return nil
 }
 
-func (c Component) Stop(ctx context.Context) error {
+func (c *Component) Stop(ctx context.Context) error {
 	c.opaService.Stop(ctx)
 	return nil
 }
 
-func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
+func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.HandleFunc("POST /pdp", c.HandleMainPolicy)
 	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", c.HandlePolicy)
 	// Serve OPA policy bundles
@@ -74,12 +74,13 @@ func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *h
 	internalMux.HandleFunc("GET /pdp/bundles/{policyName}", c.HandleGetBundle)
 }
 
-func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
+func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	var reqBody PDPRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	input := reqBody.Input
 	if err != nil {
-		http.Error(w, "unable to parse request body", http.StatusBadRequest)
+		// TODO: Change this to a proper JSON response (Problem API?)
+		http.Error(w, "unable to parse request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -125,7 +126,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 3: Enrich the policy input with data gathered from the policy information point (if available)
-	policyInput = enrichPolicyInputWithPIP(r.Context(), c, policyInput)
+	policyInput = c.enrichPolicyInputWithPIP(r.Context(), policyInput)
 
 	// Step 4: Check the request adheres to the capability statement for this scope
 	res := evalCapabilityPolicy(r.Context(), policyInput)
@@ -177,7 +178,7 @@ func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) 
 	}
 }
 
-func (c Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
+func (c *Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
 	pack := r.PathValue("package")
 	if pack != "knooppunt" {
 		http.Error(w, "invalid package", http.StatusBadRequest)
@@ -194,7 +195,7 @@ func (c Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleListBundles returns a list of available OPA policy bundles
-func (c Component) HandleListBundles(w http.ResponseWriter, r *http.Request) {
+func (c *Component) HandleListBundles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	bundles, err := policies.Bundles(r.Context())
 	if err != nil {
@@ -209,7 +210,7 @@ func (c Component) HandleListBundles(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleGetBundle serves an OPA policy bundle for a specific scope
-func (c Component) HandleGetBundle(w http.ResponseWriter, r *http.Request) {
+func (c *Component) HandleGetBundle(w http.ResponseWriter, r *http.Request) {
 	policyName := r.PathValue("policyName")
 	if policyName == "" {
 		// Shouldn't happen, but still...

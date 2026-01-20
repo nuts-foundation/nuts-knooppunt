@@ -43,7 +43,7 @@ is_allowed_query if {
 # GET [base]/Observation/$lastn?category=http://snomed.info/sct|118228005,http://snomed.info/sct|384821006
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.operation_name == "$lastn"
+    input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|118228005,http://snomed.info/sct|384821006"}
     input.action.properties.include = []
@@ -61,7 +61,7 @@ is_allowed_query if {
 # GET [base]/Observation/$lastn?code=http://snomed.info/sct|365508006
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.operation_name == "$lastn"
+    input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"code": "http://snomed.info/sct|365508006"}
     input.action.properties.include = []
@@ -166,7 +166,7 @@ is_allowed_query if {
 # GET [base]/Observation/$lastn?code=http://loinc.org|85354-9
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.operation_name == "$lastn"
+    input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"code": "http://loinc.org|85354-9"}
     input.action.properties.include = []
@@ -176,7 +176,7 @@ is_allowed_query if {
 # GET [base]/Observation/$lastn?code=http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.operation_name == "$lastn"
+    input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"code": "http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9"}
     input.action.properties.include = []
@@ -186,7 +186,7 @@ is_allowed_query if {
 # GET [base]/Observation/$lastn?category=http://snomed.info/sct|275711006&_include=Observation:related-target&_include=Observation:specimen
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.operation_name == "$lastn"
+    input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|275711006"}
     input.action.properties.include == ["Observation:related-target", "Observation:specimen"]

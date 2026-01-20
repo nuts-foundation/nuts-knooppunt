@@ -123,11 +123,11 @@ func StartMITZ(t *testing.T) MITZDetails {
 	}
 }
 
-// StartPEP starts a minimal harness for PEP e2e tests with HAPI, Knooppunt PDP, mock XACML consentChecker, and PEP nginx.
+// StartPEP starts a minimal harness for PEP e2e tests with HAPI, Knooppunt PDP, mock XACML Mitz, and PEP nginx.
 func StartPEP(t *testing.T, pepConfig PEPConfig) PEPDetails {
 	t.Helper()
 
-	// Create mock XACML consentChecker server
+	// Create mock XACML Mitz server
 	mockMitz := NewMockXACMLMitzServer(t)
 
 	// Start HAPI FHIR server

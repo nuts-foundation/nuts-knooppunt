@@ -2,6 +2,7 @@ package pdp
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 )
@@ -15,9 +16,10 @@ func (c *Component) evalMitzPolicy(ctx context.Context, input PolicyInput) (Poli
 	consentReq := xacmlFromInput(input)
 	consentResp, err := c.consentChecker.CheckConsent(ctx, consentReq)
 	if err != nil {
+		slog.InfoContext(ctx, "Mitz consent check failed", "error", err)
 		return input, Deny(ResultReason{
 			Code:        TypeResultCodeInternalError,
-			Description: "internal error, could not complete consent check with consentChecker",
+			Description: "internal error, could not complete consent check with Mitz: " + err.Error(),
 		})
 	}
 
@@ -59,31 +61,31 @@ func validateMitzInput(input PolicyInput) PolicyResult {
 	}{
 		{
 			Value:   input.Context.PatientBSN,
-			Message: "Could not complete consentChecker consent check: Missing BSN",
+			Message: "Could not complete Mitz consent check: Missing BSN",
 		},
 		{
 			Value:   input.Context.DataHolderFacilityType,
-			Message: "Could not complete consentChecker consent check: Missing data holder facility type",
+			Message: "Could not complete Mitz consent check: Missing data holder facility type",
 		},
 		{
 			Value:   input.Context.DataHolderOrganizationId,
-			Message: "Could not complete consentChecker consent check: Missing data holder organization ID",
+			Message: "Could not complete Mitz consent check: Missing data holder organization ID",
 		},
 		{
 			Value:   input.Subject.Properties.SubjectRole,
-			Message: "Could not complete consentChecker consent check: Missing subject role",
+			Message: "Could not complete Mitz consent check: Missing subject role",
 		},
 		{
 			Value:   input.Subject.Properties.SubjectId,
-			Message: "Could not complete consentChecker consent check: Missing subject id",
+			Message: "Could not complete Mitz consent check: Missing subject id",
 		},
 		{
 			Value:   input.Subject.Properties.SubjectOrganizationId,
-			Message: "Could not complete consentChecker consent check: Missing subject organization ID",
+			Message: "Could not complete Mitz consent check: Missing subject organization ID",
 		},
 		{
 			Value:   input.Subject.Properties.SubjectFacilityType,
-			Message: "Could not complete consentChecker consent check: Missing subject facility type",
+			Message: "Could not complete Mitz consent check: Missing subject facility type",
 		},
 	}
 

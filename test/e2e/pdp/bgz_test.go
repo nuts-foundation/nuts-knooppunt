@@ -1,7 +1,9 @@
 package pdp
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -19,7 +21,6 @@ func Test_BGZAuthorization(t *testing.T) {
 	pdpBaseUrl.Path = pdpBaseUrl.Path + "/pdp"
 
 	t.Run("authorize complete bgz request using the PDP", func(t *testing.T) {
-
 		pdpJSON := `{
 		  "input": {
 			"subject": {
@@ -34,11 +35,15 @@ func Test_BGZAuthorization(t *testing.T) {
 			"request": {
 			  "method": "GET",
 			  "protocol": "HTTP/1.0",
-			  "path": "/Patient/3E439979-017F-40AA-594D-EBCF880FFD97"
+			  "path": "/Patient",
+			  "query_params": {
+ 			    "_include": ["Patient:general-practitioner"]
+              }
 			},
 			"context": {
 			  "data_holder_organization_id": "00000659",
-			  "data_holder_facility_type": "Z3"
+			  "data_holder_facility_type": "Z3",
+              "patient_bsn": "1234567890"
 			}
 		  }
 		}`
@@ -55,13 +60,14 @@ func Test_BGZAuthorization(t *testing.T) {
 		require.NoError(t, err)
 
 		var pdpResponse pdp.PDPResponse
-		err = json.NewDecoder(resp.Body).Decode(&pdpResponse)
+		responseData, _ := io.ReadAll(resp.Body)
+		err = json.NewDecoder(bytes.NewReader(responseData)).Decode(&pdpResponse)
 		require.NoError(t, err)
 
 		err = resp.Body.Close()
 		require.NoError(t, err)
 
 		assert.True(t, pdpResponse.Result.Allow)
-
+		assert.Empty(t, pdpResponse.Result.Reasons)
 	})
 }

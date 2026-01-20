@@ -71,7 +71,7 @@ type PolicyAction struct {
 
 type PolicyActionProperties struct {
 	InteractionType fhir.TypeRestfulInteraction `json:"interaction_type"`
-	Operation       *string                     `json:"operation_name"`
+	Operation       *string                     `json:"operation"`
 	SearchParams    map[string]string           `json:"search_params"`
 	Include         []string                    `json:"include"`
 	Revinclude      []string                    `json:"revinclude"`
