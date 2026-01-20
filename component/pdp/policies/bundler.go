@@ -21,6 +21,8 @@ var policies embed.FS
 // This is populated lazily when first accessed
 var bundles map[string][]byte
 
+// Bundles returns the embedded OPA bundles in gzipped tar format, keyed by scope name.
+// They are generated on first access.
 func Bundles(ctx context.Context) (map[string][]byte, error) {
 	if bundles == nil {
 		if err := initBundles(ctx); err != nil {
