@@ -1,5 +1,5 @@
 ---
-name: 'Build Knooppunt Docker images'
+name: 'Build Knooppunt Docker image'
 
 on:
   push:

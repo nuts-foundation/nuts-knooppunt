@@ -12,6 +12,7 @@ on:
       - main
     paths:
       - mock-components/vc-issuer/**
+      - .github/workflows/build-mock-vc-issuer-images.yaml
 
 # cancel build action if superseded by new commit on same branch
 concurrency:

@@ -11,7 +11,8 @@ on:
     branches:
       - main
     paths:
-      - localization/hapi-pseudonimization-interceptor/Dockerfile
+      - localization/hapi-pseudonimization-interceptor/**
+      - .github/workflows/build-fakenvi-images.yaml
 
 # cancel build action if superseded by new commit on same branch
 concurrency:
