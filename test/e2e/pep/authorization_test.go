@@ -13,7 +13,7 @@ import (
 
 func Test_PEPAuthorization(t *testing.T) {
 
-	// Start the PEP harness (HAPI, Knooppunt PDP, mock consentChecker XACML, and PEP nginx)
+	// Start the PEP harness (HAPI, Knooppunt PDP, mock Mitz XACML, and PEP nginx)
 	harnessDetail := harness.StartPEP(t, harness.PEPConfig{
 		FHIRBasePath:              "/fhir/DEFAULT", // Use partitioned HAPI from harness
 		DataHolderOrganizationURA: "00000666",
@@ -83,7 +83,7 @@ func Test_PEPAuthorization(t *testing.T) {
 		t.Skip("Skipping this test because they fail in main branch as well; fix in another branch")
 		token := "bearer-00000020-01.015-123456789-900186021"
 
-		// Mock consentChecker will respond with Deny
+		// Mock Mitz will respond with Deny
 		mockMitz.SetResponse("Deny", "No consent found")
 
 		req, err := http.NewRequest("GET", pepBaseURL.JoinPath("fhir", "Patient", "patient-456").String(), nil)

@@ -31,7 +31,7 @@ func (c *Component) evalMitzPolicy(ctx context.Context, input PolicyInput) (Poli
 	if !allow {
 		return input, Deny(ResultReason{
 			Code:        TypeResultCodeInternalError,
-			Description: "not allowed, denied by consentChecker",
+			Description: "not allowed, denied by Mitz",
 		})
 	}
 

@@ -42,7 +42,6 @@ func NewMockMITZServer(t *testing.T) *MockMITZServer {
 	// Create HTTP server with mock handlers
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /abonnementen/fhir/Subscription", mitz.handleSubscription)
-	mux.HandleFunc("POST /geslotenautorisatievraag/xacml3", mitz.handleGeslotenVraag)
 	mux.HandleFunc("GET /status", mitz.handleStatus)
 
 	mitz.server = &http.Server{
@@ -91,24 +90,6 @@ func (m *MockMITZServer) handleSubscription(w http.ResponseWriter, r *http.Reque
 func (m *MockMITZServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
-}
-
-func (m *MockMITZServer) handleGeslotenVraag(httpResponse http.ResponseWriter, _ *http.Request) {
-	// Return a hardcoded XACML Permit decision in SOAP envelope format
-	xacmlResponse := `<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
-    <s:Body>
-        <Response xmlns="urn:oasis:names:tc:xacml:3.0:core:schema:wd-17">
-            <Result>
-                <Decision>Permit</Decision>
-            </Result>
-        </Response>
-    </s:Body>
-</s:Envelope>`
-
-	httpResponse.Header().Set("Content-Type", "application/soap+xml; charset=utf-8")
-	httpResponse.WriteHeader(http.StatusOK)
-	_, _ = httpResponse.Write([]byte(xacmlResponse))
 }
 
 // GetURL returns the URL of the mock MITZ server
