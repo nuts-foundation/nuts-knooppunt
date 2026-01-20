@@ -293,7 +293,7 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 		}
 		err := client.Read(*ref.Reference, &ep)
 		if err != nil {
-			internalError(w, req, "could not read reference resource", err)
+			internalError(w, req, "could not read referenced resource", err)
 			return
 		}
 		endpoints = append(endpoints, ep)
@@ -336,7 +336,7 @@ func associateHealthcareServiceEndpoints(w http.ResponseWriter, req *http.Reques
 		}
 		err := client.Read(*ref.Reference, &ep)
 		if err != nil {
-			internalError(w, req, "could not read reference resource", err)
+			internalError(w, req, "could not read referenced resource", err)
 			return
 		}
 		endpoints = append(endpoints, ep)
