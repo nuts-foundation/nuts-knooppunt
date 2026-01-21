@@ -12,7 +12,7 @@ on:
       - main
     paths:
       - localization/hapi-pseudonimization-interceptor/**
-      - .github/workflows/build-fakenvi-images.yaml
+      - .github/workflows/build-fakenvi-image.yaml
 
 # cancel build action if superseded by new commit on same branch
 concurrency:
