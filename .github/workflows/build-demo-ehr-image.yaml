@@ -12,7 +12,7 @@ on:
       - main
     paths:
       - mock-components/demo-ehr/**
-      - .github/workflows/build-demo-ehr-images.yaml
+      - .github/workflows/build-demo-ehr-image.yaml
 
 # cancel build action if superseded by new commit on same branch
 concurrency:
