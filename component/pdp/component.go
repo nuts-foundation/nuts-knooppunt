@@ -139,6 +139,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	policyInput, policyResult = c.evalMitzPolicy(r.Context(), policyInput)
 	if !policyResult.Allow {
 		writeResp(r.Context(), w, policyResult)
+		return
 	}
 
 	// Step 6: Evaluate using Open Policy Agent
