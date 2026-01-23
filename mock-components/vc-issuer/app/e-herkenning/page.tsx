@@ -2,60 +2,21 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-
-interface Organization {
-  id: string;
-  name: string;
-  type: string;
-  typeLabel: string;
-  agbCode: string;
-  uraNumber: string;
-}
-
-const mockOrganizations: Organization[] = [
-  {
-    id: 'org-1',
-    name: 'Apotheek De Zonnehoek',
-    type: 'pharmacy',
-    typeLabel: 'Apotheek',
-    agbCode: '06010713',
-    uraNumber: '32475534',
-  },
-  {
-    id: 'org-2',
-    name: 'Huisartsenpraktijk Centrum',
-    type: 'general_practice',
-    typeLabel: 'Huisartsenpraktijk',
-    agbCode: '01234567',
-    uraNumber: '12345678',
-  },
-  {
-    id: 'org-3',
-    name: 'Ziekenhuis Oost',
-    type: 'hospital',
-    typeLabel: 'Ziekenhuis',
-    agbCode: '98765432',
-    uraNumber: '87654321',
-  },
-  {
-    id: 'org-4',
-    name: 'Verpleeghuis De Rusthoeve',
-    type: 'care_home',
-    typeLabel: 'Verpleeghuis',
-    agbCode: '11223344',
-    uraNumber: '44332211',
-  },
-];
+import { getOrganizationTypeOptions, type CareOrganizationType } from '@/lib/vektis/care-organization-types';
 
 function EHerkenningContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const state = searchParams.get('state');
 
-  const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<'login' | 'select' | 'consent'>('login');
   const [error, setError] = useState<string | null>(null);
+
+  // Get organization type options from the centralized list
+  const organizationTypeOptions = getOrganizationTypeOptions();
+
+  const [selectedType, setSelectedType] = useState<CareOrganizationType>(organizationTypeOptions[0].code);
 
   useEffect(() => {
     if (!state) {
@@ -72,27 +33,34 @@ function EHerkenningContent() {
     }, 1500);
   };
 
-  const handleOrgSelect = (org: Organization) => {
-    setSelectedOrg(org);
+  const handleSubmit = () => {
     setStep('consent');
   };
 
+  const handleTypeChange = (type: string) => {
+    setSelectedType(type as CareOrganizationType);
+  };
+
+  // Helper function to get the label for the selected type
+  const getSelectedTypeLabel = () => {
+    const typeObj = organizationTypeOptions.find(t => t.code === selectedType);
+    return typeObj?.label || selectedType;
+  };
+
   const handleConsent = async () => {
-    if (!selectedOrg || !state) return;
+    if (!state) return;
 
     setIsLoading(true);
 
-    // Redirect to callback with state and selected org
-    const callbackUrl = `/api/oidc4vci/authorize/callback?state=${encodeURIComponent(state)}&org=${encodeURIComponent(selectedOrg.id)}`;
+    // Send only the healthcare provider type
+    const callbackUrl = `/api/oidc4vci/authorize/callback?state=${encodeURIComponent(state)}&organizationType=${encodeURIComponent(selectedType)}`;
+
     router.push(callbackUrl);
   };
 
   const handleBack = () => {
     if (step === 'consent') {
       setStep('select');
-      setSelectedOrg(null);
-    } else if (step === 'select') {
-      setStep('login');
     }
   };
 
@@ -227,63 +195,111 @@ function EHerkenningContent() {
               </div>
             )}
 
-            {/* Step 2: Select Organization */}
+            {/* Step 2: Select Organization Type */}
             {step === 'select' && (
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                  Selecteer Organisatie
+                  Zorgaanbiedertype Selecteren
                 </h2>
-                <p className="text-gray-600 mb-4">
-                  Kies de organisatie waarvoor u een credential wilt aanvragen.
-                </p>
-                <div className="space-y-2">
-                  {mockOrganizations.map((org) => (
-                    <button
-                      key={org.id}
-                      onClick={() => handleOrgSelect(org)}
-                      className="w-full p-4 text-left border-2 border-gray-200 rounded-lg hover:border-orange-500 hover:bg-orange-50 transition-colors"
+
+                {/* Suggested Organization Types Info Box */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                  <div className="flex">
+                    <svg
+                      className="w-5 h-5 text-blue-500 mr-2 shrink-0 mt-0.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
                     >
-                      <div className="font-medium text-gray-900">{org.name}</div>
-                      <div className="text-sm text-gray-500 mt-1">
-                        {org.typeLabel} | AGB: {org.agbCode}
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <div className="text-sm text-blue-700 w-full">
+                      <p className="font-medium mb-2">Veelgebruikte zorgaanbiedertypen:</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleTypeChange('A1')}
+                          className="text-left px-3 py-2 bg-white border border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                        >
+                          <strong>A1</strong> - Apotheek
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleTypeChange('H1')}
+                          className="text-left px-3 py-2 bg-white border border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                        >
+                          <strong>H1</strong> - Huisartsinstelling
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleTypeChange('V4')}
+                          className="text-left px-3 py-2 bg-white border border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                        >
+                          <strong>V4</strong> - Ziekenhuis
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleTypeChange('R5')}
+                          className="text-left px-3 py-2 bg-white border border-blue-200 rounded hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                        >
+                          <strong>R5</strong> - Verpleeghuis
+                        </button>
                       </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Zorgaanbiedertype *
+                    </label>
+                    <select
+                      value={selectedType}
+                      onChange={(e) => handleTypeChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    >
+                      {organizationTypeOptions.map((type) => (
+                        <option key={type.code} value={type.code}>
+                          {type.code} - {type.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      onClick={handleSubmit}
+                      className="w-full py-3 px-4 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors"
+                    >
+                      Doorgaan
                     </button>
-                  ))}
+                  </div>
                 </div>
               </div>
             )}
 
             {/* Step 3: Consent */}
-            {step === 'consent' && selectedOrg && (
+            {step === 'consent' && (
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-2">
                   Bevestig Credential Aanvraag
                 </h2>
                 <p className="text-gray-600 mb-4">
-                  U staat op het punt een VektisOrgCredential aan te maken voor:
+                  U staat op het punt een HealthcareProviderTypeCredential aan te maken voor:
                 </p>
 
                 <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                  <h3 className="font-semibold text-gray-900 mb-3">
-                    {selectedOrg.name}
-                  </h3>
                   <dl className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <dt className="text-gray-500">Type:</dt>
+                      <dt className="text-gray-500">Zorgaanbiedertype:</dt>
                       <dd className="text-gray-900 font-medium">
-                        {selectedOrg.typeLabel}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-gray-500">AGB Code:</dt>
-                      <dd className="text-gray-900 font-medium">
-                        {selectedOrg.agbCode}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-gray-500">URA Nummer:</dt>
-                      <dd className="text-gray-900 font-medium">
-                        {selectedOrg.uraNumber}
+                        {selectedType} - {getSelectedTypeLabel()}
                       </dd>
                     </div>
                   </dl>
@@ -292,7 +308,7 @@ function EHerkenningContent() {
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                   <div className="flex">
                     <svg
-                      className="w-5 h-5 text-blue-500 mr-2 flex-shrink-0"
+                      className="w-5 h-5 text-blue-500 mr-2 shrink-0"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
