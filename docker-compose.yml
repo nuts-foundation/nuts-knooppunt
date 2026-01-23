@@ -21,6 +21,16 @@ services:
       - ./test/testdata:/app/:ro
     command: /bin/sh -c "cd /app && go run main.go http://knooppunt:8081 http://hapi-fhir:7050/fhir"
 
+  nutsadmin:
+    image: nutsfoundation/nuts-admin:6.2.1
+    volumes:
+      - "./config/nuts-admin.yml:/app/config.yml:ro"
+    ports:
+        - "1305:1305"
+    environment:
+      NUTS_NODE_ADDRESS: http://knooppunt:8081/nuts
+      NUTS_CONFIGFILE: /app/config.yml
+
   # PostgreSQL Database
   #  postgres:
   #    image: postgres:14
@@ -146,6 +156,20 @@ services:
       ]
     # Ensure the container exits successfully after the check
     restart: "no"
+
+  vektis-issuer:
+    image: ghcr.io/nuts-foundation/mock-vc-issuer:latest
+    build:
+      context: ./mock-components/vc-issuer
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: file:vc-issuer.db
+      NEXT_PUBLIC_BASE_URL: http://localhost:3000
+      ISSUER_HOSTNAME: localhost:3000
+      NUTS_NODE_INTERNAL_URL: http://knooppunt:8081/nuts
+      NUTS_ISSUER_DID: TODO
 
   # Policy Enforcement Point (PEP) - NGINX-based reference implementation
   # Start with: docker compose --profile pep up

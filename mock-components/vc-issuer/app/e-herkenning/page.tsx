@@ -17,7 +17,6 @@ function EHerkenningContent() {
   const organizationTypeOptions = getOrganizationTypeOptions();
 
   const [selectedType, setSelectedType] = useState<CareOrganizationType>(organizationTypeOptions[0].code);
-  const [selectedTypeLabel, setSelectedTypeLabel] = useState(organizationTypeOptions[0].label);
 
   useEffect(() => {
     if (!state) {
@@ -39,9 +38,13 @@ function EHerkenningContent() {
   };
 
   const handleTypeChange = (type: string) => {
-    const typeObj = organizationTypeOptions.find(t => t.code === type);
     setSelectedType(type as CareOrganizationType);
-    setSelectedTypeLabel(typeObj?.label || type);
+  };
+
+  // Helper function to get the label for the selected type
+  const getSelectedTypeLabel = () => {
+    const typeObj = organizationTypeOptions.find(t => t.code === selectedType);
+    return typeObj?.label || selectedType;
   };
 
   const handleConsent = async () => {
@@ -192,15 +195,12 @@ function EHerkenningContent() {
               </div>
             )}
 
-            {/* Step 2: Select Healthcare Provider Type */}
+            {/* Step 2: Select Organization Type */}
             {step === 'select' && (
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-2">
                   Zorgaanbiedertype Selecteren
                 </h2>
-                <p className="text-gray-600 mb-4">
-                  Selecteer het type zorgaanbieder.
-                </p>
 
                 {/* Suggested Organization Types Info Box */}
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
@@ -299,7 +299,7 @@ function EHerkenningContent() {
                     <div className="flex justify-between">
                       <dt className="text-gray-500">Zorgaanbiedertype:</dt>
                       <dd className="text-gray-900 font-medium">
-                        {selectedType} - {selectedTypeLabel}
+                        {selectedType} - {getSelectedTypeLabel()}
                       </dd>
                     </div>
                   </dl>

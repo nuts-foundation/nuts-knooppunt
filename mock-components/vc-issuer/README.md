@@ -16,7 +16,6 @@ This service implements the [OpenID for Verifiable Credential Issuance (OID4VCI)
 - Ed25519 (EdDSA) credential signing
 - JWT VC format (`jwt_vc_json`)
 - DID:web for issuer identity
-- PostgreSQL for data persistence
 - Optional Nuts node integration for credential issuance
 
 ## Quick Start
@@ -25,29 +24,22 @@ This service implements the [OpenID for Verifiable Credential Issuance (OID4VCI)
 
 - Node.js 20+
 - Docker and Docker Compose
-- PostgreSQL (or use Docker)
 
 ### Development Setup
 
-1. **Start PostgreSQL:**
-
-```bash
-docker-compose up -d postgres
-```
-
-2. **Install dependencies:**
+1. **Install dependencies:**
 
 ```bash
 npm install
 ```
 
-3. **Run database migrations:**
+2. **Run database migrations:**
 
 ```bash
 npm run db:push
 ```
 
-4. **Start development server:**
+3. **Start development server:**
 
 ```bash
 npm run dev
@@ -129,7 +121,7 @@ Environment variables (see `.env.example`):
 
 | Variable                      | Description                                | Default                 |
 |-------------------------------|--------------------------------------------|-------------------------|
-| `DATABASE_URL`                | PostgreSQL connection string               | -                       |
+| `DATABASE_URL`                | Connection string                          | -                       |
 | `NEXT_PUBLIC_BASE_URL`        | Public URL of the service                  | `http://localhost:3000` |
 | `ISSUER_HOSTNAME`             | Hostname for DID:web                       | `localhost:3000`        |
 | `CREDENTIAL_VALIDITY_DAYS`    | Credential validity period                 | `365`                   |
@@ -164,35 +156,16 @@ environment:
 
 The mock e-Herkenning allows you to manually enter organization details during the authentication flow.
 
-### Suggested Organization Types
+### Issuing a Credential
 
-For testing purposes, you can use any of the 98+ official Vektis healthcare provider categories. Common examples include:
+To issue a credential during the e-Herkenning flow:
 
-- **A1** - Apotheek (Pharmacy)
-- **H1** - Huisartsinstelling (General Practice)
-- **V4** - Ziekenhuis (Hospital)
-- **R5** - Verpleeghuis (Nursing Home)
-
-### Manual Organization Entry
-
-To create a credential during the e-Herkenning flow:
-
-1. Click "Handmatig invoeren" (Manual Entry) on the organization selection screen
-2. Select the healthcare provider type from the dropdown with 98+ official Vektis categories
-3. Click "Doorgaan" (Continue) to proceed with the credential issuance
+1. Select the healthcare provider type from the dropdown with 96 official Vektis categories
+2. Click "Doorgaan" (Continue) to proceed with the credential issuance
 
 The healthcare provider types are based on the official Vektis "Dossierhoudende zorgaanbiedercategorieën" (Dossier-holding healthcare provider categories).
 
 **Note:** The credential only contains the `healthcareProviderType` code (e.g., "A1", "H1"). No organization name or other identifying information is included.
-
-Full list of healthcare provider categories (98+ types):
-- **H1** - Huisartsinstelling (General Practice)
-- **A1** - Apotheek (Pharmacy)
-- **V4** - Ziekenhuis (Hospital)
-- **R5** - Verpleeghuis (Nursing Home)
-- **G5** - Geestelijke gezondheidszorg (Mental Health Care)
-- **L1** - Laboratorium (Laboratory)
-- And 92+ more categories...
 
 Source: [Vektis - Dossierhoudende zorgaanbiedercategorieën](https://vzvz.atlassian.net/wiki/spaces/MA11/pages/828314634/Bijlage+Dossierhoudende+zorgaanbiedercategorie+n)
 
@@ -222,7 +195,7 @@ npm run format
 ## Technology Stack
 
 - **Framework:** Next.js 16 with TypeScript (App Router)
-- **Database:** PostgreSQL with Prisma ORM
+- **Database:** SQLite
 - **Crypto:** jose library (Ed25519/EdDSA)
 - **Styling:** Tailwind CSS
 
