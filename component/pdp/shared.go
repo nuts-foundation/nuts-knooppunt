@@ -161,8 +161,9 @@ type Config struct {
 }
 
 type Component struct {
-	Config         Config
-	consentChecker mitz.ConsentChecker
-	pipClient      fhirclient.Client
-	opaService     *sdk.OPA
+	Config           Config
+	consentChecker   mitz.ConsentChecker
+	pipClient        fhirclient.Client
+	opaService       *sdk.OPA
+	opaBundleBaseURL string
 }

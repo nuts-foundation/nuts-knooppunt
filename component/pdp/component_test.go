@@ -47,7 +47,6 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 	mux := http.NewServeMux()
 	httpServer := httptest.NewServer(mux)
 	defer httpServer.Close()
-	opaBundleBaseURL = httpServer.URL + "/pdp/bundles/"
 
 	// Mock Mitz; return Permit for all consent checks
 	ctrl := gomock.NewController(t)
@@ -60,6 +59,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		Enabled: true,
 	}, consentChecker)
 	require.NoError(t, err)
+	service.opaBundleBaseURL = httpServer.URL + "/pdp/bundles/"
 
 	service.RegisterHttpHandlers(nil, mux)
 

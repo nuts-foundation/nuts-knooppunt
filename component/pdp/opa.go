@@ -11,10 +11,8 @@ import (
 	"github.com/open-policy-agent/opa/v1/sdk"
 )
 
-var opaBundleBaseURL = "http://localhost:8081/pdp/bundles/"
-
 // createOPAService creates a new Open Policy Agent instance with embedded policy bundles
-func createOPAService(ctx context.Context) (*sdk.OPA, error) {
+func createOPAService(ctx context.Context, opaBundleBaseURL string) (*sdk.OPA, error) {
 	configBundles := map[string]any{}
 	bundles, err := policies.Bundles(ctx)
 	if err != nil {

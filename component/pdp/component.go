@@ -32,8 +32,9 @@ var _ component.Lifecycle = (*Component)(nil)
 // New creates an instance of the pdp component, which provides a simple policy decision endpoint.
 func New(config Config, consentChecker mitz.ConsentChecker) (*Component, error) {
 	comp := &Component{
-		Config:         config,
-		consentChecker: consentChecker,
+		Config:           config,
+		consentChecker:   consentChecker,
+		opaBundleBaseURL: "http://localhost:8081/pdp/bundles/",
 	}
 
 	if config.PIP.URL != "" {
@@ -53,7 +54,7 @@ func New(config Config, consentChecker mitz.ConsentChecker) (*Component, error) 
 }
 
 func (c *Component) Start() error {
-	opaService, err := createOPAService(context.Background())
+	opaService, err := createOPAService(context.Background(), c.opaBundleBaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to initialize Open Policy Agent service: %w", err)
 	}
