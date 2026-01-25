@@ -1,4 +1,4 @@
-package harness
+package mitzmock
 
 import (
 	"fmt"
@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockXACMLMitzServer is a mock MITZ server that handles XACML authorization requests
-type MockXACMLMitzServer struct {
+// ClosedQuestionService is a mock MITZ server that handles XACML authorization requests
+type ClosedQuestionService struct {
 	server           *http.Server
 	url              string
 	requests         [][]byte // Store raw XML requests
@@ -21,11 +21,11 @@ type MockXACMLMitzServer struct {
 	ResponseMessage  string
 }
 
-// NewMockXACMLMitzServer creates and starts a new mock XACML MITZ server
-func NewMockXACMLMitzServer(t *testing.T) *MockXACMLMitzServer {
+// NewClosedQuestionService creates and starts a new mock XACML MITZ server
+func NewClosedQuestionService(t *testing.T) *ClosedQuestionService {
 	t.Helper()
 
-	mitz := &MockXACMLMitzServer{
+	mitz := &ClosedQuestionService{
 		requests:         [][]byte{},
 		ResponseDecision: "Permit", // Default to Permit
 		ResponseMessage:  "Consent granted",
@@ -62,7 +62,7 @@ func NewMockXACMLMitzServer(t *testing.T) *MockXACMLMitzServer {
 }
 
 // handleXACMLAuthz handles XACML authorization decision requests
-func (m *MockXACMLMitzServer) handleXACMLAuthz(w http.ResponseWriter, r *http.Request) {
+func (m *ClosedQuestionService) handleXACMLAuthz(w http.ResponseWriter, r *http.Request) {
 	// Read request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -101,32 +101,32 @@ func (m *MockXACMLMitzServer) handleXACMLAuthz(w http.ResponseWriter, r *http.Re
 }
 
 // handleStatus handles status checks
-func (m *MockXACMLMitzServer) handleStatus(w http.ResponseWriter, r *http.Request) {
+func (m *ClosedQuestionService) handleStatus(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
 }
 
 // GetURL returns the URL of the mock XACML MITZ server
-func (m *MockXACMLMitzServer) GetURL() string {
+func (m *ClosedQuestionService) GetURL() string {
 	return m.url
 }
 
 // GetRequests returns all captured XACML authorization requests (raw XML)
-func (m *MockXACMLMitzServer) GetRequests() [][]byte {
+func (m *ClosedQuestionService) GetRequests() [][]byte {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.requests
 }
 
 // RequestCount returns the number of requests captured
-func (m *MockXACMLMitzServer) RequestCount() int {
+func (m *ClosedQuestionService) RequestCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.requests)
 }
 
 // SetResponse configures the response decision for subsequent requests
-func (m *MockXACMLMitzServer) SetResponse(decision string, message string) {
+func (m *ClosedQuestionService) SetResponse(decision string, message string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.ResponseDecision = decision
@@ -134,7 +134,7 @@ func (m *MockXACMLMitzServer) SetResponse(decision string, message string) {
 }
 
 // GetLastRequest returns the most recent XACML request (raw XML)
-func (m *MockXACMLMitzServer) GetLastRequest() []byte {
+func (m *ClosedQuestionService) GetLastRequest() []byte {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if len(m.requests) == 0 {
@@ -144,7 +144,7 @@ func (m *MockXACMLMitzServer) GetLastRequest() []byte {
 }
 
 // GetLastRequestXML returns the XML representation of the most recent request for debugging
-func (m *MockXACMLMitzServer) GetLastRequestXML() string {
+func (m *ClosedQuestionService) GetLastRequestXML() string {
 	req := m.GetLastRequest()
 	if req == nil {
 		return ""
@@ -153,7 +153,7 @@ func (m *MockXACMLMitzServer) GetLastRequestXML() string {
 }
 
 // Stop stops the mock XACML MITZ server
-func (m *MockXACMLMitzServer) Stop(t *testing.T) {
+func (m *ClosedQuestionService) Stop(t *testing.T) {
 	t.Helper()
 	if err := m.server.Close(); err != nil {
 		t.Logf("error stopping mock XACML MITZ server: %v", err)

@@ -9,10 +9,8 @@ import (
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
-	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
 
 // executePDPRequest is a helper function that sends a PDP request and returns the response
@@ -48,16 +46,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 	httpServer := httptest.NewServer(mux)
 	defer httpServer.Close()
 
-	// Mock Mitz; return Permit for all consent checks
-	ctrl := gomock.NewController(t)
-	consentChecker := mitz.NewMockConsentChecker(ctrl)
-	consentChecker.EXPECT().
-		CheckConsent(gomock.Any(), gomock.Any()).Return(&xacml.XACMLResponse{Decision: xacml.DecisionPermit}, nil).
-		AnyTimes()
-
 	service, err := New(Config{
 		Enabled: true,
-	}, consentChecker)
+	}, mitz.NewTestInstance(t))
 	require.NoError(t, err)
 	service.opaBundleBaseURL = httpServer.URL + "/pdp/bundles/"
 

@@ -1,4 +1,3 @@
-//go:generate mockgen -destination=component_mock.go -package=mitz -source=interface.go
 package mitz
 
 import (
