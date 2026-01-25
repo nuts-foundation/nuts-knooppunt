@@ -2,8 +2,6 @@ module github.com/nuts-foundation/nuts-knooppunt
 
 go 1.24.6
 
-toolchain go1.24.7
-
 require github.com/nuts-foundation/nuts-knooppunt/test/testdata v0.5.0
 
 replace github.com/nuts-foundation/nuts-knooppunt/test/testdata => ./test/testdata
