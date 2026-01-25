@@ -11,7 +11,6 @@ is_allowed_query if {
     input.resource.type == "Patient"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.include == ["Patient:general-practitioner"]
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Coverage?_include=Coverage:payor:Patient&_include=Coverage:payor:Organization
@@ -19,7 +18,6 @@ is_allowed_query if {
     input.resource.type == "Coverage"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.include == ["Coverage:payor:Patient", "Coverage:payor:Organization"]
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Consent?category=http://snomed.info/sct|11291000146105
@@ -28,7 +26,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|11291000146105"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Consent?category=http://snomed.info/sct|11341000146107
@@ -37,7 +34,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|11341000146107"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Observation/$lastn?category=http://snomed.info/sct|118228005,http://snomed.info/sct|384821006
@@ -47,7 +43,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|118228005,http://snomed.info/sct|384821006"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Condition
@@ -55,7 +50,6 @@ is_allowed_query if {
     input.resource.type == "Condition"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Observation/$lastn?code=http://snomed.info/sct|365508006
@@ -65,7 +59,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"code": "http://snomed.info/sct|365508006"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|228366006
@@ -74,7 +67,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"code": "http://snomed.info/sct|228366006"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|228273003
@@ -83,7 +75,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"code": "http://snomed.info/sct|228273003"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|365980008
@@ -92,7 +83,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"code": "http://snomed.info/sct|365980008"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/NutritionOrder
@@ -100,7 +90,6 @@ is_allowed_query if {
     input.resource.type == "NutritionOrder"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Flag
@@ -108,7 +97,6 @@ is_allowed_query if {
     input.resource.type == "Flag"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/AllergyIntolerance
@@ -116,7 +104,6 @@ is_allowed_query if {
     input.resource.type == "AllergyIntolerance"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/MedicationStatement?category=urn:oid:2.16.840.1.113883.2.4.3.11.60.20.77.5.3|6&_include=MedicationStatement:medication
@@ -125,7 +112,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"category": "urn:oid:2.16.840.1.113883.2.4.3.11.60.20.77.5.3|6"}
     input.action.properties.include == ["MedicationStatement:medication"]
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/MedicationRequest?category=http://snomed.info/sct|16076005&_include=MedicationRequest:medication
@@ -134,7 +120,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|16076005"}
     input.action.properties.include == ["MedicationRequest:medication"]
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/MedicationDispense?category=http://snomed.info/sct|422037009&_include=MedicationDispense:medication
@@ -143,7 +128,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|422037009"}
     input.action.properties.include == ["MedicationDispense:medication"]
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/DeviceUseStatement?_include=DeviceUseStatement:device
@@ -151,7 +135,6 @@ is_allowed_query if {
     input.resource.type == "DeviceUseStatement"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.include == ["DeviceUseStatement:device"]
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Immunization?status=completed
@@ -160,7 +143,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"status": "completed"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Observation/$lastn?code=http://loinc.org|85354-9
@@ -170,7 +152,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"code": "http://loinc.org|85354-9"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Observation/$lastn?code=http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9
@@ -180,7 +161,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"code": "http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Observation/$lastn?category=http://snomed.info/sct|275711006&_include=Observation:related-target&_include=Observation:specimen
@@ -190,7 +170,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|275711006"}
     input.action.properties.include == ["Observation:related-target", "Observation:specimen"]
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Procedure?category=http://snomed.info/sct|387713003
@@ -199,7 +178,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|387713003"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Encounter?class=http://hl7.org/fhir/v3/ActCode|IMP,http://hl7.org/fhir/v3/ActCode|ACUTE,http://hl7.org/fhir/v3/ActCode|NONAC
@@ -208,7 +186,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"class": "http://hl7.org/fhir/v3/ActCode|IMP,http://hl7.org/fhir/v3/ActCode|ACUTE,http://hl7.org/fhir/v3/ActCode|NONAC"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/ProcedureRequest?status=active
@@ -217,7 +194,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"status": "active"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/ImmunizationRecommendation
@@ -225,7 +201,6 @@ is_allowed_query if {
     input.resource.type == "ImmunizationRecommendation"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.include = []
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/MedicationDispense?category=http://snomed.info/sct|422037009&status=in-progress,preparation&_include=MedicationDispense:medication
@@ -237,7 +212,6 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"status": "active"}
     input.action.properties.include == ["DeviceRequest:device"]
-    input.action.properties.revinclude = []
 }
 
 # GET [base]/Appointment?status=booked,pending,proposed
@@ -246,5 +220,5 @@ is_allowed_query if {
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"status": "booked,pending,proposed"}
     input.action.properties.include = []
-    input.action.properties.revinclude = []
+
 }
