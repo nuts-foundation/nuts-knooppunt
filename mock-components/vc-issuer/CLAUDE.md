@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This is an OID4VCI-compliant Verifiable Credential issuer for VektisOrgCredentials. It implements the wallet-initiated Authorization Code Flow with mock e-Herkenning authentication.
+This is an OID4VCI-compliant Verifiable Credential issuer for HealthcareProviderTypeCredentials. It implements the wallet-initiated Authorization Code Flow with mock e-Herkenning authentication.
 
 ## Tech Stack
 

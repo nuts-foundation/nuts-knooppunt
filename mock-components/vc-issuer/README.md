@@ -1,15 +1,12 @@
 # Vektis VC Issuer
 
-OID4VCI-compliant Verifiable Credential Issuer for VektisOrgCredentials.
+OID4VCI-compliant Verifiable Credential Issuer for HealthcareProviderTypeCredentials.
 
 ## Overview
 
-This service implements
-the [OpenID for Verifiable Credential Issuance (OID4VCI)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html)
-specification to issue VektisOrgCredentials to wallets. It uses the wallet-initiated Authorization Code Flow with PKCE.
+This service implements the [OpenID for Verifiable Credential Issuance (OID4VCI)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) specification to issue HealthcareProviderTypeCredentials to wallets. It uses the wallet-initiated Authorization Code Flow with PKCE.
 
-**Issue Reference:
-** [#196 - Implement Vektis-Organisatie-Type-Credential](https://github.com/nuts-foundation/nuts-knooppunt/issues/196)
+**Issue Reference:** [#196 - Implement Vektis-Organisatie-Type-Credential](https://github.com/nuts-foundation/nuts-knooppunt/issues/196)
 
 ## Features
 
@@ -19,7 +16,6 @@ specification to issue VektisOrgCredentials to wallets. It uses the wallet-initi
 - Ed25519 (EdDSA) credential signing
 - JWT VC format (`jwt_vc_json`)
 - DID:web for issuer identity
-- PostgreSQL for data persistence
 - Optional Nuts node integration for credential issuance
 
 ## Quick Start
@@ -28,29 +24,22 @@ specification to issue VektisOrgCredentials to wallets. It uses the wallet-initi
 
 - Node.js 20+
 - Docker and Docker Compose
-- PostgreSQL (or use Docker)
 
 ### Development Setup
 
-1. **Start PostgreSQL:**
-
-```bash
-docker-compose up -d postgres
-```
-
-2. **Install dependencies:**
+1. **Install dependencies:**
 
 ```bash
 npm install
 ```
 
-3. **Run database migrations:**
+2. **Run database migrations:**
 
 ```bash
 npm run db:push
 ```
 
-4. **Start development server:**
+3. **Start development server:**
 
 ```bash
 npm run dev
@@ -107,26 +96,18 @@ Wallet                         Issuer                      e-Herkenning (Mock)
   │◄──── JWT VC ─────────────────│                              │
 ```
 
-## VektisOrgCredential
+## HealthcareProviderTypeCredential
 
 The issued credential contains:
 
 ```json
 {
   "vc": {
-    "@context": [
-      "https://www.w3.org/2018/credentials/v1"
-    ],
-    "type": [
-      "VerifiableCredential",
-      "VektisOrgCredential"
-    ],
+    "@context": ["https://www.w3.org/2018/credentials/v1"],
+    "type": ["VerifiableCredential", "HealthcareProviderTypeCredential"],
     "credentialSubject": {
       "id": "did:web:wallet.example.com",
-      "organizationName": "Apotheek De Zonnehoek",
-      "organizationType": "pharmacy",
-      "agbCode": "06010713",
-      "uraNumber": "32475534"
+      "healthcareProviderType": "A1"
     },
     "issuer": "did:web:issuer.example.com",
     "issuanceDate": "2024-12-01T12:00:00Z"
@@ -140,7 +121,7 @@ Environment variables (see `.env.example`):
 
 | Variable                      | Description                                | Default                 |
 |-------------------------------|--------------------------------------------|-------------------------|
-| `DATABASE_URL`                | PostgreSQL connection string               | -                       |
+| `DATABASE_URL`                | Connection string                          | -                       |
 | `NEXT_PUBLIC_BASE_URL`        | Public URL of the service                  | `http://localhost:3000` |
 | `ISSUER_HOSTNAME`             | Hostname for DID:web                       | `localhost:3000`        |
 | `CREDENTIAL_VALIDITY_DAYS`    | Credential validity period                 | `365`                   |
@@ -171,16 +152,24 @@ environment:
 **Note:** `NUTS_ISSUER_DID` is required when using Nuts node integration. If `NUTS_NODE_INTERNAL_URL` is set but
 `NUTS_ISSUER_DID` is not, credential issuance will fail.
 
-## Mock Organizations
+## Mock e-Herkenning
 
-The mock e-Herkenning provides these test organizations:
+The mock e-Herkenning allows you to manually enter organization details during the authentication flow.
 
-| Name                       | Type             | AGB Code | URA Number |
-|----------------------------|------------------|----------|------------|
-| Apotheek De Zonnehoek      | Pharmacy         | 06010713 | 32475534   |
-| Huisartsenpraktijk Centrum | General Practice | 01234567 | 12345678   |
-| Ziekenhuis Oost            | Hospital         | 98765432 | 87654321   |
-| Verpleeghuis De Rusthoeve  | Care Home        | 11223344 | 44332211   |
+### Issuing a Credential
+
+To issue a credential during the e-Herkenning flow:
+
+1. Select the healthcare provider type from the dropdown with 96 official Vektis categories
+2. Click "Doorgaan" (Continue) to proceed with the credential issuance
+
+The healthcare provider types are based on the official Vektis "Dossierhoudende zorgaanbiedercategorieën" (Dossier-holding healthcare provider categories).
+
+**Note:** The credential only contains the `healthcareProviderType` code (e.g., "A1", "H1"). No organization name or other identifying information is included.
+
+Source: [Vektis - Dossierhoudende zorgaanbiedercategorieën](https://vzvz.atlassian.net/wiki/spaces/MA11/pages/828314634/Bijlage+Dossierhoudende+zorgaanbiedercategorie+n)
+
+This feature allows testing with custom organization data without modifying the code.
 
 ## Development
 
@@ -206,7 +195,7 @@ npm run format
 ## Technology Stack
 
 - **Framework:** Next.js 16 with TypeScript (App Router)
-- **Database:** PostgreSQL with Prisma ORM
+- **Database:** SQLite
 - **Crypto:** jose library (Ed25519/EdDSA)
 - **Styling:** Tailwind CSS
 

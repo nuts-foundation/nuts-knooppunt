@@ -1,0 +1,384 @@
+{
+  "resourceType": "Task",
+  "id": "eb73e02a-3bd0-46f6-a66d-b0ecb7720d47",
+  "meta": {
+    "profile": [
+      "http://nictiz.nl/fhir/StructureDefinition/BgZ-verwijzing-Task"
+    ]
+  },
+  "intent": "proposal",
+  "status": "requested",
+  "code": {
+    "coding": [
+      {
+        "system": "http://snomed.info/sct",
+        "code": "3457005",
+        "display": "verwijzen van patiënt "
+      }
+    ],
+    "text": "Verwijzing"
+  },
+  "requester": {
+    "agent": {
+      "reference": "http://localhost:7050/fhir/sunflower-patients/Practitioner/${userId}",
+      "display": "userName"
+    }
+  },
+  "for": {
+    "reference": "Patient/1",
+    "display": "John Doe"
+  },
+  "owner": {
+    "reference": "Practitioner/2"
+  },
+  "input": [
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "79191-3",
+            "display": "Patient demographics panel"
+          }
+        ]
+      },
+      "valueString": "Patient?_include=Patient:general-practitioner"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "48768-6",
+            "display": "Payment sources Document"
+          }
+        ]
+      },
+      "valueString": "Coverage?_include=Coverage:payor:Organization&_include=Coverage:payor:Patient"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "11291000146105",
+            "display": "Treatment instructions"
+          }
+        ]
+      },
+      "valueString": "Consent?category=http%3A%2F%2Fsnomed.info%2Fsct%7C11291000146105"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "11341000146107",
+            "display": "Living will and advance directive record"
+          }
+        ]
+      },
+      "valueString": "Consent?category=http%3A%2F%2Fsnomed.info%2Fsct%7C11341000146107"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "47420-5",
+            "display": "Functional status assessment note"
+          }
+        ]
+      },
+      "valueString": "Observation/$lastn?category=http%3A%2F%2Fsnomed.info%2Fsct%7C118228005,http%3A%2F%2Fsnomed.info%2Fsct%7C384821006"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "11450-4",
+            "display": "Problem list - Reported"
+          }
+        ]
+      },
+      "valueString": "Condition"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "365508006",
+            "display": "Residence and accommodation circumstances - finding"
+          }
+        ]
+      },
+      "valueString": "Observation/$lastn?code=http%3A%2F%2Fsnomed.info%2Fsct%7C365508006"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "228366006",
+            "display": "Finding relating to drug misuse behavior"
+          }
+        ]
+      },
+      "valueString": "Observation?code=http%3A%2F%2Fsnomed.info%2Fsct%7C228366006"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "228273003",
+            "display": "Finding relating to alcohol drinking behavior"
+          }
+        ]
+      },
+      "valueString": "Observation?code=http%3A%2F%2Fsnomed.info%2Fsct%7C228273003"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "365980008",
+            "display": "Tobacco use and exposure - finding"
+          }
+        ]
+      },
+      "valueString": "Observation?code=http%3A%2F%2Fsnomed.info%2Fsct%7C365980008"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "11816003",
+            "display": "Diet education"
+          }
+        ]
+      },
+      "valueString": "NutritionOrder"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "75310-3",
+            "display": "Health concerns Document"
+          }
+        ]
+      },
+      "valueString": "Flag"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "48765-2",
+            "display": "Allergies and adverse reactions Document"
+          }
+        ]
+      },
+      "valueString": "AllergyIntolerance"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "422979000",
+            "display": "Known medication use"
+          }
+        ]
+      },
+      "valueString": "MedicationStatement?category=urn:oid:2.16.840.1.113883.2.4.3.11.60.20.77.5.3|6&_include=MedicationStatement:medication"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "16076005",
+            "display": "Known medication agreements"
+          }
+        ]
+      },
+      "valueString": "MedicationRequest?category=http%3A%2F%2Fsnomed.info%2Fsct%7C16076005&_include=MedicationRequest:medication"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "422037009",
+            "display": "Known administration agreements"
+          }
+        ]
+      },
+      "valueString": "MedicationDispense?category=http%3A%2F%2Fsnomed.info%2Fsct%7C422037009&_include=MedicationDispense:medication"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "46264-8",
+            "display": "Known medical aids"
+          }
+        ]
+      },
+      "valueString": "DeviceUseStatement?_include=DeviceUseStatement:device"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "11369-6",
+            "display": "History of Immunization Narrative"
+          }
+        ]
+      },
+      "valueString": "Immunization?status=completed"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "85354-9",
+            "display": "Blood pressure"
+          }
+        ]
+      },
+      "valueString": "Observation/$lastn?code=http://loinc.org|85354-9"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "29463-7",
+            "display": "Body weight"
+          }
+        ]
+      },
+      "valueString": "Observation/$lastn?code=http://loinc.org|29463-7"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "8302-2",
+            "display": "Body height"
+          }
+        ]
+      },
+      "valueString": "Observation/$lastn?code=http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "15220000",
+            "display": "Laboratory test"
+          }
+        ]
+      },
+      "valueString": "Observation/$lastn?category=http%3A%2F%2Fsnomed.info%2Fsct%7C275711006&_include=Observation:related-target&_include=Observation:specimen"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "47519-4",
+            "display": "History of Procedures"
+          }
+        ]
+      },
+      "valueString": "Procedure?category=http%3A%2F%2Fsnomed.info%2Fsct%7C387713003"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "46240-8",
+            "display": "History of Hospitalizations+Outpatient visits Narrative"
+          }
+        ]
+      },
+      "valueString": "Encounter?class=http%3A%2F%hl7.org%2Ffhir%2Fv3%2FActCode%7CIMP,http%3A%2F%hl7.org%2Ffhir%2Fv3%2FActCode%7CACUTE,http%3A%2F%hl7.org%2Ffhir%2Fv3%2FActCode%7CNONAC"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "18776-5",
+            "display": "Plan of care note"
+          }
+        ]
+      },
+      "valueString": "ProcedureRequest?status=active"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "18776-5",
+            "display": "Plan of care note"
+          }
+        ]
+      },
+      "valueString": "ImmunizationRecommendation"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "18776-5",
+            "display": "Plan of care note"
+          }
+        ]
+      },
+      "valueString": "DeviceRequest?status=active&_include=DeviceRequest:device"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "18776-5",
+            "display": "Plan of care note"
+          }
+        ]
+      },
+      "valueString": "Appointment?status=booked,pending,proposed"
+    },
+    {
+      "type": {
+        "coding": [
+          {
+            "system": "http://loinc.org",
+            "code": "77599-9",
+            "display": "Additional documentation"
+          }
+        ]
+      },
+      "valueString": "DocumentReference?status=current"
+    }
+  ]
+}
