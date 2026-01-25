@@ -70,8 +70,11 @@ func (c *Component) Stop(ctx context.Context) error {
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.HandleFunc("POST /pdp", c.HandleMainPolicy)
 	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", c.HandlePolicy)
-	// Serve OPA policy bundles
+	// The following endpoint lists the available OPA policy bundles.
+	// It's not used by Open Policy Agent, but can be useful for debugging and operational purposes.
 	internalMux.HandleFunc("GET /pdp/bundles", c.HandleListBundles)
+	// The following endpoint serves the OPA policy bundle for a specific scope.
+	// It's used by Open Policy Agent on startup to load the policy bundles.
 	internalMux.HandleFunc("GET /pdp/bundles/{policyName}", c.HandleGetBundle)
 }
 
