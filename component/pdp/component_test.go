@@ -59,6 +59,39 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		require.NoError(t, service.Stop(context.Background()))
 	}()
 
+	t.Run("disallow - Mitz consent not given", func(t *testing.T) {
+		pdpRequest := PDPRequest{
+			Input: PDPInput{
+				Subject: Subject{
+					Properties: SubjectProperties{
+						ClientQualifications:  []string{"bgz_patient"},
+						SubjectOrganizationId: "00000001",
+						SubjectFacilityType:   "TODO",
+						SubjectRole:           "TODO",
+						SubjectId:             "TODO",
+					},
+				},
+				Request: HTTPRequest{
+					Method:   "GET",
+					Protocol: "HTTP/1.1",
+					Path:     "/Patient",
+					QueryParams: map[string][]string{
+						"_include": {"Patient:general-practitioner"},
+					},
+				},
+				Context: PDPContext{
+					DataHolderOrganizationId: "00000002",
+					DataHolderFacilityType:   "TODO",
+					PatientBSN:               "bsn:deny",
+				},
+			},
+		}
+
+		response := executePDPRequest(t, service, pdpRequest)
+
+		assert.False(t, response.Result.Allow)
+		assert.NotEmpty(t, response.Result.Reasons)
+	})
 	t.Run("allow - correct Patient query with _include", func(t *testing.T) {
 		pdpRequest := PDPRequest{
 			Input: PDPInput{

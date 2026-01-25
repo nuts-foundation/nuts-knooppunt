@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 
@@ -74,7 +75,12 @@ func (m *ClosedQuestionService) handleXACMLAuthz(w http.ResponseWriter, r *http.
 	// Store raw XML request for verification
 	m.mu.Lock()
 	m.requests = append(m.requests, body)
-	decision := m.ResponseDecision
+	var decision string
+	if strings.Contains(string(body), "bsn:deny") {
+		decision = "Deny"
+	} else {
+		decision = m.ResponseDecision
+	}
 	message := m.ResponseMessage
 	m.mu.Unlock()
 

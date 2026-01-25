@@ -140,11 +140,9 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 5: Check the request adheres to the capability statement for this scope
-	policyInput, policyResult = c.evalMitzPolicy(r.Context(), policyInput)
-	if !policyResult.Allow {
-		writeResp(r.Context(), w, policyResult)
-		return
-	}
+	policyInput, _ = c.evalMitzPolicy(r.Context(), policyInput)
+	// Note: do not return here if the Mitz policy denies the request, as the Mitz policy
+	// only provides input to the OPA policy evaluation.
 
 	// Step 6: Evaluate using Open Policy Agent
 	regoPolicyResult, err := c.evalRegoPolicy(r.Context(), scope, policyInput)
