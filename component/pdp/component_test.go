@@ -64,7 +64,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			Input: PDPInput{
 				Subject: Subject{
 					Properties: SubjectProperties{
-						ClientQualifications:  []string{"bgz_patient"},
+						ClientQualifications:  []string{"bgz"},
 						SubjectOrganizationId: "00000001",
 						SubjectFacilityType:   "TODO",
 						SubjectRole:           "TODO",
@@ -97,7 +97,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			Input: PDPInput{
 				Subject: Subject{
 					Properties: SubjectProperties{
-						ClientQualifications:  []string{"bgz_patient"},
+						ClientQualifications:  []string{"bgz"},
 						SubjectOrganizationId: "00000001",
 						SubjectFacilityType:   "TODO",
 						SubjectRole:           "TODO",
@@ -122,7 +122,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 
 		response := executePDPRequest(t, service, pdpRequest)
 
-		assert.True(t, response.Result.Allow, "bgz_patient should allow Patient query with _include=Patient:general-practitioner")
+		assert.True(t, response.Result.Allow, "bgz should allow Patient query with _include=Patient:general-practitioner")
 		assert.Empty(t, response.Result.Reasons)
 	})
 	t.Run("allow - correct MedicationDispense query with category and _include", func(t *testing.T) {
@@ -130,7 +130,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			Input: PDPInput{
 				Subject: Subject{
 					Properties: SubjectProperties{
-						ClientQualifications:  []string{"bgz_patient"},
+						ClientQualifications:  []string{"bgz"},
 						SubjectOrganizationId: "00000001",
 						SubjectFacilityType:   "TODO",
 						SubjectRole:           "TODO",
@@ -156,7 +156,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 
 		response := executePDPRequest(t, service, pdpRequest)
 
-		assert.True(t, response.Result.Allow, "bgz_patient should allow MedicationDispense query with category and _include=MedicationDispense:medication")
+		assert.True(t, response.Result.Allow, "bgz should allow MedicationDispense query with category and _include=MedicationDispense:medication")
 		assert.Empty(t, response.Result.Reasons)
 	})
 
@@ -165,7 +165,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			Input: PDPInput{
 				Subject: Subject{
 					Properties: SubjectProperties{
-						ClientQualifications:  []string{"bgz_patient"},
+						ClientQualifications:  []string{"bgz"},
 						SubjectOrganizationId: "00000001",
 					},
 				},
@@ -185,7 +185,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 
 		response := executePDPRequest(t, service, pdpRequest)
 
-		assert.False(t, response.Result.Allow, "bgz_patient should deny Patient query with wrong _include parameter")
+		assert.False(t, response.Result.Allow, "bgz should deny Patient query with wrong _include parameter")
 	})
 
 	t.Run("deny - Patient query with additional parameters", func(t *testing.T) {
@@ -193,7 +193,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			Input: PDPInput{
 				Subject: Subject{
 					Properties: SubjectProperties{
-						ClientQualifications:  []string{"bgz_patient"},
+						ClientQualifications:  []string{"bgz"},
 						SubjectOrganizationId: "00000001",
 					},
 				},
@@ -214,6 +214,6 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 
 		response := executePDPRequest(t, service, pdpRequest)
 
-		assert.False(t, response.Result.Allow, "bgz_patient should deny Patient query with additional parameters")
+		assert.False(t, response.Result.Allow, "bgz should deny Patient query with additional parameters")
 	})
 }

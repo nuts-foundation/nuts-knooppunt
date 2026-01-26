@@ -6,6 +6,13 @@ import rego.v1
 # This file implements the FHIR queries as specified by https://informatiestandaarden.nictiz.nl/wiki/MedMij:V2020.01/FHIR_BGZ_2017
 #
 
+default allow := false
+
+allow if {
+    input.context.mitz_consent
+    is_allowed_query
+}
+
 # GET [base]/Patient?_include=Patient:general-practitioner
 is_allowed_query if {
     input.resource.type == "Patient"
