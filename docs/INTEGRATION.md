@@ -288,3 +288,77 @@ The `id_token` can later be used to acquire GF Authentication access tokens.
   "sub": "123456789"
 }
 ```
+
+## Authorization
+
+This chapter describes how to use the Knooppunt to support in making authorization decisions using its policy decision point.
+
+The PDP is a single endpoint that requires the following input:
+
+- A valid client qualification
+- Information about the subject
+- HTTP request properties
+- Contextual information
+
+The endpoint can be reached on the internal port of Knooppunt.
+
+````http request
+POST http://someaddress:8081/pdp/v1/data/knooppunt/authz
+Content-Type: application/json
+````
+
+After parsing this data the PDP will check the input against two policies.
+
+- Conformance to a capability statement
+- Conformance to a rego policy 
+
+The client qualification is used to determine which policy is applied. Knooppunt currently ships with the following policies:
+
+- `bgz_professional`
+- `mcsd_update`
+- `mcsd_query`
+
+An example requests looks like this:
+
+```json
+{
+  "input": {
+    "subject": {
+      "properties": {
+        "subject_id": "000095254",
+        "subject_role": "01.015",
+        "subject_organization_id": "00000666",
+        "subject_facility_type": "Z3",
+        "client_qualifications": ["bgz_professional"]
+      }
+    },
+    "request": {
+      "method": "GET",
+      "protocol": "HTTP/1.0",
+      "path": "/Patient?"
+    },
+    "context": {
+      "data_holder_organization_id": "00000659",
+      "data_holder_facility_type": "Z3"
+    }
+  }
+}
+```
+
+The file [pdp.http](/docs/test-scripts/pdp.http) in the repository contains additional examples.
+
+[The type declaration](/component/pdp/shared.go) `PDPInput` lists the full range of supported options.
+
+### Integration a Policy Information Point
+
+To come to a policy decision the PDP might need additional information from a policy information point.
+
+Read our [configuration guide](/docs/CONFIGURATION.md) to see the options for configuring this endpoint.
+
+Currently, this method is used to exchange a patientID for a BSN by looking up a patient record. 
+
+### Answering _de gesloten vraag_ using the PDP
+
+Some policies like `bgz_professional` will attempt to answer _de Mitz gesloten vraag_.
+
+For this to work you will need to configure the Mitz module of Knooppunt and integrate a policy information point (see above).
