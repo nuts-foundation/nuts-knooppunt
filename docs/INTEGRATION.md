@@ -314,7 +314,7 @@ After parsing this data the PDP will check the input against two policies.
 
 The client qualification is used to determine which policy is applied. Knooppunt currently ships with the following policies:
 
-- `bgz_professional`
+- `bgz`
 - `mcsd_update`
 - `mcsd_query`
 
