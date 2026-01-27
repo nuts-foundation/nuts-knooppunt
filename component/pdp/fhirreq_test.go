@@ -91,7 +91,7 @@ func TestComponent_group_params(t *testing.T) {
 	}
 
 	groupedParam := groupParams(queryParams)
-	assert.Contains(t, groupedParam.SearchParams, "_since")
+	assert.Equal(t, "1985-04-01", groupedParam.SearchParams["_since"])
 	assert.Contains(t, groupedParam.Include, "Location:managingOrganization")
 	assert.Contains(t, groupedParam.Revinclude, "PractitionerRole:Location")
 }
@@ -113,7 +113,7 @@ func TestComponent_params_in_body(t *testing.T) {
 
 	policyInput, policyResult := NewPolicyInput(pdpRequest)
 	assert.True(t, policyResult.Allow)
-	assert.Contains(t, policyInput.Action.Properties.SearchParams, "identifier")
+	assert.Equal(t, "775645332", policyInput.Action.Properties.SearchParams["identifier"])
 }
 
 func TestComponent_filter_result_param(t *testing.T) {
@@ -121,7 +121,7 @@ func TestComponent_filter_result_param(t *testing.T) {
 		"_total": {"10"},
 	}
 	params := groupParams(queryParams)
-	assert.NotContains(t, params.SearchParams, "_total")
+	assert.Empty(t, params.SearchParams)
 }
 
 func TestComponent_parse_patient_id(t *testing.T) {

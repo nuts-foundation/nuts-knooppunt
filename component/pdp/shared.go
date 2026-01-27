@@ -6,6 +6,7 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
+	"github.com/open-policy-agent/opa/v1/sdk"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -71,7 +72,7 @@ type PolicyAction struct {
 type PolicyActionProperties struct {
 	InteractionType fhir.TypeRestfulInteraction `json:"interaction_type"`
 	Operation       *string                     `json:"operation"`
-	SearchParams    []string                    `json:"search_params"`
+	SearchParams    map[string]string           `json:"search_params"`
 	Include         []string                    `json:"include"`
 	Revinclude      []string                    `json:"revinclude"`
 }
@@ -160,7 +161,9 @@ type Config struct {
 }
 
 type Component struct {
-	Config    Config
-	Mitz      *mitz.Component
-	pipClient fhirclient.Client
+	Config           Config
+	consentChecker   mitz.ConsentChecker
+	pipClient        fhirclient.Client
+	opaService       *sdk.OPA
+	opaBundleBaseURL string
 }

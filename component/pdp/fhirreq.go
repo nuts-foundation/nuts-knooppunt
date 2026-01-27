@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
-	"golang.org/x/exp/maps"
 )
 
 type PathDef struct {
@@ -240,7 +239,7 @@ func parseRequestPath(request HTTPRequest) (Tokens, bool) {
 }
 
 type Params struct {
-	SearchParams []string
+	SearchParams map[string]string
 	Revinclude   []string
 	Include      []string
 }
@@ -269,9 +268,17 @@ func groupParams(queryParams url.Values) Params {
 
 	params.Include = queryParams["_include"]
 	delete(queryParams, "_include")
+	if params.Include == nil {
+		// init to empty slice for consistency
+		params.Include = []string{}
+	}
 
 	params.Revinclude = queryParams["_revinclude"]
 	delete(queryParams, "_revinclude")
+	if params.Revinclude == nil {
+		// init to empty slice for consistency
+		params.Revinclude = []string{}
+	}
 
 	for _, p := range generalParams {
 		delete(queryParams, p)
@@ -280,7 +287,12 @@ func groupParams(queryParams url.Values) Params {
 		delete(queryParams, p)
 	}
 
-	params.SearchParams = maps.Keys(queryParams)
+	// Convert remaining query params to map
+	params.SearchParams = make(map[string]string)
+	for key, values := range queryParams {
+		// Join multiple values with comma
+		params.SearchParams[key] = strings.Join(values, ",")
+	}
 
 	return params
 }

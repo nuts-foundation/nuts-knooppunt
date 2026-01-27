@@ -7,12 +7,15 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
+	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/policies"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
+	"golang.org/x/exp/maps"
 )
 
 func DefaultConfig() Config {
@@ -27,10 +30,11 @@ func DefaultConfig() Config {
 var _ component.Lifecycle = (*Component)(nil)
 
 // New creates an instance of the pdp component, which provides a simple policy decision endpoint.
-func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
+func New(config Config, consentChecker mitz.ConsentChecker) (*Component, error) {
 	comp := &Component{
-		Config: config,
-		Mitz:   mitzcomp,
+		Config:           config,
+		consentChecker:   consentChecker,
+		opaBundleBaseURL: "http://localhost:8081/pdp/bundles/",
 	}
 
 	if config.PIP.URL != "" {
@@ -49,27 +53,38 @@ func New(config Config, mitzcomp *mitz.Component) (*Component, error) {
 	return comp, nil
 }
 
-func (c Component) Start() error {
-	// Nothing to do
+func (c *Component) Start() error {
+	opaService, err := createOPAService(context.Background(), c.opaBundleBaseURL)
+	if err != nil {
+		return fmt.Errorf("failed to initialize Open Policy Agent service: %w", err)
+	}
+	c.opaService = opaService
 	return nil
 }
 
-func (c Component) Stop(ctx context.Context) error {
-	// Nothing to do
+func (c *Component) Stop(ctx context.Context) error {
+	c.opaService.Stop(ctx)
 	return nil
 }
 
-func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	internalMux.HandleFunc("POST /pdp", http.HandlerFunc(c.HandleMainPolicy))
-	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", http.HandlerFunc(c.HandlePolicy))
+func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
+	internalMux.HandleFunc("POST /pdp", c.HandleMainPolicy)
+	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", c.HandlePolicy)
+	// The following endpoint lists the available OPA policy bundles.
+	// It's not used by Open Policy Agent, but can be useful for debugging and operational purposes.
+	internalMux.HandleFunc("GET /pdp/bundles", c.HandleListBundles)
+	// The following endpoint serves the OPA policy bundle for a specific scope.
+	// It's used by Open Policy Agent on startup to load the policy bundles.
+	internalMux.HandleFunc("GET /pdp/bundles/{policyName}", c.HandleGetBundle)
 }
 
-func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
+func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	var reqBody PDPRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	input := reqBody.Input
 	if err != nil {
-		http.Error(w, "unable to parse request body", http.StatusBadRequest)
+		// TODO: Change this to a proper JSON response (Problem API?)
+		http.Error(w, "unable to parse request body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -115,7 +130,7 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 3: Enrich the policy input with data gathered from the policy information point (if available)
-	policyInput = enrichPolicyInputWithPIP(r.Context(), c, policyInput)
+	policyInput = c.enrichPolicyInputWithPIP(r.Context(), policyInput)
 
 	// Step 4: Check the request adheres to the capability statement for this scope
 	res := evalCapabilityPolicy(r.Context(), policyInput)
@@ -125,33 +140,27 @@ func (c Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 5: Check the request adheres to the capability statement for this scope
-	policyInput, mitzPolicyResult := EvalMitzPolicy(c, r.Context(), policyInput)
+	policyInput, _ = c.evalMitzPolicy(r.Context(), policyInput)
+	// Note: do not return here if the Mitz policy denies the request, as the Mitz policy
+	// only provides input to the OPA policy evaluation.
 
-	// Step 6: Check if we are authorized to see the underlying data
-	// FUTURE: We want to use OPA policies here ...
-	// ... but for now we only have same example scopes hardcoded.
-	// This section is very much work in progress
-	switch scope {
-	case "mcsd_update":
-		// Dummy should be replaced with the actual OPA policy
-		writeResp(r.Context(), w, Allow())
-	case "mcsd_query":
-		// Dummy should be replaced with the actual OPA policy
-		writeResp(r.Context(), w, Allow())
-	case "bgz_patient":
-		// Dummy should be replaced with the actual OPA policy
-		writeResp(r.Context(), w, mitzPolicyResult)
-	case "bgz_professional":
-		// Dummy should be replaced with the actual OPA policy
-		writeResp(r.Context(), w, mitzPolicyResult)
-	default:
-		writeResp(r.Context(), w, Deny(
-			ResultReason{
-				Code:        TypeResultCodeNotImplemented,
-				Description: fmt.Sprintf("scope %s not implemeted", scope),
+	// Step 6: Evaluate using Open Policy Agent
+	regoPolicyResult, err := c.evalRegoPolicy(r.Context(), scope, policyInput)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to evaluate rego policy", logging.Error(err), slog.String("policy", scope))
+		errorResult := PolicyResult{
+			Allow: false,
+			Reasons: []ResultReason{
+				{
+					Code:        TypeResultCodeNotImplemented,
+					Description: "failed to evaluate rego policy",
+				},
 			},
-		))
+		}
+		writeResp(r.Context(), w, errorResult)
+		return
 	}
+	writeResp(r.Context(), w, *regoPolicyResult)
 }
 
 func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) {
@@ -172,7 +181,7 @@ func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) 
 	}
 }
 
-func (c Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
+func (c *Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
 	pack := r.PathValue("package")
 	if pack != "knooppunt" {
 		http.Error(w, "invalid package", http.StatusBadRequest)
@@ -185,5 +194,54 @@ func (c Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
 		c.HandleMainPolicy(w, r)
 	default:
 		http.Error(w, fmt.Sprintf("unknown rule %s", policy), http.StatusBadRequest)
+	}
+}
+
+// HandleListBundles returns a list of available OPA policy bundles
+func (c *Component) HandleListBundles(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	bundles, err := policies.Bundles(r.Context())
+	if err != nil {
+		http.Error(w, "failed to retrieve bundles", http.StatusInternalServerError)
+		slog.ErrorContext(r.Context(), "Failed to retrieve bundles", logging.Error(err))
+		return
+	}
+	if err := json.NewEncoder(w).Encode(maps.Keys(bundles)); err != nil {
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		slog.ErrorContext(r.Context(), "Failed to encode bundles list", logging.Error(err))
+	}
+}
+
+// HandleGetBundle serves an OPA policy bundle for a specific scope
+func (c *Component) HandleGetBundle(w http.ResponseWriter, r *http.Request) {
+	policyName := r.PathValue("policyName")
+	if policyName == "" {
+		// Shouldn't happen, but still...
+		http.Error(w, "policyName parameter is required", http.StatusBadRequest)
+		return
+	}
+	policyName = strings.TrimSuffix(policyName, ".tar.gz")
+
+	bundles, err := policies.Bundles(r.Context())
+	if err != nil {
+		http.Error(w, "failed to retrieve bundles", http.StatusInternalServerError)
+		slog.ErrorContext(r.Context(), "Failed to retrieve bundles", logging.Error(err))
+		return
+	}
+	bundleData, found := bundles[policyName]
+	if !found {
+		http.Error(w, fmt.Sprintf("bundle not found: %s", policyName), http.StatusNotFound)
+		slog.WarnContext(r.Context(), "Bundle not found", slog.String("policyName", policyName))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.tar.gz", policyName))
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := w.Write(bundleData); err != nil {
+		slog.ErrorContext(r.Context(), "Failed to write bundle",
+			slog.String("policyName", policyName),
+			logging.Error(err))
 	}
 }

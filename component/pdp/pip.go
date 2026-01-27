@@ -11,7 +11,7 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-func enrichPolicyInputWithPIP(ctx context.Context, c Component, policyInput PolicyInput) PolicyInput {
+func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput PolicyInput) PolicyInput {
 	if c.pipClient == nil {
 		slog.WarnContext(ctx, "PIP client not configured")
 		return policyInput

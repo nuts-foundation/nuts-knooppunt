@@ -11,6 +11,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
+	"github.com/nuts-foundation/nuts-knooppunt/test/mitzmock"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
@@ -26,19 +27,19 @@ type Details struct {
 	SunflowerFHIRBaseURL     *url.URL
 	SunflowerURA             string
 	Care2CureURA             string
-	MockMitzXACML            *MockXACMLMitzServer
+	MockMitzXACML            *mitzmock.ClosedQuestionService
 }
 
 type MITZDetails struct {
 	KnooppuntInternalBaseURL *url.URL
-	MockMITZ                 *MockMITZServer
+	MockMITZ                 *mitzmock.SubscriptionService
 }
 
 type PEPDetails struct {
 	KnooppuntPDPBaseURL *url.URL
 	HAPIBaseURL         *url.URL
 	PEPBaseURL          *url.URL
-	MockMitzXACML       *MockXACMLMitzServer
+	MockMitzXACML       *mitzmock.ClosedQuestionService
 }
 
 // Start starts the full test harness with all components (MCSD, NVI, MITZ).
@@ -77,7 +78,7 @@ func Start(t *testing.T) Details {
 		},
 	}
 
-	mockMitz := NewMockXACMLMitzServer(t)
+	mockMitz := mitzmock.NewClosedQuestionService(t)
 	config.MITZ = mitz.Config{
 		MitzBase:      mockMitz.GetURL(),
 		GatewaySystem: "test-gateway",
@@ -104,7 +105,7 @@ func StartMITZ(t *testing.T) MITZDetails {
 	t.Helper()
 
 	// Create mock MITZ server
-	mockMITZ := NewMockMITZServer(t)
+	mockMITZ := mitzmock.NewSubscriptionService(t)
 
 	// Start Knooppunt with minimal config (only MITZ enabled)
 	knooppuntInternalURL := startKnooppunt(t, cmd.Config{
@@ -128,7 +129,7 @@ func StartPEP(t *testing.T, pepConfig PEPConfig) PEPDetails {
 	t.Helper()
 
 	// Create mock XACML Mitz server
-	mockMitz := NewMockXACMLMitzServer(t)
+	mockMitz := mitzmock.NewClosedQuestionService(t)
 
 	// Start HAPI FHIR server
 	hapiBaseURL := startHAPI(t, "")

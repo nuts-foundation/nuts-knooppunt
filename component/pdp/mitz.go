@@ -2,23 +2,24 @@ package pdp
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 )
 
-func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) (PolicyInput, PolicyResult) {
+func (c *Component) evalMitzPolicy(ctx context.Context, input PolicyInput) (PolicyInput, PolicyResult) {
 	result := validateMitzInput(input)
 	if !result.Allow {
 		return input, result
 	}
 
-	mitzComp := *c.Mitz
 	consentReq := xacmlFromInput(input)
-	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
+	consentResp, err := c.consentChecker.CheckConsent(ctx, consentReq)
 	if err != nil {
+		slog.InfoContext(ctx, "Mitz consent check failed", "error", err)
 		return input, Deny(ResultReason{
 			Code:        TypeResultCodeInternalError,
-			Description: "internal error, could not complete consent check with Mitz",
+			Description: "internal error, could not complete consent check with Mitz: " + err.Error(),
 		})
 	}
 
