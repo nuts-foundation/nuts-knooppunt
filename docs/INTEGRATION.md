@@ -329,7 +329,7 @@ An example requests looks like this:
         "subject_role": "01.015",
         "subject_organization_id": "00000666",
         "subject_facility_type": "Z3",
-        "client_qualifications": ["bgz_professional"]
+        "client_qualifications": ["bgz"]
       }
     },
     "request": {
