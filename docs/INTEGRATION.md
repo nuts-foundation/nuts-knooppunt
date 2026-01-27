@@ -359,6 +359,6 @@ Currently, this method is used to exchange a patientID for a BSN by looking up a
 
 ### Answering _de gesloten vraag_ using the PDP
 
-Some policies like `bgz_professional` will attempt to answer _de Mitz gesloten vraag_.
+Some policies like `bgz` will attempt to answer _de Mitz gesloten vraag_.
 
 For this to work you will need to configure the Mitz module of Knooppunt and integrate a policy information point (see above).
