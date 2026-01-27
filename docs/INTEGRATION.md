@@ -349,7 +349,7 @@ The file [pdp.http](/docs/test-scripts/pdp.http) in the repository contains addi
 
 [The type declaration](/component/pdp/shared.go) `PDPInput` lists the full range of supported options.
 
-### Integration a Policy Information Point
+### Policy Information Points
 
 To come to a policy decision the PDP might need additional information from a policy information point.
 
