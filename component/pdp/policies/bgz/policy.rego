@@ -32,7 +32,6 @@ is_allowed_query if {
     input.resource.type == "Consent"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|11291000146105"}
-    input.action.properties.include = []
 }
 
 # GET [base]/Consent?category=http://snomed.info/sct|11341000146107
@@ -40,7 +39,6 @@ is_allowed_query if {
     input.resource.type == "Consent"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|11341000146107"}
-    input.action.properties.include = []
 }
 
 # GET [base]/Observation/$lastn?category=http://snomed.info/sct|118228005,http://snomed.info/sct|384821006
@@ -49,14 +47,12 @@ is_allowed_query if {
     input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|118228005,http://snomed.info/sct|384821006"}
-    input.action.properties.include = []
 }
 
 # GET [base]/Condition
 is_allowed_query if {
     input.resource.type == "Condition"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.include = []
 }
 
 # GET [base]/Observation/$lastn?code=http://snomed.info/sct|365508006
@@ -65,7 +61,6 @@ is_allowed_query if {
     input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"code": "http://snomed.info/sct|365508006"}
-    input.action.properties.include = []
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|228366006
@@ -73,7 +68,6 @@ is_allowed_query if {
     input.resource.type == "Observation"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"code": "http://snomed.info/sct|228366006"}
-    input.action.properties.include = []
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|228273003
@@ -81,7 +75,6 @@ is_allowed_query if {
     input.resource.type == "Observation"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"code": "http://snomed.info/sct|228273003"}
-    input.action.properties.include = []
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|365980008
@@ -89,28 +82,24 @@ is_allowed_query if {
     input.resource.type == "Observation"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"code": "http://snomed.info/sct|365980008"}
-    input.action.properties.include = []
 }
 
 # GET [base]/NutritionOrder
 is_allowed_query if {
     input.resource.type == "NutritionOrder"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.include = []
 }
 
 # GET [base]/Flag
 is_allowed_query if {
     input.resource.type == "Flag"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.include = []
 }
 
 # GET [base]/AllergyIntolerance
 is_allowed_query if {
     input.resource.type == "AllergyIntolerance"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.include = []
 }
 
 # GET [base]/MedicationStatement?category=urn:oid:2.16.840.1.113883.2.4.3.11.60.20.77.5.3|6&_include=MedicationStatement:medication
@@ -149,7 +138,6 @@ is_allowed_query if {
     input.resource.type == "Immunization"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"status": "completed"}
-    input.action.properties.include = []
 }
 
 # GET [base]/Observation/$lastn?code=http://loinc.org|85354-9
@@ -158,7 +146,6 @@ is_allowed_query if {
     input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"code": "http://loinc.org|85354-9"}
-    input.action.properties.include = []
 }
 
 # GET [base]/Observation/$lastn?code=http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9
@@ -167,7 +154,6 @@ is_allowed_query if {
     input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
     input.action.properties.search_params == {"code": "http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9"}
-    input.action.properties.include = []
 }
 
 # GET [base]/Observation/$lastn?category=http://snomed.info/sct|275711006&_include=Observation:related-target&_include=Observation:specimen
@@ -184,7 +170,6 @@ is_allowed_query if {
     input.resource.type == "Procedure"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"category": "http://snomed.info/sct|387713003"}
-    input.action.properties.include = []
 }
 
 # GET [base]/Encounter?class=http://hl7.org/fhir/v3/ActCode|IMP,http://hl7.org/fhir/v3/ActCode|ACUTE,http://hl7.org/fhir/v3/ActCode|NONAC
@@ -192,7 +177,6 @@ is_allowed_query if {
     input.resource.type == "Encounter"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"class": "http://hl7.org/fhir/v3/ActCode|IMP,http://hl7.org/fhir/v3/ActCode|ACUTE,http://hl7.org/fhir/v3/ActCode|NONAC"}
-    input.action.properties.include = []
 }
 
 # GET [base]/ProcedureRequest?status=active
@@ -200,14 +184,12 @@ is_allowed_query if {
     input.resource.type == "ProcedureRequest"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"status": "active"}
-    input.action.properties.include = []
 }
 
 # GET [base]/ImmunizationRecommendation
 is_allowed_query if {
     input.resource.type == "ImmunizationRecommendation"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.include = []
 }
 
 # GET [base]/MedicationDispense?category=http://snomed.info/sct|422037009&status=in-progress,preparation&_include=MedicationDispense:medication
@@ -226,6 +208,5 @@ is_allowed_query if {
     input.resource.type == "Appointment"
     input.action.properties.interaction_type == "search-type"
     input.action.properties.search_params == {"status": "booked,pending,proposed"}
-    input.action.properties.include = []
 
 }
