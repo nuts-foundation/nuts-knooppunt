@@ -351,7 +351,7 @@ The file [pdp.http](/docs/test-scripts/pdp.http) in the repository contains addi
 
 ### Policy Information Points
 
-To come to a policy decision the PDP might need additional information from a policy information point.
+To come to a policy decision the PDP might need additional information from a policy information point (PIP).
 
 Read our [configuration guide](/docs/CONFIGURATION.md) to see the options for configuring this endpoint.
 
