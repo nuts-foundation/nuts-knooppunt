@@ -335,7 +335,12 @@ An example requests looks like this:
     "request": {
       "method": "GET",
       "protocol": "HTTP/1.0",
-      "path": "/Patient?"
+      "path": "/Patient?",
+      "query_params": {
+        "_include": [
+          "Patient:general-practitioner"
+        ]
+      }
     },
     "context": {
       "data_holder_organization_id": "00000659",

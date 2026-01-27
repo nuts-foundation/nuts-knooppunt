@@ -62,13 +62,18 @@ Content-Type: application/json
         "subject_role": "01.015",
         "subject_organization_id": "00000666",
         "subject_facility_type": "Z3",
-        "client_qualifications": ["bgz_professional"]
+        "client_qualifications": ["bgz"]
       }
     },
     "request": {
       "method": "GET",
       "protocol": "HTTP/1.0",
-      "path": "/Patient?"
+      "path": "/Patient?",
+      "query_params": {
+        "_include": [
+          "Patient:general-practitioner"
+        ]
+      } 
     },
     "context": {
       "data_holder_organization_id": "00000659",
@@ -89,7 +94,7 @@ Content-Type: application/json
         "subject_role": "01.015",
         "subject_organization_id": "00000666",
         "subject_facility_type": "Z3",
-        "client_qualifications": ["bgz_professional"]
+        "client_qualifications": ["bgz"]
       }
     },
     "request": {
