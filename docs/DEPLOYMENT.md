@@ -8,17 +8,27 @@ The diagrams on this page were created using [Structurizr](https://structurizr.c
 
 ![structurizr-GF_SystemContext.svg](images/structurizr-GF_SystemContext.svg)
 
-### GF Addressing
+### Deployment
+The diagram below shows which contains must be deployed.
+
+![structurizr-DataExchange_ContainerDiagram.svg](images/structurizr-DataExchange_ContainerDiagram.svg)
+
+### Per Generic Function
+The following sections show the containers involved per generic function.
+
+#### GF Addressing
+
 ![structurizr-GF_Addressing_ContainerDiagram.svg](images/structurizr-GF_Addressing_ContainerDiagram.svg)
 
-### GF Localization
+#### GF Localization
+
 ![structurizr-GF_Localization_ContainerDiagram.svg](images/structurizr-GF_Localization_ContainerDiagram.svg)
 
-### Authentication
-![structurizr-Authentication_ContainerDiagram.svg](images/structurizr-Authentication_ContainerDiagram.svg)
+#### GF Authentication
+![structurizr-GF_Authentication_ContainerDiagram.svg](images/structurizr-GF_Authentication_ContainerDiagram.svg)
 
-### Handling inbound data requests
-![structurizr-DataExchange_ContainerDiagram.svg](images/structurizr-DataExchange_ContainerDiagram.svg)
+#### GF Authorization
+![structurizr-GF_Authorization_ContainerDiagram.svg](images/structurizr-GF_Authorization_ContainerDiagram.svg)
 
 ### Technology
 
