@@ -9,8 +9,12 @@ import (
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 // executePDPRequest is a helper function that sends a PDP request and returns the response
@@ -46,11 +50,35 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 	httpServer := httptest.NewServer(mux)
 	defer httpServer.Close()
 
+	pipClient := &test.StubFHIRClient{
+		Resources: []any{
+			fhir.Patient{
+				Id: to.Ptr("1000"),
+				Identifier: []fhir.Identifier{
+					{
+						System: to.Ptr(coding.BSNNamingSystem),
+						Value:  to.Ptr("123456789"),
+					},
+				},
+			},
+			fhir.Patient{
+				Id: to.Ptr("1001"),
+				Identifier: []fhir.Identifier{
+					{
+						System: to.Ptr(coding.BSNNamingSystem),
+						Value:  to.Ptr("bsn:deny"),
+					},
+				},
+			},
+		},
+	}
+
 	service, err := New(Config{
 		Enabled: true,
 	}, mitz.NewTestInstance(t))
 	require.NoError(t, err)
 	service.opaBundleBaseURL = httpServer.URL + "/pdp/bundles/"
+	service.pipClient = pipClient
 
 	service.RegisterHttpHandlers(nil, mux)
 
@@ -77,12 +105,12 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Path:     "/Patient",
 					QueryParams: map[string][]string{
 						"_include": {"Patient:general-practitioner"},
+						"_id":      {"1001"},
 					},
 				},
 				Context: PDPContext{
 					DataHolderOrganizationId: "00000002",
 					DataHolderFacilityType:   "TODO",
-					PatientBSN:               "bsn:deny",
 				},
 			},
 		}
@@ -110,12 +138,12 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Path:     "/Patient",
 					QueryParams: map[string][]string{
 						"_include": {"Patient:general-practitioner"},
+						"_id":      {"1000"},
 					},
 				},
 				Context: PDPContext{
 					DataHolderOrganizationId: "00000002",
 					DataHolderFacilityType:   "TODO",
-					PatientBSN:               "123456789",
 				},
 			},
 		}
@@ -144,12 +172,12 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					QueryParams: map[string][]string{
 						"category": {"http://snomed.info/sct|422037009"},
 						"_include": {"MedicationDispense:medication"},
+						"patient":  {"Patient/1000"},
 					},
 				},
 				Context: PDPContext{
 					DataHolderOrganizationId: "00000002",
 					DataHolderFacilityType:   "TODO",
-					PatientBSN:               "123456789",
 				},
 			},
 		}
