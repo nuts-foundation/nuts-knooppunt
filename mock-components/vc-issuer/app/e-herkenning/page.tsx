@@ -291,7 +291,7 @@ function EHerkenningContent() {
                   Bevestig Credential Aanvraag
                 </h2>
                 <p className="text-gray-600 mb-4">
-                  U staat op het punt een HealthcareProviderTypeCredential aan te maken voor:
+                  U staat op het punt een HealthcareProviderRoleTypeCredential aan te maken voor:
                 </p>
 
                 <div className="bg-gray-50 rounded-lg p-4 mb-6">

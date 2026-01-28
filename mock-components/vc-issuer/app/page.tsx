@@ -49,7 +49,7 @@ export default function Home() {
             <span className="text-green-700 font-medium">Service Online</span>
           </div>
           <p className="text-gray-600">
-            This service issues HealthcareProviderTypeCredentials using the OpenID for Verifiable
+            This service issues HealthcareProviderRoleTypeCredentials using the OpenID for Verifiable
             Credential Issuance (OID4VCI) protocol.
           </p>
         </div>
@@ -98,7 +98,7 @@ export default function Home() {
             <EndpointInfo
               method="POST"
               path="/api/oidc4vci/credential"
-              description="Credential endpoint - issues signed HealthcareProviderTypeCredential"
+              description="Credential endpoint - issues signed HealthcareProviderRoleTypeCredential"
             />
           </div>
         </div>
@@ -126,7 +126,7 @@ export default function Home() {
                 </svg>
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">HealthcareProviderTypeCredential</h3>
+                <h3 className="font-semibold text-gray-900">HealthcareProviderRoleTypeCredential</h3>
                 <p className="text-sm text-gray-600 mt-1">
                   Organization identification credential containing organization name and healthcare provider type.
                 </p>
