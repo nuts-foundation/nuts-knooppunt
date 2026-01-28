@@ -153,6 +153,40 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		assert.True(t, response.Result.Allow, "bgz should allow Patient query with _include=Patient:general-practitioner")
 		assert.Empty(t, response.Result.Reasons)
 	})
+	t.Run("allow - correct Patient query with BSN", func(t *testing.T) {
+		pdpRequest := PDPRequest{
+			Input: PDPInput{
+				Subject: Subject{
+					Properties: SubjectProperties{
+						ClientQualifications:  []string{"bgz"},
+						SubjectOrganizationId: "00000001",
+						SubjectFacilityType:   "TODO",
+						SubjectRole:           "TODO",
+						SubjectId:             "TODO",
+					},
+				},
+				Request: HTTPRequest{
+					Method:   "GET",
+					Protocol: "HTTP/1.1",
+					Path:     "/Patient",
+					QueryParams: map[string][]string{
+						"_include": {"Patient:general-practitioner"},
+						"_id":      {"1000"},
+					},
+				},
+				Context: PDPContext{
+					DataHolderOrganizationId: "00000002",
+					DataHolderFacilityType:   "TODO",
+					PatientBSN:               "123456789",
+				},
+			},
+		}
+
+		response := executePDPRequest(t, service, pdpRequest)
+
+		assert.True(t, response.Result.Allow, "bgz should allow Patient query with BSN")
+		assert.Empty(t, response.Result.Reasons)
+	})
 	t.Run("allow - correct MedicationDispense query with category and _include", func(t *testing.T) {
 		pdpRequest := PDPRequest{
 			Input: PDPInput{
@@ -243,5 +277,39 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		response := executePDPRequest(t, service, pdpRequest)
 
 		assert.False(t, response.Result.Allow, "bgz should deny Patient query with additional parameters")
+	})
+
+	t.Run("deny - Patient query without patient_id or patient_bsn", func(t *testing.T) {
+		pdpRequest := PDPRequest{
+			Input: PDPInput{
+				Subject: Subject{
+					Properties: SubjectProperties{
+						ClientQualifications:  []string{"bgz"},
+						SubjectOrganizationId: "00000001",
+						SubjectFacilityType:   "TODO",
+						SubjectRole:           "TODO",
+						SubjectId:             "TODO",
+					},
+				},
+				Request: HTTPRequest{
+					Method:   "GET",
+					Protocol: "HTTP/1.1",
+					Path:     "/Patient",
+					QueryParams: map[string][]string{
+						"_include": {"Patient:general-practitioner"},
+					},
+				},
+				Context: PDPContext{
+					DataHolderOrganizationId: "00000002",
+					DataHolderFacilityType:   "TODO",
+					// Neither patient_bsn nor patient_id set
+				},
+			},
+		}
+
+		response := executePDPRequest(t, service, pdpRequest)
+
+		assert.False(t, response.Result.Allow, "bgz should deny Patient query without patient_id or patient_bsn")
+		assert.NotEmpty(t, response.Result.Reasons)
 	})
 }

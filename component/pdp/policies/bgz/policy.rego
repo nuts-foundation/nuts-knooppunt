@@ -11,10 +11,21 @@ default allow := false
 allow if {
     input.context.mitz_consent == true
     # The BgZ on Generic Functions use case (to be formalized) specifies that requests must be scoped to a patient.
-    # We enforce this by checking that a patient_id is present in the request context.
+    # We enforce this by checking that either a patient_id or patient_bsn is present in the request context.
+    has_patient_identifier
+    is_allowed_query
+}
+
+# Helper rule: check if either patient_id or patient_bsn is filled
+has_patient_identifier if {
     is_string(input.context.patient_id)
     input.context.patient_id != ""
-    is_allowed_query
+}
+
+has_patient_identifier if {
+    # Remove this after february 2026 hackaton.
+    is_string(input.context.patient_bsn)
+    input.context.patient_bsn != ""
 }
 
 # GET [base]/Patient?_include=Patient:general-practitioner
