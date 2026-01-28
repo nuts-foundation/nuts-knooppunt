@@ -9,7 +9,7 @@ The diagrams on this page were created using [Structurizr](https://structurizr.c
 ![structurizr-GF_SystemContext.svg](images/structurizr-GF_SystemContext.svg)
 
 ### Deployment
-The diagram below shows which contains must be deployed.
+The diagram below shows which containers must be deployed.
 
 ![structurizr-DataExchange_ContainerDiagram.svg](images/structurizr-DataExchange_ContainerDiagram.svg)
 
