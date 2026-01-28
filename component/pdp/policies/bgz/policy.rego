@@ -9,8 +9,23 @@ import rego.v1
 default allow := false
 
 allow if {
-    input.context.mitz_consent
+    input.context.mitz_consent == true
+    # The BgZ on Generic Functions use case (to be formalized) specifies that requests must be scoped to a patient.
+    # We enforce this by checking that either a patient_id or patient_bsn is present in the request context.
+    has_patient_identifier
     is_allowed_query
+}
+
+# Helper rule: check if either patient_id or patient_bsn is filled
+has_patient_identifier if {
+    is_string(input.context.patient_id)
+    input.context.patient_id != ""
+}
+
+has_patient_identifier if {
+    # Remove this after february 2026 hackaton.
+    is_string(input.context.patient_bsn)
+    input.context.patient_bsn != ""
 }
 
 # GET [base]/Patient?_include=Patient:general-practitioner
@@ -31,14 +46,14 @@ is_allowed_query if {
 is_allowed_query if {
     input.resource.type == "Consent"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"category": "http://snomed.info/sct|11291000146105"}
+    input.action.properties.search_params.category == "http://snomed.info/sct|11291000146105"
 }
 
 # GET [base]/Consent?category=http://snomed.info/sct|11341000146107
 is_allowed_query if {
     input.resource.type == "Consent"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"category": "http://snomed.info/sct|11341000146107"}
+    input.action.properties.search_params.category == "http://snomed.info/sct|11341000146107"
 }
 
 # GET [base]/Observation/$lastn?category=http://snomed.info/sct|118228005,http://snomed.info/sct|384821006
@@ -46,7 +61,7 @@ is_allowed_query if {
     input.resource.type == "Observation"
     input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
-    input.action.properties.search_params == {"category": "http://snomed.info/sct|118228005,http://snomed.info/sct|384821006"}
+    input.action.properties.search_params.category == "http://snomed.info/sct|118228005,http://snomed.info/sct|384821006"
 }
 
 # GET [base]/Condition
@@ -60,28 +75,28 @@ is_allowed_query if {
     input.resource.type == "Observation"
     input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
-    input.action.properties.search_params == {"code": "http://snomed.info/sct|365508006"}
+    input.action.properties.search_params.code == "http://snomed.info/sct|365508006"
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|228366006
 is_allowed_query if {
     input.resource.type == "Observation"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"code": "http://snomed.info/sct|228366006"}
+    input.action.properties.search_params.code == "http://snomed.info/sct|228366006"
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|228273003
 is_allowed_query if {
     input.resource.type == "Observation"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"code": "http://snomed.info/sct|228273003"}
+    input.action.properties.search_params.code == "http://snomed.info/sct|228273003"
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|365980008
 is_allowed_query if {
     input.resource.type == "Observation"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"code": "http://snomed.info/sct|365980008"}
+    input.action.properties.search_params.code == "http://snomed.info/sct|365980008"
 }
 
 # GET [base]/NutritionOrder
@@ -106,7 +121,7 @@ is_allowed_query if {
 is_allowed_query if {
     input.resource.type == "MedicationStatement"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"category": "urn:oid:2.16.840.1.113883.2.4.3.11.60.20.77.5.3|6"}
+    input.action.properties.search_params.category == "urn:oid:2.16.840.1.113883.2.4.3.11.60.20.77.5.3|6"
     input.action.properties.include == ["MedicationStatement:medication"]
 }
 
@@ -114,7 +129,7 @@ is_allowed_query if {
 is_allowed_query if {
     input.resource.type == "MedicationRequest"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"category": "http://snomed.info/sct|16076005"}
+    input.action.properties.search_params.category == "http://snomed.info/sct|16076005"
     input.action.properties.include == ["MedicationRequest:medication"]
 }
 
@@ -122,7 +137,7 @@ is_allowed_query if {
 is_allowed_query if {
     input.resource.type == "MedicationDispense"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"category": "http://snomed.info/sct|422037009"}
+    input.action.properties.search_params.category == "http://snomed.info/sct|422037009"
     input.action.properties.include == ["MedicationDispense:medication"]
 }
 
@@ -137,7 +152,7 @@ is_allowed_query if {
 is_allowed_query if {
     input.resource.type == "Immunization"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"status": "completed"}
+    input.action.properties.search_params.status == "completed"
 }
 
 # GET [base]/Observation/$lastn?code=http://loinc.org|85354-9
@@ -145,7 +160,7 @@ is_allowed_query if {
     input.resource.type == "Observation"
     input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
-    input.action.properties.search_params == {"code": "http://loinc.org|85354-9"}
+    input.action.properties.search_params.code == "http://loinc.org|85354-9"
 }
 
 # GET [base]/Observation/$lastn?code=http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9
@@ -153,7 +168,7 @@ is_allowed_query if {
     input.resource.type == "Observation"
     input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
-    input.action.properties.search_params == {"code": "http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9"}
+    input.action.properties.search_params.code == "http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9"
 }
 
 # GET [base]/Observation/$lastn?category=http://snomed.info/sct|275711006&_include=Observation:related-target&_include=Observation:specimen
@@ -161,7 +176,7 @@ is_allowed_query if {
     input.resource.type == "Observation"
     input.action.properties.operation == "$lastn"
     input.action.properties.interaction_type == "operation"
-    input.action.properties.search_params == {"category": "http://snomed.info/sct|275711006"}
+    input.action.properties.search_params.category == "http://snomed.info/sct|275711006"
     input.action.properties.include == ["Observation:related-target", "Observation:specimen"]
 }
 
@@ -169,21 +184,21 @@ is_allowed_query if {
 is_allowed_query if {
     input.resource.type == "Procedure"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"category": "http://snomed.info/sct|387713003"}
+    input.action.properties.search_params.category == "http://snomed.info/sct|387713003"
 }
 
 # GET [base]/Encounter?class=http://hl7.org/fhir/v3/ActCode|IMP,http://hl7.org/fhir/v3/ActCode|ACUTE,http://hl7.org/fhir/v3/ActCode|NONAC
 is_allowed_query if {
     input.resource.type == "Encounter"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"class": "http://hl7.org/fhir/v3/ActCode|IMP,http://hl7.org/fhir/v3/ActCode|ACUTE,http://hl7.org/fhir/v3/ActCode|NONAC"}
+    input.action.properties.search_params.class == "http://hl7.org/fhir/v3/ActCode|IMP,http://hl7.org/fhir/v3/ActCode|ACUTE,http://hl7.org/fhir/v3/ActCode|NONAC"
 }
 
 # GET [base]/ProcedureRequest?status=active
 is_allowed_query if {
     input.resource.type == "ProcedureRequest"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"status": "active"}
+    input.action.properties.search_params.status == "active"
 }
 
 # GET [base]/ImmunizationRecommendation
@@ -199,7 +214,7 @@ is_allowed_query if {
 is_allowed_query if {
     input.resource.type == "DeviceRequest"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"status": "active"}
+    input.action.properties.search_params.status == "active"
     input.action.properties.include == ["DeviceRequest:device"]
 }
 
@@ -207,6 +222,6 @@ is_allowed_query if {
 is_allowed_query if {
     input.resource.type == "Appointment"
     input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params == {"status": "booked,pending,proposed"}
+    input.action.properties.search_params.status == "booked,pending,proposed"
 
 }
