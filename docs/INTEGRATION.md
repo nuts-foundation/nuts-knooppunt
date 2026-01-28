@@ -7,6 +7,7 @@ This document describes how to integrate with the Knooppunt.
 - [Addressing](#addressing)
 - [NVI](#nvi)
 - [Consent (MITZ)](#consent-mitz)
+- [Authentication](#authentication)
 
 ---
 
@@ -31,8 +32,9 @@ You also need to provide a FHIR server as mCSD Query Directory, to which mCSD re
 
 Then, configure:
 
-- the Root Administration Directory to synchronize from (`mcsd.admin.<key>.fhirbaseurl`), and
-- the local Query Directory to synchronize to (`mcsd.query.fhirbaseurl`).
+- the Root Administration Directory to synchronize from (`mcsd.admin.<key>.fhirbaseurl`),
+- the local Query Directory to synchronize to (`mcsd.query.fhirbaseurl`), and
+- (optional) directories to exclude from synchronization (`mcsd.adminexclude`), which is useful to prevent self-referencing loops when your own query directory appears as a discovered Endpoint.
 
 ### Triggering synchronization
 
@@ -212,3 +214,77 @@ mitz:
 ### Notification Handling
 
 When consent changes occur, MITZ sends notifications to the configured endpoint.
+
+## Authentication
+
+This chapter describes how to use the Knooppunt to authenticate users through GF Authentication.
+The Knooppunt acts as OpenID Connect (OIDC) Provider, abstracting the complexity of Dezi integration:
+
+- Decrypting the envelope containing the Dezi token
+- Performing revocation checking
+- Validating the token according to the business rules of Dezi
+- Providing an OIDC `id_token` that follows standard OIDC claims
+
+This OIDC Provider supports the following OIDC features:
+
+- [Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth)
+- [Discovery using well-known metadata](https://openid.net/specs/openid-connect-discovery-1_0.html) (on internal API: `http://localhost:8081/.well-known/openid-configuration`)
+- [Client authentication using `client_secret`](https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication)
+- [PKCE using S256](https://www.rfc-editor.org/rfc/rfc7636)
+
+To use the Knooppunt as OIDC Provider:
+
+1. Register your client (e.g. EHR) in the Knooppunt configuration (see below).
+2. Configure your Dezi client in the Knooppunt (coming later).
+
+### Client Authentication
+
+Clients to the Knooppunt OIDC Provider must:
+
+- be authenticated using `client_secret`
+- have its redirect URLs registered for the authorization code flow.
+
+Configure clients and their redirect URLs in the Knooppunt configuration (`knooppunt.yml`).
+
+### ID Tokens
+
+The `id_token` returned by the Knooppunt wraps the Dezi token, providing standard OIDC claims as well as Dezi-specific claims;
+
+- The decoded Dezi token claims can be found in the `dezi_claims` field.
+- The original Dezi token is available in the `dezi_token` field.
+
+The `id_token` can later be used to acquire GF Authentication access tokens.
+
+```json
+{
+  "at_hash": "aEW-FO1Kv6b--LGpu707uA",
+  "aud": [
+    "local"
+  ],
+  "auth_time": 1763560632,
+  "azp": "local",
+  "c_hash": "zUQ0iEUjJo_U7tVg2_gy6Q",
+  "client_id": "local",
+  "dezi_claims": {
+    "abonnee_naam": "Zorgaanbieder",
+    "abonnee_nummer": "123456789",
+    "achternaam": "Zorgmedewerker",
+    "dezi_nummer": "123456789",
+    "loa_dezi": "http://eidas.europe.eu/LoA/high",
+    "rol_code": "01.000",
+    "rol_code_bron": "https://auth.dezi.nl/revocatie/058d13ce-9b33-41b4-955f-f22a154b8a2d",
+    "rol_naam": "Arts",
+    "verklaring_id": "058d13ce-9b33-41b4-955f-f22a154b8a2d",
+    "voorletters": "A.B.",
+    "voorvoegsel": ""
+  },
+  "dezi_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhYm9ubmVlX25hYW0iOiJab3JnYWFuYmllZGVyIiwiYWJvbm5lZV9udW1tZXIiOiIxMjM0NTY3ODkiLCJhY2h0ZXJuYWFtIjoiWm9yZ21lZGV3ZXJrZXIiLCJkZXppX251bW1lciI6IjEyMzQ1Njc4OSIsImxvYV9kZXppIjoiaHR0cDovL2VpZGFzLmV1cm9wZS5ldS9Mb0EvaGlnaCIsInJvbF9jb2RlIjoiMDEuMDAwIiwicm9sX2NvZGVfYnJvbiI6Imh0dHBzOi8vYXV0aC5kZXppLm5sL3Jldm9jYXRpZS8wNThkMTNjZS05YjMzLTQxYjQtOTU1Zi1mMjJhMTU0YjhhMmQiLCJyb2xfbmFhbSI6IkFydHMiLCJ2ZXJrbGFyaW5nX2lkIjoiMDU4ZDEzY2UtOWIzMy00MWI0LTk1NWYtZjIyYTE1NGI4YTJkIiwidm9vcmxldHRlcnMiOiJBLkIuIiwidm9vcnZvZWdzZWwiOiIifQ.TyIT6yJ7lJK1LyDa_48XgAMC3-xD_QtFDs3Pf1B2hNTPJSVG232j18VS8QOVyqv7d1lcPj4A6tp_39mA5I2azc-U-kuRgVV1-fAKw9ARByO_WAiNR3SFKDqYtfBMSy-Ry4ge0ZOpCxZQ5md40OqiqdQ063We5qbuNKDWRMhlqldfkutCduLvAS7F2xwHg08IQGXty95o2S1jellwbXy-k6cR_0H0Zwo3XqaJpgaqeVacWKhIvlxDNtNvzFZSzI8ndUSpXe-kvELkneP3mer2-ITbR07xq0O7IPdStSDtCdAYX2DuHoRjxZloVZvdiMncKgj8MByuWIoEH9qWAhyu3A",
+  "exp": 1763564252,
+  "family_name": "Zorgmedewerker",
+  "given_name": "A.B.",
+  "iat": 1763560632,
+  "iss": "http://localhost:8080/auth",
+  "name": "A.B. Zorgmedewerker",
+  "sub": "123456789"
+}
+```

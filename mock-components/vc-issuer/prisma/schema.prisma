@@ -1,0 +1,135 @@
+// Prisma schema for Vektis VC Issuer
+// OID4VCI-compliant credential issuance
+
+generator client {
+  provider      = "prisma-client-js"
+  // native: local development (Apple Silicon)
+  // linux-musl-openssl-3.0.x: Alpine x86_64 (typical k8s deployment)
+  // linux-musl-arm64-openssl-3.0.x: Alpine ARM64 (local Docker on Apple Silicon)
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Authorization request tracking (PKCE flow)
+model AuthorizationRequest {
+  id                   String   @id @default(cuid())
+  createdAt            DateTime @default(now())
+  expiresAt            DateTime
+
+  // OAuth2 parameters
+  clientId             String
+  responseType         String
+  redirectUri          String
+  state                String   @unique
+
+  // PKCE
+  codeChallenge        String
+  codeChallengeMethod  String // S256 or plain
+
+  // OID4VCI specific
+  authorizationDetails String // JSON string
+  issuerState          String?
+
+  // Generated values
+  generatedCode        String  @unique
+
+  // e-Herkenning result (populated after mock login)
+  authenticatedOrg     String? // JSON string
+  isUsed               Boolean @default(false)
+
+  @@index([clientId, state])
+  @@index([generatedCode])
+}
+
+// Token tracking for access token management
+model TokenResponse {
+  id              String   @id @default(cuid())
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime
+
+  clientId        String
+  accessToken     String   @unique
+  tokenType       String   @default("bearer")
+
+  // c_nonce for proof of possession
+  cNonce          String   @unique
+  cNonceExpiresAt DateTime
+
+  // Link to authorization
+  authRequestId   String?
+
+  // Authorization details from token exchange
+  authorizationDetails String? // JSON string
+
+  // Authenticated organization from authorization flow
+  authenticatedOrg String? // JSON string
+
+  // Track credential issuance
+  credentialsIssued Int     @default(0)
+  isRevoked         Boolean @default(false)
+
+  @@index([accessToken])
+  @@index([cNonce])
+}
+
+// DID key pairs for signing credentials
+model DidKeyPair {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  did       String
+  keyType   String  @default("VC") // VC or OAUTH
+  algorithm String  @default("EdDSA")
+  curve     String  @default("Ed25519")
+
+  // Key material (JWK format)
+  publicKeyJwk  String // JSON string
+  privateKeyJwk String // JSON string
+  thumbprint    String
+
+  // Key status
+  isActive  Boolean   @default(true)
+  revokedAt DateTime?
+
+  @@unique([did, keyType], name: "uniqueDidKeyType")
+  @@index([did, keyType])
+}
+
+// Issued credentials audit log
+model IssuedCredential {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  // Credential details
+  credentialId String @unique
+  issuerDid    String
+  subjectDid   String
+
+  // Credential type
+  credentialType String // JSON array string
+  format         String // jwt_vc_json
+
+  // Credential content (for audit, not the signed JWT)
+  credentialSubject String // JSON string
+
+  // Issuance context
+  tokenResponseId String?
+  cNonceUsed      String
+
+  // Validity
+  issuanceDate   DateTime
+  expirationDate DateTime
+
+  // Status
+  status           String    @default("ACTIVE") // ACTIVE, REVOKED, EXPIRED
+  revokedAt        DateTime?
+  revocationReason String?
+
+  @@index([subjectDid])
+  @@index([issuerDid])
+  @@index([credentialId])
+}

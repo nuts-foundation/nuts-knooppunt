@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"slices"
@@ -17,11 +18,12 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/static"
 	tmpls "github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/templates"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
-	"github.com/rs/zerolog/log"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -42,11 +44,11 @@ var client fhirclient.Client
 func New(config Config) *Component {
 	baseURL, err := url.Parse(config.FHIRBaseURL)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to start MCSD admin component, invalid FHIRBaseURL")
+		slog.Error("Failed to start MCSD admin component, invalid FHIRBaseURL", logging.Error(err))
 		return nil
 	}
 
-	client = fhirclient.New(baseURL, http.DefaultClient, fhirutil.ClientConfig())
+	client = fhirclient.New(baseURL, tracing.NewHTTPClient(), fhirutil.ClientConfig())
 
 	return &Component{
 		config:     config,
@@ -77,6 +79,9 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice", listServices)
 	mux.HandleFunc("GET /mcsdadmin/healthcareservice/new", newService)
 	mux.HandleFunc("POST /mcsdadmin/healthcareservice/new", newServicePost)
+	mux.HandleFunc("GET /mcsdadmin/healthcareservice/{id}/endpoints", associateHealthcareServiceEndpoints)
+	mux.HandleFunc("POST /mcsdadmin/healthcareservice/{id}/endpoints", associateHealthcareServiceEndpointsPost)
+	mux.HandleFunc("DELETE /mcsdadmin/healthcareservice/{id}/endpoints", associateHealthcareServiceEndpointsDelete)
 	mux.HandleFunc("GET /mcsdadmin/organization", listOrganizations)
 	mux.HandleFunc("GET /mcsdadmin/organization/new", newOrganization)
 	mux.HandleFunc("POST /mcsdadmin/organization/new", newOrganizationPost)
@@ -203,7 +208,7 @@ func newOrganization(w http.ResponseWriter, r *http.Request) {
 }
 
 func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
-	log.Debug().Msg("New post for organization resource")
+	slog.DebugContext(r.Context(), "New post for organization resource")
 
 	err := r.ParseForm()
 	if err != nil {
@@ -219,12 +224,19 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	name := r.PostForm.Get("name")
 	org.Name = &name
 	uraString := r.PostForm.Get("identifier")
-	if uraString == "" {
-		badRequest(w, r, "missing URA identifier")
+	partOf := r.PostForm.Get("part-of")
+
+	// Validate: organization must have either URA identifier or partOf reference
+	if uraString == "" && partOf == "" {
+		badRequest(w, r, "organization must have either a URA identifier or a parent organization (part-of)")
 		return
 	}
-	org.Identifier = []fhir.Identifier{
-		uraIdentifier(uraString),
+
+	// Set identifier if provided
+	if uraString != "" {
+		org.Identifier = []fhir.Identifier{
+			uraIdentifier(uraString),
+		}
 	}
 
 	codables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.OrganizationTypeCodings, "type")
@@ -237,7 +249,6 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	active := r.PostForm.Get("active") == "true"
 	org.Active = &active
 
-	partOf := r.PostForm.Get("part-of")
 	if len(partOf) > 0 {
 		reference := "Organization/" + partOf
 		org.PartOf = &fhir.Reference{
@@ -282,7 +293,7 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 		}
 		err := client.Read(*ref.Reference, &ep)
 		if err != nil {
-			internalError(w, req, "could not read reference resource", err)
+			internalError(w, req, "could not read referenced resource", err)
 			return
 		}
 		endpoints = append(endpoints, ep)
@@ -305,6 +316,49 @@ func associateEndpoints(w http.ResponseWriter, req *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	tmpls.RenderWithBase(w, "organization_endpoints.html", props)
+}
+
+func associateHealthcareServiceEndpoints(w http.ResponseWriter, req *http.Request) {
+	serviceId := req.PathValue("id")
+	path := fmt.Sprintf("HealthcareService/%s", serviceId)
+	var service fhir.HealthcareService
+	err := client.Read(path, &service)
+	if err != nil {
+		internalError(w, req, "could not read healthcare service resource", err)
+		return
+	}
+
+	endpoints := make([]fhir.Endpoint, 0, len(service.Endpoint))
+	for _, ref := range service.Endpoint {
+		var ep fhir.Endpoint
+		if ref.Reference == nil {
+			continue
+		}
+		err := client.Read(*ref.Reference, &ep)
+		if err != nil {
+			internalError(w, req, "could not read referenced resource", err)
+			return
+		}
+		endpoints = append(endpoints, ep)
+	}
+
+	allEndpoints, err := findAll[fhir.Endpoint](client)
+	if err != nil {
+		internalError(w, req, "could not load endpoints", err)
+		return
+	}
+
+	props := struct {
+		HealthcareService fhir.HealthcareService
+		EndpointCards     []tmpls.HealthcareServiceEndpointCardProps
+		AllEndpoints      []fhir.Endpoint
+	}{
+		HealthcareService: service,
+		EndpointCards:     tmpls.MakeHealthcareServiceEndpointCards(endpoints, service),
+		AllEndpoints:      allEndpoints,
+	}
+	w.WriteHeader(http.StatusOK)
+	tmpls.RenderWithBase(w, "healthcareservice_endpoints.html", props)
 }
 
 func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
@@ -359,6 +413,58 @@ func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 	tmpls.RenderPartial(w, "_card_endpoint", props)
 }
 
+func associateHealthcareServiceEndpointsPost(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		badRequest(w, req, "invalid form input", err)
+		return
+	}
+
+	selectedId := req.PostForm.Get("selected-endpoint")
+	selected, err := findById[fhir.Endpoint](selectedId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	serviceId := req.PathValue("id")
+	service, err := findById[fhir.HealthcareService](serviceId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	foundIdx := slices.IndexFunc(service.Endpoint, func(ref fhir.Reference) bool {
+		epId := idFromRef(ref)
+		return epId == selectedId
+	})
+	if foundIdx > -1 {
+		http.Error(w, "endpoint already associated with healthcare service", http.StatusBadRequest)
+		return
+	}
+
+	selectedPath := fmt.Sprintf("Endpoint/%s", selectedId)
+	ref := fhir.Reference{
+		Reference: &selectedPath,
+	}
+	service.Endpoint = append(service.Endpoint, ref)
+
+	servicePath := fmt.Sprintf("HealthcareService/%s", serviceId)
+	var resultService fhir.HealthcareService
+	err = client.Update(servicePath, service, &resultService)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	props := tmpls.HealthcareServiceEndpointCardProps{
+		Endpoint:          selected,
+		HealthcareService: resultService,
+	}
+	tmpls.RenderPartial(w, "_card_endpoint_healthcareservice", props)
+}
+
 func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
@@ -398,6 +504,45 @@ func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func associateHealthcareServiceEndpointsDelete(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		badRequest(w, req, "invalid form input", err)
+		return
+	}
+
+	serviceId := req.PathValue("id")
+	service, err := findById[fhir.HealthcareService](serviceId)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	epId := req.URL.Query().Get("endpointId")
+	epFound := false
+	for i, ref := range service.Endpoint {
+		refId := idFromRef(ref)
+		if refId == epId {
+			service.Endpoint = slices.Delete(service.Endpoint, i, i+1)
+			epFound = true
+		}
+	}
+	if !epFound {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	servicePath := fmt.Sprintf("HealthcareService/%s", serviceId)
+	var serviceResult fhir.HealthcareService
+	err = client.Update(servicePath, service, &serviceResult)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
 func listEndpoints(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
@@ -410,18 +555,26 @@ func newEndpoint(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
+	healthcareServices, err := findAll[fhir.HealthcareService](client)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	props := struct {
-		ConnectionTypes []fhir.Coding
-		Organizations   []fhir.Organization
-		PayloadTypes    []fhir.Coding
-		PurposeOfUse    []fhir.Coding
-		Status          []fhir.Coding
+		ConnectionTypes    []fhir.Coding
+		Organizations      []fhir.Organization
+		HealthcareServices []fhir.HealthcareService
+		PayloadTypes       []fhir.Coding
+		PurposeOfUse       []fhir.Coding
+		Status             []fhir.Coding
 	}{
-		ConnectionTypes: valuesets.EndpointConnectionTypeCodings,
-		Organizations:   organizations,
-		PayloadTypes:    valuesets.EndpointPayloadTypeCodings,
-		PurposeOfUse:    valuesets.PurposeOfUseCodings,
-		Status:          valuesets.EndpointStatusCodings,
+		ConnectionTypes:    valuesets.EndpointConnectionTypeCodings,
+		Organizations:      organizations,
+		HealthcareServices: healthcareServices,
+		PayloadTypes:       valuesets.EndpointPayloadTypeCodings,
+		PurposeOfUse:       valuesets.PurposeOfUseCodings,
+		Status:             valuesets.EndpointStatusCodings,
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -429,7 +582,7 @@ func newEndpoint(w http.ResponseWriter, _ *http.Request) {
 }
 
 func newEndpointPost(w http.ResponseWriter, r *http.Request) {
-	log.Debug().Msg("New post for Endpoint resource")
+	slog.DebugContext(r.Context(), "New post for Endpoint resource")
 
 	err := r.ParseForm()
 	if err != nil {
@@ -449,14 +602,13 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint.Address = address
 
-	if len(r.PostForm["payload-type"]) < 1 {
-		badRequest(w, r, "missing payload type")
-		return
-	}
-
-	codables, ok := formdata.CodablesFromForm(r.PostForm, valuesets.EndpointPayloadTypeCodings, "payload-type")
+	codables, ok := formdata.CodablesFromFormWithCustom(r.PostForm, valuesets.EndpointPayloadTypeCodings, "payload-type")
 	if !ok {
 		badRequest(w, r, "could not find all type codes")
+		return
+	}
+	if len(codables) < 1 {
+		badRequest(w, r, "missing payload type")
 		return
 	}
 	endpoint.PayloadType = codables
@@ -527,22 +679,41 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	epRef.Type = to.Ptr("Endpoint")
 	epRef.Reference = to.Ptr("Endpoint/" + *resEp.Id)
 
-	forOrgStr := r.PostForm.Get("endpoint-for")
-	var owningOrg fhir.Organization
-	if len(forOrgStr) > 0 {
-		err = client.Read("Organization/"+forOrgStr, &owningOrg)
-		if err != nil {
-			http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
-			return
-		}
+	forResourceStr := r.PostForm.Get("endpoint-for")
+	if len(forResourceStr) > 0 {
+		// The value now contains the resource type prefix (e.g., "Organization/123" or "HealthcareService/456")
+		if strings.HasPrefix(forResourceStr, "Organization/") {
+			var owningOrg fhir.Organization
+			err = client.Read(forResourceStr, &owningOrg)
+			if err != nil {
+				http.Error(w, "bad request: could not find organization", http.StatusBadRequest)
+				return
+			}
 
-		owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
+			owningOrg.Endpoint = append(owningOrg.Endpoint, epRef)
 
-		var updatedOrg fhir.Organization
-		err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			var updatedOrg fhir.Organization
+			err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		} else if strings.HasPrefix(forResourceStr, "HealthcareService/") {
+			var owningService fhir.HealthcareService
+			err = client.Read(forResourceStr, &owningService)
+			if err != nil {
+				http.Error(w, "bad request: could not find healthcare service", http.StatusBadRequest)
+				return
+			}
+
+			owningService.Endpoint = append(owningService.Endpoint, epRef)
+
+			var updatedService fhir.HealthcareService
+			err = client.Update("HealthcareService/"+*owningService.Id, owningService, &updatedService)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 
@@ -593,7 +764,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	if len(typeCode) > 0 {
 		locType, ok := valuesets.CodableFrom(valuesets.LocationTypeCodings, typeCode)
 		if !ok {
-			log.Warn().Msg("Could not find selected location type")
+			slog.WarnContext(r.Context(), "Could not find selected location type")
 		} else {
 			location.Type = []fhir.CodeableConcept{locType}
 		}
@@ -604,7 +775,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		location.Status = &status
 	} else {
-		log.Warn().Msg("Could not find location status")
+		slog.WarnContext(r.Context(), "Could not find location status")
 	}
 
 	var address fhir.Address
@@ -641,7 +812,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	if len(physicalCode) > 0 {
 		physical, ok := valuesets.CodableFrom(valuesets.LocationPhysicalTypeCodings, physicalCode)
 		if !ok {
-			log.Warn().Msg("Could not find selected physical location type")
+			slog.WarnContext(r.Context(), "Could not find selected physical location type")
 		} else {
 			location.PhysicalType = &physical
 		}
@@ -924,7 +1095,7 @@ func respondErrorPage(w http.ResponseWriter, text string, httpcode int) {
 }
 
 func internalError(w http.ResponseWriter, r *http.Request, msg string, err error) {
-	log.Error().Err(err).Msg(msg)
+	slog.ErrorContext(r.Context(), msg, logging.Error(err))
 
 	isHtmxRequest := r.Header.Get("HX-Request") == "true"
 	if isHtmxRequest {
@@ -940,7 +1111,7 @@ func badRequest(w http.ResponseWriter, r *http.Request, msg string, errs ...erro
 	hasError := len(errs) > 0
 	if hasError {
 		err := errs[0]
-		log.Warn().Err(err).Msg(msg)
+		slog.WarnContext(r.Context(), msg, logging.Error(err))
 	}
 
 	isHtmxRequest := r.Header.Get("HX-Request") == "true"

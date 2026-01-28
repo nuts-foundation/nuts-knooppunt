@@ -1,2980 +1,3576 @@
 [
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "1",
     "display": "Adoption/Permanent Care Info/Support",
     "definition": "Adoption & permanent care information/support"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "2",
     "display": "Aged Care Assessment",
     "definition": "Aged care assessment"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "3",
     "display": "Aged Care Information/Referral",
     "definition": "Aged Care information/referral"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "4",
     "display": "Aged Residential Care",
     "definition": "Aged Residential Care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "5",
     "display": "Case Management for Older Persons",
     "definition": "Case management for older persons"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "6",
     "display": "Delivered Meals (Meals On Wheels)",
     "definition": "Delivered meals (meals on wheels)"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "7",
     "display": "Friendly Visiting",
     "definition": "Friendly visiting"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "8",
     "display": "Home Care/Housekeeping Assistance",
     "definition": "Home care/housekeeping assistance"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "9",
     "display": "Home Maintenance and Repair",
     "definition": "Home maintenance and repair"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "10",
     "display": "Personal Alarms/Alerts",
     "definition": "Personal alarms/alerts"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "11",
     "display": "Personal Care for Older Persons",
     "definition": "Personal care for older persons"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "12",
     "display": "Planned Activity Groups",
     "definition": "Planned activity groups"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "13",
     "display": "Acupuncture",
     "definition": "Acupuncture"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "14",
     "display": "Alexander Technique Therapy",
     "definition": "Alexander technique therapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "15",
     "display": "Aromatherapy",
     "definition": "Aromatherapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "16",
     "display": "Biorhythm Services",
     "definition": "Biorhythm services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "17",
     "display": "Bowen Therapy",
     "definition": "Bowen therapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "18",
     "display": "Chinese Herbal Medicine",
     "definition": "Chinese herbal medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "19",
     "display": "Feldenkrais",
     "definition": "Feldenkrais"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "20",
     "display": "Homoeopathy",
     "definition": "Homoeopathy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "21",
     "display": "Hydrotherapy",
     "definition": "Hydrotherapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "22",
     "display": "Hypnotherapy",
     "definition": "Hypnotherapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "23",
     "display": "Kinesiology",
     "definition": "Kinesiology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "24",
     "display": "Magnetic Therapy",
     "definition": "Magnetic therapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "25",
     "display": "Massage Therapy",
     "definition": "Massage therapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "26",
     "display": "Meditation",
     "definition": "Meditation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "27",
     "display": "Myotherapy",
     "definition": "Myotherapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "28",
     "display": "Naturopathy",
     "definition": "Naturopathy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "29",
     "display": "Reflexology",
     "definition": "Reflexology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "30",
     "display": "Reiki",
     "definition": "Reiki"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "31",
     "display": "Relaxation Therapy",
     "definition": "Relaxation therapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "32",
     "display": "Shiatsu",
     "definition": "Shiatsu"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "33",
     "display": "Western Herbal Medicine",
     "definition": "Western herbal medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "34",
     "display": "Family Day care",
     "definition": "Family day care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "35",
     "display": "Holiday Programs",
     "definition": "Holiday programs"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "36",
     "display": "Kindergarten Inclusion Support",
     "definition": "Kindergarten inclusion support for children with a disability"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "37",
     "display": "Kindergarten/Preschool",
     "definition": "Kindergarten/preschool"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "38",
     "display": "Long Day Child Care",
     "definition": "Long day child care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "39",
     "display": "Occasional Child Care",
     "definition": "Occasional child care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "40",
     "display": "Outside School Hours Care",
     "definition": "Outside school hours care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "41",
     "display": "Children's Play Programs",
     "definition": "Children's play programs"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "42",
     "display": "Parenting/Family Support/Education",
     "definition": "Parenting & family management support/education"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "43",
     "display": "Playgroup",
     "definition": "Playgroup"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "44",
     "display": "School Nursing",
     "definition": "School nursing"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "45",
     "display": "Toy Library",
     "definition": "Toy library"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "46",
     "display": "Child Protection/Child Abuse Report",
     "definition": "Child protection/child abuse report"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "47",
     "display": "Foster Care",
     "definition": "Foster care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "48",
     "display": "Residential/Out-of-Home Care",
     "definition": "Residential/ out of home care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "49",
     "display": "Support - Young People Leaving Care",
     "definition": "Support for young people leaving care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "50",
     "display": "Audiology",
     "definition": "Audiology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "51",
     "display": "Blood Donation",
     "definition": "Blood donation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "52",
     "display": "Chiropractic",
     "definition": "Chiropractic"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "53",
     "display": "Dietetics",
     "definition": "Dietetics"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "54",
     "display": "Family Planning",
     "definition": "Family planning"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "55",
     "display": "Health Advocacy/Liaison Service",
     "definition": "Health advocacy/Liaison service"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "56",
     "display": "Health Information/Referral",
     "definition": "Health information/referral"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "57",
     "display": "Immunization",
     "definition": "Immunization"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "58",
     "display": "Maternal & Child Health",
     "definition": "Maternal & child health"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "59",
     "display": "Nursing",
     "definition": "Nursing"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "60",
     "display": "Nutrition",
     "definition": "Nutrition"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "61",
     "display": "Occupational Therapy",
     "definition": "Occupational therapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "62",
     "display": "Optometry",
     "definition": "Optometry"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "63",
     "display": "Osteopathy",
     "definition": "Osteopathy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "64",
     "display": "Pharmacy",
     "definition": "Pharmacy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "65",
     "display": "Physiotherapy",
     "definition": "Physiotherapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "66",
     "display": "Podiatry",
     "definition": "Podiatry"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "67",
     "display": "Sexual Health",
     "definition": "Sexual health"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "68",
     "display": "Speech Pathology/Therapy",
     "definition": "Speech pathology/therapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "69",
     "display": "Bereavement Counselling",
     "definition": "Bereavement counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "70",
     "display": "Crisis Counselling",
     "definition": "Crisis counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "71",
     "display": "Family Counselling/Therapy",
     "definition": "Family counselling and/or family therapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "72",
     "display": "Family Violence Counselling",
     "definition": "Family violence counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "73",
     "display": "Financial Counselling",
     "definition": "Financial counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "74",
     "display": "Generalist Counselling",
     "definition": "Generalist counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "75",
     "display": "Genetic Counselling",
     "definition": "Genetic counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "76",
     "display": "Health Counselling",
     "definition": "Health counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "77",
     "display": "Mediation",
     "definition": "Mediation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "78",
     "display": "Problem Gambling Counselling",
     "definition": "Problem gambling counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "79",
     "display": "Relationship Counselling",
     "definition": "Relationship counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "80",
     "display": "Sexual Assault Counselling",
     "definition": "Sexual assault counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "81",
     "display": "Trauma Counselling",
     "definition": "Trauma counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "82",
     "display": "Victims of Crime Counselling",
     "definition": "Victims of crime counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "83",
     "display": "Cemetery Operation",
     "definition": "Cemetery operation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "84",
     "display": "Cremation",
     "definition": "Cremation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "85",
     "display": "Death Service Information",
     "definition": "Death service information"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "86",
     "display": "Funeral Services",
     "definition": "Funeral services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "87",
     "display": "Endodontic",
     "definition": "Endodontic"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "88",
     "display": "General Dental",
     "definition": "General dental"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "89",
     "display": "Oral Medicine",
     "definition": "Oral medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "90",
     "display": "Oral Surgery",
     "definition": "Oral surgery"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "91",
     "display": "Orthodontic",
     "definition": "Orthodontic"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "92",
     "display": "Paediatric Dentistry",
     "definition": "Paediatric Dentistry"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "93",
     "display": "Periodontic",
     "definition": "Periodontic"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "94",
     "display": "Prosthodontic",
     "definition": "Prosthodontic"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "95",
     "display": "Acquired Brain Injury Info/Referral",
     "definition": "Acquired brain injury information/referral"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "96",
     "display": "Disability Advocacy",
     "definition": "Disability advocacy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "97",
     "display": "Disability Aids & Equipment",
     "definition": "Disability aids & equipment"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "98",
     "display": "Disability Case Management",
     "definition": "Disability case management"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "99",
     "display": "Disability Day Programs/Activities",
     "definition": "Disability day programs & activities"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "100",
     "display": "Disability Information/Referral",
     "definition": "Disability information/referral"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "101",
     "display": "Disability Support Packages",
     "definition": "Disability support packages"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "102",
     "display": "Disability Supported Accommodation",
     "definition": "Disability supported accommodation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "103",
     "display": "Early Childhood Intervention",
     "definition": "Early childhood intervention"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "104",
     "display": "Hearing Aids & Equipment",
     "definition": "Hearing aids & equipment"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "105",
     "display": "Drug and/or Alcohol Counselling",
     "definition": "Drug and/or alcohol counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "106",
     "display": "Drug/Alcohol Information/Referral",
     "definition": "Drug and/or alcohol information/referral"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "107",
     "display": "Needle & Syringe Exchange",
     "definition": "Needle & Syringe exchange"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "108",
     "display": "Non-resid. Alcohol/Drug Treatment",
     "definition": "Non-residential alcohol and/or drug dependence treatment"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "109",
     "display": "Pharmacotherapy",
     "definition": "Pharmacotherapy (eg. methadone) program"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "110",
     "display": "Quit Program",
     "definition": "Quit program"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "111",
     "display": "Residential Alcohol/Drug Treatment",
     "definition": "Residential alcohol and/or drug dependence treatment"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "112",
     "display": "Adult/Community Education",
     "definition": "Adult/community education"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "113",
     "display": "Higher Education",
     "definition": "Higher education"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "114",
     "display": "Primary Education",
     "definition": "Primary education"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "115",
     "display": "Secondary Education",
     "definition": "Secondary education"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "116",
     "display": "Training & Vocational Education",
     "definition": "Training & vocational education"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "117",
     "display": "Emergency Medical",
     "definition": "Emergency medical"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "118",
     "display": "Employment Placement and/or Support",
     "definition": "Employment placement and/or support"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "119",
     "display": "Vocational Rehabilitation",
     "definition": "Vocational Rehabilitation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "120",
     "display": "Work Safety/Accident Prevention",
     "definition": "Workplace safety and/or accident prevention"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "121",
     "display": "Financial Assistance",
     "definition": "Financial assistance"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "122",
     "display": "Financial Information/Advice",
     "definition": "Financial information/advice"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "123",
     "display": "Material Aid",
     "definition": "Material aid"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "124",
     "display": "General Practice",
     "definition": "General Practice/GP (doctor)"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "125",
     "display": "Accommodation Placement/Support",
     "definition": "Accommodation placement and/or support"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "126",
     "display": "Crisis/Emergency Accommodation",
     "definition": "Crisis/emergency accommodation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "127",
     "display": "Homelessness Support",
     "definition": "Homelessness support"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "128",
     "display": "Housing Information/Referral",
     "definition": "Housing information/referral"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "129",
     "display": "Public Rental Housing",
     "definition": "Public rental housing"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "130",
     "display": "Interpreting/Multilingual Service",
     "definition": "Interpreting/Multilingual/Language service"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "131",
     "display": "Juvenile Justice",
     "definition": "Juvenile Justice"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "132",
     "display": "Legal Advocacy",
     "definition": "Legal advocacy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "133",
     "display": "Legal Information/Advice/Referral",
     "definition": "Legal information/advice/referral"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "134",
     "display": "Mental Health Advocacy",
     "definition": "Mental health advocacy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "135",
     "display": "Mental Health Assess/Triage/Crisis Response",
     "definition": "Mental health assessment/triage/crisis response"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "136",
     "display": "Mental Health Case Management",
     "definition": "Mental health case management/continuing care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "137",
     "display": "Mental Health Information/Referral",
     "definition": "Mental health information/referral"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "138",
     "display": "Mental Health Inpatient Services",
     "definition": "Mental health inpatient services (hospital psychiatric unit) - requires referral"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "139",
     "display": "Mental Health Non-residential Rehab",
     "definition": "Mental health non-residential rehabilitation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "140",
     "display": "Mental Health Residential Rehab/CCU",
     "definition": "Mental health residential rehabilitation/community care unit"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "141",
     "display": "Psychiatry (Requires Referral)",
     "definition": "Psychiatry (requires referral)"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "142",
     "display": "Psychology",
     "definition": "Psychology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "143",
     "display": "Martial Arts",
     "definition": "Martial arts"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "144",
     "display": "Personal Fitness Training",
     "definition": "Personal fitness training"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "145",
     "display": "Physical Activity Group",
     "definition": "Physical activity group"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "146",
     "display": "Physical Activity Programs",
     "definition": "Physical activity programs"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "147",
     "display": "Physical Fitness Testing",
     "definition": "Physical fitness testing"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "148",
     "display": "Pilates",
     "definition": "Pilates"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "149",
     "display": "Self-Defence",
     "definition": "Self defence"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "150",
     "display": "Sporting Club",
     "definition": "Sporting club"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "151",
     "display": "Yoga",
     "definition": "Yoga"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "152",
     "display": "Food Safety",
     "definition": "Food safety"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "153",
     "display": "Health Regulatory /Inspection /Cert.",
     "definition": "Health regulatory, inspection and/or certification"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "154",
     "display": "Work Health/Safety Inspection/Cert.",
     "definition": "Workplace health and/or safety inspection and/or certification"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "155",
     "display": "Carer Support",
     "definition": "Carer support"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "156",
     "display": "Respite Care",
     "definition": "Respite care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "157",
     "display": "Anatomical Pathology",
     "definition": "Anatomical Pathology (including Cytopathology & Forensic Pathology)"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "158",
     "display": "Pathology - Clinical Chemistry",
     "definition": "Pathology - Clinical Chemistry"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "159",
     "display": "Pathology - General",
     "definition": "Pathology - General"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "160",
     "display": "Pathology - Genetics",
     "definition": "Pathology - Genetics"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "161",
     "display": "Pathology - Haematology",
     "definition": "Pathology - Haematology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "162",
     "display": "Pathology - Immunology",
     "definition": "Pathology - Immunology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "163",
     "display": "Pathology - Microbiology",
     "definition": "Pathology - Microbiology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "164",
     "display": "Anaesthesiology - Pain Medicine",
     "definition": "Anaesthesiology - Pain Medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "165",
     "display": "Cardiology",
     "definition": "Cardiology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "166",
     "display": "Clinical Genetics",
     "definition": "Clinical Genetics"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "167",
     "display": "Clinical Pharmacology",
     "definition": "Clinical Pharmacology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "168",
     "display": "Dermatology",
     "definition": "Dermatology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "169",
     "display": "Endocrinology",
     "definition": "Endocrinology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "170",
     "display": "Gastroenterology & Hepatology",
     "definition": "Gastroenterology & Hepatology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "171",
     "display": "Geriatric Medicine",
     "definition": "Geriatric medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "172",
     "display": "Immunology & Allergy",
     "definition": "Immunology & Allergy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "173",
     "display": "Infectious Diseases",
     "definition": "Infectious diseases"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "174",
     "display": "Intensive Care Medicine",
     "definition": "Intensive care medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "175",
     "display": "Medical Oncology",
     "definition": "Medical Oncology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "176",
     "display": "Nephrology",
     "definition": "Nephrology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "177",
     "display": "Neurology",
     "definition": "Neurology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "178",
     "display": "Occupational Medicine",
     "definition": "Occupational Medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "179",
     "display": "Palliative Medicine",
     "definition": "Palliative Medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "180",
     "display": "Public Health Medicine",
     "definition": "Public Health Medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "181",
     "display": "Rehabilitation Medicine",
     "definition": "Rehabilitation Medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "182",
     "display": "Rheumatology",
     "definition": "Rheumatology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "183",
     "display": "Sleep Medicine",
     "definition": "Sleep Medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "184",
     "display": "Thoracic Medicine",
     "definition": "Thoracic medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "185",
     "display": "Gynaecological Oncology",
     "definition": "Gynaecological Oncology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "186",
     "display": "Obstetrics & Gynaecology",
     "definition": "Obstetrics & Gynaecology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "187",
     "display": "Reproductive Endocrinology/Infertility",
     "definition": "Reproductive Endocrinology & Infertility"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "188",
     "display": "Urogynaecology",
     "definition": "Urogynaecology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "189",
     "display": "Neonatology & Perinatology",
     "definition": "Neonatology & Perinatology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "190",
     "display": "Paediatric Cardiology",
     "definition": "Paediatric Cardiology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "191",
     "display": "Paediatric Clinical Genetics",
     "definition": "Paediatric Clinical Genetics"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "192",
     "display": "Paediatric Clinical Pharmacology",
     "definition": "Paediatric Clinical Pharmacology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "193",
     "display": "Paediatric Endocrinology",
     "definition": "Paediatric Endocrinology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "194",
     "display": "Paed. Gastroenterology/Hepatology",
     "definition": "Paediatric Gastroenterology & Hepatology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "195",
     "display": "Paediatric Haematology",
     "definition": "Paediatric Haematology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "196",
     "display": "Paediatric Immunology & Allergy",
     "definition": "Paediatric Immunology & Allergy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "197",
     "display": "Paediatric Infectious Diseases",
     "definition": "Paediatric Infectious diseases"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "198",
     "display": "Paediatric Intensive Care Medicine",
     "definition": "Paediatric intensive care medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "199",
     "display": "Paediatric Medical Oncology",
     "definition": "Paediatric Medical Oncology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "200",
     "display": "Paediatric Medicine",
     "definition": "Paediatric Medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "201",
     "display": "Paediatric Nephrology",
     "definition": "Paediatric Nephrology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "202",
     "display": "Paediatric Neurology",
     "definition": "Paediatric Neurology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "203",
     "display": "Paediatric Nuclear Medicine",
     "definition": "Paediatric Nuclear Medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "204",
     "display": "Paediatric Rehabilitation Medicine",
     "definition": "Paediatric Rehabilitation Medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "205",
     "display": "Paediatric Rheumatology",
     "definition": "Paediatric Rheumatology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "206",
     "display": "Paediatric Sleep Medicine",
     "definition": "Paediatric Sleep Medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "207",
     "display": "Paediatric Surgery",
     "definition": "Paediatric Surgery"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "208",
     "display": "Paediatric Thoracic Medicine",
     "definition": "Paediatric Thoracic Medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "209",
     "display": "Diag. Radiology /Xray /CT /Fluoroscopy",
     "definition": "Diagnostic Radiology/Xray/CT/Fluoroscopy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "210",
     "display": "Diagnostic Ultrasound",
     "definition": "Diagnostic Ultrasound"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "211",
     "display": "Magnetic Resonance Imaging (MRI)",
     "definition": "Magnetic Resonance Imaging (MRI)"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "212",
     "display": "Nuclear Medicine",
     "definition": "Nuclear Medicine"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "213",
     "display": "Obstetric/Gynaecological Ultrasound",
     "definition": "Obstetric & Gynaecological Ultrasound"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "214",
     "display": "Radiation Oncology",
     "definition": "Radiation oncology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "215",
     "display": "Cardiothoracic Surgery",
     "definition": "Cardiothoracic surgery"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "216",
     "display": "Neurosurgery",
     "definition": "Neurosurgery"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "217",
     "display": "Ophthalmology",
     "definition": "Ophthalmology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "218",
     "display": "Orthopaedic Surgery",
     "definition": "Orthopaedic surgery"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "219",
     "display": "Otolaryngology/Head & Neck Surgery",
     "definition": "Otolaryngology - Head & Neck Surgery"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "220",
     "display": "Plastic & Reconstructive Surgery",
     "definition": "Plastic & Reconstructive Surgery"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "221",
     "display": "Surgery - General",
     "definition": "Surgery - General"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "222",
     "display": "Urology",
     "definition": "Urology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "223",
     "display": "Vascular Surgery",
     "definition": "Vascular surgery"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "224",
     "display": "Support Groups",
     "definition": "Support groups"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "225",
     "display": "Air ambulance",
     "definition": "Air ambulance"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "226",
     "display": "Ambulance",
     "definition": "Ambulance"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "227",
     "display": "Blood Transport",
     "definition": "Blood transport"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "228",
     "display": "Community Bus",
     "definition": "Community bus"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "229",
     "display": "Flying Doctor Service",
     "definition": "Flying doctor service"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "230",
     "display": "Patient Transport",
     "definition": "Patient transport"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "231",
     "display": "A&E",
     "definition": "A&E"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "232",
     "display": "A&EP",
     "definition": "A&EP"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "233",
     "display": "Abuse",
     "definition": "Abuse"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "234",
     "display": "ACAS",
     "definition": "ACAS"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "235",
     "display": "Access",
     "definition": "Access"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "236",
     "display": "Accident",
     "definition": "Accident"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "237",
     "display": "Acute Inpatient Serv",
     "definition": "Acute Inpatient Service's"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "238",
     "display": "Adult Day Programs",
     "definition": "Adult Day Programs"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "239",
     "display": "Adult Mental Health Services",
     "definition": "Adult Mental Health Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "240",
     "display": "Advice",
     "definition": "Advice"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "241",
     "display": "Advocacy",
     "definition": "Advocacy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "242",
     "display": "Aged Persons Mental",
     "definition": "Aged Persons Mental Health Residential Units"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "243",
     "display": "Aged Persons Mental",
     "definition": "Aged Persons Mental Health Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "244",
     "display": "Aged Persons Mental",
     "definition": "Aged Persons Mental Health Teams"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "245",
     "display": "Aids",
     "definition": "Aids"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "246",
     "display": "Al-Anon",
     "definition": "Al-Anon"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "247",
     "display": "Alcohol",
     "definition": "Alcohol"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "248",
     "display": "Al-Teen",
     "definition": "Al-Teen"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "249",
     "display": "Antenatal",
     "definition": "Antenatal"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "250",
     "display": "Anxiety",
     "definition": "Anxiety"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "251",
     "display": "Arthritis",
     "definition": "Arthritis"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "252",
     "display": "Assessment",
     "definition": "Assessment"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "253",
     "display": "Assistance",
     "definition": "Assistance"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "254",
     "display": "Asthma",
     "definition": "Asthma"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "255",
     "display": "ATSS",
     "definition": "ATSS"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "256",
     "display": "Attendant Care",
     "definition": "Attendant Care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "257",
     "display": "Babies",
     "definition": "Babies"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "258",
     "display": "Bathroom Modificatio",
     "definition": "Bathroom Modification"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "259",
     "display": "Behavior",
     "definition": "Behavior"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "260",
     "display": "Behavior Interventi",
     "definition": "Behavior Intervention"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "261",
     "display": "Bereavement",
     "definition": "Bereavement"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "262",
     "display": "Bipolar",
     "definition": "Bipolar"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "263",
     "display": "Birth",
     "definition": "Birth"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "264",
     "display": "Birth Control",
     "definition": "Birth Control"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "265",
     "display": "Birthing Options",
     "definition": "Birthing Options"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "266",
     "display": "BIST",
     "definition": "BIST"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "267",
     "display": "Blood",
     "definition": "Blood"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "268",
     "display": "Bone",
     "definition": "Bone"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "269",
     "display": "Bowel",
     "definition": "Bowel"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "270",
     "display": "Brain",
     "definition": "Brain"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "271",
     "display": "Breast Feeding",
     "definition": "Breast Feeding"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "272",
     "display": "Breast Screen",
     "definition": "Breast Screen"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "273",
     "display": "Brokerage",
     "definition": "Brokerage"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "274",
     "display": "Cancer",
     "definition": "Cancer"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "275",
     "display": "Cancer Support",
     "definition": "Cancer Support"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "276",
     "display": "Cardiovascular Disea",
     "definition": "Cardiovascular Disease"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "277",
     "display": "Care Packages",
     "definition": "Care Packages"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "278",
     "display": "Carer",
     "definition": "Carer"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "279",
     "display": "Case Management",
     "definition": "Case Management"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "280",
     "display": "Casualty",
     "definition": "Casualty"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "281",
     "display": "Centrelink",
     "definition": "Centrelink"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "282",
     "display": "Chemists",
     "definition": "Chemists"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "283",
     "display": "Child And Adolescent",
     "definition": "Child And Adolescent Mental Health Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "284",
     "display": "Child Care",
     "definition": "Child Care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "285",
     "display": "Child Services",
     "definition": "Child Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "286",
     "display": "Children",
     "definition": "Children"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "287",
     "display": "Children's Services",
     "definition": "Children's Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "288",
     "display": "Cholesterol",
     "definition": "Cholesterol"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "289",
     "display": "Clothing",
     "definition": "Clothing"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "290",
     "display": "Community Based Acco",
     "definition": "Community Based Accommodation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "291",
     "display": "Community Care Unit",
     "definition": "Community Care Unit"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "292",
     "display": "Community Child And",
     "definition": "Community Child And Adolescent Mental Health Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "293",
     "display": "Community Health",
     "definition": "Community Health"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "294",
     "display": "Community Residentia",
     "definition": "Community Residential Unit"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "295",
     "display": "Community Transport",
     "definition": "Community Transport"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "296",
     "display": "Companion Visiting",
     "definition": "Companion Visiting"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "297",
     "display": "Companionship",
     "definition": "Companionship"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "298",
     "display": "Consumer Advice",
     "definition": "Consumer Advice"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "299",
     "display": "Consumer Issues",
     "definition": "Consumer Issues"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "300",
     "display": "Continuing Care Serv",
     "definition": "Continuing Care Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "301",
     "display": "Contraception Inform",
     "definition": "Contraception Information"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "302",
     "display": "Coordinating Bodies",
     "definition": "Coordinating Bodies"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "303",
     "display": "Correctional Service",
     "definition": "Correctional Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "304",
     "display": "Council Environmenta",
     "definition": "Council Environmental Health"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "305",
     "display": "Counselling",
     "definition": "Counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "306",
     "display": "Criminal",
     "definition": "Criminal"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "307",
     "display": "Crises",
     "definition": "Crises"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "308",
     "display": "Crisis Assessment An",
     "definition": "Crisis Assessment And Treatment Services (Cats)"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "309",
     "display": "Crisis Assistance",
     "definition": "Crisis Assistance"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "310",
     "display": "Crisis Refuge",
     "definition": "Crisis Refuge"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "311",
     "display": "Day Program",
     "definition": "Day Program"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "312",
     "display": "Deaf",
     "definition": "Deaf"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "313",
     "display": "Dental Hygiene",
     "definition": "Dental Hygiene"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "314",
     "display": "Dentistry",
     "definition": "Dentistry"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "315",
     "display": "Dentures",
     "definition": "Dentures"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "316",
     "display": "Depression",
     "definition": "Depression"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "317",
     "display": "Detoxification",
     "definition": "Detoxification"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "318",
     "display": "Diabetes",
     "definition": "Diabetes"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "319",
     "display": "Diaphragm Fitting",
     "definition": "Diaphragm Fitting"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "320",
     "display": "Dieticians",
     "definition": "Dieticians"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "321",
     "display": "Disabled Parking",
     "definition": "Disabled Parking"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "322",
     "display": "District Nursing",
     "definition": "District Nursing"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "323",
     "display": "Divorce",
     "definition": "Divorce"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "324",
     "display": "Doctors",
     "definition": "Doctors"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "325",
     "display": "Drink-Drive",
     "definition": "Drink-Drive"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "326",
     "display": "Dual Diagnosis Servi",
     "definition": "Dual Diagnosis Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "327",
     "display": "Early Choice",
     "definition": "Early Choice"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "328",
     "display": "Eating Disorder",
     "definition": "Eating Disorder"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "330",
     "display": "Emergency Relief",
     "definition": "Emergency Relief"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "331",
     "display": "Employment And Train",
     "definition": "Employment And Training"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "332",
     "display": "Environment",
     "definition": "Environment"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "333",
     "display": "Equipment",
     "definition": "Equipment"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "334",
     "display": "Exercise",
     "definition": "Exercise"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "335",
     "display": "Facility",
     "definition": "Facility"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "336",
     "display": "Family Choice",
     "definition": "Family Choice"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "337",
     "display": "Family Law",
     "definition": "Family Law"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "338",
     "display": "Family Options",
     "definition": "Family Options"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "339",
     "display": "Family Services",
     "definition": "Family Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "340",
     "display": "FFYA",
     "definition": "FFYA"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "341",
     "display": "Financial Aid",
     "definition": "Financial Aid"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "342",
     "display": "Fitness",
     "definition": "Fitness"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "343",
     "display": "Flexible Care Packag",
     "definition": "Flexible Care Packages"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "344",
     "display": "Food",
     "definition": "Food"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "345",
     "display": "Food Vouchers",
     "definition": "Food Vouchers"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "346",
     "display": "Forensic Mental Heal",
     "definition": "Forensic Mental Health Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "347",
     "display": "Futures",
     "definition": "Futures"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "348",
     "display": "Futures For Young Ad",
     "definition": "Futures For Young Adults"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "349",
     "display": "General Practitioner",
     "definition": "General Practitioners"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "350",
     "display": "Grants",
     "definition": "Grants"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "351",
     "display": "Grief",
     "definition": "Grief"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "352",
     "display": "Grief Counselling",
     "definition": "Grief Counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "353",
     "display": "HACC",
     "definition": "HACC"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "354",
     "display": "Heart Disease",
     "definition": "Heart Disease"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "355",
     "display": "Help",
     "definition": "Help"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "356",
     "display": "High Blood Pressure",
     "definition": "High Blood Pressure"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "357",
     "display": "Home Help",
     "definition": "Home Help"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "358",
     "display": "Home Nursing",
     "definition": "Home Nursing"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "359",
     "display": "Homefirst",
     "definition": "Homefirst"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "360",
     "display": "Hospice Care",
     "definition": "Hospice Care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "361",
     "display": "Hospital Services",
     "definition": "Hospital Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "362",
     "display": "Hospital To Home",
     "definition": "Hospital To Home"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "364",
     "display": "Hostel",
     "definition": "Hostel"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "365",
     "display": "Hostel Accommodation",
     "definition": "Hostel Accommodation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "366",
     "display": "Household Items",
     "definition": "Household Items"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "367",
     "display": "Hypertension",
     "definition": "Hypertension"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "368",
     "display": "Illness",
     "definition": "Illness"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "369",
     "display": "Independent Living",
     "definition": "Independent Living"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "370",
     "display": "Information",
     "definition": "Information"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "371",
     "display": "Injury",
     "definition": "Injury"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "372",
     "display": "Intake",
     "definition": "Intake"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "373",
     "display": "Intensive Mobile You",
     "definition": "Intensive Mobile Youth Outreach Services (Imyos)"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "374",
     "display": "Intervention",
     "definition": "Intervention"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "375",
     "display": "Job Searching",
     "definition": "Job Searching"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "376",
     "display": "Justice",
     "definition": "Justice"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "377",
     "display": "Leisure",
     "definition": "Leisure"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "378",
     "display": "Loans",
     "definition": "Loans"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "379",
     "display": "Low Income Earners",
     "definition": "Low Income Earners"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "380",
     "display": "Lung",
     "definition": "Lung"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "381",
     "display": "Making A Difference",
     "definition": "Making A Difference"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "382",
     "display": "Medical Services",
     "definition": "Medical Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "383",
     "display": "Medical Specialists",
     "definition": "Medical Specialists"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "384",
     "display": "Medication Administr",
     "definition": "Medication Administration"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "385",
     "display": "Menstrual Informatio",
     "definition": "Menstrual Information"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "386",
     "display": "Methadone",
     "definition": "Methadone"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "387",
     "display": "Mobile Support And T",
     "definition": "Mobile Support And Treatment Services (MSTS)"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "388",
     "display": "Motor Neurone",
     "definition": "Motor Neurone"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "389",
     "display": "Multiple Sclerosis",
     "definition": "Multiple Sclerosis"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "390",
     "display": "Neighbourhood House",
     "definition": "Neighbourhood House"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "391",
     "display": "Nursing Home",
     "definition": "Nursing Home"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "392",
     "display": "Nursing Mothers",
     "definition": "Nursing Mothers"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "393",
     "display": "Obesity",
     "definition": "Obesity"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "394",
     "display": "Occupational Health",
     "definition": "Occupational Health & Safety"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "395",
     "display": "Optometrist",
     "definition": "Optometrist"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "396",
     "display": "Oral Hygiene",
     "definition": "Oral Hygiene"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "397",
     "display": "Outpatients",
     "definition": "Outpatients"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "398",
     "display": "Outreach Service",
     "definition": "Outreach Service"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "399",
     "display": "PADP",
     "definition": "PADP"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "400",
     "display": "Pain",
     "definition": "Pain"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "401",
     "display": "Pap Smear",
     "definition": "Pap Smear"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "402",
     "display": "Parenting",
     "definition": "Parenting"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "403",
     "display": "Peak Organizations",
     "definition": "Peak Organizations"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "404",
     "display": "Personal Care",
     "definition": "Personal Care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "405",
     "display": "Pharmacies",
     "definition": "Pharmacies"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "406",
     "display": "Phobias",
     "definition": "Phobias"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "407",
     "display": "Physical",
     "definition": "Physical"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "408",
     "display": "Physical Activity",
     "definition": "Physical Activity"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "409",
     "display": "Postnatal",
     "definition": "Postnatal"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "410",
     "display": "Pregnancy",
     "definition": "Pregnancy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "411",
     "display": "Pregnancy Tests",
     "definition": "Pregnancy Tests"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "412",
     "display": "Preschool",
     "definition": "Preschool"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "413",
     "display": "Prescriptions",
     "definition": "Prescriptions"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "414",
     "display": "Primary Mental Healt",
     "definition": "Primary Mental Health And Early Intervention Teams"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "415",
     "display": "Property Maintenance",
     "definition": "Property Maintenance"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "416",
     "display": "Prostate",
     "definition": "Prostate"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "417",
     "display": "Psychiatric",
     "definition": "Psychiatric"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "418",
     "display": "Psychiatric Disabili",
     "definition": "Psychiatric Disability Support Services - Home-Based Outreach"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "419",
     "display": "Psychiatric Disabili",
     "definition": "Psychiatric Disability Support Services - Planned Respite"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "420",
     "display": "Psychiatric Disabili",
     "definition": "Psychiatric Disability Support Services - Residential Rehabilitation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "421",
     "display": "Psychiatric Disabili",
     "definition": "Psychiatric Disability Support Services Home-Based Outreach"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "422",
     "display": "Psychiatric Disabili",
     "definition": "Psychiatric Disability Support Services Mutual Support And Self Help"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "423",
     "display": "Psychiatric Support",
     "definition": "Psychiatric Support"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "424",
     "display": "Recreation",
     "definition": "Recreation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "425",
     "display": "Referral",
     "definition": "Referral"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "426",
     "display": "Refuge",
     "definition": "Refuge"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "427",
     "display": "Rent Assistance",
     "definition": "Rent Assistance"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "428",
     "display": "Residential Faciliti",
     "definition": "Residential Facilities"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "429",
     "display": "Residential Respite",
     "definition": "Residential Respite"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "430",
     "display": "Respiratory",
     "definition": "Respiratory"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "431",
     "display": "Response",
     "definition": "Response"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "432",
     "display": "Rooming Houses",
     "definition": "Rooming Houses"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "433",
     "display": "Safe Sex",
     "definition": "Safe Sex"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "434",
     "display": "Secure Extended Care",
     "definition": "Secure Extended Care Inpatient Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "435",
     "display": "Self Help",
     "definition": "Self Help"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "436",
     "display": "Separation",
     "definition": "Separation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "437",
     "display": "Services",
     "definition": "Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "438",
     "display": "Sex Education",
     "definition": "Sex Education"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "439",
     "display": "Sexual Abuse",
     "definition": "Sexual Abuse"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "440",
     "display": "Sexual Issues",
     "definition": "Sexual Issues"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "441",
     "display": "Sexually Transmitted",
     "definition": "Sexually Transmitted Diseases"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "442",
     "display": "SIDS",
     "definition": "SIDS"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "443",
     "display": "Social Support",
     "definition": "Social Support"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "444",
     "display": "Socialisation",
     "definition": "Socialisation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "445",
     "display": "Special Needs",
     "definition": "Special Needs"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "446",
     "display": "Speech Therapist",
     "definition": "Speech Therapist"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "447",
     "display": "Splinting",
     "definition": "Splinting"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "448",
     "display": "Sport",
     "definition": "Sport"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "449",
     "display": "Statewide And Specia",
     "definition": "Statewide And Specialist Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "450",
     "display": "STD",
     "definition": "STD"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "451",
     "display": "STI",
     "definition": "STI"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "452",
     "display": "Stillbirth",
     "definition": "Stillbirth"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "453",
     "display": "Stomal Care",
     "definition": "Stomal Care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "454",
     "display": "Stroke",
     "definition": "Stroke"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "455",
     "display": "Substance Abuse",
     "definition": "Substance Abuse"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "456",
     "display": "Support",
     "definition": "Support"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "457",
     "display": "Syringes",
     "definition": "Syringes"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "458",
     "display": "Teeth",
     "definition": "Teeth"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "459",
     "display": "Tenancy Advice",
     "definition": "Tenancy Advice"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "460",
     "display": "Terminal Illness",
     "definition": "Terminal Illness"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "461",
     "display": "Therapy",
     "definition": "Therapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "462",
     "display": "Transcription",
     "definition": "Transcription"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "463",
     "display": "Translating Services",
     "definition": "Translating Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "464",
     "display": "Translator",
     "definition": "Translator"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "465",
     "display": "Transport",
     "definition": "Transport"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "466",
     "display": "Vertebrae",
     "definition": "Vertebrae"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "467",
     "display": "Violence",
     "definition": "Violence"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "468",
     "display": "Vocational Guidance",
     "definition": "Vocational Guidance"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "469",
     "display": "Weight",
     "definition": "Weight"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "470",
     "display": "Welfare Assistance",
     "definition": "Welfare Assistance"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "471",
     "display": "Welfare Counselling",
     "definition": "Welfare Counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "472",
     "display": "Wheelchairs",
     "definition": "Wheelchairs"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "473",
     "display": "Wound Management",
     "definition": "Wound Management"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "474",
     "display": "Young People At Risk",
     "definition": "Young People At Risk"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "475",
     "display": "Further Desc. - Community Health Care",
     "definition": "Further Description - Community Health Care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "476",
     "display": "Library",
     "definition": "Library"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "477",
     "display": "Community Hours",
     "definition": "Community Hours"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "478",
     "display": "Further Desc. - Specialist Medical",
     "definition": "Further Description - Specialist Medical"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "479",
     "display": "Hepatology",
     "definition": "Hepatology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "480",
     "display": "Gastroenterology",
     "definition": "Gastroenterology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "481",
     "display": "Gynaecology",
     "definition": "Gynaecology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "482",
     "display": "Obstetrics",
     "definition": "Obstetrics"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "483",
     "display": "Further Desc. - Specialist Surgical",
     "definition": "Further Description - Specialist Surgical"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "484",
     "display": "Placement Protection",
     "definition": "Placement Protection"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "485",
     "display": "Family Violence",
     "definition": "Family Violence"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "486",
     "display": "Integrated Family Services",
     "definition": "Integrated Family Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "488",
     "display": "Diabetes Educator",
     "definition": "Diabetes Educator"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "489",
     "display": "Kinship Care",
     "definition": "Kinship Care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "490",
     "display": "General Mental Health Services",
     "definition": "General Mental Health Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "491",
     "display": "Exercise Physiology",
     "definition": "Exercise Physiology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "492",
     "display": "Medical Research",
     "definition": "Medical Research"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "493",
     "display": "Youth",
     "definition": "Youth"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "494",
     "display": "Youth Services",
     "definition": "Youth Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "495",
     "display": "Youth Health",
     "definition": "Youth Health"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "496",
     "display": "Child and Family Ser",
     "definition": "Child and Family Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "497",
     "display": "Home Visits",
     "definition": "Home Visits"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "498",
     "display": "Mobile Services",
     "definition": "Mobile Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "500",
     "display": "Before and/or After",
     "definition": "Before and/or After School Care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "501",
     "display": "Cancer Services",
     "definition": "Cancer Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "502",
     "display": "Integrated Cancer Se",
     "definition": "Integrated Cancer Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "503",
     "display": "Multidisciplinary Se",
     "definition": "Multidisciplinary Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "504",
     "display": "Multidisciplinary Ca",
     "definition": "Multidisciplinary Cancer Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "505",
     "display": "Meetings",
     "definition": "Meetings"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "506",
     "display": "Blood pressure monit",
     "definition": "Blood pressure monitoring"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "507",
     "display": "Dose administration",
     "definition": "Dose administration aid"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "508",
     "display": "Medical Equipment Hi",
     "definition": "Medical Equipment Hire"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "509",
     "display": "Parenting/Family Support/Education",
     "definition": "Parenting & family support/education"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "510",
     "display": "Deputising Service",
     "definition": "Deputising Service"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "513",
     "display": "Cancer Support Groups",
     "definition": "Cancer Support Groups"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "514",
     "display": "Community Cancer Services",
     "definition": "Community Cancer Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "530",
     "display": "Disability Care Transport",
     "definition": "Disability Care Transport"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "531",
     "display": "Aged Care Transport",
     "definition": "Aged Care Transport"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "532",
     "display": "Diabetes Education s",
     "definition": "Diabetes Education service"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "533",
     "display": "Cardiac Rehabilitati",
     "definition": "Cardiac Rehabilitation Service"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "534",
     "display": "Young Adult Diabetes",
     "definition": "Young Adult Diabetes services (YADS)"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "535",
     "display": "Pulmonary Rehabilita",
     "definition": "Pulmonary Rehabilitation Service"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "536",
     "display": "Art therapy",
     "definition": "Art therapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "537",
     "display": "Medication Reviews",
     "definition": "Medication Reviews"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "538",
     "display": "Telephone Counselling",
     "definition": "Telephone Counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "539",
     "display": "Telephone Help Line",
     "definition": "Telephone Help Line"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "540",
     "display": "Online Service",
     "definition": "Online Service"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "541",
     "display": "Crisis - Mental Health",
     "definition": "Crisis - Mental Health"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "542",
     "display": "Youth Crisis",
     "definition": "Youth Crisis"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "543",
     "display": "Sexual Assault",
     "definition": "Sexual Assault"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "544",
     "display": "GPAH Other",
     "definition": "GPAH Other"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "545",
     "display": "Paediatric Dermatology",
     "definition": "Paediatric Dermatology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "546",
     "display": "Veterans Services",
     "definition": "Veterans Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "547",
     "display": "Veterans",
     "definition": "Veterans"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "548",
     "display": "Food Relief/Food/Meals",
     "definition": "Food Relief/food/meals"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "550",
     "display": "Dementia Care",
     "definition": "Dementia Care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "551",
     "display": "Alzheimer",
     "definition": "Alzheimer"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "552",
     "display": "Drug and/or Alcohol Support Groups",
     "definition": "Drug and/or alcohol support groups"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "553",
     "display": "1-on-1 Support /Mentoring /Coaching",
     "definition": "One on One Support/Mentoring/Coaching"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "554",
     "display": "Chronic Disease Management",
     "definition": "Chronic Disease Management"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "555",
     "display": "Liaison Services",
     "definition": "Liaison Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "556",
     "display": "Walk-in Centre /Non-Emergency",
     "definition": "Walk in Centre / non emergency"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "557",
     "display": "Inpatients",
     "definition": "Inpatients"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "558",
     "display": "Spiritual Counselling",
     "definition": "Spiritual Counselling"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "559",
     "display": "Women's Health",
     "definition": "Women's Health"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "560",
     "display": "Men's Health",
     "definition": "Men's Health"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "561",
     "display": "Health Education/Awareness Program",
     "definition": "Health education/Health awareness program"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "562",
     "display": "Test Message",
     "definition": "Test Message"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "563",
     "display": "Remedial Massage",
     "definition": "Remedial Massage"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "564",
     "display": "Adolescent Mental Health Services",
     "definition": "Adolescent Mental Health Services"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "565",
     "display": "Youth Drop In/Assistance/Support",
     "definition": "Youth drop in/assistance/support"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "566",
     "display": "Aboriginal Health Worker",
     "definition": "Aboriginal Health Worker"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "567",
     "display": "Women's Health Clinic",
     "definition": "Women's Health Clinic"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "568",
     "display": "Men's Health Clinic",
     "definition": "Men's Health Clinic"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "569",
     "display": "Migrant Health Clinic",
     "definition": "Migrant Health Clinic"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "570",
     "display": "Refugee Health Clinic",
     "definition": "Refugee Health Clinic"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "571",
     "display": "Aboriginal Health Clinic",
     "definition": "Aboriginal Health Clinic"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "572",
     "display": "Nurse Practitioner Lead Clinic/s",
     "definition": "Nurse Practitioner lead Clinic/s"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "573",
     "display": "Nurse Lead Clinic/s",
     "definition": "Nurse lead Clinic/s"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "574",
     "display": "Culturally Tailored Support Groups",
     "definition": "Culturally tailored support groups"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "575",
     "display": "Culturally Tailored Health Promotion",
     "definition": "Culturally tailored health promotion"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "576",
     "display": "Rehabilitation",
     "definition": "Rehabilitation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "577",
     "display": "Education Information/Referral",
     "definition": "Education information/referral"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "580",
     "display": "Social Work",
     "definition": "Social Work"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "581",
     "display": "Haematology",
     "definition": "Haematology"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "582",
     "display": "Maternity Shared Car",
     "definition": "Maternity Shared Care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "583",
     "display": "Rehabilitation Servi",
     "definition": "Rehabilitation Service"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "584",
     "display": "Cranio-sacral Therapy",
     "definition": "Cranio-Sacral Therapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "585",
     "display": "Prosthetics & Orthotics",
     "definition": "Prosthetics & Orthotics"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "589",
     "display": "Home Medicine Review",
     "definition": "Home Medicine Review"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "590",
     "display": "GPAH - Medical",
     "definition": "GPAH - Medical"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "591",
     "display": "Music Therapy",
     "definition": "Music Therapy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "593",
     "display": "Falls Prevention",
     "definition": "Falls Prevention"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "599",
     "display": "Accommodation/Tenancy",
     "definition": "Accommodation/Tenancy"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "600",
     "display": "Assess-Skill, Ability, Needs",
     "definition": "Assess-Skill, Ability, Needs"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "601",
     "display": "Assist Access/Maintain Employ",
     "definition": "Assist Access/Maintain Employ"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "602",
     "display": "Assist Prod-Pers Care/Safety",
     "definition": "Assist Prod-Pers Care/Safety"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "603",
     "display": "Assist-Integrate School/Ed",
     "definition": "Assist-Integrate School/Ed"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "604",
     "display": "Assist-Life Stage, Transition",
     "definition": "Assist-Life Stage, Transition"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "605",
     "display": "Assist-Personal Activities",
     "definition": "Assist-Personal Activities"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "606",
     "display": "Assist-Travel/Transport",
     "definition": "Assist-Travel/Transport"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "607",
     "display": "Assistive Equip-General Tasks",
     "definition": "Assistive Equip-General Tasks"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "608",
     "display": "Assistive Equip-Recreation",
     "definition": "Assistive Equip-Recreation"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "609",
     "display": "Assistive Prod-Household Task",
     "definition": "Assistive Prod-Household Task"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "610",
     "display": "Behavior Support",
     "definition": "Behavior Support"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "611",
     "display": "Comms & Info Equipment",
     "definition": "Comms & Info Equipment"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "612",
     "display": "Community Nursing Care",
     "definition": "Community Nursing Care"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "613",
     "display": "Daily Tasks/Shared Living",
     "definition": "Daily Tasks/Shared Living"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "614",
     "display": "Development-Life Skills",
     "definition": "Development-Life Skills"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "615",
     "display": "Early Childhood Supports",
     "definition": "Early Childhood Supports"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "616",
     "display": "Equipment Special Assess Setup",
     "definition": "Equipment Special Assess Setup"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "617",
     "display": "Hearing Equipment",
     "definition": "Hearing Equipment"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "618",
     "display": "Home Modification",
     "definition": "Home Modification"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "619",
     "display": "Household Tasks",
     "definition": "Household Tasks"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "620",
     "display": "Interpret/Translate",
     "definition": "Interpret/Translate"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "621",
     "display": "Other Innovative Supports",
     "definition": "Other Innovative Supports"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "622",
     "display": "Participate Community",
     "definition": "Participate Community"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "623",
     "display": "Personal Mobility Equipment",
     "definition": "Personal Mobility Equipment"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "624",
     "display": "Physical Wellbeing",
     "definition": "Physical Wellbeing"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "625",
     "display": "Plan Management",
     "definition": "Plan Management"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "626",
     "display": "Therapeutic Supports",
     "definition": "Therapeutic Supports"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "627",
     "display": "Training-Travel Independence",
     "definition": "Training-Travel Independence"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "628",
     "display": "Vehicle modifications",
     "definition": "Vehicle modifications"
   },
   {
+    "system": "http://terminology.hl7.org/CodeSystem/service-type",
     "code": "629",
     "display": "Vision Equipment",
     "definition": "Vision Equipment"

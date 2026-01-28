@@ -9,6 +9,7 @@ services:
       KNPT_MCSD_QUERY_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-query
       KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL: https://knooppunt-test.nuts-services.nl/lrza/mcsd
       KNPT_NVI_BASEURL: http://hapi-fhir:7050/fhir/nvi
+      KNPT_TRACING_OTLPENDPOINT: ${KNPT_TRACING_OTLPENDPOINT:-aspire-dashboard:18890}
     volumes:
       - ./config:/app/config:ro
   init:
@@ -19,6 +20,16 @@ services:
     volumes:
       - ./test/testdata:/app/:ro
     command: /bin/sh -c "cd /app && go run main.go http://knooppunt:8081 http://hapi-fhir:7050/fhir"
+
+  nutsadmin:
+    image: nutsfoundation/nuts-admin:6.2.1
+    volumes:
+      - "./config/nuts-admin.yml:/app/config.yml:ro"
+    ports:
+        - "1305:1305"
+    environment:
+      NUTS_NODE_ADDRESS: http://knooppunt:8081/nuts
+      NUTS_CONFIGFILE: /app/config.yml
 
   # PostgreSQL Database
   #  postgres:
@@ -71,6 +82,16 @@ services:
       # Allow storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
       hapi.fhir.store_meta_source_information: SOURCE_URI
 
+      NVI_AUDIENCE: nvi
+      NVI_TENANT: nvi
+      # OpenTelemetry - enables full trace/log visibility into HAPI FHIR
+      JAVA_TOOL_OPTIONS: "-javaagent:/app/opentelemetry-javaagent.jar"
+      OTEL_SERVICE_NAME: "hapi-fhir"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://aspire-dashboard:18890"
+      OTEL_EXPORTER_OTLP_PROTOCOL: "http/protobuf"
+      OTEL_PROPAGATORS: "tracecontext,baggage"
+      OTEL_LOGS_EXPORTER: "otlp"
+
       #
       # Local development properties (not to be used when deploying to test/production)
       #
@@ -80,20 +101,45 @@ services:
       hapi.fhir.delete_expunge_enabled: true
       hapi.fhir.allow_multiple_delete: true # to allow $expunge on system-level
       # Adds some default configs to the HAPI web UI for development
-      hapi.fhir.tester.local.name: Local Directory
-      hapi.fhir.tester.local.server_address: http://localhost:7050/fhir/DEFAULT
-      hapi.fhir.tester.local.refuse_to_fetch_third_party_urls: false
-      hapi.fhir.tester.local.fhir_version: R4
+      hapi.fhir.tester.admin.name: Local Administration Directory
+      hapi.fhir.tester.admin.server_address: http://localhost:7050/fhir/knpt-mcsd-admin
+      hapi.fhir.tester.admin.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.admin.fhir_version: R4
 
-      hapi.fhir.tester.lrza.name: LRZA
-      hapi.fhir.tester.lrza.server_address: http://localhost:7050/fhir/LRZA
+      hapi.fhir.tester.query.name: Local Query Directory
+      hapi.fhir.tester.query.server_address: http://localhost:7050/fhir/knpt-mcsd-query
+      hapi.fhir.tester.query.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.query.fhir_version: R4
+
+      hapi.fhir.tester.lrza.name: Local LRZA
+      hapi.fhir.tester.lrza.server_address: http://localhost:7050/fhir/lrza-mcsd-admin
       hapi.fhir.tester.lrza.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.lrza.fhir_version: R4
 
-      hapi.fhir.tester.orga.name: Org A Directory
-      hapi.fhir.tester.orga.server_address: http://localhost:7050/fhir/OrgA
-      hapi.fhir.tester.orga.refuse_to_fetch_third_party_urls: false
-      hapi.fhir.tester.orga.fhir_version: R4
+      hapi.fhir.tester.care2cure.name: Care2Cure Admin Directory
+      hapi.fhir.tester.care2cure.server_address: http://localhost:7050/fhir/care2cure-admin
+      hapi.fhir.tester.care2cure.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.care2cure.fhir_version: R4
+
+      hapi.fhir.tester.sunflower.name: Sunflower Admin Directory
+      hapi.fhir.tester.sunflower.server_address: http://localhost:7050/fhir/sunflower-admin
+      hapi.fhir.tester.sunflower.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.sunflower.fhir_version: R4
+
+      hapi.fhir.tester.sunflowerpatients.name: Sunflower Patients Directory
+      hapi.fhir.tester.sunflowerpatients.server_address: http://localhost:7050/fhir/sunflower-patients
+      hapi.fhir.tester.sunflowerpatients.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.sunflowerpatients.fhir_version: R4
+
+      hapi.fhir.tester.nvi.name: NVI
+      hapi.fhir.tester.nvi.server_address: http://localhost:7050/fhir/nvi
+      hapi.fhir.tester.nvi.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.nvi.fhir_version: R4
+
+      hapi.fhir.tester.pip.name: PIP
+      hapi.fhir.tester.pip.server_address: http://localhost:7050/fhir/policy-information-point
+      hapi.fhir.tester.pip.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.pip.fhir_version: R4
 
       # Enable partitioning and allow string tenant identifiers
       hapi.fhir.partitioning.allow_references_across_partitions: false
@@ -110,6 +156,20 @@ services:
       ]
     # Ensure the container exits successfully after the check
     restart: "no"
+
+  vektis-issuer:
+    image: ghcr.io/nuts-foundation/mock-vc-issuer:latest
+    build:
+      context: ./mock-components/vc-issuer
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: file:vc-issuer.db
+      NEXT_PUBLIC_BASE_URL: http://localhost:3000
+      ISSUER_HOSTNAME: localhost:3000
+      NUTS_NODE_INTERNAL_URL: http://knooppunt:8081/nuts
+      NUTS_ISSUER_DID: TODO
 
   # Policy Enforcement Point (PEP) - NGINX-based reference implementation
   # Start with: docker compose --profile pep up
@@ -143,6 +203,37 @@ services:
       start_period: 10s
     profiles:
       - pep
+
+  demo-ehr:
+    image: ghcr.io/nuts-foundation/demo-ehr:latest
+    profiles:
+      - demoehr
+    container_name: demo-ehr
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./demo-ehr/src:/app/src
+      - ./demo-ehr/public:/app/public
+    environment:
+      - CHOKIDAR_USEPOLLING=true  # For hot reload on some systems
+      - REACT_APP_AUTHORITY=http://localhost:8080/auth
+      - REACT_APP_FHIR_BASE_URL=https://server.fire.ly/R4      # adjust this to a local FHIR server or a different one if needed
+      - REACT_APP_FHIR_STU3_BASE_URL=https://server.fire.ly/R3 # adjust this to a local FHIR server or a different one if needed
+      - REACT_APP_FHIR_MCSD_QUERY_BASE_URL=http://localhost:7050/fhir/knpt-mcsd-query
+    stdin_open: true
+    tty: true
+
+  # Aspire Dashboard - unified observability for traces, logs, and metrics
+  # UI available at http://localhost:18888
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:latest
+    container_name: aspire-dashboard
+    ports:
+      - "18888:18888"  # Dashboard UI
+      - "4317:18889"   # OTLP gRPC endpoint
+      - "4318:18890"   # OTLP HTTP endpoint
+    environment:
+      DOTNET_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
 
 volumes:
   #postgres-data:

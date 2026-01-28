@@ -14,7 +14,7 @@ func startHAPI(t *testing.T, dockerNetworkName string) *url.URL {
 	ctx := t.Context()
 	req := testcontainers.ContainerRequest{
 		Name:         "knooppunt-unittest-fhirstore",
-		Image:        "hapiproject/hapi:v8.2.0-2",
+		Image:        "ghcr.io/nuts-foundation/fake-nvi:latest",
 		ExposedPorts: []string{"8080/tcp"},
 		//Networks:     []string{dockerNetworkName},
 		Env: map[string]string{
@@ -26,6 +26,7 @@ func startHAPI(t *testing.T, dockerNetworkName string) *url.URL {
 			// Enable system-wide $expunge operation for test data cleanup
 			"hapi.fhir.delete_expunge_enabled": "true",
 			"hapi.fhir.allow_multiple_delete":  "true",
+			"NVI_AUDIENCE":                     "nvi",
 		},
 		WaitingFor: wait.ForHTTP("/fhir/DEFAULT/Account"),
 		LogConsumerCfg: &testcontainers.LogConsumerConfig{

@@ -4,42 +4,107 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
+	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
-	"github.com/rs/zerolog/log"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 var _ component.Lifecycle = (*Component)(nil)
+var _ InterfaceInfo = (*Component)(nil)
+
+type InterfaceInfo interface {
+	Public() InterfaceConfig
+	Internal() InterfaceConfig
+}
+
+type Config struct {
+	InternalInterface InterfaceConfig `koanf:"internal"`
+	PublicInterface   InterfaceConfig `koanf:"public"`
+}
+
+type InterfaceConfig struct {
+	Address string `koanf:"address"`
+	BaseURL string `koanf:"url"`
+}
+
+func (c InterfaceConfig) URL() *url.URL {
+	u := c.BaseURL
+	if u == "" {
+		if strings.HasPrefix(c.Address, ":") {
+			// E.g. :8080
+			hostname, err := os.Hostname()
+			if err != nil {
+				slog.Warn("Failed to get hostname, defaulting to localhost", logging.Error(err))
+				hostname = "localhost"
+			}
+			u = "http://" + hostname + c.Address
+		} else {
+			// E.g. localhost:8080
+			u = "http://" + c.Address
+		}
+	}
+	result, _ := url.Parse(u)
+	return result
+}
+
+func DefaultConfig() Config {
+	return Config{
+		InternalInterface: InterfaceConfig{
+			Address: ":8081",
+		},
+		PublicInterface: InterfaceConfig{
+			Address: ":8080",
+		},
+	}
+}
 
 type Component struct {
 	publicMux      *http.ServeMux
 	publicServer   *http.Server
-	publicAddr     string
 	internalMux    *http.ServeMux
 	internalServer *http.Server
-	internalAddr   string
+	config         Config
 }
 
 // New creates an instance of the HTTP component, which handles the HTTP interfaces for the application.
-func New(publicMux *http.ServeMux, internalMux *http.ServeMux) *Component {
+func New(config Config, publicMux *http.ServeMux, internalMux *http.ServeMux) *Component {
 	return &Component{
-		publicMux:    publicMux,
-		publicAddr:   ":8080",
-		internalMux:  internalMux,
-		internalAddr: ":8081",
+		config:      config,
+		publicMux:   publicMux,
+		internalMux: internalMux,
 	}
 }
 
 func (c *Component) Start() error {
-	log.Info().Msgf("Starting HTTP servers (public-address: %s, internal-address: %s)", c.publicAddr, c.internalAddr)
+	publicAddr := c.config.PublicInterface.Address
+	internalAddr := c.config.InternalInterface.Address
+	slog.Info("Starting HTTP servers", slog.String("public-address", publicAddr), slog.String("internal-address", internalAddr))
+
+	// Wrap muxes with OpenTelemetry instrumentation for automatic span creation
+	// Filter out health check endpoints to avoid polluting traces
+	healthCheckFilter := otelhttp.WithFilter(func(r *http.Request) bool {
+		return r.URL.Path != "/status" && r.URL.Path != "/health"
+	})
+	// Format span names to include HTTP method and path for better discernibility
+	spanNameFormatter := otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
+		return fmt.Sprintf("%s %s", r.Method, r.URL.Path)
+	})
+	publicHandler := otelhttp.NewHandler(c.publicMux, "public-api", healthCheckFilter, spanNameFormatter)
+	internalHandler := otelhttp.NewHandler(c.internalMux, "internal-api", healthCheckFilter, spanNameFormatter)
+
 	var err error
-	c.publicServer, err = createServer(c.publicAddr, c.publicMux)
+	c.publicServer, err = createServer(publicAddr, publicHandler)
 	if err != nil {
 		return fmt.Errorf("create public HTTP server: %w", err)
 	}
-	c.internalServer, err = createServer(c.internalAddr, c.internalMux)
+	c.internalServer, err = createServer(internalAddr, internalHandler)
 	if err != nil {
 		return fmt.Errorf("create internal HTTP server: %w", err)
 	}
@@ -60,6 +125,14 @@ func (c *Component) Stop(ctx context.Context) error {
 	return nil
 }
 
+func (c *Component) Public() InterfaceConfig {
+	return c.config.PublicInterface
+}
+
+func (c *Component) Internal() InterfaceConfig {
+	return c.config.InternalInterface
+}
+
 func (c *Component) RegisterHttpHandlers(_ *http.ServeMux, _ *http.ServeMux) {
 	// Nothing to do here
 }
@@ -76,7 +149,7 @@ func createServer(addr string, handler http.Handler) (*http.Server, error) {
 	go func() {
 		if err := server.Serve(listener); err != nil {
 			if !errors.Is(err, http.ErrServerClosed) {
-				log.Err(err).Msgf("Failed to start HTTP server (address: %s)", addr)
+				slog.Error("Failed to start HTTP server", slog.String("address", addr), logging.Error(err))
 			}
 		}
 	}()

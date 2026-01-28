@@ -18,17 +18,22 @@ func Test_Registration(t *testing.T) {
 
 	expected := fhir.DocumentReference{
 		Status: fhir.DocumentReferenceStatusCurrent,
-		Type: &fhir.CodeableConcept{
-			Coding: []fhir.Coding{
-				{
-					System: to.Ptr("system"),
-					Code:   to.Ptr("code"),
-				},
+		Subject: &fhir.Reference{
+			Identifier: &fhir.Identifier{
+				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/bsn"),
+				Value:  to.Ptr("12345"),
+			},
+		},
+		Custodian: &fhir.Reference{
+			Type: to.Ptr("Organization"),
+			Identifier: &fhir.Identifier{
+				System: to.Ptr(coding.URANamingSystem),
+				Value:  to.Ptr("00000030"),
 			},
 		},
 	}
 	requestHeaders := fhirclient.RequestHeaders(map[string][]string{
-		"X-Tenant-ID": {coding.URANamingSystem + "|1"},
+		"X-Tenant-ID": {coding.URANamingSystem + "|00000030"},
 	})
 	nviGatewayClient := fhirclient.New(harnessDetail.KnooppuntInternalBaseURL.JoinPath("nvi"), http.DefaultClient, nil)
 
@@ -45,31 +50,22 @@ func Test_Registration(t *testing.T) {
 		require.NotNil(t, actual.Id)
 		require.Equal(t, expected.Status, actual.Status)
 
-		t.Run("search through NVI Gateway with POST", func(t *testing.T) {
+		t.Run("search through NVI Gateway with patient:identifier", func(t *testing.T) {
 			var searchSet fhir.Bundle
 			err := nviGatewayClient.Search("DocumentReference", url.Values{
-				"_id": []string{*actual.Id},
+				"patient:identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn|12345"},
 			}, &searchSet, requestHeaders)
 			require.NoError(t, err)
-			require.Len(t, searchSet.Entry, 1)
+			require.Len(t, searchSet.Entry, 2)
 		})
-		t.Run("search through NVI Gateway with GET", func(t *testing.T) {
-			nviGatewayClient := fhirclient.New(harnessDetail.KnooppuntInternalBaseURL.JoinPath("nvi"), http.DefaultClient, &fhirclient.Config{
-				UsePostSearch: false,
-			})
+
+		t.Run("search through NVI Gateway with subject:identifier", func(t *testing.T) {
 			var searchSet fhir.Bundle
-			err := nviGatewayClient.Search("DocumentReference", url.Values{"_id": []string{*actual.Id}}, &searchSet, requestHeaders)
+			err := nviGatewayClient.Search("DocumentReference", url.Values{
+				"subject:identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn|12345"},
+			}, &searchSet, requestHeaders)
 			require.NoError(t, err)
-			require.Len(t, searchSet.Entry, 1)
-		})
-		t.Run("read DocumentReference directly from NVI", func(t *testing.T) {
-			nviClient := fhirclient.New(harnessDetail.Vectors.NVI.FHIRBaseURL, http.DefaultClient, nil)
-			var fetched fhir.DocumentReference
-			err = nviClient.Read("DocumentReference/"+*actual.Id, &fetched, requestHeaders)
-			require.NoError(t, err)
-			require.Equal(t, expected.Status, fetched.Status)
-			require.Equal(t, expected.Type.Coding[0].System, fetched.Type.Coding[0].System)
-			require.Equal(t, expected.Type.Coding[0].Code, fetched.Type.Coding[0].Code)
+			require.Len(t, searchSet.Entry, 2)
 		})
 	})
 }

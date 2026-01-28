@@ -1,18 +1,30 @@
 # Nuts Knooppunt Configuration
 # This file demonstrates the configuration options available
 
+strictmode: false
+
 # mCSD (Mobile Care Services Discovery) configuration
 mcsd:
-  # Root directories to synchronize from
-  admin:
-    "example-org":
-      fhirbaseurl: "https://fhir.example.org/fhir"
-    "another-org":
-      fhirbaseurl: "https://fhir.another-org.com/fhir"
-  
   # Local FHIR directory configuration
   query:
     fhirbaseurl: "http://localhost:8080/fhir"
+
+  # Exclude administration directories from being registered
+  # Use this to prevent your own FHIR server from being added as an admin directory
+  # This avoids syncing your own resources back to yourself
+  adminexclude:
+    - "http://localhost:8080/fhir"  # Exclude own query directory
+    # - "https://fhir.other-excluded.org/fhir"  # Add more exclusions as needed
+
+  # Resource types to synchronize from discovered mCSD directories
+  # If not specified, defaults to: Organization, Endpoint, Location, HealthcareService, PractitionerRole, Practitioner
+  # directoryresourcetypes:
+  #   - "Organization"
+  #   - "Endpoint"
+  #   - "Location"
+  #   - "HealthcareService"
+  #   - "PractitionerRole"
+  #   - "Practitioner"
 
 # mCSD Admin configuration
 mcsdadmin:
@@ -44,5 +56,20 @@ mitz:
   # CA certificate to trust MITZ server (if not in system trust store)
   #tlscafile: "/path/to/ca-file"
 
+http:
+  internal:
+    url: http://localhost:8081
+  public:
+    url: http://localhost:8080
+
+authn:
+  clients:
+    - id: "local"
+      secret: "local-secret"
+      redirecturls:
+        - "http://localhost:8080/auth/test-callback"
+
 pdp:
   enabled: true
+  pip: 
+    url: http://localhost:7050/fhir/policy-information-point

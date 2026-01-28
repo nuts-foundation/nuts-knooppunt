@@ -6,10 +6,17 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-func HAPITenant() hapi.Tenant {
+func AdminHAPITenant() hapi.Tenant {
 	return hapi.Tenant{
 		Name: "sunflower-admin",
 		ID:   5,
+	}
+}
+
+func PatientsHAPITenant() hapi.Tenant {
+	return hapi.Tenant{
+		Name: "sunflower-patients",
+		ID:   7,
 	}
 }
 
@@ -39,7 +46,7 @@ func Endpoints() []fhir.Endpoint {
 	return []fhir.Endpoint{
 		{
 			Id:      to.Ptr("f8a9c2d1-4567-489a-bcde-123456789abc"),
-			Address: "https://example.com/sunflower/fhir",
+			Address: "http://localhost:7050/fhir/sunflower-patients",
 			Meta: &fhir.Meta{
 				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
 			},
@@ -55,11 +62,39 @@ func Endpoints() []fhir.Endpoint {
 	}
 }
 
-func Resources() []fhir.HasId {
+func Patients() []fhir.Patient {
+	return []fhir.Patient{
+		{
+			Id: to.Ptr("e9772fee-ecfb-41c2-83a2-51e833d43347"),
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/bsn"),
+					Value:  to.Ptr("999992193"),
+				},
+			},
+			Name: []fhir.HumanName{
+				{
+					Given:  []string{"Jan"},
+					Family: to.Ptr("Jansen"),
+				},
+			},
+		},
+	}
+}
+
+func AdminResources() []fhir.HasId {
 	var resources []fhir.HasId
 	for _, endpoint := range Endpoints() {
 		resources = append(resources, to.Ptr(endpoint))
 	}
 	resources = append(resources, to.Ptr(Organization()))
+	return resources
+}
+
+func PatientsResources() []fhir.HasId {
+	var resources []fhir.HasId
+	for _, patient := range Patients() {
+		resources = append(resources, to.Ptr(patient))
+	}
 	return resources
 }

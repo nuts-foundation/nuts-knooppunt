@@ -1,12 +1,12 @@
 package formdata
 
 import (
-	"fmt"
+	"log/slog"
 	"net/url"
 	"regexp"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin/valuesets"
-	"github.com/rs/zerolog/log"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -15,7 +15,7 @@ var keyExp regexp.Regexp
 func init() {
 	exp, err := regexp.Compile(`(\w+)\[(\d*)\]\[(\w+)\]`)
 	if err != nil {
-		log.Error().Err(err).Msg("could not parse regular expression")
+		slog.Error("could not parse regular expression", logging.Error(err))
 		return
 	}
 	keyExp = *exp
@@ -50,7 +50,7 @@ func ParseMaps(postform url.Values, fieldName string) []map[string]string {
 		}
 
 		if len(val) > 1 {
-			log.Warn().Msg(fmt.Sprintf("conflicting values found for key: %s", fk))
+			slog.Warn("conflicting values found for key", slog.String("key", fk))
 		}
 		partial[propKeyMatch] = val[0]
 	}
@@ -67,6 +67,78 @@ func ParseMaps(postform url.Values, fieldName string) []map[string]string {
 func CodablesFromForm(postform url.Values, set []fhir.Coding, key string) ([]fhir.CodeableConcept, bool) {
 	nonEmpty := filterEmpty(postform[key])
 	return valuesets.CodablesFrom(set, nonEmpty)
+}
+
+// CodablesFromFormWithCustom handles codables from form, including custom "other" option
+// Supports indexed keys like "payload-type[0]", "payload-type[1]" with corresponding custom fields
+func CodablesFromFormWithCustom(postform url.Values, set []fhir.Coding, key string) ([]fhir.CodeableConcept, bool) {
+	codables := make([]fhir.CodeableConcept, 0)
+	allOk := true
+
+	// Pattern to match indexed keys: "key[n]"
+	indexedKeyPattern := regexp.MustCompile(`^` + regexp.QuoteMeta(key) + `\[(\d+)\]$`)
+
+	// Collect all indexed keys
+	var indexedKeys []string
+	for formKey := range postform {
+		if indexedKeyPattern.MatchString(formKey) {
+			indexedKeys = append(indexedKeys, formKey)
+		}
+	}
+
+	// Process each indexed key
+	for _, indexedKey := range indexedKeys {
+		matches := indexedKeyPattern.FindStringSubmatch(indexedKey)
+		if len(matches) < 2 {
+			continue
+		}
+		index := matches[1]
+
+		values := filterEmpty(postform[indexedKey])
+		for _, code := range values {
+			if code == "other" {
+				// Handle custom coding with indexed fields
+				customSystemKey := "custom-system[" + index + "]"
+				customCodeKey := "custom-code[" + index + "]"
+				customDisplayKey := "custom-display[" + index + "]"
+
+				customSystem := postform.Get(customSystemKey)
+				customCode := postform.Get(customCodeKey)
+				customDisplay := postform.Get(customDisplayKey)
+
+				if customSystem == "" || customCode == "" {
+					allOk = false
+					continue
+				}
+
+				coding := fhir.Coding{
+					System: &customSystem,
+					Code:   &customCode,
+				}
+				if customDisplay != "" {
+					coding.Display = &customDisplay
+				}
+
+				codable := fhir.CodeableConcept{
+					Coding: []fhir.Coding{coding},
+				}
+				if customDisplay != "" {
+					codable.Text = &customDisplay
+				}
+				codables = append(codables, codable)
+			} else {
+				// Handle standard coding from valueset
+				codable, ok := valuesets.CodableFrom(set, code)
+				if !ok {
+					allOk = false
+				} else {
+					codables = append(codables, codable)
+				}
+			}
+		}
+	}
+
+	return codables, allOk
 }
 
 func filterEmpty(multiStrings []string) []string {

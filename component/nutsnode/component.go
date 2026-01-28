@@ -9,13 +9,14 @@ import (
 	"os"
 	"strconv"
 
+	"log/slog"
+
+	knooppuntCore "github.com/nuts-foundation/nuts-knooppunt/cmd/core"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/netutil"
 	"github.com/nuts-foundation/nuts-node/cmd"
 	"github.com/nuts-foundation/nuts-node/core"
 	httpEngine "github.com/nuts-foundation/nuts-node/http"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 )
@@ -23,8 +24,8 @@ import (
 var _ component.Lifecycle = (*Component)(nil)
 
 func New(config Config) (*Component, error) {
-	// Nuts node uses logrus, register a hook to convert logrus logs to zerolog.
-	logrus.AddHook(&logrusZerologBridgeHook{})
+	// Nuts node uses logrus, register a hook to convert logrus logs to slog.
+	logrus.AddHook(&logrusSlogBridgeHook{})
 	// set nil logger to avoid logrus output
 	logrus.StandardLogger().SetOutput(&devNullWriter{})
 
@@ -53,6 +54,7 @@ func New(config Config) (*Component, error) {
 
 type Component struct {
 	config       Config
+	coreConfig   knooppuntCore.Config
 	ctx          context.Context
 	cancel       context.CancelFunc
 	system       *core.System
@@ -61,7 +63,13 @@ type Component struct {
 }
 
 type Config struct {
-	Enabled bool `koanf:"enabled"`
+	Enabled        bool   `koanf:"enabled"`
+	TracingConfig  TracingConfig
+}
+
+type TracingConfig struct {
+	OTLPEndpoint string
+	Insecure     bool
 }
 
 func (c *Component) Start() error {
@@ -71,7 +79,15 @@ func (c *Component) Start() error {
 		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr.Host,
 		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr.Host,
 		"NUTS_DATADIR":               dataDir,
-		"NUTS_VERBOSITY":             zerolog.GlobalLevel().String(),
+		"NUTS_VERBOSITY":             GetLogrusLevel(slog.LevelDebug), // TODO: use configured log level when supported
+		"NUTS_STRICTMODE":            strconv.FormatBool(c.coreConfig.StrictMode),
+	}
+	// Pass tracing config to nuts-node so it creates its own TracerProvider
+	// with service.name="nuts-node". It will use the same OTLP endpoint but
+	// won't overwrite the global TracerProvider (knooppunt owns that).
+	if c.config.TracingConfig.OTLPEndpoint != "" {
+		envVars["NUTS_TRACING_ENDPOINT"] = c.config.TracingConfig.OTLPEndpoint
+		envVars["NUTS_TRACING_INSECURE"] = strconv.FormatBool(c.config.TracingConfig.Insecure)
 	}
 	// Only set NUTS_CONFIGFILE if the config file exists
 	if _, err := os.Stat(configFile); err == nil {
@@ -83,11 +99,11 @@ func (c *Component) Start() error {
 		}
 	}
 
-	log.Debug().Msgf("Starting Nuts node (internal-address: %s, public-address: %s)", c.internalAddr, c.publicAddr)
+	slog.Debug("Starting Nuts node", slog.String("internal-address", c.internalAddr.String()), slog.String("public-address", c.publicAddr.String()))
 
 	c.system = cmd.CreateSystem(func() {
 		// Not sure how to handle this
-		log.Warn().Msg("Nuts node signaled exit.")
+		slog.Warn("Nuts node signaled exit.")
 	})
 	if err := c.system.Load(&pflag.FlagSet{}); err != nil {
 		return fmt.Errorf("load Nuts node config: %w", err)

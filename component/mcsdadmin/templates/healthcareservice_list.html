@@ -12,6 +12,7 @@
                 <th scope="col">Type</th>
                 <th scope="col">Active</th>
                 <th scope="col">Provided By</th>
+                <th scope="col">Endpoints</th>
                 <th scope="col">Actions</th>
             </tr>
             </thead>
@@ -28,7 +29,10 @@
                     {{end}}
                 </td>
                 <td>{{ .ProvidedBy }}</td>
+                <th scope="row">{{ .EndpointCount }}</th>
                 <td>
+                    <a class="btn btn-outline-dark btn-sm"
+                       href="/mcsdadmin/healthcareservice/{{.Id}}/endpoints">Endpoints</a>
                     <button class="btn btn-outline-dark btn-sm"
                             hx-delete="/mcsdadmin/healthcareservice/{{ .Id }}"
                             hx-target="#row-{{.Id}}"

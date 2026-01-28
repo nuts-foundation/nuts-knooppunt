@@ -13,9 +13,7 @@ This document details the inner design of the Knooppunt.
 
 ## Authentication
 
-The following diagram shows how authentication is handled in the Knooppunt.
-
-![dataexchange-authorization-sd.svg](images/dataexchange-authorization-sd.svg)
+![structurizr-Authentication_ComponentDiagram.svg](images/structurizr-Authentication_ComponentDiagram.svg)
 
 ## Handling inbound data requests
 

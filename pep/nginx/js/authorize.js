@@ -66,7 +66,7 @@ function mockIntrospect(request) {
             requesting_uzi_role_code: parts[2],
             requesting_practitioner_identifier: parts[3],
             patient_bsn: parts[4],
-            scope: 'fhir/Patient.read fhir/Observation.read'
+            scope: 'bgz'
         }));
 
     } catch (e) {
@@ -86,9 +86,13 @@ function mockIntrospect(request) {
  */
 function extractFhirContext(uri) {
     const context = {
+        interactionType: null,
         resourceType: null,
         resourceId: null
     };
+    
+    // Only support resource reads for now
+    context.interactionType = "read"
 
     // Remove /fhir/ prefix
     const fhirPath = uri.replace(/^\/fhir\//, '');
@@ -126,6 +130,7 @@ function buildOpaRequest(tokenClaims, fhirContext, request) {
 
     return {
         input: {
+            scope: tokenClaims.scope,
             // HTTP Request context
             method: request.variables.request_method || request.method,
             path: parsePathArray(uri),
@@ -145,6 +150,7 @@ function buildOpaRequest(tokenClaims, fhirContext, request) {
 
             // PATIENT/RESOURCE CONTEXT
             patient_bsn: tokenClaims.patient_bsn || null,
+            interaction_type: fhirContext.interactionType,
             resource_type: fhirContext.resourceType,
             resource_id: fhirContext.resourceId,
 
