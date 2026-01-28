@@ -128,7 +128,7 @@ export default function Home() {
               <div>
                 <h3 className="font-semibold text-gray-900">HealthcareProviderRoleTypeCredential</h3>
                 <p className="text-sm text-gray-600 mt-1">
-                  Organization identification credential containing organization name and healthcare provider type.
+                  Credential containing the Dutch healthcare provider role code (roleCodeNL).
                 </p>
                 <div className="flex flex-wrap gap-2 mt-3">
                   <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
