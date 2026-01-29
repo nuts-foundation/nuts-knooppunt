@@ -2,7 +2,6 @@ package harness
 
 import (
 	"net/url"
-	"runtime"
 	"testing"
 
 	"github.com/docker/docker/api/types/container"
@@ -10,19 +9,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
-
-// defaultDNSResolver returns the appropriate DNS resolver for the current platform.
-// Docker Desktop (macOS/Windows) uses a different DNS server than Linux.
-func defaultDNSResolver() string {
-	switch runtime.GOOS {
-	case "darwin", "windows":
-		// Docker Desktop DNS server
-		return "192.168.65.7 8.8.8.8"
-	default:
-		// Docker embedded DNS for Linux containers
-		return "127.0.0.11 8.8.8.8"
-	}
-}
 
 type PEPConfig struct {
 	FHIRBackendHost           string
@@ -44,8 +30,7 @@ type PEPContainerResult struct {
 	Container testcontainers.Container
 }
 
-// StartPEPContainer starts the PEP container and returns the URL and container
-// Use this when you need access to the container (e.g., for logs). Otherwise use startPEP.
+// StartPEPContainer starts the PEP container and returns the URL and container.
 func StartPEPContainer(t *testing.T, config PEPConfig) PEPContainerResult {
 	t.Helper()
 	ctx := t.Context()
@@ -62,13 +47,11 @@ func StartPEPContainer(t *testing.T, config PEPConfig) PEPContainerResult {
 		"DATA_HOLDER_FACILITY_TYPE":    config.DataHolderFacilityType,
 	}
 
-	// Set DNS resolver (required for ngx.fetch in njs)
-	// Use provided value or detect platform-appropriate default
-	dnsResolver := config.DNSResolver
-	if dnsResolver == "" {
-		dnsResolver = defaultDNSResolver()
+	// DNS resolver is set to 127.0.0.1 (dnsmasq) in the container by default
+	// Only override if explicitly provided in config
+	if config.DNSResolver != "" {
+		env["DNS_RESOLVER"] = config.DNSResolver
 	}
-	env["DNS_RESOLVER"] = dnsResolver
 
 	pepReq := testcontainers.ContainerRequest{
 		FromDockerfile: testcontainers.FromDockerfile{
@@ -105,9 +88,4 @@ func StartPEPContainer(t *testing.T, config PEPConfig) PEPContainerResult {
 		Host:   host + ":" + mappedPort.Port(),
 	}
 	return PEPContainerResult{URL: u, Container: pepContainer}
-}
-
-// startPEP is the internal function that returns only the URL (used by StartPEP harness)
-func startPEP(t *testing.T, config PEPConfig) *url.URL {
-	return StartPEPContainer(t, config).URL
 }
