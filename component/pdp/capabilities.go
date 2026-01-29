@@ -62,7 +62,7 @@ func evalCapabilityPolicy(ctx context.Context, input PolicyInput) (PolicyInput, 
 	}
 
 	result := evalInteraction(statement, input)
-	input.Context.CapabilityAllowed = result.Allow
+	input.Context.FhirCapabilityChecked = result.Allow
 	return input, result
 }
 

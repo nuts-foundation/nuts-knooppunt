@@ -80,7 +80,7 @@ type PolicyActionProperties struct {
 }
 
 type PolicyContext struct {
-	CapabilityAllowed        bool   `json:"capability_allowed"`
+	FhirCapabilityChecked    bool   `json:"fhir_capability_checked"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
 	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	MitzConsent              bool   `json:"mitz_consent"`

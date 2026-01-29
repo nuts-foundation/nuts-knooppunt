@@ -5,5 +5,5 @@ import rego.v1
 default allow := false 
 
 allow if {
-    input.context.capability_allowed == true
+    input.context.fhir_capability_checked == true
 }
