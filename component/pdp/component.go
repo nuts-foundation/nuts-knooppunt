@@ -133,19 +133,15 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	policyInput = c.enrichPolicyInputWithPIP(r.Context(), policyInput)
 
 	// Step 4: Check the request adheres to the capability statement for this scope
-	res := evalCapabilityPolicy(r.Context(), policyInput)
-	if !res.Allow {
-		writeResp(r.Context(), w, res)
-		return
-	}
+	policyInput, capabilityResult := evalCapabilityPolicy(r.Context(), policyInput)
 
 	// Step 5: Check the request adheres to the capability statement for this scope
-	policyInput, _ = c.evalMitzPolicy(r.Context(), policyInput)
+	policyInput, mitzResult := c.evalMitzPolicy(r.Context(), policyInput)
 	// Note: do not return here if the Mitz policy denies the request, as the Mitz policy
 	// only provides input to the OPA policy evaluation.
 
 	// Step 6: Evaluate using Open Policy Agent
-	regoPolicyResult, err := c.evalRegoPolicy(r.Context(), scope, policyInput)
+	regoPolicyResultPtr, err := c.evalRegoPolicy(r.Context(), scope, policyInput)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to evaluate rego policy", logging.Error(err), slog.String("policy", scope))
 		errorResult := PolicyResult{
@@ -160,7 +156,15 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		writeResp(r.Context(), w, errorResult)
 		return
 	}
-	writeResp(r.Context(), w, *regoPolicyResult)
+
+	regoPolicyResult := *regoPolicyResultPtr
+	if !regoPolicyResult.Allow {
+		notAllowedResult := appendReasons(regoPolicyResult, capabilityResult, mitzResult)
+		writeResp(r.Context(), w, notAllowedResult)
+		return
+	}
+
+	writeResp(r.Context(), w, regoPolicyResult)
 }
 
 func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) {
@@ -174,6 +178,7 @@ func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) 
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(b)
 	if err != nil {

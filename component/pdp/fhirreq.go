@@ -360,6 +360,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 
 	var rawParams url.Values
 	contentType := request.Input.Request.Header.Get("Content-Type")
+	policyInput.Action.Properties.ContentType = contentType
 	hasFormData := contentType == "application/x-www-form-urlencoded"
 	interWithBody := []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionSearchType,

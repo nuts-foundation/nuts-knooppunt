@@ -70,20 +70,22 @@ type PolicyAction struct {
 }
 
 type PolicyActionProperties struct {
+	ContentType     string                      `json:"content_type"`
+	Include         []string                    `json:"include"`
 	InteractionType fhir.TypeRestfulInteraction `json:"interaction_type"`
 	Operation       *string                     `json:"operation"`
-	SearchParams    map[string]string           `json:"search_params"`
-	Include         []string                    `json:"include"`
 	Revinclude      []string                    `json:"revinclude"`
+	SearchParams    map[string]string           `json:"search_params"`
 }
 
 type PolicyContext struct {
+	CapabilityAllowed        bool   `json:"capability_allowed"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
 	DataHolderOrganizationId string `json:"data_holder_organization_id"`
+	MitzConsent              bool   `json:"mitz_consent"`
 	PatientBSN               string `json:"patient_bsn"`
 	PatientID                string `json:"patient_id"`
 	PurposeOfUse             string `json:"purpose_of_use"`
-	MitzConsent              bool   `json:"mitz_consent"`
 }
 
 type PDPRequest struct {
@@ -139,6 +141,15 @@ func Deny(reason ResultReason) PolicyResult {
 			reason,
 		},
 	}
+}
+
+func appendReasons(mainResult PolicyResult, results ...PolicyResult) PolicyResult {
+	reasons := mainResult.Reasons
+	for _, result := range results {
+		reasons = append(reasons, result.Reasons...)
+	}
+	mainResult.Reasons = reasons
+	return mainResult
 }
 
 type TypeResultCode string
