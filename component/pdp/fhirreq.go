@@ -359,9 +359,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 		}
 	}
 
-	policyInput.Action.Properties = PolicyActionProperties{
-		InteractionType: tokens.Interaction,
-	}
+	policyInput.Action.Properties.InteractionType = tokens.Interaction
 
 	if tokens.OperationName != "" {
 		policyInput.Action.Properties.Operation = &tokens.OperationName

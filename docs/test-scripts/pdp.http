@@ -14,7 +14,10 @@ Content-Type: application/json
     "request": {
       "method": "GET",
       "protocol": "HTTP/1.0",
-      "path": "/Organization/_history"
+      "path": "/Organization/_history",
+      "header": {
+        "Content-Type": ["application/fhir+json"]
+      }
     },
     "context": {
       "data_holder_organization_id": "00000659"
@@ -41,6 +44,9 @@ Content-Type: application/json
       "path": "/Organization?",
       "query_params": {
         "_since": ["foo"]
+      },
+      "header": {
+        "Content-Type": ["application/fhir+json"]
       }
     },
     "context": {
@@ -68,7 +74,10 @@ Content-Type: application/json
     "request": {
       "method": "GET",
       "protocol": "HTTP/1.0",
-      "path": "/Patient?"
+      "path": "/Patient?",
+      "header": {
+        "Content-Type": ["application/fhir+json"]
+      }
     },
     "context": {
       "data_holder_organization_id": "00000659",
@@ -95,7 +104,10 @@ Content-Type: application/json
     "request": {
       "method": "GET",
       "protocol": "HTTP/1.0",
-      "path": "/Patient/3E439979-017F-40AA-594D-EBCF880FFD97"
+      "path": "/Patient/3E439979-017F-40AA-594D-EBCF880FFD97",
+      "header": {
+        "Content-Type": ["application/fhir+json"]
+      }
     },
     "context": {
       "data_holder_organization_id": "00000659",

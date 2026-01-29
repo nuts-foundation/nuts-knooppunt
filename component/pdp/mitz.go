@@ -8,6 +8,12 @@ import (
 )
 
 func (c *Component) evalMitzPolicy(ctx context.Context, input PolicyInput) (PolicyInput, PolicyResult) {
+	// If this call doesn't relate to a BSN don't attempt Mitz
+	if input.Context.PatientBSN == "" {
+		input.Context.MitzConsent = false
+		return input, Allow()
+	}
+
 	result := validateMitzInput(input)
 	if !result.Allow {
 		return input, result
