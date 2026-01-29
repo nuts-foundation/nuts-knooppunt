@@ -112,7 +112,7 @@ func (p *PolicyResult) Merge(other PolicyResult) PolicyResult {
 	merged := PolicyResult{
 		Policy:  strings.Join(policies, ","),
 		Allow:   p.Allow && other.Allow,
-		Reasons: append(p.Reasons, other.Reasons...),
+		Reasons: append(append([]ResultReason{}, p.Reasons...), other.Reasons...),
 	}
 	return merged
 }
