@@ -334,10 +334,19 @@ func derivePatientId(tokens Tokens, queryParams url.Values) (string, error) {
 func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	var policyInput PolicyInput
 
+	policyInput.Subject = request.Input.Subject
+	policyInput.Action.Properties.Request = request.Input.Request
+	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
+	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
+	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
+
+	contentType := request.Input.Request.Header.Get("Content-Type")
+	policyInput.Action.Properties.ContentType = contentType
+
 	tokens, ok := parseRequestPath(request.Input.Request)
 	if !ok {
-		reason := ResultReason{Code: TypeResultCodeUnexpectedInput, Description: "Not a valid FHIR request path"}
-		return PolicyInput{}, Deny(reason)
+		// This is not a FHIR request
+		return policyInput, Allow()
 	}
 
 	if tokens.ResourceType != nil {
@@ -359,8 +368,6 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	}
 
 	var rawParams url.Values
-	contentType := request.Input.Request.Header.Get("Content-Type")
-	policyInput.Action.Properties.ContentType = contentType
 	hasFormData := contentType == "application/x-www-form-urlencoded"
 	interWithBody := []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionSearchType,
@@ -388,9 +395,6 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Action.Properties.Include = params.Include
 	policyInput.Action.Properties.Revinclude = params.Revinclude
 	policyInput.Action.Properties.SearchParams = params.SearchParams
-	policyInput.Subject = request.Input.Subject
-	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
-	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
 
 	patientId, err := derivePatientId(tokens, rawParams)
 	if err != nil {
@@ -401,7 +405,6 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 		return PolicyInput{}, Deny(reason)
 	}
 	policyInput.Context.PatientID = patientId
-	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
 
 	return policyInput, Allow()
 }
