@@ -22,7 +22,7 @@ Request + Bearer/DPoP Token + DPoP Header
 └─────────────────┘
 ```
 
-The PEP uses `ngx.fetch` (njs) to call Nuts node and PDP endpoints directly.
+The PEP uses nginx subrequests to proxy calls to Nuts node and PDP via internal locations.
 
 ## Quick Start
 
@@ -174,7 +174,7 @@ POST /pdp
 When the introspection response includes a `cnf.jkt` claim, the PEP validates DPoP:
 
 1. Extracts `DPoP` header from request
-2. Calls Nuts node `/internal/auth/v2/dpop/validate` endpoint via `ngx.fetch`
+2. Calls Nuts node `/internal/auth/v2/dpop/validate` via internal subrequest
 3. Returns 401 if validation fails
 
 This ensures the access token is bound to the client's proof-of-possession key.

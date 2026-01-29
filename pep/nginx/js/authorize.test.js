@@ -18,12 +18,6 @@ const {
     STANDARD_CLAIMS
 } = authorize;
 
-// Mock global ngx object (NGINX njs runtime)
-const mockNgxFetch = jest.fn();
-global.ngx = {
-    fetch: mockNgxFetch
-};
-
 function createMockRequest(overrides = {}) {
     return {
         headersIn: {},
@@ -43,12 +37,11 @@ function createMockRequest(overrides = {}) {
     };
 }
 
-// Helper to create mock fetch response
-function createMockFetchResponse(status, body, ok = null) {
+// Helper to create mock subrequest response (njs style)
+function createMockSubrequestResponse(status, body) {
     return {
-        ok: ok !== null ? ok : (status >= 200 && status < 300),
         status,
-        json: jest.fn().mockResolvedValue(body)
+        responseText: typeof body === 'string' ? body : JSON.stringify(body)
     };
 }
 
@@ -464,10 +457,6 @@ describe('buildPDPRequest', () => {
 });
 
 describe('validateDPoP', () => {
-    beforeEach(() => {
-        mockNgxFetch.mockReset();
-    });
-
     test('returns valid when no cnf claim present', async () => {
         const request = createMockRequest();
         const introspection = { active: true };
@@ -502,11 +491,9 @@ describe('validateDPoP', () => {
     });
 
     test('calls Nuts node validation endpoint with correct payload', async () => {
-        mockNgxFetch.mockResolvedValue({
-            ok: true,
-            status: 200,
-            json: jest.fn().mockResolvedValue({ valid: true })
-        });
+        const mockSubrequest = jest.fn().mockResolvedValue(
+            createMockSubrequestResponse(200, { valid: true })
+        );
         const request = createMockRequest({
             headersIn: {
                 'Authorization': 'DPoP token123',
@@ -516,7 +503,8 @@ describe('validateDPoP', () => {
             variables: {
                 request_uri: '/fhir/Patient/123',
                 request_method: 'GET'
-            }
+            },
+            subrequest: mockSubrequest
         });
         const introspection = {
             active: true,
@@ -526,28 +514,22 @@ describe('validateDPoP', () => {
         const result = await validateDPoP(request, introspection);
 
         expect(result.valid).toBe(true);
-        expect(mockNgxFetch).toHaveBeenCalledWith(
-            expect.stringContaining('/internal/auth/v2/dpop/validate'),
-            expect.objectContaining({
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    dpop_proof: 'dpop-proof-jwt',
-                    method: 'GET',
-                    thumbprint: 'thumbprint123',
-                    token: 'token123',
-                    url: 'https://example.com/fhir/Patient/123'
-                })
+        expect(mockSubrequest).toHaveBeenCalledWith('/_dpop_validate', {
+            method: 'POST',
+            body: JSON.stringify({
+                dpop_proof: 'dpop-proof-jwt',
+                method: 'GET',
+                thumbprint: 'thumbprint123',
+                token: 'token123',
+                url: 'https://example.com/fhir/Patient/123'
             })
-        );
+        });
     });
 
     test('returns invalid when validation endpoint returns non-200', async () => {
-        mockNgxFetch.mockResolvedValue({
-            ok: false,
-            status: 400,
-            text: jest.fn().mockResolvedValue('invalid_dpop')
-        });
+        const mockSubrequest = jest.fn().mockResolvedValue(
+            createMockSubrequestResponse(400, 'invalid_dpop')
+        );
         const request = createMockRequest({
             headersIn: {
                 'Authorization': 'DPoP token123',
@@ -557,7 +539,8 @@ describe('validateDPoP', () => {
             variables: {
                 request_uri: '/fhir/Patient',
                 request_method: 'GET'
-            }
+            },
+            subrequest: mockSubrequest
         });
         const introspection = {
             active: true,
@@ -571,11 +554,9 @@ describe('validateDPoP', () => {
     });
 
     test('returns invalid when validation response has valid: false', async () => {
-        mockNgxFetch.mockResolvedValue({
-            ok: true,
-            status: 200,
-            json: jest.fn().mockResolvedValue({ valid: false, reason: 'expired' })
-        });
+        const mockSubrequest = jest.fn().mockResolvedValue(
+            createMockSubrequestResponse(200, { valid: false, reason: 'expired' })
+        );
         const request = createMockRequest({
             headersIn: {
                 'Authorization': 'DPoP token123',
@@ -585,7 +566,8 @@ describe('validateDPoP', () => {
             variables: {
                 request_uri: '/fhir/Patient',
                 request_method: 'GET'
-            }
+            },
+            subrequest: mockSubrequest
         });
         const introspection = {
             active: true,
@@ -638,7 +620,6 @@ describe('checkAuthorization integration', () => {
             KNOOPPUNT_PDP_HOST: 'knooppunt',
             KNOOPPUNT_PDP_PORT: '8081'
         };
-        mockNgxFetch.mockReset();
     });
 
     afterEach(() => {
@@ -655,11 +636,12 @@ describe('checkAuthorization integration', () => {
     });
 
     test('returns 401 when token introspection returns inactive', async () => {
-        mockNgxFetch.mockResolvedValueOnce(
-            createMockFetchResponse(200, { active: false })
+        const mockSubrequest = jest.fn().mockResolvedValue(
+            createMockSubrequestResponse(200, { active: false })
         );
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'Bearer test-token' }
+            headersIn: { 'Authorization': 'Bearer test-token' },
+            subrequest: mockSubrequest
         });
 
         await checkAuthorization(request);
@@ -668,40 +650,39 @@ describe('checkAuthorization integration', () => {
         expect(request.error).toHaveBeenCalledWith('Token is not active');
     });
 
-    test('returns 503 when introspection fails', async () => {
-        mockNgxFetch.mockResolvedValueOnce(
-            createMockFetchResponse(500, {}, false)
+    test('returns 502 when introspection fails', async () => {
+        const mockSubrequest = jest.fn().mockResolvedValue(
+            createMockSubrequestResponse(500, {})
         );
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'Bearer test-token' }
+            headersIn: { 'Authorization': 'Bearer test-token' },
+            subrequest: mockSubrequest
         });
 
         await checkAuthorization(request);
 
-        expect(request.return).toHaveBeenCalledWith(503);
+        expect(request.return).toHaveBeenCalledWith(502);
     });
 
     test('returns 200 when PDP allows', async () => {
-        // First call: introspection
-        mockNgxFetch.mockResolvedValueOnce(
-            createMockFetchResponse(200, {
+        const mockSubrequest = jest.fn()
+            // First call: introspection
+            .mockResolvedValueOnce(createMockSubrequestResponse(200, {
                 active: true,
                 client_id: 'did:nuts:test',
                 scope: 'bgz'
-            })
-        );
-        // Second call: PDP
-        mockNgxFetch.mockResolvedValueOnce(
-            createMockFetchResponse(200, {
+            }))
+            // Second call: PDP
+            .mockResolvedValueOnce(createMockSubrequestResponse(200, {
                 result: { allow: true }
-            })
-        );
+            }));
         const request = createMockRequest({
             headersIn: { 'Authorization': 'Bearer test-token' },
             variables: {
                 request_uri: '/fhir/Patient/123',
                 request_method: 'GET'
-            }
+            },
+            subrequest: mockSubrequest
         });
 
         await checkAuthorization(request);
@@ -711,29 +692,27 @@ describe('checkAuthorization integration', () => {
     });
 
     test('returns 403 when PDP denies', async () => {
-        // First call: introspection
-        mockNgxFetch.mockResolvedValueOnce(
-            createMockFetchResponse(200, {
+        const mockSubrequest = jest.fn()
+            // First call: introspection
+            .mockResolvedValueOnce(createMockSubrequestResponse(200, {
                 active: true,
                 client_id: 'did:nuts:test',
                 scope: 'bgz'
-            })
-        );
-        // Second call: PDP
-        mockNgxFetch.mockResolvedValueOnce(
-            createMockFetchResponse(200, {
+            }))
+            // Second call: PDP
+            .mockResolvedValueOnce(createMockSubrequestResponse(200, {
                 result: {
                     allow: false,
                     reasons: [{ code: 'not_allowed', description: 'No consent' }]
                 }
-            })
-        );
+            }));
         const request = createMockRequest({
             headersIn: { 'Authorization': 'Bearer test-token' },
             variables: {
                 request_uri: '/fhir/Patient/123',
                 request_method: 'GET'
-            }
+            },
+            subrequest: mockSubrequest
         });
 
         await checkAuthorization(request);
@@ -743,20 +722,18 @@ describe('checkAuthorization integration', () => {
     });
 
     test('returns 401 when DPoP validation fails', async () => {
-        // First call: introspection (token has cnf.jkt)
-        mockNgxFetch.mockResolvedValueOnce(
-            createMockFetchResponse(200, {
+        const mockSubrequest = jest.fn()
+            // First call: introspection (token has cnf.jkt)
+            .mockResolvedValueOnce(createMockSubrequestResponse(200, {
                 active: true,
                 client_id: 'did:nuts:test',
                 cnf: { jkt: 'thumbprint123' }
-            })
-        );
-        // Second call: DPoP validation fails
-        mockNgxFetch.mockResolvedValueOnce({
-            ok: true,
-            status: 200,
-            json: jest.fn().mockResolvedValue({ valid: false, reason: 'invalid signature' })
-        });
+            }))
+            // Second call: DPoP validation fails
+            .mockResolvedValueOnce(createMockSubrequestResponse(200, {
+                valid: false,
+                reason: 'invalid signature'
+            }));
         const request = createMockRequest({
             headersIn: {
                 'Authorization': 'DPoP test-token',
@@ -766,7 +743,8 @@ describe('checkAuthorization integration', () => {
             variables: {
                 request_uri: '/fhir/Patient/123',
                 request_method: 'GET'
-            }
+            },
+            subrequest: mockSubrequest
         });
 
         await checkAuthorization(request);
@@ -795,15 +773,14 @@ describe('checkAuthorization integration', () => {
         // cannot use it by simply changing Authorization scheme to Bearer.
         // The token's cnf.jkt binding is intrinsic and revealed by introspection.
 
-        // Introspection returns cnf.jkt even when token presented as Bearer
-        mockNgxFetch.mockResolvedValueOnce(
-            createMockFetchResponse(200, {
+        const mockSubrequest = jest.fn()
+            // Introspection returns cnf.jkt even when token presented as Bearer
+            .mockResolvedValueOnce(createMockSubrequestResponse(200, {
                 active: true,
                 client_id: 'did:nuts:victim',
                 scope: 'bgz',
                 cnf: { jkt: 'victim-key-thumbprint' }  // Token is DPoP-bound
-            })
-        );
+            }));
 
         // Attacker presents stolen token as Bearer (no DPoP header)
         const request = createMockRequest({
@@ -814,7 +791,8 @@ describe('checkAuthorization integration', () => {
             variables: {
                 request_uri: '/fhir/Patient/123',
                 request_method: 'GET'
-            }
+            },
+            subrequest: mockSubrequest
         });
 
         await checkAuthorization(request);

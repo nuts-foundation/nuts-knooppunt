@@ -221,30 +221,17 @@ async function validateDPoP(request, introspection) {
         url: `https://${host}${request.variables.request_uri || request.uri || ''}`
     };
 
-    // Use ngx.fetch for DPoP validation (same pattern as introspection)
-    const nutsHost = process.env.NUTS_NODE_HOST || 'knooppunt';
-    const nutsPort = process.env.NUTS_NODE_INTERNAL_PORT || '8081';
-    const dpopValidateUrl = `http://${nutsHost}:${nutsPort}/internal/auth/v2/dpop/validate`;
-
-    request.warn(`DPoP validate URL: ${dpopValidateUrl}`);
-    request.warn(`DPoP validate payload: ${JSON.stringify(payload)}`);
-
     try {
-        const response = await ngx.fetch(dpopValidateUrl, {
+        const response = await request.subrequest('/_dpop_validate', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
             body: JSON.stringify(payload)
         });
-        request.warn(`DPoP validate response status: ${response.status}`);
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            return { valid: false, reason: `DPoP validation returned ${response.status}: ${errorText}` };
+        if (response.status !== 200) {
+            return { valid: false, reason: `DPoP validation returned ${response.status}: ${response.responseText}` };
         }
 
-        const result = await response.json();
+        const result = JSON.parse(response.responseText);
         return { valid: result.valid === true, reason: result.reason || '' };
     } catch (e) {
         return { valid: false, reason: `DPoP validation error: ${e}` };
@@ -257,8 +244,6 @@ async function validateDPoP(request, introspection) {
  */
 async function checkAuthorization(request) {
     try {
-        request.warn('=== Starting authorization check ===');
-
         // Step 1: Extract token from Authorization header
         const token = extractBearerToken(request);
         if (!token) {
@@ -266,7 +251,6 @@ async function checkAuthorization(request) {
             request.return(401);
             return;
         }
-        request.warn(`Token extracted (first 20 chars): ${token.substring(0, 20)}...`);
 
         // RFC 9449: If using DPoP authorization scheme, DPoP header is required
         const tokenType = getTokenType(request);
@@ -276,41 +260,31 @@ async function checkAuthorization(request) {
             return;
         }
 
-        request.log('Token found, introspecting via Nuts node...');
-
         // Step 2: Introspect token via Nuts node (RFC 7662)
-        // Use ngx.fetch for POST body support (njs subrequest doesn't work well with proxy_pass)
-        const nutsHost = process.env.NUTS_NODE_HOST || 'knooppunt';
-        const nutsPort = process.env.NUTS_NODE_INTERNAL_PORT || '8081';
-        const introspectUrl = `http://${nutsHost}:${nutsPort}/internal/auth/v2/accesstoken/introspect`;
-
         let introspectionResponse;
         try {
-            introspectionResponse = await ngx.fetch(introspectUrl, {
+            introspectionResponse = await request.subrequest('/_introspect', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
                 body: `token=${encodeURIComponent(token)}`
             });
         } catch (e) {
-            request.error(`Token introspection fetch failed: ${e}`);
-            request.return(503);
+            request.error(`Token introspection failed: ${e}`);
+            request.return(502);
             return;
         }
 
-        if (!introspectionResponse.ok) {
-            request.error(`Token introspection failed: ${introspectionResponse.status}`);
-            request.return(introspectionResponse.status === 401 ? 401 : 503);
+        if (introspectionResponse.status !== 200) {
+            request.error(`Token introspection returned ${introspectionResponse.status}`);
+            request.return(introspectionResponse.status === 401 ? 401 : 502);
             return;
         }
 
         let introspection;
         try {
-            introspection = await introspectionResponse.json();
+            introspection = JSON.parse(introspectionResponse.responseText);
         } catch (e) {
-            request.error(`Failed to parse introspection response: ${e}`);
-            request.return(401);
+            request.error(`Invalid introspection response: ${e}`);
+            request.return(502);
             return;
         }
 
@@ -323,9 +297,7 @@ async function checkAuthorization(request) {
         request.log(`Token active: client_id=${introspection.client_id}, scope=${introspection.scope}`);
 
         // Step 3: Validate DPoP if token has cnf claim
-        request.warn(`DPoP validation starting: cnf=${JSON.stringify(introspection.cnf)}`);
         const dpopResult = await validateDPoP(request, introspection);
-        request.warn(`DPoP validation result: ${JSON.stringify(dpopResult)}`);
         if (!dpopResult.valid) {
             request.error(`DPoP validation failed: ${dpopResult.reason}`);
             request.return(401);
@@ -338,38 +310,31 @@ async function checkAuthorization(request) {
         request.log(`Calling PDP: client_id=${pdpRequest.input.subject.id}, ` +
             `path=${pdpRequest.input.request.path}, method=${pdpRequest.input.request.method}`);
 
-        // Step 5: Call Knooppunt PDP using ngx.fetch
-        const pdpHost = process.env.KNOOPPUNT_PDP_HOST || 'knooppunt';
-        const pdpPort = process.env.KNOOPPUNT_PDP_PORT || '8081';
-        const pdpUrl = `http://${pdpHost}:${pdpPort}/pdp`;
-
+        // Step 5: Call Knooppunt PDP
         let pdpResponse;
         try {
-            pdpResponse = await ngx.fetch(pdpUrl, {
+            pdpResponse = await request.subrequest('/_pdp', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
                 body: JSON.stringify(pdpRequest)
             });
         } catch (e) {
-            request.error(`PDP fetch failed: ${e}`);
-            request.return(503);
+            request.error(`PDP unreachable: ${e}`);
+            request.return(502);
             return;
         }
 
-        if (!pdpResponse.ok) {
-            request.error(`PDP returned error status: ${pdpResponse.status}`);
-            request.return(503);
+        if (pdpResponse.status !== 200) {
+            request.error(`PDP returned ${pdpResponse.status}`);
+            request.return(502);
             return;
         }
 
         let pdpResult;
         try {
-            pdpResult = await pdpResponse.json();
+            pdpResult = JSON.parse(pdpResponse.responseText);
         } catch (e) {
-            request.error(`Failed to parse PDP response: ${e}`);
-            request.return(500);
+            request.error(`Invalid PDP response: ${e}`);
+            request.return(502);
             return;
         }
 

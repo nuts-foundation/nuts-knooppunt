@@ -20,8 +20,6 @@ type PEPConfig struct {
 	NutsNodePort              string
 	DataHolderOrganizationURA string
 	DataHolderFacilityType    string
-	// Optional settings (leave empty for defaults)
-	DNSResolver string // DNS resolver for ngx.fetch (e.g., "192.168.65.7 8.8.8.8")
 }
 
 // PEPContainerResult contains the PEP URL and container for additional operations
@@ -47,12 +45,6 @@ func StartPEPContainer(t *testing.T, config PEPConfig) PEPContainerResult {
 		"DATA_HOLDER_FACILITY_TYPE":    config.DataHolderFacilityType,
 	}
 
-	// DNS resolver is set to 127.0.0.1 (dnsmasq) in the container by default
-	// Only override if explicitly provided in config
-	if config.DNSResolver != "" {
-		env["DNS_RESOLVER"] = config.DNSResolver
-	}
-
 	pepReq := testcontainers.ContainerRequest{
 		FromDockerfile: testcontainers.FromDockerfile{
 			Context:    "../../../pep/nginx",
@@ -62,9 +54,9 @@ func StartPEPContainer(t *testing.T, config PEPConfig) PEPContainerResult {
 		Env:          env,
 		WaitingFor:   wait.ForHTTP("/health").WithPort("8080"),
 		HostConfigModifier: func(hostConfig *container.HostConfig) {
-			// Map host.docker.internal to host gateway for Linux (GitHub Actions)
-			// On macOS/Windows (Docker Desktop), host.docker.internal already exists
-			// On Linux, this maps it to the bridge gateway IP automatically
+			// Map host.docker.internal to host gateway
+			// On macOS/Windows (Docker Desktop), this is already available
+			// On Linux, this adds it to /etc/hosts which Docker's DNS can resolve
 			hostConfig.ExtraHosts = []string{"host.docker.internal:host-gateway"}
 		},
 	}
