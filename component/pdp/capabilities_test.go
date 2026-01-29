@@ -24,6 +24,7 @@ func TestComponent_reject_interaction(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
+				ContentType:     "application/fhir+json",
 				InteractionType: fhir.TypeRestfulInteractionUpdate,
 			},
 		},
@@ -32,8 +33,9 @@ func TestComponent_reject_interaction(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
+	assert.False(t, inp.Context.FhirCapabilityChecked)
 }
 
 func TestComponent_allow_interaction(t *testing.T) {
@@ -52,6 +54,7 @@ func TestComponent_allow_interaction(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
+				ContentType:     "application/fhir+json",
 				InteractionType: fhir.TypeRestfulInteractionHistoryType,
 			},
 		},
@@ -60,8 +63,9 @@ func TestComponent_allow_interaction(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
+	assert.True(t, inp.Context.FhirCapabilityChecked)
 }
 
 func TestComponent_allow_search_param(t *testing.T) {
@@ -80,6 +84,7 @@ func TestComponent_allow_search_param(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
+				ContentType:     "application/fhir+json",
 				InteractionType: fhir.TypeRestfulInteractionSearchType,
 				SearchParams:    map[string]string{"_since": "2024-01-01"},
 			},
@@ -89,8 +94,9 @@ func TestComponent_allow_search_param(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
+	assert.True(t, inp.Context.FhirCapabilityChecked)
 }
 
 func TestComponent_reject_search_param(t *testing.T) {
@@ -109,6 +115,7 @@ func TestComponent_reject_search_param(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
+				ContentType:     "application/fhir+json",
 				InteractionType: fhir.TypeRestfulInteractionSearchType,
 				SearchParams:    map[string]string{"_foo": "bar", "_since": "2024-01-01"},
 			},
@@ -118,8 +125,9 @@ func TestComponent_reject_search_param(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
+	assert.False(t, inp.Context.FhirCapabilityChecked)
 }
 
 func TestComponent_reject_interaction_type(t *testing.T) {
@@ -132,6 +140,7 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
+				ContentType:     "application/fhir+json",
 				InteractionType: fhir.TypeRestfulInteractionSearchSystem,
 			},
 		},
@@ -140,8 +149,9 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
+	assert.False(t, inp.Context.FhirCapabilityChecked)
 }
 
 func TestComponent_allow_include(t *testing.T) {
@@ -160,6 +170,7 @@ func TestComponent_allow_include(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
+				ContentType:     "application/fhir+json",
 				InteractionType: fhir.TypeRestfulInteractionRead,
 				Include:         []string{"Location:organization"},
 			},
@@ -169,8 +180,9 @@ func TestComponent_allow_include(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
+	assert.True(t, inp.Context.FhirCapabilityChecked)
 }
 
 func TestComponent_reject_include(t *testing.T) {
@@ -189,6 +201,7 @@ func TestComponent_reject_include(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
+				ContentType:     "application/fhir+json",
 				InteractionType: fhir.TypeRestfulInteractionRead,
 				Include:         []string{"Endpoint:organization"},
 			},
@@ -198,8 +211,9 @@ func TestComponent_reject_include(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
+	assert.False(t, inp.Context.FhirCapabilityChecked)
 }
 
 func TestComponent_reject_revinclude(t *testing.T) {
@@ -218,6 +232,7 @@ func TestComponent_reject_revinclude(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
+				ContentType:     "application/fhir+json",
 				InteractionType: fhir.TypeRestfulInteractionRead,
 				Include:         []string{"Location:organization"},
 			},
@@ -227,8 +242,9 @@ func TestComponent_reject_revinclude(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
+	assert.False(t, inp.Context.FhirCapabilityChecked)
 }
 
 func TestComponent_allow_revinclude(t *testing.T) {
@@ -247,6 +263,7 @@ func TestComponent_allow_revinclude(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
+				ContentType:     "application/fhir+json",
 				InteractionType: fhir.TypeRestfulInteractionRead,
 				Revinclude:      []string{"Location:organization"},
 			},
@@ -256,6 +273,7 @@ func TestComponent_allow_revinclude(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
+	assert.True(t, inp.Context.FhirCapabilityChecked)
 }
