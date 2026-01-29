@@ -74,6 +74,7 @@ type PolicyActionProperties struct {
 	Include         []string                    `json:"include"`
 	InteractionType fhir.TypeRestfulInteraction `json:"interaction_type"`
 	Operation       *string                     `json:"operation"`
+	Request         HTTPRequest                 `json:"request"`
 	Revinclude      []string                    `json:"revinclude"`
 	SearchParams    map[string]string           `json:"search_params"`
 }
