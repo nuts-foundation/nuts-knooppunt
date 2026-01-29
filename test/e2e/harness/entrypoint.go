@@ -35,12 +35,6 @@ type MITZDetails struct {
 	MockMITZ                 *mitzmock.SubscriptionService
 }
 
-type PEPDetails struct {
-	KnooppuntPDPBaseURL *url.URL
-	HAPIBaseURL         *url.URL
-	PEPBaseURL          *url.URL
-	MockMitzXACML       *mitzmock.ClosedQuestionService
-}
 
 // Start starts the full test harness with all components (MCSD, NVI, MITZ).
 func Start(t *testing.T) Details {
@@ -124,42 +118,3 @@ func StartMITZ(t *testing.T) MITZDetails {
 	}
 }
 
-// StartPEP starts a minimal harness for PEP e2e tests with HAPI, Knooppunt PDP, mock XACML Mitz, and PEP nginx.
-func StartPEP(t *testing.T, pepConfig PEPConfig) PEPDetails {
-	t.Helper()
-
-	// Create mock XACML Mitz server
-	mockMitz := mitzmock.NewClosedQuestionService(t)
-
-	// Start HAPI FHIR server
-	hapiBaseURL := startHAPI(t, "")
-
-	// Start Knooppunt with PDP and MITZ enabled
-	knooppuntPDPURL := startKnooppunt(t, cmd.Config{
-		HTTP: http.TestConfig(),
-		PDP: pdp.Config{
-			Enabled: true,
-		},
-		MITZ: mitz.Config{
-			MitzBase:      mockMitz.GetURL(),
-			GatewaySystem: "test-gateway",
-			SourceSystem:  "test-source",
-		},
-	})
-
-	// Configure PEP to point to HAPI and Knooppunt
-	pepConfig.FHIRBackendHost = "host.docker.internal"
-	pepConfig.FHIRBackendPort = hapiBaseURL.Port()
-	pepConfig.KnooppuntPDPHost = "host.docker.internal"
-	pepConfig.KnooppuntPDPPort = knooppuntPDPURL.Port()
-
-	// Start PEP container
-	pepBaseURL := startPEP(t, pepConfig)
-
-	return PEPDetails{
-		KnooppuntPDPBaseURL: knooppuntPDPURL,
-		HAPIBaseURL:         hapiBaseURL,
-		PEPBaseURL:          pepBaseURL,
-		MockMitzXACML:       mockMitz,
-	}
-}
