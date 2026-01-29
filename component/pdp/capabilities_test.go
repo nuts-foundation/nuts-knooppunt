@@ -32,7 +32,7 @@ func TestComponent_reject_interaction(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	resp := evalCapabilityPolicy(context.Background(), input, "mcsd_update")
 	assert.False(t, resp.Allow)
 }
 
@@ -60,7 +60,7 @@ func TestComponent_allow_interaction(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	resp := evalCapabilityPolicy(context.Background(), input, "mcsd_update")
 	assert.True(t, resp.Allow)
 }
 
@@ -89,7 +89,7 @@ func TestComponent_allow_search_param(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	resp := evalCapabilityPolicy(context.Background(), input, "mcsd_update")
 	assert.True(t, resp.Allow)
 }
 
@@ -118,7 +118,7 @@ func TestComponent_reject_search_param(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	resp := evalCapabilityPolicy(context.Background(), input, "mcsd_update")
 	assert.False(t, resp.Allow)
 }
 
@@ -140,7 +140,7 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	resp := evalCapabilityPolicy(context.Background(), input, "mcsd_update")
 	assert.False(t, resp.Allow)
 }
 
@@ -169,7 +169,7 @@ func TestComponent_allow_include(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	resp := evalCapabilityPolicy(context.Background(), input, "mcsd_query")
 	assert.True(t, resp.Allow)
 }
 
@@ -198,7 +198,7 @@ func TestComponent_reject_include(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	resp := evalCapabilityPolicy(context.Background(), input, "mcsd_query")
 	assert.False(t, resp.Allow)
 }
 
@@ -227,7 +227,7 @@ func TestComponent_reject_revinclude(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	resp := evalCapabilityPolicy(context.Background(), input, "mcsd_query")
 	assert.False(t, resp.Allow)
 }
 
@@ -256,6 +256,6 @@ func TestComponent_allow_revinclude(t *testing.T) {
 		},
 	}
 
-	resp := evalCapabilityPolicy(context.Background(), input)
+	resp := evalCapabilityPolicy(context.Background(), input, "mcsd_query")
 	assert.True(t, resp.Allow)
 }

@@ -40,18 +40,16 @@ func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityState
 	return result, true
 }
 
-func evalCapabilityPolicy(ctx context.Context, input PolicyInput) PolicyResult {
+func evalCapabilityPolicy(ctx context.Context, input PolicyInput, policy string) PolicyResult {
 	out := PolicyResult{
 		Allow: false,
 	}
 
-	scope := input.Subject.Properties.ClientQualifications[0]
-
-	statement, ok := capabilityForScope(ctx, scope)
+	statement, ok := capabilityForScope(ctx, policy)
 	if !ok {
 		reason := ResultReason{
 			Code:        TypeResultCodeUnexpectedInput,
-			Description: "unexpected input, no capability statement known for scope",
+			Description: "unexpected input, no capability statement known for policy",
 		}
 		out.Reasons = []ResultReason{reason}
 		return out

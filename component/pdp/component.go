@@ -124,23 +124,28 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Step 2: Parse the PDP input and translate to the policy input
 	policyInput, policyResult := NewPolicyInput(reqBody)
+	policyResult.Policy = scope
 	if !policyResult.Allow {
 		writeResp(r.Context(), w, policyResult)
 		return
 	}
 
 	// Step 3: Enrich the policy input with data gathered from the policy information point (if available)
-	policyInput = c.enrichPolicyInputWithPIP(r.Context(), policyInput)
+	var resultReasons []ResultReason
+	policyInput, resultReasons = c.enrichPolicyInputWithPIP(r.Context(), policyInput)
+	policyResult.Reasons = append(policyResult.Reasons, resultReasons...)
 
 	// Step 4: Check the request adheres to the capability statement for this scope
-	res := evalCapabilityPolicy(r.Context(), policyInput)
-	if !res.Allow {
-		writeResp(r.Context(), w, res)
+	capabilityStatementResult := evalCapabilityPolicy(r.Context(), policyInput, scope)
+	policyResult = policyResult.Merge(capabilityStatementResult)
+	if !policyResult.Allow {
+		writeResp(r.Context(), w, policyResult)
 		return
 	}
 
 	// Step 5: Check the request adheres to the capability statement for this scope
-	policyInput, _ = c.evalMitzPolicy(r.Context(), policyInput)
+	policyInput, resultReasons = c.enrichPolicyInputWithMitz(r.Context(), policyInput)
+	policyResult.Reasons = append(policyResult.Reasons, resultReasons...)
 	// Note: do not return here if the Mitz policy denies the request, as the Mitz policy
 	// only provides input to the OPA policy evaluation.
 
@@ -148,19 +153,15 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	regoPolicyResult, err := c.evalRegoPolicy(r.Context(), scope, policyInput)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to evaluate rego policy", logging.Error(err), slog.String("policy", scope))
-		errorResult := PolicyResult{
-			Allow: false,
-			Reasons: []ResultReason{
-				{
-					Code:        TypeResultCodeNotImplemented,
-					Description: "failed to evaluate rego policy",
-				},
-			},
-		}
-		writeResp(r.Context(), w, errorResult)
+		policyResult.Allow = false
+		policyResult.Reasons = append(policyResult.Reasons, ResultReason{
+			Code:        TypeResultCodeNotImplemented,
+			Description: "failed to evaluate rego policy",
+		})
+		writeResp(r.Context(), w, policyResult)
 		return
 	}
-	writeResp(r.Context(), w, *regoPolicyResult)
+	writeResp(r.Context(), w, policyResult.Merge(*regoPolicyResult))
 }
 
 func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) {
