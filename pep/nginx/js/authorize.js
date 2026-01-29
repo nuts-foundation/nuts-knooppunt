@@ -53,6 +53,19 @@ function parseScopes(scopeString) {
 }
 
 /**
+ * Safely decode URI component, returning original string on failure
+ * @param {string} str - String to decode
+ * @returns {string} - Decoded string or original if decoding fails
+ */
+function safeDecode(str) {
+    try {
+        return decodeURIComponent(str);
+    } catch (e) {
+        return str;
+    }
+}
+
+/**
  * Parse query parameters from query string
  * @param {string} queryString - Query string without leading ?
  * @returns {Object} - Map of param name to array of values
@@ -63,8 +76,8 @@ function parseQueryParams(queryString) {
     queryString.split('&').forEach(pair => {
         const idx = pair.indexOf('=');
         if (idx > 0) {
-            const key = decodeURIComponent(pair.substring(0, idx));
-            const value = decodeURIComponent(pair.substring(idx + 1));
+            const key = safeDecode(pair.substring(0, idx));
+            const value = safeDecode(pair.substring(idx + 1));
             if (!params[key]) params[key] = [];
             params[key].push(value);
         }
@@ -338,8 +351,15 @@ async function checkAuthorization(request) {
             return;
         }
 
+        // Validate PDP response schema
+        if (!pdpResult.result || typeof pdpResult.result.allow !== 'boolean') {
+            request.error(`Malformed PDP response: missing result.allow boolean`);
+            request.return(502);
+            return;
+        }
+
         // Step 6: Enforce decision
-        if (pdpResult.result && pdpResult.result.allow === true) {
+        if (pdpResult.result.allow) {
             request.log('Access ALLOWED by PDP');
             request.return(200);
         } else {

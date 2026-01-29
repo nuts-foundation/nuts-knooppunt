@@ -331,6 +331,14 @@ describe('parseQueryParams', () => {
             'filter': ['type=Patient']
         });
     });
+
+    test('handles malformed percent-encoding gracefully', () => {
+        // Invalid percent-encoding should not throw, returns original string
+        expect(parseQueryParams('patient=%ZZ&valid=ok')).toEqual({
+            'patient': ['%ZZ'],
+            'valid': ['ok']
+        });
+    });
 });
 
 describe('buildPDPRequest', () => {
@@ -719,6 +727,32 @@ describe('checkAuthorization integration', () => {
 
         expect(request.return).toHaveBeenCalledWith(403);
         expect(request.warn).toHaveBeenCalled();
+    });
+
+    test('returns 502 when PDP response is malformed', async () => {
+        const mockSubrequest = jest.fn()
+            .mockResolvedValueOnce(createMockSubrequestResponse(200, {
+                active: true,
+                client_id: 'did:nuts:test',
+                scope: 'bgz'
+            }))
+            // PDP returns malformed response (allow is string instead of boolean)
+            .mockResolvedValueOnce(createMockSubrequestResponse(200, {
+                result: { allow: 'true' }
+            }));
+        const request = createMockRequest({
+            headersIn: { 'Authorization': 'Bearer test-token' },
+            variables: {
+                request_uri: '/fhir/Patient/123',
+                request_method: 'GET'
+            },
+            subrequest: mockSubrequest
+        });
+
+        await checkAuthorization(request);
+
+        expect(request.return).toHaveBeenCalledWith(502);
+        expect(request.error).toHaveBeenCalledWith('Malformed PDP response: missing result.allow boolean');
     });
 
     test('returns 401 when DPoP validation fails', async () => {
