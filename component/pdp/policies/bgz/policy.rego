@@ -9,6 +9,7 @@ import rego.v1
 default allow := false
 
 allow if {
+    input.context.capability_allowed == true   
     input.context.mitz_consent == true
     # The BgZ on Generic Functions use case (to be formalized) specifies that requests must be scoped to a patient.
     # We enforce this by checking that either a patient_id or patient_bsn is present in the request context.
