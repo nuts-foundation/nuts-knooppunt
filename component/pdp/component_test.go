@@ -103,7 +103,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient",
+						Path:     "/Patient?",
 						QueryParams: map[string][]string{
 							"_include": {"Patient:general-practitioner"},
 							"_id":      {"1001"},
@@ -136,7 +136,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient",
+						Path:     "/Patient?",
 						QueryParams: map[string][]string{
 							"_include": {"Patient:general-practitioner"},
 							"_id":      {"1000"},
@@ -169,7 +169,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient",
+						Path:     "/Patient?",
 						QueryParams: map[string][]string{
 							"_include": {"Patient:general-practitioner"},
 							"_id":      {"1000"},
@@ -295,7 +295,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient",
+						Path:     "/Patient?",
 						QueryParams: map[string][]string{
 							"_include": {"Patient:general-practitioner"},
 						},
@@ -331,7 +331,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient",
+						Path:     "/Patient?",
 						QueryParams: map[string][]string{
 							"identifier": {"http://fhir.nl/fhir/NamingSystem/bsn|123456789"},
 						},
@@ -356,7 +356,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient",
+						Path:     "/Patient?",
 						QueryParams: map[string][]string{
 							"identifier": {"123456789"},
 						},
@@ -381,7 +381,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient",
+						Path:     "/Patient?",
 						QueryParams: map[string][]string{
 							"identifier": {"http://example.com/identifier|123456789"},
 						},
@@ -557,7 +557,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient",
+						Path:     "/Patient?",
 						QueryParams: map[string][]string{
 							"identifier": {"http://fhir.nl/fhir/NamingSystem/bsn|bsn:deny"},
 						},

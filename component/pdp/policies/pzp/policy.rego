@@ -21,17 +21,14 @@ is_allowed_query if {
     # identifier: exactly 1 identifier of type BSN
     is_string(input.action.properties.search_params.identifier)
     startswith(input.action.properties.search_params.identifier, "http://fhir.nl/fhir/NamingSystem/bsn|")
-    not contains(input.action.properties.search_params.identifier, ",")
 }
 
 # GET [base]/Consent?patient={reference}&_profile=http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2
 is_allowed_query if {
     input.resource.type == "Consent"
     input.action.properties.interaction_type == "search-type"
-    # patient: exactly 1 reference to Patient resource
-    is_string(input.action.properties.search_params.patient)
+    # patient: reference Patient resource
     startswith(input.action.properties.search_params.patient, "Patient/")
-    not contains(input.action.properties.search_params.patient, ",")
     # _profile
     is_string(input.action.properties.search_params._profile)
     input.action.properties.search_params._profile == "http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2"
