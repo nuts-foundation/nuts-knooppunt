@@ -226,12 +226,19 @@ async function validateDPoP(request, introspection) {
     const token = extractBearerToken(request);
     const host = request.headersIn['Host'] || request.headersIn['host'] || '';
 
+    // Derive scheme from request, falling back to https to preserve production behavior
+    const scheme =
+        (request.variables && request.variables.scheme) ||
+        request.headersIn['X-Forwarded-Proto'] ||
+        request.headersIn['x-forwarded-proto'] ||
+        'https';
+
     const payload = {
         dpop_proof: dpopHeader,
         method: request.variables.request_method || request.method || 'GET',
         thumbprint: introspection.cnf.jkt,
         token: token,
-        url: `https://${host}${request.variables.request_uri || request.uri || ''}`
+        url: `${scheme}://${host}${request.variables.request_uri || request.uri || ''}`
     };
 
     try {
