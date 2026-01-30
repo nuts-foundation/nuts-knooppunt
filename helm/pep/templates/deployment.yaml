@@ -45,18 +45,22 @@ spec:
             value: {{ .Values.env.fhirBackendHost | quote }}
           - name: FHIR_BACKEND_PORT
             value: {{ .Values.env.fhirBackendPort | quote }}
+          - name: FHIR_BASE_PATH
+            value: {{ .Values.env.fhirBasePath | quote }}
           - name: KNOOPPUNT_PDP_HOST
             value: {{ .Values.env.knooppuntPdpHost | quote }}
           - name: KNOOPPUNT_PDP_PORT
             value: {{ .Values.env.knooppuntPdpPort | quote }}
+          - name: NUTS_NODE_HOST
+            value: {{ .Values.env.nutsNodeHost | quote }}
+          - name: NUTS_NODE_INTERNAL_PORT
+            value: {{ .Values.env.nutsNodeInternalPort | quote }}
           - name: DATA_HOLDER_ORGANIZATION_URA
             value: {{ .Values.env.dataHolderOrganizationUra | quote }}
           - name: DATA_HOLDER_FACILITY_TYPE
             value: {{ .Values.env.dataHolderFacilityType | quote }}
-          - name: REQUESTING_FACILITY_TYPE
-            value: {{ .Values.env.requestingFacilityType | quote }}
-          - name: PURPOSE_OF_USE
-            value: {{ .Values.env.purposeOfUse | quote }}
+          - name: NGINX_PORT
+            value: {{ .Values.service.port | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}

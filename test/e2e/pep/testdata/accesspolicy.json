@@ -1,0 +1,120 @@
+{
+  "bgz": {
+    "organization": {
+      "format": {
+        "jwt_vc": {
+          "alg": ["PS256", "ES256", "RS256"]
+        },
+        "jwt_vp": {
+          "alg": ["ES256", "PS256", "RS256"]
+        },
+        "ldp_vc": {
+          "proof_type": ["JsonWebSignature2020"]
+        }
+      },
+      "id": "pd_bgz_care_organization",
+      "name": "BgZ Care organization",
+      "purpose": "Authorization for BgZ (Basisgegevensset Zorg) access",
+      "input_descriptors": [
+        {
+          "id": "id_x509credential",
+          "name": "Care organization identity from UZI certificate",
+          "purpose": "Finding a care organization for authorizing access to medical metadata.",
+          "constraints": {
+            "fields": [
+              {
+                "path": ["$.type"],
+                "filter": {
+                  "type": "array",
+                  "contains": {
+                    "const": "X509Credential"
+                  }
+                }
+              },
+              {
+                "path": ["$.issuer"],
+                "purpose": "Only accept credentials from our test CA",
+                "filter": {
+                  "type": "string",
+                  "pattern": "^did:x509:0:sha256:OPYJNiIh8WSwSDzJL0R2d2yPlolN9eAzZ8zvfMK3lcM::.*$"
+                }
+              },
+              {
+                "id": "subject_organization",
+                "path": ["$.credentialSubject[0].subject.O", "$.credentialSubject.subject.O"],
+                "filter": {
+                  "type": "string"
+                }
+              },
+              {
+                "id": "subject_organization_id",
+                "path": ["$.credentialSubject[0].san.otherName", "$.credentialSubject.san.otherName"],
+                "filter": {
+                  "type": "string",
+                  "pattern": "^[0-9.]+-\\d+-\\d+-S-(\\d+)-00\\.000-\\d+$"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "id_nuts_employee_credential",
+          "name": "Employee identity",
+          "purpose": "Identify the employee making the request for accountability and consent verification.",
+          "constraints": {
+            "fields": [
+              {
+                "path": ["$.type"],
+                "filter": {
+                  "type": "array",
+                  "contains": {
+                    "const": "NutsEmployeeCredential"
+                  }
+                }
+              },
+              {
+                "id": "subject_id",
+                "path": ["$.credentialSubject.identifier"],
+                "filter": {
+                  "type": "string"
+                }
+              },
+              {
+                "id": "subject_role",
+                "path": ["$.credentialSubject.roleName"],
+                "filter": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "id_healthcare_provider_role_type_credential",
+          "name": "Healthcare provider role type",
+          "purpose": "Identify the facility type of the requesting organization for Mitz consent verification.",
+          "constraints": {
+            "fields": [
+              {
+                "path": ["$.type"],
+                "filter": {
+                  "type": "array",
+                  "contains": {
+                    "const": "HealthcareProviderRoleTypeCredential"
+                  }
+                }
+              },
+              {
+                "id": "subject_facility_type",
+                "path": ["$.credentialSubject.roleCodeNL"],
+                "filter": {
+                  "type": "string"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

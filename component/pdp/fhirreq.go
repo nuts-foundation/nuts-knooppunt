@@ -338,7 +338,6 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Action.Properties.Request = request.Input.Request
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
-	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
 
 	contentType := request.Input.Request.Header.Get("Content-Type")
 	policyInput.Action.Properties.ContentType = contentType
@@ -350,7 +349,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	}
 
 	if tokens.ResourceType != nil {
-		policyInput.Resource.Type = *tokens.ResourceType
+		policyInput.Resource.Type = tokens.ResourceType
 		if tokens.ResourceId != "" {
 			policyInput.Resource.Properties.ResourceId = tokens.ResourceId
 		}
@@ -403,6 +402,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 		return PolicyInput{}, Deny(reason)
 	}
 	policyInput.Context.PatientID = patientId
+	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
 
 	return policyInput, Allow()
 }
