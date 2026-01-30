@@ -90,14 +90,14 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 
 	qualifications := input.Subject.Properties.ClientQualifications
 
-	// Step 1: Providing a scope is required for every PDP request
+	// Step 1: Providing a policy is required for every PDP request
 	if len(qualifications) == 0 {
 		res := PolicyResult{
 			Allow: false,
 			Reasons: []ResultReason{
 				{
 					Code:        TypeResultCodeMissingRequiredValue,
-					Description: "missing required value, no scope defined",
+					Description: "missing required value, no policy defined",
 				},
 			},
 		}
@@ -120,11 +120,11 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: Implement support for multiple scopes
-	scope := qualifications[0]
+	policy := qualifications[0]
 
 	// Step 2: Parse the PDP input and translate to the policy input
 	policyInput, policyResult := NewPolicyInput(reqBody)
-	policyResult.Policy = scope
+	policyResult.Policy = policy
 	if !policyResult.Allow {
 		writeResp(r.Context(), w, policyResult)
 		return
@@ -135,24 +135,18 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	policyInput, resultReasons = c.enrichPolicyInputWithPIP(r.Context(), policyInput)
 	policyResult.Reasons = append(policyResult.Reasons, resultReasons...)
 
-	// Step 4: Check the request adheres to the capability statement for this scope
-	capabilityStatementResult := evalCapabilityPolicy(r.Context(), policyInput, scope)
-	policyResult = policyResult.Merge(capabilityStatementResult)
-	if !policyResult.Allow {
-		writeResp(r.Context(), w, policyResult)
-		return
-	}
+	// Step 4: Check FHIR Capability Statement
+	policyInput, resultReasons = enrichPolicyInputWithCapabilityStatement(r.Context(), policyInput, policy)
+	policyResult.Reasons = append(policyResult.Reasons, resultReasons...)
 
-	// Step 5: Check the request adheres to the capability statement for this scope
+	// Step 5: Check consent at Mitz
 	policyInput, resultReasons = c.enrichPolicyInputWithMitz(r.Context(), policyInput)
 	policyResult.Reasons = append(policyResult.Reasons, resultReasons...)
-	// Note: do not return here if the Mitz policy denies the request, as the Mitz policy
-	// only provides input to the OPA policy evaluation.
 
 	// Step 6: Evaluate using Open Policy Agent
-	regoPolicyResult, err := c.evalRegoPolicy(r.Context(), scope, policyInput)
+	regoPolicyResult, err := c.evalRegoPolicy(r.Context(), policy, policyInput)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "failed to evaluate rego policy", logging.Error(err), slog.String("policy", scope))
+		slog.ErrorContext(r.Context(), "failed to evaluate rego policy", logging.Error(err), slog.String("policy", policy))
 		policyResult.Allow = false
 		policyResult.Reasons = append(policyResult.Reasons, ResultReason{
 			Code:        TypeResultCodeNotImplemented,
@@ -161,7 +155,8 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		writeResp(r.Context(), w, policyResult)
 		return
 	}
-	writeResp(r.Context(), w, policyResult.Merge(*regoPolicyResult))
+	regoPolicyResult.Reasons = append(policyResult.Reasons, regoPolicyResult.Reasons...)
+	writeResp(r.Context(), w, *regoPolicyResult)
 }
 
 func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) {
@@ -175,6 +170,7 @@ func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) 
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(b)
 	if err != nil {

@@ -140,6 +140,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						"_include": {"Patient:general-practitioner"},
 						"_id":      {"1000"},
 					},
+					Header: http.Header{
+						"Content-Type": {"application/fhir+json"},
+					},
 				},
 				Context: PDPContext{
 					DataHolderOrganizationId: "00000002",
@@ -172,6 +175,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					QueryParams: map[string][]string{
 						"_include": {"Patient:general-practitioner"},
 						"_id":      {"1000"},
+					},
+					Header: http.Header{
+						"Content-Type": {"application/fhir+json"},
 					},
 				},
 				Context: PDPContext{
@@ -208,6 +214,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						"_include": {"MedicationDispense:medication"},
 						"patient":  {"Patient/1000"},
 					},
+					Header: http.Header{
+						"Content-Type": {"application/fhir+json"},
+					},
 				},
 				Context: PDPContext{
 					DataHolderOrganizationId: "00000002",
@@ -238,6 +247,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					QueryParams: map[string][]string{
 						"_include": {"Patient:organization"},
 					},
+					Header: http.Header{
+						"Content-Type": {"application/fhir+json"},
+					},
 				},
 				Context: PDPContext{
 					DataHolderOrganizationId: "00000002",
@@ -266,6 +278,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					QueryParams: map[string][]string{
 						"_include": {"Patient:general-practitioner"},
 						"name":     {"John"},
+					},
+					Header: http.Header{
+						"Content-Type": {"application/fhir+json"},
 					},
 				},
 				Context: PDPContext{
@@ -297,6 +312,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Path:     "/Patient",
 					QueryParams: map[string][]string{
 						"_include": {"Patient:general-practitioner"},
+					},
+					Header: http.Header{
+						"Content-Type": {"application/fhir+json"},
 					},
 				},
 				Context: PDPContext{

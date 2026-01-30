@@ -1,10 +1,10 @@
 # Vektis VC Issuer
 
-OID4VCI-compliant Verifiable Credential Issuer for HealthcareProviderTypeCredentials.
+OID4VCI-compliant Verifiable Credential Issuer for HealthcareProviderRoleTypeCredentials.
 
 ## Overview
 
-This service implements the [OpenID for Verifiable Credential Issuance (OID4VCI)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) specification to issue HealthcareProviderTypeCredentials to wallets. It uses the wallet-initiated Authorization Code Flow with PKCE.
+This service implements the [OpenID for Verifiable Credential Issuance (OID4VCI)](https://openid.net/specs/openid-4-verifiable-credential-issuance-1_0.html) specification to issue HealthcareProviderRoleTypeCredentials to wallets. It uses the wallet-initiated Authorization Code Flow with PKCE.
 
 **Issue Reference:** [#196 - Implement Vektis-Organisatie-Type-Credential](https://github.com/nuts-foundation/nuts-knooppunt/issues/196)
 
@@ -96,7 +96,7 @@ Wallet                         Issuer                      e-Herkenning (Mock)
   │◄──── JWT VC ─────────────────│                              │
 ```
 
-## HealthcareProviderTypeCredential
+## HealthcareProviderRoleTypeCredential
 
 The issued credential contains:
 
@@ -104,10 +104,10 @@ The issued credential contains:
 {
   "vc": {
     "@context": ["https://www.w3.org/2018/credentials/v1"],
-    "type": ["VerifiableCredential", "HealthcareProviderTypeCredential"],
+    "type": ["VerifiableCredential", "HealthcareProviderRoleTypeCredential"],
     "credentialSubject": {
       "id": "did:web:wallet.example.com",
-      "healthcareProviderType": "A1"
+      "roleCodeNL": "A1"
     },
     "issuer": "did:web:issuer.example.com",
     "issuanceDate": "2024-12-01T12:00:00Z"
@@ -165,7 +165,7 @@ To issue a credential during the e-Herkenning flow:
 
 The healthcare provider types are based on the official Vektis "Dossierhoudende zorgaanbiedercategorieën" (Dossier-holding healthcare provider categories).
 
-**Note:** The credential only contains the `healthcareProviderType` code (e.g., "A1", "H1"). No organization name or other identifying information is included.
+**Note:** The credential only contains the `roleCodeNL` code (e.g., "A1", "H1"). No organization name or other identifying information is included.
 
 Source: [Vektis - Dossierhoudende zorgaanbiedercategorieën](https://vzvz.atlassian.net/wiki/spaces/MA11/pages/828314634/Bijlage+Dossierhoudende+zorgaanbiedercategorie+n)
 

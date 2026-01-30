@@ -8,6 +8,12 @@ import (
 )
 
 func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input PolicyInput) (PolicyInput, []ResultReason) {
+	// If this call doesn't relate to a BSN don't attempt Mitz
+	if input.Context.PatientBSN == "" {
+		input.Context.MitzConsent = false
+		return input, []ResultReason{}
+	}
+
 	resultReasons := validateMitzInput(input)
 	if len(resultReasons) > 0 {
 		return input, resultReasons

@@ -24,7 +24,7 @@ interface CredentialRequest {
 
 /**
  * Credential endpoint for OID4VCI
- * Issues HealthcareProviderTypeCredential to the wallet
+ * Issues HealthcareProviderRoleTypeCredential to the wallet
  */
 export async function POST(req: NextRequest) {
   console.log('[Credential] POST request received');
@@ -157,7 +157,7 @@ export async function POST(req: NextRequest) {
 
   const credentialSubject = {
     id: subjectDid,
-    healthcareProviderType: authenticatedOrg.type,
+    roleCodeNL: authenticatedOrg.type,
   };
 
   // Issue the credential
@@ -174,7 +174,7 @@ export async function POST(req: NextRequest) {
         'https://www.w3.org/2018/credentials/v1',
         `${baseUrl}/contexts/vektis-org.jsonld`
       ],
-      type: ['VerifiableCredential', 'HealthcareProviderTypeCredential'],
+      type: ['VerifiableCredential', 'HealthcareProviderRoleTypeCredential'],
       issuanceDate,
       expirationDate,
     });
@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
       credentialId,
       issuerDid,
       subjectDid,
-      credentialType: JSON.stringify(['VerifiableCredential', 'HealthcareProviderTypeCredential']),
+      credentialType: JSON.stringify(['VerifiableCredential', 'HealthcareProviderRoleTypeCredential']),
       format: 'jwt_vc_json',
       credentialSubject: JSON.stringify(credentialSubject),
       tokenResponseId: tokenResponse.id,
