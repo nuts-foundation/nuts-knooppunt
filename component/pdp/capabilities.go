@@ -40,40 +40,32 @@ func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityState
 	return result, true
 }
 
-func evalCapabilityPolicy(ctx context.Context, input PolicyInput) (PolicyInput, PolicyResult) {
+func enrichPolicyInputWithCapabilityStatement(ctx context.Context, input PolicyInput, policy string) (PolicyInput, []ResultReason) {
 	if input.Action.Properties.ContentType != "application/fhir+json" {
-		return input, Allow()
+		return input, nil
 	}
 
-	out := PolicyResult{
-		Allow: false,
-	}
-
-	scope := input.Subject.Properties.ClientQualifications[0]
-
-	statement, ok := capabilityForScope(ctx, scope)
+	statement, ok := capabilityForScope(ctx, policy)
 	if !ok {
-		reason := ResultReason{
-			Code:        TypeResultCodeUnexpectedInput,
-			Description: "unexpected input, no capability statement known for scope",
+		return input, []ResultReason{
+			{
+				Code:        TypeResultCodeUnexpectedInput,
+				Description: "unexpected input, no capability statement known for policy",
+			},
 		}
-		out.Reasons = []ResultReason{reason}
-		return input, out
 	}
 
-	result := evalInteraction(statement, input)
-	input.Context.FHIRCapabilityChecked = result.Allow
-	return input, result
+	resultReasons := evalInteraction(statement, input)
+	input.Context.FHIRCapabilityChecked = len(resultReasons) == 0
+	return input, resultReasons
 }
 
+// evalInteraction checks whether the requested interaction is allowed by the capability statement.
+// If not, it returns a list of reasons why not.
 func evalInteraction(
 	statement fhir.CapabilityStatement,
 	input PolicyInput,
-) PolicyResult {
-	policyResult := PolicyResult{
-		Allow: false,
-	}
-
+) []ResultReason {
 	// FUTURE: This is a pretty naive implementation - we can make it more efficient at a later point.
 	var supported = []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionRead,
@@ -90,11 +82,12 @@ func evalInteraction(
 	props := input.Action.Properties
 
 	if !slices.Contains(supported, props.InteractionType) {
-		return Deny(
-			ResultReason{
+		return []ResultReason{
+			{
 				Code:        TypeResultCodeNotImplemented,
 				Description: "restful interaction type not supported",
-			})
+			},
+		}
 	}
 
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
@@ -116,11 +109,12 @@ func evalInteraction(
 	}
 
 	if !allowInteraction {
-		return Deny(
-			ResultReason{
+		return []ResultReason{
+			{
 				Code:        TypeResultCodeNotAllowed,
 				Description: "capability statement does not allow interaction",
-			})
+			},
+		}
 	}
 
 	allowParams := false
@@ -142,11 +136,14 @@ func evalInteraction(
 
 	allowParams = len(rejectedSearchParams) == 0
 	if !allowParams {
-		policyResult.AddReasons(rejectedSearchParams, "search parameter %s is not allowed", TypeResultCodeNotAllowed)
-		return policyResult
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: fmt.Sprintf("search parameter %s not allowed", rejectedSearchParams),
+			},
+		}
 	}
 
-	allowIncludes := false
 	allowedIncludes := make([]string, 0, 10)
 	for _, des := range resourceDescriptions {
 		for _, include := range des.SearchInclude {
@@ -161,10 +158,14 @@ func evalInteraction(
 		}
 	}
 
-	allowIncludes = len(rejectedIncludes) == 0
+	allowIncludes := len(rejectedIncludes) == 0
 	if !allowIncludes {
-		policyResult.AddReasons(rejectedIncludes, "include %s is not allowed", TypeResultCodeNotAllowed)
-		return policyResult
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: fmt.Sprintf("include %s is not allowed", rejectedIncludes),
+			},
+		}
 	}
 
 	allowRevincludes := false
@@ -184,9 +185,13 @@ func evalInteraction(
 
 	allowRevincludes = len(rejectedRevincludes) == 0
 	if !allowRevincludes {
-		policyResult.AddReasons(rejectedRevincludes, "Revinclude %s is not allowed", TypeResultCodeNotAllowed)
-		return policyResult
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: fmt.Sprintf("revinclude %s is not allowed", rejectedRevincludes),
+			},
+		}
 	}
 
-	return Allow()
+	return nil
 }
