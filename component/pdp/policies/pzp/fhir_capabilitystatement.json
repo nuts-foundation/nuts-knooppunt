@@ -1,0 +1,56 @@
+{
+  "resourceType": "CapabilityStatement",
+  "version": "0.0.1",
+  "name": "PZPServer",
+  "status": "active",
+  "date": "2026-01-29",
+  "publisher": "Stichting Nuts",
+  "description": "This CapabilityStatement describes the minimal requirements for a server to expose the PZP/ACP (Proactieve Zorgplanning) interfaces. It is not the formal specification (can be found here: https://build.fhir.org/ig/IKNL/PZP-FHIR-R4/branches/develop/CapabilityStatement-ACP-CapabilityStatementProvider.html).",
+  "copyright": "CC0",
+  "kind": "requirements",
+  "fhirVersion": "4.0.1",
+  "acceptUnknown": "both",
+  "format": [
+    "xml",
+    "json"
+  ],
+  "rest": [
+    {
+      "mode": "server",
+      "resource": [
+        {
+          "type": "Patient",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "identifier",
+              "type": "token"
+            }
+          ]
+        },
+        {
+          "type": "Consent",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "reference"
+            },
+            {
+              "name": "_profile",
+              "type": "uri"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
