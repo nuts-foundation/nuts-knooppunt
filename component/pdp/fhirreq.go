@@ -400,7 +400,6 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 		return PolicyInput{}, Deny(reason)
 	}
 	policyInput.Context.PatientID = patientId
-	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
 
 	return policyInput, Allow()
 }

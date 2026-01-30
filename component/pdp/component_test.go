@@ -177,7 +177,6 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				Context: PDPContext{
 					DataHolderOrganizationId: "00000002",
 					DataHolderFacilityType:   "TODO",
-					PatientBSN:               "123456789",
 				},
 			},
 		}

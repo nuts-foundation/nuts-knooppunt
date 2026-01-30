@@ -152,8 +152,7 @@ POST /pdp
     },
     "context": {
       "data_holder_organization_id": "12345678",
-      "data_holder_facility_type": "Z3",
-      "patient_bsn": ""
+      "data_holder_facility_type": "Z3"
     }
   }
 }

@@ -44,7 +44,6 @@ type HTTPRequest struct {
 type PDPContext struct {
 	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
-	PatientBSN               string `json:"patient_bsn"`
 }
 
 type PolicyInput struct {
