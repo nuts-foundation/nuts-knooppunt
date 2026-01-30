@@ -39,7 +39,10 @@ func Test_BGZAuthorization(t *testing.T) {
 			  "query_params": {
  			    "_include": ["Patient:general-practitioner"],
 				"_id": ["1000"]
-              }
+              },
+			  "header": {
+				"Content-Type": ["application/fhir+json"]
+			  }
 			},
 			"context": {
 			  "data_holder_organization_id": "00000659",

@@ -40,7 +40,11 @@ func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityState
 	return result, true
 }
 
-func evalCapabilityPolicy(ctx context.Context, input PolicyInput) PolicyResult {
+func evalCapabilityPolicy(ctx context.Context, input PolicyInput) (PolicyInput, PolicyResult) {
+	if input.Action.Properties.ContentType != "application/fhir+json" {
+		return input, Allow()
+	}
+
 	out := PolicyResult{
 		Allow: false,
 	}
@@ -54,10 +58,12 @@ func evalCapabilityPolicy(ctx context.Context, input PolicyInput) PolicyResult {
 			Description: "unexpected input, no capability statement known for scope",
 		}
 		out.Reasons = []ResultReason{reason}
-		return out
+		return input, out
 	}
 
-	return evalInteraction(statement, input)
+	result := evalInteraction(statement, input)
+	input.Context.FHIRCapabilityChecked = result.Allow
+	return input, result
 }
 
 func evalInteraction(
