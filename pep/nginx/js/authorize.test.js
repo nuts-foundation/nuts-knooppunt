@@ -404,7 +404,8 @@ describe('buildPDPRequest', () => {
                 },
                 context: {
                     data_holder_organization_id: '00000666',
-                    data_holder_facility_type: 'Z3'
+                    data_holder_facility_type: 'Z3',
+                    patient_bsn: ''
                 }
             }
         });

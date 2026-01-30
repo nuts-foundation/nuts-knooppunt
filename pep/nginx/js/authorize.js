@@ -199,7 +199,8 @@ function buildPDPRequest(introspection, request) {
             },
             context: {
                 data_holder_organization_id: process.env.DATA_HOLDER_ORGANIZATION_URA || '',
-                data_holder_facility_type: process.env.DATA_HOLDER_FACILITY_TYPE || ''
+                data_holder_facility_type: process.env.DATA_HOLDER_FACILITY_TYPE || '',
+                patient_bsn: ''
             }
         }
     };

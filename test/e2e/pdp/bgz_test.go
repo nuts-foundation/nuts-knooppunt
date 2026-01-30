@@ -38,15 +38,13 @@ func Test_BGZAuthorization(t *testing.T) {
 			  "path": "/Patient",
 			  "query_params": {
  			    "_include": ["Patient:general-practitioner"],
-				"_id": ["1000"]
-              },
-			  "header": {
-				"Content-Type": ["application/fhir+json"]
-			  }
+				"_id": ["3E439979-017F-40AA-594D-EBCF880FFD97"]
+              }
 			},
 			"context": {
 			  "data_holder_organization_id": "00000659",
-			  "data_holder_facility_type": "Z3"
+			  "data_holder_facility_type": "Z3",
+              "patient_bsn": ""
 			}
 		  }
 		}`
