@@ -578,7 +578,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Request: HTTPRequest{
 						Method:      "GET",
 						Protocol:    "HTTP/1.1",
-						Path:        "/Patient",
+						Path:        "/Patient?",
 						QueryParams: map[string][]string{},
 						Header: http.Header{
 							"Content-Type": {"application/fhir+json"},
