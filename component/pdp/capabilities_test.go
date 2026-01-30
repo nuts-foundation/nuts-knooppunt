@@ -35,7 +35,7 @@ func TestComponent_reject_interaction(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
-	assert.False(t, inp.Context.FhirCapabilityChecked)
+	assert.False(t, inp.Context.FHIRCapabilityChecked)
 }
 
 func TestComponent_allow_interaction(t *testing.T) {
@@ -65,7 +65,7 @@ func TestComponent_allow_interaction(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
-	assert.True(t, inp.Context.FhirCapabilityChecked)
+	assert.True(t, inp.Context.FHIRCapabilityChecked)
 }
 
 func TestComponent_allow_search_param(t *testing.T) {
@@ -96,7 +96,7 @@ func TestComponent_allow_search_param(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
-	assert.True(t, inp.Context.FhirCapabilityChecked)
+	assert.True(t, inp.Context.FHIRCapabilityChecked)
 }
 
 func TestComponent_reject_search_param(t *testing.T) {
@@ -127,7 +127,7 @@ func TestComponent_reject_search_param(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
-	assert.False(t, inp.Context.FhirCapabilityChecked)
+	assert.False(t, inp.Context.FHIRCapabilityChecked)
 }
 
 func TestComponent_reject_interaction_type(t *testing.T) {
@@ -151,7 +151,7 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
-	assert.False(t, inp.Context.FhirCapabilityChecked)
+	assert.False(t, inp.Context.FHIRCapabilityChecked)
 }
 
 func TestComponent_allow_include(t *testing.T) {
@@ -182,7 +182,7 @@ func TestComponent_allow_include(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
-	assert.True(t, inp.Context.FhirCapabilityChecked)
+	assert.True(t, inp.Context.FHIRCapabilityChecked)
 }
 
 func TestComponent_reject_include(t *testing.T) {
@@ -213,7 +213,7 @@ func TestComponent_reject_include(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
-	assert.False(t, inp.Context.FhirCapabilityChecked)
+	assert.False(t, inp.Context.FHIRCapabilityChecked)
 }
 
 func TestComponent_reject_revinclude(t *testing.T) {
@@ -244,7 +244,7 @@ func TestComponent_reject_revinclude(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
-	assert.False(t, inp.Context.FhirCapabilityChecked)
+	assert.False(t, inp.Context.FHIRCapabilityChecked)
 }
 
 func TestComponent_allow_revinclude(t *testing.T) {
@@ -275,5 +275,5 @@ func TestComponent_allow_revinclude(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
-	assert.True(t, inp.Context.FhirCapabilityChecked)
+	assert.True(t, inp.Context.FHIRCapabilityChecked)
 }
