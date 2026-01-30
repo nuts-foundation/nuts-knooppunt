@@ -59,19 +59,19 @@ export function getCredentialIssuerMetadata(baseUrl: string, issuerDid: string):
       },
     ],
     credential_configurations_supported: {
-      HealthcareProviderTypeCredential: {
+      HealthcareProviderRoleTypeCredential: {
         format: 'jwt_vc_json',
-        scope: 'HealthcareProviderTypeCredential',
+        scope: 'HealthcareProviderRoleTypeCredential',
         cryptographic_binding_methods_supported: ['did:web', 'did:jwk'],
         credential_signing_alg_values_supported: ['EdDSA'],
         credential_definition: {
-          type: ['VerifiableCredential', 'HealthcareProviderTypeCredential'],
+          type: ['VerifiableCredential', 'HealthcareProviderRoleTypeCredential'],
           credentialSubject: {
-            healthcareProviderType: {
+            roleCodeNL: {
               mandatory: true,
               display: [
-                { name: 'Zorgaanbiedertype', locale: 'nl-NL' },
-                { name: 'Healthcare Provider Type', locale: 'en-US' },
+                { name: 'Zorgaanbieder rolcode', locale: 'nl-NL' },
+                { name: 'Healthcare Role Code', locale: 'en-US' },
               ],
             },
           },
@@ -144,7 +144,7 @@ export function getAuthorizationServerMetadata(baseUrl: string): AuthorizationSe
     grant_types_supported: ['authorization_code'],
     token_endpoint_auth_methods_supported: ['none'],
     code_challenge_methods_supported: ['S256'],
-    scopes_supported: ['HealthcareProviderTypeCredential'],
+    scopes_supported: ['HealthcareProviderRoleTypeCredential'],
 
     // OID4VCI extensions
     authorization_details_types_supported: ['openid_credential'],

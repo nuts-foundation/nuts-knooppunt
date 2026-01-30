@@ -108,6 +108,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 							"_include": {"Patient:general-practitioner"},
 							"_id":      {"1001"},
 						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
+						},
 					},
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
@@ -141,6 +144,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 							"_include": {"Patient:general-practitioner"},
 							"_id":      {"1000"},
 						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
+						},
 					},
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
@@ -173,6 +179,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						QueryParams: map[string][]string{
 							"_include": {"Patient:general-practitioner"},
 							"_id":      {"1000"},
+						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
 						},
 					},
 					Context: PDPContext{
@@ -209,6 +218,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 							"_include": {"MedicationDispense:medication"},
 							"patient":  {"Patient/1000"},
 						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
+						},
 					},
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
@@ -239,6 +251,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						QueryParams: map[string][]string{
 							"_include": {"Patient:organization"},
 						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
+						},
 					},
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
@@ -267,6 +282,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						QueryParams: map[string][]string{
 							"_include": {"Patient:general-practitioner"},
 							"name":     {"John"},
+						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
 						},
 					},
 					Context: PDPContext{
@@ -298,6 +316,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						Path:     "/Patient?",
 						QueryParams: map[string][]string{
 							"_include": {"Patient:general-practitioner"},
+						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
 						},
 					},
 					Context: PDPContext{
@@ -335,6 +356,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						QueryParams: map[string][]string{
 							"identifier": {"http://fhir.nl/fhir/NamingSystem/bsn|123456789"},
 						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
+						},
 					},
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
@@ -360,6 +384,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						QueryParams: map[string][]string{
 							"identifier": {"123456789"},
 						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
+						},
 					},
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
@@ -384,6 +411,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						Path:     "/Patient?",
 						QueryParams: map[string][]string{
 							"identifier": {"http://example.com/identifier|123456789"},
+						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
 						},
 					},
 					Context: PDPContext{
@@ -411,6 +441,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 							"patient":  {"Patient/1000"},
 							"_profile": {"http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2"},
 						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
+						},
 					},
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
@@ -435,6 +468,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						QueryParams: map[string][]string{
 							"patient":  {"Patient/1000,Patient/1001"},
 							"_profile": {"http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2"},
+						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
 						},
 					},
 					Context: PDPContext{
@@ -461,6 +497,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						QueryParams: map[string][]string{
 							"_profile": {"http://example.com/fhir/StructureDefinition/consent-profile"},
 						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
+						},
 					},
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
@@ -485,6 +524,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						Path:     "/Consent",
 						QueryParams: map[string][]string{
 							"patient": {"Patient/1000"},
+						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
 						},
 					},
 					Context: PDPContext{
@@ -512,6 +554,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 							"patient":  {""},
 							"_profile": {"http://example.com/fhir/StructureDefinition/consent-profile"},
 						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
+						},
 					},
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
@@ -535,6 +580,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						Protocol:    "HTTP/1.1",
 						Path:        "/Patient",
 						QueryParams: map[string][]string{},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
+						},
 					},
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
@@ -561,6 +609,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						QueryParams: map[string][]string{
 							"identifier": {"http://fhir.nl/fhir/NamingSystem/bsn|bsn:deny"},
 						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
+						},
 					},
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
@@ -585,6 +636,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						Path:     "/Observation",
 						QueryParams: map[string][]string{
 							"patient": {"Patient/1000"},
+						},
+						Header: http.Header{
+							"Content-Type": {"application/fhir+json"},
 						},
 					},
 					Context: PDPContext{

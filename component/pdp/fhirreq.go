@@ -368,10 +368,19 @@ func getSingleParameter(params url.Values, name string) (string, error) {
 func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	var policyInput PolicyInput
 
+	policyInput.Subject = request.Input.Subject
+	policyInput.Action.Properties.Request = request.Input.Request
+	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
+	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
+	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
+
+	contentType := request.Input.Request.Header.Get("Content-Type")
+	policyInput.Action.Properties.ContentType = contentType
+
 	tokens, ok := parseRequestPath(request.Input.Request)
 	if !ok {
-		reason := ResultReason{Code: TypeResultCodeUnexpectedInput, Description: "Not a valid FHIR request path"}
-		return PolicyInput{}, Deny(reason)
+		// This is not a FHIR request
+		return policyInput, Allow()
 	}
 
 	if tokens.ResourceType != nil {
@@ -384,16 +393,13 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 		}
 	}
 
-	policyInput.Action.Properties = PolicyActionProperties{
-		InteractionType: tokens.Interaction,
-	}
+	policyInput.Action.Properties.InteractionType = tokens.Interaction
 
 	if tokens.OperationName != "" {
 		policyInput.Action.Properties.Operation = &tokens.OperationName
 	}
 
 	var rawParams url.Values
-	contentType := request.Input.Request.Header.Get("Content-Type")
 	hasFormData := contentType == "application/x-www-form-urlencoded"
 	interWithBody := []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionSearchType,
@@ -421,10 +427,8 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Action.Properties.Include = params.Include
 	policyInput.Action.Properties.Revinclude = params.Revinclude
 	policyInput.Action.Properties.SearchParams = params.SearchParams
-	policyInput.Subject = request.Input.Subject
-	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
-	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
 
+	// Read patient resource ID from request
 	patientId, err := derivePatientId(tokens, rawParams)
 	if err != nil {
 		return PolicyInput{}, Deny(ResultReason{
@@ -434,17 +438,15 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	}
 	policyInput.Context.PatientID = patientId
 
-	if request.Input.Context.PatientBSN == "" {
-		// BSN not provided, try to derive from request
-		patientBSN, err := derivePatientBSN(tokens, rawParams)
-		if err != nil {
-			return PolicyInput{}, Deny(ResultReason{
-				Code:        TypeResultCodeUnexpectedInput,
-				Description: "patient_bsn: " + err.Error(),
-			})
-		}
-		policyInput.Context.PatientBSN = patientBSN
+	// Read patient BSN from request
+	patientBSN, err := derivePatientBSN(tokens, rawParams)
+	if err != nil {
+		return PolicyInput{}, Deny(ResultReason{
+			Code:        TypeResultCodeUnexpectedInput,
+			Description: "patient_bsn: " + err.Error(),
+		})
 	}
+	policyInput.Context.PatientBSN = patientBSN
 
 	return policyInput, Allow()
 }
