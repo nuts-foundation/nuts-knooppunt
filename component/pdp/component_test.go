@@ -315,18 +315,19 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		})
 	})
 	t.Run("pzp", func(t *testing.T) {
+		subject := Subject{
+			Properties: SubjectProperties{
+				ClientQualifications:  []string{"pzp"},
+				SubjectOrganizationId: "00000001",
+				SubjectFacilityType:   "TODO",
+				SubjectRole:           "TODO",
+				SubjectId:             "TODO",
+			},
+		}
 		t.Run("allow - Patient search with BSN identifier", func(t *testing.T) {
 			pdpRequest := PDPRequest{
 				Input: PDPInput{
-					Subject: Subject{
-						Properties: SubjectProperties{
-							ClientQualifications:  []string{"pzp"},
-							SubjectOrganizationId: "00000001",
-							SubjectFacilityType:   "TODO",
-							SubjectRole:           "TODO",
-							SubjectId:             "TODO",
-						},
-					},
+					Subject: subject,
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
@@ -338,7 +339,6 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
 						DataHolderFacilityType:   "TODO",
-						PatientBSN:               "123456789",
 					},
 				},
 			}
@@ -352,15 +352,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		t.Run("deny - Patient search without BSN namespace", func(t *testing.T) {
 			pdpRequest := PDPRequest{
 				Input: PDPInput{
-					Subject: Subject{
-						Properties: SubjectProperties{
-							ClientQualifications:  []string{"pzp"},
-							SubjectOrganizationId: "00000001",
-							SubjectFacilityType:   "TODO",
-							SubjectRole:           "TODO",
-							SubjectId:             "TODO",
-						},
-					},
+					Subject: subject,
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
@@ -372,7 +364,6 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
 						DataHolderFacilityType:   "TODO",
-						PatientBSN:               "123456789",
 					},
 				},
 			}
@@ -386,15 +377,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		t.Run("deny - Patient search with wrong identifier system", func(t *testing.T) {
 			pdpRequest := PDPRequest{
 				Input: PDPInput{
-					Subject: Subject{
-						Properties: SubjectProperties{
-							ClientQualifications:  []string{"pzp"},
-							SubjectOrganizationId: "00000001",
-							SubjectFacilityType:   "TODO",
-							SubjectRole:           "TODO",
-							SubjectId:             "TODO",
-						},
-					},
+					Subject: subject,
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
@@ -406,7 +389,6 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
 						DataHolderFacilityType:   "TODO",
-						PatientBSN:               "123456789",
 					},
 				},
 			}
@@ -420,15 +402,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		t.Run("allow - Consent search with patient and _profile", func(t *testing.T) {
 			pdpRequest := PDPRequest{
 				Input: PDPInput{
-					Subject: Subject{
-						Properties: SubjectProperties{
-							ClientQualifications:  []string{"pzp"},
-							SubjectOrganizationId: "00000001",
-							SubjectFacilityType:   "TODO",
-							SubjectRole:           "TODO",
-							SubjectId:             "TODO",
-						},
-					},
+					Subject: subject,
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
@@ -450,19 +424,36 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			assert.True(t, response.Result.Allow, "pzp should allow Consent search with patient and _profile")
 			assert.Empty(t, response.Result.Reasons)
 		})
+		t.Run("deny - Consent search with multiple patient refs", func(t *testing.T) {
+			pdpRequest := PDPRequest{
+				Input: PDPInput{
+					Subject: subject,
+					Request: HTTPRequest{
+						Method:   "GET",
+						Protocol: "HTTP/1.1",
+						Path:     "/Consent",
+						QueryParams: map[string][]string{
+							"patient":  {"Patient/1000,Patient/1001"},
+							"_profile": {"http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2"},
+						},
+					},
+					Context: PDPContext{
+						DataHolderOrganizationId: "00000002",
+						DataHolderFacilityType:   "TODO",
+					},
+				},
+			}
+
+			response := executePDPRequest(t, service, pdpRequest)
+
+			assert.False(t, response.Result.Allow)
+			assert.NotEmpty(t, response.Result.Reasons)
+		})
 
 		t.Run("deny - Consent search without patient parameter", func(t *testing.T) {
 			pdpRequest := PDPRequest{
 				Input: PDPInput{
-					Subject: Subject{
-						Properties: SubjectProperties{
-							ClientQualifications:  []string{"pzp"},
-							SubjectOrganizationId: "00000001",
-							SubjectFacilityType:   "TODO",
-							SubjectRole:           "TODO",
-							SubjectId:             "TODO",
-						},
-					},
+					Subject: subject,
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
@@ -474,7 +465,6 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
 						DataHolderFacilityType:   "TODO",
-						PatientBSN:               "123456789",
 					},
 				},
 			}
@@ -488,15 +478,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		t.Run("deny - Consent search without _profile parameter", func(t *testing.T) {
 			pdpRequest := PDPRequest{
 				Input: PDPInput{
-					Subject: Subject{
-						Properties: SubjectProperties{
-							ClientQualifications:  []string{"pzp"},
-							SubjectOrganizationId: "00000001",
-							SubjectFacilityType:   "TODO",
-							SubjectRole:           "TODO",
-							SubjectId:             "TODO",
-						},
-					},
+					Subject: subject,
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
@@ -508,7 +490,6 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
 						DataHolderFacilityType:   "TODO",
-						PatientBSN:               "123456789",
 					},
 				},
 			}
@@ -522,15 +503,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		t.Run("deny - Consent search with empty patient parameter", func(t *testing.T) {
 			pdpRequest := PDPRequest{
 				Input: PDPInput{
-					Subject: Subject{
-						Properties: SubjectProperties{
-							ClientQualifications:  []string{"pzp"},
-							SubjectOrganizationId: "00000001",
-							SubjectFacilityType:   "TODO",
-							SubjectRole:           "TODO",
-							SubjectId:             "TODO",
-						},
-					},
+					Subject: subject,
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
@@ -543,7 +516,6 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
 						DataHolderFacilityType:   "TODO",
-						PatientBSN:               "123456789",
 					},
 				},
 			}
@@ -557,22 +529,12 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		t.Run("deny - Patient search without patient_id or patient_bsn", func(t *testing.T) {
 			pdpRequest := PDPRequest{
 				Input: PDPInput{
-					Subject: Subject{
-						Properties: SubjectProperties{
-							ClientQualifications:  []string{"pzp"},
-							SubjectOrganizationId: "00000001",
-							SubjectFacilityType:   "TODO",
-							SubjectRole:           "TODO",
-							SubjectId:             "TODO",
-						},
-					},
+					Subject: subject,
 					Request: HTTPRequest{
-						Method:   "GET",
-						Protocol: "HTTP/1.1",
-						Path:     "/Patient",
-						QueryParams: map[string][]string{
-							"identifier": {"http://fhir.nl/fhir/NamingSystem/bsn|123456789"},
-						},
+						Method:      "GET",
+						Protocol:    "HTTP/1.1",
+						Path:        "/Patient",
+						QueryParams: map[string][]string{},
 					},
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
@@ -591,21 +553,13 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		t.Run("deny - Mitz consent not given", func(t *testing.T) {
 			pdpRequest := PDPRequest{
 				Input: PDPInput{
-					Subject: Subject{
-						Properties: SubjectProperties{
-							ClientQualifications:  []string{"pzp"},
-							SubjectOrganizationId: "00000001",
-							SubjectFacilityType:   "TODO",
-							SubjectRole:           "TODO",
-							SubjectId:             "TODO",
-						},
-					},
+					Subject: subject,
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Patient",
 						QueryParams: map[string][]string{
-							"identifier": {"http://fhir.nl/fhir/NamingSystem/bsn|999999999"},
+							"identifier": {"http://fhir.nl/fhir/NamingSystem/bsn|bsn:deny"},
 						},
 					},
 					Context: PDPContext{
@@ -624,15 +578,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		t.Run("deny - unsupported resource type", func(t *testing.T) {
 			pdpRequest := PDPRequest{
 				Input: PDPInput{
-					Subject: Subject{
-						Properties: SubjectProperties{
-							ClientQualifications:  []string{"pzp"},
-							SubjectOrganizationId: "00000001",
-							SubjectFacilityType:   "TODO",
-							SubjectRole:           "TODO",
-							SubjectId:             "TODO",
-						},
-					},
+					Subject: subject,
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
@@ -644,7 +590,6 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					Context: PDPContext{
 						DataHolderOrganizationId: "00000002",
 						DataHolderFacilityType:   "TODO",
-						PatientBSN:               "123456789",
 					},
 				},
 			}
