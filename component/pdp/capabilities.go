@@ -41,7 +41,7 @@ func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityState
 }
 
 func evalCapabilityPolicy(ctx context.Context, input PolicyInput) (PolicyInput, PolicyResult) {
-	// Skip capability checking for non-FHIR resource requests (e.g., /metadata, /)
+	// Skip capability checking for requests that don't target a specific resource type (e.g., /metadata, /)
 	if input.Resource.Type == nil {
 		return input, Allow()
 	}
