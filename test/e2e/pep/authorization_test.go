@@ -217,15 +217,6 @@ func Test_PEPAuthorization(t *testing.T) {
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 
-		// Print PEP container logs for debugging
-		logs, err := pepResult.Container.Logs(t.Context())
-		if err != nil {
-			t.Logf("Failed to get PEP logs: %v", err)
-		} else if logs != nil {
-			logBytes, _ := io.ReadAll(logs)
-			t.Logf("PEP container logs:\n%s", string(logBytes))
-			logs.Close()
-		}
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode, "Expected successful authorization with DPoP token: %s", string(body))
 		assert.Contains(t, string(body), "Bundle")

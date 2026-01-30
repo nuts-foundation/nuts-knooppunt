@@ -14,8 +14,7 @@ const {
     normalizeClaimValue,
     extractPDClaims,
     buildPDPRequest,
-    validateDPoP,
-    STANDARD_CLAIMS
+    validateDPoP
 } = authorize;
 
 function createMockRequest(overrides = {}) {
