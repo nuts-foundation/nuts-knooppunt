@@ -35,10 +35,6 @@ import (
 //   - Real token introspection with extracted claims
 //   - PEP authorization through Knooppunt PDP
 //   - Mitz consent checking (mocked)
-//
-// Prerequisites:
-//   - Docker must be running
-//   - go-didx509-toolkit Docker image must be available
 func Test_PEPAuthorization(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")

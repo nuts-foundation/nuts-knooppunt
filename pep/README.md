@@ -73,7 +73,7 @@ The Presentation Definition (PD) is configured on the authorization server (Nuts
 For BgZ use cases, the PD typically requires:
 
 1. **X509Credential** - Organization identity with URA number
-2. **HealthcareProviderTypeCredential** - Vektis facility type
+2. **HealthcareProviderRoleTypeCredential** - Vektis facility type
 3. **NutsEmployeeCredential** - Employee identity for Mitz consent verification
 
 See `test/e2e/pep/testdata/accesspolicy.json` for an example PD used in e2e tests.
@@ -104,9 +104,9 @@ Verifiable Credentials    Presentation Definition    Introspection Response    P
 The PEP passes claims directly from introspection to the PDP. **The Presentation Definition must use
 `id` fields that match what the PDP expects.**
 
-### Required PD Constraint IDs
+### PD Constraint IDs (for PDP/Mitz)
 
-The PD must use these exact `id` values in its constraints:
+The PEP passes all non-standard claims through to the PDP. The PDP expects these `id` values in the PD constraints:
 
 | PD Constraint `id` | VC Path Example | Description |
 |--------------------|-----------------|-------------|
@@ -196,7 +196,7 @@ go test ./test/e2e/pep/... -v
 ```
 
 The e2e test (in `test/e2e/pep/authorization_test.go`):
-1. Starts Nuts node, HAPI FHIR, Knooppunt PDP, and PEP containers
+1. Starts Nuts node and HAPI FHIR containers, Knooppunt PDP in-process, and PEP container
 2. Issues X509Credential, NutsEmployeeCredential, and HealthcareProviderRoleTypeCredential
 3. Requests an access token with scope `bgz`
 4. Tests the full PEP authorization flow with real credential validation
@@ -212,5 +212,5 @@ The e2e test (in `test/e2e/pep/authorization_test.go`):
 
 The PEP requires:
 1. **Nuts node** with introspection endpoint at `/internal/auth/v2/accesstoken/introspect`
-2. **Presentation Definition** configured on the authorization server (Nuts node) with claim IDs matching `authorize.js`
+2. **Presentation Definition** configured on the authorization server (Nuts node) with claim IDs matching what the PDP expects
 3. **PDP** configured with Mitz consent checking
