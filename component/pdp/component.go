@@ -157,14 +157,13 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	regoPolicyResult := *regoPolicyResultPtr
-	if !regoPolicyResult.Allow {
-		notAllowedResult := appendReasons(regoPolicyResult, capabilityResult, mitzResult)
+	if !(*regoPolicyResultPtr).Allow {
+		notAllowedResult := appendReasons(*regoPolicyResultPtr, capabilityResult, mitzResult)
 		writeResp(r.Context(), w, notAllowedResult)
 		return
 	}
 
-	writeResp(r.Context(), w, regoPolicyResult)
+	writeResp(r.Context(), w, *regoPolicyResultPtr)
 }
 
 func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) {
