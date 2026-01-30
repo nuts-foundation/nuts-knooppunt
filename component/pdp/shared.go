@@ -55,7 +55,7 @@ type PolicyInput struct {
 }
 
 type PolicyResource struct {
-	Type       fhir.ResourceType        `json:"type"`
+	Type       *fhir.ResourceType       `json:"type"`
 	Properties PolicyResourceProperties `json:"properties"`
 }
 
