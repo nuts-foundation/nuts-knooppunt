@@ -439,14 +439,16 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Context.PatientID = patientId
 
 	// Read patient BSN from request
-	patientBSN, err := derivePatientBSN(tokens, rawParams)
-	if err != nil {
-		return PolicyInput{}, Deny(ResultReason{
-			Code:        TypeResultCodeUnexpectedInput,
-			Description: "patient_bsn: " + err.Error(),
-		})
+	if policyInput.Context.PatientBSN == "" {
+		patientBSN, err := derivePatientBSN(tokens, rawParams)
+		if err != nil {
+			return PolicyInput{}, Deny(ResultReason{
+				Code:        TypeResultCodeUnexpectedInput,
+				Description: "patient_bsn: " + err.Error(),
+			})
+		}
+		policyInput.Context.PatientBSN = patientBSN
 	}
-	policyInput.Context.PatientBSN = patientBSN
 
 	return policyInput, Allow()
 }

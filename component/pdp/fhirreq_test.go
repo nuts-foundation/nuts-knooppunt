@@ -168,3 +168,44 @@ func TestComponent_parse_patient_id(t *testing.T) {
 	policyInput, _ = NewPolicyInput(pdpRequest)
 	assert.Equal(t, "98765", policyInput.Context.PatientID)
 }
+
+func TestNewPolicyInput(t *testing.T) {
+	t.Run("patient BSN is parsed", func(t *testing.T) {
+		pdpRequest := PDPRequest{
+			Input: PDPInput{
+				Request: HTTPRequest{
+					Method:   "GET",
+					Protocol: "HTTP/1.1",
+					Path:     "/Patient",
+					QueryParams: url.Values{
+						"identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn|900186021"},
+					},
+					Header: http.Header{
+						"Content-Type": []string{"application/fhir+json"},
+					},
+				},
+			},
+		}
+		policyInput, _ := NewPolicyInput(pdpRequest)
+		assert.Equal(t, "900186021", policyInput.Context.PatientBSN)
+	})
+	t.Run("patient BSN can be provided by PEP", func(t *testing.T) {
+		pdpRequest := PDPRequest{
+			Input: PDPInput{
+				Request: HTTPRequest{
+					Method:   "GET",
+					Protocol: "HTTP/1.1",
+					Path:     "/Patient",
+					Header: http.Header{
+						"Content-Type": []string{"application/fhir+json"},
+					},
+				},
+				Context: PDPContext{
+					PatientBSN: "900186021",
+				},
+			},
+		}
+		policyInput, _ := NewPolicyInput(pdpRequest)
+		assert.Equal(t, "900186021", policyInput.Context.PatientBSN)
+	})
+}
