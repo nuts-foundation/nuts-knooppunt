@@ -2,7 +2,7 @@
 
 title Dezi login and user identity in data exchanges
 
-box "Local EHR"
+box "Local XIS"
     actor User
     participant Browser
     participant EHR
