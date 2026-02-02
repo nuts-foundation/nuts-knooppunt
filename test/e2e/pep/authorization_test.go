@@ -101,7 +101,8 @@ func Test_PEPAuthorization(t *testing.T) {
 	pepConfig := harness.PEPConfig{
 		FHIRBackendHost:           "host.docker.internal",
 		FHIRBackendPort:           hapiBaseURL.Port(),
-		FHIRBasePath:              "/fhir/DEFAULT",
+		FHIRBasePath:              "/fhir",         // incoming path clients use
+		FHIRUpstreamPath:          "/fhir/DEFAULT", // HAPI multi-tenant partition
 		KnooppuntPDPHost:          "host.docker.internal",
 		KnooppuntPDPPort:          knooppuntURL.Port(),
 		NutsNodeHost:              "host.docker.internal",

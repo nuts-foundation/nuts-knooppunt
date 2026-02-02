@@ -13,7 +13,8 @@ import (
 type PEPConfig struct {
 	FHIRBackendHost           string
 	FHIRBackendPort           string
-	FHIRBasePath              string // e.g. "/fhir" or "/fhir/DEFAULT"
+	FHIRBasePath              string // incoming path clients use, e.g. "/fhir"
+	FHIRUpstreamPath          string // path on backend FHIR server, e.g. "/fhir/DEFAULT" (defaults to FHIRBasePath)
 	KnooppuntPDPHost          string
 	KnooppuntPDPPort          string
 	NutsNodeHost              string
@@ -37,6 +38,7 @@ func StartPEPContainer(t *testing.T, config PEPConfig) PEPContainerResult {
 		"FHIR_BACKEND_HOST":            config.FHIRBackendHost,
 		"FHIR_BACKEND_PORT":            config.FHIRBackendPort,
 		"FHIR_BASE_PATH":               config.FHIRBasePath,
+		"FHIR_UPSTREAM_PATH":           config.FHIRUpstreamPath,
 		"KNOOPPUNT_PDP_HOST":           config.KnooppuntPDPHost,
 		"KNOOPPUNT_PDP_PORT":           config.KnooppuntPDPPort,
 		"NUTS_NODE_HOST":               config.NutsNodeHost,

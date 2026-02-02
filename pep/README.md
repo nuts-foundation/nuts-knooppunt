@@ -36,8 +36,11 @@ docker compose --profile pep up -d
 Environment variables in `docker-compose.yml`:
 
 ```yaml
-# FHIR API path (default: /fhir)
+# FHIR API path exposed by PEP (default: /fhir)
 FHIR_BASE_PATH=/fhir
+# FHIR path on backend server (default: same as FHIR_BASE_PATH)
+# Use for HAPI multi-tenancy: /fhir/DEFAULT
+FHIR_UPSTREAM_PATH=/fhir
 
 # Backend connections
 FHIR_BACKEND_HOST=hapi-fhir
