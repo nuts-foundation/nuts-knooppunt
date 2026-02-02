@@ -218,7 +218,13 @@ async function validateDPoP(request, introspection) {
     }
 
     const token = extractBearerToken(request);
-    const host = request.headersIn['Host'] || request.headersIn['host'] || '';
+
+    // Use configured hostname for DPoP URL construction to prevent Host header spoofing.
+    // Falls back to Host header for backwards compatibility, but production should configure PEP_HOSTNAME.
+    const host = process.env.PEP_HOSTNAME ||
+        request.headersIn['Host'] ||
+        request.headersIn['host'] ||
+        '';
 
     // Derive scheme from request, falling back to https to preserve production behavior
     const scheme =

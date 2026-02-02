@@ -55,6 +55,10 @@ NUTS_NODE_INTERNAL_PORT=8081
 # Data holder (this organization)
 DATA_HOLDER_ORGANIZATION_URA=00000666
 DATA_HOLDER_FACILITY_TYPE=Z3
+
+# Security: Configure expected hostname for DPoP URL validation
+# Prevents Host header spoofing attacks. Falls back to Host header if not set.
+PEP_HOSTNAME=pep.example.com
 ```
 
 ## Presentation Definition

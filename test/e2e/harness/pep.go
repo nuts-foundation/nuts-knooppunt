@@ -21,6 +21,7 @@ type PEPConfig struct {
 	NutsNodePort              string
 	DataHolderOrganizationURA string
 	DataHolderFacilityType    string
+	PEPHostname               string // expected hostname for DPoP validation (prevents Host header spoofing)
 }
 
 // PEPContainerResult contains the PEP URL and container for additional operations
@@ -45,6 +46,7 @@ func StartPEPContainer(t *testing.T, config PEPConfig) PEPContainerResult {
 		"NUTS_NODE_INTERNAL_PORT":      config.NutsNodePort,
 		"DATA_HOLDER_ORGANIZATION_URA": config.DataHolderOrganizationURA,
 		"DATA_HOLDER_FACILITY_TYPE":    config.DataHolderFacilityType,
+		"PEP_HOSTNAME":                 config.PEPHostname,
 	}
 
 	pepReq := testcontainers.ContainerRequest{
