@@ -36,6 +36,9 @@ docker compose --profile pep up -d
 Environment variables in `docker-compose.yml`:
 
 ```yaml
+# FHIR API path (default: /fhir)
+FHIR_BASE_PATH=/fhir
+
 # Backend connections
 FHIR_BACKEND_HOST=hapi-fhir
 FHIR_BACKEND_PORT=7050
@@ -202,6 +205,8 @@ The PEP requires:
 2. **Presentation Definition** configured on the authorization server (Nuts node) with claim IDs matching what the PDP expects
 3. **PDP** with policies matching the scopes/qualifications in the access tokens
 
+**Limitations:**
+- **Single-tenant only**: This PEP supports a single FHIR backend. Multi-tenant setups (e.g., HAPI multi-tenancy) are not supported because the PDP has no tenant context for patient lookups and consent checks. Deploy separate PEP instances per tenant if needed.
+
 **Considerations for production:**
 - **Claim forwarding**: This PoC forwards all non-standard introspection claims to the PDP. In production, consider explicitly allowlisting which claims to forward based on the Presentation Definition, rather than forwarding everything.
-- **FHIR path detection**: The current implementation hardcodes `/fhir/` prefix detection. Production deployments should configure this explicitly via environment variables or nginx location context.

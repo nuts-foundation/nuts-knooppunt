@@ -152,12 +152,17 @@ function buildPDPRequest(introspection, request) {
     let requestPath = uriParts[0];
     const queryString = uriParts[1];
 
-    // Strip /fhir prefix to get the FHIR resource path
-    // e.g., /fhir/Condition -> /Condition
-    // The PEP always exposes /fhir/ externally; the PDP works with FHIR resource paths
-    // Note: FHIR_BASE_PATH env var is for the backend path (e.g., /fhir/DEFAULT), not for stripping
-    if (requestPath.startsWith('/fhir/')) {
-        requestPath = requestPath.substring('/fhir'.length);
+    // Strip FHIR base path to get the FHIR resource path for PDP
+    // e.g., /fhir/Condition -> /Condition (default: /fhir)
+    // The PDP parser expects FHIR resource paths, not the full URL path
+    let fhirBasePath = process.env.FHIR_BASE_PATH || '/fhir';
+    if (fhirBasePath.endsWith('/')) {
+        fhirBasePath = fhirBasePath.slice(0, -1);
+    }
+    if (requestPath.startsWith(fhirBasePath + '/')) {
+        requestPath = requestPath.substring(fhirBasePath.length);
+    } else if (requestPath === fhirBasePath) {
+        requestPath = '/';
     }
 
     // Extract all PD-defined claims (non-standard OAuth/JWT claims)
