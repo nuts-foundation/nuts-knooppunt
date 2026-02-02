@@ -213,3 +213,4 @@ The PEP requires:
 
 **Considerations for production:**
 - **Claim forwarding**: This PoC forwards all non-standard introspection claims to the PDP. In production, consider explicitly allowlisting which claims to forward based on the Presentation Definition, rather than forwarding everything.
+- **Log security**: PEP logs contain OAuth metadata (client_id, scope) and error details for debugging. Ensure appropriate log access controls and retention policies.
