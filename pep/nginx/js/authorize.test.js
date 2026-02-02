@@ -18,21 +18,24 @@ const {
 } = authorize;
 
 function createMockRequest(overrides = {}) {
+    const { variables, headersIn, method, ...rest } = overrides;
+    const effectiveMethod = method || 'GET';
     return {
-        headersIn: {},
+        headersIn: { ...headersIn },
         variables: {
             request_uri: '',
-            request_method: 'GET'
+            request_method: effectiveMethod,
+            ...variables
         },
         uri: '',
-        method: 'GET',
+        method: effectiveMethod,
         requestText: '',
         log: jest.fn(),
         error: jest.fn(),
         warn: jest.fn(),
         return: jest.fn(),
         subrequest: jest.fn(),
-        ...overrides
+        ...rest
     };
 }
 
@@ -457,6 +460,22 @@ describe('buildPDPRequest', () => {
         expect(result.input.request.method).toBe('POST');
         // /fhir/ prefix is stripped from path
         expect(result.input.request.path).toBe('/Patient');
+    });
+
+    test('passes request body for POST search', () => {
+        const introspection = { active: true, client_id: 'test' };
+        const searchBody = 'patient=Patient/123&_include=Observation:subject';
+        const request = createMockRequest({
+            uri: '/fhir/Observation/_search',
+            method: 'POST',
+            requestText: searchBody
+        });
+
+        const result = buildPDPRequest(introspection, request);
+
+        expect(result.input.request.method).toBe('POST');
+        expect(result.input.request.path).toBe('/Observation/_search');
+        expect(result.input.request.body).toBe(searchBody);
     });
 });
 

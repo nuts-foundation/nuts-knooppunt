@@ -189,7 +189,7 @@ function buildPDPRequest(introspection, request) {
                 path: requestPath || '/',
                 query_params: parseQueryParams(queryString),
                 header: {},
-                body: ''
+                body: request.requestText || ''
             },
             context: {
                 data_holder_organization_id: process.env.DATA_HOLDER_ORGANIZATION_URA || '',
