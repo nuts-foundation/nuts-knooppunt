@@ -12,7 +12,7 @@ end box
 participant Dezi
 participant RemoteXIS as "Remote XIS"
 
-== Dezi login\n  opt. A: EHR integrates with Dezi ==
+== Dezi login\n  Option A: EHR integrates with Dezi ==
 User -> EHR : Login/Interact
 activate EHR
 EHR -> Browser : Make Auth Request,\nredirect
@@ -52,7 +52,7 @@ EHR --> EHR : Store id_token or,\ncreate user session
 EHR --> Browser : User logged in
 deactivate EHR
 
-== Dezi login\n  opt. B: Knooppunt as IDP,\n  Knooppunt integrates with Dezi ==
+== Dezi login\n  Option B: Knooppunt as IDP,\n  Knooppunt integrates with Dezi ==
 User -> EHR : Login/Interact
 activate EHR
 EHR -> Browser : Make Auth Request,\nredirect
