@@ -52,23 +52,12 @@ function parseScopes(scopeString) {
     return scopeString.split(' ').filter(s => s.length > 0);
 }
 
-/**
- * Safely decode URI component, returning original string on failure
- * @param {string} str - String to decode
- * @returns {string} - Decoded string or original if decoding fails
- */
-function safeDecode(str) {
-    try {
-        return decodeURIComponent(str);
-    } catch (e) {
-        return str;
-    }
-}
 
 /**
  * Parse query parameters from query string
  * @param {string} queryString - Query string without leading ?
  * @returns {Object} - Map of param name to array of values
+ * @throws {URIError} - If URL decoding fails (malformed percent-encoding)
  */
 function parseQueryParams(queryString) {
     if (!queryString) return {};
@@ -76,8 +65,8 @@ function parseQueryParams(queryString) {
     queryString.split('&').forEach(pair => {
         const idx = pair.indexOf('=');
         if (idx > 0) {
-            const key = safeDecode(pair.substring(0, idx));
-            const value = safeDecode(pair.substring(idx + 1));
+            const key = decodeURIComponent(pair.substring(0, idx));
+            const value = decodeURIComponent(pair.substring(idx + 1));
             if (!params[key]) params[key] = [];
             params[key].push(value);
         }
@@ -325,7 +314,17 @@ async function checkAuthorization(request) {
         }
 
         // Step 4: Build PDPInput request
-        const pdpRequest = buildPDPRequest(introspection, request);
+        let pdpRequest;
+        try {
+            pdpRequest = buildPDPRequest(introspection, request);
+        } catch (e) {
+            if (e instanceof URIError) {
+                request.error(`Malformed URL encoding in request: ${e.message}`);
+                request.return(400);
+                return;
+            }
+            throw e;
+        }
 
         request.log(`Calling PDP: client_id=${pdpRequest.input.subject.id}, ` +
             `path=${pdpRequest.input.request.path}, method=${pdpRequest.input.request.method}`);

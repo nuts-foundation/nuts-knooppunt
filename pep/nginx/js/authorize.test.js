@@ -331,12 +331,9 @@ describe('parseQueryParams', () => {
         });
     });
 
-    test('handles malformed percent-encoding gracefully', () => {
-        // Invalid percent-encoding should not throw, returns original string
-        expect(parseQueryParams('patient=%ZZ&valid=ok')).toEqual({
-            'patient': ['%ZZ'],
-            'valid': ['ok']
-        });
+    test('throws on malformed percent-encoding', () => {
+        // Invalid percent-encoding should throw URIError for explicit 400 response
+        expect(() => parseQueryParams('patient=%ZZ&valid=ok')).toThrow(URIError);
     });
 });
 
