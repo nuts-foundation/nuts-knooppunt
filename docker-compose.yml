@@ -186,7 +186,8 @@ services:
       # Backend connections
       - FHIR_BACKEND_HOST=hapi-fhir
       - FHIR_BACKEND_PORT=7050
-      - FHIR_BASE_PATH=/fhir/DEFAULT
+      - FHIR_BASE_PATH=/fhir
+      - FHIR_UPSTREAM_PATH=/fhir/DEFAULT
       - KNOOPPUNT_PDP_HOST=knooppunt
       - KNOOPPUNT_PDP_PORT=8081
       # Nuts node connection (Authorization Server)
