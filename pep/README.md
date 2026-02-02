@@ -4,23 +4,7 @@ NGINX-based reference implementation that enforces authorization decisions from 
 
 ## Architecture
 
-```
-Request + Bearer/DPoP Token + DPoP Header
-            │
-            ▼
-┌───────────────────┐  /internal/auth/v2/  ┌─────────────────┐
-│      PEP          │  accesstoken/introspect  │   Nuts Node     │
-│  (NGINX + njs)    │─────────────────────▶│  (Auth Server)  │
-│                   │  dpop/validate       │                 │
-└────────┬──────────┘◀─────────────────────└─────────────────┘
-         │
-         │ POST /pdp
-         ▼
-┌─────────────────┐
-│      PDP        │
-│  (OPA + Mitz)   │
-└─────────────────┘
-```
+![dataexchange-authorization-sd.svg](../docs/images/dataexchange-authorization-sd.svg)
 
 The PEP uses nginx subrequests to proxy calls to Nuts node and PDP via internal locations.
 
@@ -212,6 +196,12 @@ The e2e test (in `test/e2e/pep/authorization_test.go`):
 ## Production Notes
 
 The PEP requires:
-1. **Nuts node** with introspection endpoint at `/internal/auth/v2/accesstoken/introspect`
+1. **Nuts node** with:
+   - Introspection endpoint at `/internal/auth/v2/accesstoken/introspect`
+   - DPoP validation endpoint at `/internal/auth/v2/dpop/validate`
 2. **Presentation Definition** configured on the authorization server (Nuts node) with claim IDs matching what the PDP expects
-3. **PDP** configured with Mitz consent checking
+3. **PDP** with policies matching the scopes/qualifications in the access tokens
+
+**Considerations for production:**
+- **Claim forwarding**: This PoC forwards all non-standard introspection claims to the PDP. In production, consider explicitly allowlisting which claims to forward based on the Presentation Definition, rather than forwarding everything.
+- **FHIR path detection**: The current implementation hardcodes `/fhir/` prefix detection. Production deployments should configure this explicitly via environment variables or nginx location context.
