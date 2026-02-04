@@ -1,53 +1,73 @@
 @startuml
 
-title Authentication Sequence Diagram
+title Dezi login and user identity in data exchanges
 
-actor User
-participant Browser
-participant EHR
-participant Knooppunt
-
+box "Local XIS"
+    actor User
+    participant Browser
+    participant EHR
+    participant Knooppunt
+    participant AuthClient as "OAuth Client\n(Nuts Node)"
+end box
+participant Dezi
 participant RemoteXIS as "Remote XIS"
 
-User -> EHR : Interact
-group User AuthN - OpenID Authorized Code\n(e.g. EHR login)
-    EHR -> EHR : Make Auth Request\nURL
-    EHR -> Browser : Redirect\n/Open
-    Browser -> Knooppunt : OIDC Authorization Request\n(scope=openid profile)
+== Dezi login ==
+User -> EHR : Login/Interact
+activate EHR
+EHR -> Browser : Make Auth Request,\nredirect
+deactivate EHR
+group Dezi OIDC Authorized Code Flow
+Browser -> Dezi : OIDC Authorization Request\n(scope=openid profile)
+activate Dezi
+Dezi --> Browser : Request authentication
+deactivate Dezi
 
-    group GF Auth (omitted for brevity)
-        Knooppunt --> Browser : Request authentication
-        Browser -> Knooppunt : Submit auth credential
-    end
+User -> Browser : Login
+Browser -> Dezi : User auth (e.g. DigiD)
+activate Dezi
+Dezi --> Browser : OIDC Auth Response\n(auth code)
+deactivate Dezi
+Browser -> EHR : Redirect\n(auth code)
+activate EHR
+EHR -> Dezi : OIDC Token Request\n(auth code)
+activate Dezi
+    Dezi --> EHR : OIDC Token Response\n(id_token(encrypted))
+deactivate Dezi
+group Dezi business rules
+    EHR -> EHR : Process id_token(encrypted)
+    activate EHR
+    EHR -> EHR : Decrypt id_token(encrypted)
+    EHR -> EHR : Validate id_token claims
+    EHR -> Dezi : Get revocation status
+    activate Dezi
+    Dezi --> EHR : Revocation status
+    deactivate Dezi
+    EHR -> EHR : Check revocation status
+    EHR --> EHR : OK/NOK
+    deactivate EHR
+end group
+end group
+EHR --> EHR : Store id_token or,\ncreate user session
+EHR --> Browser : User logged in
+deactivate EHR
 
-    Knooppunt --> Browser : OIDC Auth Response\n(auth code)
-    Browser -> EHR : Redirect\n(auth code)
-    EHR -> Knooppunt : OIDC Token Request\n(auth code)
-    Knooppunt --> EHR : OIDC Token Response\n(id_token)
+== Fetching data with user identity ==
+User -> EHR : Request data\nfrom remote source
+activate EHR
+group Get access token
+    EHR -> AuthClient : Request token\n(Dezi id_token(decrypted)
+    activate AuthClient
+    AuthClient -> AuthClient : Create\nDeziIDTokenCredential
+    AuthClient --> EHR : Token Response\n(access token)
+    note right : Token is requested at\nremote OAuth server
+    deactivate AuthClient
 end
 
-group User data request
-    User -> EHR : Request data\nfrom remote source
-    group OAuth2 Client Credentials
-        EHR -> Knooppunt : OAuth2 Token Request\n(id_token)
-        Knooppunt --> EHR : OAuth2 Token Response\n(access token)
-    end
-
-    EHR -> RemoteXIS : Data request\n(access token)
-    RemoteXIS --> EHR : Data response\n(e.g. FHIR)
-    EHR --> User : Data response
-end
-
-group Non-user data request
-    EHR -> EHR : System-initiated\ndata request
-    group OAuth2 Client Credentials
-        EHR -> Knooppunt : OAuth2 Token Request
-        Knooppunt --> EHR : OAuth2 Token Response\n(access token)
-    end
-
-    EHR -> RemoteXIS : Data request\n(access token)
-    RemoteXIS --> EHR : Data response\n(e.g. FHIR)
-    EHR -> EHR : Process data
-end
-
+EHR -> RemoteXIS : Data request\n(access token)
+activate RemoteXIS
+RemoteXIS --> EHR : Data response\n(e.g. FHIR)
+deactivate RemoteXIS
+EHR --> User : Data response
+deactivate EHR
 @enduml
