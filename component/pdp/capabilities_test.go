@@ -34,8 +34,8 @@ func TestComponent_reject_interaction(t *testing.T) {
 		},
 	}
 
-	inp, resp := evalCapabilityPolicy(context.Background(), input)
-	assert.False(t, resp.Allow)
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "mcsd_update")
+	assert.NotEmpty(t, resp)
 	assert.False(t, inp.Context.FHIRCapabilityChecked)
 }
 
@@ -64,8 +64,8 @@ func TestComponent_allow_interaction(t *testing.T) {
 		},
 	}
 
-	inp, resp := evalCapabilityPolicy(context.Background(), input)
-	assert.True(t, resp.Allow)
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "mcsd_update")
+	assert.Empty(t, resp)
 	assert.True(t, inp.Context.FHIRCapabilityChecked)
 }
 
@@ -95,8 +95,8 @@ func TestComponent_allow_search_param(t *testing.T) {
 		},
 	}
 
-	inp, resp := evalCapabilityPolicy(context.Background(), input)
-	assert.True(t, resp.Allow)
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "mcsd_update")
+	assert.Empty(t, resp)
 	assert.True(t, inp.Context.FHIRCapabilityChecked)
 }
 
@@ -126,8 +126,8 @@ func TestComponent_reject_search_param(t *testing.T) {
 		},
 	}
 
-	inp, resp := evalCapabilityPolicy(context.Background(), input)
-	assert.False(t, resp.Allow)
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "mcsd_update")
+	assert.NotEmpty(t, resp)
 	assert.False(t, inp.Context.FHIRCapabilityChecked)
 }
 
@@ -138,9 +138,6 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 				ClientQualifications:  []string{"mcsd_update"},
 				SubjectOrganizationId: "00000666",
 			},
-		},
-		Resource: PolicyResource{
-			Type: to.Ptr(fhir.ResourceTypeOrganization),
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
@@ -153,8 +150,8 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 		},
 	}
 
-	inp, resp := evalCapabilityPolicy(context.Background(), input)
-	assert.False(t, resp.Allow)
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "mcsd_update")
+	assert.Empty(t, resp)
 	assert.False(t, inp.Context.FHIRCapabilityChecked)
 }
 
@@ -184,8 +181,8 @@ func TestComponent_allow_include(t *testing.T) {
 		},
 	}
 
-	inp, resp := evalCapabilityPolicy(context.Background(), input)
-	assert.True(t, resp.Allow)
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "mcsd_query")
+	assert.Empty(t, resp)
 	assert.True(t, inp.Context.FHIRCapabilityChecked)
 }
 
@@ -215,8 +212,8 @@ func TestComponent_reject_include(t *testing.T) {
 		},
 	}
 
-	inp, resp := evalCapabilityPolicy(context.Background(), input)
-	assert.False(t, resp.Allow)
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "mcsd_query")
+	assert.NotEmpty(t, resp)
 	assert.False(t, inp.Context.FHIRCapabilityChecked)
 }
 
@@ -238,7 +235,7 @@ func TestComponent_reject_revinclude(t *testing.T) {
 			Properties: PolicyActionProperties{
 				ContentType:     "application/fhir+json",
 				InteractionType: fhir.TypeRestfulInteractionRead,
-				Include:         []string{"Location:organization"},
+				Revinclude:      []string{"Location:organization"},
 			},
 		},
 		Context: PolicyContext{
@@ -246,8 +243,8 @@ func TestComponent_reject_revinclude(t *testing.T) {
 		},
 	}
 
-	inp, resp := evalCapabilityPolicy(context.Background(), input)
-	assert.False(t, resp.Allow)
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "mcsd_query")
+	assert.NotEmpty(t, resp)
 	assert.False(t, inp.Context.FHIRCapabilityChecked)
 }
 
@@ -277,7 +274,7 @@ func TestComponent_allow_revinclude(t *testing.T) {
 		},
 	}
 
-	inp, resp := evalCapabilityPolicy(context.Background(), input)
-	assert.True(t, resp.Allow)
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "mcsd_query")
+	assert.Empty(t, resp)
 	assert.True(t, inp.Context.FHIRCapabilityChecked)
 }
