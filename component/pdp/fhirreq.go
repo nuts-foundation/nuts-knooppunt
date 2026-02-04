@@ -372,6 +372,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Action.Properties.Request = request.Input.Request
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
+	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
 
 	contentType := request.Input.Request.Header.Get("Content-Type")
 	policyInput.Action.Properties.ContentType = contentType
@@ -438,7 +439,6 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	} else {
 		policyInput.Context.PatientID = patientId
 	}
-	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
 
 	// Read patient BSN from request
 	if policyInput.Context.PatientBSN == "" {
