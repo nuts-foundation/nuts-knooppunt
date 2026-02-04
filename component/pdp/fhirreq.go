@@ -429,26 +429,29 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Action.Properties.SearchParams = params.SearchParams
 
 	// Read patient resource ID from request
+	result := Allow()
 	patientId, err := derivePatientId(tokens, rawParams)
 	if err != nil {
-		return PolicyInput{}, Deny(ResultReason{
+		result.Reasons = append(result.Reasons, ResultReason{
 			Code:        TypeResultCodeUnexpectedInput,
 			Description: "patient_id: " + err.Error(),
 		})
+	} else {
+		policyInput.Context.PatientID = patientId
 	}
-	policyInput.Context.PatientID = patientId
 
 	// Read patient BSN from request
 	if policyInput.Context.PatientBSN == "" {
 		patientBSN, err := derivePatientBSN(tokens, rawParams)
 		if err != nil {
-			return PolicyInput{}, Deny(ResultReason{
+			result.Reasons = append(result.Reasons, ResultReason{
 				Code:        TypeResultCodeUnexpectedInput,
 				Description: "patient_bsn: " + err.Error(),
 			})
+		} else {
+			policyInput.Context.PatientBSN = patientBSN
 		}
-		policyInput.Context.PatientBSN = patientBSN
 	}
 
-	return policyInput, Allow()
+	return policyInput, result
 }
