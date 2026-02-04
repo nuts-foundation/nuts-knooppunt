@@ -226,3 +226,16 @@ is_allowed_query if {
     input.action.properties.search_params.status == "booked,pending,proposed"
 
 }
+
+# GET [base]/DocumentReference?status=current
+is_allowed_query if {
+    input.resource.type == "DocumentReference"
+    input.action.properties.interaction_type == "search-type"
+    input.action.properties.search_params.status == "current"
+}
+
+# GET [base]/DocumentReference
+is_allowed_query if {
+    input.resource.type == "DocumentReference"
+    input.action.properties.interaction_type == "read"
+}
