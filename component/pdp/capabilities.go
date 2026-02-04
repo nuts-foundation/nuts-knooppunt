@@ -41,7 +41,7 @@ func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityState
 }
 
 func evalCapabilityPolicy(ctx context.Context, input PolicyInput) (PolicyInput, PolicyResult) {
-	if input.Action.Properties.ContentType != "application/fhir+json" {
+	if !input.Action.Properties.ConnectionData.FHIRRest.isFHIRRest {
 		return input, Allow()
 	}
 
@@ -62,7 +62,7 @@ func evalCapabilityPolicy(ctx context.Context, input PolicyInput) (PolicyInput, 
 	}
 
 	result := evalInteraction(statement, input)
-	input.Context.FHIRCapabilityChecked = result.Allow
+	input.Action.Properties.ConnectionData.FHIRRest.CapabilityChecked = result.Allow
 	return input, result
 }
 
@@ -87,9 +87,9 @@ func evalInteraction(
 		fhir.TypeRestfulInteractionSearchType,
 	}
 
-	props := input.Action.Properties
+	fhirData := input.Action.Properties.ConnectionData.FHIRRest
 
-	if !slices.Contains(supported, props.InteractionType) {
+	if !slices.Contains(supported, fhirData.InteractionType) {
 		return Deny(
 			ResultReason{
 				Code:        TypeResultCodeNotImplemented,
@@ -109,7 +109,7 @@ func evalInteraction(
 	allowInteraction := false
 	for _, des := range resourceDescriptions {
 		for _, inter := range des.Interaction {
-			if inter.Code == props.InteractionType {
+			if inter.Code == fhirData.InteractionType {
 				allowInteraction = true
 			}
 		}
@@ -125,7 +125,7 @@ func evalInteraction(
 
 	allowParams := false
 	rejectedSearchParams := make([]string, 0, 10)
-	if props.InteractionType == fhir.TypeRestfulInteractionSearchType {
+	if fhirData.InteractionType == fhir.TypeRestfulInteractionSearchType {
 		allowedParams := make([]string, 0, 10)
 		for _, des := range resourceDescriptions {
 			for _, param := range des.SearchParam {
@@ -133,7 +133,7 @@ func evalInteraction(
 			}
 		}
 
-		for paramName := range props.SearchParams {
+		for paramName := range fhirData.SearchParams {
 			if !slices.Contains(allowedParams, paramName) {
 				rejectedSearchParams = append(rejectedSearchParams, paramName)
 			}
@@ -155,7 +155,7 @@ func evalInteraction(
 	}
 
 	rejectedIncludes := make([]string, 0, len(allowedIncludes))
-	for _, inc := range props.Include {
+	for _, inc := range fhirData.Include {
 		if !slices.Contains(allowedIncludes, inc) {
 			rejectedIncludes = append(rejectedIncludes, inc)
 		}
@@ -176,7 +176,7 @@ func evalInteraction(
 	}
 
 	rejectedRevincludes := make([]string, 0, len(allowedRevincludes))
-	for _, inc := range props.Revinclude {
+	for _, inc := range fhirData.Revinclude {
 		if !slices.Contains(allowedRevincludes, inc) {
 			rejectedRevincludes = append(rejectedRevincludes, inc)
 		}

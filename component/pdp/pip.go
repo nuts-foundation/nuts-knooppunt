@@ -18,11 +18,11 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput Po
 	}
 
 	// If we have a patientId try and fetch the BSN
-	if policyInput.Context.PatientID != "" && policyInput.Context.PatientBSN == "" {
+	if policyInput.Action.Properties.ConnectionData.FHIRRest.PatientID != "" && policyInput.Context.PatientBSN == "" {
 		client := c.pipClient
 
 		var patient fhir.Patient
-		path := fmt.Sprintf("Patient/%s", policyInput.Context.PatientID)
+		path := fmt.Sprintf("Patient/%s", policyInput.Action.Properties.ConnectionData.FHIRRest.PatientID)
 		err := client.Read(path, &patient)
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to get patient record from PIP, policy input might not be complete", logging.Error(err))

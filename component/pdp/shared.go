@@ -42,8 +42,9 @@ type HTTPRequest struct {
 }
 
 type PDPContext struct {
-	DataHolderOrganizationId string `json:"data_holder_organization_id"`
+	ConnectionTypeCode       string `json:"connection_type_code"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
+	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	PatientBSN               string `json:"patient_bsn"`
 }
 
@@ -70,22 +71,31 @@ type PolicyAction struct {
 }
 
 type PolicyActionProperties struct {
-	ContentType     string                      `json:"content_type"`
-	Include         []string                    `json:"include"`
-	InteractionType fhir.TypeRestfulInteraction `json:"interaction_type"`
-	Operation       *string                     `json:"operation"`
-	Request         HTTPRequest                 `json:"request"`
-	Revinclude      []string                    `json:"revinclude"`
-	SearchParams    map[string]string           `json:"search_params"`
+	Request        HTTPRequest          `json:"request"`
+	ConnectionData PolicyConnectionData `json:"connection_data"`
+}
+
+// Contains data that is parsed for a specific connection type
+type PolicyConnectionData struct {
+	FHIRRest FhirConnectionData `json:fhir_rest`
+}
+
+type FhirConnectionData struct {
+	isFHIRRest        bool                        `json:"is_fhir_rest"`
+	CapabilityChecked bool                        `json:"capability_checked"`
+	Include           []string                    `json:"include"`
+	InteractionType   fhir.TypeRestfulInteraction `json:"interaction_type"`
+	Operation         *string                     `json:"operation"`
+	Revinclude        []string                    `json:"revinclude"`
+	SearchParams      map[string]string           `json:"search_params"`
+	PatientID         string                      `json:"patient_id"`
 }
 
 type PolicyContext struct {
-	FHIRCapabilityChecked    bool   `json:"fhir_capability_checked"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
 	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	MitzConsent              bool   `json:"mitz_consent"`
 	PatientBSN               string `json:"patient_bsn"`
-	PatientID                string `json:"patient_id"`
 	PurposeOfUse             string `json:"purpose_of_use"`
 }
 
