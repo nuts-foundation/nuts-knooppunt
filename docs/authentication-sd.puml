@@ -12,7 +12,7 @@ end box
 participant Dezi
 participant RemoteXIS as "Remote XIS"
 
-== Dezi login\n  Option A: EHR integrates with Dezi ==
+== Dezi login ==
 User -> EHR : Login/Interact
 activate EHR
 EHR -> Browser : Make Auth Request,\nredirect
@@ -52,74 +52,13 @@ EHR --> EHR : Store id_token or,\ncreate user session
 EHR --> Browser : User logged in
 deactivate EHR
 
-== Dezi login\n  Option B: Knooppunt as IDP,\n  Knooppunt integrates with Dezi ==
-User -> EHR : Login/Interact
-activate EHR
-EHR -> Browser : Make Auth Request,\nredirect
-deactivate EHR
-Browser -> Knooppunt : OIDC Authorization Request\n(scope=openid profile)
-activate Knooppunt
-Knooppunt -> Knooppunt : Make redirect URL\nfor Dezi auth
-Knooppunt --> Browser : redirect URL
-deactivate Knooppunt
-group Dezi OIDC Authorized Code Flow
-Browser -> Dezi : OIDC Authorization Request\n(scope=openid profile)
-activate Dezi
-Dezi --> Browser : Request authentication
-deactivate Dezi
-
-User -> Browser : Login
-Browser -> Dezi : User auth (e.g. DigiD)
-activate Dezi
-Dezi --> Browser : OIDC Auth Response\n(auth code)
-deactivate Dezi
-Browser -> Knooppunt : Redirect\n(auth code)
-activate Knooppunt
-Knooppunt -> Dezi : OIDC Token Request\n(auth code)
-activate Dezi
-    Dezi --> Knooppunt : OIDC Token Response\n(id_token(encrypted))
-deactivate Dezi
-group Dezi business rules
-    Knooppunt -> Knooppunt : Process id_token(encrypted)
-    activate Knooppunt
-    Knooppunt -> Knooppunt : Decrypt id_token(encrypted)
-    Knooppunt -> Knooppunt : Validate id_token claims
-    Knooppunt -> Dezi : Get revocation status
-    activate Dezi
-    Dezi --> Knooppunt : Revocation status
-    deactivate Dezi
-    Knooppunt -> Knooppunt : Check revocation status
-    Knooppunt --> Knooppunt : OK/NOK
-    deactivate Knooppunt
-end group
-end group
-Knooppunt --> Knooppunt : Store id_token in session
-Knooppunt --> Browser : OIDC Auth Response\n(auth code)
-deactivate Knooppunt
-Browser -> EHR : Redirect\n(auth code)
-activate EHR
-EHR -> Knooppunt : OIDC Token Request\n(auth code)
-activate Knooppunt
-    Knooppunt -> Knooppunt : Create DeziIDTokenCredential\n(id_token)
-    Knooppunt --> EHR : OIDC Token Response\n(id_token,\nDeziIDTokenCredential)
-    note right : Custom field in token response:\nDeziIDTokenCredential
-deactivate Knooppunt
-EHR -> EHR : Update/create user session\n(id_token,\nDeziIDTokenCredential)
-EHR --> Browser : User logged in
-deactivate EHR
-
 == Fetching data with user identity ==
 User -> EHR : Request data\nfrom remote source
 activate EHR
 group Get access token
-    group IF: EHR integrated directly with Dezi
-    EHR -> Knooppunt : Create DeziIDTokenCredential\n(id_token)
-    activate Knooppunt
-    Knooppunt --> EHR : DeziIDTokenCredential
-    deactivate Knooppunt
-    end group
-    EHR -> AuthClient : Request token\n(DeziIDTokenCredential)
+    EHR -> AuthClient : Request token\n(Dezi id_token(decrypted)
     activate AuthClient
+    AuthClient -> AuthClient : Create\nDeziIDTokenCredential
     AuthClient --> EHR : Token Response\n(access token)
     note right : Token is requested at\nremote OAuth server
     deactivate AuthClient
