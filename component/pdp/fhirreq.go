@@ -384,7 +384,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	}
 
 	if tokens.ResourceType != nil {
-		policyInput.Resource.Type = *tokens.ResourceType
+		policyInput.Resource.Type = tokens.ResourceType
 		if tokens.ResourceId != "" {
 			policyInput.Resource.Properties.ResourceId = tokens.ResourceId
 		}
