@@ -9,7 +9,7 @@ import rego.v1
 default allow := false
 
 allow if {
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.capability_checked == true
+    input.action.properties.connection_data.fhir_rest.capability_checked == true
     input.context.mitz_consent == true
     # The BgZ on Generic Functions use case (to be formalized) specifies that requests must be scoped to a patient.
     # We enforce this by checking that either a patient_id or patient_bsn is present in the request context.
@@ -19,8 +19,8 @@ allow if {
 
 # Helper rule: check if either patient_id or patient_bsn is filled
 has_patient_identifier if {
-    is_string(input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.patient_id)
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.patient_id != ""
+    is_string(input.action.properties.connection_data.fhir_rest.patient_id)
+    input.action.properties.connection_data.fhir_rest.patient_id != ""
 }
 
 has_patient_identifier if {
@@ -32,58 +32,58 @@ has_patient_identifier if {
 # GET [base]/Patient?_include=Patient:general-practitioner
 is_allowed_query if {
     input.resource.type == "Patient"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.include == ["Patient:general-practitioner"]
+    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
+    input.action.properties.connection_data.fhir_rest.include == ["Patient:general-practitioner"]
 }
 
 # GET [base]/Coverage?_include=Coverage:payor:Patient&_include=Coverage:payor:Organization
 is_allowed_query if {
     input.resource.type == "Coverage"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.include == ["Coverage:payor:Patient", "Coverage:payor:Organization"]
+    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
+    input.action.properties.connection_data.fhir_rest.include == ["Coverage:payor:Patient", "Coverage:payor:Organization"]
 }
 
 # GET [base]/Consent?category=http://snomed.info/sct|11291000146105
 is_allowed_query if {
     input.resource.type == "Consent"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|11291000146105"
+    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
+    input.action.properties.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|11291000146105"
 }
 
 # GET [base]/Consent?category=http://snomed.info/sct|11341000146107
 is_allowed_query if {
     input.resource.type == "Consent"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|11341000146107"
+    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
+    input.action.properties.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|11341000146107"
 }
 
 # GET [base]/Observation/$lastn?category=http://snomed.info/sct|118228005,http://snomed.info/sct|384821006
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.operation == "$lastn"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.interaction_type == "operation"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|118228005,http://snomed.info/sct|384821006"
+    input.action.properties.connection_data.fhir_rest.operation == "$lastn"
+    input.action.properties.connection_data.fhir_rest.interaction_type == "operation"
+    input.action.properties.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|118228005,http://snomed.info/sct|384821006"
 }
 
 # GET [base]/Condition
 is_allowed_query if {
     input.resource.type == "Condition"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.interaction_type == "search-type"
+    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
 }
 
 # GET [base]/Observation/$lastn?code=http://snomed.info/sct|365508006
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.operation == "$lastn"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.interaction_type == "operation"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.search_params.code == "http://snomed.info/sct|365508006"
+    input.action.properties.connection_data.fhir_rest.operation == "$lastn"
+    input.action.properties.connection_data.fhir_rest.interaction_type == "operation"
+    input.action.properties.connection_data.fhir_rest.search_params.code == "http://snomed.info/sct|365508006"
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|228366006
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.connection_data.fhir_rest.search_params.code == "http://snomed.info/sct|228366006"
+    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
+    input.action.properties.connection_data.fhir_rest.search_params.code == "http://snomed.info/sct|228366006"
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|228273003

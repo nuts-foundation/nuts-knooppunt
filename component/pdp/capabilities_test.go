@@ -24,8 +24,12 @@ func TestComponent_reject_interaction(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
-				ContentType:     "application/fhir+json",
-				InteractionType: fhir.TypeRestfulInteractionUpdate,
+				ConnectionData: PolicyConnectionData{
+					FHIRRest: FhirConnectionData{
+						isFHIRRest:      true,
+						InteractionType: fhir.TypeRestfulInteractionUpdate,
+					},
+				},
 			},
 		},
 		Context: PolicyContext{
@@ -35,7 +39,7 @@ func TestComponent_reject_interaction(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
-	assert.False(t, inp.Context.FHIRCapabilityChecked)
+	assert.False(t, inp.Action.Properties.ConnectionData.FHIRRest.CapabilityChecked)
 }
 
 func TestComponent_allow_interaction(t *testing.T) {
@@ -54,8 +58,12 @@ func TestComponent_allow_interaction(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
-				ContentType:     "application/fhir+json",
-				InteractionType: fhir.TypeRestfulInteractionHistoryType,
+				ConnectionData: PolicyConnectionData{
+					FHIRRest: FhirConnectionData{
+						isFHIRRest:      true,
+						InteractionType: fhir.TypeRestfulInteractionHistoryType,
+					},
+				},
 			},
 		},
 		Context: PolicyContext{
@@ -65,7 +73,7 @@ func TestComponent_allow_interaction(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
-	assert.True(t, inp.Context.FHIRCapabilityChecked)
+	assert.True(t, inp.Action.Properties.ConnectionData.FHIRRest.CapabilityChecked)
 }
 
 func TestComponent_allow_search_param(t *testing.T) {
@@ -84,9 +92,13 @@ func TestComponent_allow_search_param(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
-				ContentType:     "application/fhir+json",
-				InteractionType: fhir.TypeRestfulInteractionSearchType,
-				SearchParams:    map[string]string{"_since": "2024-01-01"},
+				ConnectionData: PolicyConnectionData{
+					FHIRRest: FhirConnectionData{
+						isFHIRRest:      true,
+						InteractionType: fhir.TypeRestfulInteractionSearchType,
+						SearchParams:    map[string]string{"_since": "2024-01-01"},
+					},
+				},
 			},
 		},
 		Context: PolicyContext{
@@ -96,7 +108,7 @@ func TestComponent_allow_search_param(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
-	assert.True(t, inp.Context.FHIRCapabilityChecked)
+	assert.True(t, inp.Action.Properties.ConnectionData.FHIRRest.CapabilityChecked)
 }
 
 func TestComponent_reject_search_param(t *testing.T) {
@@ -115,9 +127,13 @@ func TestComponent_reject_search_param(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
-				ContentType:     "application/fhir+json",
-				InteractionType: fhir.TypeRestfulInteractionSearchType,
-				SearchParams:    map[string]string{"_foo": "bar", "_since": "2024-01-01"},
+				ConnectionData: PolicyConnectionData{
+					FHIRRest: FhirConnectionData{
+						isFHIRRest:      true,
+						InteractionType: fhir.TypeRestfulInteractionSearchType,
+						SearchParams:    map[string]string{"_foo": "bar", "_since": "2024-01-01"},
+					},
+				},
 			},
 		},
 		Context: PolicyContext{
@@ -127,7 +143,7 @@ func TestComponent_reject_search_param(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
-	assert.False(t, inp.Context.FHIRCapabilityChecked)
+	assert.False(t, inp.Action.Properties.ConnectionData.FHIRRest.CapabilityChecked)
 }
 
 func TestComponent_reject_interaction_type(t *testing.T) {
@@ -140,8 +156,12 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
-				ContentType:     "application/fhir+json",
-				InteractionType: fhir.TypeRestfulInteractionSearchSystem,
+				ConnectionData: PolicyConnectionData{
+					FHIRRest: FhirConnectionData{
+						isFHIRRest:      true,
+						InteractionType: fhir.TypeRestfulInteractionSearchSystem,
+					},
+				},
 			},
 		},
 		Context: PolicyContext{
@@ -151,7 +171,7 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
-	assert.False(t, inp.Context.FHIRCapabilityChecked)
+	assert.False(t, inp.Action.Properties.ConnectionData.FHIRRest.CapabilityChecked)
 }
 
 func TestComponent_allow_include(t *testing.T) {
@@ -170,9 +190,13 @@ func TestComponent_allow_include(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
-				ContentType:     "application/fhir+json",
-				InteractionType: fhir.TypeRestfulInteractionRead,
-				Include:         []string{"Location:organization"},
+				ConnectionData: PolicyConnectionData{
+					FHIRRest: FhirConnectionData{
+						isFHIRRest:      true,
+						InteractionType: fhir.TypeRestfulInteractionRead,
+						Include:         []string{"Location:organization"},
+					},
+				},
 			},
 		},
 		Context: PolicyContext{
@@ -182,7 +206,7 @@ func TestComponent_allow_include(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
-	assert.True(t, inp.Context.FHIRCapabilityChecked)
+	assert.True(t, inp.Action.Properties.ConnectionData.FHIRRest.CapabilityChecked)
 }
 
 func TestComponent_reject_include(t *testing.T) {
@@ -201,9 +225,13 @@ func TestComponent_reject_include(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
-				ContentType:     "application/fhir+json",
-				InteractionType: fhir.TypeRestfulInteractionRead,
-				Include:         []string{"Endpoint:organization"},
+				ConnectionData: PolicyConnectionData{
+					FHIRRest: FhirConnectionData{
+						isFHIRRest:      true,
+						InteractionType: fhir.TypeRestfulInteractionRead,
+						Include:         []string{"Endpoint:organization"},
+					},
+				},
 			},
 		},
 		Context: PolicyContext{
@@ -213,7 +241,7 @@ func TestComponent_reject_include(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
-	assert.False(t, inp.Context.FHIRCapabilityChecked)
+	assert.False(t, inp.Action.Properties.ConnectionData.FHIRRest.CapabilityChecked)
 }
 
 func TestComponent_reject_revinclude(t *testing.T) {
@@ -232,9 +260,13 @@ func TestComponent_reject_revinclude(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
-				ContentType:     "application/fhir+json",
-				InteractionType: fhir.TypeRestfulInteractionRead,
-				Include:         []string{"Location:organization"},
+				ConnectionData: PolicyConnectionData{
+					FHIRRest: FhirConnectionData{
+						isFHIRRest:      true,
+						InteractionType: fhir.TypeRestfulInteractionRead,
+						Include:         []string{"Location:organization"},
+					},
+				},
 			},
 		},
 		Context: PolicyContext{
@@ -244,7 +276,7 @@ func TestComponent_reject_revinclude(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.False(t, resp.Allow)
-	assert.False(t, inp.Context.FHIRCapabilityChecked)
+	assert.False(t, inp.Action.Properties.ConnectionData.FHIRRest.CapabilityChecked)
 }
 
 func TestComponent_allow_revinclude(t *testing.T) {
@@ -263,9 +295,13 @@ func TestComponent_allow_revinclude(t *testing.T) {
 		},
 		Action: PolicyAction{
 			Properties: PolicyActionProperties{
-				ContentType:     "application/fhir+json",
-				InteractionType: fhir.TypeRestfulInteractionRead,
-				Revinclude:      []string{"Location:organization"},
+				ConnectionData: PolicyConnectionData{
+					FHIRRest: FhirConnectionData{
+						isFHIRRest:      true,
+						InteractionType: fhir.TypeRestfulInteractionRead,
+						Revinclude:      []string{"Location:organization"},
+					},
+				},
 			},
 		},
 		Context: PolicyContext{
@@ -275,5 +311,5 @@ func TestComponent_allow_revinclude(t *testing.T) {
 
 	inp, resp := evalCapabilityPolicy(context.Background(), input)
 	assert.True(t, resp.Allow)
-	assert.True(t, inp.Context.FHIRCapabilityChecked)
+	assert.True(t, inp.Action.Properties.ConnectionData.FHIRRest.CapabilityChecked)
 }

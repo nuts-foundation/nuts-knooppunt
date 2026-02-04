@@ -111,6 +111,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				Context: PDPContext{
 					DataHolderOrganizationId: "00000002",
 					DataHolderFacilityType:   "TODO",
+					ConnectionTypeCode:       "hl7-fhir-rest",
 				},
 			},
 		}
@@ -140,13 +141,11 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						"_include": {"Patient:general-practitioner"},
 						"_id":      {"1000"},
 					},
-					Header: http.Header{
-						"Content-Type": {"application/fhir+json"},
-					},
 				},
 				Context: PDPContext{
 					DataHolderOrganizationId: "00000002",
 					DataHolderFacilityType:   "TODO",
+					ConnectionTypeCode:       "hl7-fhir-rest",
 				},
 			},
 		}
@@ -184,6 +183,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					DataHolderOrganizationId: "00000002",
 					DataHolderFacilityType:   "TODO",
 					PatientBSN:               "123456789",
+					ConnectionTypeCode:       "hl7-fhir-rest",
 				},
 			},
 		}
@@ -221,6 +221,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				Context: PDPContext{
 					DataHolderOrganizationId: "00000002",
 					DataHolderFacilityType:   "TODO",
+					ConnectionTypeCode:       "hl7-fhir-rest",
 				},
 			},
 		}
@@ -253,6 +254,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				},
 				Context: PDPContext{
 					DataHolderOrganizationId: "00000002",
+					ConnectionTypeCode:       "hl7-fhir-rest",
 				},
 			},
 		}
@@ -285,6 +287,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				},
 				Context: PDPContext{
 					DataHolderOrganizationId: "00000002",
+					ConnectionTypeCode:       "hl7-fhir-rest",
 				},
 			},
 		}
@@ -321,6 +324,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					DataHolderOrganizationId: "00000002",
 					DataHolderFacilityType:   "TODO",
 					// Neither patient_bsn nor patient_id set
+					ConnectionTypeCode: "hl7-fhir-rest",
 				},
 			},
 		}

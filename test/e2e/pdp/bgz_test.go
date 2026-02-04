@@ -39,14 +39,12 @@ func Test_BGZAuthorization(t *testing.T) {
 			  "query_params": {
  			    "_include": ["Patient:general-practitioner"]
               },
-			  "header": {
-				"Content-Type": ["application/fhir+json"]
-			  }
 			},
 			"context": {
 			  "data_holder_organization_id": "00000659",
 			  "data_holder_facility_type": "Z3",
-              "patient_bsn": "1234567890"
+              "patient_bsn": "1234567890",
+              "connection_type_code": "hl7-fhir-rest"
 			}
 		  }
 		}`
