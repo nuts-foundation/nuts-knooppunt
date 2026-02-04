@@ -1,6 +1,6 @@
 {
   "id": "bgz-test",
-  "endpoint": "http://localhost:8080/discovery/bgz-test",
+  "endpoint": "http://localhost:8080/nuts/discovery/bgz-test",
   "presentation_max_validity": 36000,
   "presentation_definition": {
     "id": "pd_bgz_discovery",
