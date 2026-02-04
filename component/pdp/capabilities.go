@@ -100,7 +100,7 @@ func evalInteraction(
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
 	for _, rest := range statement.Rest {
 		for _, res := range rest.Resource {
-			if res.Type == input.Resource.Type {
+			if res.Type == *input.Resource.Type {
 				resourceDescriptions = append(resourceDescriptions, res)
 			}
 		}

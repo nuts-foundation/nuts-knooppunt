@@ -1,12 +1,14 @@
 package pdp
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -298,24 +300,17 @@ func groupParams(queryParams url.Values) Params {
 }
 
 func derivePatientId(tokens Tokens, queryParams url.Values) (string, error) {
-	// https://fhir.example.org/Patient/12345
-	typeInPath := tokens.ResourceType != nil && *tokens.ResourceType == fhir.ResourceTypePatient
-	idInPath := tokens.ResourceId != ""
-	if typeInPath && idInPath {
-		return tokens.ResourceId, nil
+	if tokens.ResourceType != nil && *tokens.ResourceType == fhir.ResourceTypePatient {
+		// https://fhir.example.org/Patient/12345
+		if tokens.ResourceId != "" {
+			return tokens.ResourceId, nil
+		}
+
+		// https://fhir.example.org/Patient?_id=12345
+		return getSingleParameter(queryParams, "_id")
 	}
 
-	// https://fhir.example.org/Patient?_id=12345
-	idInParams := len(queryParams["_id"]) == 1
-	if typeInPath && idInParams {
-		return queryParams["_id"][0], nil
-	}
-
-	multiIdInParams := len(queryParams["_id"]) > 1
-	if typeInPath && multiIdInParams {
-		return "", fmt.Errorf("multiple _id parameters found")
-	}
-
+	// TODO: make this resource-specific
 	// https://fhir.example.org/Encounter?patient=Patient/12345
 	patientInParams := len(queryParams["patient"]) == 1
 	if patientInParams {
@@ -329,6 +324,45 @@ func derivePatientId(tokens Tokens, queryParams url.Values) (string, error) {
 	}
 
 	return "", nil
+}
+
+func derivePatientBSN(tokens Tokens, rawParams url.Values) (string, error) {
+	// TODO: support other resource types if needed
+	if tokens.ResourceType == nil || *tokens.ResourceType != fhir.ResourceTypePatient {
+		return "", nil
+	}
+	identifier, err := getSingleParameter(rawParams, "identifier")
+	if err != nil {
+		return "", err
+	}
+	if identifier == "" {
+		return "", nil
+	}
+	parts := strings.Split(identifier, "|")
+	if len(parts) != 2 {
+		return "", errors.New("expected identifier parameter in format 'system|value'")
+	}
+	if parts[0] != coding.BSNNamingSystem {
+		return "", fmt.Errorf("expected identifier system to be '%s', found '%s'", coding.BSNNamingSystem, parts[0])
+	}
+	if parts[1] == "" {
+		return "", errors.New("identifier value is empty")
+	}
+	return parts[1], nil
+}
+
+func getSingleParameter(params url.Values, name string) (string, error) {
+	values := params[name]
+	if len(values) == 0 {
+		return "", nil
+	} else if len(values) > 1 {
+		return "", fmt.Errorf("multiple %s parameters found", name)
+	}
+	value := values[0]
+	if strings.Count(value, ",") != 0 {
+		return "", fmt.Errorf("expected 1 value in %s parameter, found multiple", name)
+	}
+	return value, nil
 }
 
 func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
@@ -357,7 +391,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	}
 
 	if tokens.ResourceType != nil {
-		policyInput.Resource.Type = *tokens.ResourceType
+		policyInput.Resource.Type = tokens.ResourceType
 		if tokens.ResourceId != "" {
 			policyInput.Resource.Properties.ResourceId = tokens.ResourceId
 		}
@@ -401,15 +435,30 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Action.Properties.ConnectionData.FHIRRest.Revinclude = params.Revinclude
 	policyInput.Action.Properties.ConnectionData.FHIRRest.SearchParams = params.SearchParams
 
+	// Read patient resource ID from request
+	result := Allow()
 	patientId, err := derivePatientId(tokens, rawParams)
 	if err != nil {
-		reason := ResultReason{
+		result.Reasons = append(result.Reasons, ResultReason{
 			Code:        TypeResultCodeUnexpectedInput,
-			Description: "Multiple patient id's provided",
-		}
-		return PolicyInput{}, Deny(reason)
+			Description: "patient_id: " + err.Error(),
+		})
+	} else {
+		policyInput.Action.Properties.ConnectionData.FHIRRest.PatientID = patientId
 	}
-	policyInput.Action.Properties.ConnectionData.FHIRRest.PatientID = patientId
 
-	return policyInput, Allow()
+	// Read patient BSN from request
+	if policyInput.Context.PatientBSN == "" {
+		patientBSN, err := derivePatientBSN(tokens, rawParams)
+		if err != nil {
+			result.Reasons = append(result.Reasons, ResultReason{
+				Code:        TypeResultCodeUnexpectedInput,
+				Description: "patient_bsn: " + err.Error(),
+			})
+		} else {
+			policyInput.Context.PatientBSN = patientBSN
+		}
+	}
+
+	return policyInput, result
 }
