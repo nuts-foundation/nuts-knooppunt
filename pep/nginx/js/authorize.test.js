@@ -122,13 +122,15 @@ describe('normalizeClaimValue', () => {
         expect(normalizeClaimValue('hello')).toBe('hello');
     });
 
-    test('converts numbers to string', () => {
-        expect(normalizeClaimValue(12345)).toBe('12345');
+    test('preserves numbers as-is', () => {
+        expect(normalizeClaimValue(12345)).toBe(12345);
+        expect(normalizeClaimValue(0)).toBe(0);
+        expect(normalizeClaimValue(-42)).toBe(-42);
     });
 
-    test('converts booleans to string', () => {
-        expect(normalizeClaimValue(true)).toBe('true');
-        expect(normalizeClaimValue(false)).toBe('false');
+    test('preserves booleans as-is', () => {
+        expect(normalizeClaimValue(true)).toBe(true);
+        expect(normalizeClaimValue(false)).toBe(false);
     });
 
     test('converts null to empty string', () => {
@@ -177,17 +179,22 @@ describe('extractPDClaims', () => {
         expect(claims.iss).toBeUndefined();
     });
 
-    test('converts non-string values to string', () => {
+    test('preserves primitive types from introspection', () => {
         const introspection = {
             active: true,
             numeric_claim: 12345,
-            boolean_claim: false
+            boolean_claim: false,
+            string_claim: 'hello',
+            array_claim: ['a', 'b', 'c']
         };
 
         const claims = extractPDClaims(introspection);
 
-        expect(claims.numeric_claim).toBe('12345');
-        expect(claims.boolean_claim).toBe('false');
+        expect(claims.numeric_claim).toBe(12345);
+        expect(claims.boolean_claim).toBe(false);
+        expect(claims.string_claim).toBe('hello');
+        expect(claims.array_claim).toEqual(['a', 'b', 'c']);
+        expect(Array.isArray(claims.array_claim)).toBe(true);
     });
 
     test('handles null and undefined values', () => {

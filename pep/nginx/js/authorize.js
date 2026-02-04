@@ -93,10 +93,10 @@ const STANDARD_CLAIMS = {
  * Normalize a claim value for PDP
  * - Arrays are preserved as arrays (PDP may need to iterate)
  * - Plain objects are converted to JSON strings (structure unknown)
- * - Primitives are converted to strings
+ * - Primitives (string, number, boolean) are preserved as-is
  * - null/undefined become empty strings
  * @param {*} value - Claim value from introspection
- * @returns {string|Array} - Normalized value
+ * @returns {string|number|boolean|Array} - Normalized value
  */
 function normalizeClaimValue(value) {
     if (value === null || value === undefined) {
@@ -110,7 +110,8 @@ function normalizeClaimValue(value) {
     if (typeof value === 'object') {
         return JSON.stringify(value);
     }
-    return String(value);
+    // Preserve primitive types (string, number, boolean)
+    return value;
 }
 
 /**
