@@ -41,7 +41,8 @@ func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityState
 }
 
 func enrichPolicyInputWithCapabilityStatement(ctx context.Context, input PolicyInput, policy string) (PolicyInput, []ResultReason) {
-	if input.Action.Properties.ContentType != "application/fhir+json" {
+	// Skip capability checking for requests that don't target a specific resource type (e.g., /metadata, /)
+	if input.Resource.Type == nil {
 		return input, nil
 	}
 
@@ -93,7 +94,7 @@ func evalInteraction(
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
 	for _, rest := range statement.Rest {
 		for _, res := range rest.Resource {
-			if res.Type == input.Resource.Type {
+			if res.Type == *input.Resource.Type {
 				resourceDescriptions = append(resourceDescriptions, res)
 			}
 		}

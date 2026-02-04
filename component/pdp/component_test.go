@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
@@ -87,45 +89,28 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		require.NoError(t, service.Stop(context.Background()))
 	}()
 
-	t.Run("disallow - Mitz consent not given", func(t *testing.T) {
-		pdpRequest := PDPRequest{
-			Input: PDPInput{
-				Subject: Subject{
-					Properties: SubjectProperties{
-						ClientQualifications:  []string{"bgz"},
-						SubjectOrganizationId: "00000001",
-						SubjectFacilityType:   "TODO",
-						SubjectRole:           "TODO",
-						SubjectId:             "TODO",
-					},
-				},
-				Request: HTTPRequest{
-					Method:   "GET",
-					Protocol: "HTTP/1.1",
-					Path:     "/Patient",
-					QueryParams: map[string][]string{
-						"_include": {"Patient:general-practitioner"},
-						"_id":      {"1001"},
-					},
-				},
-				Context: PDPContext{
-					DataHolderOrganizationId: "00000002",
-					DataHolderFacilityType:   "TODO",
-				},
-			},
+	type testCase struct {
+		name                 string
+		clientQualifications []string
+		httpRequest          string
+		httpRequestBody      string
+		decision             bool
+	}
+	runTest := func(t *testing.T, tc testCase) {
+		t.Helper()
+		httpReqParts := strings.Split(tc.httpRequest, " ")
+		httpReqURL, err := url.Parse("http://localhost" + httpReqParts[1])
+		require.NoError(t, err)
+		path := httpReqURL.Path
+		if httpReqURL.RawQuery != "" {
+			path += "?"
 		}
 
-		response := executePDPRequest(t, service, pdpRequest)
-
-		assert.False(t, response.Result.Allow)
-		assert.NotEmpty(t, response.Result.Reasons)
-	})
-	t.Run("allow - correct Patient query with _include", func(t *testing.T) {
 		pdpRequest := PDPRequest{
 			Input: PDPInput{
 				Subject: Subject{
 					Properties: SubjectProperties{
-						ClientQualifications:  []string{"bgz"},
+						ClientQualifications:  tc.clientQualifications,
 						SubjectOrganizationId: "00000001",
 						SubjectFacilityType:   "TODO",
 						SubjectRole:           "TODO",
@@ -133,13 +118,10 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					},
 				},
 				Request: HTTPRequest{
-					Method:   "GET",
-					Protocol: "HTTP/1.1",
-					Path:     "/Patient",
-					QueryParams: map[string][]string{
-						"_include": {"Patient:general-practitioner"},
-						"_id":      {"1000"},
-					},
+					Method:      httpReqParts[0],
+					Protocol:    "HTTP/1.1",
+					Path:        path,
+					QueryParams: httpReqURL.Query(),
 					Header: http.Header{
 						"Content-Type": {"application/fhir+json"},
 					},
@@ -150,184 +132,140 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				},
 			},
 		}
-
+		if tc.httpRequestBody != "" {
+			pdpRequest.Input.Request.Body = tc.httpRequestBody
+		}
 		response := executePDPRequest(t, service, pdpRequest)
+		if tc.decision {
+			assert.True(t, response.Result.Allow, tc.name)
+			assert.Empty(t, response.Result.Reasons, tc.name)
+		} else {
+			assert.False(t, response.Result.Allow, tc.name)
+			assert.NotEmpty(t, response.Result.Reasons, tc.name)
+		}
+	}
 
-		assert.True(t, response.Result.Allow, "bgz should allow Patient query with _include=Patient:general-practitioner")
-		assert.Empty(t, response.Result.Reasons)
-	})
-	t.Run("allow - correct Patient query with BSN", func(t *testing.T) {
-		pdpRequest := PDPRequest{
-			Input: PDPInput{
-				Subject: Subject{
-					Properties: SubjectProperties{
-						ClientQualifications:  []string{"bgz"},
-						SubjectOrganizationId: "00000001",
-						SubjectFacilityType:   "TODO",
-						SubjectRole:           "TODO",
-						SubjectId:             "TODO",
-					},
-				},
-				Request: HTTPRequest{
-					Method:   "GET",
-					Protocol: "HTTP/1.1",
-					Path:     "/Patient",
-					QueryParams: map[string][]string{
-						"_include": {"Patient:general-practitioner"},
-						"_id":      {"1000"},
-					},
-					Header: http.Header{
-						"Content-Type": {"application/fhir+json"},
-					},
-				},
-				Context: PDPContext{
-					DataHolderOrganizationId: "00000002",
-					DataHolderFacilityType:   "TODO",
-					PatientBSN:               "123456789",
-				},
+	t.Run("bgz", func(t *testing.T) {
+		testCases := []testCase{
+			{
+				name:                 "disallow - Mitz consent not given",
+				clientQualifications: []string{"bgz"},
+				httpRequest:          `GET /Patient?_include=Patient:general-practitioner&_id=1001`,
+				decision:             false,
+			},
+			{
+				name:                 "allow - correct Patient query with _include",
+				clientQualifications: []string{"bgz"},
+				httpRequest:          `GET /Patient?_include=Patient:general-practitioner&_id=1000`,
+				decision:             true,
+			},
+			{
+				name:                 "allow - correct Patient query with BSN",
+				clientQualifications: []string{"bgz"},
+				httpRequest:          `GET /Patient?_include=Patient:general-practitioner&_id=1000`,
+				decision:             true,
+			},
+			{
+				name:                 "allow - correct MedicationDispense query with category and _include",
+				clientQualifications: []string{"bgz"},
+				httpRequest:          `GET /MedicationDispense?category=http://snomed.info/sct|422037009&_include=MedicationDispense:medication&patient=Patient/1000`,
+				decision:             true,
+			},
+			{
+				name:                 "disallow - Patient query with wrong _include parameter",
+				clientQualifications: []string{"bgz"},
+				httpRequest:          `GET /Patient?_include=Patient:organization`,
+			},
+			{
+				name:                 "disallow - Patient query with additional parameters",
+				clientQualifications: []string{"bgz"},
+				httpRequest:          `GET /Patient?_include=Patient:general-practitioner&name=John`,
+			},
+			{
+				name:                 "disallow - Patient query without patient_id or patient_bsn",
+				clientQualifications: []string{"bgz"},
+				httpRequest:          `GET /Patient?_include=Patient:general-practitioner`,
 			},
 		}
-
-		response := executePDPRequest(t, service, pdpRequest)
-
-		assert.True(t, response.Result.Allow, "bgz should allow Patient query with BSN")
-		assert.Empty(t, response.Result.Reasons)
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				runTest(t, tc)
+			})
+		}
 	})
-	t.Run("allow - correct MedicationDispense query with category and _include", func(t *testing.T) {
-		pdpRequest := PDPRequest{
-			Input: PDPInput{
-				Subject: Subject{
-					Properties: SubjectProperties{
-						ClientQualifications:  []string{"bgz"},
-						SubjectOrganizationId: "00000001",
-						SubjectFacilityType:   "TODO",
-						SubjectRole:           "TODO",
-						SubjectId:             "TODO",
-					},
-				},
-				Request: HTTPRequest{
-					Method:   "GET",
-					Protocol: "HTTP/1.1",
-					Path:     "/MedicationDispense",
-					QueryParams: map[string][]string{
-						"category": {"http://snomed.info/sct|422037009"},
-						"_include": {"MedicationDispense:medication"},
-						"patient":  {"Patient/1000"},
-					},
-					Header: http.Header{
-						"Content-Type": {"application/fhir+json"},
-					},
-				},
-				Context: PDPContext{
-					DataHolderOrganizationId: "00000002",
-					DataHolderFacilityType:   "TODO",
-				},
+	t.Run("pzp", func(t *testing.T) {
+		testCases := []testCase{
+			{
+				name:                 "allow - Patient search with BSN identifier",
+				clientQualifications: []string{"pzp"},
+				httpRequest:          `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|123456789`,
+				decision:             true,
+			},
+			{
+				name:                 "deny - Patient search without BSN namespace",
+				clientQualifications: []string{"pzp"},
+				httpRequest:          `GET /Patient?identifier=123456789`,
+				decision:             false,
+			},
+			{
+				name:                 "deny - Patient search with wrong identifier system",
+				clientQualifications: []string{"pzp"},
+				httpRequest:          `GET /Patient?identifier=http://example.com/identifier|123456789`,
+				decision:             false,
+			},
+			{
+				name:                 "allow - Consent search with patient and _profile",
+				clientQualifications: []string{"pzp"},
+				httpRequest:          `GET /Consent?patient=Patient/1000&_profile=http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2`,
+				decision:             true,
+			},
+			{
+				name:                 "deny - Consent search with multiple patient refs",
+				clientQualifications: []string{"pzp"},
+				httpRequest:          `GET /Consent?patient=Patient/1000,Patient/1001&_profile=http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2`,
+				decision:             false,
+			},
+			{
+				name:                 "deny - Consent search without patient parameter",
+				clientQualifications: []string{"pzp"},
+				httpRequest:          `GET /Consent?_profile=http://example.com/fhir/StructureDefinition/consent-profile`,
+				decision:             false,
+			},
+			{
+				name:                 "deny - Consent search without _profile parameter",
+				clientQualifications: []string{"pzp"},
+				httpRequest:          `GET /Consent?patient=Patient/1000`,
+				decision:             false,
+			},
+			{
+				name:                 "deny - Consent search with empty patient parameter",
+				clientQualifications: []string{"pzp"},
+				httpRequest:          `GET /Consent?patient=&_profile=http://example.com/fhir/StructureDefinition/consent-profile`,
+				decision:             false,
+			},
+			{
+				name:                 "deny - Patient search without patient_id or patient_bsn",
+				clientQualifications: []string{"pzp"},
+				httpRequest:          `GET /Patient?`,
+				decision:             false,
+			},
+			{
+				name:                 "deny - Mitz consent not given",
+				clientQualifications: []string{"pzp"},
+				httpRequest:          `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|bsn:deny`,
+				decision:             false,
+			},
+			{
+				name:                 "deny - unsupported resource type",
+				clientQualifications: []string{"pzp"},
+				httpRequest:          `GET /Observation?patient=Patient/1000`,
+				decision:             false,
 			},
 		}
-
-		response := executePDPRequest(t, service, pdpRequest)
-
-		assert.True(t, response.Result.Allow, "bgz should allow MedicationDispense query with category and _include=MedicationDispense:medication")
-		assert.Empty(t, response.Result.Reasons)
-	})
-
-	t.Run("deny - Patient query with wrong _include parameter", func(t *testing.T) {
-		pdpRequest := PDPRequest{
-			Input: PDPInput{
-				Subject: Subject{
-					Properties: SubjectProperties{
-						ClientQualifications:  []string{"bgz"},
-						SubjectOrganizationId: "00000001",
-					},
-				},
-				Request: HTTPRequest{
-					Method:   "GET",
-					Protocol: "HTTP/1.1",
-					Path:     "/Patient?",
-					QueryParams: map[string][]string{
-						"_include": {"Patient:organization"},
-					},
-					Header: http.Header{
-						"Content-Type": {"application/fhir+json"},
-					},
-				},
-				Context: PDPContext{
-					DataHolderOrganizationId: "00000002",
-				},
-			},
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				runTest(t, tc)
+			})
 		}
-
-		response := executePDPRequest(t, service, pdpRequest)
-
-		assert.False(t, response.Result.Allow, "bgz should deny Patient query with wrong _include parameter")
-	})
-
-	t.Run("deny - Patient query with additional parameters", func(t *testing.T) {
-		pdpRequest := PDPRequest{
-			Input: PDPInput{
-				Subject: Subject{
-					Properties: SubjectProperties{
-						ClientQualifications:  []string{"bgz"},
-						SubjectOrganizationId: "00000001",
-					},
-				},
-				Request: HTTPRequest{
-					Method:   "GET",
-					Protocol: "HTTP/1.1",
-					Path:     "/Patient?",
-					QueryParams: map[string][]string{
-						"_include": {"Patient:general-practitioner"},
-						"name":     {"John"},
-					},
-					Header: http.Header{
-						"Content-Type": {"application/fhir+json"},
-					},
-				},
-				Context: PDPContext{
-					DataHolderOrganizationId: "00000002",
-				},
-			},
-		}
-
-		response := executePDPRequest(t, service, pdpRequest)
-
-		assert.False(t, response.Result.Allow, "bgz should deny Patient query with additional parameters")
-	})
-
-	t.Run("deny - Patient query without patient_id or patient_bsn", func(t *testing.T) {
-		pdpRequest := PDPRequest{
-			Input: PDPInput{
-				Subject: Subject{
-					Properties: SubjectProperties{
-						ClientQualifications:  []string{"bgz"},
-						SubjectOrganizationId: "00000001",
-						SubjectFacilityType:   "TODO",
-						SubjectRole:           "TODO",
-						SubjectId:             "TODO",
-					},
-				},
-				Request: HTTPRequest{
-					Method:   "GET",
-					Protocol: "HTTP/1.1",
-					Path:     "/Patient",
-					QueryParams: map[string][]string{
-						"_include": {"Patient:general-practitioner"},
-					},
-					Header: http.Header{
-						"Content-Type": {"application/fhir+json"},
-					},
-				},
-				Context: PDPContext{
-					DataHolderOrganizationId: "00000002",
-					DataHolderFacilityType:   "TODO",
-					// Neither patient_bsn nor patient_id set
-				},
-			},
-		}
-
-		response := executePDPRequest(t, service, pdpRequest)
-
-		assert.False(t, response.Result.Allow, "bgz should deny Patient query without patient_id or patient_bsn")
-		assert.NotEmpty(t, response.Result.Reasons)
 	})
 }
