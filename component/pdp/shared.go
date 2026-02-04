@@ -75,9 +75,8 @@ type PolicyActionProperties struct {
 	ConnectionData PolicyConnectionData `json:"connection_data"`
 }
 
-// Contains data that is parsed for a specific connection type
 type PolicyConnectionData struct {
-	FHIRRest FhirConnectionData `json:fhir_rest`
+	FHIRRest FhirConnectionData `json:"fhir_rest"`
 }
 
 type FhirConnectionData struct {
