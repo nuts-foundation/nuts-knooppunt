@@ -3,7 +3,6 @@ package pdp
 import (
 	"fmt"
 	"net/http"
-	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
@@ -102,22 +101,6 @@ type PolicyResult struct {
 	Policy  string         `json:"policy"`
 	Allow   bool           `json:"allow"`
 	Reasons []ResultReason `json:"reasons"`
-}
-
-func (p *PolicyResult) Merge(other PolicyResult) PolicyResult {
-	var policies []string
-	if p.Policy != "" {
-		policies = append(policies, p.Policy)
-	}
-	if other.Policy != "" {
-		policies = append(policies, other.Policy)
-	}
-	merged := PolicyResult{
-		Policy:  strings.Join(policies, ","),
-		Allow:   p.Allow && other.Allow,
-		Reasons: append(append([]ResultReason{}, p.Reasons...), other.Reasons...),
-	}
-	return merged
 }
 
 type ResultReason struct {
