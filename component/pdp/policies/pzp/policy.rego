@@ -17,19 +17,19 @@ allow if {
 # GET [base]/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|{value}
 is_allowed_query if {
     input.resource.type == "Patient"
-    input.action.properties.interaction_type == "search-type"
+    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
     # identifier: exactly 1 identifier of type BSN
-    is_string(input.action.properties.search_params.identifier)
-    startswith(input.action.properties.search_params.identifier, "http://fhir.nl/fhir/NamingSystem/bsn|")
+    is_string(input.action.properties.connection_data.fhir_rest.search_params.identifier)
+    startswith(input.action.properties.connection_data.fhir_rest.search_params.identifier, "http://fhir.nl/fhir/NamingSystem/bsn|")
 }
 
 # GET [base]/Consent?patient={reference}&_profile=http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2
 is_allowed_query if {
     input.resource.type == "Consent"
-    input.action.properties.interaction_type == "search-type"
+    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
     # patient: reference Patient resource
-    startswith(input.action.properties.search_params.patient, "Patient/")
+    startswith(input.action.properties.connection_data.fhir_rest.search_params.patient, "Patient/")
     # _profile
-    is_string(input.action.properties.search_params._profile)
-    input.action.properties.search_params._profile == "http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2"
+    is_string(input.action.properties.connection_data.fhir_rest.search_params._profile)
+    input.action.properties.connection_data.fhir_rest.search_params._profile == "http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2"
 }
