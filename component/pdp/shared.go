@@ -107,6 +107,7 @@ type PDPResponse struct {
 }
 
 type PolicyResult struct {
+	Policy  string         `json:"policy"`
 	Allow   bool           `json:"allow"`
 	Reasons []ResultReason `json:"reasons"`
 }
@@ -170,6 +171,7 @@ const (
 	TypeResultCodeNotAllowed           TypeResultCode = "not_allowed"
 	TypeResultCodeNotImplemented       TypeResultCode = "not_implemented"
 	TypeResultCodeInternalError        TypeResultCode = "internal_error"
+	TypeResultCodePIPError             TypeResultCode = "pip_error"
 )
 
 type PIPConfig struct {

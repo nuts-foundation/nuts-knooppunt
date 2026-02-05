@@ -40,40 +40,33 @@ func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityState
 	return result, true
 }
 
-func evalCapabilityPolicy(ctx context.Context, input PolicyInput) (PolicyInput, PolicyResult) {
-	if !input.Action.Properties.ConnectionData.FHIRRest.isFHIRRest {
-		return input, Allow()
+func enrichPolicyInputWithCapabilityStatement(ctx context.Context, input PolicyInput, policy string) (PolicyInput, []ResultReason) {
+	// Skip capability checking for requests that don't target a specific resource type (e.g., /metadata, /)
+	if input.Resource.Type == nil {
+		return input, nil
 	}
 
-	out := PolicyResult{
-		Allow: false,
-	}
-
-	scope := input.Subject.Properties.ClientQualifications[0]
-
-	statement, ok := capabilityForScope(ctx, scope)
+	statement, ok := capabilityForScope(ctx, policy)
 	if !ok {
-		reason := ResultReason{
-			Code:        TypeResultCodeUnexpectedInput,
-			Description: "unexpected input, no capability statement known for scope",
+		return input, []ResultReason{
+			{
+				Code:        TypeResultCodeUnexpectedInput,
+				Description: "unexpected input, no capability statement known for policy",
+			},
 		}
-		out.Reasons = []ResultReason{reason}
-		return input, out
 	}
 
-	result := evalInteraction(statement, input)
-	input.Action.Properties.ConnectionData.FHIRRest.CapabilityChecked = result.Allow
-	return input, result
+	resultReasons := evalInteraction(statement, input)
+	input.Context.FHIRCapabilityChecked = len(resultReasons) == 0
+	return input, resultReasons
 }
 
+// evalInteraction checks whether the requested interaction is allowed by the capability statement.
+// If not, it returns a list of reasons why not.
 func evalInteraction(
 	statement fhir.CapabilityStatement,
 	input PolicyInput,
-) PolicyResult {
-	policyResult := PolicyResult{
-		Allow: false,
-	}
-
+) []ResultReason {
 	// FUTURE: This is a pretty naive implementation - we can make it more efficient at a later point.
 	var supported = []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionRead,
@@ -87,14 +80,15 @@ func evalInteraction(
 		fhir.TypeRestfulInteractionSearchType,
 	}
 
-	fhirData := input.Action.Properties.ConnectionData.FHIRRest
+	props := input.Action.Properties
 
-	if !slices.Contains(supported, fhirData.InteractionType) {
-		return Deny(
-			ResultReason{
+	if !slices.Contains(supported, props.InteractionType) {
+		return []ResultReason{
+			{
 				Code:        TypeResultCodeNotImplemented,
 				Description: "restful interaction type not supported",
-			})
+			},
+		}
 	}
 
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
@@ -109,23 +103,24 @@ func evalInteraction(
 	allowInteraction := false
 	for _, des := range resourceDescriptions {
 		for _, inter := range des.Interaction {
-			if inter.Code == fhirData.InteractionType {
+			if inter.Code == props.InteractionType {
 				allowInteraction = true
 			}
 		}
 	}
 
 	if !allowInteraction {
-		return Deny(
-			ResultReason{
+		return []ResultReason{
+			{
 				Code:        TypeResultCodeNotAllowed,
 				Description: "capability statement does not allow interaction",
-			})
+			},
+		}
 	}
 
 	allowParams := false
 	rejectedSearchParams := make([]string, 0, 10)
-	if fhirData.InteractionType == fhir.TypeRestfulInteractionSearchType {
+	if props.InteractionType == fhir.TypeRestfulInteractionSearchType {
 		allowedParams := make([]string, 0, 10)
 		for _, des := range resourceDescriptions {
 			for _, param := range des.SearchParam {
@@ -133,7 +128,7 @@ func evalInteraction(
 			}
 		}
 
-		for paramName := range fhirData.SearchParams {
+		for paramName := range props.SearchParams {
 			if !slices.Contains(allowedParams, paramName) {
 				rejectedSearchParams = append(rejectedSearchParams, paramName)
 			}
@@ -142,11 +137,14 @@ func evalInteraction(
 
 	allowParams = len(rejectedSearchParams) == 0
 	if !allowParams {
-		policyResult.AddReasons(rejectedSearchParams, "search parameter %s is not allowed", TypeResultCodeNotAllowed)
-		return policyResult
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: fmt.Sprintf("search parameter %s not allowed", rejectedSearchParams),
+			},
+		}
 	}
 
-	allowIncludes := false
 	allowedIncludes := make([]string, 0, 10)
 	for _, des := range resourceDescriptions {
 		for _, include := range des.SearchInclude {
@@ -155,16 +153,20 @@ func evalInteraction(
 	}
 
 	rejectedIncludes := make([]string, 0, len(allowedIncludes))
-	for _, inc := range fhirData.Include {
+	for _, inc := range props.Include {
 		if !slices.Contains(allowedIncludes, inc) {
 			rejectedIncludes = append(rejectedIncludes, inc)
 		}
 	}
 
-	allowIncludes = len(rejectedIncludes) == 0
+	allowIncludes := len(rejectedIncludes) == 0
 	if !allowIncludes {
-		policyResult.AddReasons(rejectedIncludes, "include %s is not allowed", TypeResultCodeNotAllowed)
-		return policyResult
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: fmt.Sprintf("include %s is not allowed", rejectedIncludes),
+			},
+		}
 	}
 
 	allowRevincludes := false
@@ -176,7 +178,7 @@ func evalInteraction(
 	}
 
 	rejectedRevincludes := make([]string, 0, len(allowedRevincludes))
-	for _, inc := range fhirData.Revinclude {
+	for _, inc := range props.Revinclude {
 		if !slices.Contains(allowedRevincludes, inc) {
 			rejectedRevincludes = append(rejectedRevincludes, inc)
 		}
@@ -184,9 +186,13 @@ func evalInteraction(
 
 	allowRevincludes = len(rejectedRevincludes) == 0
 	if !allowRevincludes {
-		policyResult.AddReasons(rejectedRevincludes, "Revinclude %s is not allowed", TypeResultCodeNotAllowed)
-		return policyResult
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: fmt.Sprintf("revinclude %s is not allowed", rejectedRevincludes),
+			},
+		}
 	}
 
-	return Allow()
+	return nil
 }
