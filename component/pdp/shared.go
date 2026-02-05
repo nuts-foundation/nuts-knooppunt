@@ -59,9 +59,9 @@ func (s *SubjectProperties) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (s *SubjectProperties) MarshalJSON() ([]byte, error) {
+func (s SubjectProperties) MarshalJSON() ([]byte, error) {
 	type Alias SubjectProperties
-	tmp := Alias(*s)
+	tmp := Alias(s)
 	data, err := json.Marshal(tmp)
 	if err != nil {
 		return nil, err
@@ -212,6 +212,7 @@ const (
 	TypeResultCodeNotImplemented       TypeResultCode = "not_implemented"
 	TypeResultCodeInternalError        TypeResultCode = "internal_error"
 	TypeResultCodePIPError             TypeResultCode = "pip_error"
+	TypeResultCodeInformational        TypeResultCode = "info"
 )
 
 type PIPConfig struct {

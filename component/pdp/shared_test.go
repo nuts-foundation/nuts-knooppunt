@@ -39,6 +39,6 @@ func TestSubjectProperties_UnmarshalJSON(t *testing.T) {
 		}
 		data, err := json.Marshal(subjectProps)
 		require.NoError(t, err)
-		assert.JSONEq(t, `{"client_id":"1","client_qualifications":["mcsd_update"],"subject_id":"2","subject_organization_id":"00000666","subject_organization":"3","subject_facility_type":"Z3","subject_role":"GP"}`, string(data))
+		assert.JSONEq(t, `{"other":"value", "client_id":"1","client_qualifications":["mcsd_update"],"subject_id":"2","subject_organization_id":"00000666","subject_organization":"3","subject_facility_type":"Z3","subject_role":"GP"}`, string(data))
 	})
 }

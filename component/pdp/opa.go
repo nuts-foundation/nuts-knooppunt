@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/policies"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
@@ -57,19 +58,34 @@ func (c *Component) evalRegoPolicy(ctx context.Context, scope string, policyInpu
 	result, err := c.opaService.Decision(ctx, sdk.DecisionOptions{Path: "/" + scope, Input: opaInputMap})
 	if err != nil {
 		return nil, fmt.Errorf("failed to evaluate policy: %w", err)
-	} else if _, ok := result.Result.(bool); !ok {
+	}
+	resultMap, ok := result.Result.(map[string]any)
+	if !ok {
 		return nil, fmt.Errorf("unexpected policy result type (expected bool, was %T)", result.Result)
 	}
-
-	allowed := result.Result.(bool)
+	allowed, ok := resultMap["allow"].(bool)
+	if !ok {
+		return nil, fmt.Errorf("unexpected 'allow' result type (expected bool, was %T)", resultMap["allow"])
+	}
 	policyResult := PolicyResult{
 		Allow: allowed,
 	}
 	if !allowed {
+		var infoLines []string
+		for key, value := range resultMap {
+			if key == "allow" {
+				continue
+			}
+			infoLines = append(infoLines, fmt.Sprintf("%s: %v", key, value))
+		}
 		policyResult.Reasons = []ResultReason{
 			{
 				Code:        TypeResultCodeNotAllowed,
 				Description: "access denied by policy",
+			},
+			{
+				Code:        TypeResultCodeInformational,
+				Description: strings.Join(infoLines, "\n"),
 			},
 		}
 	}
