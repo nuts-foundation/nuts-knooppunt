@@ -36,7 +36,7 @@ has_patient_identifier if {
 }
 
 has_patient_identifier if {
-    # Remove this after february 2026 hackaton.
+    # Remove this after february 2026 hackathon.
     is_string(input.context.patient_bsn)
     input.context.patient_bsn != ""
 }
