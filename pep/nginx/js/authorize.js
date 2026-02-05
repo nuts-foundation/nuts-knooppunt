@@ -193,6 +193,7 @@ function buildPDPRequest(introspection, request) {
                 body: request.requestText || ''
             },
             context: {
+                connection_type_code: "hl7-fhir-rest",
                 data_holder_organization_id: process.env.DATA_HOLDER_ORGANIZATION_URA || '',
                 data_holder_facility_type: process.env.DATA_HOLDER_FACILITY_TYPE || '',
                 patient_bsn: ''
