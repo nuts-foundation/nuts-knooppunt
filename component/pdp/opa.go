@@ -61,7 +61,7 @@ func (c *Component) evalRegoPolicy(ctx context.Context, scope string, policyInpu
 	}
 	resultMap, ok := result.Result.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("unexpected policy result type (expected bool, was %T)", result.Result)
+		return nil, fmt.Errorf("unexpected policy result type (expected map[string]any with 'allow' field, was %T)", result.Result)
 	}
 	allowed, ok := resultMap["allow"].(bool)
 	if !ok {
