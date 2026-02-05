@@ -9,7 +9,7 @@ import rego.v1
 default allow := false
 
 allow if {
-    input.action.properties.connection_data.fhir_rest.capability_checked == true
+    input.action.fhir_rest.capability_checked == true
     input.context.mitz_consent == true
     # The BgZ on Generic Functions use case (to be formalized) specifies that requests must be scoped to a patient.
     # We enforce this by checking that either a patient_id or patient_bsn is present in the request context.
@@ -19,8 +19,8 @@ allow if {
 
 # Helper rule: check if either patient_id or patient_bsn is filled
 has_patient_identifier if {
-    is_string(input.action.properties.connection_data.fhir_rest.patient_id)
-    input.action.properties.connection_data.fhir_rest.patient_id != ""
+    is_string(input.action.fhir_rest.patient_id)
+    input.action.fhir_rest.patient_id != ""
 }
 
 has_patient_identifier if {
@@ -32,180 +32,180 @@ has_patient_identifier if {
 # GET [base]/Patient?_include=Patient:general-practitioner
 is_allowed_query if {
     input.resource.type == "Patient"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.include == ["Patient:general-practitioner"]
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.include == ["Patient:general-practitioner"]
 }
 
 # GET [base]/Coverage?_include=Coverage:payor:Patient&_include=Coverage:payor:Organization
 is_allowed_query if {
     input.resource.type == "Coverage"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.include == ["Coverage:payor:Patient", "Coverage:payor:Organization"]
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.include == ["Coverage:payor:Patient", "Coverage:payor:Organization"]
 }
 
 # GET [base]/Consent?category=http://snomed.info/sct|11291000146105
 is_allowed_query if {
     input.resource.type == "Consent"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|11291000146105"
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.category == "http://snomed.info/sct|11291000146105"
 }
 
 # GET [base]/Consent?category=http://snomed.info/sct|11341000146107
 is_allowed_query if {
     input.resource.type == "Consent"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|11341000146107"
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.category == "http://snomed.info/sct|11341000146107"
 }
 
 # GET [base]/Observation/$lastn?category=http://snomed.info/sct|118228005,http://snomed.info/sct|384821006
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.connection_data.fhir_rest.operation == "$lastn"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "operation"
-    input.action.properties.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|118228005,http://snomed.info/sct|384821006"
+    input.action.fhir_rest.operation == "$lastn"
+    input.action.fhir_rest.interaction_type == "operation"
+    input.action.fhir_rest.search_params.category == "http://snomed.info/sct|118228005,http://snomed.info/sct|384821006"
 }
 
 # GET [base]/Condition
 is_allowed_query if {
     input.resource.type == "Condition"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.interaction_type == "search-type"
 }
 
 # GET [base]/Observation/$lastn?code=http://snomed.info/sct|365508006
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.connection_data.fhir_rest.operation == "$lastn"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "operation"
-    input.action.properties.connection_data.fhir_rest.search_params.code == "http://snomed.info/sct|365508006"
+    input.action.fhir_rest.operation == "$lastn"
+    input.action.fhir_rest.interaction_type == "operation"
+    input.action.fhir_rest.search_params.code == "http://snomed.info/sct|365508006"
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|228366006
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.code == "http://snomed.info/sct|228366006"
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.code == "http://snomed.info/sct|228366006"
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|228273003
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.code == "http://snomed.info/sct|228273003"
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.code == "http://snomed.info/sct|228273003"
 }
 
 # GET [base]/Observation?code=http://snomed.info/sct|365980008
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.code == "http://snomed.info/sct|365980008"
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.code == "http://snomed.info/sct|365980008"
 }
 
 # GET [base]/NutritionOrder
 is_allowed_query if {
     input.resource.type == "NutritionOrder"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.interaction_type == "search-type"
 }
 
 # GET [base]/Flag
 is_allowed_query if {
     input.resource.type == "Flag"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.interaction_type == "search-type"
 }
 
 # GET [base]/AllergyIntolerance
 is_allowed_query if {
     input.resource.type == "AllergyIntolerance"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.interaction_type == "search-type"
 }
 
 # GET [base]/MedicationStatement?category=urn:oid:2.16.840.1.113883.2.4.3.11.60.20.77.5.3|6&_include=MedicationStatement:medication
 is_allowed_query if {
     input.resource.type == "MedicationStatement"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.category == "urn:oid:2.16.840.1.113883.2.4.3.11.60.20.77.5.3|6"
-    input.action.properties.connection_data.fhir_rest.include == ["MedicationStatement:medication"]
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.category == "urn:oid:2.16.840.1.113883.2.4.3.11.60.20.77.5.3|6"
+    input.action.fhir_rest.include == ["MedicationStatement:medication"]
 }
 
 # GET [base]/MedicationRequest?category=http://snomed.info/sct|16076005&_include=MedicationRequest:medication
 is_allowed_query if {
     input.resource.type == "MedicationRequest"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|16076005"
-    input.action.properties.connection_data.fhir_rest.include == ["MedicationRequest:medication"]
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.category == "http://snomed.info/sct|16076005"
+    input.action.fhir_rest.include == ["MedicationRequest:medication"]
 }
 
 # GET [base]/MedicationDispense?category=http://snomed.info/sct|422037009&_include=MedicationDispense:medication
 is_allowed_query if {
     input.resource.type == "MedicationDispense"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|422037009"
-    input.action.properties.connection_data.fhir_rest.include == ["MedicationDispense:medication"]
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.category == "http://snomed.info/sct|422037009"
+    input.action.fhir_rest.include == ["MedicationDispense:medication"]
 }
 
 # GET [base]/DeviceUseStatement?_include=DeviceUseStatement:device
 is_allowed_query if {
     input.resource.type == "DeviceUseStatement"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.include == ["DeviceUseStatement:device"]
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.include == ["DeviceUseStatement:device"]
 }
 
 # GET [base]/Immunization?status=completed
 is_allowed_query if {
     input.resource.type == "Immunization"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.status == "completed"
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.status == "completed"
 }
 
 # GET [base]/Observation/$lastn?code=http://loinc.org|85354-9
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.connection_data.fhir_rest.operation == "$lastn"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "operation"
-    input.action.properties.connection_data.fhir_rest.search_params.code == "http://loinc.org|85354-9"
+    input.action.fhir_rest.operation == "$lastn"
+    input.action.fhir_rest.interaction_type == "operation"
+    input.action.fhir_rest.search_params.code == "http://loinc.org|85354-9"
 }
 
 # GET [base]/Observation/$lastn?code=http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.connection_data.fhir_rest.operation == "$lastn"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "operation"
-    input.action.properties.connection_data.fhir_rest.search_params.code == "http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9"
+    input.action.fhir_rest.operation == "$lastn"
+    input.action.fhir_rest.interaction_type == "operation"
+    input.action.fhir_rest.search_params.code == "http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9"
 }
 
 # GET [base]/Observation/$lastn?category=http://snomed.info/sct|275711006&_include=Observation:related-target&_include=Observation:specimen
 is_allowed_query if {
     input.resource.type == "Observation"
-    input.action.properties.connection_data.fhir_rest.operation == "$lastn"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "operation"
-    input.action.properties.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|275711006"
-    input.action.properties.connection_data.fhir_rest.include == ["Observation:related-target", "Observation:specimen"]
+    input.action.fhir_rest.operation == "$lastn"
+    input.action.fhir_rest.interaction_type == "operation"
+    input.action.fhir_rest.search_params.category == "http://snomed.info/sct|275711006"
+    input.action.fhir_rest.include == ["Observation:related-target", "Observation:specimen"]
 }
 
 # GET [base]/Procedure?category=http://snomed.info/sct|387713003
 is_allowed_query if {
     input.resource.type == "Procedure"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.category == "http://snomed.info/sct|387713003"
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.category == "http://snomed.info/sct|387713003"
 }
 
 # GET [base]/Encounter?class=http://hl7.org/fhir/v3/ActCode|IMP,http://hl7.org/fhir/v3/ActCode|ACUTE,http://hl7.org/fhir/v3/ActCode|NONAC
 is_allowed_query if {
     input.resource.type == "Encounter"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.class == "http://hl7.org/fhir/v3/ActCode|IMP,http://hl7.org/fhir/v3/ActCode|ACUTE,http://hl7.org/fhir/v3/ActCode|NONAC"
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.class == "http://hl7.org/fhir/v3/ActCode|IMP,http://hl7.org/fhir/v3/ActCode|ACUTE,http://hl7.org/fhir/v3/ActCode|NONAC"
 }
 
 # GET [base]/ProcedureRequest?status=active
 is_allowed_query if {
     input.resource.type == "ProcedureRequest"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.status == "active"
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.status == "active"
 }
 
 # GET [base]/ImmunizationRecommendation
 is_allowed_query if {
     input.resource.type == "ImmunizationRecommendation"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.interaction_type == "search-type"
 }
 
 # GET [base]/MedicationDispense?category=http://snomed.info/sct|422037009&status=in-progress,preparation&_include=MedicationDispense:medication
@@ -214,16 +214,16 @@ is_allowed_query if {
 # GET [base]/DeviceRequest?status=active&_include=DeviceRequest:device
 is_allowed_query if {
     input.resource.type == "DeviceRequest"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.status == "active"
-    input.action.properties.connection_data.fhir_rest.include == ["DeviceRequest:device"]
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.status == "active"
+    input.action.fhir_rest.include == ["DeviceRequest:device"]
 }
 
 # GET [base]/Appointment?status=booked,pending,proposed
 is_allowed_query if {
     input.resource.type == "Appointment"
-    input.action.properties.connection_data.fhir_rest.interaction_type == "search-type"
-    input.action.properties.connection_data.fhir_rest.search_params.status == "booked,pending,proposed"
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.status == "booked,pending,proposed"
 
 }
 
