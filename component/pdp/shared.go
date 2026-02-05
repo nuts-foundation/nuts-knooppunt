@@ -66,21 +66,13 @@ type PolicyResourceProperties struct {
 }
 
 type PolicyAction struct {
-	Name       string                 `json:"name"`
-	Properties PolicyActionProperties `json:"properties"`
-}
-
-type PolicyActionProperties struct {
-	Request        HTTPRequest          `json:"request"`
-	ConnectionData PolicyConnectionData `json:"connection_data"`
-}
-
-type PolicyConnectionData struct {
-	FHIRRest FhirConnectionData `json:"fhir_rest"`
+	Name           string             `json:"name"`
+	ConnectionType string             `json:"connection_type"`
+	Request        HTTPRequest        `json:"request"`
+	FHIRRest       FhirConnectionData `json:"fhir_rest"`
 }
 
 type FhirConnectionData struct {
-	isFHIRRest        bool                        `json:"is_fhir_rest"`
 	CapabilityChecked bool                        `json:"capability_checked"`
 	Include           []string                    `json:"include"`
 	InteractionType   fhir.TypeRestfulInteraction `json:"interaction_type"`
