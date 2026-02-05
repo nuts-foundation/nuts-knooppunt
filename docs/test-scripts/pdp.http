@@ -135,3 +135,38 @@ Content-Type: application/json
     }
   }
 }
+
+### Testing pzp call
+POST http://localhost:8081/pdp/v1/data/knooppunt/authz
+Content-Type: application/json
+
+{
+  "input": {
+    "subject": {
+      "properties": {
+        "subject_id": "900030757",
+        "subject_role": "01.015",
+        "subject_organization_id": "00000025",
+        "subject_facility_type": "V5",
+        "client_qualifications": [
+          "pzp_gf"
+        ]
+      }
+    },
+    "request": {
+      "method": "POST",
+      "protocol": "HTTP/1.0",
+      "path": "/Patient/_search?",
+      "header": {
+        "Content-Type": ["application/x-www-form-urlencoded"]
+      },
+      "body": "identifier=http://fhir.nl/fhir/NamingSystem/bsn|900214181"
+    },
+    "context": {
+      "data_holder_organization_id": "90000697",
+      "data_holder_facility_type": "Z3",
+      "connection_type_code": "hl7-fhir-rest"
+    }
+  }
+}
+
