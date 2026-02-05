@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/policies"
@@ -72,11 +73,16 @@ func (c *Component) evalRegoPolicy(ctx context.Context, scope string, policyInpu
 	}
 	if !allowed {
 		var infoLines []string
-		for key, value := range resultMap {
-			if key == "allow" {
-				continue
+		// Sort keys to ensure deterministic output
+		keys := make([]string, 0, len(resultMap))
+		for key := range resultMap {
+			if key != "allow" {
+				keys = append(keys, key)
 			}
-			infoLines = append(infoLines, fmt.Sprintf("%s: %v", key, value))
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			infoLines = append(infoLines, fmt.Sprintf("%s: %v", key, resultMap[key]))
 		}
 		policyResult.Reasons = []ResultReason{
 			{
