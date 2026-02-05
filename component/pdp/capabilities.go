@@ -80,7 +80,7 @@ func evalInteraction(
 		fhir.TypeRestfulInteractionSearchType,
 	}
 
-	props := input.Action.Properties
+	props := input.Action
 
 	if !slices.Contains(supported, props.InteractionType) {
 		return []ResultReason{

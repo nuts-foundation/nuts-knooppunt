@@ -369,7 +369,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	var policyInput PolicyInput
 
 	policyInput.Subject = request.Input.Subject
-	policyInput.Action.Properties.Request = request.Input.Request
+	policyInput.Action.Request = request.Input.Request
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
 	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
@@ -379,7 +379,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 		// This is not a FHIR request
 		return policyInput, Allow()
 	}
-	policyInput.Action.FHIRRest.isFHIRRest = true
+	policyInput.Action.ConnectionTypeCode = "hl7-fhir-rest"
 
 	tokens, ok := parseRequestPath(request.Input.Request)
 	if !ok {
