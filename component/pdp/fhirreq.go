@@ -369,18 +369,25 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	var policyInput PolicyInput
 
 	policyInput.Subject = request.Input.Subject
-	policyInput.Action.Properties.Request = request.Input.Request
+	policyInput.Action.Request = request.Input.Request
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
 	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
 
-	contentType := request.Input.Request.Header.Get("Content-Type")
-	policyInput.Action.Properties.ContentType = contentType
+	isFhirAPI := request.Input.Context.ConnectionTypeCode == "hl7-fhir-rest"
+	if !isFhirAPI {
+		// This is not a FHIR request
+		return policyInput, Allow()
+	}
+	policyInput.Action.ConnectionTypeCode = "hl7-fhir-rest"
 
 	tokens, ok := parseRequestPath(request.Input.Request)
 	if !ok {
-		// This is not a FHIR request
-		return policyInput, Allow()
+		reason := ResultReason{
+			Code:        TypeResultCodeUnexpectedInput,
+			Description: "unexpected input, unable to parse fhir request",
+		}
+		return policyInput, Deny(reason)
 	}
 
 	if tokens.ResourceType != nil {
@@ -393,14 +400,14 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 		}
 	}
 
-	policyInput.Action.Properties.InteractionType = tokens.Interaction
+	policyInput.Action.FHIRRest.InteractionType = tokens.Interaction
 
 	if tokens.OperationName != "" {
-		policyInput.Action.Properties.Operation = &tokens.OperationName
+		policyInput.Action.FHIRRest.Operation = &tokens.OperationName
 	}
 
 	var rawParams url.Values
-	hasFormData := contentType == "application/x-www-form-urlencoded"
+	hasFormData := request.Input.Request.Header.Get("Content-Type") == "application/x-www-form-urlencoded"
 	interWithBody := []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionSearchType,
 		fhir.TypeRestfulInteractionOperation,
@@ -424,9 +431,9 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	}
 
 	params := groupParams(rawParams)
-	policyInput.Action.Properties.Include = params.Include
-	policyInput.Action.Properties.Revinclude = params.Revinclude
-	policyInput.Action.Properties.SearchParams = params.SearchParams
+	policyInput.Action.FHIRRest.Include = params.Include
+	policyInput.Action.FHIRRest.Revinclude = params.Revinclude
+	policyInput.Action.FHIRRest.SearchParams = params.SearchParams
 
 	// Read patient resource ID from request
 	result := Allow()
@@ -437,7 +444,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 			Description: "patient_id: " + err.Error(),
 		})
 	} else {
-		policyInput.Context.PatientID = patientId
+		policyInput.Action.FHIRRest.PatientID = patientId
 	}
 
 	// Read patient BSN from request

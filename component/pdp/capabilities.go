@@ -57,7 +57,7 @@ func enrichPolicyInputWithCapabilityStatement(ctx context.Context, input PolicyI
 	}
 
 	resultReasons := evalInteraction(statement, input)
-	input.Context.FHIRCapabilityChecked = len(resultReasons) == 0
+	input.Action.FHIRRest.CapabilityChecked = len(resultReasons) == 0
 	return input, resultReasons
 }
 
@@ -80,7 +80,7 @@ func evalInteraction(
 		fhir.TypeRestfulInteractionSearchType,
 	}
 
-	props := input.Action.Properties
+	props := input.Action.FHIRRest
 
 	if !slices.Contains(supported, props.InteractionType) {
 		return []ResultReason{

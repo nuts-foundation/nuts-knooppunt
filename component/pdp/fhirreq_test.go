@@ -109,12 +109,15 @@ func TestComponent_params_in_body(t *testing.T) {
 				},
 				Body: "identifier=http://fhir.nl/fhir/NamingSystem/bsn|775645332",
 			},
+			Context: PDPContext{
+				ConnectionTypeCode: "hl7-fhir-rest",
+			},
 		},
 	}
 
 	policyInput, policyResult := NewPolicyInput(pdpRequest)
 	assert.True(t, policyResult.Allow)
-	assert.Equal(t, "http://fhir.nl/fhir/NamingSystem/bsn|775645332", policyInput.Action.Properties.SearchParams["identifier"])
+	assert.Equal(t, "http://fhir.nl/fhir/NamingSystem/bsn|775645332", policyInput.Action.FHIRRest.SearchParams["identifier"])
 	assert.Equal(t, "775645332", policyInput.Context.PatientBSN)
 }
 
@@ -134,10 +137,13 @@ func TestComponent_parse_patient_id(t *testing.T) {
 				Protocol: "HTTP/1.1",
 				Path:     "/Patient/12345",
 			},
+			Context: PDPContext{
+				ConnectionTypeCode: "hl7-fhir-rest",
+			},
 		},
 	}
 	policyInput, _ := NewPolicyInput(pdpRequest)
-	assert.Equal(t, "12345", policyInput.Context.PatientID)
+	assert.Equal(t, "12345", policyInput.Action.FHIRRest.PatientID)
 
 	pdpRequest = PDPRequest{
 		Input: PDPInput{
@@ -149,10 +155,13 @@ func TestComponent_parse_patient_id(t *testing.T) {
 					"_id": []string{"56789"},
 				},
 			},
+			Context: PDPContext{
+				ConnectionTypeCode: "hl7-fhir-rest",
+			},
 		},
 	}
 	policyInput, _ = NewPolicyInput(pdpRequest)
-	assert.Equal(t, "56789", policyInput.Context.PatientID)
+	assert.Equal(t, "56789", policyInput.Action.FHIRRest.PatientID)
 
 	pdpRequest = PDPRequest{
 		Input: PDPInput{
@@ -164,10 +173,13 @@ func TestComponent_parse_patient_id(t *testing.T) {
 					"patient": []string{"Patient/98765"},
 				},
 			},
+			Context: PDPContext{
+				ConnectionTypeCode: "hl7-fhir-rest",
+			},
 		},
 	}
 	policyInput, _ = NewPolicyInput(pdpRequest)
-	assert.Equal(t, "98765", policyInput.Context.PatientID)
+	assert.Equal(t, "98765", policyInput.Action.FHIRRest.PatientID)
 }
 
 func TestNewPolicyInput(t *testing.T) {
@@ -180,10 +192,13 @@ func TestNewPolicyInput(t *testing.T) {
 						Protocol: "HTTP/1.1",
 						Path:     "/Patient/12345",
 					},
+					Context: PDPContext{
+						ConnectionTypeCode: "hl7-fhir-rest",
+					},
 				},
 			}
 			policyInput, _ := NewPolicyInput(pdpRequest)
-			assert.Equal(t, "12345", policyInput.Context.PatientID)
+			assert.Equal(t, "12345", policyInput.Action.FHIRRest.PatientID)
 		})
 		t.Run("from _id query parameter", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -196,10 +211,13 @@ func TestNewPolicyInput(t *testing.T) {
 							"_id": []string{"56789"},
 						},
 					},
+					Context: PDPContext{
+						ConnectionTypeCode: "hl7-fhir-rest",
+					},
 				},
 			}
 			policyInput, _ := NewPolicyInput(pdpRequest)
-			assert.Equal(t, "56789", policyInput.Context.PatientID)
+			assert.Equal(t, "56789", policyInput.Action.FHIRRest.PatientID)
 		})
 		t.Run("from patient query parameter", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -212,10 +230,13 @@ func TestNewPolicyInput(t *testing.T) {
 							"patient": []string{"Patient/98765"},
 						},
 					},
+					Context: PDPContext{
+						ConnectionTypeCode: "hl7-fhir-rest",
+					},
 				},
 			}
 			policyInput, _ := NewPolicyInput(pdpRequest)
-			assert.Equal(t, "98765", policyInput.Context.PatientID)
+			assert.Equal(t, "98765", policyInput.Action.FHIRRest.PatientID)
 		})
 		t.Run("multiple patient parameters", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -228,13 +249,16 @@ func TestNewPolicyInput(t *testing.T) {
 							"patient": []string{"Patient/123", "Patient/456"},
 						},
 					},
+					Context: PDPContext{
+						ConnectionTypeCode: "hl7-fhir-rest",
+					},
 				},
 			}
 			policyInput, result := NewPolicyInput(pdpRequest)
 			assert.True(t, result.Allow)
 			require.Len(t, result.Reasons, 1)
 			assert.Equal(t, "patient_id: multiple patient parameters found", result.Reasons[0].Description)
-			assert.Empty(t, policyInput.Context.PatientID)
+			assert.Empty(t, policyInput.Action.FHIRRest.PatientID)
 		})
 		t.Run("multiple _id parameters", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -247,13 +271,16 @@ func TestNewPolicyInput(t *testing.T) {
 							"_id": []string{"123", "456"},
 						},
 					},
+					Context: PDPContext{
+						ConnectionTypeCode: "hl7-fhir-rest",
+					},
 				},
 			}
 			policyInput, result := NewPolicyInput(pdpRequest)
 			assert.True(t, result.Allow)
 			require.Len(t, result.Reasons, 1)
 			assert.Equal(t, "patient_id: multiple _id parameters found", result.Reasons[0].Description)
-			assert.Empty(t, policyInput.Context.PatientID)
+			assert.Empty(t, policyInput.Action.FHIRRest.PatientID)
 		})
 		t.Run("no patient ID provided", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -268,7 +295,7 @@ func TestNewPolicyInput(t *testing.T) {
 			policyInput, result := NewPolicyInput(pdpRequest)
 			assert.True(t, result.Allow)
 			assert.Empty(t, result.Reasons)
-			assert.Empty(t, policyInput.Context.PatientID)
+			assert.Empty(t, policyInput.Action.FHIRRest.PatientID)
 		})
 	})
 	t.Run("patient BSN parsing", func(t *testing.T) {
@@ -282,9 +309,9 @@ func TestNewPolicyInput(t *testing.T) {
 						QueryParams: url.Values{
 							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn|900186021"},
 						},
-						Header: http.Header{
-							"Content-Type": []string{"application/fhir+json"},
-						},
+					},
+					Context: PDPContext{
+						ConnectionTypeCode: "hl7-fhir-rest",
 					},
 				},
 			}
@@ -301,9 +328,9 @@ func TestNewPolicyInput(t *testing.T) {
 						QueryParams: url.Values{
 							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/other|900186021"},
 						},
-						Header: http.Header{
-							"Content-Type": []string{"application/fhir+json"},
-						},
+					},
+					Context: PDPContext{
+						ConnectionTypeCode: "hl7-fhir-rest",
 					},
 				},
 			}
@@ -325,7 +352,8 @@ func TestNewPolicyInput(t *testing.T) {
 						},
 					},
 					Context: PDPContext{
-						PatientBSN: "900186021",
+						PatientBSN:         "900186021",
+						ConnectionTypeCode: "hl7-fhir-rest",
 					},
 				},
 			}

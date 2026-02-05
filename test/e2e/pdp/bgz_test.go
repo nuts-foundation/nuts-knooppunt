@@ -44,6 +44,7 @@ func Test_BGZAuthorization(t *testing.T) {
 			"context": {
 			  "data_holder_organization_id": "00000659",
 			  "data_holder_facility_type": "Z3",
+              "connection_type_code": "hl7-fhir-rest",
               "patient_bsn": ""
 			}
 		  }
