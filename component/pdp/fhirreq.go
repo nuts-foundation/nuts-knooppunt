@@ -304,6 +304,15 @@ func groupParams(queryParams url.Values) Params {
 	return params
 }
 
+// derivePatientId tries to derive the patient ID from the request path and query parameters.
+// It returns an error if the patient ID cannot be derived due to invalid input.
+// It returns an empty string if the patient ID cannot be derived but there is no invalid input (e.g. patient parameter is not present).
+// Currently, it supports the following cases:
+// - The request is for a Patient resource (e.g. GET /Patient/12345)
+// - The request is a search interaction with a 'patient' parameter (e.g. GET /Observation?patient=Patient/12345)
+// - The request is a search interaction with a 'subject' parameter referencing a patient (e.g. GET /Observation?subject=Patient/12345)
+//
+// If the subject parameter is present, but does not reference a single Patient, it returns nothing and no error.
 func derivePatientId(tokens Tokens, queryParams url.Values) (string, error) {
 	if tokens.ResourceType != nil && *tokens.ResourceType == fhir.ResourceTypePatient {
 		// https://fhir.example.org/Patient/12345
@@ -315,19 +324,27 @@ func derivePatientId(tokens Tokens, queryParams url.Values) (string, error) {
 		return getSingleParameter(queryParams, "_id")
 	}
 
-	// TODO: make this resource-specific
-	// https://fhir.example.org/Encounter?patient=Patient/12345
-	patientInParams := len(queryParams["patient"]) == 1
-	if patientInParams {
-		refStr := queryParams["patient"][0]
-		parts := strings.Split(refStr, "/")
-		return parts[len(parts)-1], nil
+	// Otherwise, we can only derive patient ID for search interactions with patient parameter
+	// Theoretically, this could apply to other interactions as well (conditional update),
+	// but those are edge cases we don't need to support right now.
+	if tokens.Interaction == fhir.TypeRestfulInteractionSearchType {
+		// try 'patient'
+		patientID, err := getSingleParameter(queryParams, "patient")
+		if err != nil {
+			return "", err
+		}
+		if patientID != "" {
+			if !strings.HasPrefix(patientID, "Patient/") {
+				return "", errors.New("patient parameter does not reference a Patient resource")
+			}
+			return strings.TrimPrefix(patientID, "Patient/"), nil
+		}
+		// try 'subject'
+		subjectID, err := getSingleParameter(queryParams, "subject")
+		if err == nil && strings.HasPrefix(subjectID, "Patient/") {
+			return strings.TrimPrefix(subjectID, "Patient/"), nil
+		}
 	}
-
-	if len(queryParams["patient"]) > 1 {
-		return "", fmt.Errorf("multiple patient parameters found")
-	}
-
 	return "", nil
 }
 
