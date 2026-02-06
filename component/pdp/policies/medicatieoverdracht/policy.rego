@@ -5,7 +5,8 @@ import rego.v1
 #
 # This file implements the FHIR queries for the Medicatieoverdracht use case, as specified by https://informatiestandaarden.nictiz.nl/wiki/MedMij:V2019.01_FHIR_MedicationProcess
 #
-# But, we only allow searching for MedicationRequest for now
+# But, we only allow searching for MedicationRequest for now.
+# TODO/Warning: the MedicationRequest query rule might need additional checks on search parameters (search narrowing).
 
 default allow := false
 allow if {
@@ -44,6 +45,9 @@ has_patient_identifier if {
 # This rule checks whether the requesting party actually has the patient in care.
 default requester_has_enrolled_patient := false
 requester_has_enrolled_patient if {
+    # We must have a patient BSN
+    not input.context.patient_bsn == ""
+    is_string(input.context.patient_bsn)
     concat("", ["http://fhir.nl/fhir/NamingSystem/bsn|", input.context.patient_bsn]) == input.subject.properties.patient_enrollment_identifier
 }
 

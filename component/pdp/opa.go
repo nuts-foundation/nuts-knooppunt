@@ -77,6 +77,12 @@ func (c *Component) evalRegoPolicy(ctx context.Context, policy string, policyInp
 		Policy: policy,
 	}
 	if !allowed {
+		policyResult.Reasons = []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: "access denied by policy",
+			},
+		}
 		var infoLines []string
 		// Sort keys to ensure deterministic output
 		keys := make([]string, 0, len(resultMap))
@@ -89,15 +95,11 @@ func (c *Component) evalRegoPolicy(ctx context.Context, policy string, policyInp
 		for _, key := range keys {
 			infoLines = append(infoLines, fmt.Sprintf("%s: %v", key, resultMap[key]))
 		}
-		policyResult.Reasons = []ResultReason{
-			{
-				Code:        TypeResultCodeNotAllowed,
-				Description: "access denied by policy",
-			},
-			{
+		if len(infoLines) > 0 {
+			policyResult.Reasons = append(policyResult.Reasons, ResultReason{
 				Code:        TypeResultCodeInformational,
 				Description: strings.Join(infoLines, "; "),
-			},
+			})
 		}
 	}
 	return &policyResult, nil
