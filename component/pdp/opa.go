@@ -48,9 +48,9 @@ func createOPAService(ctx context.Context, opaBundleBaseURL string) (*sdk.OPA, e
 }
 
 // evalRegoPolicy evaluates a Rego policy using Open Policy Agent for the given scope and input
-func (c *Component) evalRegoPolicy(ctx context.Context, scope string, policyInput PolicyInput) (*PolicyResult, error) {
+func (c *Component) evalRegoPolicy(ctx context.Context, policy string, policyInput PolicyInput) (*PolicyResult, error) {
 	// get the named policy decision for the specified input
-	result, err := c.opaService.Decision(ctx, sdk.DecisionOptions{Path: "/" + scope + "/allow", Input: policyInput})
+	result, err := c.opaService.Decision(ctx, sdk.DecisionOptions{Path: "/" + policy + "/allow", Input: policyInput})
 	if err != nil {
 		return nil, fmt.Errorf("failed to evaluate policy: %w", err)
 	} else if _, ok := result.Result.(bool); !ok {
@@ -59,7 +59,8 @@ func (c *Component) evalRegoPolicy(ctx context.Context, scope string, policyInpu
 
 	allowed := result.Result.(bool)
 	policyResult := PolicyResult{
-		Allow: allowed,
+		Allow:  allowed,
+		Policy: policy,
 	}
 	if !allowed {
 		policyResult.Reasons = []ResultReason{

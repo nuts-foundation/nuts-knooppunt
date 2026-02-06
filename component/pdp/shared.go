@@ -3,6 +3,7 @@ package pdp
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
@@ -33,12 +34,12 @@ type SubjectProperties struct {
 }
 
 type HTTPRequest struct {
-	Method      string              `json:"method"`
-	Protocol    string              `json:"protocol"` // "HTTP/1.0"
-	Path        string              `json:"path"`
-	QueryParams map[string][]string `json:"query_params"`
-	Header      http.Header         `json:"header"`
-	Body        string              `json:"body"`
+	Method      string      `json:"method"`
+	Protocol    string      `json:"protocol"` // "HTTP/1.0"
+	Path        string      `json:"path"`
+	QueryParams url.Values  `json:"query_params"`
+	Header      http.Header `json:"header"`
+	Body        string      `json:"body"`
 }
 
 type PDPContext struct {

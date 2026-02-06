@@ -299,13 +299,13 @@ func TestNewPolicyInput(t *testing.T) {
 		})
 	})
 	t.Run("patient BSN parsing", func(t *testing.T) {
-		t.Run("ok", func(t *testing.T) {
+		t.Run("in query parameter, unencoded", func(t *testing.T) {
 			pdpRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient",
+						Path:     "/Patient?",
 						QueryParams: url.Values{
 							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn|900186021"},
 						},
@@ -317,6 +317,46 @@ func TestNewPolicyInput(t *testing.T) {
 			}
 			policyInput, _ := NewPolicyInput(pdpRequest)
 			assert.Equal(t, "900186021", policyInput.Context.PatientBSN)
+		})
+		t.Run("in query parameter, encoded", func(t *testing.T) {
+			pdpRequest := PDPRequest{
+				Input: PDPInput{
+					Request: HTTPRequest{
+						Method:   "GET",
+						Protocol: "HTTP/1.1",
+						Path:     "/Patient?",
+						QueryParams: url.Values{
+							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn%7C900186021"},
+						},
+					},
+					Context: PDPContext{
+						ConnectionTypeCode: "hl7-fhir-rest",
+					},
+				},
+			}
+			policyInput, _ := NewPolicyInput(pdpRequest)
+			assert.Equal(t, "900186021", policyInput.Context.PatientBSN)
+		})
+		t.Run("in POST body, encoded", func(t *testing.T) {
+			pdpRequest := PDPRequest{
+				Input: PDPInput{
+					Request: HTTPRequest{
+						Method:   "POST",
+						Protocol: "HTTP/1.1",
+						Path:     "/Patient/_search",
+						Header: http.Header{
+							"Content-Type": []string{"application/x-www-form-urlencoded"},
+						},
+						Body: "identifier=http://fhir.nl/fhir/NamingSystem/bsn%7C900186021",
+					},
+					Context: PDPContext{
+						ConnectionTypeCode: "hl7-fhir-rest",
+					},
+				},
+			}
+			policyInput, policyResult := NewPolicyInput(pdpRequest)
+			assert.Equal(t, "900186021", policyInput.Context.PatientBSN)
+			assert.Empty(t, policyResult.Reasons)
 		})
 		t.Run("incorrect system", func(t *testing.T) {
 			pdpRequest := PDPRequest{

@@ -71,6 +71,11 @@ var definitions = []PathDef{
 		Verb:        "POST",
 	},
 	{
+		Interaction: fhir.TypeRestfulInteractionSearchType,
+		PathDef:     []string{"[type]", "_search"},
+		Verb:        "POST",
+	},
+	{
 		Interaction: fhir.TypeRestfulInteractionSearchSystem,
 		PathDef:     []string{"?"},
 		Verb:        "GET",
@@ -368,8 +373,19 @@ func getSingleParameter(params url.Values, name string) (string, error) {
 func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	var policyInput PolicyInput
 
+	// URL decode query parameters
+	decodeHTTPRequest := request.Input.Request
+	decodedQueryParams, err := urlValuesDecode(request.Input.Request.QueryParams)
+	if err != nil {
+		return policyInput, Deny(ResultReason{
+			Code:        TypeResultCodeUnexpectedInput,
+			Description: "unable to decode query parameters: " + err.Error(),
+		})
+	}
+	decodeHTTPRequest.QueryParams = *decodedQueryParams
+
 	policyInput.Subject = request.Input.Subject
-	policyInput.Action.Request = request.Input.Request
+	policyInput.Action.Request = decodeHTTPRequest
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
 	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
@@ -385,7 +401,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	if !ok {
 		reason := ResultReason{
 			Code:        TypeResultCodeUnexpectedInput,
-			Description: "unexpected input, unable to parse fhir request",
+			Description: "unable to parse FHIR request",
 		}
 		return policyInput, Deny(reason)
 	}
@@ -418,16 +434,20 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 
 	if paramsInBody {
 		values, err := url.ParseQuery(request.Input.Request.Body)
+		var decodedValues *url.Values
+		if err == nil {
+			decodedValues, err = urlValuesDecode(values)
+		}
 		if err != nil {
 			reason := ResultReason{
 				Code:        TypeResultCodeUnexpectedInput,
-				Description: "Could not parse form encoded data",
+				Description: fmt.Sprintf("Could not parse form encoded request body: %v", err),
 			}
 			return PolicyInput{}, Deny(reason)
 		}
-		rawParams = values
+		rawParams = *decodedValues
 	} else {
-		rawParams = request.Input.Request.QueryParams
+		rawParams = policyInput.Action.Request.QueryParams
 	}
 
 	params := groupParams(rawParams)
@@ -461,4 +481,18 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	}
 
 	return policyInput, result
+}
+
+func urlValuesDecode(in url.Values) (*url.Values, error) {
+	out := make(url.Values)
+	for key, values := range in {
+		for _, value := range values {
+			decodedValue, err := url.QueryUnescape(value)
+			if err != nil {
+				return nil, fmt.Errorf("parameter '%s': %w", key, err)
+			}
+			out.Add(key, decodedValue)
+		}
+	}
+	return &out, nil
 }
