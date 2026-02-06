@@ -197,6 +197,18 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 	t.Run("pzp", func(t *testing.T) {
 		testCases := []testCase{
 			{
+				name:                 "allow - dash is normalized to underscore",
+				clientQualifications: []string{"pzp-gf"},
+				httpRequest:          `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|123456789`,
+				decision:             true,
+			},
+			{
+				name:                 "allow - patient identifier is encoded",
+				clientQualifications: []string{"pzp-gf"},
+				httpRequest:          `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn%7C123456789`,
+				decision:             true,
+			},
+			{
 				name:                 "allow - Patient search with BSN identifier",
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|123456789`,
