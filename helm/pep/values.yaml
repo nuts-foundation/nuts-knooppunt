@@ -15,14 +15,19 @@ image:
 
 # PEP configuration environment variables
 env:
+  # FHIR backend (upstream server)
   fhirBackendHost: "hapi-fhir"
   fhirBackendPort: "7050"
+  fhirBasePath: "/fhir"
+  # Knooppunt PDP for authorization decisions
   knooppuntPdpHost: "knooppunt"
   knooppuntPdpPort: "8081"
+  # Nuts node for token introspection (RFC 7662)
+  nutsNodeHost: "nuts-node"
+  nutsNodeInternalPort: "8081"
+  # Data holder organization identity
   dataHolderOrganizationUra: "00000001"
   dataHolderFacilityType: "Z3"
-  requestingFacilityType: "Z3"
-  purposeOfUse: "treatment"
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []

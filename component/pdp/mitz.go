@@ -2,24 +2,33 @@ package pdp
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 )
 
-func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) (PolicyInput, PolicyResult) {
-	result := validateMitzInput(input)
-	if !result.Allow {
-		return input, result
+func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input PolicyInput) (PolicyInput, []ResultReason) {
+	// If this call doesn't relate to a BSN don't attempt Mitz
+	if input.Context.PatientBSN == "" {
+		input.Context.MitzConsent = false
+		return input, []ResultReason{}
 	}
 
-	mitzComp := *c.Mitz
+	resultReasons := validateMitzInput(input)
+	if len(resultReasons) > 0 {
+		return input, resultReasons
+	}
+
 	consentReq := xacmlFromInput(input)
-	consentResp, err := mitzComp.CheckConsent(ctx, consentReq)
+	consentResp, err := c.consentChecker.CheckConsent(ctx, consentReq)
 	if err != nil {
-		return input, Deny(ResultReason{
-			Code:        TypeResultCodeInternalError,
-			Description: "internal error, could not complete consent check with Mitz",
-		})
+		slog.WarnContext(ctx, "Mitz consent check failed", "error", err)
+		return input, []ResultReason{
+			{
+				Code:        TypeResultCodeInternalError,
+				Description: "internal error, could not complete consent check with Mitz: " + err.Error(),
+			},
+		}
 	}
 
 	allow := false
@@ -28,14 +37,16 @@ func EvalMitzPolicy(c Component, ctx context.Context, input PolicyInput) (Policy
 	}
 
 	if !allow {
-		return input, Deny(ResultReason{
-			Code:        TypeResultCodeInternalError,
-			Description: "not allowed, denied by Mitz",
-		})
+		return input, []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: "not allowed, denied by Mitz",
+			},
+		}
 	}
 
 	input.Context.MitzConsent = true
-	return input, Allow()
+	return input, nil
 }
 
 func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
@@ -53,7 +64,7 @@ func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
 	}
 }
 
-func validateMitzInput(input PolicyInput) PolicyResult {
+func validateMitzInput(input PolicyInput) []ResultReason {
 	requiredData := []struct {
 		Value   string
 		Message string
@@ -97,13 +108,5 @@ func validateMitzInput(input PolicyInput) PolicyResult {
 			})
 		}
 	}
-
-	if len(errorReasons) > 0 {
-		return PolicyResult{
-			Allow:   false,
-			Reasons: errorReasons,
-		}
-	}
-
-	return Allow()
+	return errorReasons
 }

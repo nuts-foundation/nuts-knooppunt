@@ -1,4 +1,4 @@
-package harness
+package mitzmock
 
 import (
 	"encoding/json"
@@ -11,8 +11,8 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-// MockMITZServer is a mock MITZ server that captures subscription requests
-type MockMITZServer struct {
+// SubscriptionService is a mock MITZ server that captures subscription requests
+type SubscriptionService struct {
 	server           *http.Server
 	url              string
 	subscriptions    []fhir.Subscription
@@ -21,11 +21,11 @@ type MockMITZServer struct {
 	ResponseLocation string
 }
 
-// NewMockMITZServer creates and starts a new mock MITZ server
-func NewMockMITZServer(t *testing.T) *MockMITZServer {
+// NewSubscriptionService creates and starts a new mock MITZ server
+func NewSubscriptionService(t *testing.T) *SubscriptionService {
 	t.Helper()
 
-	mitz := &MockMITZServer{
+	mitz := &SubscriptionService{
 		subscriptions:    []fhir.Subscription{},
 		ResponseStatus:   http.StatusAccepted, // MITZ responds with 202 Accepted
 		ResponseLocation: "Subscription/test-id-123",
@@ -64,7 +64,7 @@ func NewMockMITZServer(t *testing.T) *MockMITZServer {
 }
 
 // handleSubscription handles subscription creation requests
-func (m *MockMITZServer) handleSubscription(w http.ResponseWriter, r *http.Request) {
+func (m *SubscriptionService) handleSubscription(w http.ResponseWriter, r *http.Request) {
 	var subscription fhir.Subscription
 	if err := json.NewDecoder(r.Body).Decode(&subscription); err != nil {
 		http.Error(w, fmt.Sprintf("failed to decode subscription: %v", err), http.StatusBadRequest)
@@ -87,32 +87,32 @@ func (m *MockMITZServer) handleSubscription(w http.ResponseWriter, r *http.Reque
 }
 
 // handleStatus handles status checks
-func (m *MockMITZServer) handleStatus(w http.ResponseWriter, r *http.Request) {
+func (m *SubscriptionService) handleStatus(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("ok"))
 }
 
 // GetURL returns the URL of the mock MITZ server
-func (m *MockMITZServer) GetURL() string {
+func (m *SubscriptionService) GetURL() string {
 	return m.url
 }
 
 // GetSubscriptions returns all captured subscriptions
-func (m *MockMITZServer) GetSubscriptions() []fhir.Subscription {
+func (m *SubscriptionService) GetSubscriptions() []fhir.Subscription {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.subscriptions
 }
 
 // SubscriptionCount returns the number of subscriptions captured
-func (m *MockMITZServer) SubscriptionCount() int {
+func (m *SubscriptionService) SubscriptionCount() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.subscriptions)
 }
 
 // Stop stops the mock MITZ server
-func (m *MockMITZServer) Stop(t *testing.T) {
+func (m *SubscriptionService) Stop(t *testing.T) {
 	t.Helper()
 	if err := m.server.Close(); err != nil {
 		t.Logf("error stopping mock MITZ server: %v", err)

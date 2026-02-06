@@ -1,0 +1,115 @@
+@startuml
+title Data Exchange Authorization   Sequence Diagrams
+
+participant mitz as "Online Consent Store\n [ Mitz ]"
+box Local XIS - Data Holder (Bronhouder)
+    participant ehr as "EHR\n [ FHIR Server ]"
+    participant pip as "Policy Information Point / EHR\n [ FHIR Server ]"
+    participant pdp as "Policy Decision Point\n[ Knooppunt ]"
+    participant pep as "Policy Enforcement Point\n[ NGINX ]"
+end box
+box Remote XIS - Data Requester (Afnemer)
+    participant remoteXIS as "FHIR Client/Server"
+end box
+
+== Referral (Verwijzing), e.g. eOverdracht ==
+activate ehr
+ehr -> pip : Record resource-level consent\n[FHIR] POST /Consent\n  custodian, actor, provision
+activate pip
+    pip --> ehr : 201 Created
+deactivate pip
+ehr -> pip : Record patient-level consent\n[FHIR] POST /Consent\n  custodian, actor, patient
+note right: Patient-level local consents are not yet supported.
+activate pip
+    pip --> ehr : 201 Created
+deactivate pip
+ehr -> remoteXIS : Notify\nPOST Task/123
+activate remoteXIS
+remoteXIS --> ehr : 200 OK
+deactivate ehr
+
+remoteXIS -> pep : [FHIR] GET Task/123\nscope=eOverdracht-sender
+group Request Access Decision
+    activate pep
+    pep -> pdp: Evaluate access request\nPOST v1/data/main
+    note right: 'main' policy includes all use case-policies
+    activate pdp
+    loop Evaluate scope-mapped-policy
+        group IF FHIR:\nCapabilityStatement Policy
+        pdp -> pdp : Evaluate
+            activate pdp
+                pdp -> pdp : Check FHIR operation v.s.\nCapabilityStatement
+                pdp --> pdp : Set capabilitystatement.checked\non PDP input
+            deactivate
+        end group
+        group IF Patient context (patient_id):\nLookup patient BSN
+            pdp -> pdp : Evaluate
+            activate pdp
+                pdp -> pip : Lookup Patient resource)
+                activate pip
+                    pip --> pdp : 200 OK\n(Patient)
+                deactivate pip
+                pdp -> pdp : Get BSN identifier
+                pdp --> pdp : Set patient_bsn on input
+            deactivate
+        end group
+        group IF Patient context:\nCollect online consents
+            pdp -> pdp : Evaluate
+            activate pdp
+                pdp -> mitz : Perform Mitz closed-question\n[SOAP]
+                activate mitz
+                    mitz --> pdp : 200 OK\n(Consents)
+                deactivate mitz
+                pdp -> pdp : Verify consent\n(period, t.b.d.)
+                pdp --> pdp : Set mitz.checked\non PDP input
+            deactivate
+        end group
+
+        group Collect local consents (resource-level)
+        pdp -> pdp : Evaluate
+            activate pdp
+                pdp -> pip : [FHIR] GET /Consent\n  ?data=Task/123\n  &custodian=URA|9876\n  &actor=URA|4321
+                activate pip
+                    pip --> pdp : 200 OK\n(Consents)
+                deactivate pip
+                pdp -> pdp : Verify consent\n(period, t.b.d.)
+                pdp --> pdp : Add to context.consents\non PDP input
+            deactivate
+        end group
+        group IF Patient context:\nCollect local consents (patient-level)
+            pdp -> pdp : Evaluate
+            note right: Patient-level local consents are not yet supported.
+            activate pdp
+                pdp -> pip : [FHIR] GET /Consent\n  ?patient=Patient/ABC\n  &custodian=URA|9876\n  &actor=URA|4321\n
+                activate pip
+                    pip --> pdp : 200 OK\n(Consents)
+                deactivate pip
+                pdp -> pdp : Verify consent\n(period, t.b.d.)
+                pdp --> pdp : Add to context.consents\non PDP input
+            deactivate
+        end group
+
+        pdp -> pdp : Evaluate Rego policy
+        activate pdp
+            pdp --> pdp : Permit/Deny
+        deactivate
+        pdp --> pep : 200 OK\n(Permit/Deny)
+    end group
+    deactivate pdp
+    end group
+    group Proxy resource
+        pep -> ehr : GET Task/123
+        activate ehr
+            ehr --> pep : 200 OK\n(Task)
+        deactivate ehr
+        pep --> remoteXIS : 200 OK\n(Task)
+    else Deny
+        pep --> remoteXIS : 403 Forbidden
+    end
+
+deactivate
+
+
+deactivate remoteXIS
+
+@enduml

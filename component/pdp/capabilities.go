@@ -12,11 +12,11 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-//go:embed capabilities/*.json
+//go:embed policies/*/fhir_capabilitystatement.json
 var FS embed.FS
 
 func readCapability(ctx context.Context, name string) (fhir.CapabilityStatement, error) {
-	fileName := fmt.Sprintf("capabilities/%s.json", name)
+	fileName := fmt.Sprintf("policies/%s/fhir_capabilitystatement.json", name)
 	data, err := FS.ReadFile(fileName)
 	if err != nil {
 		return fhir.CapabilityStatement{}, err
@@ -32,53 +32,41 @@ func readCapability(ctx context.Context, name string) (fhir.CapabilityStatement,
 }
 
 func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityStatement, bool) {
-	switch scope {
-	// FUTURE: Should be made configurable or packaged up with some policy
-	case "mcsd_update":
-		capa, err := readCapability(ctx, "nl-gf-admin-directory-update-client")
-		return capa, err == nil
-	case "mcsd_query":
-		capa, err := readCapability(ctx, "nl-gf-query-directory-query-client")
-		return capa, err == nil
-	case "bgz_patient":
-		capa, err := readCapability(ctx, "bgz-patient")
-		return capa, err == nil
-	case "bgz_professional":
-		capa, err := readCapability(ctx, "bgz-professional")
-		return capa, err == nil
-	default:
+	result, err := readCapability(ctx, scope)
+	if err != nil {
+		slog.WarnContext(ctx, "unable to read capability statement for scope", slog.String("scope", scope), logging.Error(err))
 		return fhir.CapabilityStatement{}, false
 	}
+	return result, true
 }
 
-func evalCapabilityPolicy(ctx context.Context, input PolicyInput) PolicyResult {
-	out := PolicyResult{
-		Allow: false,
+func enrichPolicyInputWithCapabilityStatement(ctx context.Context, input PolicyInput, policy string) (PolicyInput, []ResultReason) {
+	// Skip capability checking for requests that don't target a specific resource type (e.g., /metadata, /)
+	if input.Resource.Type == nil {
+		return input, nil
 	}
 
-	scope := input.Subject.Properties.ClientQualifications[0]
-
-	statement, ok := capabilityForScope(ctx, scope)
+	statement, ok := capabilityForScope(ctx, policy)
 	if !ok {
-		reason := ResultReason{
-			Code:        TypeResultCodeUnexpectedInput,
-			Description: "unexpected input, no capability statement known for scope",
+		return input, []ResultReason{
+			{
+				Code:        TypeResultCodeUnexpectedInput,
+				Description: "unexpected input, no capability statement known for policy",
+			},
 		}
-		out.Reasons = []ResultReason{reason}
-		return out
 	}
 
-	return evalInteraction(statement, input)
+	resultReasons := evalInteraction(statement, input)
+	input.Action.FHIRRest.CapabilityChecked = len(resultReasons) == 0
+	return input, resultReasons
 }
 
+// evalInteraction checks whether the requested interaction is allowed by the capability statement.
+// If not, it returns a list of reasons why not.
 func evalInteraction(
 	statement fhir.CapabilityStatement,
 	input PolicyInput,
-) PolicyResult {
-	policyResult := PolicyResult{
-		Allow: false,
-	}
-
+) []ResultReason {
 	// FUTURE: This is a pretty naive implementation - we can make it more efficient at a later point.
 	var supported = []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionRead,
@@ -92,20 +80,21 @@ func evalInteraction(
 		fhir.TypeRestfulInteractionSearchType,
 	}
 
-	props := input.Action.Properties
+	props := input.Action.FHIRRest
 
 	if !slices.Contains(supported, props.InteractionType) {
-		return Deny(
-			ResultReason{
+		return []ResultReason{
+			{
 				Code:        TypeResultCodeNotImplemented,
 				Description: "restful interaction type not supported",
-			})
+			},
+		}
 	}
 
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
 	for _, rest := range statement.Rest {
 		for _, res := range rest.Resource {
-			if res.Type == input.Resource.Type {
+			if res.Type == *input.Resource.Type {
 				resourceDescriptions = append(resourceDescriptions, res)
 			}
 		}
@@ -121,11 +110,12 @@ func evalInteraction(
 	}
 
 	if !allowInteraction {
-		return Deny(
-			ResultReason{
+		return []ResultReason{
+			{
 				Code:        TypeResultCodeNotAllowed,
 				Description: "capability statement does not allow interaction",
-			})
+			},
+		}
 	}
 
 	allowParams := false
@@ -138,20 +128,23 @@ func evalInteraction(
 			}
 		}
 
-		for _, param := range props.SearchParams {
-			if !slices.Contains(allowedParams, param) {
-				rejectedSearchParams = append(rejectedSearchParams, param)
+		for paramName := range props.SearchParams {
+			if !slices.Contains(allowedParams, paramName) {
+				rejectedSearchParams = append(rejectedSearchParams, paramName)
 			}
 		}
 	}
 
 	allowParams = len(rejectedSearchParams) == 0
 	if !allowParams {
-		policyResult.AddReasons(rejectedSearchParams, "search parameter %s is not allowed", TypeResultCodeNotAllowed)
-		return policyResult
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: fmt.Sprintf("search parameter %s not allowed", rejectedSearchParams),
+			},
+		}
 	}
 
-	allowIncludes := false
 	allowedIncludes := make([]string, 0, 10)
 	for _, des := range resourceDescriptions {
 		for _, include := range des.SearchInclude {
@@ -166,10 +159,14 @@ func evalInteraction(
 		}
 	}
 
-	allowIncludes = len(rejectedIncludes) == 0
+	allowIncludes := len(rejectedIncludes) == 0
 	if !allowIncludes {
-		policyResult.AddReasons(rejectedIncludes, "include %s is not allowed", TypeResultCodeNotAllowed)
-		return policyResult
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: fmt.Sprintf("include %s is not allowed", rejectedIncludes),
+			},
+		}
 	}
 
 	allowRevincludes := false
@@ -189,9 +186,13 @@ func evalInteraction(
 
 	allowRevincludes = len(rejectedRevincludes) == 0
 	if !allowRevincludes {
-		policyResult.AddReasons(rejectedRevincludes, "Revinclude %s is not allowed", TypeResultCodeNotAllowed)
-		return policyResult
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: fmt.Sprintf("revinclude %s is not allowed", rejectedRevincludes),
+			},
+		}
 	}
 
-	return Allow()
+	return nil
 }

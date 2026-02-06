@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Vektis VC Issuer",
-  description: "OID4VCI-compliant Verifiable Credential Issuer for HealthcareProviderTypeCredentials",
+  description: "OID4VCI-compliant Verifiable Credential Issuer for HealthcareProviderRoleTypeCredentials",
 };
 
 export default function RootLayout({

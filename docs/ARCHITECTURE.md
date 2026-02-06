@@ -30,3 +30,9 @@ The Knooppunt acts as Authorization Server ("AS") and Policy Decision Point ("PX
 ### Implementation
 
 ![structurizr-DataExchange_ComponentDiagram.svg](images/structurizr-DataExchange_ComponentDiagram.svg)
+
+### Sequence diagram
+
+The following diagram shows how inbound data requests are handled:
+
+![dataexchange-authorization-sd.svg](images/dataexchange-authorization-sd.svg)

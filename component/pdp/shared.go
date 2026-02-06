@@ -3,9 +3,11 @@ package pdp
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
+	"github.com/open-policy-agent/opa/v1/sdk"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -32,17 +34,18 @@ type SubjectProperties struct {
 }
 
 type HTTPRequest struct {
-	Method      string              `json:"method"`
-	Protocol    string              `json:"protocol"` // "HTTP/1.0"
-	Path        string              `json:"path"`
-	QueryParams map[string][]string `json:"query_params"`
-	Header      http.Header         `json:"header"`
-	Body        string              `json:"body"`
+	Method      string      `json:"method"`
+	Protocol    string      `json:"protocol"` // "HTTP/1.0"
+	Path        string      `json:"path"`
+	QueryParams url.Values  `json:"query_params"`
+	Header      http.Header `json:"header"`
+	Body        string      `json:"body"`
 }
 
 type PDPContext struct {
-	DataHolderOrganizationId string `json:"data_holder_organization_id"`
+	ConnectionTypeCode       string `json:"connection_type_code"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
+	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	PatientBSN               string `json:"patient_bsn"`
 }
 
@@ -54,7 +57,7 @@ type PolicyInput struct {
 }
 
 type PolicyResource struct {
-	Type       fhir.ResourceType        `json:"type"`
+	Type       *fhir.ResourceType       `json:"type"`
 	Properties PolicyResourceProperties `json:"properties"`
 }
 
@@ -64,25 +67,28 @@ type PolicyResourceProperties struct {
 }
 
 type PolicyAction struct {
-	Name       string                 `json:"name"`
-	Properties PolicyActionProperties `json:"properties"`
+	Name               string       `json:"name"`
+	ConnectionTypeCode string       `json:"connection_type_code"`
+	Request            HTTPRequest  `json:"request"`
+	FHIRRest           FHIRRestData `json:"fhir_rest"`
 }
 
-type PolicyActionProperties struct {
-	InteractionType fhir.TypeRestfulInteraction `json:"interaction_type"`
-	Operation       *string                     `json:"operation"`
-	SearchParams    []string                    `json:"search_params"`
-	Include         []string                    `json:"include"`
-	Revinclude      []string                    `json:"revinclude"`
+type FHIRRestData struct {
+	CapabilityChecked bool                        `json:"capability_checked"`
+	Include           []string                    `json:"include"`
+	InteractionType   fhir.TypeRestfulInteraction `json:"interaction_type"`
+	Operation         *string                     `json:"operation"`
+	Revinclude        []string                    `json:"revinclude"`
+	SearchParams      map[string]string           `json:"search_params"`
+	PatientID         string                      `json:"patient_id"`
 }
 
 type PolicyContext struct {
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
 	DataHolderOrganizationId string `json:"data_holder_organization_id"`
-	PatientBSN               string `json:"patient_bsn"`
-	PatientID                string `json:"patient_id"`
-	PurposeOfUse             string `json:"purpose_of_use"`
 	MitzConsent              bool   `json:"mitz_consent"`
+	PatientBSN               string `json:"patient_bsn"`
+	PurposeOfUse             string `json:"purpose_of_use"`
 }
 
 type PDPRequest struct {
@@ -94,6 +100,7 @@ type PDPResponse struct {
 }
 
 type PolicyResult struct {
+	Policy  string         `json:"policy"`
 	Allow   bool           `json:"allow"`
 	Reasons []ResultReason `json:"reasons"`
 }
@@ -140,6 +147,15 @@ func Deny(reason ResultReason) PolicyResult {
 	}
 }
 
+func appendReasons(mainResult PolicyResult, results ...PolicyResult) PolicyResult {
+	reasons := mainResult.Reasons
+	for _, result := range results {
+		reasons = append(reasons, result.Reasons...)
+	}
+	mainResult.Reasons = reasons
+	return mainResult
+}
+
 type TypeResultCode string
 
 const (
@@ -148,6 +164,7 @@ const (
 	TypeResultCodeNotAllowed           TypeResultCode = "not_allowed"
 	TypeResultCodeNotImplemented       TypeResultCode = "not_implemented"
 	TypeResultCodeInternalError        TypeResultCode = "internal_error"
+	TypeResultCodePIPError             TypeResultCode = "pip_error"
 )
 
 type PIPConfig struct {
@@ -160,7 +177,9 @@ type Config struct {
 }
 
 type Component struct {
-	Config    Config
-	Mitz      *mitz.Component
-	pipClient fhirclient.Client
+	Config           Config
+	consentChecker   mitz.ConsentChecker
+	pipClient        fhirclient.Client
+	opaService       *sdk.OPA
+	opaBundleBaseURL string
 }
