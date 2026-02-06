@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
@@ -82,17 +83,18 @@ func (s SubjectProperties) MarshalJSON() ([]byte, error) {
 type OtherSubjectProperties map[string]any
 
 type HTTPRequest struct {
-	Method      string              `json:"method"`
-	Protocol    string              `json:"protocol"` // "HTTP/1.0"
-	Path        string              `json:"path"`
-	QueryParams map[string][]string `json:"query_params"`
-	Header      http.Header         `json:"header"`
-	Body        string              `json:"body"`
+	Method      string      `json:"method"`
+	Protocol    string      `json:"protocol"` // "HTTP/1.0"
+	Path        string      `json:"path"`
+	QueryParams url.Values  `json:"query_params"`
+	Header      http.Header `json:"header"`
+	Body        string      `json:"body"`
 }
 
 type PDPContext struct {
-	DataHolderOrganizationId string `json:"data_holder_organization_id"`
+	ConnectionTypeCode       string `json:"connection_type_code"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
+	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	PatientBSN               string `json:"patient_bsn"`
 }
 
@@ -114,27 +116,27 @@ type PolicyResourceProperties struct {
 }
 
 type PolicyAction struct {
-	Name       string                 `json:"name"`
-	Properties PolicyActionProperties `json:"properties"`
+	Name               string       `json:"name"`
+	ConnectionTypeCode string       `json:"connection_type_code"`
+	Request            HTTPRequest  `json:"request"`
+	FHIRRest           FHIRRestData `json:"fhir_rest"`
 }
 
-type PolicyActionProperties struct {
-	ContentType     string                      `json:"content_type"`
-	Include         []string                    `json:"include"`
-	InteractionType fhir.TypeRestfulInteraction `json:"interaction_type"`
-	Operation       *string                     `json:"operation"`
-	Request         HTTPRequest                 `json:"request"`
-	Revinclude      []string                    `json:"revinclude"`
-	SearchParams    map[string]string           `json:"search_params"`
+type FHIRRestData struct {
+	CapabilityChecked bool                        `json:"capability_checked"`
+	Include           []string                    `json:"include"`
+	InteractionType   fhir.TypeRestfulInteraction `json:"interaction_type"`
+	Operation         *string                     `json:"operation"`
+	Revinclude        []string                    `json:"revinclude"`
+	SearchParams      map[string]string           `json:"search_params"`
+	PatientID         string                      `json:"patient_id"`
 }
 
 type PolicyContext struct {
-	FHIRCapabilityChecked    bool   `json:"fhir_capability_checked"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
 	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	MitzConsent              bool   `json:"mitz_consent"`
 	PatientBSN               string `json:"patient_bsn"`
-	PatientID                string `json:"patient_id"`
 	PurposeOfUse             string `json:"purpose_of_use"`
 }
 

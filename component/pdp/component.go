@@ -121,6 +121,8 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: Implement support for multiple scopes
 	policy := qualifications[0]
+	// OPA doesn't support dashes in package and rule names, so we replace them with underscores.
+	policy = strings.ReplaceAll(policy, "-", "_")
 
 	// Step 2: Parse the PDP input and translate to the policy input
 	policyInput, policyResult := NewPolicyInput(reqBody)

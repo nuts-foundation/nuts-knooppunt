@@ -71,6 +71,11 @@ var definitions = []PathDef{
 		Verb:        "POST",
 	},
 	{
+		Interaction: fhir.TypeRestfulInteractionSearchType,
+		PathDef:     []string{"[type]", "_search"},
+		Verb:        "POST",
+	},
+	{
 		Interaction: fhir.TypeRestfulInteractionSearchSystem,
 		PathDef:     []string{"?"},
 		Verb:        "GET",
@@ -368,19 +373,37 @@ func getSingleParameter(params url.Values, name string) (string, error) {
 func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	var policyInput PolicyInput
 
+	// URL decode query parameters
+	decodeHTTPRequest := request.Input.Request
+	decodedQueryParams, err := urlValuesDecode(request.Input.Request.QueryParams)
+	if err != nil {
+		return policyInput, Deny(ResultReason{
+			Code:        TypeResultCodeUnexpectedInput,
+			Description: "unable to decode query parameters: " + err.Error(),
+		})
+	}
+	decodeHTTPRequest.QueryParams = *decodedQueryParams
+
 	policyInput.Subject = request.Input.Subject
-	policyInput.Action.Properties.Request = request.Input.Request
+	policyInput.Action.Request = decodeHTTPRequest
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
 	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
 
-	contentType := request.Input.Request.Header.Get("Content-Type")
-	policyInput.Action.Properties.ContentType = contentType
+	isFhirAPI := request.Input.Context.ConnectionTypeCode == "hl7-fhir-rest"
+	if !isFhirAPI {
+		// This is not a FHIR request
+		return policyInput, Allow()
+	}
+	policyInput.Action.ConnectionTypeCode = "hl7-fhir-rest"
 
 	tokens, ok := parseRequestPath(request.Input.Request)
 	if !ok {
-		// This is not a FHIR request
-		return policyInput, Allow()
+		reason := ResultReason{
+			Code:        TypeResultCodeUnexpectedInput,
+			Description: "unable to parse FHIR request",
+		}
+		return policyInput, Deny(reason)
 	}
 
 	if tokens.ResourceType != nil {
@@ -393,14 +416,14 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 		}
 	}
 
-	policyInput.Action.Properties.InteractionType = tokens.Interaction
+	policyInput.Action.FHIRRest.InteractionType = tokens.Interaction
 
 	if tokens.OperationName != "" {
-		policyInput.Action.Properties.Operation = &tokens.OperationName
+		policyInput.Action.FHIRRest.Operation = &tokens.OperationName
 	}
 
 	var rawParams url.Values
-	hasFormData := contentType == "application/x-www-form-urlencoded"
+	hasFormData := request.Input.Request.Header.Get("Content-Type") == "application/x-www-form-urlencoded"
 	interWithBody := []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionSearchType,
 		fhir.TypeRestfulInteractionOperation,
@@ -410,23 +433,23 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 			hasFormData
 
 	if paramsInBody {
-		values, err := url.ParseQuery(request.Input.Request.Body)
+		decodedBody, err := url.ParseQuery(request.Input.Request.Body)
 		if err != nil {
 			reason := ResultReason{
 				Code:        TypeResultCodeUnexpectedInput,
-				Description: "Could not parse form encoded data",
+				Description: fmt.Sprintf("could not parse form encoded request body: %v", err),
 			}
 			return PolicyInput{}, Deny(reason)
 		}
-		rawParams = values
+		rawParams = decodedBody
 	} else {
-		rawParams = request.Input.Request.QueryParams
+		rawParams = *decodedQueryParams
 	}
 
 	params := groupParams(rawParams)
-	policyInput.Action.Properties.Include = params.Include
-	policyInput.Action.Properties.Revinclude = params.Revinclude
-	policyInput.Action.Properties.SearchParams = params.SearchParams
+	policyInput.Action.FHIRRest.Include = params.Include
+	policyInput.Action.FHIRRest.Revinclude = params.Revinclude
+	policyInput.Action.FHIRRest.SearchParams = params.SearchParams
 
 	// Read patient resource ID from request
 	result := Allow()
@@ -437,7 +460,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 			Description: "patient_id: " + err.Error(),
 		})
 	} else {
-		policyInput.Context.PatientID = patientId
+		policyInput.Action.FHIRRest.PatientID = patientId
 	}
 
 	// Read patient BSN from request
@@ -454,4 +477,18 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	}
 
 	return policyInput, result
+}
+
+func urlValuesDecode(in url.Values) (*url.Values, error) {
+	out := make(url.Values)
+	for key, values := range in {
+		for _, value := range values {
+			decodedValue, err := url.QueryUnescape(value)
+			if err != nil {
+				return nil, fmt.Errorf("parameter '%s': %w", key, err)
+			}
+			out.Add(key, decodedValue)
+		}
+	}
+	return &out, nil
 }

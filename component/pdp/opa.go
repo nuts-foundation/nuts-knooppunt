@@ -51,12 +51,12 @@ func createOPAService(ctx context.Context, opaBundleBaseURL string) (*sdk.OPA, e
 }
 
 // evalRegoPolicy evaluates a Rego policy using Open Policy Agent for the given scope and input
-func (c *Component) evalRegoPolicy(ctx context.Context, scope string, policyInput PolicyInput) (*PolicyResult, error) {
+func (c *Component) evalRegoPolicy(ctx context.Context, policy string, policyInput PolicyInput) (*PolicyResult, error) {
 	opaInputMap, err := to.JSONMap(policyInput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert policy input to map: %w", err)
 	}
-	result, err := c.opaService.Decision(ctx, sdk.DecisionOptions{Path: "/" + scope, Input: opaInputMap})
+	result, err := c.opaService.Decision(ctx, sdk.DecisionOptions{Path: "/" + policy, Input: opaInputMap})
 	if err != nil {
 		return nil, fmt.Errorf("failed to evaluate policy: %w", err)
 	}
@@ -69,7 +69,8 @@ func (c *Component) evalRegoPolicy(ctx context.Context, scope string, policyInpu
 		return nil, fmt.Errorf("unexpected 'allow' result type (expected bool, was %T)", resultMap["allow"])
 	}
 	policyResult := PolicyResult{
-		Allow: allowed,
+		Allow:  allowed,
+		Policy: policy,
 	}
 	if !allowed {
 		var infoLines []string

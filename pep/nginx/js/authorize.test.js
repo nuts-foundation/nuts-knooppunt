@@ -409,6 +409,7 @@ describe('buildPDPRequest', () => {
                     body: ''
                 },
                 context: {
+                    connection_type_code: "hl7-fhir-rest",
                     data_holder_organization_id: '00000666',
                     data_holder_facility_type: 'Z3',
                     patient_bsn: ''
