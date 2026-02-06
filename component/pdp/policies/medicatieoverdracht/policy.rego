@@ -11,7 +11,7 @@ default allow := false
 allow if {
     request_conforms_fhir_capabilitystatement
     patient_gave_mitz_consent
-    # The BgZ on Generic Functions use case (to be formalized) specifies that requests must be scoped to a patient.
+    # The MedicatieOverdracht requests must be scoped to a patient.
     # We enforce this by checking that either a patient_id or patient_bsn is present in the request context.
     has_patient_identifier
     requester_has_enrolled_patient
