@@ -139,6 +139,8 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			pdpRequest.Input.Request.Body = tc.httpRequestBody
 		}
 		response := executePDPRequest(t, service, pdpRequest)
+		data, _ := json.Marshal(response)
+		t.Logf("PDP response: %s", string(data))
 		if tc.decision {
 			assert.True(t, response.Result.Allow, tc.name)
 			assert.Empty(t, response.Result.Reasons, tc.name)

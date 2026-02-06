@@ -26,7 +26,7 @@ func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input PolicyI
 		return input, []ResultReason{
 			{
 				Code:        TypeResultCodeInternalError,
-				Description: "internal error, could not complete consent check with Mitz: " + err.Error(),
+				Description: "could not complete consent check with Mitz: " + err.Error(),
 			},
 		}
 	}
@@ -39,8 +39,8 @@ func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input PolicyI
 	if !allow {
 		return input, []ResultReason{
 			{
-				Code:        TypeResultCodeNotAllowed,
-				Description: "not allowed, denied by Mitz",
+				Code:        TypeResultCodeNoConsent,
+				Description: "denied by Mitz",
 			},
 		}
 	}
