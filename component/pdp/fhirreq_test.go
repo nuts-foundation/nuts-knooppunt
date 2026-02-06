@@ -5,10 +5,102 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
+
+func TestDerivePatientID(t *testing.T) {
+	t.Run("FHIR read - patient ID from path (Patient resource)", func(t *testing.T) {
+		tokens := Tokens{
+			ResourceType: to.Ptr(fhir.ResourceTypePatient),
+			ResourceId:   "12345",
+		}
+		actual, err := derivePatientId(tokens, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "12345", actual)
+	})
+	t.Run("FHIR search - patient ID from query parameters (Patient resource)", func(t *testing.T) {
+		tokens := Tokens{
+			ResourceType: to.Ptr(fhir.ResourceTypePatient),
+			Interaction:  fhir.TypeRestfulInteractionSearchType,
+		}
+		queryParams := url.Values{
+			"_id": []string{"56789"},
+		}
+		actual, err := derivePatientId(tokens, queryParams)
+		assert.NoError(t, err)
+		assert.Equal(t, "56789", actual)
+	})
+	type testCase struct {
+		name              string
+		queryParams       url.Values
+		expectedPatientId string
+		expectedError     string
+	}
+	testCases := []testCase{
+		{
+			name: "FHIR search - patient ID from patient query parameter (other resource) - ok",
+			queryParams: url.Values{
+				"patient": []string{"Patient/56789"},
+			},
+			expectedPatientId: "56789",
+		},
+		{
+			name: "FHIR search - patient ID from patient query parameter (other resource) - multiple patient params",
+			queryParams: url.Values{
+				"patient": []string{"Patient/56789", "Patient/10"},
+			},
+			expectedError: "multiple patient parameters found",
+		},
+		{
+			name: "FHIR search - patient ID from patient query parameter (other resource) - not referencing a Patient resource",
+			queryParams: url.Values{
+				"patient": []string{"Observation/56789"},
+			},
+			expectedError: "patient parameter does not reference a Patient resource",
+		},
+		{
+			name: "FHIR search - patient ID from subject query parameter (other resource) - ok",
+			queryParams: url.Values{
+				"subject": []string{"Patient/56789"},
+			},
+			expectedPatientId: "56789",
+		},
+		{
+			name: "FHIR search - patient ID from subject query parameter (other resource) - multiple subject params",
+			queryParams: url.Values{
+				"subject": []string{"Patient/56789", "Patient/10"},
+			},
+			expectedPatientId: "",
+		},
+		{
+			name: "FHIR search - patient ID from subject query parameter (other resource) - not referencing a Patient resource",
+			queryParams: url.Values{
+				"subject": []string{"Observation/56789"},
+			},
+			expectedPatientId: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tokens := Tokens{
+				ResourceType: to.Ptr(fhir.ResourceTypeObservation),
+				Interaction:  fhir.TypeRestfulInteractionSearchType,
+			}
+			actual, err := derivePatientId(tokens, tc.queryParams)
+			if tc.expectedError != "" {
+				assert.EqualError(t, err, tc.expectedError)
+				assert.Empty(t, actual)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedPatientId, actual)
+			}
+		})
+	}
+}
 
 func TestComponent_parse_tokens(t *testing.T) {
 	var def = PathDef{
