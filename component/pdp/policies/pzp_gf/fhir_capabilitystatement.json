@@ -45,9 +45,16 @@
               "type": "reference"
             },
             {
-              "name": "_profile",
-              "type": "uri"
+              "name": "scope",
+              "type": "string"
+            },
+            {
+              "name": "category",
+              "type": "string"
             }
+          ],
+          "searchInclude": [
+            "Consent:actor"
           ]
         }
       ]

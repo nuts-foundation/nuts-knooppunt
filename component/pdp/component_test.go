@@ -215,9 +215,15 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				decision:             false,
 			},
 			{
-				name:                 "allow - Consent search with patient and _profile",
+				name:                 "allow - Consent search with patient, scope and category",
 				clientQualifications: []string{"pzp_gf"},
-				httpRequest:          `GET /Consent?patient=Patient/1000&_profile=http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2`,
+				httpRequest:          `GET /Consent?patient=Patient/1000&scope=http://terminology.hl7.org/CodeSystem/consentscope|treatment&category=http://snomed.info/sct|129125009`,
+				decision:             true,
+			},
+			{
+				name:                 "allow - Consent search with patient, scope, category and include",
+				clientQualifications: []string{"pzp_gf"},
+				httpRequest:          `GET /Consent?patient=Patient/1000&scope=http://terminology.hl7.org/CodeSystem/consentscope|treatment&category=http://snomed.info/sct|129125009&_include=Consent:actor`,
 				decision:             true,
 			},
 			{
