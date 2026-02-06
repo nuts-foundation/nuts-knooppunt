@@ -15,7 +15,7 @@ Configuration is loaded in the following order (later sources override earlier o
 
 ## Configuration Options
 
-Environment variables use the prefix `KNPT_` followed by the configuration path in uppercase with underscores (if you enable NUTS node as embedded service within your knoppunt, those variables are prefixed with `NUTS_`):
+Environment variables use the prefix `KNPT_` followed by the configuration path in uppercase with underscores (if you enable NUTS node as embedded service within your Knooppunt, those variables are prefixed with `NUTS_`):
 
 | Environment Variable                      | YAML Path                            | Description                                                                                                                                                                                                                                                                               |
 |-------------------------------------------|--------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
