@@ -47,6 +47,25 @@ func executePDPRequest(t *testing.T, service *Component, pdpRequest PDPRequest) 
 	return response
 }
 
+func TestHandleMainPolicy(t *testing.T) {
+	t.Run("invalid HTTP request body", func(t *testing.T) {
+		service := &Component{}
+		httpRequest := httptest.NewRequest("POST", "/pdp", strings.NewReader("invalid json"))
+		httpRequest.Header.Set("Content-Type", "application/json")
+		httpResponse := httptest.NewRecorder()
+
+		service.HandleMainPolicy(httpResponse, httpRequest)
+
+		assert.Equal(t, http.StatusBadRequest, httpResponse.Code)
+		var actual PDPResponse
+		err := json.NewDecoder(httpResponse.Body).Decode(&actual)
+		require.NoError(t, err)
+		require.False(t, actual.Result.Allow)
+		assert.Len(t, actual.Result.Reasons, 1)
+		assert.Equal(t, TypeResultCodeUnexpectedInput, actual.Result.Reasons[0].Code)
+	})
+}
+
 func TestHandleMainPolicy_Integration(t *testing.T) {
 	mux := http.NewServeMux()
 	httpServer := httptest.NewServer(mux)
