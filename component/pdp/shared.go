@@ -80,7 +80,6 @@ type FHIRRestData struct {
 	Operation         *string                     `json:"operation"`
 	Revinclude        []string                    `json:"revinclude"`
 	SearchParams      map[string]string           `json:"search_params"`
-	PatientID         string                      `json:"patient_id"`
 }
 
 type PolicyContext struct {
@@ -88,6 +87,7 @@ type PolicyContext struct {
 	DataHolderOrganizationId string `json:"data_holder_organization_id"`
 	MitzConsent              bool   `json:"mitz_consent"`
 	PatientBSN               string `json:"patient_bsn"`
+	PatientID                string `json:"patient_id"`
 	PurposeOfUse             string `json:"purpose_of_use"`
 }
 
