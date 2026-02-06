@@ -437,7 +437,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 		if err != nil {
 			reason := ResultReason{
 				Code:        TypeResultCodeUnexpectedInput,
-				Description: fmt.Sprintf("Could not parse form encoded request body: %v", err),
+				Description: fmt.Sprintf("could not parse form encoded request body: %v", err),
 			}
 			return PolicyInput{}, Deny(reason)
 		}
