@@ -434,10 +434,6 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 
 	if paramsInBody {
 		values, err := url.ParseQuery(request.Input.Request.Body)
-		var decodedValues *url.Values
-		if err == nil {
-			decodedValues, err = urlValuesDecode(values)
-		}
 		if err != nil {
 			reason := ResultReason{
 				Code:        TypeResultCodeUnexpectedInput,
@@ -445,7 +441,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 			}
 			return PolicyInput{}, Deny(reason)
 		}
-		rawParams = *decodedValues
+		rawParams = values
 	} else {
 		rawParams = policyInput.Action.Request.QueryParams
 	}
