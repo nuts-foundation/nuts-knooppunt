@@ -2,7 +2,7 @@ package mcsd_query
 
 import rego.v1
 
-default allow := true
+default allow := false
 allow if {
     request_conforms_fhir_capabilitystatement
 }
