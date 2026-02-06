@@ -19,8 +19,8 @@ allow if {
 
 # Helper rule: check if either patient_id or patient_bsn is filled
 has_patient_identifier if {
-    is_string(input.action.fhir_rest.patient_id)
-    input.action.fhir_rest.patient_id != ""
+    is_string(input.context.patient_id)
+    input.context.patient_id != ""
 }
 
 has_patient_identifier if {

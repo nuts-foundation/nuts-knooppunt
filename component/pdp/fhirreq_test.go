@@ -143,7 +143,7 @@ func TestComponent_parse_patient_id(t *testing.T) {
 		},
 	}
 	policyInput, _ := NewPolicyInput(pdpRequest)
-	assert.Equal(t, "12345", policyInput.Action.FHIRRest.PatientID)
+	assert.Equal(t, "12345", policyInput.Context.PatientID)
 
 	pdpRequest = PDPRequest{
 		Input: PDPInput{
@@ -161,7 +161,7 @@ func TestComponent_parse_patient_id(t *testing.T) {
 		},
 	}
 	policyInput, _ = NewPolicyInput(pdpRequest)
-	assert.Equal(t, "56789", policyInput.Action.FHIRRest.PatientID)
+	assert.Equal(t, "56789", policyInput.Context.PatientID)
 
 	pdpRequest = PDPRequest{
 		Input: PDPInput{
@@ -179,7 +179,7 @@ func TestComponent_parse_patient_id(t *testing.T) {
 		},
 	}
 	policyInput, _ = NewPolicyInput(pdpRequest)
-	assert.Equal(t, "98765", policyInput.Action.FHIRRest.PatientID)
+	assert.Equal(t, "98765", policyInput.Context.PatientID)
 }
 
 func TestNewPolicyInput(t *testing.T) {
@@ -198,7 +198,7 @@ func TestNewPolicyInput(t *testing.T) {
 				},
 			}
 			policyInput, _ := NewPolicyInput(pdpRequest)
-			assert.Equal(t, "12345", policyInput.Action.FHIRRest.PatientID)
+			assert.Equal(t, "12345", policyInput.Context.PatientID)
 		})
 		t.Run("from _id query parameter", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -217,7 +217,7 @@ func TestNewPolicyInput(t *testing.T) {
 				},
 			}
 			policyInput, _ := NewPolicyInput(pdpRequest)
-			assert.Equal(t, "56789", policyInput.Action.FHIRRest.PatientID)
+			assert.Equal(t, "56789", policyInput.Context.PatientID)
 		})
 		t.Run("from patient query parameter", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -236,7 +236,7 @@ func TestNewPolicyInput(t *testing.T) {
 				},
 			}
 			policyInput, _ := NewPolicyInput(pdpRequest)
-			assert.Equal(t, "98765", policyInput.Action.FHIRRest.PatientID)
+			assert.Equal(t, "98765", policyInput.Context.PatientID)
 		})
 		t.Run("multiple patient parameters", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -258,7 +258,7 @@ func TestNewPolicyInput(t *testing.T) {
 			assert.True(t, result.Allow)
 			require.Len(t, result.Reasons, 1)
 			assert.Equal(t, "patient_id: multiple patient parameters found", result.Reasons[0].Description)
-			assert.Empty(t, policyInput.Action.FHIRRest.PatientID)
+			assert.Empty(t, policyInput.Context.PatientID)
 		})
 		t.Run("multiple _id parameters", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -280,7 +280,7 @@ func TestNewPolicyInput(t *testing.T) {
 			assert.True(t, result.Allow)
 			require.Len(t, result.Reasons, 1)
 			assert.Equal(t, "patient_id: multiple _id parameters found", result.Reasons[0].Description)
-			assert.Empty(t, policyInput.Action.FHIRRest.PatientID)
+			assert.Empty(t, policyInput.Context.PatientID)
 		})
 		t.Run("no patient ID provided", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -295,7 +295,7 @@ func TestNewPolicyInput(t *testing.T) {
 			policyInput, result := NewPolicyInput(pdpRequest)
 			assert.True(t, result.Allow)
 			assert.Empty(t, result.Reasons)
-			assert.Empty(t, policyInput.Action.FHIRRest.PatientID)
+			assert.Empty(t, policyInput.Context.PatientID)
 		})
 	})
 	t.Run("patient BSN parsing", func(t *testing.T) {

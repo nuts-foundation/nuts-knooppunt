@@ -460,7 +460,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 			Description: "patient_id: " + err.Error(),
 		})
 	} else {
-		policyInput.Action.FHIRRest.PatientID = patientId
+		policyInput.Context.PatientID = patientId
 	}
 
 	// Read patient BSN from request
