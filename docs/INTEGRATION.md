@@ -366,4 +366,4 @@ Currently, this method is used to exchange a patientID for a BSN by looking up a
 
 Some policies like `bgz` will attempt to answer _de Mitz gesloten vraag_.
 
-For this to work you will need to configure the Mitz module of Knooppunt and integrate a policy information point (see above).
+For this to work you will need to configure the Mitz module of Knooppunt and integrate a policy information point (see above). Otherwise, access will be rejected.
