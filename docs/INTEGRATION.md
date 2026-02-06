@@ -16,8 +16,10 @@ This document describes how to integrate with the Knooppunt.
 This chapter describes how to integrate with the addressing generic function of the Knooppunt,
 based on the mCSD (Mobile Care Services Discovery) profile. It provides the following:
 
-- Synchronization from remote mCSD Administration Directories to your local mCSD Query Directory, so it can be used to find organizations, endpoints, etc.
-- Optional: an embedded mCSD Administration Directory web application to manage your local mCSD Administration Directory.
+- Synchronization from remote mCSD Administration Directories to your local mCSD Query Directory, so it can be used to
+  find organizations, endpoints, etc.
+- Optional: an embedded mCSD Administration Directory web application to manage your local mCSD Administration
+  Directory.
 
 ### Pre-requisites
 
@@ -28,17 +30,20 @@ You need to provide an mCSD Administration Directory, which is typically:
     - manually, e.g. using the embedded mCSD Admin web application (configure `mcsdadmin.fhirbaseurl`),
     - synchronized from another source in some way.
 
-You also need to provide a FHIR server as mCSD Query Directory, to which mCSD resources are synchronized, e.g. HAPI FHIR.
+You also need to provide a FHIR server as mCSD Query Directory, to which mCSD resources are synchronized, e.g. HAPI
+FHIR.
 
 Then, configure:
 
 - the Root Administration Directory to synchronize from (`mcsd.admin.<key>.fhirbaseurl`),
 - the local Query Directory to synchronize to (`mcsd.query.fhirbaseurl`), and
-- (optional) directories to exclude from synchronization (`mcsd.adminexclude`), which is useful to prevent self-referencing loops when your own query directory appears as a discovered Endpoint.
+- (optional) directories to exclude from synchronization (`mcsd.adminexclude`), which is useful to prevent
+  self-referencing loops when your own query directory appears as a discovered Endpoint.
 
 ### Triggering synchronization
 
-To synchronize remote mCSD Directories to your local query directory, use the following endpoint to trigger a synchronization:
+To synchronize remote mCSD Directories to your local query directory, use the following endpoint to trigger a
+synchronization:
 
 ```http
 POST http://localhost:8081/mcsd/update
@@ -64,7 +69,8 @@ It will return a JSON report of the update per mCSD Administration Directory tha
 
 ### Using the mCSD Administration Application
 
-The Knooppunt contains a web-application to manually manage the mCSD Administration Directory entries (e.g. create organizations and endpoints).
+The Knooppunt contains a web-application to manually manage the mCSD Administration Directory entries (e.g. create
+organizations and endpoints).
 
 You can find the mCSD Admin application at:
 
@@ -83,7 +89,8 @@ You can create or search for DocumentReference resources using the following end
     - [POST http://localhost:8081/nvi/DocumentReference/_search](http://localhost:8081/nvi/DocumentReference/_search)
     - [GET http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
 
-These endpoints need the URA of the requesting care organization. You provide this URA using the `X-Tenant-ID` HTTP header:
+These endpoints need the URA of the requesting care organization. You provide this URA using the `X-Tenant-ID` HTTP
+header:
 
 ```http
 X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|<URA>
@@ -201,13 +208,15 @@ mitz:
 2. **Configured endpoint**: If no endpoint is provided in the request, the configured `notify_endpoint` is used
 3. **Missing endpoint**: If neither is provided, a warning is logged and the subscription may fail at MITZ
 
-**Recommendation**: Always configure `notify_endpoint` to ensure subscriptions work without requiring clients to specify endpoints.
+**Recommendation**: Always configure `notify_endpoint` to ensure subscriptions work without requiring clients to specify
+endpoints.
 
 ### Subscription Behavior
 
 1. **Validation**: Knooppunt validates the subscription meets MITZ requirements
 2. **Extension Addition**: Automatically adds gateway and source system OIDs
-3. **Endpoint Setting**: Uses configured `notify_endpoint` if no endpoint provided in request (see [Notification Endpoint Configuration](#notification-endpoint-configuration))
+3. **Endpoint Setting**: Uses configured `notify_endpoint` if no endpoint provided in request (
+   see [Notification Endpoint Configuration](#notification-endpoint-configuration))
 4. **Forwarding**: Sends subscription to MITZ with mTLS authentication
 5. **Response**: Returns created subscription with ID
 
@@ -228,8 +237,10 @@ The Knooppunt acts as OpenID Connect (OIDC) Provider, abstracting the complexity
 This OIDC Provider supports the following OIDC features:
 
 - [Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth)
-- [Discovery using well-known metadata](https://openid.net/specs/openid-connect-discovery-1_0.html) (on internal API: `http://localhost:8081/.well-known/openid-configuration`)
-- [Client authentication using `client_secret`](https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication)
+- [Discovery using well-known metadata](https://openid.net/specs/openid-connect-discovery-1_0.html) (on internal API:
+  `http://localhost:8081/.well-known/openid-configuration`)
+- [Client authentication using
+  `client_secret`](https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication)
 - [PKCE using S256](https://www.rfc-editor.org/rfc/rfc7636)
 
 To use the Knooppunt as OIDC Provider:
@@ -248,7 +259,8 @@ Configure clients and their redirect URLs in the Knooppunt configuration (`knoop
 
 ### ID Tokens
 
-The `id_token` returned by the Knooppunt wraps the Dezi token, providing standard OIDC claims as well as Dezi-specific claims;
+The `id_token` returned by the Knooppunt wraps the Dezi token, providing standard OIDC claims as well as Dezi-specific
+claims;
 
 - The decoded Dezi token claims can be found in the `dezi_claims` field.
 - The original Dezi token is available in the `dezi_token` field.
@@ -291,7 +303,8 @@ The `id_token` can later be used to acquire GF Authentication access tokens.
 
 ## Authorization
 
-This chapter describes how to use the Knooppunt to support in making authorization decisions using its policy decision point.
+This chapter describes how to use the Knooppunt to support in making authorization decisions using its policy decision
+point.
 
 The PDP is a single endpoint that requires the following input:
 
@@ -307,16 +320,20 @@ POST http://someaddress:8081/pdp/v1/data/knooppunt/authz
 Content-Type: application/json
 ````
 
-After parsing this data the PDP will check the input against two policies.
+The PDP will check the request against the policy associated with the client qualification (scope). It will perform the
+following checks:
 
 - Conformance to a capability statement
-- Conformance to a rego policy 
+- Conformance to a rego policy
 
-The client qualification is used to determine which policy is applied. Knooppunt currently ships with the following policies:
+The client qualification is used to determine which policy is applied. Knooppunt currently ships with the following
+policies:
 
 - `bgz`
+- `eoverdracht_notification`
 - `mcsd_update`
 - `mcsd_query`
+- `pzp_gf`
 
 An example requests looks like this:
 
@@ -329,7 +346,9 @@ An example requests looks like this:
         "subject_role": "01.015",
         "subject_organization_id": "00000666",
         "subject_facility_type": "Z3",
-        "client_qualifications": ["bgz"]
+        "client_qualifications": [
+          "bgz"
+        ]
       }
     },
     "request": {
@@ -344,7 +363,8 @@ An example requests looks like this:
     },
     "context": {
       "data_holder_organization_id": "00000659",
-      "data_holder_facility_type": "Z3"
+      "data_holder_facility_type": "Z3",
+      "connection_type_code": "hl7-fhir-rest"
     }
   }
 }
@@ -360,10 +380,12 @@ To come to a policy decision the PDP might need additional information from a po
 
 Read our [configuration guide](/docs/CONFIGURATION.md) to see the options for configuring this endpoint.
 
-Currently, this method is used to exchange a patientID for a BSN by looking up a patient record. 
+Currently, this method is used to exchange a patientID for a BSN by looking up a patient record. The PIP should be a
+FHIR R4 Rest compatible API.
 
 ### Answering _de gesloten vraag_ using the PDP
 
 Some policies like `bgz` will attempt to answer _de Mitz gesloten vraag_.
 
-For this to work you will need to configure the Mitz module of Knooppunt and integrate a policy information point (see above). Otherwise, access will be rejected.
+For this to work you will need to configure the Mitz module of Knooppunt and integrate a policy information point (see
+above). Otherwise, access will be rejected.
