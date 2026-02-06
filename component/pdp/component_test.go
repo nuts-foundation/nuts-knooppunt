@@ -95,6 +95,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		httpRequest          string
 		httpRequestBody      string
 		decision             bool
+		properties           map[string]any
 	}
 	runTest := func(t *testing.T, tc testCase) {
 		t.Helper()
@@ -110,6 +111,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			Input: PDPInput{
 				Subject: Subject{
 					Properties: SubjectProperties{
+						OtherProps:            tc.properties,
 						ClientQualifications:  tc.clientQualifications,
 						SubjectOrganizationId: "00000001",
 						SubjectFacilityType:   "TODO",
@@ -279,6 +281,33 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Observation?patient=Patient/1000`,
 				decision:             false,
+			},
+		}
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				runTest(t, tc)
+			})
+		}
+	})
+	t.Run("medicatieoverdracht", func(t *testing.T) {
+		testCases := []testCase{
+			{
+				name:                 "allow - MedicationRequest with correct category and _include",
+				clientQualifications: []string{"medicatieoverdracht"},
+				httpRequest:          `GET /MedicationRequest?category=http://snomed.info/sct|422037009&_include=MedicationRequest:medication&patient=Patient/1000`,
+				decision:             true,
+				properties: OtherSubjectProperties{
+					"patient_enrollment_identifier": "http://fhir.nl/fhir/NamingSystem/bsn|123456789",
+				},
+			},
+			{
+				name:                 "deny - List search",
+				clientQualifications: []string{"medicatieoverdracht"},
+				httpRequest:          `GET /List?patient=Patient/1000`,
+				decision:             false,
+				properties: OtherSubjectProperties{
+					"patient_enrollment_identifier": "http://fhir.nl/fhir/NamingSystem/bsn|123456789",
+				},
 			},
 		}
 		for _, tc := range testCases {

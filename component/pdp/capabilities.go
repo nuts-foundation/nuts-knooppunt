@@ -5,10 +5,8 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"slices"
 
-	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -19,25 +17,15 @@ func readCapability(ctx context.Context, name string) (fhir.CapabilityStatement,
 	fileName := fmt.Sprintf("policies/%s/fhir_capabilitystatement.json", name)
 	data, err := FS.ReadFile(fileName)
 	if err != nil {
-		return fhir.CapabilityStatement{}, err
+		return fhir.CapabilityStatement{}, fmt.Errorf("file read: %w", err)
 	}
 
 	var capability fhir.CapabilityStatement
 	if err := json.Unmarshal(data, &capability); err != nil {
-		slog.WarnContext(ctx, "unable to read JSON", slog.String("file", fileName), logging.Error(err))
-		return fhir.CapabilityStatement{}, err
+		return fhir.CapabilityStatement{}, fmt.Errorf("JSON unmarshal: %w", err)
 	}
 
 	return capability, nil
-}
-
-func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityStatement, bool) {
-	result, err := readCapability(ctx, scope)
-	if err != nil {
-		slog.WarnContext(ctx, "unable to read capability statement for scope", slog.String("scope", scope), logging.Error(err))
-		return fhir.CapabilityStatement{}, false
-	}
-	return result, true
 }
 
 func enrichPolicyInputWithCapabilityStatement(ctx context.Context, input PolicyInput, policy string) (PolicyInput, []ResultReason) {
@@ -46,12 +34,12 @@ func enrichPolicyInputWithCapabilityStatement(ctx context.Context, input PolicyI
 		return input, nil
 	}
 
-	statement, ok := capabilityForScope(ctx, policy)
-	if !ok {
+	statement, err := readCapability(ctx, policy)
+	if err != nil {
 		return input, []ResultReason{
 			{
 				Code:        TypeResultCodeUnexpectedInput,
-				Description: "unexpected input, no capability statement known for policy",
+				Description: "FHIR CapabilityStatement check failed: " + err.Error(),
 			},
 		}
 	}

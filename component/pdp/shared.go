@@ -1,6 +1,7 @@
 package pdp
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -23,15 +24,63 @@ type Subject struct {
 	Properties SubjectProperties `json:"properties"`
 }
 
+var _ json.Unmarshaler = (*SubjectProperties)(nil)
+var _ json.Marshaler = (*SubjectProperties)(nil)
+
 type SubjectProperties struct {
-	ClientId              string   `json:"client_id"`
-	ClientQualifications  []string `json:"client_qualifications"`
-	SubjectId             string   `json:"subject_id"`
-	SubjectOrganizationId string   `json:"subject_organization_id"`
-	SubjectOrganization   string   `json:"subject_organization"`
-	SubjectFacilityType   string   `json:"subject_facility_type"`
-	SubjectRole           string   `json:"subject_role"`
+	OtherProps            map[string]any `json:"-"`
+	ClientId              string         `json:"client_id"`
+	ClientQualifications  []string       `json:"client_qualifications"`
+	SubjectId             string         `json:"subject_id"`
+	SubjectOrganizationId string         `json:"subject_organization_id"`
+	SubjectOrganization   string         `json:"subject_organization"`
+	SubjectFacilityType   string         `json:"subject_facility_type"`
+	SubjectRole           string         `json:"subject_role"`
 }
+
+func (s *SubjectProperties) UnmarshalJSON(data []byte) error {
+	type Alias SubjectProperties
+	var tmp Alias
+	if err := json.Unmarshal(data, &tmp); err != nil {
+		return err
+	}
+	tmp.OtherProps = make(map[string]any)
+	if err := json.Unmarshal(data, &tmp.OtherProps); err != nil {
+		return err
+	}
+	// remove standard properties from OtherProps
+	delete(tmp.OtherProps, "client_id")
+	delete(tmp.OtherProps, "client_qualifications")
+	delete(tmp.OtherProps, "subject_id")
+	delete(tmp.OtherProps, "subject_organization_id")
+	delete(tmp.OtherProps, "subject_organization")
+	delete(tmp.OtherProps, "subject_facility_type")
+	delete(tmp.OtherProps, "subject_role")
+	*s = SubjectProperties(tmp)
+	return nil
+}
+
+func (s SubjectProperties) MarshalJSON() ([]byte, error) {
+	type Alias SubjectProperties
+	tmp := Alias(s)
+	data, err := json.Marshal(tmp)
+	if err != nil {
+		return nil, err
+	}
+	if len(s.OtherProps) == 0 {
+		return data, nil
+	}
+	var baseMap map[string]any
+	if err := json.Unmarshal(data, &baseMap); err != nil {
+		return nil, err
+	}
+	for k, v := range s.OtherProps {
+		baseMap[k] = v
+	}
+	return json.Marshal(baseMap)
+}
+
+type OtherSubjectProperties map[string]any
 
 type HTTPRequest struct {
 	Method      string      `json:"method"`
@@ -110,6 +159,10 @@ type ResultReason struct {
 	Description string         `json:"description"`
 }
 
+func (r ResultReason) String() string {
+	return fmt.Sprintf("%s - %s", r.Code, r.Description)
+}
+
 func (p *PolicyResult) AddReasons(input []string, format string, code TypeResultCode) {
 	isNewSlice := cap(p.Reasons) == 0
 	if isNewSlice {
@@ -147,15 +200,6 @@ func Deny(reason ResultReason) PolicyResult {
 	}
 }
 
-func appendReasons(mainResult PolicyResult, results ...PolicyResult) PolicyResult {
-	reasons := mainResult.Reasons
-	for _, result := range results {
-		reasons = append(reasons, result.Reasons...)
-	}
-	mainResult.Reasons = reasons
-	return mainResult
-}
-
 type TypeResultCode string
 
 const (
@@ -165,6 +209,7 @@ const (
 	TypeResultCodeNotImplemented       TypeResultCode = "not_implemented"
 	TypeResultCodeInternalError        TypeResultCode = "internal_error"
 	TypeResultCodePIPError             TypeResultCode = "pip_error"
+	TypeResultCodeInformational        TypeResultCode = "info"
 )
 
 type PIPConfig struct {

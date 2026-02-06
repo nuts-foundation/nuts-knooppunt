@@ -19,6 +19,7 @@ docker compose --profile pep up -d
 ```
 
 **Endpoints:**
+
 - PEP: `http://localhost:9080`
 - PDP: `http://localhost:8081/pdp` (internal API)
 
@@ -38,26 +39,26 @@ Environment variables in `docker-compose.yml`:
 ```yaml
 # FHIR API path exposed by PEP (default: /fhir)
 FHIR_BASE_PATH=/fhir
-# FHIR path on backend server (default: same as FHIR_BASE_PATH)
-# Use for HAPI multi-tenancy: /fhir/DEFAULT
+  # FHIR path on backend server (default: same as FHIR_BASE_PATH)
+  # Use for HAPI multi-tenancy: /fhir/DEFAULT
 FHIR_UPSTREAM_PATH=/fhir
 
-# Backend connections
+  # Backend connections
 FHIR_BACKEND_HOST=hapi-fhir
 FHIR_BACKEND_PORT=7050
 KNOOPPUNT_PDP_HOST=knooppunt
 KNOOPPUNT_PDP_PORT=8081
 
-# Nuts node connection (Authorization Server)
+  # Nuts node connection (Authorization Server)
 NUTS_NODE_HOST=knooppunt
 NUTS_NODE_INTERNAL_PORT=8081
 
-# Data holder (this organization)
+  # Data holder (this organization)
 DATA_HOLDER_ORGANIZATION_URA=00000666
 DATA_HOLDER_FACILITY_TYPE=Z3
 
-# Security: Configure expected hostname for DPoP URL validation
-# Prevents Host header spoofing attacks. Falls back to Host header if not set.
+  # Security: Configure expected hostname for DPoP URL validation
+  # Prevents Host header spoofing attacks. Falls back to Host header if not set.
 PEP_HOSTNAME=pep.example.com
 ```
 
@@ -102,15 +103,16 @@ The PEP passes claims directly from introspection to the PDP. **The Presentation
 
 The PEP passes all non-standard claims through to the PDP. The PDP expects these `id` values in the PD constraints:
 
-| PD Constraint `id` | VC Path Example | Description |
-|--------------------|-----------------|-------------|
-| `subject_id` | `$.credentialSubject.identifier` | Employee/practitioner identifier |
-| `subject_role` | `$.credentialSubject.roleName` | Role code (e.g., "Medisch Specialist") |
-| `subject_organization_id` | `$.credentialSubject.san.otherName` | URA number |
-| `subject_organization` | `$.credentialSubject.subject.O` | Organization name |
-| `subject_facility_type` | `$.credentialSubject.roleCodeNL` | Vektis facility type code |
+| PD Constraint `id`        | VC Path Example                     | Description                            |
+|---------------------------|-------------------------------------|----------------------------------------|
+| `subject_id`              | `$.credentialSubject.identifier`    | Employee/practitioner identifier       |
+| `subject_role`            | `$.credentialSubject.roleName`      | Role code (e.g., "Medisch Specialist") |
+| `subject_organization_id` | `$.credentialSubject.san.otherName` | URA number                             |
+| `subject_organization`    | `$.credentialSubject.subject.O`     | Organization name                      |
+| `subject_facility_type`   | `$.credentialSubject.roleCodeNL`    | Vektis facility type code              |
 
 Additionally, the PDP receives from OAuth:
+
 - `client_id` - OAuth client identifier (DID)
 - `scope` - OAuth scopes (converted to `client_qualifications` array)
 
@@ -128,7 +130,9 @@ POST /pdp
       "id": "did:web:example.com",
       "properties": {
         "client_id": "did:web:example.com",
-        "client_qualifications": ["bgz"],
+        "client_qualifications": [
+          "bgz"
+        ],
         "subject_id": "000095254",
         "subject_role": "medical-specialist",
         "subject_organization_id": "87654321",
@@ -140,7 +144,11 @@ POST /pdp
       "method": "GET",
       "protocol": "HTTP/1.1",
       "path": "/Condition",
-      "query_params": {"patient": ["Patient/patient-123"]},
+      "query_params": {
+        "patient": [
+          "Patient/patient-123"
+        ]
+      },
       "header": {},
       "body": ""
     },
@@ -154,6 +162,7 @@ POST /pdp
 ```
 
 **Expected response:**
+
 ```json
 {
   "result": {
@@ -191,6 +200,7 @@ go test ./test/e2e/pep/... -v
 ```
 
 The e2e test (in `test/e2e/pep/authorization_test.go`):
+
 1. Starts Nuts node and HAPI FHIR containers, Knooppunt PDP in-process, and PEP container
 2. Issues X509Credential, NutsEmployeeCredential, and HealthcareProviderRoleTypeCredential
 3. Requests an access token with scope `bgz`
@@ -206,15 +216,24 @@ The e2e test (in `test/e2e/pep/authorization_test.go`):
 ## Production Notes
 
 The PEP requires:
+
 1. **Nuts node** with:
-   - Introspection endpoint at `/internal/auth/v2/accesstoken/introspect`
-   - DPoP validation endpoint at `/internal/auth/v2/dpop/validate`
-2. **Presentation Definition** configured on the authorization server (Nuts node) with claim IDs matching what the PDP expects
+    - Introspection endpoint at `/internal/auth/v2/accesstoken/introspect`
+    - DPoP validation endpoint at `/internal/auth/v2/dpop/validate`
+2. **Presentation Definition** configured on the authorization server (Nuts node) with claim IDs matching what the PDP
+   expects
 3. **PDP** with policies matching the scopes/qualifications in the access tokens
 
 **Limitations:**
-- **Single-tenant only**: This PEP supports a single FHIR backend. Multi-tenant setups (e.g., HAPI multi-tenancy) are not supported because the PDP has no tenant context for patient lookups and consent checks. Deploy separate PEP instances per tenant if needed.
+
+- **Single-tenant only**: This PEP supports a single FHIR backend. Multi-tenant setups (e.g., HAPI multi-tenancy) are
+  not supported because the PDP has no tenant context for patient lookups and consent checks. Deploy separate PEP
+  instances per tenant if needed.
 
 **Considerations for production:**
-- **Claim forwarding**: This PoC forwards all non-standard introspection claims to the PDP. In production, consider explicitly allowlisting which claims to forward based on the Presentation Definition, rather than forwarding everything.
-- **Log security**: PEP logs contain OAuth metadata (client_id, scope) and error details for debugging. Ensure appropriate log access controls and retention policies.
+
+- **Claim forwarding**: This PoC forwards all non-standard introspection claims to the PDP. In production, consider
+  explicitly allowlisting which claims to forward based on the Presentation Definition, rather than forwarding
+  everything.
+- **Log security**: PEP logs contain OAuth metadata (client_id, scope) and error details for debugging. Ensure
+  appropriate log access controls and retention policies.
