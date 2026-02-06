@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"os"
 	"sync"
 	"syscall"
 	"testing"
@@ -13,6 +14,9 @@ import (
 
 func Test_Main(t *testing.T) {
 	t.Log("This tests the application lifecycle, making sure it stops gracefully on SIGINT.")
+
+	os.Setenv("NUTS_POLICY_DIRECTORY", "./config/policy")
+
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -26,7 +30,7 @@ func Test_Main(t *testing.T) {
 	privateURL := "http://localhost:8081"
 
 	t.Run("check if Nuts node is running", func(t *testing.T) {
-		subjectID, err := createNutsSubject(privateURL)
+		subjectID, dids, err := createNutsSubject(privateURL)
 		require.NoError(t, err)
 		t.Run("public endpoint status", func(t *testing.T) {
 			resp, err := http.Get(publicURL + "/nuts/status")
@@ -44,6 +48,13 @@ func Test_Main(t *testing.T) {
 			resp, err := http.Get(publicURL + "/.well-known/oauth-authorization-server/nuts/oauth2/" + subjectID)
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, resp.StatusCode, "Expected status code 200 OK")
+		})
+		t.Run("resolve created DID", func(t *testing.T) {
+			for _, currentDID := range dids {
+				resp, err := http.Get(privateURL + "/nuts/internal/vdr/v2/did/" + currentDID)
+				require.NoError(t, err)
+				require.Equal(t, http.StatusOK, resp.StatusCode, "Expected status code 200 OK for DID "+currentDID)
+			}
 		})
 	})
 	// Shutdown: send interrupt signal
@@ -83,14 +94,19 @@ func waitForUp(t *testing.T) bool {
 	return false
 }
 
-func createNutsSubject(privateURL string) (string, error) {
+func createNutsSubject(privateURL string) (string, []string, error) {
 	httpResponse, err := http.Post(privateURL+"/nuts/internal/vdr/v2/subject", "application/json", nil)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	response, err := from.JSONResponse[map[string]any](httpResponse)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return response["subject"].(string), nil
+	subjectID := response["subject"].(string)
+	var dids []string
+	for _, didDocument := range response["documents"].([]any) {
+		dids = append(dids, didDocument.(map[string]any)["id"].(string))
+	}
+	return subjectID, dids, nil
 }

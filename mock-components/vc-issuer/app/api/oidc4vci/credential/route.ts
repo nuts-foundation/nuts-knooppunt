@@ -1,17 +1,13 @@
 import { NextRequest } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '@/lib/prisma';
-import { signCredential, getSubjectDidFromProof, verifyAccessToken } from '@/lib/crypto/signing';
+import { getSubjectDidFromProof, verifyAccessToken } from '@/lib/crypto/signing';
 import { generateCNonce } from '@/lib/oid4vci/pkce';
 import { getIssuerDid, getBaseUrl, getCredentialValidityDays, getCNonceExpirySeconds, jsonResponse } from '@/lib/utils';
+import { issueCredential } from '@/lib/credential';
 
 interface AuthenticatedOrg {
-  id: string;
-  name: string;
   type: string;
-  typeLabel: string;
-  agbCode: string;
-  uraNumber: string;
 }
 
 interface CredentialRequest {
@@ -28,7 +24,7 @@ interface CredentialRequest {
 
 /**
  * Credential endpoint for OID4VCI
- * Issues VektisOrgCredential to the wallet
+ * Issues HealthcareProviderRoleTypeCredential to the wallet
  */
 export async function POST(req: NextRequest) {
   console.log('[Credential] POST request received');
@@ -151,7 +147,7 @@ export async function POST(req: NextRequest) {
     );
   }
   const authenticatedOrg = JSON.parse(tokenResponse.authenticatedOrg) as AuthenticatedOrg;
-  console.log('[Credential] Authenticated organization:', authenticatedOrg.name);
+  console.log('[Credential] Authenticated organization type:', authenticatedOrg.type);
 
   // Build credential
   const credentialId = `urn:uuid:${uuidv4()}`;
@@ -161,42 +157,32 @@ export async function POST(req: NextRequest) {
 
   const credentialSubject = {
     id: subjectDid,
-    organizationName: authenticatedOrg.name,
-    organizationType: authenticatedOrg.type,
-    agbCode: authenticatedOrg.agbCode,
-    uraNumber: authenticatedOrg.uraNumber,
+    roleCodeNL: authenticatedOrg.type,
   };
 
-  const credentialPayload = {
-    vc: {
-      '@context': [
-        'https://www.w3.org/2018/credentials/v1',
-        `${baseUrl}/contexts/vektis-org.jsonld`,
-      ],
-      id: credentialId,
-      type: ['VerifiableCredential', 'VektisOrgCredential'],
-      credentialSubject,
-      issuer: issuerDid,
-      issuanceDate: issuanceDate.toISOString(),
-      expirationDate: expirationDate.toISOString(),
-    },
-  };
-
-  // Sign the credential
-  console.log('[Credential] Signing credential with id:', credentialId);
+  // Issue the credential
+  console.log('[Credential] Issuing credential with id:', credentialId);
   let signedCredential: string;
+
   try {
-    signedCredential = await signCredential(
-      credentialPayload,
+    signedCredential = await issueCredential({
+      credentialId,
       issuerDid,
       subjectDid,
-      validityDays
-    );
-    console.log('[Credential] Credential signed successfully');
+      credentialSubject,
+      context: [
+        'https://www.w3.org/2018/credentials/v1',
+        `${baseUrl}/contexts/vektis-org.jsonld`
+      ],
+      type: ['VerifiableCredential', 'HealthcareProviderRoleTypeCredential'],
+      issuanceDate,
+      expirationDate,
+    });
+    console.log('[Credential] Credential issued successfully');
   } catch (err) {
-    console.log('[Credential] ERROR: Failed to sign credential:', err);
+    console.log('[Credential] ERROR: Failed to issue credential:', err);
     return jsonResponse(
-      { error: 'server_error', error_description: 'Failed to sign credential' },
+      { error: 'server_error', error_description: 'Failed to issue credential' },
       { status: 500 }
     );
   }
@@ -206,13 +192,12 @@ export async function POST(req: NextRequest) {
   const cNonceExpiresIn = getCNonceExpirySeconds();
 
   // Store issued credential
-  console.log('[Credential] Storing issued credential in database');
   await prisma.issuedCredential.create({
     data: {
       credentialId,
       issuerDid,
       subjectDid,
-      credentialType: JSON.stringify(['VerifiableCredential', 'VektisOrgCredential']),
+      credentialType: JSON.stringify(['VerifiableCredential', 'HealthcareProviderRoleTypeCredential']),
       format: 'jwt_vc_json',
       credentialSubject: JSON.stringify(credentialSubject),
       tokenResponseId: tokenResponse.id,
@@ -232,12 +217,14 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  console.log('[Credential] SUCCESS: Credential issued for', authenticatedOrg.name, 'to subject', subjectDid);
+  console.log('[Credential] SUCCESS: Credential issued for organization type', authenticatedOrg.type, 'to subject', subjectDid);
 
-  return jsonResponse({
+  const responseBody = {
     format: 'jwt_vc_json',
     credential: signedCredential,
     c_nonce: newCNonce,
     c_nonce_expires_in: cNonceExpiresIn,
-  });
+  };
+
+  return jsonResponse(responseBody);
 }

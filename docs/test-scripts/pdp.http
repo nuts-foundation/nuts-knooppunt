@@ -5,61 +5,168 @@ Content-Type: application/json
 
 {
   "input": {
-    "scope": "mcsd_update",
-    "interaction_type": "history-type",
-    "resource_id": "987612",
-    "resource_type": "Organization",
-    "requesting_organization_ura": "00000666",
-    "data_holder_organization_ura": "00000659"
+    "subject": {
+      "properties": {
+        "subject_organization_id": "00000666",
+        "client_qualifications": ["mcsd_update"]
+      }
+    },
+    "request": {
+      "method": "GET",
+      "protocol": "HTTP/1.0",
+      "path": "/Organization/_history"
+    },
+    "context": {
+      "data_holder_organization_id": "00000659",
+      "connection_type_code": "hl7-fhir-rest"
+    }
   }
 }
 
-### Testing search type request with invalid param
+### Testing search type request with valid parameter
 
 POST http://localhost:8081/pdp/v1/data/knooppunt/authz
 Content-Type: application/json
 
 {
   "input": {
-    "scope": "mcsd_update",
-    "interaction_type": "search-type",
-    "search_params": ["_since", "foo"],
-    "resource_id": "987612",
-    "resource_type": "Organization",
-    "requesting_organization_ura": "00000666",
-    "data_holder_organization_ura": "00000659"
+    "subject": {
+      "properties": {
+        "subject_organization_id": "00000666",
+        "client_qualifications": ["mcsd_update"]
+      }
+    },
+    "request": {
+      "method": "GET",
+      "protocol": "HTTP/1.0",
+      "path": "/Organization?",
+      "query_params": {
+        "_since": ["foo"]
+      }
+    },
+    "context": {
+      "data_holder_organization_id": "00000659",
+      "connection_type_code": "hl7-fhir-rest"
+    }
   }
 }
 
-### Testing "gesloten vraag" request
+### Testing request that leads to the "gesloten vraag"
 
 POST http://localhost:8081/pdp/v1/data/knooppunt/authz
 Content-Type: application/json
 
 {
   "input": {
-    "scope": "patient_example",
-    "resource_id": "123445",
-    "resource_type": "Patient",
-    "patient_bsn": "900186021",
-    "requesting_uzi_role_code": "01.015",
-    "requesting_practitioner_identifier": "000095254",
-    "requesting_organization_ura": "00000666",
-    "requesting_facility_type": "Z3",
-    "data_holder_organization_ura": "00000659",
-    "data_holder_facility_type": "Z3",
-    "purpose_of_use": "treatment"
+    "subject": {
+      "properties": {
+        "subject_id": "000095254",
+        "subject_role": "01.015",
+        "subject_organization_id": "00000666",
+        "subject_facility_type": "Z3",
+        "client_qualifications": ["bgz"]
+      }
+    },
+    "request": {
+      "method": "GET",
+      "protocol": "HTTP/1.0",
+      "path": "/Patient?"
+    },
+    "context": {
+      "data_holder_organization_id": "00000659",
+      "data_holder_facility_type": "Z3",
+      "connection_type_code": "hl7-fhir-rest"
+    }
   }
 }
 
-### Testing invalid request
-
-POST http://localhost:8081/pdp
+### Testing request that parses a patient id
+POST http://localhost:8081/pdp/v1/data/knooppunt/authz
 Content-Type: application/json
 
 {
   "input": {
-    "patient_bsn": "",
-    "requesting_uzi_role_code": "true"
+    "subject": {
+      "properties": {
+        "subject_id": "000095254",
+        "subject_role": "01.015",
+        "subject_organization_id": "00000666",
+        "subject_facility_type": "Z3",
+        "client_qualifications": ["bgz"]
+      }
+    },
+    "request": {
+      "method": "GET",
+      "protocol": "HTTP/1.0",
+      "path": "/Patient/3E439979-017F-40AA-594D-EBCF880FFD97"
+    },
+    "context": {
+      "data_holder_organization_id": "00000659",
+      "data_holder_facility_type": "Z3",
+      "connection_type_code": "hl7-fhir-rest"
+    }
   }
 }
+
+### Testing policy that does not have a capability statement 
+POST http://localhost:8081/pdp/v1/data/knooppunt/authz
+Content-Type: application/json
+
+{
+  "input": {
+    "subject": {
+      "properties": {
+        "subject_id": "000095254",
+        "subject_role": "01.015",
+        "subject_organization_id": "00000666",
+        "subject_facility_type": "Z3",
+        "client_qualifications": ["eoverdracht_notification"]
+      }
+    },
+    "request": {
+      "method": "POST",
+      "protocol": "HTTP/1.0",
+      "path": "/"
+    },
+    "context": {
+      "data_holder_organization_id": "00000659",
+      "data_holder_facility_type": "Z3",
+      "connection_type_code": "hl7-fhir-rest"
+    }
+  }
+}
+
+### Testing pzp call
+POST http://localhost:8081/pdp/v1/data/knooppunt/authz
+Content-Type: application/json
+
+{
+  "input": {
+    "subject": {
+      "properties": {
+        "subject_id": "900030757",
+        "subject_role": "01.015",
+        "subject_organization_id": "00000025",
+        "subject_facility_type": "V5",
+        "client_qualifications": [
+          "pzp_gf"
+        ]
+      }
+    },
+    "request": {
+      "method": "POST",
+      "protocol": "HTTP/1.0",
+      "path": "/Patient/_search?",
+      "header": {
+        "Content-Type": ["application/x-www-form-urlencoded"]
+      },
+      "body": "identifier=http://fhir.nl/fhir/NamingSystem/bsn|900214181"
+    },
+    "context": {
+      "data_holder_organization_id": "90000697",
+      "data_holder_facility_type": "Z3",
+      "connection_type_code": "hl7-fhir-rest"
+    }
+  }
+}
+

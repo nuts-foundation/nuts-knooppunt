@@ -38,8 +38,16 @@ export function getBaseUrl(req?: NextRequest): string {
 
 /**
  * Get the issuer DID from request hostname
+ * If NUTS_ISSUER_DID is configured, use that instead
  */
 export function getIssuerDid(req?: NextRequest): string {
+  // If Nuts issuer DID is configured, use it
+  const nutsIssuerDid = process.env.NUTS_ISSUER_DID;
+  if (nutsIssuerDid) {
+    return nutsIssuerDid;
+  }
+
+  // Otherwise, generate did:web from hostname
   const hostname = getIssuerHostname(req);
   return generateDidWeb(hostname);
 }

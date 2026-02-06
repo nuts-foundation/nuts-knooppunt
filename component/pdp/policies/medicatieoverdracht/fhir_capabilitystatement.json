@@ -1,0 +1,53 @@
+{
+  "resourceType": "CapabilityStatement",
+  "version": "0.0.1",
+  "name": "MedicationServer",
+  "status": "active",
+  "date": "2026-01-29",
+  "publisher": "Stichting Nuts",
+  "copyright": "CC0",
+  "kind": "requirements",
+  "fhirVersion": "4.0.1",
+  "acceptUnknown": "both",
+  "format": [
+    "xml",
+    "json"
+  ],
+  "rest": [
+    {
+      "mode": "server",
+      "resource": [
+        {
+          "type": "MedicationRequest",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchInclude": [
+            "MedicationRequest:medication"
+          ],
+          "searchParam": [
+            {
+              "name": "patient",
+              "type": "reference"
+            },
+            {
+              "name": "identifier",
+              "type": "token"
+            },
+            {
+              "name": "category",
+              "type": "token"
+            },
+            {
+              "name": "periodofuse",
+              "definition": "http://nictiz.nl/fhir/SearchParameter/Medications-periodofuse",
+              "type": "date"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

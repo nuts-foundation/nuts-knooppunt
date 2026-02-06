@@ -5,68 +5,56 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"slices"
 
-	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-//go:embed capabilities/*.json
+//go:embed policies/*/fhir_capabilitystatement.json
 var FS embed.FS
 
 func readCapability(ctx context.Context, name string) (fhir.CapabilityStatement, error) {
-	fileName := fmt.Sprintf("capabilities/%s.json", name)
+	fileName := fmt.Sprintf("policies/%s/fhir_capabilitystatement.json", name)
 	data, err := FS.ReadFile(fileName)
 	if err != nil {
-		return fhir.CapabilityStatement{}, err
+		return fhir.CapabilityStatement{}, fmt.Errorf("file read: %w", err)
 	}
 
 	var capability fhir.CapabilityStatement
 	if err := json.Unmarshal(data, &capability); err != nil {
-		slog.WarnContext(ctx, "unable to read JSON", slog.String("file", fileName), logging.Error(err))
-		return fhir.CapabilityStatement{}, err
+		return fhir.CapabilityStatement{}, fmt.Errorf("JSON unmarshal: %w", err)
 	}
 
 	return capability, nil
 }
 
-func capabilityForScope(ctx context.Context, scope string) (fhir.CapabilityStatement, bool) {
-	switch scope {
-	// FUTURE: Should be made configurable or packaged up with some policy
-	case "mcsd_update":
-		capa, err := readCapability(ctx, "nl-gf-admin-directory-update-client")
-		return capa, err == nil
-	case "patient_example":
-		capa, err := readCapability(ctx, "patient-example")
-		return capa, err == nil
-	default:
-		return fhir.CapabilityStatement{}, false
-	}
-}
-
-func evalCapabilityPolicy(ctx context.Context, input MainPolicyInput) PolicyResult {
-	out := PolicyResult{
-		Allow: false,
+func enrichPolicyInputWithCapabilityStatement(ctx context.Context, input PolicyInput, policy string) (PolicyInput, []ResultReason) {
+	// Skip capability checking for requests that don't target a specific resource type (e.g., /metadata, /)
+	if input.Resource.Type == nil {
+		return input, nil
 	}
 
-	statement, ok := capabilityForScope(ctx, input.Scope)
-	if !ok {
-		reason := ResultReason{
-			Code:        "unexpected_input",
-			Description: "unexpected input, no capability statement known for scope",
+	statement, err := readCapability(ctx, policy)
+	if err != nil {
+		return input, []ResultReason{
+			{
+				Code:        TypeResultCodeUnexpectedInput,
+				Description: "FHIR CapabilityStatement check failed: " + err.Error(),
+			},
 		}
-		out.Reasons = []ResultReason{reason}
-		return out
 	}
 
-	return evalInteraction(statement, input)
+	resultReasons := evalInteraction(statement, input)
+	input.Action.FHIRRest.CapabilityChecked = len(resultReasons) == 0
+	return input, resultReasons
 }
 
+// evalInteraction checks whether the requested interaction is allowed by the capability statement.
+// If not, it returns a list of reasons why not.
 func evalInteraction(
 	statement fhir.CapabilityStatement,
-	input MainPolicyInput,
-) PolicyResult {
+	input PolicyInput,
+) []ResultReason {
 	// FUTURE: This is a pretty naive implementation - we can make it more efficient at a later point.
 	var supported = []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionRead,
@@ -79,14 +67,14 @@ func evalInteraction(
 		fhir.TypeRestfulInteractionCreate,
 		fhir.TypeRestfulInteractionSearchType,
 	}
-	if !slices.Contains(supported, input.InteractionType) {
-		return PolicyResult{
-			Allow: false,
-			Reasons: []ResultReason{
-				{
-					Code:        "not_implemented",
-					Description: "restful interaction type not supported",
-				},
+
+	props := input.Action.FHIRRest
+
+	if !slices.Contains(supported, props.InteractionType) {
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotImplemented,
+				Description: "restful interaction type not supported",
 			},
 		}
 	}
@@ -94,7 +82,7 @@ func evalInteraction(
 	var resourceDescriptions []fhir.CapabilityStatementRestResource
 	for _, rest := range statement.Rest {
 		for _, res := range rest.Resource {
-			if res.Type == input.ResourceType {
+			if res.Type == *input.Resource.Type {
 				resourceDescriptions = append(resourceDescriptions, res)
 			}
 		}
@@ -103,27 +91,24 @@ func evalInteraction(
 	allowInteraction := false
 	for _, des := range resourceDescriptions {
 		for _, inter := range des.Interaction {
-			if inter.Code == input.InteractionType {
+			if inter.Code == props.InteractionType {
 				allowInteraction = true
 			}
 		}
 	}
 
 	if !allowInteraction {
-		return PolicyResult{
-			Allow: false,
-			Reasons: []ResultReason{
-				{
-					Code:        "not_allowed",
-					Description: "capability statement does not allow interaction",
-				},
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: "capability statement does not allow interaction",
 			},
 		}
 	}
 
 	allowParams := false
 	rejectedSearchParams := make([]string, 0, 10)
-	if input.InteractionType == fhir.TypeRestfulInteractionSearchType {
+	if props.InteractionType == fhir.TypeRestfulInteractionSearchType {
 		allowedParams := make([]string, 0, 10)
 		for _, des := range resourceDescriptions {
 			for _, param := range des.SearchParam {
@@ -131,32 +116,71 @@ func evalInteraction(
 			}
 		}
 
-		for _, param := range input.SearchParams {
-			if !slices.Contains(allowedParams, param) {
-				rejectedSearchParams = append(rejectedSearchParams, param)
+		for paramName := range props.SearchParams {
+			if !slices.Contains(allowedParams, paramName) {
+				rejectedSearchParams = append(rejectedSearchParams, paramName)
 			}
 		}
 	}
-	if len(rejectedSearchParams) == 0 {
-		allowParams = true
-	}
 
+	allowParams = len(rejectedSearchParams) == 0
 	if !allowParams {
-		reasons := make([]ResultReason, 0, 10)
-		for _, param := range rejectedSearchParams {
-			reason := ResultReason{
-				Code:        "not_allowed",
-				Description: fmt.Sprintf("search parameter %s is not allowed", param),
-			}
-			reasons = append(reasons, reason)
-		}
-		return PolicyResult{
-			Allow:   false,
-			Reasons: reasons,
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: fmt.Sprintf("search parameter %s not allowed", rejectedSearchParams),
+			},
 		}
 	}
 
-	return PolicyResult{
-		Allow: true,
+	allowedIncludes := make([]string, 0, 10)
+	for _, des := range resourceDescriptions {
+		for _, include := range des.SearchInclude {
+			allowedIncludes = append(allowedIncludes, include)
+		}
 	}
+
+	rejectedIncludes := make([]string, 0, len(allowedIncludes))
+	for _, inc := range props.Include {
+		if !slices.Contains(allowedIncludes, inc) {
+			rejectedIncludes = append(rejectedIncludes, inc)
+		}
+	}
+
+	allowIncludes := len(rejectedIncludes) == 0
+	if !allowIncludes {
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: fmt.Sprintf("include %s is not allowed", rejectedIncludes),
+			},
+		}
+	}
+
+	allowRevincludes := false
+	allowedRevincludes := make([]string, 0, 10)
+	for _, des := range resourceDescriptions {
+		for _, revinclude := range des.SearchRevInclude {
+			allowedRevincludes = append(allowedRevincludes, revinclude)
+		}
+	}
+
+	rejectedRevincludes := make([]string, 0, len(allowedRevincludes))
+	for _, inc := range props.Revinclude {
+		if !slices.Contains(allowedRevincludes, inc) {
+			rejectedRevincludes = append(rejectedRevincludes, inc)
+		}
+	}
+
+	allowRevincludes = len(rejectedRevincludes) == 0
+	if !allowRevincludes {
+		return []ResultReason{
+			{
+				Code:        TypeResultCodeNotAllowed,
+				Description: fmt.Sprintf("revinclude %s is not allowed", rejectedRevincludes),
+			},
+		}
+	}
+
+	return nil
 }

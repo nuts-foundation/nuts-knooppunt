@@ -13,18 +13,41 @@ import (
 type PEPConfig struct {
 	FHIRBackendHost           string
 	FHIRBackendPort           string
-	FHIRBasePath              string // e.g. "/fhir" or "/fhir/DEFAULT"
+	FHIRBasePath              string // incoming path clients use, e.g. "/fhir"
+	FHIRUpstreamPath          string // path on backend FHIR server, e.g. "/fhir/DEFAULT" (defaults to FHIRBasePath)
 	KnooppuntPDPHost          string
 	KnooppuntPDPPort          string
+	NutsNodeHost              string
+	NutsNodePort              string
 	DataHolderOrganizationURA string
 	DataHolderFacilityType    string
-	RequestingFacilityType    string
-	PurposeOfUse              string
+	PEPHostname               string // expected hostname for DPoP validation (prevents Host header spoofing)
 }
 
-func startPEP(t *testing.T, config PEPConfig) *url.URL {
+// PEPContainerResult contains the PEP URL and container for additional operations
+type PEPContainerResult struct {
+	URL       *url.URL
+	Container testcontainers.Container
+}
+
+// StartPEPContainer starts the PEP container and returns the URL and container.
+func StartPEPContainer(t *testing.T, config PEPConfig) PEPContainerResult {
 	t.Helper()
 	ctx := t.Context()
+
+	env := map[string]string{
+		"FHIR_BACKEND_HOST":            config.FHIRBackendHost,
+		"FHIR_BACKEND_PORT":            config.FHIRBackendPort,
+		"FHIR_BASE_PATH":               config.FHIRBasePath,
+		"FHIR_UPSTREAM_PATH":           config.FHIRUpstreamPath,
+		"KNOOPPUNT_PDP_HOST":           config.KnooppuntPDPHost,
+		"KNOOPPUNT_PDP_PORT":           config.KnooppuntPDPPort,
+		"NUTS_NODE_HOST":               config.NutsNodeHost,
+		"NUTS_NODE_INTERNAL_PORT":      config.NutsNodePort,
+		"DATA_HOLDER_ORGANIZATION_URA": config.DataHolderOrganizationURA,
+		"DATA_HOLDER_FACILITY_TYPE":    config.DataHolderFacilityType,
+		"PEP_HOSTNAME":                 config.PEPHostname,
+	}
 
 	pepReq := testcontainers.ContainerRequest{
 		FromDockerfile: testcontainers.FromDockerfile{
@@ -32,22 +55,12 @@ func startPEP(t *testing.T, config PEPConfig) *url.URL {
 			Dockerfile: "Dockerfile",
 		},
 		ExposedPorts: []string{"8080/tcp"},
-		Env: map[string]string{
-			"FHIR_BACKEND_HOST":            config.FHIRBackendHost,
-			"FHIR_BACKEND_PORT":            config.FHIRBackendPort,
-			"FHIR_BASE_PATH":               config.FHIRBasePath,
-			"KNOOPPUNT_PDP_HOST":           config.KnooppuntPDPHost,
-			"KNOOPPUNT_PDP_PORT":           config.KnooppuntPDPPort,
-			"DATA_HOLDER_ORGANIZATION_URA": config.DataHolderOrganizationURA,
-			"DATA_HOLDER_FACILITY_TYPE":    config.DataHolderFacilityType,
-			"REQUESTING_FACILITY_TYPE":     config.RequestingFacilityType,
-			"PURPOSE_OF_USE":               config.PurposeOfUse,
-		},
-		WaitingFor: wait.ForHTTP("/health").WithPort("8080"),
+		Env:          env,
+		WaitingFor:   wait.ForHTTP("/health").WithPort("8080"),
 		HostConfigModifier: func(hostConfig *container.HostConfig) {
-			// Map host.docker.internal to host gateway for Linux (GitHub Actions)
-			// On macOS/Windows (Docker Desktop), host.docker.internal already exists
-			// On Linux, this maps it to the bridge gateway IP automatically
+			// Map host.docker.internal to host gateway
+			// On macOS/Windows (Docker Desktop), this is already available
+			// On Linux, this adds it to /etc/hosts which Docker's DNS can resolve
 			hostConfig.ExtraHosts = []string{"host.docker.internal:host-gateway"}
 		},
 	}
@@ -70,5 +83,5 @@ func startPEP(t *testing.T, config PEPConfig) *url.URL {
 		Scheme: "http",
 		Host:   host + ":" + mappedPort.Port(),
 	}
-	return u
+	return PEPContainerResult{URL: u, Container: pepContainer}
 }

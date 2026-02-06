@@ -1,6 +1,8 @@
 package mcsd
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -919,7 +921,7 @@ func TestValidateLocationResource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateLocationResource(ctx, tt.location, tt.parentOrgMap)
+			err := validateLocationResource(ctx, tt.location, tt.parentOrgMap, nil)
 
 			if tt.shouldSucceed {
 				require.NoError(t, err, tt.description)
@@ -1148,7 +1150,7 @@ func TestValidatePractitionerRoleResource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validatePractitionerRoleResource(ctx, tt.practitionerRole, tt.parentOrgMap)
+			err := validatePractitionerRoleResource(ctx, tt.practitionerRole, tt.parentOrgMap, nil)
 
 			if tt.shouldSucceed {
 				require.NoError(t, err, tt.description)
@@ -1377,7 +1379,7 @@ func TestValidateHealthcareServiceResource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateHealthcareServiceResource(ctx, tt.healthcareService, tt.parentOrgMap)
+			err := validateHealthcareServiceResource(ctx, tt.healthcareService, tt.parentOrgMap, nil)
 
 			if tt.shouldSucceed {
 				require.NoError(t, err, tt.description)
@@ -1681,7 +1683,7 @@ func TestValidateEndpointResource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateEndpointResource(ctx, tt.endpoint, tt.parentOrgMap)
+			err := validateEndpointResource(ctx, tt.endpoint, tt.parentOrgMap, nil)
 
 			if tt.shouldSucceed {
 				require.NoError(t, err, tt.description)
@@ -1690,6 +1692,351 @@ func TestValidateEndpointResource(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateEndpointResourceReferencedByHealthcareService(t *testing.T) {
+	uraSystem := "http://fhir.nl/fhir/NamingSystem/ura"
+	ctx := t.Context()
+
+	tests := []struct {
+		name                  string
+		endpoint              *fhir.Endpoint
+		parentOrgMap          map[*fhir.Organization][]*fhir.Organization
+		allHealthcareServices []fhir.BundleEntry
+		shouldSucceed         bool
+		description           string
+	}{
+		{
+			name: "endpoint referenced by healthcare service",
+			endpoint: &fhir.Endpoint{
+				Id: to.Ptr("endpoint-hcs-1"),
+			},
+			parentOrgMap: map[*fhir.Organization][]*fhir.Organization{
+				{
+					Id: to.Ptr("hospital-main"),
+					Identifier: []fhir.Identifier{
+						{System: to.Ptr(uraSystem), Value: to.Ptr("12345")},
+					},
+				}: {},
+			},
+			allHealthcareServices: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalJSON(&fhir.HealthcareService{
+						Id:         to.Ptr("hcs-1"),
+						ProvidedBy: &fhir.Reference{Reference: to.Ptr("Organization/hospital-main")},
+						Endpoint: []fhir.Reference{
+							{Reference: to.Ptr("Endpoint/endpoint-hcs-1")},
+						},
+					}),
+				},
+			},
+			shouldSucceed: true,
+			description:   "should succeed when endpoint is referenced by healthcare service",
+		},
+		{
+			name: "endpoint referenced by healthcare service with absolute URL",
+			endpoint: &fhir.Endpoint{
+				Id: to.Ptr("endpoint-hcs-2"),
+			},
+			parentOrgMap: map[*fhir.Organization][]*fhir.Organization{
+				{
+					Id: to.Ptr("hospital-main"),
+					Identifier: []fhir.Identifier{
+						{System: to.Ptr(uraSystem), Value: to.Ptr("12345")},
+					},
+				}: {},
+			},
+			allHealthcareServices: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalJSON(&fhir.HealthcareService{
+						Id:         to.Ptr("hcs-2"),
+						ProvidedBy: &fhir.Reference{Reference: to.Ptr("Organization/hospital-main")},
+						Endpoint: []fhir.Reference{
+							{Reference: to.Ptr("http://example.org/fhir/Endpoint/endpoint-hcs-2")},
+						},
+					}),
+				},
+			},
+			shouldSucceed: true,
+			description:   "should succeed when endpoint is referenced by healthcare service with absolute URL",
+		},
+		{
+			name: "endpoint among multiple endpoints in healthcare service",
+			endpoint: &fhir.Endpoint{
+				Id: to.Ptr("endpoint-hcs-3"),
+			},
+			parentOrgMap: map[*fhir.Organization][]*fhir.Organization{
+				{
+					Id: to.Ptr("hospital-main"),
+					Identifier: []fhir.Identifier{
+						{System: to.Ptr(uraSystem), Value: to.Ptr("12345")},
+					},
+				}: {},
+			},
+			allHealthcareServices: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalJSON(&fhir.HealthcareService{
+						Id:         to.Ptr("hcs-multi"),
+						ProvidedBy: &fhir.Reference{Reference: to.Ptr("Organization/hospital-main")},
+						Endpoint: []fhir.Reference{
+							{Reference: to.Ptr("Endpoint/endpoint-hcs-1")},
+							{Reference: to.Ptr("Endpoint/endpoint-hcs-2")},
+							{Reference: to.Ptr("Endpoint/endpoint-hcs-3")},
+						},
+					}),
+				},
+			},
+			shouldSucceed: true,
+			description:   "should succeed when endpoint is one of multiple endpoints in healthcare service",
+		},
+		{
+			name: "endpoint referenced by one of multiple healthcare services",
+			endpoint: &fhir.Endpoint{
+				Id: to.Ptr("endpoint-hcs-4"),
+			},
+			parentOrgMap: map[*fhir.Organization][]*fhir.Organization{
+				{
+					Id: to.Ptr("hospital-main"),
+					Identifier: []fhir.Identifier{
+						{System: to.Ptr(uraSystem), Value: to.Ptr("12345")},
+					},
+				}: {},
+			},
+			allHealthcareServices: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalJSON(&fhir.HealthcareService{
+						Id:         to.Ptr("hcs-cardiology"),
+						ProvidedBy: &fhir.Reference{Reference: to.Ptr("Organization/hospital-main")},
+						Endpoint: []fhir.Reference{
+							{Reference: to.Ptr("Endpoint/endpoint-cardio")},
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalJSON(&fhir.HealthcareService{
+						Id:         to.Ptr("hcs-emergency"),
+						ProvidedBy: &fhir.Reference{Reference: to.Ptr("Organization/hospital-main")},
+						Endpoint: []fhir.Reference{
+							{Reference: to.Ptr("Endpoint/endpoint-hcs-4")},
+						},
+					}),
+				},
+			},
+			shouldSucceed: true,
+			description:   "should succeed when endpoint is referenced by one of multiple healthcare services",
+		},
+		{
+			name: "endpoint not referenced by healthcare service or organization",
+			endpoint: &fhir.Endpoint{
+				Id: to.Ptr("endpoint-orphan"),
+			},
+			parentOrgMap: map[*fhir.Organization][]*fhir.Organization{
+				{
+					Id: to.Ptr("hospital-main"),
+					Identifier: []fhir.Identifier{
+						{System: to.Ptr(uraSystem), Value: to.Ptr("12345")},
+					},
+					Endpoint: []fhir.Reference{
+						{Reference: to.Ptr("Endpoint/endpoint-other")},
+					},
+				}: {},
+			},
+			allHealthcareServices: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalJSON(&fhir.HealthcareService{
+						Id: to.Ptr("hcs-1"),
+						Endpoint: []fhir.Reference{
+							{Reference: to.Ptr("Endpoint/endpoint-different")},
+						},
+					}),
+				},
+			},
+			shouldSucceed: false,
+			description:   "should fail when endpoint is not referenced by any healthcare service or organization",
+		},
+		{
+			name: "endpoint referenced by both organization and healthcare service",
+			endpoint: &fhir.Endpoint{
+				Id: to.Ptr("endpoint-shared"),
+			},
+			parentOrgMap: map[*fhir.Organization][]*fhir.Organization{
+				{
+					Id: to.Ptr("hospital-main"),
+					Identifier: []fhir.Identifier{
+						{System: to.Ptr(uraSystem), Value: to.Ptr("12345")},
+					},
+					Endpoint: []fhir.Reference{
+						{Reference: to.Ptr("Endpoint/endpoint-shared")},
+					},
+				}: {},
+			},
+			allHealthcareServices: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalJSON(&fhir.HealthcareService{
+						Id: to.Ptr("hcs-1"),
+						Endpoint: []fhir.Reference{
+							{Reference: to.Ptr("Endpoint/endpoint-shared")},
+						},
+					}),
+				},
+			},
+			shouldSucceed: true,
+			description:   "should succeed when endpoint is referenced by both organization and healthcare service",
+		},
+		{
+			name: "endpoint only referenced by healthcare service when no orgs have endpoints",
+			endpoint: &fhir.Endpoint{
+				Id: to.Ptr("endpoint-hcs-only"),
+			},
+			parentOrgMap: map[*fhir.Organization][]*fhir.Organization{
+				{
+					Id: to.Ptr("hospital-main"),
+					Identifier: []fhir.Identifier{
+						{System: to.Ptr(uraSystem), Value: to.Ptr("12345")},
+					},
+					// No endpoint references in organization
+				}: {},
+			},
+			allHealthcareServices: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalJSON(&fhir.HealthcareService{
+						Id:         to.Ptr("hcs-1"),
+						ProvidedBy: &fhir.Reference{Reference: to.Ptr("Organization/hospital-main")},
+						Endpoint: []fhir.Reference{
+							{Reference: to.Ptr("Endpoint/endpoint-hcs-only")},
+						},
+					}),
+				},
+			},
+			shouldSucceed: true,
+			description:   "should succeed when endpoint is only referenced by healthcare service",
+		},
+		{
+			name: "empty healthcare services list with endpoint not in org",
+			endpoint: &fhir.Endpoint{
+				Id: to.Ptr("endpoint-orphan"),
+			},
+			parentOrgMap: map[*fhir.Organization][]*fhir.Organization{
+				{
+					Id: to.Ptr("hospital-main"),
+					Identifier: []fhir.Identifier{
+						{System: to.Ptr(uraSystem), Value: to.Ptr("12345")},
+					},
+				}: {},
+			},
+			allHealthcareServices: []fhir.BundleEntry{},
+			shouldSucceed:         false,
+			description:           "should fail when healthcare services list is empty and endpoint not in org",
+		},
+		{
+			name: "healthcare service with nil endpoint references",
+			endpoint: &fhir.Endpoint{
+				Id: to.Ptr("endpoint-1"),
+			},
+			parentOrgMap: map[*fhir.Organization][]*fhir.Organization{
+				{
+					Id: to.Ptr("hospital-main"),
+					Identifier: []fhir.Identifier{
+						{System: to.Ptr(uraSystem), Value: to.Ptr("12345")},
+					},
+				}: {},
+			},
+			allHealthcareServices: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalJSON(&fhir.HealthcareService{
+						Id:       to.Ptr("hcs-1"),
+						Endpoint: nil, // No endpoints
+					}),
+				},
+			},
+			shouldSucceed: false,
+			description:   "should fail when healthcare service has nil endpoint references",
+		},
+		{
+			name: "endpoint referenced by invalid healthcare service (missing providedBy) should fail",
+			endpoint: &fhir.Endpoint{
+				Id: to.Ptr("endpoint-invalid"),
+			},
+			parentOrgMap: map[*fhir.Organization][]*fhir.Organization{
+				{
+					Id: to.Ptr("hospital-main"),
+					Identifier: []fhir.Identifier{
+						{System: to.Ptr(uraSystem), Value: to.Ptr("12345")},
+					},
+				}: {},
+			},
+			allHealthcareServices: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalJSON(&fhir.HealthcareService{
+						Id: to.Ptr("hcs-invalid"),
+						// Missing ProvidedBy - healthcare service is invalid
+						Endpoint: []fhir.Reference{
+							{Reference: to.Ptr("Endpoint/endpoint-invalid")},
+						},
+					}),
+				},
+			},
+			shouldSucceed: false,
+			description:   "should fail when endpoint is only referenced by an invalid healthcare service",
+		},
+		{
+			name: "endpoint referenced by invalid and valid healthcare services should succeed",
+			endpoint: &fhir.Endpoint{
+				Id: to.Ptr("endpoint-mixed"),
+			},
+			parentOrgMap: map[*fhir.Organization][]*fhir.Organization{
+				{
+					Id: to.Ptr("hospital-main"),
+					Identifier: []fhir.Identifier{
+						{System: to.Ptr(uraSystem), Value: to.Ptr("12345")},
+					},
+				}: {},
+			},
+			allHealthcareServices: []fhir.BundleEntry{
+				{
+					Resource: mustMarshalJSON(&fhir.HealthcareService{
+						Id: to.Ptr("hcs-invalid"),
+						// Missing ProvidedBy - invalid
+						Endpoint: []fhir.Reference{
+							{Reference: to.Ptr("Endpoint/endpoint-mixed")},
+						},
+					}),
+				},
+				{
+					Resource: mustMarshalJSON(&fhir.HealthcareService{
+						Id:         to.Ptr("hcs-valid"),
+						ProvidedBy: &fhir.Reference{Reference: to.Ptr("Organization/hospital-main")},
+						Endpoint: []fhir.Reference{
+							{Reference: to.Ptr("Endpoint/endpoint-mixed")},
+						},
+					}),
+				},
+			},
+			shouldSucceed: true,
+			description:   "should succeed when endpoint is referenced by at least one valid healthcare service",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateEndpointResource(ctx, tt.endpoint, tt.parentOrgMap, tt.allHealthcareServices)
+
+			if tt.shouldSucceed {
+				require.NoError(t, err, tt.description)
+			} else {
+				require.Error(t, err, tt.description)
+			}
+		})
+	}
+}
+
+// mustMarshalJSON is a helper function to marshal FHIR resources for tests
+func mustMarshalJSON(v any) []byte {
+	data, err := json.Marshal(v)
+	if err != nil {
+		panic(fmt.Sprintf("failed to marshal JSON: %v", err))
+	}
+	return data
 }
 
 func TestAssertReferencePointsToValidOrganization(t *testing.T) {

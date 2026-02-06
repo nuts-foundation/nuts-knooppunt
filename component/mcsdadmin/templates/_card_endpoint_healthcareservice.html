@@ -1,0 +1,16 @@
+{{ define "_card_endpoint_healthcareservice" }}
+<div id="endpoint-card-{{ .Endpoint.Id }}" class="card">
+    <ul>
+        <li>Type: <code>{{ .Endpoint.ConnectionType.Display }}</code></li>
+        <li>Payload: <code>{{ (index .Endpoint.PayloadType 0).Text }}</code></li>
+        <li>Address: <code>{{ .Endpoint.Address }}</code></li>
+    </ul>
+    <button class="btn btn-outline-dark btn-sm"
+            hx-delete="/mcsdadmin/healthcareservice/{{ .HealthcareService.Id }}/endpoints"
+            hx-swap="delete"
+            hx-target="#endpoint-card-{{ .Endpoint.Id }}"
+            hx-vals='{"endpointId": "{{ .Endpoint.Id }}"}'
+    >Delete
+    </button>
+</div>
+{{ end }}

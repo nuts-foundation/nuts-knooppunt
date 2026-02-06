@@ -1,0 +1,27 @@
+{{define "main"}}
+<div id="edit-associations">
+    <h3>Healthcare Service: {{ .HealthcareService.Name }}</h3>
+    <label>Endpoints:</label>
+    <div id="endpoints">
+        {{ range .EndpointCards }}
+            {{ template "_card_endpoint_healthcareservice" .  }}
+        {{ end }}
+    </div>
+    <label>Add endpoint:</label>
+    <div>
+        <select name="selected-endpoint" id="selected-endpoint">
+            <option value="" disabled selected>--Please choose an option--</option>
+            {{ range .AllEndpoints }}
+            <option value="{{ .Id }}">{{ .Address }}</option>
+            {{ end }}
+        </select>
+        <button class="btn btn-outline-dark btn-sm"
+                hx-include="#selected-endpoint"
+                hx-post="/mcsdadmin/healthcareservice/{{ .HealthcareService.Id }}/endpoints"
+                hx-target="#endpoints"
+                hx-swap="beforeend"
+        >Add
+        </button>
+    </div>
+</div>
+{{end}}
