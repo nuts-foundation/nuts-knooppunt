@@ -47,7 +47,7 @@ func createOPAService(ctx context.Context, opaBundleBaseURL string) (*sdk.OPA, e
 	return result, nil
 }
 
-// evalRegoPolicy evaluates a Rego policy using Open Policy Agent for the given scope and input
+// evalRegoPolicy evaluates a Rego policy using Open Policy Agent for the given policy and input
 func (c *Component) evalRegoPolicy(ctx context.Context, policy string, policyInput PolicyInput) (*PolicyResult, error) {
 	// get the named policy decision for the specified input
 	result, err := c.opaService.Decision(ctx, sdk.DecisionOptions{Path: "/" + policy + "/allow", Input: policyInput})
