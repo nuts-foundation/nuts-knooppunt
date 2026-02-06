@@ -20,7 +20,7 @@ allow if {
 
 default request_conforms_fhir_capabilitystatement := false
 request_conforms_fhir_capabilitystatement if {
-    input.context.fhir_capability_checked == true
+    input.action.fhir_rest.capability_checked == true
 }
 
 default patient_gave_mitz_consent := false
@@ -51,5 +51,5 @@ requester_has_enrolled_patient if {
 default is_allowed_query := false
 is_allowed_query if {
     input.resource.type == "MedicationRequest"
-    input.action.properties.interaction_type == "search-type"
+    input.action.fhir_rest.interaction_type == "search-type"
 }

@@ -92,7 +92,7 @@ func (c *Component) evalRegoPolicy(ctx context.Context, policy string, policyInp
 			},
 			{
 				Code:        TypeResultCodeInformational,
-				Description: strings.Join(infoLines, "\n"),
+				Description: strings.Join(infoLines, "; "),
 			},
 		}
 	}

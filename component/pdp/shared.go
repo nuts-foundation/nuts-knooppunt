@@ -159,6 +159,10 @@ type ResultReason struct {
 	Description string         `json:"description"`
 }
 
+func (r ResultReason) String() string {
+	return fmt.Sprintf("%s - %s", r.Code, r.Description)
+}
+
 func (p *PolicyResult) AddReasons(input []string, format string, code TypeResultCode) {
 	isNewSlice := cap(p.Reasons) == 0
 	if isNewSlice {
@@ -194,15 +198,6 @@ func Deny(reason ResultReason) PolicyResult {
 			reason,
 		},
 	}
-}
-
-func appendReasons(mainResult PolicyResult, results ...PolicyResult) PolicyResult {
-	reasons := mainResult.Reasons
-	for _, result := range results {
-		reasons = append(reasons, result.Reasons...)
-	}
-	mainResult.Reasons = reasons
-	return mainResult
 }
 
 type TypeResultCode string
