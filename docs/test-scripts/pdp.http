@@ -39,7 +39,7 @@ Content-Type: application/json
     "request": {
       "method": "GET",
       "protocol": "HTTP/1.0",
-      "path": "/Organization?",
+      "path": "/Organization",
       "query_params": {
         "_since": ["foo"]
       }
@@ -70,7 +70,7 @@ Content-Type: application/json
     "request": {
       "method": "GET",
       "protocol": "HTTP/1.0",
-      "path": "/Patient?"
+      "path": "/Patient"
     },
     "context": {
       "data_holder_organization_id": "00000659",
@@ -156,7 +156,7 @@ Content-Type: application/json
     "request": {
       "method": "POST",
       "protocol": "HTTP/1.0",
-      "path": "/Patient/_search?",
+      "path": "/Patient/_search",
       "header": {
         "Content-Type": ["application/x-www-form-urlencoded"]
       },
