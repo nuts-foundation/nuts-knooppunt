@@ -246,7 +246,7 @@ func parseRequestPath(request HTTPRequest) (Tokens, bool) {
 }
 
 type Params struct {
-	SearchParams map[string]string
+	SearchParams map[string][]string
 	Revinclude   []string
 	Include      []string
 }
@@ -293,13 +293,7 @@ func groupParams(queryParams url.Values) Params {
 	for _, p := range resultParams {
 		delete(queryParams, p)
 	}
-
-	// Convert remaining query params to map
-	params.SearchParams = make(map[string]string)
-	for key, values := range queryParams {
-		// Join multiple values with comma
-		params.SearchParams[key] = strings.Join(values, ",")
-	}
+	params.SearchParams = queryParams
 
 	return params
 }

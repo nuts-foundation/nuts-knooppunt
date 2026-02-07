@@ -87,7 +87,7 @@ func TestComponent_allow_search_param(t *testing.T) {
 			ConnectionTypeCode: "hl7-fhir-rest",
 			FHIRRest: FHIRRestData{
 				InteractionType: fhir.TypeRestfulInteractionSearchType,
-				SearchParams:    map[string]string{"_since": "2024-01-01"},
+				SearchParams:    map[string][]string{"_since": []string{"2024-01-01"}},
 			},
 		},
 		Context: PolicyContext{
@@ -118,7 +118,7 @@ func TestComponent_reject_search_param(t *testing.T) {
 			ConnectionTypeCode: "hl7-fhir-rest",
 			FHIRRest: FHIRRestData{
 				InteractionType: fhir.TypeRestfulInteractionSearchType,
-				SearchParams:    map[string]string{"_foo": "bar", "_since": "2024-01-01"},
+				SearchParams:    map[string][]string{"_foo": []string{"bar"}, "_since": {"2024-01-01"}},
 			},
 		},
 		Context: PolicyContext{
@@ -143,7 +143,7 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 			ConnectionTypeCode: "hl7-fhir-rest",
 			FHIRRest: FHIRRestData{
 				InteractionType: fhir.TypeRestfulInteractionSearchSystem,
-				SearchParams:    map[string]string{"_foo": "bar", "_since": "2024-01-01"},
+				SearchParams:    map[string][]string{"_foo": []string{"bar"}, "_since": []string{"2024-01-01"}},
 			},
 		},
 		Context: PolicyContext{

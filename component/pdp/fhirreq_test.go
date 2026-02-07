@@ -92,7 +92,7 @@ func TestComponent_group_params(t *testing.T) {
 	}
 
 	groupedParam := groupParams(queryParams)
-	assert.Equal(t, "1985-04-01", groupedParam.SearchParams["_since"])
+	assert.Equal(t, []string{"1985-04-01"}, groupedParam.SearchParams["_since"])
 	assert.Contains(t, groupedParam.Include, "Location:managingOrganization")
 	assert.Contains(t, groupedParam.Revinclude, "PractitionerRole:Location")
 }
