@@ -175,6 +175,18 @@ func TestReferencesType(t *testing.T) {
 			expected:     false,
 		},
 		{
+			name:         "subpath",
+			ref:          "Organization/123/_history/1",
+			resourceType: "Patient",
+			expected:     false,
+		},
+		{
+			name:         "multiple refs",
+			ref:          "Organization/123,123",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
 			name:         "empty reference",
 			ref:          "",
 			resourceType: "Organization",

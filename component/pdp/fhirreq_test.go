@@ -84,13 +84,21 @@ func TestDerivePatientID(t *testing.T) {
 			expectedPatientId: "",
 		},
 		{
-			name: "FHIR search - both subject and patient set (patient takes precedence)",
+			name: "FHIR search - both subject and patient set (not allowed)",
 			queryParams: url.Values{
 				"subject": []string{"Patient/56789"},
 				"patient": []string{"Patient/56789"},
 			},
 			expectedPatientId: "",
 			expectedError:     "multiple patient references found in patient and subject parameters, unable to determine patient ID",
+		},
+		{
+			name: "FHIR search - multiple subject parameter values",
+			queryParams: url.Values{
+				"subject": []string{"Patient/56789", "Patient/10"},
+			},
+			expectedPatientId: "",
+			expectedError:     "multiple subject parameters found (including 1 Patient reference), unable to determine patient ID",
 		},
 	}
 

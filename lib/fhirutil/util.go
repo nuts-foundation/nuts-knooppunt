@@ -94,6 +94,14 @@ func TokenToIdentifier(token string) (*fhir.Identifier, error) {
 }
 
 func ReferencesType(ref string, resourceType string) bool {
+	if strings.Count(ref, "/") != 1 {
+		// not allowed
+		return false
+	}
+	if strings.Contains(ref, ",") {
+		// not allowed
+		return false
+	}
 	// Also make sure it's actually in form of <type>/<id>
 	if !strings.HasPrefix(ref, resourceType+"/") {
 		return false
