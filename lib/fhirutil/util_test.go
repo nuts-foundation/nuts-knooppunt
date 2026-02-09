@@ -148,3 +148,74 @@ func TestBuildSourceURL(t *testing.T) {
 		})
 	}
 }
+
+func TestReferencesType(t *testing.T) {
+	tests := []struct {
+		name         string
+		ref          string
+		resourceType string
+		expected     bool
+	}{
+		{
+			name:         "valid reference",
+			ref:          "Organization/123",
+			resourceType: "Organization",
+			expected:     true,
+		},
+		{
+			name:         "valid reference with UUID",
+			ref:          "Patient/550e8400-e29b-41d4-a716-446655440000",
+			resourceType: "Patient",
+			expected:     true,
+		},
+		{
+			name:         "wrong resource type",
+			ref:          "Organization/123",
+			resourceType: "Patient",
+			expected:     false,
+		},
+		{
+			name:         "empty reference",
+			ref:          "",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
+			name:         "reference without ID",
+			ref:          "Organization/",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
+			name:         "type only without slash",
+			ref:          "Organization",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
+			name:         "partial type match",
+			ref:          "Org/123",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
+			name:         "type is prefix of reference type",
+			ref:          "OrganizationAffiliation/123",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
+			name:         "case sensitive mismatch",
+			ref:          "organization/123",
+			resourceType: "Organization",
+			expected:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ReferencesType(tt.ref, tt.resourceType)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}

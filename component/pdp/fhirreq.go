@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -328,21 +329,41 @@ func derivePatientId(tokens Tokens, queryParams url.Values) (string, error) {
 	// Theoretically, this could apply to other interactions as well (conditional update),
 	// but those are edge cases we don't need to support right now.
 	if tokens.Interaction == fhir.TypeRestfulInteractionSearchType {
+		var candidates []string
 		// try 'patient'
 		patientID, err := getSingleParameter(queryParams, "patient")
 		if err != nil {
 			return "", err
 		}
 		if patientID != "" {
-			if !strings.HasPrefix(patientID, "Patient/") {
+			if !fhirutil.ReferencesType(patientID, "Patient") {
 				return "", errors.New("patient parameter does not reference a Patient resource")
 			}
-			return strings.TrimPrefix(patientID, "Patient/"), nil
+			candidates = append(candidates, fhirutil.IDFromReference(patientID, "Patient"))
 		}
 		// try 'subject'
-		subjectID, err := getSingleParameter(queryParams, "subject")
-		if err == nil && strings.HasPrefix(subjectID, "Patient/") {
-			return strings.TrimPrefix(subjectID, "Patient/"), nil
+		var subjectID string
+		for _, subject := range queryParams["subject"] {
+			if fhirutil.ReferencesType(subject, "Patient") {
+				subjectID = subject
+				break
+			}
+		}
+		if subjectID != "" {
+			// Sanity/security check, prevent vulnerabilities with queries like these: CarePlan?subject=Patient/12345,Observation/67890
+			// Not sure if this actually prevents something, but we can always remove it.
+			if len(queryParams["subject"]) > 1 {
+				return "", errors.New("multiple subject parameters found (including 1 Patient reference), unable to determine patient ID")
+			}
+			candidates = append(candidates, fhirutil.IDFromReference(subjectID, "Patient"))
+		}
+
+		if len(candidates) == 1 {
+			return candidates[0], nil
+		} else if len(candidates) > 1 {
+			// Not an actual vulnerability, as multiple search params in FHIR act as AND operator,
+			// but we can't let a random one win for authZ decision, so still error out.
+			return "", errors.New("multiple patient references found in patient and subject parameters, unable to determine patient ID")
 		}
 	}
 	return "", nil

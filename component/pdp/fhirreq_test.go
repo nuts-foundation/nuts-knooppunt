@@ -12,7 +12,7 @@ import (
 )
 
 func TestDerivePatientID(t *testing.T) {
-	t.Run("FHIR read - patient ID from path (Patient resource)", func(t *testing.T) {
+	t.Run("FHIR read - from path (Patient resource)", func(t *testing.T) {
 		tokens := Tokens{
 			ResourceType: to.Ptr(fhir.ResourceTypePatient),
 			ResourceId:   "12345",
@@ -21,7 +21,7 @@ func TestDerivePatientID(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "12345", actual)
 	})
-	t.Run("FHIR search - patient ID from query parameters (Patient resource)", func(t *testing.T) {
+	t.Run("FHIR search - from query parameters (Patient resource)", func(t *testing.T) {
 		tokens := Tokens{
 			ResourceType: to.Ptr(fhir.ResourceTypePatient),
 			Interaction:  fhir.TypeRestfulInteractionSearchType,
@@ -41,46 +41,56 @@ func TestDerivePatientID(t *testing.T) {
 	}
 	testCases := []testCase{
 		{
-			name: "FHIR search - patient ID from patient query parameter (other resource) - ok",
+			name: "FHIR search - from patient query parameter (other resource) - ok",
 			queryParams: url.Values{
 				"patient": []string{"Patient/56789"},
 			},
 			expectedPatientId: "56789",
 		},
 		{
-			name: "FHIR search - patient ID from patient query parameter (other resource) - multiple patient params",
+			name: "FHIR search - from patient query parameter (other resource) - multiple patient params",
 			queryParams: url.Values{
 				"patient": []string{"Patient/56789", "Patient/10"},
 			},
 			expectedError: "multiple patient parameters found",
 		},
 		{
-			name: "FHIR search - patient ID from patient query parameter (other resource) - not referencing a Patient resource",
+			name: "FHIR search - from patient query parameter (other resource) - not referencing a Patient resource",
 			queryParams: url.Values{
 				"patient": []string{"Observation/56789"},
 			},
 			expectedError: "patient parameter does not reference a Patient resource",
 		},
 		{
-			name: "FHIR search - patient ID from subject query parameter (other resource) - ok",
+			name: "FHIR search - from subject query parameter (other resource) - ok",
 			queryParams: url.Values{
 				"subject": []string{"Patient/56789"},
 			},
 			expectedPatientId: "56789",
 		},
 		{
-			name: "FHIR search - patient ID from subject query parameter (other resource) - multiple subject params",
+			name: "FHIR search - from subject query parameter (other resource) - multiple subject params",
 			queryParams: url.Values{
 				"subject": []string{"Patient/56789", "Patient/10"},
 			},
 			expectedPatientId: "",
+			expectedError:     "multiple subject parameters found (including 1 Patient reference), unable to determine patient ID",
 		},
 		{
-			name: "FHIR search - patient ID from subject query parameter (other resource) - not referencing a Patient resource",
+			name: "FHIR search - from subject query parameter (other resource) - not referencing a Patient resource",
 			queryParams: url.Values{
 				"subject": []string{"Observation/56789"},
 			},
 			expectedPatientId: "",
+		},
+		{
+			name: "FHIR search - both subject and patient set (patient takes precedence)",
+			queryParams: url.Values{
+				"subject": []string{"Patient/56789"},
+				"patient": []string{"Patient/56789"},
+			},
+			expectedPatientId: "",
+			expectedError:     "multiple patient references found in patient and subject parameters, unable to determine patient ID",
 		},
 	}
 

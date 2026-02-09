@@ -92,3 +92,17 @@ func TokenToIdentifier(token string) (*fhir.Identifier, error) {
 	}
 	return &result, nil
 }
+
+func ReferencesType(ref string, resourceType string) bool {
+	// Also make sure it's actually in form of <type>/<id>
+	if !strings.HasPrefix(ref, resourceType+"/") {
+		return false
+	}
+	// Check if the part after the resource type is a valid ID (non-empty)
+	idPart := strings.TrimPrefix(ref, resourceType+"/")
+	return idPart != ""
+}
+
+func IDFromReference(ref string, resourceType string) string {
+	return strings.TrimPrefix(ref, resourceType+"/")
+}
