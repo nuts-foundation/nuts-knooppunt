@@ -103,8 +103,7 @@ func ReferencesType(ref string, resourceType string) bool {
 }
 
 func IDFromReference(ref string, resourceType string) string {
-	if !localLiteralReferencePattern.MatchString(ref) {
-		// not allowed
+	if !ReferencesType(ref, resourceType) {
 		return ""
 	}
 	return strings.TrimPrefix(ref, resourceType+"/")

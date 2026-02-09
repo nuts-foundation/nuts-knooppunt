@@ -231,3 +231,63 @@ func TestReferencesType(t *testing.T) {
 		})
 	}
 }
+
+func TestIDFromReference(t *testing.T) {
+	type args struct {
+		ref          string
+		resourceType string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "valid reference",
+			args: args{
+				ref:          "Organization/123",
+				resourceType: "Organization",
+			},
+			want: "123",
+		},
+		{
+			name: "reference with subpath",
+			args: args{
+				ref:          "Organization/123/_history/1",
+				resourceType: "Organization",
+			},
+			want: "",
+		},
+		{
+			name: "reference with wrong resource type",
+			args: args{
+				ref:          "Organization/123",
+				resourceType: "Patient",
+			},
+			want: "",
+		},
+		{
+			name: "reference without ID",
+			args: args{
+				ref:          "Organization/",
+				resourceType: "Organization",
+			},
+			want: "",
+		},
+		{
+			name: "reference without slash",
+			args: args{
+				ref:          "Organization",
+				resourceType: "Organization",
+			},
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IDFromReference(tt.args.ref, tt.args.resourceType); got != tt.want {
+				t.Errorf("IDFromReference() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
