@@ -313,7 +313,7 @@ func groupParams(queryParams url.Values) Params {
 // - The request is a search interaction with a 'patient' parameter (e.g. GET /Observation?patient=Patient/12345)
 // - The request is a search interaction with a 'subject' parameter referencing a patient (e.g. GET /Observation?subject=Patient/12345)
 //
-// If the subject parameter is present, but does not reference a single Patient, it returns nothing and no error.
+// If the subject parameter is present but does not reference exactly one Patient (for example, when multiple values are supplied), the function returns an error.
 func derivePatientId(tokens Tokens, queryParams url.Values) (string, error) {
 	if tokens.ResourceType != nil && *tokens.ResourceType == fhir.ResourceTypePatient {
 		// https://fhir.example.org/Patient/12345
