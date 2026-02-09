@@ -106,6 +106,9 @@ or wants to have the Nuts node deployed separately, the Knooppunt can use that N
 
 Use [`nuts.enabled`](./CONFIGURATION.md) to configure the embedded or existing Nuts node.
 
+Note that you MUST configure the `url` (or `NUTS_URL`) property in the Nuts configuration to point to the **publicly accessible** base URL of the Knooppunt (the URL under which other Nuts nodes and clients can reach it). This is the URL the Nuts node advertises externally.
+The Knooppunt runs the embedded Nuts node on `/nuts`, so if the Knooppunt is publicly reachable at `https://knooppunt.example.com/`, the Nuts node URL must be `https://knooppunt.example.com/nuts` (not an internal-only address such as `http://knooppunt:8080/nuts`).
+
 ### Tracing
 
 The Knooppunt supports distributed tracing using OpenTelemetry. Traces can be sent to any OTLP-compatible collector (e.g. Jaeger, Grafana Tempo, or a vendor's existing observability platform).
