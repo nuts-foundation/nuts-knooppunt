@@ -177,7 +177,7 @@ func TestReferencesType(t *testing.T) {
 		{
 			name:         "subpath",
 			ref:          "Organization/123/_history/1",
-			resourceType: "Patient",
+			resourceType: "Organization",
 			expected:     false,
 		},
 		{
