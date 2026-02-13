@@ -154,23 +154,6 @@ func TestComponent_parse_literals(t *testing.T) {
 	assert.True(t, ok)
 }
 
-func TestComponent_parse_trailing_question_mark(t *testing.T) {
-	var def = PathDef{
-		Interaction: fhir.TypeRestfulInteractionSearchType,
-		PathDef:     []string{"[type]?"},
-		Verb:        "GET",
-	}
-
-	var req = HTTPRequest{
-		Method: "GET",
-		Path:   "/Observation?",
-	}
-	tokens, ok := parsePath(def, req)
-
-	assert.True(t, ok)
-	assert.Equal(t, fhir.ResourceTypeObservation, *tokens.ResourceType)
-}
-
 func TestComponent_parse_leading_dollar(t *testing.T) {
 	var def = PathDef{
 		Interaction: fhir.TypeRestfulInteractionOperation,
@@ -213,7 +196,7 @@ func TestComponent_params_in_body(t *testing.T) {
 			Request: HTTPRequest{
 				Method:   "POST",
 				Protocol: "HTTP/1.1",
-				Path:     "/Patient/_search?",
+				Path:     "/Patient/_search",
 				Header: http.Header{
 					"Content-Type": []string{"application/x-www-form-urlencoded"},
 				},
@@ -260,7 +243,7 @@ func TestComponent_parse_patient_id(t *testing.T) {
 			Request: HTTPRequest{
 				Method:   "GET",
 				Protocol: "HTTP/1.1",
-				Path:     "/Patient?",
+				Path:     "/Patient",
 				QueryParams: url.Values{
 					"_id": []string{"56789"},
 				},
@@ -278,7 +261,7 @@ func TestComponent_parse_patient_id(t *testing.T) {
 			Request: HTTPRequest{
 				Method:   "GET",
 				Protocol: "HTTP/1.1",
-				Path:     "/Encounter?",
+				Path:     "/Encounter",
 				QueryParams: url.Values{
 					"patient": []string{"Patient/98765"},
 				},
@@ -316,7 +299,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient?",
+						Path:     "/Patient",
 						QueryParams: url.Values{
 							"_id": []string{"56789"},
 						},
@@ -335,7 +318,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Encounter?",
+						Path:     "/Encounter",
 						QueryParams: url.Values{
 							"patient": []string{"Patient/98765"},
 						},
@@ -354,7 +337,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Encounter?",
+						Path:     "/Encounter",
 						QueryParams: url.Values{
 							"patient": []string{"Patient/123", "Patient/456"},
 						},
@@ -376,7 +359,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient?",
+						Path:     "/Patient",
 						QueryParams: url.Values{
 							"_id": []string{"123", "456"},
 						},
@@ -398,7 +381,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Observation?",
+						Path:     "/Observation",
 					},
 				},
 			}
@@ -415,7 +398,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient?",
+						Path:     "/Patient",
 						QueryParams: url.Values{
 							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn|900186021"},
 						},
@@ -434,7 +417,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient?",
+						Path:     "/Patient",
 						QueryParams: url.Values{
 							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn%7C900186021"},
 						},

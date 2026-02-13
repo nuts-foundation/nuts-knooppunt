@@ -48,7 +48,7 @@ var definitions = []PathDef{
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionDelete,
-		PathDef:     []string{"[type]?"},
+		PathDef:     []string{"[type]"},
 		Verb:        "DELETE",
 	},
 	{
@@ -58,18 +58,13 @@ var definitions = []PathDef{
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionSearchType,
-		PathDef:     []string{"[type]?"},
+		PathDef:     []string{"[type]"},
 		Verb:        "GET",
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionUpdate,
-		PathDef:     []string{"[type]?"},
+		PathDef:     []string{"[type]"},
 		Verb:        "PUT",
-	},
-	{
-		Interaction: fhir.TypeRestfulInteractionSearchType,
-		PathDef:     []string{"[type]", "_search?"},
-		Verb:        "POST",
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionSearchType,
@@ -78,7 +73,7 @@ var definitions = []PathDef{
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionSearchSystem,
-		PathDef:     []string{"?"},
+		PathDef:     []string{""},
 		Verb:        "GET",
 	},
 	{
@@ -173,14 +168,6 @@ func parsePath(def PathDef, req HTTPRequest) (Tokens, bool) {
 		switch part {
 		case "[type]":
 			ptr, ok := parseResourceType(path[idx])
-			if !ok {
-				return Tokens{}, false
-			}
-			out.ResourceType = ptr
-			continue
-		case "[type]?":
-			str := strings.TrimSuffix(path[idx], "?")
-			ptr, ok := parseResourceType(str)
 			if !ok {
 				return Tokens{}, false
 			}
