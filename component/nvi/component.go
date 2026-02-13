@@ -41,9 +41,10 @@ type Component struct {
 	client        fhirclient.Client
 	pseudonymizer pseudonimization.Pseudonymizer
 	audience      string
+	httpCient     *http.Client
 }
 
-func New(config Config) (*Component, error) {
+func New(config Config, httpClient *http.Client) (*Component, error) {
 	baseURL, err := url.Parse(config.FHIRBaseURL)
 	if err != nil {
 		return nil, err
@@ -52,7 +53,9 @@ func New(config Config) (*Component, error) {
 		return nil, fmt.Errorf("audience must be configured when NVI component is enabled")
 	}
 	return &Component{
-		client:        fhirclient.New(baseURL, tracing.NewHTTPClient(), fhirutil.ClientConfig()),
+		client: fhirclient.New(baseURL, &http.Client{
+			Transport: tracing.WrapTransport(httpClient.Transport),
+		}, fhirutil.ClientConfig()),
 		pseudonymizer: &pseudonimization.Component{},
 		audience:      config.Audience,
 	}, nil
