@@ -206,6 +206,7 @@ const (
 	TypeResultCodeMissingRequiredValue TypeResultCode = "missing_required_value"
 	TypeResultCodeUnexpectedInput      TypeResultCode = "unexpected_input"
 	TypeResultCodeNotAllowed           TypeResultCode = "not_allowed"
+	TypeResultCodeNoConsent            TypeResultCode = "no_consent"
 	TypeResultCodeNotImplemented       TypeResultCode = "not_implemented"
 	TypeResultCodeInternalError        TypeResultCode = "internal_error"
 	TypeResultCodePIPError             TypeResultCode = "pip_error"
