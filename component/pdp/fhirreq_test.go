@@ -202,7 +202,7 @@ func TestComponent_group_params(t *testing.T) {
 	}
 
 	groupedParam := groupParams(queryParams)
-	assert.Equal(t, "1985-04-01", groupedParam.SearchParams["_since"])
+	assert.Equal(t, []string{"1985-04-01"}, groupedParam.SearchParams["_since"])
 	assert.Contains(t, groupedParam.Include, "Location:managingOrganization")
 	assert.Contains(t, groupedParam.Revinclude, "PractitionerRole:Location")
 }
@@ -227,7 +227,7 @@ func TestComponent_params_in_body(t *testing.T) {
 
 	policyInput, policyResult := NewPolicyInput(pdpRequest)
 	assert.True(t, policyResult.Allow)
-	assert.Equal(t, "http://fhir.nl/fhir/NamingSystem/bsn|775645332", policyInput.Action.FHIRRest.SearchParams["identifier"])
+	assert.Equal(t, []string{"http://fhir.nl/fhir/NamingSystem/bsn|775645332"}, policyInput.Action.FHIRRest.SearchParams["identifier"])
 	assert.Equal(t, "775645332", policyInput.Context.PatientBSN)
 }
 
