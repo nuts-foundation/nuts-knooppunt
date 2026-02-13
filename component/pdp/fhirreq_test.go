@@ -227,7 +227,7 @@ func TestComponent_params_in_body(t *testing.T) {
 
 	policyInput, policyResult := NewPolicyInput(pdpRequest)
 	assert.True(t, policyResult.Allow)
-	assert.Equal(t, "http://fhir.nl/fhir/NamingSystem/bsn|775645332", policyInput.Action.FHIRRest.SearchParams["identifier"])
+	assert.Equal(t, []string{"http://fhir.nl/fhir/NamingSystem/bsn|775645332"}, policyInput.Action.FHIRRest.SearchParams["identifier"])
 	assert.Equal(t, "775645332", policyInput.Context.PatientBSN)
 }
 
