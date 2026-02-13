@@ -229,12 +229,12 @@ is_allowed_query if {
 # GET [base]/DocumentReference?status=current
 is_allowed_query if {
     input.resource.type == "DocumentReference"
-    input.action.properties.interaction_type == "search-type"
-    input.action.properties.search_params.status == ["current"]
+    input.action.fhir_rest.interaction_type == "search-type"
+    input.action.fhir_rest.search_params.status == ["current"]
 }
 
 # GET [base]/DocumentReference
 is_allowed_query if {
     input.resource.type == "DocumentReference"
-    input.action.properties.interaction_type == "read"
+    input.action.fhir_rest.interaction_type == "read"
 }
