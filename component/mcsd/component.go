@@ -358,7 +358,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	deduplicatedEntries := deduplicateHistoryEntries(entries)
 
 	// Filter to only include HealthcareService resources
-	var allHealthcareServices []fhir.BundleEntry
+	var allHealthcareServices []fhir.HealthcareService
 	for _, entry := range entries {
 		if entry.Resource == nil {
 			continue
@@ -366,7 +366,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		var healthcareService fhir.HealthcareService
 		if err := json.Unmarshal(entry.Resource, &healthcareService); err == nil {
 			// Successfully unmarshaled as HealthcareService
-			allHealthcareServices = append(allHealthcareServices, entry)
+			allHealthcareServices = append(allHealthcareServices, healthcareService)
 		}
 	}
 

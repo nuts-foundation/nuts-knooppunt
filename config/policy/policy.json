@@ -1,0 +1,144 @@
+{
+  "eOverdracht-sender": {
+    "organization": {
+      "format": {
+        "ldp_vc": {
+          "proof_type": [
+            "JsonWebSignature2020"
+          ]
+        },
+        "jwt_vc": {
+          "alg": [
+            "PS256"
+          ]
+        },
+        "jwt_vp": {
+          "alg": [
+            "ES256"
+          ]
+        }
+      },
+      "id": "pd_any_care_organization",
+      "name": "Care organization",
+      "purpose": "Finding a care organization",
+      "input_descriptors": [
+        {
+          "id": "id_uzicert_uracredential",
+          "name": "Care organization identity from fake UZI-server certificate",
+          "purpose": "Finding a care organization for authorizing access to medical metadata.",
+          "constraints": {
+            "fields": [
+              {
+                "path": ["$.type"],
+                "filter": {
+                  "type": "string",
+                  "const": "X509Credential"
+                }
+              },
+              {
+                "id": "organization_id",
+                "path": ["$.credentialSubject[0].id", "$.credentialSubject.id"],
+                "filter": {
+                  "type": "string",
+                  "pattern": "^did:web:"
+                }
+              },
+              {
+                "id": "organization_name",
+                "path": [
+                  "$.credentialSubject[0].subject.O",
+                  "$.credentialSubject.subject.O"
+                ],
+                "filter": {
+                  "type": "string"
+                }
+              },
+              {
+                "id": "organization_ura",
+                "path": [
+                  "$.credentialSubject[0].san.otherName",
+                  "$.credentialSubject.san.otherName"
+                ],
+                "filter": {
+                  "type": "string",
+                  "pattern": "^[0-9.]+-\\d+-\\d+-S-(\\d+)-00\\.000-\\d+$"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "eOverdracht-receiver": {
+    "organization": {
+      "format": {
+        "ldp_vc": {
+          "proof_type": [
+            "JsonWebSignature2020"
+          ]
+        },
+        "jwt_vc": {
+          "alg": [
+            "PS256"
+          ]
+        },
+        "jwt_vp": {
+          "alg": [
+            "ES256"
+          ]
+        }
+      },
+      "id": "pd_any_care_organization",
+      "name": "Care organization",
+      "purpose": "Finding a care organization",
+      "input_descriptors": [
+        {
+          "id": "id_uzicert_uracredential",
+          "name": "Care organization identity from fake UZI-server certificate",
+          "purpose": "Finding a care organization for authorizing access to medical metadata.",
+          "constraints": {
+            "fields": [
+              {
+                "path": ["$.type"],
+                "filter": {
+                  "type": "string",
+                  "const": "X509Credential"
+                }
+              },
+              {
+                "id": "organization_id",
+                "path": ["$.credentialSubject[0].id", "$.credentialSubject.id"],
+                "filter": {
+                  "type": "string",
+                  "pattern": "^did:web:"
+                }
+              },
+              {
+                "id": "organization_name",
+                "path": [
+                  "$.credentialSubject[0].subject.O",
+                  "$.credentialSubject.subject.O"
+                ],
+                "filter": {
+                  "type": "string"
+                }
+              },
+              {
+                "id": "organization_ura",
+                "path": [
+                  "$.credentialSubject[0].san.otherName",
+                  "$.credentialSubject.san.otherName"
+                ],
+                "filter": {
+                  "type": "string",
+                  "pattern": "^[0-9.]+-\\d+-\\d+-S-(\\d+)-00\\.000-\\d+$"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
