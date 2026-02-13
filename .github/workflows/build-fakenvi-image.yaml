@@ -11,7 +11,7 @@ on:
     branches:
       - main
     paths:
-      - localization/hapi-pseudonimization-interceptor/**
+      - mock-components/nvi/**
       - .github/workflows/build-fakenvi-image.yaml
 
 # cancel build action if superseded by new commit on same branch
@@ -79,8 +79,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: localization/hapi-pseudonimization-interceptor
-          file: localization/hapi-pseudonimization-interceptor/Dockerfile
+          context: mock-components/nvi/hapi-pseudonimization-interceptor
+          file: mock-components/nvi/hapi-pseudonimization-interceptor/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
