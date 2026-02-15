@@ -22,6 +22,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+type HTTPClientProvider func(ctx context.Context, scope []string, uraNumber string, audience string) (*http.Client, error)
+
 // MinistryAuthConfig holds the configuration for authenticating with the Ministry of Health's (MinVWS) OAuth2 Authorization Server using the client credentials flow with JWT assertion.
 type MinistryAuthConfig struct {
 	tlsutil.Config
