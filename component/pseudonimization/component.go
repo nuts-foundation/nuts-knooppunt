@@ -3,6 +3,7 @@ package pseudonimization
 
 import (
 	"fmt"
+	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/bsnutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
@@ -15,7 +16,14 @@ type Pseudonymizer interface {
 	TokenToBSN(identifier fhir.Identifier, audience string) (*fhir.Identifier, error)
 }
 
+func New(httpClient *http.Client) *Component {
+	return &Component{
+		httpClient: httpClient,
+	}
+}
+
 type Component struct {
+	httpClient *http.Client
 }
 
 func (c Component) IdentifierToToken(identifier fhir.Identifier, audience string) (*fhir.Identifier, error) {

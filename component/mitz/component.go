@@ -24,19 +24,12 @@ import (
 
 // Config holds the configuration for the MITZ component
 type Config struct {
+	tlsutil.Config
 	MitzBase      string `koanf:"mitzbase"`
 	GatewaySystem string `koanf:"gatewaysystem"`
 	SourceSystem  string `koanf:"sourcesystem"`
 	// NotifyEndpoint is the URL for subscription notifications
 	NotifyEndpoint string `koanf:"notifyendpoint"`
-	// TLSCertFile is the PEM certificate file OR .p12/.pfx file
-	TLSCertFile string `koanf:"tlscertfile"`
-	// TLSKeyFile is the PEM key file (not used if TLSCertFile is .p12/.pfx)
-	TLSKeyFile string `koanf:"tlskeyfile"`
-	// TLSKeyPassword is the password for encrypted key or .p12/.pfx file
-	TLSKeyPassword string `koanf:"tlskeypassword"`
-	// TLSCAFile is the CA certificate file to verify MITZ server
-	TLSCAFile string `koanf:"tlscafile"`
 }
 
 func (c Config) Enabled() bool {
@@ -98,12 +91,7 @@ func createHTTPClient(config Config) (*http.Client, error) {
 
 	// If TLS certificate is configured, set up mTLS
 	if config.TLSCertFile != "" {
-		tlsConfig, err := tlsutil.CreateTLSConfig(
-			config.TLSCertFile,
-			config.TLSKeyFile,
-			config.TLSKeyPassword,
-			config.TLSCAFile,
-		)
+		tlsConfig, err := tlsutil.CreateTLSConfig(config.Config)
 		if err != nil {
 			// Fail early when TLS is explicitly configured but setup fails
 			return nil, fmt.Errorf("TLS is configured but failed to load: %w", err)

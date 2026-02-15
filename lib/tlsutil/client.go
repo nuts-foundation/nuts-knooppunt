@@ -13,18 +13,6 @@ import (
 	"software.sslmate.com/src/go-pkcs12"
 )
 
-// Config holds TLS configuration options
-type Config struct {
-	// CertFile is the path to a PEM certificate file OR .p12/.pfx file
-	CertFile string
-	// KeyFile is the path to a PEM key file (not used if CertFile is .p12/.pfx)
-	KeyFile string
-	// Password is the password for encrypted key or .p12/.pfx file
-	Password string
-	// CAFile is the path to a CA certificate file to verify server
-	CAFile string
-}
-
 // LoadClientCertificate loads a client certificate from PEM or PKCS#12 file
 func LoadClientCertificate(certFile, keyFile, password string) (tls.Certificate, error) {
 	if certFile == "" {
@@ -76,9 +64,20 @@ func LoadCACertPool(caFile string) (*x509.CertPool, error) {
 	return caCertPool, nil
 }
 
+type Config struct {
+	// TLSCertFile is the PEM certificate file OR .p12/.pfx file
+	TLSCertFile string `koanf:"tlscertfile"`
+	// TLSKeyFile is the PEM key file (not used if TLSCertFile is .p12/.pfx)
+	TLSKeyFile string `koanf:"tlskeyfile"`
+	// TLSKeyPassword is the password for encrypted key or .p12/.pfx file
+	TLSKeyPassword string `koanf:"tlskeypassword"`
+	// TLSCAFile is the CA certificate file to verify MITZ server
+	TLSCAFile string `koanf:"tlscafile"`
+}
+
 // CreateTLSConfig creates a TLS configuration with client certificate and optional CA
-func CreateTLSConfig(certFile, keyFile, password, caFile string) (*tls.Config, error) {
-	cert, err := LoadClientCertificate(certFile, keyFile, password)
+func CreateTLSConfig(cfg Config) (*tls.Config, error) {
+	cert, err := LoadClientCertificate(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSKeyPassword)
 	if err != nil {
 		return nil, err
 	}
@@ -88,8 +87,8 @@ func CreateTLSConfig(certFile, keyFile, password, caFile string) (*tls.Config, e
 	}
 
 	// Load CA certificate if specified
-	if caFile != "" {
-		caCertPool, err := LoadCACertPool(caFile)
+	if cfg.TLSCAFile != "" {
+		caCertPool, err := LoadCACertPool(cfg.TLSCAFile)
 		if err != nil {
 			return nil, err
 		}
