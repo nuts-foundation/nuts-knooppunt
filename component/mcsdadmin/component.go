@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -105,9 +106,9 @@ func (c Component) RegisterHttpHandlers(mux *http.ServeMux, _ *http.ServeMux) {
 	mux.HandleFunc("GET /mcsdadmin/", notFound)
 }
 
-func listServices(w http.ResponseWriter, _ *http.Request) {
+func listServices(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	renderList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, tmpls.MakeServiceListXsProps)
+	renderPaginatedList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, r, tmpls.MakeServiceListXsProps)
 }
 
 func newService(w http.ResponseWriter, r *http.Request) {
@@ -179,9 +180,9 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 	renderList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, tmpls.MakeServiceListXsProps)
 }
 
-func listOrganizations(w http.ResponseWriter, _ *http.Request) {
+func listOrganizations(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
+	renderPaginatedList[fhir.Organization, tmpls.OrgListProps](client, w, r, tmpls.MakeOrgListXsProps)
 }
 
 func newOrganization(w http.ResponseWriter, r *http.Request) {
@@ -543,9 +544,9 @@ func associateHealthcareServiceEndpointsDelete(w http.ResponseWriter, req *http.
 	w.WriteHeader(http.StatusOK)
 }
 
-func listEndpoints(w http.ResponseWriter, _ *http.Request) {
+func listEndpoints(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
+	renderPaginatedList[fhir.Endpoint, tmpls.EpListProps](client, w, r, tmpls.MakeEpListXsProps)
 }
 
 func newEndpoint(w http.ResponseWriter, _ *http.Request) {
@@ -844,9 +845,9 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	renderList[fhir.Location, tmpls.LocationListProps](client, w, tmpls.MakeLocationListXsProps)
 }
 
-func listLocations(w http.ResponseWriter, _ *http.Request) {
+func listLocations(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	renderList[fhir.Location, tmpls.LocationListProps](client, w, tmpls.MakeLocationListXsProps)
+	renderPaginatedList[fhir.Location, tmpls.LocationListProps](client, w, r, tmpls.MakeLocationListXsProps)
 }
 
 func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
@@ -954,7 +955,7 @@ func newPractitionerRole(w http.ResponseWriter, r *http.Request) {
 
 func listPractitionerRole(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	renderList[fhir.PractitionerRole, tmpls.PractitionerRoleProps](client, w, tmpls.MakePractitionerRoleXsProps)
+	renderPaginatedList[fhir.PractitionerRole, tmpls.PractitionerRoleProps](client, w, r, tmpls.MakePractitionerRoleXsProps)
 }
 
 func homePage(w http.ResponseWriter, _ *http.Request) {
@@ -996,6 +997,24 @@ func findById[T any](id string) (T, error) {
 	return prototype, err
 }
 
+// PaginationInfo holds metadata about pagination state
+type PaginationInfo struct {
+	CurrentPage int
+	PageSize    int
+	TotalItems  int
+	TotalPages  int
+	HasPrev     bool
+	HasNext     bool
+}
+
+// PaginatedResult contains paginated data and pagination metadata
+type PaginatedResult[T any] struct {
+	Items      []T
+	Pagination PaginationInfo
+}
+
+const defaultPageSize = 20
+
 func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {
 	var prototype T
 	resourceType := caramel.ResourceType(prototype)
@@ -1019,6 +1038,76 @@ func findAll[T any](fhirClient fhirclient.Client) ([]T, error) {
 	return result, nil
 }
 
+// findPaginated retrieves paginated resources from FHIR server
+// It uses _count, _total=accurate, and _getpagesoffset parameters for direct page access.
+func findPaginated[T any](fhirClient fhirclient.Client, page, pageSize int) (PaginatedResult[T], error) {
+	var prototype T
+	resourceType := caramel.ResourceType(prototype)
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = defaultPageSize
+	}
+
+	// Calculate offset: (page - 1) * pageSize
+	// Page 1: offset = 0
+	// Page 2: offset = pageSize
+	// Page 3: offset = pageSize * 2, etc.
+	offset := (page - 1) * pageSize
+
+	searchParams := url.Values{}
+	searchParams.Set("_count", strconv.Itoa(pageSize))
+	searchParams.Set("_total", "accurate")
+	if offset > 0 {
+		searchParams.Set("_getpagesoffset", strconv.Itoa(offset))
+	}
+
+	var searchResponse fhir.Bundle
+	err := fhirClient.Search(resourceType, searchParams, &searchResponse, nil)
+	if err != nil {
+		return PaginatedResult[T]{}, fmt.Errorf("search for resource type %s failed: %w", resourceType, err)
+	}
+
+	// Extract total count from the Bundle
+	totalItems := 0
+	if searchResponse.Total != nil {
+		totalItems = *searchResponse.Total
+	}
+
+	// Unmarshal the entries for the current page
+	pageItems := make([]T, 0, len(searchResponse.Entry))
+	for i, entry := range searchResponse.Entry {
+		var item T
+		if err := json.Unmarshal(entry.Resource, &item); err != nil {
+			return PaginatedResult[T]{}, fmt.Errorf("unmarshal of entry %d for resource type %s failed: %w", i, resourceType, err)
+		}
+		pageItems = append(pageItems, item)
+	}
+
+	// Calculate pagination metadata
+	totalPages := totalItems / pageSize
+	if totalItems%pageSize > 0 {
+		totalPages++
+	}
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	return PaginatedResult[T]{
+		Items: pageItems,
+		Pagination: PaginationInfo{
+			CurrentPage: page,
+			PageSize:    pageSize,
+			TotalItems:  totalItems,
+			TotalPages:  totalPages,
+			HasPrev:     page > 1,
+			HasNext:     page < totalPages,
+		},
+	}, nil
+}
+
 func uraIdentifier(uraString string) fhir.Identifier {
 	var identifier fhir.Identifier
 	identifier.Value = to.Ptr(uraString)
@@ -1037,6 +1126,41 @@ func renderList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.
 		Items []DTO
 	}{
 		Items: dtoFunc(items),
+	})
+}
+
+// renderPaginatedList renders a paginated list of resources
+func renderPaginatedList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.ResponseWriter, httpRequest *http.Request, dtoFunc func([]R) []DTO) {
+	resourceType := caramel.ResourceType(new(R))
+
+	// Parse pagination parameters from query string
+	page := 1
+	pageSize := defaultPageSize
+
+	if pageStr := httpRequest.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	if pageSizeStr := httpRequest.URL.Query().Get("pageSize"); pageSizeStr != "" {
+		if ps, err := strconv.Atoi(pageSizeStr); err == nil && ps > 0 && ps <= 100 {
+			pageSize = ps
+		}
+	}
+
+	result, err := findPaginated[R](fhirClient, page, pageSize)
+	if err != nil {
+		http.Error(httpResponse, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	tmpls.RenderWithBase(httpResponse, strings.ToLower(resourceType)+"_list.html", struct {
+		Items      []DTO
+		Pagination PaginationInfo
+	}{
+		Items:      dtoFunc(result.Items),
+		Pagination: result.Pagination,
 	})
 }
 
