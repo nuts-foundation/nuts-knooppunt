@@ -26,9 +26,9 @@ type HTTPClientProvider func(ctx context.Context, scope []string, uraNumber stri
 
 // MinistryAuthConfig holds the configuration for authenticating with the Ministry of Health's (MinVWS) OAuth2 Authorization Server using the client credentials flow with JWT assertion.
 type MinistryAuthConfig struct {
-	tlsutil.Config
+	tlsutil.Config `koanf:",squash"`
 	// TokenEndpoint is the URL of the Ministry's token endpoint, e.g. "https://oauth.proeftuin.gf.irealisatie.nl/oauth/token"
-	TokenEndpoint string `json:"tokenendpoint"`
+	TokenEndpoint string `koanf:"tokenendpoint"`
 }
 
 // MinVWSHTTPClient creates an HTTP client suitable for making authenticated requests to the Ministry of Health's APIs.
