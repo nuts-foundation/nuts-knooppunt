@@ -8,13 +8,18 @@ import rego.v1
 #
 
 default allow := false
-
 allow if {
-    input.context.mitz_consent == true
+    patient_gave_mitz_consent
     is_allowed_query
 }
 
+default patient_gave_mitz_consent := false
+patient_gave_mitz_consent if {
+    input.context.mitz_consent == true
+}
+
 # GET [base]/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|{value}
+default is_allowed_query := false
 is_allowed_query if {
     input.resource.type == "Patient"
     input.action.fhir_rest.interaction_type == "search-type"

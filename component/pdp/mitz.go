@@ -8,9 +8,9 @@ import (
 )
 
 func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input PolicyInput) (PolicyInput, []ResultReason) {
+	input.Context.MitzConsent = false
 	// If this call doesn't relate to a BSN don't attempt Mitz
 	if input.Context.PatientBSN == "" {
-		input.Context.MitzConsent = false
 		return input, []ResultReason{}
 	}
 
@@ -26,26 +26,11 @@ func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input PolicyI
 		return input, []ResultReason{
 			{
 				Code:        TypeResultCodeInternalError,
-				Description: "internal error, could not complete consent check with Mitz: " + err.Error(),
+				Description: "could not complete consent check with Mitz: " + err.Error(),
 			},
 		}
 	}
-
-	allow := false
-	if consentResp.Decision == xacml.DecisionPermit {
-		allow = true
-	}
-
-	if !allow {
-		return input, []ResultReason{
-			{
-				Code:        TypeResultCodeNotAllowed,
-				Description: "not allowed, denied by Mitz",
-			},
-		}
-	}
-
-	input.Context.MitzConsent = true
+	input.Context.MitzConsent = consentResp.Decision == xacml.DecisionPermit
 	return input, nil
 }
 
