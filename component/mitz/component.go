@@ -24,10 +24,10 @@ import (
 
 // Config holds the configuration for the MITZ component
 type Config struct {
-	tlsutil.Config
-	MitzBase      string `koanf:"mitzbase"`
-	GatewaySystem string `koanf:"gatewaysystem"`
-	SourceSystem  string `koanf:"sourcesystem"`
+	tlsutil.Config `koanf:",squash"`
+	MitzBase       string `koanf:"mitzbase"`
+	GatewaySystem  string `koanf:"gatewaysystem"`
+	SourceSystem   string `koanf:"sourcesystem"`
 	// NotifyEndpoint is the URL for subscription notifications
 	NotifyEndpoint string `koanf:"notifyendpoint"`
 }

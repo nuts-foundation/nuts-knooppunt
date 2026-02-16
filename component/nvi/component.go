@@ -56,6 +56,8 @@ func New(config Config, httpClientFn authn.HTTPClientProvider) (*Component, erro
 	return &Component{
 		fhirBaseURL: baseURL,
 		fhirClientFn: func(ctx context.Context, uraNumber string) (fhirclient.Client, error) {
+			// TODO: Cache the HTTP client per URA number, instead of creating a new one for each request.
+			//       That would also allow caching the access tokens obtained from the OAuth2 server.
 			httpClient, err := httpClientFn(ctx, []string{"epd:read", "epd:write"}, uraNumber, baseURL.String())
 			if err != nil {
 				return nil, err

@@ -23,24 +23,37 @@ func LoadClientCertificate(certFile, keyFile, password string) (tls.Certificate,
 	ext := strings.ToLower(filepath.Ext(certFile))
 	isPKCS12 := ext == ".p12" || ext == ".pfx"
 
+	var cert tls.Certificate
+	var err error
 	if isPKCS12 {
-		cert, err := loadPKCS12(certFile, password)
+		cert, err = loadPKCS12(certFile, password)
 		if err != nil {
 			return tls.Certificate{}, fmt.Errorf("failed to load PKCS#12: %w", err)
 		}
 		slog.Info("Loaded client certificate from PKCS#12", slog.String("p12File", certFile))
-		return cert, nil
+	} else {
+		// Load PEM
+		if keyFile == "" {
+			return tls.Certificate{}, fmt.Errorf("key file required when using PEM certificate")
+		}
+		cert, err = tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return tls.Certificate{}, fmt.Errorf("failed to load certificate: %w", err)
+		}
+		slog.Info("Loaded client certificate from PEM", slog.String("certFile", certFile), slog.String("keyFile", keyFile))
 	}
 
-	// Load PEM
-	if keyFile == "" {
-		return tls.Certificate{}, fmt.Errorf("key file required when using PEM certificate")
+	// Make sure leaf is populated
+	if len(cert.Certificate) == 0 {
+		return tls.Certificate{}, fmt.Errorf("no certificates found in file")
 	}
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("failed to load certificate: %w", err)
+	if cert.Leaf == nil {
+		cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
+		if err != nil {
+			return tls.Certificate{}, fmt.Errorf("failed to parse leaf certificate: %w", err)
+		}
 	}
-	slog.Info("Loaded client certificate from PEM", slog.String("certFile", certFile), slog.String("keyFile", keyFile))
+
 	return cert, nil
 }
 
