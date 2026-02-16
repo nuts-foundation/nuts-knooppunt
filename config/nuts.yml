@@ -1,7 +1,10 @@
-url: http://localhost:8080
+url: http://localhost:8080/nuts
 
 didmethods:
   - web
 auth:
   contractvalidators:
     - dummy
+
+policy:
+  directory: "/app/config/policy"
