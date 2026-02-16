@@ -46,12 +46,12 @@ func TestHTTPClient(t *testing.T) {
 	t.Run("successful token retrieval", func(t *testing.T) {
 		// Generate test certificate
 		//cert := generateTestCertificate(t)
-		var receivedFormData url.Values
+		var receivedFormDataChan = make(chan url.Values, 1)
 
 		tokenServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			err := r.ParseForm()
 			require.NoError(t, err)
-			receivedFormData = r.Form
+			receivedFormDataChan <- r.Form
 			assert.Equal(t, "POST", r.Method)
 
 			// Validate form parameters
@@ -92,6 +92,7 @@ func TestHTTPClient(t *testing.T) {
 		assert.Equal(t, "Bearer", token.TokenType)
 
 		// Verify JWT grant token
+		receivedFormData := <-receivedFormDataChan
 		clientCredentials := receivedFormData.Get("client_credentials")
 		require.NotEmpty(t, clientCredentials)
 

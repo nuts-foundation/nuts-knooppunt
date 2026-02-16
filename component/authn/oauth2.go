@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -48,6 +49,7 @@ func HTTPClient(ctx context.Context, scope []string, uraNumber string, targetAud
 	}
 
 	if cfg.TokenEndpoint == "" {
+		slog.WarnContext(ctx, "MinVWS OAuth2 token endpoint is not configured, not using authentication for MinVWS API calls")
 		// Fallback: if no token endpoint is configured, return a default HTTP client without authentication.
 		return &http.Client{
 			Transport: &http.Transport{
