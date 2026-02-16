@@ -120,176 +120,137 @@ func TestDerivePatientID(t *testing.T) {
 	}
 }
 
-func TestComponent_parse_tokens(t *testing.T) {
-	var def = PathDef{
-		Interaction: fhir.TypeRestfulInteractionRead,
-		PathDef:     []string{"[type]", "[id]"},
-		Verb:        "GET",
-	}
+func TestComponent_parsePath(t *testing.T) {
+	t.Run("tokens", func(t *testing.T) {
+		var def = PathDef{
+			Interaction: fhir.TypeRestfulInteractionRead,
+			PathDef:     []string{"[type]", "[id]"},
+			Verb:        "GET",
+		}
 
-	var req = HTTPRequest{
-		Method: "GET",
-		Path:   "/Observation/12775",
-	}
-	tokens, ok := parsePath(def, req)
+		var req = HTTPRequest{
+			Method: "GET",
+			Path:   "/Observation/12775",
+		}
+		tokens, ok := parsePath(def, req)
 
-	assert.True(t, ok)
-	assert.Equal(t, "12775", tokens.ResourceId)
-	assert.Equal(t, fhir.ResourceTypeObservation, *tokens.ResourceType)
+		assert.True(t, ok)
+		assert.Equal(t, "12775", tokens.ResourceId)
+		assert.Equal(t, fhir.ResourceTypeObservation, *tokens.ResourceType)
+	})
+
+	t.Run("literals", func(t *testing.T) {
+		var def = PathDef{
+			Interaction: fhir.TypeRestfulInteractionHistorySystem,
+			PathDef:     []string{"_history"},
+			Verb:        "GET",
+		}
+
+		var req = HTTPRequest{
+			Method: "GET",
+			Path:   "/_history",
+		}
+		_, ok := parsePath(def, req)
+
+		assert.True(t, ok)
+	})
+
+	t.Run("leading dollar", func(t *testing.T) {
+		var def = PathDef{
+			Interaction: fhir.TypeRestfulInteractionOperation,
+			PathDef:     []string{"[type]", "[id]", "$[name]"},
+			Verb:        "GET",
+		}
+
+		var req = HTTPRequest{
+			Method: "GET",
+			Path:   "/Observation/123123/$validate",
+		}
+		tokens, ok := parsePath(def, req)
+
+		assert.True(t, ok)
+		assert.Equal(t, "validate", tokens.OperationName)
+	})
 }
 
-func TestComponent_parse_literals(t *testing.T) {
-	var def = PathDef{
-		Interaction: fhir.TypeRestfulInteractionHistorySystem,
-		PathDef:     []string{"_history"},
-		Verb:        "GET",
-	}
+func TestComponent_parseRequestPath(t *testing.T) {
+	t.Run("specific interactions has precedence over read/write/update-by-id", func(t *testing.T) {
+		t.Run("patient history", func(t *testing.T) {
+			// Test that Patient/_history is correctly parsed as HistoryType
+			// and not incorrectly matched as Read with id="_history"
+			var req = HTTPRequest{
+				Method: "GET",
+				Path:   "/Patient/_history",
+			}
+			tokens, ok := parseRequestPath(req)
 
-	var req = HTTPRequest{
-		Method: "GET",
-		Path:   "/_history",
-	}
-	_, ok := parsePath(def, req)
+			assert.True(t, ok)
+			assert.Equal(t, fhir.TypeRestfulInteractionHistoryType, tokens.Interaction)
+			assert.Equal(t, fhir.ResourceTypePatient, *tokens.ResourceType)
+			assert.Empty(t, tokens.ResourceId, "ResourceId should be empty for HistoryType interaction")
+		})
 
-	assert.True(t, ok)
+		t.Run("$export operation", func(t *testing.T) {
+			// Test that Patient/$export is correctly parsed as Operation
+			// and not incorrectly matched as Read with id="$export"
+			var req = HTTPRequest{
+				Method: "GET",
+				Path:   "/Patient/$export",
+			}
+			tokens, ok := parseRequestPath(req)
+
+			assert.True(t, ok)
+			assert.Equal(t, fhir.TypeRestfulInteractionOperation, tokens.Interaction)
+			assert.Equal(t, fhir.ResourceTypePatient, *tokens.ResourceType)
+			assert.Equal(t, "export", tokens.OperationName)
+			assert.Empty(t, tokens.ResourceId, "ResourceId should be empty for Operation interaction")
+		})
+
+		t.Run("_search endpoint", func(t *testing.T) {
+			// Test that Patient/_search is correctly parsed as SearchType
+			// and not incorrectly matched as update with id="_search"
+			var req = HTTPRequest{
+				Method: "POST",
+				Path:   "/Patient/_search",
+			}
+			tokens, ok := parseRequestPath(req)
+
+			assert.True(t, ok)
+			assert.Equal(t, fhir.TypeRestfulInteractionSearchType, tokens.Interaction)
+			assert.Equal(t, fhir.ResourceTypePatient, *tokens.ResourceType)
+			assert.Empty(t, tokens.ResourceId, "ResourceId should be empty for SearchType interaction")
+		})
+	})
+
 }
 
-func TestComponent_parse_trailing_question_mark(t *testing.T) {
-	var def = PathDef{
-		Interaction: fhir.TypeRestfulInteractionSearchType,
-		PathDef:     []string{"[type]?"},
-		Verb:        "GET",
-	}
-
-	var req = HTTPRequest{
-		Method: "GET",
-		Path:   "/Observation?",
-	}
-	tokens, ok := parsePath(def, req)
-
-	assert.True(t, ok)
-	assert.Equal(t, fhir.ResourceTypeObservation, *tokens.ResourceType)
-}
-
-func TestComponent_parse_leading_dollar(t *testing.T) {
-	var def = PathDef{
-		Interaction: fhir.TypeRestfulInteractionOperation,
-		PathDef:     []string{"[type]", "[id]", "$[name]"},
-		Verb:        "GET",
-	}
-
-	var req = HTTPRequest{
-		Method: "GET",
-		Path:   "/Observation/123123/$validate",
-	}
-	tokens, ok := parsePath(def, req)
-
-	assert.True(t, ok)
-	assert.Equal(t, "validate", tokens.OperationName)
-}
-
-func TestComponent_group_params(t *testing.T) {
-	queryParams := map[string][]string{
-		"_since": {
-			"1985-04-01",
-		},
-		"_revinclude": {
-			"PractitionerRole:Location",
-		},
-		"_include": {
-			"Location:managingOrganization",
-		},
-	}
-
-	groupedParam := groupParams(queryParams)
-	assert.Equal(t, []string{"1985-04-01"}, groupedParam.SearchParams["_since"])
-	assert.Contains(t, groupedParam.Include, "Location:managingOrganization")
-	assert.Contains(t, groupedParam.Revinclude, "PractitionerRole:Location")
-}
-
-func TestComponent_params_in_body(t *testing.T) {
-	pdpRequest := PDPRequest{
-		Input: PDPInput{
-			Request: HTTPRequest{
-				Method:   "POST",
-				Protocol: "HTTP/1.1",
-				Path:     "/Patient/_search?",
-				Header: http.Header{
-					"Content-Type": []string{"application/x-www-form-urlencoded"},
-				},
-				Body: "identifier=http://fhir.nl/fhir/NamingSystem/bsn|775645332",
+func TestComponent_groupParams(t *testing.T) {
+	t.Run("group parameters correctly", func(t *testing.T) {
+		queryParams := map[string][]string{
+			"_since": {
+				"1985-04-01",
 			},
-			Context: PDPContext{
-				ConnectionTypeCode: "hl7-fhir-rest",
+			"_revinclude": {
+				"PractitionerRole:Location",
 			},
-		},
-	}
+			"_include": {
+				"Location:managingOrganization",
+			},
+		}
 
-	policyInput, policyResult := NewPolicyInput(pdpRequest)
-	assert.True(t, policyResult.Allow)
-	assert.Equal(t, []string{"http://fhir.nl/fhir/NamingSystem/bsn|775645332"}, policyInput.Action.FHIRRest.SearchParams["identifier"])
-	assert.Equal(t, "775645332", policyInput.Context.PatientBSN)
-}
+		groupedParam := groupParams(queryParams)
+		assert.Equal(t, []string{"1985-04-01"}, groupedParam.SearchParams["_since"])
+		assert.Contains(t, groupedParam.Include, "Location:managingOrganization")
+		assert.Contains(t, groupedParam.Revinclude, "PractitionerRole:Location")
+	})
 
-func TestComponent_filter_result_param(t *testing.T) {
-	queryParams := map[string][]string{
-		"_total": {"10"},
-	}
-	params := groupParams(queryParams)
-	assert.Empty(t, params.SearchParams)
-}
-
-func TestComponent_parse_patient_id(t *testing.T) {
-	pdpRequest := PDPRequest{
-		Input: PDPInput{
-			Request: HTTPRequest{
-				Method:   "GET",
-				Protocol: "HTTP/1.1",
-				Path:     "/Patient/12345",
-			},
-			Context: PDPContext{
-				ConnectionTypeCode: "hl7-fhir-rest",
-			},
-		},
-	}
-	policyInput, _ := NewPolicyInput(pdpRequest)
-	assert.Equal(t, "12345", policyInput.Context.PatientID)
-
-	pdpRequest = PDPRequest{
-		Input: PDPInput{
-			Request: HTTPRequest{
-				Method:   "GET",
-				Protocol: "HTTP/1.1",
-				Path:     "/Patient?",
-				QueryParams: url.Values{
-					"_id": []string{"56789"},
-				},
-			},
-			Context: PDPContext{
-				ConnectionTypeCode: "hl7-fhir-rest",
-			},
-		},
-	}
-	policyInput, _ = NewPolicyInput(pdpRequest)
-	assert.Equal(t, "56789", policyInput.Context.PatientID)
-
-	pdpRequest = PDPRequest{
-		Input: PDPInput{
-			Request: HTTPRequest{
-				Method:   "GET",
-				Protocol: "HTTP/1.1",
-				Path:     "/Encounter?",
-				QueryParams: url.Values{
-					"patient": []string{"Patient/98765"},
-				},
-			},
-			Context: PDPContext{
-				ConnectionTypeCode: "hl7-fhir-rest",
-			},
-		},
-	}
-	policyInput, _ = NewPolicyInput(pdpRequest)
-	assert.Equal(t, "98765", policyInput.Context.PatientID)
+	t.Run("filter result parameters", func(t *testing.T) {
+		queryParams := map[string][]string{
+			"_total": {"10"},
+		}
+		params := groupParams(queryParams)
+		assert.Empty(t, params.SearchParams)
+	})
 }
 
 func TestNewPolicyInput(t *testing.T) {
@@ -316,7 +277,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient?",
+						Path:     "/Patient",
 						QueryParams: url.Values{
 							"_id": []string{"56789"},
 						},
@@ -335,7 +296,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Encounter?",
+						Path:     "/Encounter",
 						QueryParams: url.Values{
 							"patient": []string{"Patient/98765"},
 						},
@@ -354,7 +315,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Encounter?",
+						Path:     "/Encounter",
 						QueryParams: url.Values{
 							"patient": []string{"Patient/123", "Patient/456"},
 						},
@@ -376,7 +337,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient?",
+						Path:     "/Patient",
 						QueryParams: url.Values{
 							"_id": []string{"123", "456"},
 						},
@@ -398,7 +359,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Observation?",
+						Path:     "/Observation",
 					},
 				},
 			}
@@ -415,7 +376,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient?",
+						Path:     "/Patient",
 						QueryParams: url.Values{
 							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn|900186021"},
 						},
@@ -434,7 +395,7 @@ func TestNewPolicyInput(t *testing.T) {
 					Request: HTTPRequest{
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
-						Path:     "/Patient?",
+						Path:     "/Patient",
 						QueryParams: url.Values{
 							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn%7C900186021"},
 						},
@@ -467,6 +428,29 @@ func TestNewPolicyInput(t *testing.T) {
 			policyInput, policyResult := NewPolicyInput(pdpRequest)
 			assert.Equal(t, "900186021", policyInput.Context.PatientBSN)
 			assert.Empty(t, policyResult.Reasons)
+		})
+		t.Run("in POST body, unencoded (pipe character)", func(t *testing.T) {
+			pdpRequest := PDPRequest{
+				Input: PDPInput{
+					Request: HTTPRequest{
+						Method:   "POST",
+						Protocol: "HTTP/1.1",
+						Path:     "/Patient/_search",
+						Header: http.Header{
+							"Content-Type": []string{"application/x-www-form-urlencoded"},
+						},
+						Body: "identifier=http://fhir.nl/fhir/NamingSystem/bsn|775645332",
+					},
+					Context: PDPContext{
+						ConnectionTypeCode: "hl7-fhir-rest",
+					},
+				},
+			}
+
+			policyInput, policyResult := NewPolicyInput(pdpRequest)
+			assert.True(t, policyResult.Allow)
+			assert.Equal(t, []string{"http://fhir.nl/fhir/NamingSystem/bsn|775645332"}, policyInput.Action.FHIRRest.SearchParams["identifier"])
+			assert.Equal(t, "775645332", policyInput.Context.PatientBSN)
 		})
 		t.Run("incorrect system", func(t *testing.T) {
 			pdpRequest := PDPRequest{
