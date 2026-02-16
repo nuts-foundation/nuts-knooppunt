@@ -72,7 +72,7 @@ var definitions = []PathDef{
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionSearchSystem,
-		PathDef:     []string{""},
+		PathDef:     []string{},
 		Verb:        "GET",
 	},
 	{
@@ -130,6 +130,19 @@ var definitions = []PathDef{
 		PathDef:     []string{"[type]", "[id]", "$[name]"},
 		Verb:        "POST",
 	},
+}
+
+func init() {
+	// Sanity check: verify that all path definitions are valid
+	for _, def := range definitions {
+		for _, pathPart := range def.PathDef {
+			if pathPart == "" {
+				// Fine to panic here, since it's an unrecoverable error.
+				// It will be checked on startup (due to the init function).
+				panic(fmt.Sprintf("invalid path definition: empty path part in interaction %s", def.Interaction))
+			}
+		}
+	}
 }
 
 var regexId = regexp.MustCompile(`^[A-Za-z0-9\-\.]{1,64}$`)
