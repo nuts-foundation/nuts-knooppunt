@@ -108,7 +108,7 @@ func (t tokenSource) Token() (*oauth2.Token, error) {
 	if err := headers.Set(jws.KeyIDKey, certThumbprint); err != nil {
 		return nil, fmt.Errorf("set kid header: %w", err)
 	}
-	// TOOD: Might have to support multiple key/alg types in the future
+	// TODO: Might have to support multiple key/alg types in the future
 	jwtGrantTokenSigned, err := jwt.Sign(jwtGrantToken, jwt.WithKey(jwa.RS256, clientCert.PrivateKey, jws.WithProtectedHeaders(headers)))
 	if err != nil {
 		return nil, fmt.Errorf("sign JWT: %w", err)
