@@ -122,10 +122,6 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		httpReqParts := strings.Split(tc.httpRequest, " ")
 		httpReqURL, err := url.Parse("http://localhost" + httpReqParts[1])
 		require.NoError(t, err)
-		path := httpReqURL.Path
-		if httpReqURL.RawQuery != "" {
-			path += "?"
-		}
 
 		pdpRequest := PDPRequest{
 			Input: PDPInput{
@@ -142,7 +138,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				Request: HTTPRequest{
 					Method:      httpReqParts[0],
 					Protocol:    "HTTP/1.1",
-					Path:        path,
+					Path:        httpReqURL.Path,
 					QueryParams: httpReqURL.Query(),
 					Header: http.Header{
 						"Content-Type": {"application/fhir+json"},
