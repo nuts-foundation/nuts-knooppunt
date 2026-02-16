@@ -84,7 +84,7 @@ type Config struct {
 	TLSKeyFile string `koanf:"tlskeyfile"`
 	// TLSKeyPassword is the password for encrypted key or .p12/.pfx file
 	TLSKeyPassword string `koanf:"tlskeypassword"`
-	// TLSCAFile is the CA certificate file to verify MITZ server
+	// TLSCAFile is the CA certificate file (or bundle) used to verify server/peer certificates
 	TLSCAFile string `koanf:"tlscafile"`
 }
 
