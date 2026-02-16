@@ -30,22 +30,7 @@ func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input PolicyI
 			},
 		}
 	}
-
-	allow := false
-	if consentResp.Decision == xacml.DecisionPermit {
-		allow = true
-	}
-
-	if !allow {
-		return input, []ResultReason{
-			{
-				Code:        TypeResultCodeNoConsent,
-				Description: "denied by Mitz",
-			},
-		}
-	}
-
-	input.Context.MitzConsent = true
+	input.Context.MitzConsent = consentResp.Decision == xacml.DecisionPermit
 	return input, nil
 }
 
