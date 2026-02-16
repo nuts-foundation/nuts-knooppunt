@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -53,6 +54,10 @@ func HTTPClient(ctx context.Context, scope []string, uraNumber string, targetAud
 				TLSClientConfig: tlsConfig,
 			},
 		}, nil
+	}
+
+	if tlsConfig == nil {
+		return nil, errors.New("token endpoint is configured but TLS client certificate is not configured")
 	}
 
 	return oauth2.NewClient(ctx, tokenSource{
