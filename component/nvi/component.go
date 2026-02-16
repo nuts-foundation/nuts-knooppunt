@@ -62,9 +62,8 @@ func New(config Config, httpClientFn authn.HTTPClientProvider) (*Component, erro
 			if err != nil {
 				return nil, err
 			}
-			return fhirclient.New(baseURL, &http.Client{
-				Transport: tracing.WrapTransport(httpClient.Transport),
-			}, fhirutil.ClientConfig()), nil
+			httpClient.Transport = tracing.WrapTransport(httpClient.Transport)
+			return fhirclient.New(baseURL, httpClient, fhirutil.ClientConfig()), nil
 		},
 		pseudonymizer: &pseudonimization.Component{},
 		audience:      config.Audience,
