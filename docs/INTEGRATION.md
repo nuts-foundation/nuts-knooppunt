@@ -217,74 +217,79 @@ When consent changes occur, MITZ sends notifications to the configured endpoint.
 
 ## Authentication
 
-This chapter describes how to use the Knooppunt to authenticate users through GF Authentication.
-The Knooppunt acts as OpenID Connect (OIDC) Provider, abstracting the complexity of Dezi integration:
+This chapter describes how to use the Knooppunt to perform data exchanges, leveraging GF Authentication.
 
-- Decrypting the envelope containing the Dezi token
-- Performing revocation checking
-- Validating the token according to the business rules of Dezi
-- Providing an OIDC `id_token` that follows standard OIDC claims
+The EHR will need to:
 
-This OIDC Provider supports the following OIDC features:
+- Integrate with Dezi to have its end-users log in
+- Store the decrypted ID token from Dezi for use in data exchanges
+- Use the Knooppunt to request access tokens for data exchanges
 
-- [Authorization Code Flow](https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth)
-- [Discovery using well-known metadata](https://openid.net/specs/openid-connect-discovery-1_0.html) (on internal API: `http://localhost:8081/.well-known/openid-configuration`)
-- [Client authentication using `client_secret`](https://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication)
-- [PKCE using S256](https://www.rfc-editor.org/rfc/rfc7636)
+The Knooppunt will:
 
-To use the Knooppunt as OIDC Provider:
+- Perform access token request at remote EHRs (Nuts node) for outbound data exchanges.
+  - If user is involved: take the decrypted ID token (Dezi) to include in the access token request
+- Validate the organization credentials and end-user credential (Dezi ID token) for inbound data exchanges.
 
-1. Register your client (e.g. EHR) in the Knooppunt configuration (see below).
-2. Configure your Dezi client in the Knooppunt (coming later).
+For more information on the Knooppunt's authentication endpoints, see the [Nuts node API reference](https://nuts-node.readthedocs.io/en/stable/pages/integrating/api.html).
 
-### Client Authentication
+### Getting an access token
 
-Clients to the Knooppunt OIDC Provider must:
+Use the Nuts node's "request service access token" endpoint to get an access token:
 
-- be authenticated using `client_secret`
-- have its redirect URLs registered for the authorization code flow.
+```http
+POST http://localhost:8081/nuts/auth/v2/{subjectID}/request-service-access-token
+Content-Type: application/json
 
-Configure clients and their redirect URLs in the Knooppunt configuration (`knooppunt.yml`).
+{
+  "authorization_server": "https://example.com/oauth2",
+  "scope": "some-scope",
+  "id_token": "eyJhbGci..."
+}
+```
 
-### ID Tokens
+To provide an end-user identity, include the `id_token` field with the decrypted ID token from Dezi.
+If no end-user identity is required, you may omit the `id_token` field.
 
-The `id_token` returned by the Knooppunt wraps the Dezi token, providing standard OIDC claims as well as Dezi-specific claims;
+Note that to successfully negotiate an access token, the local Nuts node must have been loaded with right credentials.
+Which credentials are required, depends on the use case.
 
-- The decoded Dezi token claims can be found in the `dezi_claims` field.
-- The original Dezi token is available in the `dezi_token` field.
 
-The `id_token` can later be used to acquire GF Authentication access tokens.
+### Verifying access tokens
+
+Use the token introspection endpoint to verify the access token:
+
+```http
+POST http://localhost:8081/nuts/auth/v2/accesstoken/introspect
+Content-Type: application/x-www-form-urlencoded
+
+token=eyJhbGciOi...
+```
+
+The response contains claims about the requesting party and if provided, claims about the end-user (Dezi).
+
+Example:
 
 ```json
 {
-  "at_hash": "aEW-FO1Kv6b--LGpu707uA",
-  "aud": [
-    "local"
-  ],
-  "auth_time": 1763560632,
-  "azp": "local",
-  "c_hash": "zUQ0iEUjJo_U7tVg2_gy6Q",
-  "client_id": "local",
-  "dezi_claims": {
-    "abonnee_naam": "Zorgaanbieder",
-    "abonnee_nummer": "123456789",
-    "achternaam": "Zorgmedewerker",
-    "dezi_nummer": "123456789",
-    "loa_dezi": "http://eidas.europe.eu/LoA/high",
-    "rol_code": "01.000",
-    "rol_code_bron": "https://auth.dezi.nl/revocatie/058d13ce-9b33-41b4-955f-f22a154b8a2d",
-    "rol_naam": "Arts",
-    "verklaring_id": "058d13ce-9b33-41b4-955f-f22a154b8a2d",
-    "voorletters": "A.B.",
-    "voorvoegsel": ""
+  "active": true,
+  "client_id": "https://nodeB/oauth2/vendorB",
+  "cnf": {
+    "jkt": "ESawEozHRACsFtrnGysiMwUu2vz9jpeWNToSBEBa9CQ"
   },
-  "dezi_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJhYm9ubmVlX25hYW0iOiJab3JnYWFuYmllZGVyIiwiYWJvbm5lZV9udW1tZXIiOiIxMjM0NTY3ODkiLCJhY2h0ZXJuYWFtIjoiWm9yZ21lZGV3ZXJrZXIiLCJkZXppX251bW1lciI6IjEyMzQ1Njc4OSIsImxvYV9kZXppIjoiaHR0cDovL2VpZGFzLmV1cm9wZS5ldS9Mb0EvaGlnaCIsInJvbF9jb2RlIjoiMDEuMDAwIiwicm9sX2NvZGVfYnJvbiI6Imh0dHBzOi8vYXV0aC5kZXppLm5sL3Jldm9jYXRpZS8wNThkMTNjZS05YjMzLTQxYjQtOTU1Zi1mMjJhMTU0YjhhMmQiLCJyb2xfbmFhbSI6IkFydHMiLCJ2ZXJrbGFyaW5nX2lkIjoiMDU4ZDEzY2UtOWIzMy00MWI0LTk1NWYtZjIyYTE1NGI4YTJkIiwidm9vcmxldHRlcnMiOiJBLkIuIiwidm9vcnZvZWdzZWwiOiIifQ.TyIT6yJ7lJK1LyDa_48XgAMC3-xD_QtFDs3Pf1B2hNTPJSVG232j18VS8QOVyqv7d1lcPj4A6tp_39mA5I2azc-U-kuRgVV1-fAKw9ARByO_WAiNR3SFKDqYtfBMSy-Ry4ge0ZOpCxZQ5md40OqiqdQ063We5qbuNKDWRMhlqldfkutCduLvAS7F2xwHg08IQGXty95o2S1jellwbXy-k6cR_0H0Zwo3XqaJpgaqeVacWKhIvlxDNtNvzFZSzI8ndUSpXe-kvELkneP3mer2-ITbR07xq0O7IPdStSDtCdAYX2DuHoRjxZloVZvdiMncKgj8MByuWIoEH9qWAhyu3A",
-  "exp": 1763564252,
-  "family_name": "Zorgmedewerker",
-  "given_name": "A.B.",
-  "iat": 1763560632,
-  "iss": "http://localhost:8080/auth",
-  "name": "A.B. Zorgmedewerker",
-  "sub": "123456789"
+  "exp": 1771330157,
+  "iat": 1771329257,
+  "iss": "https://nodeA/oauth2/vendorA",
+  "scope": "test",
+  "organization_ura": "12345678",
+  "organization_name": "Hospital East",
+  "organization_city": "Amsterdam",
+  "employee_identifier": "87654321",
+  "employee_initials": "J.",
+  "employee_surname_prefix": "van der",
+  "employee_surname": "Broek",
+  "employee_roles": ["01.041", "30.000", "01.010", "01.011"]
 }
 ```
+
+Note that the returned fields depend on the Nuts Access Policy that was loaded in the Knooppunt.
