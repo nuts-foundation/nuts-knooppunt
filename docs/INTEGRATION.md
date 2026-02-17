@@ -251,7 +251,7 @@ Content-Type: application/json
 To provide an end-user identity, include the `id_token` field with the decrypted ID token from Dezi.
 If no end-user identity is required, you may omit the `id_token` field.
 
-Note that to successfully negotiate an access token, the local Nuts node must have been loaded with right credentials.
+Note that to successfully negotiate an access token, the local Nuts node must have been loaded with the right credentials.
 Which credentials are required, depends on the use case.
 
 
