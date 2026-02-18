@@ -43,13 +43,12 @@ type PEPTestConfig struct {
 }
 
 type PEPDetails struct {
-	KnooppuntURL  *url.URL                          // Internal interface URL (for PDP, etc.)
-	NutsPublicURL *url.URL                          // Public interface URL for Nuts APIs (for OAuth authServer)
-	HAPIBaseURL   *url.URL                          // HAPI FHIR base URL
-	NutsAPI       func(path string) string          // Helper to build internal Nuts API URLs
+	KnooppuntURL  *url.URL                 // Internal interface URL (for PDP, etc.)
+	NutsPublicURL *url.URL                 // Public interface URL for Nuts APIs (for OAuth authServer)
+	HAPIBaseURL   *url.URL                 // HAPI FHIR base URL
+	NutsAPI       func(path string) string // Helper to build internal Nuts API URLs
 	MockMitz      *mitzmock.ClosedQuestionService
 }
-
 
 // Start starts the full test harness with all components (MCSD, NVI, MITZ).
 func Start(t *testing.T) Details {
@@ -78,7 +77,6 @@ func Start(t *testing.T) Details {
 	}
 	config.NVI = nvi.Config{
 		FHIRBaseURL: testData.NVI.FHIRBaseURL.String(),
-		Audience:    "nvi",
 	}
 	config.PDP = pdp.Config{
 		Enabled: true,
@@ -211,4 +209,3 @@ func setupNutsEnvironment(t *testing.T, testdataDir, caPath string) {
 	os.Setenv("NUTS_NETWORK_ENABLEDISCOVERY", "false")
 	os.Setenv("SSL_CERT_FILE", caPath)
 }
-

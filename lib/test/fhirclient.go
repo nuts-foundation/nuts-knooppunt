@@ -282,7 +282,7 @@ func (s *StubFHIRClient) SearchWithContext(ctx context.Context, resourceType str
 			filterCandidates(func(candidate BaseResource) bool {
 				return candidate.asMap()["status"] == value
 			})
-		case "patient:identifier":
+		case "patient:identifier", "patient.identifier":
 			filterCandidates(func(candidate BaseResource) bool {
 				subject, ok := candidate.asMap()["subject"].(map[string]any)
 				if !ok {
@@ -295,6 +295,27 @@ func (s *StubFHIRClient) SearchWithContext(ctx context.Context, resourceType str
 				token := strings.Split(value, "|")
 				return (token[0] == "" || identifier["system"].(string) == token[0]) &&
 					(token[1] == "" || identifier["value"].(string) == token[1])
+			})
+		case "code":
+			filterCandidates(func(candidate BaseResource) bool {
+				code, ok := candidate.asMap()["code"].(map[string]any)
+				if !ok {
+					return false
+				}
+				codings, ok := code["coding"].([]any)
+				if !ok {
+					return false
+				}
+				for _, c := range codings {
+					coding, ok := c.(map[string]any)
+					if !ok {
+						continue
+					}
+					if coding["code"] == value {
+						return true
+					}
+				}
+				return false
 			})
 		default:
 			return fmt.Errorf("unsupported query parameter: %s", name)
