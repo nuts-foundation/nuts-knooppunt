@@ -39,7 +39,7 @@ func RenderWithBase(w io.Writer, name string, data any) {
 	}
 	files = append(files, partialTemplates...)
 
-	ts, err := template.New("base").ParseFS(tmplFS, files...)
+	ts, err := template.ParseFS(tmplFS, files...)
 	if err != nil {
 		slog.Error("Failed to parse template", logging.Error(err))
 		return
