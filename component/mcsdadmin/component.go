@@ -999,12 +999,21 @@ func findById[T any](id string) (T, error) {
 
 // PaginationInfo holds metadata about pagination state
 type PaginationInfo struct {
-	CurrentPage int
-	PageSize    int
-	TotalItems  int
-	TotalPages  int
-	HasPrev     bool
-	HasNext     bool
+	CurrentPage       int
+	PageSize          int
+	TotalItems        int
+	TotalPages        int
+	HasPrev           bool
+	HasNext           bool
+	PrevPage          int
+	NextPage          int
+	ShowingFrom       int
+	ShowingTo         int
+	PageWindow        []int
+	ShowFirst         bool
+	ShowFirstEllipsis bool
+	ShowLast          bool
+	ShowLastEllipsis  bool
 }
 
 // PaginatedResult contains paginated data and pagination metadata
@@ -1095,15 +1104,40 @@ func findPaginated[T any](fhirClient fhirclient.Client, page, pageSize int) (Pag
 		totalPages = 1
 	}
 
+	showingFrom := 0
+	if totalItems > 0 {
+		showingFrom = (page-1)*pageSize + 1
+	}
+	showingTo := page * pageSize
+	if showingTo > totalItems {
+		showingTo = totalItems
+	}
+
+	pageWindow := make([]int, 0)
+	for i := 1; i <= totalPages; i++ {
+		if i >= page-2 && i <= page+2 {
+			pageWindow = append(pageWindow, i)
+		}
+	}
+
 	return PaginatedResult[T]{
 		Items: pageItems,
 		Pagination: PaginationInfo{
-			CurrentPage: page,
-			PageSize:    pageSize,
-			TotalItems:  totalItems,
-			TotalPages:  totalPages,
-			HasPrev:     page > 1,
-			HasNext:     page < totalPages,
+			CurrentPage:       page,
+			PageSize:          pageSize,
+			TotalItems:        totalItems,
+			TotalPages:        totalPages,
+			HasPrev:           page > 1,
+			HasNext:           page < totalPages,
+			PrevPage:          page - 1,
+			NextPage:          page + 1,
+			ShowingFrom:       showingFrom,
+			ShowingTo:         showingTo,
+			PageWindow:        pageWindow,
+			ShowFirst:         page > 3,
+			ShowFirstEllipsis: page > 4,
+			ShowLast:          page < totalPages-2,
+			ShowLastEllipsis:  page < totalPages-3,
 		},
 	}, nil
 }

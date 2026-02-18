@@ -3,14 +3,14 @@
 <nav aria-label="Page navigation">
     <div class="d-flex justify-content-between align-items-center mt-3">
         <div class="text-muted">
-            Showing {{if eq .Pagination.TotalItems 0}}0{{else}}{{add (mul (sub .Pagination.CurrentPage 1) .Pagination.PageSize) 1}}{{end}}
-            to {{min (mul .Pagination.CurrentPage .Pagination.PageSize) .Pagination.TotalItems}}
+            Showing {{.Pagination.ShowingFrom}}
+            to {{.Pagination.ShowingTo}}
             of {{.Pagination.TotalItems}} items
         </div>
         <ul class="pagination mb-0">
             {{if .Pagination.HasPrev}}
             <li class="page-item">
-                <a class="page-link" href="?page={{sub .Pagination.CurrentPage 1}}&pageSize={{.Pagination.PageSize}}" aria-label="Previous">
+                <a class="page-link" href="?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}" aria-label="Previous">
                     <span aria-hidden="true">&laquo;</span>
                 </a>
             </li>
@@ -20,16 +20,12 @@
             </li>
             {{end}}
 
-            {{$current := .Pagination.CurrentPage}}
-            {{$total := .Pagination.TotalPages}}
-            {{$pageSize := .Pagination.PageSize}}
-
             {{/* Show first page */}}
-            {{if gt $current 3}}
+            {{if .Pagination.ShowFirst}}
             <li class="page-item">
-                <a class="page-link" href="?page=1&pageSize={{$pageSize}}">1</a>
+                <a class="page-link" href="?page=1&pageSize={{.Pagination.PageSize}}">1</a>
             </li>
-            {{if gt $current 4}}
+            {{if .Pagination.ShowFirstEllipsis}}
             <li class="page-item disabled">
                 <span class="page-link">...</span>
             </li>
@@ -37,30 +33,29 @@
             {{end}}
 
             {{/* Show pages around current */}}
-            {{range $i := iterate $total}}
-            {{$page := add $i 1}}
-            {{if and (ge $page (sub $current 2)) (le $page (add $current 2))}}
+            {{$current := .Pagination.CurrentPage}}
+            {{$pageSize := .Pagination.PageSize}}
+            {{range $page := .Pagination.PageWindow}}
             <li class="page-item {{if eq $page $current}}active{{end}}">
                 <a class="page-link" href="?page={{$page}}&pageSize={{$pageSize}}">{{$page}}</a>
             </li>
             {{end}}
-            {{end}}
 
             {{/* Show last page */}}
-            {{if lt $current (sub $total 2)}}
-            {{if lt $current (sub $total 3)}}
+            {{if .Pagination.ShowLast}}
+            {{if .Pagination.ShowLastEllipsis}}
             <li class="page-item disabled">
                 <span class="page-link">...</span>
             </li>
             {{end}}
             <li class="page-item">
-                <a class="page-link" href="?page={{$total}}&pageSize={{$pageSize}}">{{$total}}</a>
+                <a class="page-link" href="?page={{.Pagination.TotalPages}}&pageSize={{.Pagination.PageSize}}">{{.Pagination.TotalPages}}</a>
             </li>
             {{end}}
 
             {{if .Pagination.HasNext}}
             <li class="page-item">
-                <a class="page-link" href="?page={{add .Pagination.CurrentPage 1}}&pageSize={{.Pagination.PageSize}}" aria-label="Next">
+                <a class="page-link" href="?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}" aria-label="Next">
                     <span aria-hidden="true">&raquo;</span>
                 </a>
             </li>

@@ -39,28 +39,7 @@ func RenderWithBase(w io.Writer, name string, data any) {
 	}
 	files = append(files, partialTemplates...)
 
-	// Create template with custom functions
-	funcMap := template.FuncMap{
-		"add": func(a, b int) int { return a + b },
-		"sub": func(a, b int) int { return a - b },
-		"mul": func(a, b int) int { return a * b },
-		"min": func(a, b int) int {
-			if a < b {
-				return a
-			}
-			return b
-		},
-		"iterate": func(count int) []int {
-			var i int
-			var items []int
-			for i = 0; i < count; i++ {
-				items = append(items, i)
-			}
-			return items
-		},
-	}
-
-	ts, err := template.New("base").Funcs(funcMap).ParseFS(tmplFS, files...)
+	ts, err := template.New("base").ParseFS(tmplFS, files...)
 	if err != nil {
 		slog.Error("Failed to parse template", logging.Error(err))
 		return
