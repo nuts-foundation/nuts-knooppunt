@@ -2,34 +2,25 @@ package nvi
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonymisation"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/tenants"
-	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 func DefaultConfig() Config {
-	return Config{
-		Audience: "nvi",
-	}
+	return Config{}
 }
 
 type Config struct {
 	FHIRBaseURL string `koanf:"baseurl"`
-	Audience    string `koanf:"audience"`
 }
 
 func (c Config) Enabled() bool {
@@ -72,24 +63,18 @@ func New(config Config, httpClientFn authn.HTTPClientProvider, pseudonymizer pse
 }
 
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	internalMux.Handle("POST /nvi/DocumentReference", http.HandlerFunc(c.handleRegister))
-	internalMux.Handle("GET /nvi/DocumentReference", http.HandlerFunc(c.handleSearch))
-	internalMux.Handle("POST /nvi/DocumentReference/_search", http.HandlerFunc(c.handleSearch))
+	internalMux.Handle("POST /nvi/Bundle", http.HandlerFunc(c.handleRegister))
+	internalMux.Handle("GET /nvi/List", http.HandlerFunc(c.handleSearch))
+	internalMux.Handle("POST /nvi/List/_search", http.HandlerFunc(c.handleSearch))
 }
 
 func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest *http.Request) {
-	requesterURA, err := tenants.IDFromRequest(httpRequest)
+	fhirRequest, err := fhirapi.ParseRequest[fhir.Bundle](httpRequest)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
 	}
-
-	fhirRequest, err := fhirapi.ParseRequest[fhir.DocumentReference](httpRequest)
-	if err != nil {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
-		return
-	}
-	resource := fhirRequest.Resource
+	bundle := fhirRequest.Resource
 
 	// Make sure the right profile is set
 	resource.Meta = profile.Set(resource.Meta, profile.NLGenericFunctionDocumentReference)
@@ -100,7 +85,6 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
 	}
-	resource = *tokenizedResource
 
 	fhirClient, err := c.fhirClientFn(httpRequest.Context(), *requesterURA.Value)
 	if err != nil {
@@ -115,7 +99,7 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 	err = fhirClient.CreateWithContext(httpRequest.Context(), resource, &created, fhirclient.RequestHeaders(requestHeaders))
 	if err != nil {
 		err = &fhirapi.Error{
-			Message:   "Failed to register DocumentReference at NVI",
+			Message:   "Failed to register Bundle at NVI",
 			Cause:     err,
 			IssueType: fhir.IssueTypeTransient,
 		}
@@ -127,19 +111,12 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 }
 
 func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *http.Request) {
-	requesterURA, err := tenants.IDFromRequest(httpRequest)
+	fhirRequest, err := fhirapi.ParseRequest[fhir.List](httpRequest)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
 	}
 
-	fhirRequest, err := fhirapi.ParseRequest[fhir.DocumentReference](httpRequest)
-	if err != nil {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
-		return
-	}
-
-	// Use BSN transport tokens to NVI, instead of BSNs
 	searchParams := url.Values{}
 	for key, values := range fhirRequest.Parameters {
 		newValues := append([]string{}, values...)
@@ -157,6 +134,9 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		}
 		searchParams[key] = newValues
 	}
+	/**
+	todo: pseduoanonymization
+	*/
 
 	fhirClient, err := c.fhirClientFn(httpRequest.Context(), *requesterURA.Value)
 	if err != nil {
@@ -170,7 +150,7 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 	err = fhirClient.SearchWithContext(httpRequest.Context(), "DocumentReference", searchParams, &searchSet, fhirclient.RequestHeaders(requestHeaders))
 	if err != nil {
 		err = &fhirapi.Error{
-			Message:   "Failed to search for DocumentReferences at NVI",
+			Message:   "Failed to search for List resources at NVI",
 			Cause:     err,
 			IssueType: fhir.IssueTypeTransient,
 		}
@@ -179,7 +159,6 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 	}
 
 	if hasNextLink(&searchSet) {
-		// Otherwise must paginate, not supported for now.
 		err = &fhirapi.Error{
 			Message:   "NVI returned more results than can be handled. Please refine your search, or increase _count.",
 			IssueType: fhir.IssueTypeTooCostly,
