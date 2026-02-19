@@ -2469,3 +2469,307 @@ func TestComponent_authFlow(t *testing.T) {
 		require.Equal(t, 1, adminReport.CountCreated, "one organization should be created")
 	})
 }
+
+// snapshotTestOrgBundle is a searchset bundle with an Organization that has a URA.
+const snapshotTestOrgBundle = `{
+	"resourceType": "Bundle",
+	"type": "searchset",
+	"meta": {"lastUpdated": "2025-12-18T10:00:00.000Z"},
+	"entry": [{
+		"fullUrl": "http://test.example.org/fhir/Organization/org-snap-1",
+		"resource": {
+			"resourceType": "Organization",
+			"id": "org-snap-1",
+			"meta": {"lastUpdated": "2025-12-18T09:00:00.000Z"},
+			"identifier": [{"system": "http://fhir.nl/fhir/NamingSystem/ura", "value": "999"}],
+			"name": "Snapshot Test Org"
+		}
+	}]
+}`
+
+// snapshotEmpty is a minimal empty searchset bundle.
+const snapshotEmpty = `{"resourceType": "Bundle", "type": "searchset", "meta": {"lastUpdated": "2025-12-18T10:00:00.000Z"}, "entry": []}`
+
+func newSnapshotComponent(t *testing.T, serverURL string, snapshotModeSupport bool) (*Component, *test.StubFHIRClient) {
+	t.Helper()
+	stub := &test.StubFHIRClient{}
+	config := DefaultConfig()
+	config.SnapshotModeSupport = snapshotModeSupport
+	// Omit AdministrationDirectories from config to avoid the implicit discover=true registration.
+	comp, err := New(config)
+	require.NoError(t, err)
+	comp.fhirQueryClient = stub
+	comp.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
+		return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
+	}
+	// Register as a non-discoverable (healthcare-provider owned) directory so resources
+	// pass through buildUpdateTransaction into the query directory.
+	err = comp.registerAdministrationDirectory(context.Background(), serverURL, rootDirectoryResourceTypes, false, "", "")
+	require.NoError(t, err)
+	return comp, stub
+}
+
+func TestComponent_SnapshotMode_InitialSync(t *testing.T) {
+	var calledPaths []string
+	var mu sync.Mutex
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/Organization", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calledPaths = append(calledPaths, r.URL.Path)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(snapshotTestOrgBundle))
+	})
+	mux.HandleFunc("/Endpoint", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calledPaths = append(calledPaths, r.URL.Path)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(snapshotEmpty))
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	comp, _ := newSnapshotComponent(t, srv.URL, true)
+
+	report, err := comp.update(context.Background())
+	require.NoError(t, err)
+
+	// No _history endpoint should have been contacted.
+	mu.Lock()
+	defer mu.Unlock()
+	for _, p := range calledPaths {
+		assert.NotContains(t, p, "_history", "Snapshot Mode must not call _history (path=%s)", p)
+	}
+	require.Empty(t, report[srv.URL].Errors)
+	// Confirm the entry was actually submitted to the query directory, not silently dropped.
+	assert.Equal(t, 1, report[srv.URL].CountCreated, "snapshot organization must be created in query directory")
+
+	// Timestamp must be stored so the next run can do incremental (_since) sync.
+	directoryKey := makeDirectoryKey(srv.URL, "")
+	val, exists := comp.lastUpdateTimes[directoryKey]
+	assert.True(t, exists, "lastUpdateTimes must be set after a snapshot sync")
+	assert.Equal(t, "2025-12-18T10:00:00.000Z", val, "lastUpdateTimes should equal bundle meta.lastUpdated")
+}
+
+func TestComponent_SnapshotMode_NextRunUsesHistory(t *testing.T) {
+	var historyCallsSince []string
+	var mu sync.Mutex
+
+	orgBundle := snapshotTestOrgBundle
+	emptyHistory := `{"resourceType":"Bundle","type":"history","meta":{"lastUpdated":"2025-12-19T10:00:00.000Z"},"entry":[]}`
+
+	mux := http.NewServeMux()
+	// Snapshot handlers (first run)
+	mux.HandleFunc("/Organization", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(orgBundle))
+	})
+	mux.HandleFunc("/Endpoint", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(snapshotEmpty))
+	})
+	// History handlers (second run)
+	mux.HandleFunc("/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(emptyHistory))
+	})
+	mux.HandleFunc("/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		historyCallsSince = append(historyCallsSince, r.URL.Query().Get("_since"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(emptyHistory))
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	comp, _ := newSnapshotComponent(t, srv.URL, true)
+	ctx := context.Background()
+
+	// First run — snapshot mode.
+	_, err := comp.update(ctx)
+	require.NoError(t, err)
+
+	// Second run — must use _history with the stored _since timestamp.
+	_, err = comp.update(ctx)
+	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Len(t, historyCallsSince, 1, "Endpoint/_history should have been called once on second run")
+	assert.Equal(t, "2025-12-18T10:00:00.000Z", historyCallsSince[0], "_since should be the timestamp stored from the snapshot sync")
+}
+
+func TestComponent_SnapshotMode_410GoneFallback(t *testing.T) {
+	var historyCallCount, orgSearchCallCount, endpointSearchCallCount int
+	var mu sync.Mutex
+
+	goneBody := `{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"gone","diagnostics":"History too old"}]}`
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		historyCallCount++
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusGone)
+		_, _ = w.Write([]byte(goneBody))
+	})
+	mux.HandleFunc("/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		historyCallCount++
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusGone)
+		_, _ = w.Write([]byte(goneBody))
+	})
+	mux.HandleFunc("/Organization", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		orgSearchCallCount++
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(snapshotTestOrgBundle))
+	})
+	mux.HandleFunc("/Endpoint", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		endpointSearchCallCount++
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(snapshotEmpty))
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	comp, _ := newSnapshotComponent(t, srv.URL, true)
+	// Pre-set a timestamp so the first attempt uses History Mode.
+	comp.lastUpdateTimes[srv.URL] = "2025-12-17T10:00:00.000Z"
+
+	report, err := comp.update(context.Background())
+
+	require.NoError(t, err)
+	require.Empty(t, report[srv.URL].Errors, "should have no errors after fallback to Snapshot Mode")
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 1, historyCallCount, "only Organization/_history should be called — it 410s and Endpoint/_history must not be reached")
+	assert.Equal(t, 2, orgSearchCallCount, "Organization plain search must be called for snapshot sync and parent-org lookup")
+	assert.Equal(t, 1, endpointSearchCallCount, "Endpoint plain search must be called exactly once for snapshot sync")
+}
+
+func TestComponent_SnapshotMode_410GoneWithoutSupport(t *testing.T) {
+	goneBody := `{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"gone","diagnostics":"History too old"}]}`
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusGone)
+		_, _ = w.Write([]byte(goneBody))
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	comp, _ := newSnapshotComponent(t, srv.URL, false /* SnapshotModeSupport disabled */)
+	// Pre-set to trigger History Mode.
+	comp.lastUpdateTimes[srv.URL] = "2025-12-17T10:00:00.000Z"
+
+	report, err := comp.update(context.Background())
+
+	require.NoError(t, err, "update() itself should not return an error; it is reported per-directory")
+	require.NotNil(t, report)
+	dirReport := report[srv.URL]
+	require.NotEmpty(t, dirReport.Errors, "error should be recorded in the directory report")
+	assert.Contains(t, dirReport.Errors[0], "410 Gone")
+	assert.Contains(t, dirReport.Errors[0], "Snapshot Mode is disabled")
+}
+
+func TestComponent_HistoryMode_WhenSnapshotDisabled(t *testing.T) {
+	var historyCallCount int
+	var historySinceParams []string
+	var mu sync.Mutex
+
+	orgHistory := `{
+		"resourceType": "Bundle", "type": "history",
+		"meta": {"lastUpdated": "2025-12-18T10:00:00.000Z"},
+		"entry": [{
+			"fullUrl": "http://test.example.org/fhir/Organization/org-h-1",
+			"resource": {
+				"resourceType":"Organization","id":"org-h-1",
+				"identifier":[{"system":"http://fhir.nl/fhir/NamingSystem/ura","value":"888"}],
+				"name":"History Org"
+			},
+			"request":{"method":"PUT","url":"Organization/org-h-1"},
+			"response":{"status":"201 Created"}
+		}]
+	}`
+	emptyHistory := `{"resourceType":"Bundle","type":"history","meta":{"lastUpdated":"2025-12-18T10:00:00.000Z"},"entry":[]}`
+	orgSearch := snapshotTestOrgBundle // used by ensureParentOrganizationsMap
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		historyCallCount++
+		historySinceParams = append(historySinceParams, r.URL.Query().Get("_since"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(orgHistory))
+	})
+	mux.HandleFunc("/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		historyCallCount++
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(emptyHistory))
+	})
+	mux.HandleFunc("/Organization", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(orgSearch))
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	comp, _ := newSnapshotComponent(t, srv.URL, false /* SnapshotModeSupport disabled */)
+
+	report, err := comp.update(context.Background())
+
+	require.NoError(t, err)
+	require.Empty(t, report[srv.URL].Errors)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.GreaterOrEqual(t, historyCallCount, 1, "_history must be used even without SnapshotModeSupport")
+	for _, since := range historySinceParams {
+		assert.Empty(t, since, "_since must not be set on the initial history sync")
+	}
+}
+
+func TestComponent_SnapshotMode_RequestFieldsSynthesized(t *testing.T) {
+	mux := http.NewServeMux()
+	orgBundle := snapshotTestOrgBundle
+	emptyEndpoint := snapshotEmpty
+	mockEndpoints(mux, map[string]*string{
+		"/Organization": &orgBundle,
+		"/Endpoint":     &emptyEndpoint,
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	comp, _ := newSnapshotComponent(t, srv.URL, true)
+
+	report, err := comp.update(context.Background())
+
+	require.NoError(t, err)
+	require.Empty(t, report[srv.URL].Errors)
+	// The synthetic Request injection works when no entry is skipped due to a missing request field.
+	for _, w := range report[srv.URL].Warnings {
+		assert.NotContains(t, w, "Skipping entry with no request", "request field should have been synthesised for all search entries")
+	}
+	assert.Equal(t, 1, report[srv.URL].CountCreated, "snapshot entry must be submitted to the query directory")
+}
