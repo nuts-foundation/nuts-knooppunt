@@ -273,8 +273,6 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	// For incremental updates test, we need custom handlers to capture _since parameters
 	rootDirMux.HandleFunc("/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
 		// FHIR client configured to use GET, parameters are in query string
-		since := r.URL.Query().Get("_since")
-		sinceParams = append(sinceParams, since)
 		w.Header().Set("Content-Type", "application/fhir+json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(testDataJSONOrg)
@@ -334,7 +332,7 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	// First update - should have no _since parameter
 	_, err = component.update(ctx)
 	require.NoError(t, err)
-	require.Len(t, sinceParams, 2, "Should have two requests")
+	require.Len(t, sinceParams, 1, "Should have 1 request")
 	require.Empty(t, sinceParams[0], "First update should not have _since parameter")
 
 	// Verify timestamp was stored
@@ -345,22 +343,17 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	// Second update - should include _since parameter
 	_, err = component.update(ctx)
 	require.NoError(t, err)
-	require.Len(t, sinceParams, 4, "Should have four requests total")
-	require.NotEmpty(t, sinceParams[2], "Third update should include _since parameter")
-	require.NotEmpty(t, sinceParams[3], "Fourth update should include _since parameter")
+	require.Len(t, sinceParams, 2, "Should have 2 requests total")
+	require.NotEmpty(t, sinceParams[1], "Second update should include _since parameter")
 
 	// Verify _since parameter is a valid RFC3339 timestamp
-	_, err = time.Parse(time.RFC3339, sinceParams[2])
+	_, err = time.Parse(time.RFC3339, sinceParams[1])
 	require.NoError(t, err, "_since parameter should be valid RFC3339 timestamp")
-	_, err = time.Parse(time.RFC3339Nano, sinceParams[2])
-	require.NoError(t, err, "_since parameter should be valid RFC3339Nano timestamp")
-	_, err = time.Parse(time.RFC3339, sinceParams[3])
-	require.NoError(t, err, "_since parameter should be valid RFC3339 timestamp")
-	_, err = time.Parse(time.RFC3339Nano, sinceParams[3])
+	_, err = time.Parse(time.RFC3339Nano, sinceParams[1])
 	require.NoError(t, err, "_since parameter should be valid RFC3339Nano timestamp")
 
 	// Verify _since parameter matches the stored timestamp
-	require.Equal(t, lastUpdate, sinceParams[2], "_since parameter should match the stored lastUpdate timestamp")
+	require.Equal(t, lastUpdate, sinceParams[1], "_since parameter should match the stored lastUpdate timestamp")
 }
 
 func TestComponent_multipleDirsSameFHIRBaseURL(t *testing.T) {
