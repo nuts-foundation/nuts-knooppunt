@@ -15,6 +15,7 @@ import (
 	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/httpauth"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/stretchr/testify/assert"
@@ -72,7 +73,8 @@ func TestComponent_update_regression(t *testing.T) {
 	}
 	component, err := New(config)
 	require.NoError(t, err)
-	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+	component.fhirQueryClient = localClient
+	component.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
 		if baseURL.String() == server.URL {
 			return fhirclient.New(baseURL, http.DefaultClient, nil)
 		} else {
@@ -180,7 +182,8 @@ func TestComponent_update(t *testing.T) {
 	unknownFHIRServerClient := &test.StubFHIRClient{
 		Error: errors.New("404 Not Found"),
 	}
-	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+	component.fhirQueryClient = localClient
+	component.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
 		if baseURL.String() == rootDirServer.URL ||
 			baseURL.String() == orgDir1BaseURL {
 			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{
@@ -316,7 +319,8 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	component, err := New(config)
 	require.NoError(t, err)
 
-	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+	component.fhirQueryClient = localClient
+	component.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
 		if baseURL.String() == rootDirServer.URL {
 			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{
 				UsePostSearch: false,
@@ -509,7 +513,8 @@ func TestComponent_multipleDirsSameFHIRBaseURL(t *testing.T) {
 	component, err := New(config)
 	require.NoError(t, err)
 
-	component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+	component.fhirQueryClient = localClient
+	component.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
 		urlStr := baseURL.String()
 		if urlStr == rootDirServer.URL || urlStr == sharedDirServer.URL {
 			return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
@@ -818,7 +823,8 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		component, err := New(config)
 		require.NoError(t, err)
 
-		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+		component.fhirQueryClient = capturingClient
+		component.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
 			if baseURL.String() == server.URL+"/fhir" {
 				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
 			}
@@ -975,7 +981,8 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 
 		// Mock FHIR client that tracks operations
 		capturingClient := &test.StubFHIRClient{}
-		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+		component.fhirQueryClient = capturingClient
+		component.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
 			if baseURL.String() == server.URL+"/fhir" {
 				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
 			}
@@ -1081,7 +1088,8 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		require.NoError(t, err)
 
 		capturingClient := &test.StubFHIRClient{}
-		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+		component.fhirQueryClient = capturingClient
+		component.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
 			if baseURL.String() == server.URL+"/fhir" {
 				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
 			}
@@ -1249,7 +1257,8 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		assert.Equal(t, customResourceTypes, component.directoryResourceTypes)
 
 		capturingClient := &test.StubFHIRClient{}
-		component.fhirClientFn = func(baseURL *url.URL) fhirclient.Client {
+		component.fhirQueryClient = capturingClient
+		component.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
 			if strings.HasPrefix(baseURL.String(), server.URL) {
 				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
 			}
@@ -2303,5 +2312,160 @@ func TestCheckForURAIdentifierChanges(t *testing.T) {
 
 		result := checkForURAIdentifierChanges(entries)
 		assert.False(t, result, "should return false for empty entries")
+	})
+}
+
+func TestComponent_authFlow(t *testing.T) {
+	t.Log("Test that OAuth2 authentication flow is used by fhirQueryClient when auth is configured")
+
+	var tokenRequested bool
+
+	// Mock OAuth2 token server
+	queryAuthMux := http.NewServeMux()
+	queryAuthMux.HandleFunc("/auth", func(w http.ResponseWriter, r *http.Request) {
+		tokenRequested = true
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
+
+		err := r.ParseForm()
+		require.NoError(t, err)
+		require.Equal(t, "client_credentials", r.Form.Get("grant_type"))
+		require.Equal(t, "test-client-id", r.Form.Get("client_id"))
+		require.Equal(t, "test-client-secret", r.Form.Get("client_secret"))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err = w.Write([]byte(`{"access_token":"test-access-token","token_type":"Bearer","expires_in":3600}`))
+		require.NoError(t, err)
+	})
+	tokenServer := httptest.NewServer(queryAuthMux)
+	defer tokenServer.Close()
+
+	var (
+		authHeaderReceived string
+		fhirRequestCount   int
+	)
+	// Mock FHIR query directory that tracks Authorization headers
+	queryDirMux := http.NewServeMux()
+	queryDirMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fhirRequestCount++
+		authHeaderReceived = r.Header.Get("Authorization")
+
+		// Return a successful transaction response
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusOK)
+		response := fhir.Bundle{
+			Type: fhir.BundleTypeTransactionResponse,
+			Entry: []fhir.BundleEntry{
+				{
+					Response: &fhir.BundleEntryResponse{
+						Status: "201 Created",
+					},
+				},
+			},
+		}
+		responseBytes, err := json.Marshal(response)
+		require.NoError(t, err)
+
+		_, err = w.Write(responseBytes)
+		require.NoError(t, err)
+	})
+
+	queryDirServer := httptest.NewServer(queryDirMux)
+	defer queryDirServer.Close()
+
+	// Mock FHIR admin directory - use non-root directory so resources are synced
+	adminDirMux := http.NewServeMux()
+	emptyResponse, err := os.ReadFile("test/regression_lrza_empty_history_response.json")
+	require.NoError(t, err)
+	emptyResponseStr := string(emptyResponse)
+
+	// Create organization response for a non-root directory with URA
+	// Resources from non-root directories are synced to the query directory
+	orgResponse := `{
+		"resourceType": "Bundle",
+		"type": "history",
+		"meta": {"lastUpdated": "2025-12-18T10:00:00.000Z"},
+		"entry": [{
+			"fullUrl": "http://test.example.org/Organization/test-org-1",
+			"resource": {
+				"resourceType": "Organization",
+				"id": "test-org-1",
+				"meta": {"lastUpdated": "2025-12-18T09:00:00.000Z"},
+				"identifier": [{"system": "http://fhir.nl/fhir/NamingSystem/ura", "value": "111"}],
+				"name": "Test Organization",
+				"active": true
+			},
+			"request": {"method": "POST", "url": "Organization/test-org-1"}
+		}]
+	}`
+
+	mockEndpoints(adminDirMux, map[string]*string{
+		"/Organization/_history":      &orgResponse,
+		"/Organization":               &orgResponse,
+		"/Endpoint/_history":          &emptyResponseStr,
+		"/Location/_history":          &emptyResponseStr,
+		"/HealthcareService/_history": &emptyResponseStr,
+		"/PractitionerRole/_history":  &emptyResponseStr,
+		"/Practitioner/_history":      &emptyResponseStr,
+	})
+	adminDirServer := httptest.NewServer(adminDirMux)
+	defer adminDirServer.Close()
+
+	// Create component with OAuth2 auth configuration
+	config := DefaultConfig()
+	config.QueryDirectory = DirectoryConfig{
+		FHIRBaseURL: queryDirServer.URL,
+	}
+	config.Auth = httpauth.OAuth2Config{
+		TokenEndpoint: tokenServer.URL + "/auth",
+		ClientID:      "test-client-id",
+		ClientSecret:  "test-client-secret",
+	}
+
+	component, err := New(config)
+	require.NoError(t, err)
+	require.NotNil(t, component)
+
+	// Manually register a non-root admin directory (discover=false)
+	// Since registerAdministrationDirectory is private, we directly add to the slice
+	// This ensures resources from it are synced to the query directory
+	component.administrationDirectories = append(component.administrationDirectories, administrationDirectory{
+		fhirBaseURL:      adminDirServer.URL,
+		resourceTypes:    defaultDirectoryResourceTypes,
+		discover:         false,
+		sourceURL:        "",
+		authoritativeUra: "111",
+	})
+
+	// Override fhirAdminClientFn to use default client for admin directory
+	component.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
+		return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{
+			UsePostSearch: false,
+		})
+	}
+
+	ctx := context.Background()
+
+	// Run update which should trigger OAuth2 flow
+	report, err := component.update(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, report)
+
+	// Verify OAuth2 flow was executed
+	t.Run("verify OAuth2 token was requested", func(t *testing.T) {
+		require.True(t, tokenRequested, "OAuth2 token should have been requested")
+	})
+
+	t.Run("verify Authorization header was sent to FHIR query directory", func(t *testing.T) {
+		require.Greater(t, fhirRequestCount, 0, "FHIR query directory should have received at least one request")
+		require.Equal(t, "Bearer test-access-token", authHeaderReceived, "Authorization header should contain Bearer token")
+	})
+
+	t.Run("verify update was successful", func(t *testing.T) {
+		adminReport := report[makeDirectoryKey(adminDirServer.URL, "111")]
+		require.NotNil(t, adminReport)
+		require.Empty(t, adminReport.Errors, "update should complete without errors")
+		require.Equal(t, 1, adminReport.CountCreated, "one organization should be created")
 	})
 }
