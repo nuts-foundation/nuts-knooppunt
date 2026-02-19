@@ -598,7 +598,18 @@ func (c *Component) queryAllResourceTypes(ctx context.Context, fhirClient fhircl
 	var firstSearchSet fhir.Bundle
 
 	for i, resourceType := range resourceTypes {
-		currEntries, currSearchSet, err := c.queryHistory(ctx, fhirClient, resourceType, searchParams)
+		// Create a copy of searchParams for this resource type
+		params := make(url.Values)
+		for k, v := range searchParams {
+			params[k] = v
+		}
+
+		// Remove _single parameter for Organization resource type
+		if resourceType == "Organization" {
+			params.Del("_since")
+		}
+
+		currEntries, currSearchSet, err := c.queryHistory(ctx, fhirClient, resourceType, params)
 		if err != nil {
 			return nil, fhir.Bundle{}, fmt.Errorf("failed to query %s history: %w", resourceType, err)
 		}

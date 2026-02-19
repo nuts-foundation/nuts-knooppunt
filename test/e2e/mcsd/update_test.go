@@ -92,7 +92,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 
 		care2CureReport := mapEntryContains(updateReport, "care2cure-admin")
 		require.Equal(t, 0, care2CureReport.CountCreated)
-		require.Equal(t, 1, care2CureReport.CountUpdated)
+		require.Equal(t, 2, care2CureReport.CountUpdated)
 
 		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
 		t.Run("assert updated endpoint in query directory", func(t *testing.T) {
