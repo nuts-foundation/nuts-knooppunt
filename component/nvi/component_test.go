@@ -2,6 +2,7 @@ package nvi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"testing"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi/testdata"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonimization"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
@@ -105,7 +107,9 @@ func TestComponent_handleRegister(t *testing.T) {
 				Error: testCase.nviTransportError,
 			}
 			component := Component{
-				client:        nvi,
+				fhirClientFn: func(_ context.Context, _ string) (fhirclient.Client, error) {
+					return nvi, nil
+				},
 				pseudonymizer: pseudonymizer,
 				audience:      "nvi",
 			}
@@ -225,7 +229,9 @@ func TestComponent_handleSearch(t *testing.T) {
 				Error:     testCase.nviTransportError,
 			}
 			component := Component{
-				client:        nvi,
+				fhirClientFn: func(_ context.Context, _ string) (fhirclient.Client, error) {
+					return nvi, nil
+				},
 				pseudonymizer: pseudonymizer,
 			}
 

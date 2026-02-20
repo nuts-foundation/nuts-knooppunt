@@ -95,7 +95,7 @@ func Start(ctx context.Context, config Config) error {
 
 	// Create NVI component
 	if config.NVI.Enabled() {
-		nviComponent, err := nvi.New(config.NVI)
+		nviComponent, err := nvi.New(config.NVI, authnComponent.MinVWSHTTPClient)
 		if err != nil {
 			return errors.Wrap(err, "failed to create NVI component")
 		}

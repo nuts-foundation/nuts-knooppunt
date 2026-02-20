@@ -29,7 +29,8 @@ const (
 )
 
 type Config struct {
-	Clients []Client `koanf:"clients"`
+	Clients []Client           `koanf:"clients"`
+	MinVWS  MinistryAuthConfig `koanf:"minvws"`
 }
 
 var endpointConfig = struct {

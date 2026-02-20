@@ -13,18 +13,6 @@ import (
 	"software.sslmate.com/src/go-pkcs12"
 )
 
-// Config holds TLS configuration options
-type Config struct {
-	// CertFile is the path to a PEM certificate file OR .p12/.pfx file
-	CertFile string
-	// KeyFile is the path to a PEM key file (not used if CertFile is .p12/.pfx)
-	KeyFile string
-	// Password is the password for encrypted key or .p12/.pfx file
-	Password string
-	// CAFile is the path to a CA certificate file to verify server
-	CAFile string
-}
-
 // LoadClientCertificate loads a client certificate from PEM or PKCS#12 file
 func LoadClientCertificate(certFile, keyFile, password string) (tls.Certificate, error) {
 	if certFile == "" {
@@ -35,24 +23,37 @@ func LoadClientCertificate(certFile, keyFile, password string) (tls.Certificate,
 	ext := strings.ToLower(filepath.Ext(certFile))
 	isPKCS12 := ext == ".p12" || ext == ".pfx"
 
+	var cert tls.Certificate
+	var err error
 	if isPKCS12 {
-		cert, err := loadPKCS12(certFile, password)
+		cert, err = loadPKCS12(certFile, password)
 		if err != nil {
 			return tls.Certificate{}, fmt.Errorf("failed to load PKCS#12: %w", err)
 		}
 		slog.Info("Loaded client certificate from PKCS#12", slog.String("p12File", certFile))
-		return cert, nil
+	} else {
+		// Load PEM
+		if keyFile == "" {
+			return tls.Certificate{}, fmt.Errorf("key file required when using PEM certificate")
+		}
+		cert, err = tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return tls.Certificate{}, fmt.Errorf("failed to load certificate: %w", err)
+		}
+		slog.Info("Loaded client certificate from PEM", slog.String("certFile", certFile), slog.String("keyFile", keyFile))
 	}
 
-	// Load PEM
-	if keyFile == "" {
-		return tls.Certificate{}, fmt.Errorf("key file required when using PEM certificate")
+	// Make sure leaf is populated
+	if len(cert.Certificate) == 0 {
+		return tls.Certificate{}, fmt.Errorf("no certificates found in file")
 	}
-	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("failed to load certificate: %w", err)
+	if cert.Leaf == nil {
+		cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
+		if err != nil {
+			return tls.Certificate{}, fmt.Errorf("failed to parse leaf certificate: %w", err)
+		}
 	}
-	slog.Info("Loaded client certificate from PEM", slog.String("certFile", certFile), slog.String("keyFile", keyFile))
+
 	return cert, nil
 }
 
@@ -76,9 +77,20 @@ func LoadCACertPool(caFile string) (*x509.CertPool, error) {
 	return caCertPool, nil
 }
 
+type Config struct {
+	// TLSCertFile is the PEM certificate file OR .p12/.pfx file
+	TLSCertFile string `koanf:"tlscertfile"`
+	// TLSKeyFile is the PEM key file (not used if TLSCertFile is .p12/.pfx)
+	TLSKeyFile string `koanf:"tlskeyfile"`
+	// TLSKeyPassword is the password for encrypted key or .p12/.pfx file
+	TLSKeyPassword string `koanf:"tlskeypassword"`
+	// TLSCAFile is the CA certificate file (or bundle) used to verify server/peer certificates
+	TLSCAFile string `koanf:"tlscafile"`
+}
+
 // CreateTLSConfig creates a TLS configuration with client certificate and optional CA
-func CreateTLSConfig(certFile, keyFile, password, caFile string) (*tls.Config, error) {
-	cert, err := LoadClientCertificate(certFile, keyFile, password)
+func CreateTLSConfig(cfg Config) (*tls.Config, error) {
+	cert, err := LoadClientCertificate(cfg.TLSCertFile, cfg.TLSKeyFile, cfg.TLSKeyPassword)
 	if err != nil {
 		return nil, err
 	}
@@ -88,8 +100,8 @@ func CreateTLSConfig(certFile, keyFile, password, caFile string) (*tls.Config, e
 	}
 
 	// Load CA certificate if specified
-	if caFile != "" {
-		caCertPool, err := LoadCACertPool(caFile)
+	if cfg.TLSCAFile != "" {
+		caCertPool, err := LoadCACertPool(cfg.TLSCAFile)
 		if err != nil {
 			return nil, err
 		}

@@ -9,6 +9,7 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonimization"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
@@ -38,12 +39,13 @@ func (c Config) Enabled() bool {
 var _ component.Lifecycle = (*Component)(nil)
 
 type Component struct {
-	client        fhirclient.Client
 	pseudonymizer pseudonimization.Pseudonymizer
 	audience      string
+	fhirBaseURL   *url.URL
+	fhirClientFn  func(ctx context.Context, uraNumber string) (fhirclient.Client, error)
 }
 
-func New(config Config) (*Component, error) {
+func New(config Config, httpClientFn authn.HTTPClientProvider) (*Component, error) {
 	baseURL, err := url.Parse(config.FHIRBaseURL)
 	if err != nil {
 		return nil, err
@@ -52,7 +54,17 @@ func New(config Config) (*Component, error) {
 		return nil, fmt.Errorf("audience must be configured when NVI component is enabled")
 	}
 	return &Component{
-		client:        fhirclient.New(baseURL, tracing.NewHTTPClient(), fhirutil.ClientConfig()),
+		fhirBaseURL: baseURL,
+		fhirClientFn: func(ctx context.Context, uraNumber string) (fhirclient.Client, error) {
+			// TODO: Cache the HTTP client per URA number, instead of creating a new one for each request.
+			//       That would also allow caching the access tokens obtained from the OAuth2 server.
+			httpClient, err := httpClientFn(ctx, []string{"epd:read", "epd:write"}, uraNumber, baseURL.String())
+			if err != nil {
+				return nil, err
+			}
+			httpClient.Transport = tracing.WrapTransport(httpClient.Transport)
+			return fhirclient.New(baseURL, httpClient, fhirutil.ClientConfig()), nil
+		},
 		pseudonymizer: &pseudonimization.Component{},
 		audience:      config.Audience,
 	}, nil
@@ -89,11 +101,17 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 	}
 	resource = *tokenizedResource
 
+	fhirClient, err := c.fhirClientFn(httpRequest.Context(), *requesterURA.Value)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+	// TODO: Remove this after migrating to real NVI
 	requestHeaders := http.Header{
 		"X-Requester-URA": []string{*requesterURA.Value},
 	}
 	var created fhir.DocumentReference
-	err = c.client.CreateWithContext(httpRequest.Context(), resource, &created, fhirclient.RequestHeaders(requestHeaders))
+	err = fhirClient.CreateWithContext(httpRequest.Context(), resource, &created, fhirclient.RequestHeaders(requestHeaders))
 	if err != nil {
 		err = &fhirapi.Error{
 			Message:   "Failed to register DocumentReference at NVI",
@@ -146,11 +164,16 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		searchParams[key] = newValues
 	}
 
+	fhirClient, err := c.fhirClientFn(httpRequest.Context(), *requesterURA.Value)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
 	requestHeaders := http.Header{
 		"X-Requester-URA": []string{*requesterURA.Value},
 	}
 	var searchSet fhir.Bundle
-	err = c.client.SearchWithContext(httpRequest.Context(), "DocumentReference", searchParams, &searchSet, fhirclient.RequestHeaders(requestHeaders))
+	err = fhirClient.SearchWithContext(httpRequest.Context(), "DocumentReference", searchParams, &searchSet, fhirclient.RequestHeaders(requestHeaders))
 	if err != nil {
 		err = &fhirapi.Error{
 			Message:   "Failed to search for DocumentReferences at NVI",
