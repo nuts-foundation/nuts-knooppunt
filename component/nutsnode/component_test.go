@@ -64,7 +64,7 @@ func TestTracingConfigEnvVars(t *testing.T) {
 		cfg := Config{
 			Enabled: true,
 			TracingConfig: TracingConfig{
-				OTLPEndpoint: "http://jaeger:4318",
+				OTLPEndpoint: "jaeger:4318",
 				Insecure:     true,
 			},
 		}
@@ -75,7 +75,7 @@ func TestTracingConfigEnvVars(t *testing.T) {
 		defer c.Stop(context.Background())
 		require.NoError(t, err)
 
-		assert.Equal(t, "http://jaeger:4318", os.Getenv("NUTS_TRACING_ENDPOINT"))
+		assert.Equal(t, "jaeger:4318", os.Getenv("NUTS_TRACING_ENDPOINT"))
 		assert.Equal(t, "true", os.Getenv("NUTS_TRACING_INSECURE"))
 	})
 

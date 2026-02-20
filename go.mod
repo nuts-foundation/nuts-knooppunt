@@ -1,6 +1,6 @@
 module github.com/nuts-foundation/nuts-knooppunt
 
-go 1.25.7
+go 1.26.0
 
 require github.com/nuts-foundation/nuts-knooppunt/test/testdata v0.5.0
 
