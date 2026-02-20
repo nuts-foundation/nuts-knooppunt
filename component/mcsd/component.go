@@ -340,16 +340,22 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		slog.InfoContext(ctx, "No last update time, doing full sync from FHIR server", logging.FHIRServer(fhirBaseURLRaw))
 	}
 
-	var entries []fhir.BundleEntry
-	var firstSearchSet fhir.Bundle
-	for i, resourceType := range allowedResourceTypes {
-		currEntries, currSearchSet, err := c.queryHistory(ctx, remoteAdminDirectoryFHIRClient, resourceType, searchParams)
+	// Initial query
+	entries, firstSearchSet, err := c.queryAllResourceTypes(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
+	if err != nil {
+		return DirectoryUpdateReport{}, err
+	}
+
+	// Check if any Organization's URA identifier has changed between history versions
+	uraIdentifierChanged := checkForURAIdentifierChanges(entries)
+	if uraIdentifierChanged {
+		slog.WarnContext(ctx, "Detected URA identifier change in organization history. Rerunning history query without _since parameter.", logging.FHIRServer(fhirBaseURLRaw))
+
+		// Remove _since parameter and rerun the query
+		searchParams.Del("_since")
+		entries, firstSearchSet, err = c.queryAllResourceTypes(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
 		if err != nil {
-			return DirectoryUpdateReport{}, fmt.Errorf("failed to query %s history: %w", resourceType, err)
-		}
-		entries = append(entries, currEntries...)
-		if i == 0 {
-			firstSearchSet = currSearchSet
+			return DirectoryUpdateReport{}, err
 		}
 	}
 
@@ -584,6 +590,90 @@ func extractResourceIDFromURL(entry fhir.BundleEntry) string {
 	}
 
 	return ""
+}
+
+// queryAllResourceTypes queries all specified resource types from the FHIR server and returns combined entries.
+func (c *Component) queryAllResourceTypes(ctx context.Context, fhirClient fhirclient.Client, resourceTypes []string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
+	var entries []fhir.BundleEntry
+	var firstSearchSet fhir.Bundle
+
+	for i, resourceType := range resourceTypes {
+		// Create a copy of searchParams for this resource type
+		params := make(url.Values)
+		for k, v := range searchParams {
+			params[k] = v
+		}
+
+		// Remove _single parameter for Organization resource type
+		if resourceType == "Organization" {
+			params.Del("_since")
+		}
+
+		currEntries, currSearchSet, err := c.queryHistory(ctx, fhirClient, resourceType, params)
+		if err != nil {
+			return nil, fhir.Bundle{}, fmt.Errorf("failed to query %s history: %w", resourceType, err)
+		}
+		entries = append(entries, currEntries...)
+		if i == 0 {
+			firstSearchSet = currSearchSet
+		}
+	}
+
+	return entries, firstSearchSet, nil
+}
+
+// checkForURAIdentifierChanges detects if any Organization's URA identifier has changed between history versions
+func checkForURAIdentifierChanges(entries []fhir.BundleEntry) bool {
+	// Map to track URA identifiers per Organization ID
+	// We use empty string "" as a marker for "no URA identifier present"
+	orgURAMap := make(map[string]map[string]bool) // orgID -> set of URA values (or "" for no URA)
+
+	for _, entry := range entries {
+		if entry.Resource == nil {
+			continue
+		}
+
+		// Try to unmarshal as Organization
+		var org fhir.Organization
+		if err := json.Unmarshal(entry.Resource, &org); err != nil {
+			continue // Not an Organization, skip
+		}
+
+		if org.Id == nil {
+			continue
+		}
+
+		orgID := *org.Id
+
+		// Extract URA identifiers
+		uraIdentifiers := libfhir.FilterIdentifiersBySystem(org.Identifier, coding.URANamingSystem)
+
+		// Initialize map for this org if needed
+		if orgURAMap[orgID] == nil {
+			orgURAMap[orgID] = make(map[string]bool)
+		}
+
+		// Track all URA values seen for this organization
+		if len(uraIdentifiers) == 0 {
+			// No URA identifier - mark with empty string
+			orgURAMap[orgID][""] = true
+		} else {
+			for _, ura := range uraIdentifiers {
+				if ura.Value != nil {
+					orgURAMap[orgID][*ura.Value] = true
+				}
+			}
+		}
+	}
+
+	// Check if any organization has multiple different URA values (including presence/absence changes)
+	for _, uraSet := range orgURAMap {
+		if len(uraSet) > 1 {
+			return true // Found an organization with changed URA identifier
+		}
+	}
+
+	return false
 }
 
 func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseURLRaw string, remoteAdminDirectoryFHIRClient fhirclient.Client, authoritativeUra string) (parentOrganizationMap, error) {
