@@ -38,6 +38,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.38.0
 	go.uber.org/mock v0.6.0
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
+	golang.org/x/oauth2 v0.35.0
 	software.sslmate.com/src/go-pkcs12 v0.6.0
 )
 

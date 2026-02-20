@@ -18,6 +18,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/httpauth"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -64,8 +65,9 @@ func makeDirectoryKey(fhirBaseURL, authoritativeUra string) string {
 //   - These are mitigating measures to prevent an attacker to spoof another care organization.
 //   - The organization's mcsd-directory-endpoint must be discoverable through the root mCSD Directory.'
 type Component struct {
-	config       Config
-	fhirClientFn func(baseURL *url.URL) fhirclient.Client
+	config            Config
+	fhirAdminClientFn func(baseURL *url.URL) fhirclient.Client
+	fhirQueryClient   fhirclient.Client
 
 	administrationDirectories []administrationDirectory
 	directoryResourceTypes    []string
@@ -84,6 +86,7 @@ type Config struct {
 	QueryDirectory            DirectoryConfig            `koanf:"query"`
 	ExcludeAdminDirectories   []string                   `koanf:"adminexclude"`
 	DirectoryResourceTypes    []string                   `koanf:"directoryresourcetypes"`
+	Auth                      httpauth.OAuth2Config      `koanf:"auth"`
 }
 
 type DirectoryConfig struct {
@@ -109,13 +112,34 @@ type DirectoryUpdateReport struct {
 }
 
 func New(config Config) (*Component, error) {
+	// Create HTTP client with optional OAuth2 authentication
+	var httpClient *http.Client
+	var err error
+	if config.Auth.IsConfigured() {
+		slog.Info("mCSD: OAuth2 authentication configured", slog.String("token_endpoint", config.Auth.TokenEndpoint))
+		httpClient, err = httpauth.NewOAuth2HTTPClient(config.Auth, tracing.WrapTransport(nil))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OAuth2 HTTP client for mCSD: %w", err)
+		}
+	} else {
+		httpClient = tracing.NewHTTPClient()
+	}
+
+	queryDirectoryFHIRBaseURL, err := url.Parse(config.QueryDirectory.FHIRBaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid Query Directory FHIR base URL (url=%s): %w", config.QueryDirectory.FHIRBaseURL, err)
+	}
+
 	result := &Component{
 		config: config,
-		fhirClientFn: func(baseURL *url.URL) fhirclient.Client {
+		fhirAdminClientFn: func(baseURL *url.URL) fhirclient.Client {
 			return fhirclient.New(baseURL, tracing.NewHTTPClient(), &fhirclient.Config{
 				UsePostSearch: false,
 			})
 		},
+		fhirQueryClient: fhirclient.New(queryDirectoryFHIRBaseURL, httpClient, &fhirclient.Config{
+			UsePostSearch: false,
+		}),
 		directoryResourceTypes: config.DirectoryResourceTypes,
 		lastUpdateTimes:        make(map[string]string),
 		updateMux:              &sync.RWMutex{},
@@ -315,13 +339,9 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	if err != nil {
 		return DirectoryUpdateReport{}, err
 	}
-	remoteAdminDirectoryFHIRClient := c.fhirClientFn(remoteAdminDirectoryFHIRBaseURL)
+	remoteAdminDirectoryFHIRClient := c.fhirAdminClientFn(remoteAdminDirectoryFHIRBaseURL)
 
-	queryDirectoryFHIRBaseURL, err := url.Parse(c.config.QueryDirectory.FHIRBaseURL)
-	if err != nil {
-		return DirectoryUpdateReport{}, err
-	}
-	queryDirectoryFHIRClient := c.fhirClientFn(queryDirectoryFHIRBaseURL)
+	queryDirectoryFHIRClient := c.fhirQueryClient
 
 	// Get last update time for incremental sync
 	directoryKey := makeDirectoryKey(fhirBaseURLRaw, authoritativeUra)
