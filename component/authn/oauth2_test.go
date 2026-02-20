@@ -3,7 +3,6 @@ package authn
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
@@ -44,8 +43,6 @@ func TestHTTPClient_IntegrationTest(t *testing.T) {
 
 func TestHTTPClient(t *testing.T) {
 	t.Run("successful token retrieval", func(t *testing.T) {
-		// Generate test certificate
-		//cert := generateTestCertificate(t)
 		var receivedFormDataChan = make(chan url.Values, 1)
 
 		tokenServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -123,9 +120,6 @@ func TestHTTPClient(t *testing.T) {
 
 func TestTokenSource_Token(t *testing.T) {
 	t.Run("successful token request", func(t *testing.T) {
-		// Generate test certificate
-		//cert := generateTestCertificate(t)
-
 		// Create mock token endpoint
 		tokenServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := oauth2.Token{
@@ -155,9 +149,6 @@ func TestTokenSource_Token(t *testing.T) {
 	})
 
 	t.Run("token endpoint returns error", func(t *testing.T) {
-		// Generate test certificate
-		//cert := generateTestCertificate(t)
-
 		// Create mock token endpoint that returns an error
 		tokenServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -212,35 +203,4 @@ func TestCertThumbprint(t *testing.T) {
 	assert.True(t, len(thumbprint) > 0)
 	// SHA-256 produces 32 bytes, base64url encoded should be 43 characters (without padding)
 	assert.Equal(t, 43, len(thumbprint))
-}
-
-// generateTestCertificate creates a self-signed certificate for testing
-func generateTestCertificate(t *testing.T) tls.Certificate {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			Organization: []string{"Test Organization"},
-			CommonName:   "test.example.com",
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(24 * time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
-
-	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
-	require.NoError(t, err)
-
-	cert, err := x509.ParseCertificate(certBytes)
-	require.NoError(t, err)
-
-	return tls.Certificate{
-		Certificate: [][]byte{certBytes},
-		PrivateKey:  privateKey,
-		Leaf:        cert,
-	}
 }
