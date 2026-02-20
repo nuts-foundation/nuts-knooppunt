@@ -128,7 +128,7 @@ type FHIRRestData struct {
 	InteractionType   fhir.TypeRestfulInteraction `json:"interaction_type"`
 	Operation         *string                     `json:"operation"`
 	Revinclude        []string                    `json:"revinclude"`
-	SearchParams      map[string]string           `json:"search_params"`
+	SearchParams      map[string][]string         `json:"search_params"`
 }
 
 type PolicyContext struct {

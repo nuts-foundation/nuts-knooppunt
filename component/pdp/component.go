@@ -83,8 +83,16 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	input := reqBody.Input
 	if err != nil {
-		// TODO: Change this to a proper JSON response (Problem API?)
-		http.Error(w, "unable to parse request body: "+err.Error(), http.StatusBadRequest)
+		res := PolicyResult{
+			Allow: false,
+			Reasons: []ResultReason{
+				{
+					Code:        TypeResultCodeUnexpectedInput,
+					Description: "unable to parse request body: " + err.Error(),
+				},
+			},
+		}
+		writeResponseWithCode(r.Context(), w, res, http.StatusBadRequest)
 		return
 	}
 
@@ -101,7 +109,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 				},
 			},
 		}
-		writeResp(r.Context(), w, res)
+		writeResponse(r.Context(), w, res)
 		return
 	}
 
@@ -115,7 +123,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 				},
 			},
 		}
-		writeResp(r.Context(), w, res)
+		writeResponse(r.Context(), w, res)
 		return
 	}
 
@@ -128,7 +136,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	policyInput, policyResult := NewPolicyInput(reqBody)
 	policyResult.Policy = policy
 	if !policyResult.Allow {
-		writeResp(r.Context(), w, policyResult)
+		writeResponse(r.Context(), w, policyResult)
 		return
 	}
 
@@ -154,14 +162,14 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 			Code:        TypeResultCodeNotImplemented,
 			Description: "failed to evaluate rego policy",
 		})
-		writeResp(r.Context(), w, policyResult)
+		writeResponse(r.Context(), w, policyResult)
 		return
 	}
 	regoPolicyResult.Reasons = append(policyResult.Reasons, regoPolicyResult.Reasons...)
-	writeResp(r.Context(), w, *regoPolicyResult)
+	writeResponse(r.Context(), w, *regoPolicyResult)
 }
 
-func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) {
+func writeResponseWithCode(ctx context.Context, w http.ResponseWriter, result PolicyResult, statusCode int) {
 	resp := PDPResponse{
 		Result: result,
 	}
@@ -173,11 +181,15 @@ func writeResp(ctx context.Context, w http.ResponseWriter, result PolicyResult) 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(statusCode)
 	_, err = w.Write(b)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write response to ResponseWriter", logging.Error(err))
 	}
+}
+
+func writeResponse(ctx context.Context, w http.ResponseWriter, result PolicyResult) {
+	writeResponseWithCode(ctx, w, result, http.StatusOK)
 }
 
 func (c *Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {

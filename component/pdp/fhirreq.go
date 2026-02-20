@@ -48,7 +48,7 @@ var definitions = []PathDef{
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionDelete,
-		PathDef:     []string{"[type]?"},
+		PathDef:     []string{"[type]"},
 		Verb:        "DELETE",
 	},
 	{
@@ -58,18 +58,13 @@ var definitions = []PathDef{
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionSearchType,
-		PathDef:     []string{"[type]?"},
+		PathDef:     []string{"[type]"},
 		Verb:        "GET",
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionUpdate,
-		PathDef:     []string{"[type]?"},
+		PathDef:     []string{"[type]"},
 		Verb:        "PUT",
-	},
-	{
-		Interaction: fhir.TypeRestfulInteractionSearchType,
-		PathDef:     []string{"[type]", "_search?"},
-		Verb:        "POST",
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionSearchType,
@@ -78,7 +73,7 @@ var definitions = []PathDef{
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionSearchSystem,
-		PathDef:     []string{"?"},
+		PathDef:     []string{},
 		Verb:        "GET",
 	},
 	{
@@ -138,6 +133,19 @@ var definitions = []PathDef{
 	},
 }
 
+func init() {
+	// Sanity check: verify that all path definitions are valid
+	for _, def := range definitions {
+		for _, pathPart := range def.PathDef {
+			if pathPart == "" {
+				// Fine to panic here, since it's an unrecoverable error.
+				// It will be checked on startup (due to the init function).
+				panic(fmt.Sprintf("invalid path definition: empty path part in interaction %s", def.Interaction))
+			}
+		}
+	}
+}
+
 var regexId = regexp.MustCompile(`^[A-Za-z0-9\-\.]{1,64}$`)
 var regexOperation = regexp.MustCompile(`^\$[a-z\-\.]+$`)
 
@@ -173,14 +181,6 @@ func parsePath(def PathDef, req HTTPRequest) (Tokens, bool) {
 		switch part {
 		case "[type]":
 			ptr, ok := parseResourceType(path[idx])
-			if !ok {
-				return Tokens{}, false
-			}
-			out.ResourceType = ptr
-			continue
-		case "[type]?":
-			str := strings.TrimSuffix(path[idx], "?")
-			ptr, ok := parseResourceType(str)
 			if !ok {
 				return Tokens{}, false
 			}
@@ -247,7 +247,7 @@ func parseRequestPath(request HTTPRequest) (Tokens, bool) {
 }
 
 type Params struct {
-	SearchParams map[string]string
+	SearchParams map[string][]string
 	Revinclude   []string
 	Include      []string
 }
@@ -294,13 +294,7 @@ func groupParams(queryParams url.Values) Params {
 	for _, p := range resultParams {
 		delete(queryParams, p)
 	}
-
-	// Convert remaining query params to map
-	params.SearchParams = make(map[string]string)
-	for key, values := range queryParams {
-		// Join multiple values with comma
-		params.SearchParams[key] = strings.Join(values, ",")
-	}
+	params.SearchParams = queryParams
 
 	return params
 }
