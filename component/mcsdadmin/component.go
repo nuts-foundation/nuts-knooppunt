@@ -22,6 +22,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/httpauth"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
@@ -30,7 +31,8 @@ import (
 )
 
 type Config struct {
-	FHIRBaseURL string `koanf:"fhirbaseurl"`
+	FHIRBaseURL string                `koanf:"fhirbaseurl"`
+	Auth        httpauth.OAuth2Config `koanf:"auth"`
 }
 
 var _ component.Lifecycle = (*Component)(nil)
@@ -49,7 +51,20 @@ func New(config Config) *Component {
 		return nil
 	}
 
-	client = fhirclient.New(baseURL, tracing.NewHTTPClient(), fhirutil.ClientConfig())
+	// Create HTTP client with optional OAuth2 authentication
+	var httpClient *http.Client
+	if config.Auth.IsConfigured() {
+		slog.Info("MCSD admin: OAuth2 authentication configured", slog.String("token_endpoint", config.Auth.TokenEndpoint))
+		httpClient, err = httpauth.NewOAuth2HTTPClient(config.Auth, tracing.WrapTransport(nil))
+		if err != nil {
+			slog.Error("Failed to create OAuth2 HTTP client for MCSD admin", logging.Error(err))
+			return nil
+		}
+	} else {
+		httpClient = tracing.NewHTTPClient()
+	}
+
+	client = fhirclient.New(baseURL, httpClient, fhirutil.ClientConfig())
 
 	return &Component{
 		config:     config,
