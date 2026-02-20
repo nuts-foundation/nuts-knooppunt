@@ -89,6 +89,8 @@ These endpoints need the URA of the requesting care organization. You provide th
 X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|<URA>
 ```
 
+Make sure you've configured the `authn.minvws` properties to allow the Knooppunt to authenticate to the NVI service.
+
 ## Consent MITZ
 
 The Knooppunt acts as a gateway that simplifies MITZ integration by:
