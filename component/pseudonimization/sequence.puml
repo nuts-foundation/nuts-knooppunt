@@ -1,0 +1,34 @@
+@startuml
+participant "Client 1\n(Source / Zorgaanbieder)" as C1
+participant "PRS\n(Pseudoniemen Register Service)" as PRS
+participant "NVI\n(Nationale VerwijsIndex)" as NVI
+
+== OAuth ==
+C1 -> PRS : OAuth token (prs:read)
+C1 -> NVI : OAuth token (epd:write)
+
+== Step 1: Local derivation ==
+C1 -> C1 : HKDF(BSN, info)  \n(RFC 5869)
+
+== Step 2: Blind ==
+C1 -> C1 : blind_input, blind_factor\n(OPRF client blind - RFC 9497)
+
+== Step 3: OPRF Evaluation ==
+C1 -> PRS : blinded_input
+PRS -> PRS : evaluate with PRS secret key
+PRS --> C1 : evaluated_blinded_output\n+ encrypted JWE for NVI
+
+== Step 4: Deblind ==
+C1 -> C1 : deblind(evaluated_blinded_output)\n→ pseudonym
+C1 -> C1 : derive oprfKey
+
+== Step 5: Register at NVI ==
+C1 -> NVI : POST /NVIDataReference\n(JWE pseudonym + oprfKey + URA + careContext)
+
+== Step 6: NVI Processing ==
+NVI -> NVI : decrypt JWE
+NVI -> NVI : hash(pseudonym)
+NVI -> NVI : store {hash, URA, careContext}
+
+NVI --> C1 : 201 Created
+@enduml

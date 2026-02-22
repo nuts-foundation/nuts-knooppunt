@@ -67,6 +67,7 @@ require (
 	github.com/bwesterb/go-atum v1.1.5 // indirect
 	github.com/bwesterb/go-exptable v1.0.0 // indirect
 	github.com/bwesterb/go-pow v1.0.0 // indirect
+	github.com/bwesterb/go-ristretto v1.2.3 // indirect
 	github.com/bwesterb/go-xmssmt v1.5.2 // indirect
 	github.com/bytecodealliance/wasmtime-go/v39 v39.0.1 // indirect
 	github.com/cbroglie/mustache v1.4.0 // indirect
@@ -74,6 +75,7 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/containerd/containerd/v2 v2.2.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect

@@ -86,6 +86,8 @@ github.com/bwesterb/go-exptable v1.0.0 h1:23PSZOb/63bD1WOkCwBDNC5lI+CgziLSXis9aI
 github.com/bwesterb/go-exptable v1.0.0/go.mod h1:g2X3srHVojy70H73yL0Wxy0yuuMuJwJByeKXaBkEZpw=
 github.com/bwesterb/go-pow v1.0.0 h1:QZ+LZMmZZYjqesKIr4nFCKAGIpLPePO/klHVSlzbvbo=
 github.com/bwesterb/go-pow v1.0.0/go.mod h1:Px3tTFyb+vzbrJYKBqyrxp+3MY8KRP6mbAk74iayAyY=
+github.com/bwesterb/go-ristretto v1.2.3 h1:1w53tCkGhCQ5djbat3+MH0BAQ5Kfgbt56UZQ/JMzngw=
+github.com/bwesterb/go-ristretto v1.2.3/go.mod h1:fUIoIZaG73pV5biE2Blr2xEzDoMj7NFEuV9ekS419A0=
 github.com/bwesterb/go-xmssmt v1.5.2 h1:nnPnAgBFVlxwMKozJmgBeWOVZCu1PQbxSYE5UqKHe8s=
 github.com/bwesterb/go-xmssmt v1.5.2/go.mod h1:Eob3lpFvWHYREWk+ao/vRFirdciRHF7w2z4NhAfozmA=
 github.com/bytecodealliance/wasmtime-go/v39 v39.0.1 h1:RibaT47yiyCRxMOj/l2cvL8cWiWBSqDXHyqsa9sGcCE=
@@ -100,6 +102,8 @@ github.com/cespare/xxhash v1.1.0 h1:a6HrQnmkObjyL+Gs60czilIUGqrzKutQD6XZog3p+ko=
 github.com/cespare/xxhash v1.1.0/go.mod h1:XrSqR1VqqWfGrhpAt58auRo0WTKS1nRRg3ghfAqPWnc=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
+github.com/cloudflare/circl v1.6.3 h1:9GPOhQGF9MCYUeXyMYlqTR6a5gTrgR/fBLXvUgtVcg8=
+github.com/cloudflare/circl v1.6.3/go.mod h1:2eXP6Qfat4O/Yhh8BznvKnJ+uzEoTQ6jVKJRn81BiS4=
 github.com/containerd/containerd/v2 v2.2.0 h1:K7TqcXy+LnFmZaui2DgHsnp2gAHhVNWYaHlx7HXfys8=
 github.com/containerd/containerd/v2 v2.2.0/go.mod h1:YCMjKjA4ZA7egdHNi3/93bJR1+2oniYlnS+c0N62HdE=
 github.com/containerd/errdefs v1.0.0 h1:tg5yIfIlQIrxYtu9ajqY42W3lpS19XqdxRQeEwYG8PI=
