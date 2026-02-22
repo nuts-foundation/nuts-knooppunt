@@ -43,6 +43,14 @@ const maxUpdateEntries = 1000
 // and don't rely on server defaults (which may be very high or very low (Azure FHIR's default is 10)).
 const searchPageSize = 100
 
+// is410GoneError checks if an error indicates a 410 Gone response (history too old).
+// This is used to detect when the _history endpoint can't serve the requested _since time
+// and we need to fallback to Snapshot Mode.
+func is410GoneError(err error) bool {
+	errStr := err.Error()
+	return strings.Contains(errStr, "410") || strings.Contains(strings.ToLower(errStr), "gone")
+}
+
 // makeDirectoryKey creates a composite key from fhirBaseURL and authoritativeUra for tracking sync state per directory.
 // This allows multiple directories with the same FHIR base URL but different authoritative URAs to maintain separate sync states.
 func makeDirectoryKey(fhirBaseURL, authoritativeUra string) string {
@@ -87,6 +95,11 @@ type Config struct {
 	ExcludeAdminDirectories   []string                   `koanf:"adminexclude"`
 	DirectoryResourceTypes    []string                   `koanf:"directoryresourcetypes"`
 	Auth                      httpauth.OAuth2Config      `koanf:"auth"`
+	// SnapshotModeSupport enables fallback to full sync (search) when:
+	// - No last update time exists (initial sync)
+	// - Server returns HTTP 410 Gone (history too old)
+	// If false, only incremental sync (_history with _since) is supported.
+	SnapshotModeSupport bool `koanf:"snapshotmodesupport"`
 }
 
 type DirectoryConfig struct {
@@ -353,34 +366,59 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	searchParams := url.Values{
 		"_count": []string{strconv.Itoa(searchPageSize)},
 	}
-	if hasLastUpdate {
+
+	// Determine the sync mode.
+	// Snapshot Mode uses regular FHIR search to obtain the complete current state. It is used when:
+	//   1. No previous sync timestamp exists (initial load) and SnapshotModeSupport is enabled, or
+	//   2. The server returns HTTP 410 Gone (history too old) during a History Mode attempt.
+	// History Mode uses _history with an optional _since parameter for incremental sync.
+	useSnapshotMode := !hasLastUpdate && c.config.SnapshotModeSupport
+	historyMode := !useSnapshotMode
+
+	var (
+		entries []fhir.BundleEntry
+		firstSearchSet fhir.Bundle
+	)
+
+	if historyMode {
 		searchParams.Set("_since", lastUpdate)
 		slog.DebugContext(ctx, "Using _since parameter for incremental sync from FHIR server", logging.FHIRServer(fhirBaseURLRaw), slog.String("_since", lastUpdate))
-	} else {
-		slog.InfoContext(ctx, "No last update time, doing full sync from FHIR server", logging.FHIRServer(fhirBaseURLRaw))
+
+		entries, firstSearchSet, err = c.queryAllResourceTypes(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
+		if err != nil {
+			if is410GoneError(err) {
+				if !c.config.SnapshotModeSupport {
+					return DirectoryUpdateReport{}, fmt.Errorf("history unavailable (410 Gone) and Snapshot Mode is disabled, cannot sync: %w", err)
+				}
+				slog.WarnContext(ctx, "History unavailable (410 Gone), falling back to Snapshot Mode for full sync", logging.FHIRServer(fhirBaseURLRaw))
+				useSnapshotMode = true
+			} else {
+				return DirectoryUpdateReport{}, err
+			}
+		}
 	}
 
-	// Initial query
-	entries, firstSearchSet, err := c.queryAllResourceTypes(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
+	if useSnapshotMode {
+		// Snapshot Mode: full sync via regular search — no _since, no multiple resource versions.
+		slog.DebugContext(ctx, "Snapshot Mode: performing full sync using search", logging.FHIRServer(fhirBaseURLRaw))
+		entries, firstSearchSet, err = c.queryAllResourceTypesSnapshot(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
+	} else {
+		uraIdentifierChanged := checkForURAIdentifierChanges(entries)
+		if uraIdentifierChanged {
+			slog.WarnContext(ctx, "Detected URA identifier change in organization history. Rerunning history query without _since parameter.", logging.FHIRServer(fhirBaseURLRaw))
+
+			// Remove _since parameter and rerun the query
+			searchParams.Del("_since")
+			entries, firstSearchSet, err = c.queryAllResourceTypes(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
+		}
+	}
 	if err != nil {
 		return DirectoryUpdateReport{}, err
 	}
 
-	// Check if any Organization's URA identifier has changed between history versions
-	uraIdentifierChanged := checkForURAIdentifierChanges(entries)
-	if uraIdentifierChanged {
-		slog.WarnContext(ctx, "Detected URA identifier change in organization history. Rerunning history query without _since parameter.", logging.FHIRServer(fhirBaseURLRaw))
-
-		// Remove _since parameter and rerun the query
-		searchParams.Del("_since")
-		entries, firstSearchSet, err = c.queryAllResourceTypes(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
-		if err != nil {
-			return DirectoryUpdateReport{}, err
-		}
-	}
-
-	// Deduplicate resources from _history query - keep only the most recent version
-	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
+	// Deduplicate resources - in History Mode, _history can return multiple versions of the same
+	// resource, so we keep only the most recent. In Snapshot Mode, search results are already
+	// deduplicated by the server, but a pass here is safe and keeps the code path uniform.
 	deduplicatedEntries := deduplicateHistoryEntries(entries)
 
 	// Filter to only include HealthcareService resources
@@ -633,6 +671,51 @@ func (c *Component) queryAllResourceTypes(ctx context.Context, fhirClient fhircl
 		if err != nil {
 			return nil, fhir.Bundle{}, fmt.Errorf("failed to query %s history: %w", resourceType, err)
 		}
+		entries = append(entries, currEntries...)
+		if i == 0 {
+			firstSearchSet = currSearchSet
+		}
+	}
+
+	return entries, firstSearchSet, nil
+}
+
+// queryAllResourceTypesSnapshot queries all specified resource types using regular FHIR search (not _history).
+// This is used for Snapshot Mode — either for the initial load when no _since timestamp exists, or as a
+// fallback when the server returns 410 Gone (history too old).
+// Unlike history entries, search results do not carry Request metadata, so this function synthesises
+// a PUT Request for every entry so that buildUpdateTransaction can process them uniformly.
+func (c *Component) queryAllResourceTypesSnapshot(ctx context.Context, fhirClient fhirclient.Client, resourceTypes []string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
+	// Snapshot queries the current state; _since must not be set.
+	snapshotParams := make(url.Values)
+	for k, v := range searchParams {
+		snapshotParams[k] = v
+	}
+	snapshotParams.Del("_since")
+
+	var entries []fhir.BundleEntry
+	var firstSearchSet fhir.Bundle
+
+	for i, resourceType := range resourceTypes {
+		currEntries, currSearchSet, err := c.query(ctx, fhirClient, resourceType, snapshotParams)
+		if err != nil {
+			return nil, fhir.Bundle{}, fmt.Errorf("failed to query %s in snapshot mode: %w", resourceType, err)
+		}
+
+		// Synthesise Request fields that buildUpdateTransaction requires but search results lack.
+		for j := range currEntries {
+			if currEntries[j].Request == nil {
+				var resourceID string
+				if info, err := libfhir.ExtractResourceInfo(currEntries[j].Resource); err == nil {
+					resourceID = info.ID
+				}
+				currEntries[j].Request = &fhir.BundleEntryRequest{
+					Method: fhir.HTTPVerbPUT,
+					Url:    resourceType + "/" + resourceID,
+				}
+			}
+		}
+
 		entries = append(entries, currEntries...)
 		if i == 0 {
 			firstSearchSet = currSearchSet
