@@ -147,7 +147,7 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 			key == "subject:identifier" ||
 			strings.HasPrefix(key, coding.BSNNamingSystem) {
 			for i, value := range values {
-				newValue, err := c.tokenizeFHIRSearchToken(value, *requesterURA.Value, "nvi")
+				newValue, err := c.tokenizeFHIRSearchToken(httpRequest.Context(), value, *requesterURA.Value, "nvi")
 				if err != nil {
 					fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 					return
@@ -204,7 +204,7 @@ func (c Component) tokenizeIdentifiers(ctx context.Context, resource fhir.Docume
 }
 
 // tokenizeFHIRSearchToken converts a FHIR search token  (<system>|<value>) to a BSN transport token value.
-func (c Component) tokenizeFHIRSearchToken(searchToken string, localOrganizationURA string, audience string) (string, error) {
+func (c Component) tokenizeFHIRSearchToken(ctx context.Context, searchToken string, localOrganizationURA string, audience string) (string, error) {
 	if !strings.HasPrefix(searchToken, coding.BSNNamingSystem+"|") {
 		return searchToken, nil
 	}
@@ -216,7 +216,7 @@ func (c Component) tokenizeFHIRSearchToken(searchToken string, localOrganization
 		System: to.Ptr(parts[0]),
 		Value:  to.Ptr(parts[1]),
 	}
-	tokenizedIdentifier, err := c.identifierToToken(nil, identifier, localOrganizationURA, audience)
+	tokenizedIdentifier, err := c.identifierToToken(ctx, identifier, localOrganizationURA, audience)
 	if err != nil {
 		return "", err
 	}
