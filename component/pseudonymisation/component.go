@@ -1,51 +1,62 @@
-//go:generate mockgen -destination=component_mock.go -package=pseudonimization -source=component.go
-package pseudonimization
+//go:generate mockgen -destination=component_mock.go -package=pseudonymisation -source=component.go
+package pseudonymisation
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
 
+	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/from"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-type Pseudonymizer interface {
-	IdentifierToToken(ctx context.Context, identifier fhir.Identifier, audience string) (*fhir.Identifier, error)
-	TokenToBSN(identifier fhir.Identifier, audience string) (*fhir.Identifier, error)
+type Config struct {
+	PRSBaseURL string `koanf:"prsurl"`
 }
 
-func New(httpClient *http.Client, prsURL string) *Component {
+type Pseudonymizer interface {
+	IdentifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA string, recipientURA string) (*fhir.Identifier, error)
+}
+
+func New(cfg Config, httpClientFn authn.HTTPClientProvider) *Component {
 	return &Component{
-		httpClient: httpClient,
-		prsURL:     prsURL,
+		httpClientFn: httpClientFn,
+		config:       cfg,
 	}
 }
 
 type Component struct {
-	httpClient *http.Client
-	prsURL     string // Base URL for PRS service
+	httpClientFn authn.HTTPClientProvider
+	config       Config
 }
 
 // IdentifierToToken converts a BSN identifier to a pseudonymous transport token using the PRS service.
 // The process follows RFC 9497 OPRF protocol:
-// 1. Create prsIdentifier from BSN
+// 1. Create PRS identifier from BSN
 // 2. Derive key using HKDF
 // 3. Blind the input using OPRF client
 // 4. Send blinded input to PRS for evaluation
 // 5. PRS returns the final pseudonymized identifier (deblinding happens at the consuming system/NVI)
-func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identifier, recipientURA string) (*fhir.Identifier, error) {
+func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA string, recipientURA string) (*fhir.Identifier, error) {
+	if c.config.PRSBaseURL == "" {
+		// TODO: Remove Fake Pseudonymizer fallback once PRS is properly integrated
+		slog.WarnContext(ctx, "PRS base URL is not configured, using fake pseudonymizer for IdentifierToToken")
+		return FakePseudonymizer{}.IdentifierToToken(ctx, identifier, localOrganizationURA, recipientURA)
+	}
+
 	if identifier.System == nil || *identifier.System != coding.BSNNamingSystem || identifier.Value == nil {
 		return &identifier, nil
 	}
 
-	// Step 1: Create prsIdentifier
+	// Step 1: Create PRS identifier
 	prsID := prsIdentifier{
 		LandCode: "NL",
 		Type:     "BSN",
@@ -61,7 +72,7 @@ func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identi
 
 	// Step 4: Call PRS to get the pseudonymized identifier
 	// PRS returns the final pseudonymized BSN (deblinding happens at the consuming system/NVI)
-	pseudonymizedBSN, err := c.callPRSEvaluate(ctx, recipientURA, scope, blindedInputData)
+	pseudonymizedBSN, err := c.callPRSEvaluate(ctx, localOrganizationURA, recipientURA, scope, blindedInputData)
 	if err != nil {
 		return nil, err
 	}
@@ -72,23 +83,12 @@ func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identi
 	}, nil
 }
 
-// TokenToBSN is not supported in the PRS implementation.
-// PRS pseudonyms are one-way using OPRF and cannot be reversed to the original BSN.
-// This function returns an error if a transport token is provided.
-func (c Component) TokenToBSN(identifier fhir.Identifier, _ string) (*fhir.Identifier, error) {
-	if identifier.System == nil || *identifier.System != coding.BSNTransportTokenNamingSystem || identifier.Value == nil {
-		return &identifier, nil
-	}
-	return nil, fmt.Errorf("TokenToBSN is not supported: PRS pseudonyms cannot be reversed to BSN")
-}
-
 type prsIdentifier struct {
 	LandCode string `json:"landCode"`
 	Type     string `json:"type"`
 	Value    string `json:"value"`
 }
 
-// PRS API request/response structures
 type prsEvaluateRequest struct {
 	RecipientOrganization string `json:"recipientOrganization"`
 	RecipientScope        string `json:"recipientScope"`
@@ -96,11 +96,13 @@ type prsEvaluateRequest struct {
 }
 
 type prsEvaluateResponse struct {
-	PseudonymizedIdentifier string `json:"pseudonymized_identifier"` // The final pseudonymized BSN
+	JWE string `json:"jwe"`
 }
 
 // callPRSEvaluate sends the blinded input to the PRS service and returns the pseudonymized identifier
-func (c Component) callPRSEvaluate(ctx context.Context, recipientURA string, scope string, blindedInputData []byte) (string, error) {
+func (c Component) callPRSEvaluate(ctx context.Context, localOrganizationURA string, recipientURA string, scope string, blindedInputData []byte) (string, error) {
+	httpClient, err := c.httpClientFn(ctx, []string{"prs:read"}, localOrganizationURA, c.config.PRSBaseURL)
+
 	requestBody := prsEvaluateRequest{
 		RecipientOrganization: "ura:" + recipientURA,
 		RecipientScope:        scope,
@@ -112,8 +114,7 @@ func (c Component) callPRSEvaluate(ctx context.Context, recipientURA string, sco
 		return "", err
 	}
 
-	// Call PRS evaluate endpoint
-	requestURL, err := url.Parse(c.prsURL)
+	requestURL, err := url.Parse(c.config.PRSBaseURL)
 	if err != nil {
 		return "", err
 	}
@@ -122,7 +123,8 @@ func (c Component) callPRSEvaluate(ctx context.Context, recipientURA string, sco
 	if err != nil {
 		return "", err
 	}
-	httpResponse, err := c.httpClient.Do(httpRequest)
+	httpRequest.Header.Set("Content-Type", "application/json")
+	httpResponse, err := httpClient.Do(httpRequest)
 	if err != nil {
 		return "", fmt.Errorf("PRS request: %w", err)
 	}
@@ -132,5 +134,5 @@ func (c Component) callPRSEvaluate(ctx context.Context, recipientURA string, sco
 	if err != nil {
 		return "", fmt.Errorf("PRS response: %w", err)
 	}
-	return response.PseudonymizedIdentifier, nil
+	return response.JWE, nil
 }

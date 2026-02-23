@@ -1,4 +1,4 @@
-package pseudonimization
+package pseudonymisation
 
 import (
 	"crypto/hkdf"

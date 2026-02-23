@@ -83,6 +83,13 @@ func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *
 }
 
 func New(config Config, httpInterfaces httpComponent.InterfaceInfo, coreConfig core.Config) (*Component, error) {
+	result := &Component{
+		config: config,
+	}
+	if len(config.Clients) == 0 {
+		return result, nil
+	}
+
 	var extraOptions []op.Option
 	if !coreConfig.StrictMode {
 		extraOptions = append(extraOptions, op.WithAllowInsecure())
@@ -116,12 +123,10 @@ func New(config Config, httpInterfaces httpComponent.InterfaceInfo, coreConfig c
 	if err != nil {
 		return nil, err
 	}
-	return &Component{
-		provider:        provider,
-		storage:         storage,
-		callbackURLFunc: op.AuthCallbackURL(provider),
-		config:          config,
-	}, nil
+	result.provider = provider
+	result.storage = storage
+	result.callbackURLFunc = op.AuthCallbackURL(provider)
+	return result, nil
 }
 
 func newOIDCProvider(storage op.Storage, httpInterfaces httpComponent.InterfaceInfo, extraOptions []op.Option) (*op.Provider, error) {

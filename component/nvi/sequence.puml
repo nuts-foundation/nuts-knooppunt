@@ -1,5 +1,5 @@
 @startuml
-participant "Client 1\n(Source / Zorgaanbieder)" as C1
+participant "Client\n(Source / Zorgaanbieder)" as C1
 participant "PRS\n(Pseudoniemen Register Service)" as PRS
 participant "NVI\n(Nationale VerwijsIndex)" as NVI
 
@@ -18,15 +18,13 @@ C1 -> PRS : blinded_input
 PRS -> PRS : evaluate with PRS secret key
 PRS --> C1 : evaluated_blinded_output\n+ encrypted JWE for NVI
 
-== Step 4: Deblind ==
-C1 -> C1 : deblind(evaluated_blinded_output)\n→ pseudonym
-C1 -> C1 : derive oprfKey
+== Step 4: Register at NVI ==
+C1 -> NVI : POST /NVIDataReference\n(JWE evaluated_blinded_output + URA + careContext)
 
-== Step 5: Register at NVI ==
-C1 -> NVI : POST /NVIDataReference\n(JWE pseudonym + oprfKey + URA + careContext)
-
-== Step 6: NVI Processing ==
+== Step 5: NVI Processing ==
 NVI -> NVI : decrypt JWE
+NVI -> NVI : deblind(evaluated_blinded_output)\n→ pseudonym
+NVI -> NVI : derive oprfKey
 NVI -> NVI : hash(pseudonym)
 NVI -> NVI : store {hash, URA, careContext}
 
