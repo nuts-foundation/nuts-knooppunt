@@ -2,60 +2,84 @@
 package pseudonimization
 
 import (
-	"crypto/sha256"
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"net/url"
+	"path"
 
-	"github.com/nuts-foundation/nuts-knooppunt/lib/bsnutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/from"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
-	"golang.org/x/crypto/hkdf"
 )
 
 type Pseudonymizer interface {
-	IdentifierToToken(identifier fhir.Identifier, audience string) (*fhir.Identifier, error)
+	IdentifierToToken(ctx context.Context, identifier fhir.Identifier, audience string) (*fhir.Identifier, error)
 	TokenToBSN(identifier fhir.Identifier, audience string) (*fhir.Identifier, error)
 }
 
-func New(httpClient *http.Client) *Component {
+func New(httpClient *http.Client, prsURL string) *Component {
 	return &Component{
 		httpClient: httpClient,
+		prsURL:     prsURL,
 	}
 }
 
 type Component struct {
 	httpClient *http.Client
+	prsURL     string // Base URL for PRS service
 }
 
-func (c Component) IdentifierToToken(identifier fhir.Identifier, audience string) (*fhir.Identifier, error) {
+// IdentifierToToken converts a BSN identifier to a pseudonymous transport token using the PRS service.
+// The process follows RFC 9497 OPRF protocol:
+// 1. Create prsIdentifier from BSN
+// 2. Derive key using HKDF
+// 3. Blind the input using OPRF client
+// 4. Send blinded input to PRS for evaluation
+// 5. PRS returns the final pseudonymized identifier (deblinding happens at the consuming system/NVI)
+func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identifier, recipientURA string) (*fhir.Identifier, error) {
 	if identifier.System == nil || *identifier.System != coding.BSNNamingSystem || identifier.Value == nil {
 		return &identifier, nil
 	}
-	token, err := bsnutil.CreateTransportToken(*identifier.Value, audience)
-	if err != nil {
-		return nil, fmt.Errorf("getting BSN transport token: %v", err)
+
+	// Step 1: Create prsIdentifier
+	prsID := prsIdentifier{
+		LandCode: "NL",
+		Type:     "BSN",
+		Value:    *identifier.Value,
 	}
+
+	// Step 2 & 3: Blind the identifier (internally derives key and blinds)
+	scope := "nationale-verwijsindex"
+	blindedInputData, err := blindIdentifier(prsID, recipientURA, scope)
+	if err != nil {
+		return nil, fmt.Errorf("blinding identifier: %w", err)
+	}
+
+	// Step 4: Call PRS to get the pseudonymized identifier
+	// PRS returns the final pseudonymized BSN (deblinding happens at the consuming system/NVI)
+	pseudonymizedBSN, err := c.callPRSEvaluate(ctx, recipientURA, scope, blindedInputData)
+	if err != nil {
+		return nil, err
+	}
+
 	return &fhir.Identifier{
 		System: to.Ptr(coding.BSNTransportTokenNamingSystem),
-		Value:  to.Ptr(token),
+		Value:  &pseudonymizedBSN,
 	}, nil
 }
 
-func (c Component) TokenToBSN(identifier fhir.Identifier, audience string) (*fhir.Identifier, error) {
+// TokenToBSN is not supported in the PRS implementation.
+// PRS pseudonyms are one-way using OPRF and cannot be reversed to the original BSN.
+// This function returns an error if a transport token is provided.
+func (c Component) TokenToBSN(identifier fhir.Identifier, _ string) (*fhir.Identifier, error) {
 	if identifier.System == nil || *identifier.System != coding.BSNTransportTokenNamingSystem || identifier.Value == nil {
 		return &identifier, nil
 	}
-	bsn, err := bsnutil.BSNFromTransportToken(*identifier.Value)
-	if err != nil {
-		return nil, fmt.Errorf("getting BSN from transport token: %v", err)
-	}
-	return &fhir.Identifier{
-		System: to.Ptr(coding.BSNNamingSystem),
-		Value:  to.Ptr(bsn),
-	}, nil
+	return nil, fmt.Errorf("TokenToBSN is not supported: PRS pseudonyms cannot be reversed to BSN")
 }
 
 type prsIdentifier struct {
@@ -64,35 +88,49 @@ type prsIdentifier struct {
 	Value    string `json:"value"`
 }
 
-// CreatePseudonym derives a pseudonym from a personal identifier using HKDF-SHA256.
-// This is the Go equivalent of:
-//
-//	info = f"{recipient_organization}|{recipient_scope}|v1".encode("utf-8")
-//	hkdf = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=info)
-//	pid = json.dumps(personal_identifier)
-//	pseudonym = hkdf.derive(pid.encode("utf-8"))
-func (c Component) CreatePseudonym(personalIdentifier prsIdentifier, recipientOrganization, recipientScope string) ([]byte, error) {
-	// JSON encode the personal identifier (this is the Input Key Material)
-	pid, err := json.Marshal(personalIdentifier)
+// PRS API request/response structures
+type prsEvaluateRequest struct {
+	RecipientOrganization string `json:"recipientOrganization"`
+	RecipientScope        string `json:"recipientScope"`
+	EncryptedPersonalID   []byte `json:"encryptedPersonalId"`
+}
+
+type prsEvaluateResponse struct {
+	PseudonymizedIdentifier string `json:"pseudonymized_identifier"` // The final pseudonymized BSN
+}
+
+// callPRSEvaluate sends the blinded input to the PRS service and returns the pseudonymized identifier
+func (c Component) callPRSEvaluate(ctx context.Context, recipientURA string, scope string, blindedInputData []byte) (string, error) {
+	requestBody := prsEvaluateRequest{
+		RecipientOrganization: "ura:" + recipientURA,
+		RecipientScope:        scope,
+		EncryptedPersonalID:   blindedInputData,
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("marshaling personal identifier: %w", err)
+		return "", err
 	}
 
-	// Create the info string: "{recipient_organization}|{recipient_scope}|v1"
-	info := fmt.Sprintf("%s|%s|v1", recipientOrganization, recipientScope)
-
-	// Create HKDF reader with:
-	// - hash: SHA256
-	// - secret/IKM: the JSON-encoded personal identifier
-	// - salt: nil (no salt)
-	// - info: the recipient organization, scope, and version
-	hkdfReader := hkdf.New(sha256.New, pid, nil, []byte(info))
-
-	// Derive 32 bytes (256 bits) for the pseudonym
-	pseudonym := make([]byte, 32)
-	if _, err := io.ReadFull(hkdfReader, pseudonym); err != nil {
-		return nil, fmt.Errorf("deriving pseudonym: %w", err)
+	// Call PRS evaluate endpoint
+	requestURL, err := url.Parse(c.prsURL)
+	if err != nil {
+		return "", err
 	}
+	requestURL.Path = path.Join(requestURL.Path, "oprf/eval")
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL.String(), bytes.NewReader(bodyBytes))
+	if err != nil {
+		return "", err
+	}
+	httpResponse, err := c.httpClient.Do(httpRequest)
+	if err != nil {
+		return "", fmt.Errorf("PRS request: %w", err)
+	}
+	defer httpResponse.Body.Close()
 
-	return pseudonym, nil
+	response, err := from.JSONResponse[prsEvaluateResponse](httpResponse)
+	if err != nil {
+		return "", fmt.Errorf("PRS response: %w", err)
+	}
+	return response.PseudonymizedIdentifier, nil
 }

@@ -62,6 +62,14 @@ func HTTPClient(ctx context.Context, scope []string, uraNumber string, targetAud
 		return nil, errors.New("token endpoint is configured but TLS client certificate is not configured")
 	}
 
+	// Create a base HTTP client with TLS config
+	// Add the base client to the context so oauth2.NewClient uses it
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: tlsConfig,
+		},
+	})
+
 	return oauth2.NewClient(ctx, tokenSource{
 		uraNumber:      uraNumber,
 		targetAudience: targetAudience,

@@ -356,7 +356,7 @@ func TestComponent_identifierToToken(t *testing.T) {
 				pseudonymizer: pseudonymizer,
 			}
 
-			result, err := component.identifierToToken(tc.inputIdentifier, tc.audience)
+			result, err := component.identifierToToken(nil, tc.inputIdentifier, tc.audience)
 
 			if tc.expectedError {
 				require.Error(t, err)

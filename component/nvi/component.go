@@ -30,6 +30,7 @@ func DefaultConfig() Config {
 type Config struct {
 	FHIRBaseURL string `koanf:"baseurl"`
 	Audience    string `koanf:"audience"`
+	PRSURL      string `koanf:"prsurl"`
 }
 
 func (c Config) Enabled() bool {
@@ -53,6 +54,14 @@ func New(config Config, httpClientFn authn.HTTPClientProvider) (*Component, erro
 	if config.Audience == "" {
 		return nil, fmt.Errorf("audience must be configured when NVI component is enabled")
 	}
+	if config.PRSURL == "" {
+		return nil, fmt.Errorf("prsurl must be configured when NVI component is enabled")
+	}
+
+	// Create HTTP client for PRS
+	// Note: In production, this should use OAuth2 authentication with prs:read scope
+	prsHTTPClient := &http.Client{}
+
 	return &Component{
 		fhirBaseURL: baseURL,
 		fhirClientFn: func(ctx context.Context, uraNumber string) (fhirclient.Client, error) {
@@ -65,7 +74,7 @@ func New(config Config, httpClientFn authn.HTTPClientProvider) (*Component, erro
 			httpClient.Transport = tracing.WrapTransport(httpClient.Transport)
 			return fhirclient.New(baseURL, httpClient, fhirutil.ClientConfig()), nil
 		},
-		pseudonymizer: &pseudonimization.Component{},
+		pseudonymizer: pseudonimization.New(prsHTTPClient, config.PRSURL),
 		audience:      config.Audience,
 	}, nil
 }
@@ -94,7 +103,7 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 	resource.Meta = profile.Set(resource.Meta, profile.NLGenericFunctionDocumentReference)
 
 	// Use BSN transport tokens to NVI, instead of BSNs
-	tokenizedResource, err := c.tokenizeIdentifiers(resource, c.audience)
+	tokenizedResource, err := c.tokenizeIdentifiers(httpRequest.Context(), resource, c.audience)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
@@ -224,11 +233,11 @@ func (c Component) detokenizeIdentifiers(resource fhir.DocumentReference, audien
 	return &resource, nil
 }
 
-func (c Component) tokenizeIdentifiers(resource fhir.DocumentReference, audience string) (*fhir.DocumentReference, error) {
+func (c Component) tokenizeIdentifiers(ctx context.Context, resource fhir.DocumentReference, audience string) (*fhir.DocumentReference, error) {
 	if resource.Subject == nil || resource.Subject.Identifier == nil {
 		return &resource, nil
 	}
-	tokenizedIdentifier, err := c.identifierToToken(*resource.Subject.Identifier, audience)
+	tokenizedIdentifier, err := c.identifierToToken(ctx, *resource.Subject.Identifier, audience)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +258,7 @@ func (c Component) tokenizeFHIRSearchToken(searchToken string, audience string) 
 		System: to.Ptr(parts[0]),
 		Value:  to.Ptr(parts[1]),
 	}
-	tokenizedIdentifier, err := c.identifierToToken(identifier, audience)
+	tokenizedIdentifier, err := c.identifierToToken(nil, identifier, audience)
 	if err != nil {
 		return "", err
 	}
@@ -268,8 +277,8 @@ func (c Component) identifierToBSN(identifier fhir.Identifier, audience string) 
 	return result, nil
 }
 
-func (c Component) identifierToToken(identifier fhir.Identifier, audience string) (*fhir.Identifier, error) {
-	result, err := c.pseudonymizer.IdentifierToToken(identifier, audience)
+func (c Component) identifierToToken(ctx context.Context, identifier fhir.Identifier, audience string) (*fhir.Identifier, error) {
+	result, err := c.pseudonymizer.IdentifierToToken(ctx, identifier, audience)
 	if err != nil {
 		return nil, &fhirapi.Error{
 			Message:   "Failed to pseudonymize BSN identifier",

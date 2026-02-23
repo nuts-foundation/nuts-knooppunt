@@ -30,15 +30,13 @@ func Test_blindIdentifier(t *testing.T) {
 			Type:     "BSN",
 			Value:    "900186021",
 		}
-		data, input, err := blindIdentifier(identifier, "ura:1234", "nationale-verwijsindex")
+		blindedInputData, err := blindIdentifier(identifier, "ura:1234", "nationale-verwijsindex")
 		require.NoError(t, err)
-		require.NotEmpty(t, data)
-		require.NotEmpty(t, input)
+		require.NotEmpty(t, blindedInputData)
 
-		t.Log("blind: " + base64.URLEncoding.EncodeToString(data))
-		t.Log("blinded input: " + base64.URLEncoding.EncodeToString(input))
+		t.Log("blinded input: " + base64.URLEncoding.EncodeToString(blindedInputData))
 
-		evaluatedBlind := evaluateBlind(t, input)
+		evaluatedBlind := evaluateBlind(t, blindedInputData)
 
 		t.Log("evaluated blind: " + base64.URLEncoding.EncodeToString(evaluatedBlind))
 	})
