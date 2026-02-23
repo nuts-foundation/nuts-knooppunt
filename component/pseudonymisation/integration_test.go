@@ -1,6 +1,7 @@
 package pseudonymisation
 
 import (
+	"os"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd/core"
@@ -13,17 +14,26 @@ import (
 )
 
 func TestIntegration(t *testing.T) {
-	//t.Skip()
 	const (
 		tokenEndpoint = "https://oauth.proeftuin.gf.irealisatie.nl/oauth/token"
 		prsBaseURL    = "https://pseudoniemendienst.proeftuin.gf.irealisatie.nl"
-		ura           = "90000311"
+		ura           = "90000311" // adjust this to your own
 		uraNVI        = "90000901"
+		certFile      = "../authn/cert.pem"
+		keyFile       = "../authn/cert-key.pem"
 	)
+
+	// Only skip if certificate files don't exist
+	if _, err := os.Stat(certFile); os.IsNotExist(err) {
+		t.Skipf("Certificate file not found: %s", certFile)
+	}
+	if _, err := os.Stat(keyFile); os.IsNotExist(err) {
+		t.Skipf("Key file not found: %s", keyFile)
+	}
 
 	authnComponent, err := authn.New(authn.Config{
 		MinVWS: authn.MinistryAuthConfig{
-			Config:        tlsutil.Config{TLSCertFile: "../authn/cert.pem", TLSKeyFile: "../authn/cert-key.pem"},
+			Config:        tlsutil.Config{TLSCertFile: certFile, TLSKeyFile: keyFile},
 			TokenEndpoint: tokenEndpoint,
 		},
 	}, nil, core.Config{})
