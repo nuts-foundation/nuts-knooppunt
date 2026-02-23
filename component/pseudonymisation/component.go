@@ -102,6 +102,9 @@ type prsEvaluateResponse struct {
 // callPRSEvaluate sends the blinded input to the PRS service and returns the pseudonymized identifier
 func (c Component) callPRSEvaluate(ctx context.Context, localOrganizationURA string, recipientURA string, scope string, blindedInputData []byte) (string, error) {
 	httpClient, err := c.httpClientFn(ctx, []string{"prs:read"}, localOrganizationURA, c.config.PRSBaseURL)
+	if err != nil {
+		return "", fmt.Errorf("creating PRS HTTP client: %w", err)
+	}
 
 	requestBody := prsEvaluateRequest{
 		RecipientOrganization: "ura:" + recipientURA,
