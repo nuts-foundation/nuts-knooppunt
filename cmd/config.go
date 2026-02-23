@@ -34,7 +34,7 @@ type Config struct {
 	HTTP             http.Config             `koanf:"http"`
 	AuthN            authn.Config            `koanf:"authn"`
 	Tracing          tracing.Config          `koanf:"tracing"`
-	Pseudonymisation pseudonymisation.Config `koanf:"pseudo`
+	Pseudonymisation pseudonymisation.Config `koanf:"pseudo"`
 }
 
 func DefaultConfig() Config {
