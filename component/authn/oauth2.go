@@ -20,6 +20,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
 	"golang.org/x/oauth2"
 )
@@ -52,15 +53,23 @@ func HTTPClient(ctx context.Context, scope []string, uraNumber string, targetAud
 		slog.WarnContext(ctx, "MinVWS OAuth2 token endpoint is not configured, not using authentication for MinVWS API calls")
 		// Fallback: if no token endpoint is configured, return a default HTTP client without authentication.
 		return &http.Client{
-			Transport: &http.Transport{
+			Transport: tracing.WrapTransport(&http.Transport{
 				TLSClientConfig: tlsConfig,
-			},
+			}),
 		}, nil
 	}
 
 	if tlsConfig == nil {
 		return nil, errors.New("token endpoint is configured but TLS client certificate is not configured")
 	}
+
+	// Create a base HTTP client with TLS config
+	// Add the base client to the context so oauth2.NewClient uses it
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, &http.Client{
+		Transport: tracing.WrapTransport(&http.Transport{
+			TLSClientConfig: tlsConfig,
+		}),
+	})
 
 	return oauth2.NewClient(ctx, tokenSource{
 		uraNumber:      uraNumber,

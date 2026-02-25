@@ -10,7 +10,7 @@ import (
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
-	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonimization"
+	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonymisation"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
@@ -39,13 +39,13 @@ func (c Config) Enabled() bool {
 var _ component.Lifecycle = (*Component)(nil)
 
 type Component struct {
-	pseudonymizer pseudonimization.Pseudonymizer
+	pseudonymizer pseudonymisation.Pseudonymizer
 	audience      string
 	fhirBaseURL   *url.URL
 	fhirClientFn  func(ctx context.Context, uraNumber string) (fhirclient.Client, error)
 }
 
-func New(config Config, httpClientFn authn.HTTPClientProvider) (*Component, error) {
+func New(config Config, httpClientFn authn.HTTPClientProvider, pseudonymizer pseudonymisation.Pseudonymizer) (*Component, error) {
 	baseURL, err := url.Parse(config.FHIRBaseURL)
 	if err != nil {
 		return nil, err
@@ -53,6 +53,7 @@ func New(config Config, httpClientFn authn.HTTPClientProvider) (*Component, erro
 	if config.Audience == "" {
 		return nil, fmt.Errorf("audience must be configured when NVI component is enabled")
 	}
+
 	return &Component{
 		fhirBaseURL: baseURL,
 		fhirClientFn: func(ctx context.Context, uraNumber string) (fhirclient.Client, error) {
@@ -65,7 +66,7 @@ func New(config Config, httpClientFn authn.HTTPClientProvider) (*Component, erro
 			httpClient.Transport = tracing.WrapTransport(httpClient.Transport)
 			return fhirclient.New(baseURL, httpClient, fhirutil.ClientConfig()), nil
 		},
-		pseudonymizer: &pseudonimization.Component{},
+		pseudonymizer: pseudonymizer,
 		audience:      config.Audience,
 	}, nil
 }
@@ -94,7 +95,7 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 	resource.Meta = profile.Set(resource.Meta, profile.NLGenericFunctionDocumentReference)
 
 	// Use BSN transport tokens to NVI, instead of BSNs
-	tokenizedResource, err := c.tokenizeIdentifiers(resource, c.audience)
+	tokenizedResource, err := c.tokenizeIdentifiers(httpRequest.Context(), resource, *requesterURA.Value, c.audience)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
@@ -122,14 +123,7 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 		return
 	}
 
-	// Translate BSN transport tokens from NVI back to BSNs
-	result, err := c.detokenizeIdentifiers(created, *requesterURA.Value)
-	if err != nil {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
-		return
-	}
-
-	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusCreated, result)
+	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusCreated, created)
 }
 
 func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *http.Request) {
@@ -153,7 +147,7 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 			key == "subject:identifier" ||
 			strings.HasPrefix(key, coding.BSNNamingSystem) {
 			for i, value := range values {
-				newValue, err := c.tokenizeFHIRSearchToken(value, "nvi")
+				newValue, err := c.tokenizeFHIRSearchToken(httpRequest.Context(), value, *requesterURA.Value, "nvi")
 				if err != nil {
 					fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 					return
@@ -194,41 +188,14 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		return
 	}
 
-	// Translate BSN transport tokens from NVI back to BSNs
-	err = fhirutil.VisitBundleResources[fhir.DocumentReference](&searchSet, func(resource *fhir.DocumentReference) error {
-		// Translate BSN transport tokens from NVI back to BSNs
-		newResource, err := c.detokenizeIdentifiers(*resource, *requesterURA.Value)
-		if err != nil {
-			return err
-		}
-		*resource = *newResource
-		return nil
-	})
-	if err != nil {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
-		return
-	}
-
 	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusOK, searchSet)
 }
 
-func (c Component) detokenizeIdentifiers(resource fhir.DocumentReference, audience string) (*fhir.DocumentReference, error) {
+func (c Component) tokenizeIdentifiers(ctx context.Context, resource fhir.DocumentReference, localOrganizationURA string, audience string) (*fhir.DocumentReference, error) {
 	if resource.Subject == nil || resource.Subject.Identifier == nil {
 		return &resource, nil
 	}
-	detokenizedIdentifier, err := c.identifierToBSN(*resource.Subject.Identifier, audience)
-	if err != nil {
-		return nil, err
-	}
-	resource.Subject.Identifier = detokenizedIdentifier
-	return &resource, nil
-}
-
-func (c Component) tokenizeIdentifiers(resource fhir.DocumentReference, audience string) (*fhir.DocumentReference, error) {
-	if resource.Subject == nil || resource.Subject.Identifier == nil {
-		return &resource, nil
-	}
-	tokenizedIdentifier, err := c.identifierToToken(*resource.Subject.Identifier, audience)
+	tokenizedIdentifier, err := c.identifierToToken(ctx, *resource.Subject.Identifier, localOrganizationURA, audience)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +204,7 @@ func (c Component) tokenizeIdentifiers(resource fhir.DocumentReference, audience
 }
 
 // tokenizeFHIRSearchToken converts a FHIR search token  (<system>|<value>) to a BSN transport token value.
-func (c Component) tokenizeFHIRSearchToken(searchToken string, audience string) (string, error) {
+func (c Component) tokenizeFHIRSearchToken(ctx context.Context, searchToken string, localOrganizationURA string, audience string) (string, error) {
 	if !strings.HasPrefix(searchToken, coding.BSNNamingSystem+"|") {
 		return searchToken, nil
 	}
@@ -249,27 +216,15 @@ func (c Component) tokenizeFHIRSearchToken(searchToken string, audience string) 
 		System: to.Ptr(parts[0]),
 		Value:  to.Ptr(parts[1]),
 	}
-	tokenizedIdentifier, err := c.identifierToToken(identifier, audience)
+	tokenizedIdentifier, err := c.identifierToToken(ctx, identifier, localOrganizationURA, audience)
 	if err != nil {
 		return "", err
 	}
 	return *tokenizedIdentifier.System + "|" + *tokenizedIdentifier.Value, nil
 }
 
-func (c Component) identifierToBSN(identifier fhir.Identifier, audience string) (*fhir.Identifier, error) {
-	result, err := c.pseudonymizer.TokenToBSN(identifier, audience)
-	if err != nil {
-		return nil, &fhirapi.Error{
-			Message:   "Failed to get BSN from transport token",
-			Cause:     err,
-			IssueType: fhir.IssueTypeTransient,
-		}
-	}
-	return result, nil
-}
-
-func (c Component) identifierToToken(identifier fhir.Identifier, audience string) (*fhir.Identifier, error) {
-	result, err := c.pseudonymizer.IdentifierToToken(identifier, audience)
+func (c Component) identifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA string, audience string) (*fhir.Identifier, error) {
+	result, err := c.pseudonymizer.IdentifierToToken(ctx, identifier, localOrganizationURA, audience, "nationale-verwijsindex")
 	if err != nil {
 		return nil, &fhirapi.Error{
 			Message:   "Failed to pseudonymize BSN identifier",

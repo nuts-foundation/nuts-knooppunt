@@ -12,7 +12,7 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi/testdata"
-	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonimization"
+	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonymisation"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
@@ -100,9 +100,8 @@ func TestComponent_handleRegister(t *testing.T) {
 			}
 
 			ctrl := gomock.NewController(t)
-			pseudonymizer := pseudonimization.NewMockPseudonymizer(ctrl)
-			pseudonymizer.EXPECT().IdentifierToToken(bsnIdentifier, "nvi").Return(&bsnTokenIdentifier, nil).AnyTimes()
-			pseudonymizer.EXPECT().TokenToBSN(bsnTokenIdentifier, tenantURA).Return(&bsnIdentifier, nil).AnyTimes()
+			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
+			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, tenantURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
 			nvi := &test.StubFHIRClient{
 				Error: testCase.nviTransportError,
 			}
@@ -220,10 +219,10 @@ func TestComponent_handleSearch(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
+			const localURA = "1"
 			ctrl := gomock.NewController(t)
-			pseudonymizer := pseudonimization.NewMockPseudonymizer(ctrl)
-			pseudonymizer.EXPECT().IdentifierToToken(bsnIdentifier, "nvi").Return(&bsnTokenIdentifier, nil).AnyTimes()
-			pseudonymizer.EXPECT().TokenToBSN(bsnTokenIdentifier, "1").Return(&bsnIdentifier, nil).AnyTimes()
+			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
+			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, localURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
 			nvi := &test.StubFHIRClient{
 				Resources: testCase.nviResources,
 				Error:     testCase.nviTransportError,
@@ -247,7 +246,7 @@ func TestComponent_handleSearch(t *testing.T) {
 				httpRequest = httptest.NewRequest("POST", "/nvi/DocumentReference/_search", bytes.NewReader([]byte(searchParams)))
 				httpRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 			}
-			httpRequest.Header.Add("X-Tenant-ID", coding.URANamingSystem+"|1")
+			httpRequest.Header.Add("X-Tenant-ID", coding.URANamingSystem+"|"+localURA)
 			httpResponse := httptest.NewRecorder()
 			component.handleSearch(httpResponse, httpRequest)
 
@@ -270,15 +269,6 @@ func TestComponent_handleSearch(t *testing.T) {
 				err := json.Unmarshal(responseData, &bundle)
 				require.NoError(t, err)
 				require.Len(t, bundle.Entry, testCase.expectedEntries)
-
-				t.Run("assert BSN transport tokens are translated back to BSNs", func(t *testing.T) {
-					for _, entry := range bundle.Entry {
-						var documentReference fhir.DocumentReference
-						err := json.Unmarshal(entry.Resource, &documentReference)
-						require.NoError(t, err)
-						assert.Equal(t, bsnIdentifier, *documentReference.Subject.Identifier)
-					}
-				})
 			}
 		})
 	}
@@ -345,10 +335,10 @@ func TestComponent_identifierToToken(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			pseudonymizer := pseudonimization.NewMockPseudonymizer(ctrl)
+			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
 
 			pseudonymizer.EXPECT().
-				IdentifierToToken(tc.inputIdentifier, tc.audience).
+				IdentifierToToken(gomock.Any(), tc.inputIdentifier, "1", tc.audience, "nationale-verwijsindex").
 				Return(tc.mockReturnToken, tc.mockReturnError).
 				Times(1)
 
@@ -356,7 +346,7 @@ func TestComponent_identifierToToken(t *testing.T) {
 				pseudonymizer: pseudonymizer,
 			}
 
-			result, err := component.identifierToToken(tc.inputIdentifier, tc.audience)
+			result, err := component.identifierToToken(t.Context(), tc.inputIdentifier, "1", tc.audience)
 
 			if tc.expectedError {
 				require.Error(t, err)

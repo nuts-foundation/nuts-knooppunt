@@ -15,6 +15,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
+	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonymisation"
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
@@ -95,7 +96,9 @@ func Start(ctx context.Context, config Config) error {
 
 	// Create NVI component
 	if config.NVI.Enabled() {
-		nviComponent, err := nvi.New(config.NVI, authnComponent.MinVWSHTTPClient)
+		pseudoComponent := pseudonymisation.New(config.Pseudonymisation, authnComponent.MinVWSHTTPClient)
+
+		nviComponent, err := nvi.New(config.NVI, authnComponent.MinVWSHTTPClient, pseudoComponent)
 		if err != nil {
 			return errors.Wrap(err, "failed to create NVI component")
 		}

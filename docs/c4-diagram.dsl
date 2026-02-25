@@ -21,6 +21,12 @@ workspace "Knooppunt" "Description" {
                     nvi = softwareSystem "NVI" "Nationale Verwijs Index, contains entries with URA and patient" {
                         tags "External System,localization"
                     }
+                    prs = softwareSystem "PRS" "Pseudoniemen Register Service, performs OPRF evaluation for pseudonymization" {
+                        tags "External System,localization"
+                    }
+                    authzServer = softwareSystem "Authorization Server" "OAuth2 authorization server for authenticating to PRS and NVI" {
+                        tags "External System,localization"
+                    }
                     otv = softwareSystem "OTV" "Mitz national system, containing patient consents" "External System" {
                         tags "External System,consent,authorization"
                     }
@@ -99,6 +105,9 @@ workspace "Knooppunt" "Description" {
                     authnClient = component "AuthN Client" "Request access tokens" "Nuts Node" {
                         tags "authentication"
                     }
+                    vwsAuthnClient = component "AuthN Client\n(VWS services)" "Request access tokens" {
+                        tags "localization"
+                    }
                     authnServer = component "AuthN Server" "Authenticate & issue access tokens" "Nuts Node"{
                         tags "authentication"
                     }
@@ -152,6 +161,15 @@ workspace "Knooppunt" "Description" {
         # GF Localization transactions
         #
         xis.ehr.localizationClient -> xis.kp.nviGateway "Publish and find localization data\nhttp://knooppunt:8081/nvi" FHIR {
+            tags "localization"
+        }
+        xis.kp.nviGateway -> xis.kp.vwsAuthnClient "Authenticate to authz server for NVI access" "OAuth2 Client Credentials" {
+            tags "localization"
+        }
+        xis.kp.vwsAuthnClient -> authzServer "Request access tokens" "OAuth2 Client Credentials" {
+            tags "localization"
+        }
+        xis.kp.nviGateway -> prs "Request OPRF evaluation for pseudonymization" REST {
             tags "localization"
         }
         xis.kp.nviGateway -> nvi "Publish and find localization data\n(pseudonymized)" FHIR {
