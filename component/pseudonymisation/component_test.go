@@ -50,7 +50,7 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		}
 
 		// Convert to token
-		result, err := component.IdentifierToToken(t.Context(), bsnIdentifier, "4321", "1234")
+		result, err := component.IdentifierToToken(t.Context(), bsnIdentifier, "4321", "1234", "nationale-verwijsindex")
 		require.NoError(t, err)
 
 		// Verify result
@@ -72,7 +72,7 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 			Value:  to.Ptr("12345"),
 		}
 
-		result, err := component.IdentifierToToken(t.Context(), identifier, "4321", "1234")
+		result, err := component.IdentifierToToken(t.Context(), identifier, "4321", "1234", "nationale-verwijsindex")
 		require.NoError(t, err)
 		assert.Equal(t, &identifier, result)
 	})
@@ -95,7 +95,7 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 			Value:  to.Ptr("900186021"),
 		}
 
-		result, err := component.IdentifierToToken(t.Context(), bsnIdentifier, "4321", "1234")
+		result, err := component.IdentifierToToken(t.Context(), bsnIdentifier, "4321", "1234", "nationale-verwijsindex")
 		assert.Error(t, err)
 		assert.Nil(t, result)
 		assert.Contains(t, err.Error(), "PRS response: non-OK status code (status=500")

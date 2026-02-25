@@ -101,7 +101,7 @@ func TestComponent_handleRegister(t *testing.T) {
 
 			ctrl := gomock.NewController(t)
 			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
-			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, tenantURA, "nvi").Return(&bsnTokenIdentifier, nil).AnyTimes()
+			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, tenantURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
 			nvi := &test.StubFHIRClient{
 				Error: testCase.nviTransportError,
 			}
@@ -222,7 +222,7 @@ func TestComponent_handleSearch(t *testing.T) {
 			const localURA = "1"
 			ctrl := gomock.NewController(t)
 			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
-			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, localURA, "nvi").Return(&bsnTokenIdentifier, nil).AnyTimes()
+			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, localURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
 			nvi := &test.StubFHIRClient{
 				Resources: testCase.nviResources,
 				Error:     testCase.nviTransportError,
@@ -338,7 +338,7 @@ func TestComponent_identifierToToken(t *testing.T) {
 			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
 
 			pseudonymizer.EXPECT().
-				IdentifierToToken(gomock.Any(), tc.inputIdentifier, "1", tc.audience).
+				IdentifierToToken(gomock.Any(), tc.inputIdentifier, "1", tc.audience, "nationale-verwijsindex").
 				Return(tc.mockReturnToken, tc.mockReturnError).
 				Times(1)
 

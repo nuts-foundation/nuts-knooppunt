@@ -23,7 +23,7 @@ type Config struct {
 }
 
 type Pseudonymizer interface {
-	IdentifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA string, recipientURA string) (*fhir.Identifier, error)
+	IdentifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA string, recipientURA string, scope string) (*fhir.Identifier, error)
 }
 
 func New(cfg Config, httpClientFn authn.HTTPClientProvider) *Component {
@@ -45,11 +45,11 @@ type Component struct {
 // 3. Blind the input using OPRF client
 // 4. Send blinded input to PRS for evaluation
 // 5. PRS returns the final pseudonymized identifier (deblinding happens at the consuming system/NVI)
-func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA string, recipientURA string) (*fhir.Identifier, error) {
+func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA string, recipientURA string, scope string) (*fhir.Identifier, error) {
 	if c.config.PRSBaseURL == "" {
 		// TODO: Remove Fake Pseudonymizer fallback once PRS is properly integrated
 		slog.WarnContext(ctx, "PRS base URL is not configured, using fake pseudonymizer for IdentifierToToken")
-		return FakePseudonymizer{}.IdentifierToToken(ctx, identifier, localOrganizationURA, recipientURA)
+		return FakePseudonymizer{}.IdentifierToToken(ctx, identifier, localOrganizationURA, recipientURA, scope)
 	}
 
 	if identifier.System == nil || *identifier.System != coding.BSNNamingSystem || identifier.Value == nil {
@@ -64,7 +64,6 @@ func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identi
 	}
 
 	// Step 2 & 3: Blind the identifier (internally derives key and blinds)
-	scope := "nationale-verwijsindex"
 	blindedInputData, err := blindIdentifier(prsID, recipientURA, scope)
 	if err != nil {
 		return nil, fmt.Errorf("blinding identifier: %w", err)

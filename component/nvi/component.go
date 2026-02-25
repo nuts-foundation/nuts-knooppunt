@@ -224,7 +224,7 @@ func (c Component) tokenizeFHIRSearchToken(ctx context.Context, searchToken stri
 }
 
 func (c Component) identifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA string, audience string) (*fhir.Identifier, error) {
-	result, err := c.pseudonymizer.IdentifierToToken(ctx, identifier, localOrganizationURA, audience)
+	result, err := c.pseudonymizer.IdentifierToToken(ctx, identifier, localOrganizationURA, audience, "nationale-verwijsindex")
 	if err != nil {
 		return nil, &fhirapi.Error{
 			Message:   "Failed to pseudonymize BSN identifier",

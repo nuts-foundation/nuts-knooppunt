@@ -46,7 +46,7 @@ func TestIntegration(t *testing.T) {
 		System: to.Ptr(coding.BSNNamingSystem),
 		Value:  to.Ptr("123456789"),
 	}
-	token, err := prsComponent.IdentifierToToken(t.Context(), bsn, ura, uraNVI)
+	token, err := prsComponent.IdentifierToToken(t.Context(), bsn, ura, uraNVI, "nationale-verwijsindex")
 	require.NoError(t, err)
 	t.Logf("Pseudonymized token: %s", *token.Value)
 }

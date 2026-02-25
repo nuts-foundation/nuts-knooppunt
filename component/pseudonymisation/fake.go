@@ -15,7 +15,7 @@ var _ Pseudonymizer = (*FakePseudonymizer)(nil)
 type FakePseudonymizer struct {
 }
 
-func (f FakePseudonymizer) IdentifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA string, recipientURA string) (*fhir.Identifier, error) {
+func (f FakePseudonymizer) IdentifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA string, recipientURA string, scope string) (*fhir.Identifier, error) {
 	if identifier.System == nil || *identifier.System != coding.BSNNamingSystem || identifier.Value == nil {
 		return &identifier, nil
 	}

@@ -42,16 +42,16 @@ func (m *MockPseudonymizer) EXPECT() *MockPseudonymizerMockRecorder {
 }
 
 // IdentifierToToken mocks base method.
-func (m *MockPseudonymizer) IdentifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA, recipientURA string) (*fhir.Identifier, error) {
+func (m *MockPseudonymizer) IdentifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA, recipientURA, scope string) (*fhir.Identifier, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IdentifierToToken", ctx, identifier, localOrganizationURA, recipientURA)
+	ret := m.ctrl.Call(m, "IdentifierToToken", ctx, identifier, localOrganizationURA, recipientURA, scope)
 	ret0, _ := ret[0].(*fhir.Identifier)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // IdentifierToToken indicates an expected call of IdentifierToToken.
-func (mr *MockPseudonymizerMockRecorder) IdentifierToToken(ctx, identifier, localOrganizationURA, recipientURA any) *gomock.Call {
+func (mr *MockPseudonymizerMockRecorder) IdentifierToToken(ctx, identifier, localOrganizationURA, recipientURA, scope any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IdentifierToToken", reflect.TypeOf((*MockPseudonymizer)(nil).IdentifierToToken), ctx, identifier, localOrganizationURA, recipientURA)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IdentifierToToken", reflect.TypeOf((*MockPseudonymizer)(nil).IdentifierToToken), ctx, identifier, localOrganizationURA, recipientURA, scope)
 }
