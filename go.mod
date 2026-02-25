@@ -18,7 +18,7 @@ require (
 	github.com/knadh/koanf/providers/structs v1.0.0
 	github.com/knadh/koanf/v2 v2.2.2
 	github.com/lestrrat-go/jwx/v2 v2.1.6
-	github.com/nuts-foundation/nuts-node v1.0.1-0.20260217143158-910dfaa9f3eb
+	github.com/nuts-foundation/nuts-node v1.0.1-0.20260225105905-5fd918b4d6a6
 	github.com/open-policy-agent/opa v1.12.3
 	github.com/pkg/errors v0.9.1
 	github.com/russellhaering/goxmldsig v1.5.0
