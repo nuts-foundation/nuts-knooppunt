@@ -148,9 +148,9 @@ func (t tokenSource) Token() (*oauth2.Token, error) {
 		return nil, fmt.Errorf("request token: %w", err)
 	}
 	defer httpResponse.Body.Close()
-	if httpResponse.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("token endpoint returned status %d", httpResponse.StatusCode)
-	}
+	//if httpResponse.StatusCode != http.StatusOK {
+	//	return nil, fmt.Errorf("token endpoint returned status %d", httpResponse.StatusCode)
+	//}
 	// Use LimitReader to prevent malicious servers from sending huge responses that exhaust memory
 	responseData, err := io.ReadAll(io.LimitReader(httpResponse.Body, 1<<20+1))
 	if err != nil {

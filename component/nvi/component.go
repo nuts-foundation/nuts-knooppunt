@@ -2,6 +2,7 @@ package nvi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -15,7 +16,6 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tenants"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -72,9 +72,9 @@ func New(config Config, httpClientFn authn.HTTPClientProvider, pseudonymizer pse
 }
 
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	internalMux.Handle("POST /nvi/DocumentReference", http.HandlerFunc(c.handleRegister))
-	internalMux.Handle("GET /nvi/DocumentReference", http.HandlerFunc(c.handleSearch))
-	internalMux.Handle("POST /nvi/DocumentReference/_search", http.HandlerFunc(c.handleSearch))
+	internalMux.Handle("POST /nvi", http.HandlerFunc(c.handleRegister))
+	internalMux.Handle("GET /nvi/List", http.HandlerFunc(c.handleSearch))
+	internalMux.Handle("POST /nvi/List/_search", http.HandlerFunc(c.handleSearch))
 }
 
 func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest *http.Request) {
@@ -84,23 +84,40 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 		return
 	}
 
-	fhirRequest, err := fhirapi.ParseRequest[fhir.DocumentReference](httpRequest)
+	fhirRequest, err := fhirapi.ParseRequest[fhir.Bundle](httpRequest)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
 	}
-	resource := fhirRequest.Resource
-
-	// Make sure the right profile is set
-	resource.Meta = profile.Set(resource.Meta, profile.NLGenericFunctionDocumentReference)
+	bundle := fhirRequest.Resource
 
 	// Use BSN transport tokens to NVI, instead of BSNs
-	tokenizedResource, err := c.tokenizeIdentifiers(httpRequest.Context(), resource, *requesterURA.Value, c.audience)
-	if err != nil {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
-		return
+	for i, entry := range bundle.Entry {
+		if entry.Resource == nil {
+			continue
+		}
+		var resourceType struct {
+			ResourceType string `json:"resourceType"`
+		}
+		if err := json.Unmarshal(entry.Resource, &resourceType); err != nil || resourceType.ResourceType != "List" {
+			continue
+		}
+		var listResource fhir.List
+		if err := json.Unmarshal(entry.Resource, &listResource); err != nil {
+			continue
+		}
+		tokenizedList, err := c.tokenizeListIdentifiers(httpRequest.Context(), listResource, *requesterURA.Value, c.audience)
+		if err != nil {
+			fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+			return
+		}
+		tokenizedJSON, err := json.Marshal(tokenizedList)
+		if err != nil {
+			fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+			return
+		}
+		bundle.Entry[i].Resource = tokenizedJSON
 	}
-	resource = *tokenizedResource
 
 	fhirClient, err := c.fhirClientFn(httpRequest.Context(), *requesterURA.Value)
 	if err != nil {
@@ -111,11 +128,11 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 	requestHeaders := http.Header{
 		"X-Requester-URA": []string{*requesterURA.Value},
 	}
-	var created fhir.DocumentReference
-	err = fhirClient.CreateWithContext(httpRequest.Context(), resource, &created, fhirclient.RequestHeaders(requestHeaders))
+	var result fhir.Bundle
+	err = fhirClient.CreateWithContext(httpRequest.Context(), bundle, &result, fhirclient.AtPath("/"), fhirclient.RequestHeaders(requestHeaders))
 	if err != nil {
 		err = &fhirapi.Error{
-			Message:   "Failed to register DocumentReference at NVI",
+			Message:   "Failed to register Bundle at NVI",
 			Cause:     err,
 			IssueType: fhir.IssueTypeTransient,
 		}
@@ -123,7 +140,7 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 		return
 	}
 
-	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusCreated, created)
+	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusOK, result)
 }
 
 func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *http.Request) {
@@ -133,7 +150,7 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		return
 	}
 
-	fhirRequest, err := fhirapi.ParseRequest[fhir.DocumentReference](httpRequest)
+	fhirRequest, err := fhirapi.ParseRequest[fhir.List](httpRequest)
 	if err != nil {
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
@@ -147,7 +164,7 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 			key == "subject:identifier" ||
 			strings.HasPrefix(key, coding.BSNNamingSystem) {
 			for i, value := range values {
-				newValue, err := c.tokenizeFHIRSearchToken(httpRequest.Context(), value, *requesterURA.Value, "nvi")
+				newValue, err := c.tokenizeFHIRSearchToken(httpRequest.Context(), value, *requesterURA.Value, c.audience)
 				if err != nil {
 					fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 					return
@@ -167,10 +184,10 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		"X-Requester-URA": []string{*requesterURA.Value},
 	}
 	var searchSet fhir.Bundle
-	err = fhirClient.SearchWithContext(httpRequest.Context(), "DocumentReference", searchParams, &searchSet, fhirclient.RequestHeaders(requestHeaders))
+	err = fhirClient.SearchWithContext(httpRequest.Context(), "List", searchParams, &searchSet, fhirclient.RequestHeaders(requestHeaders))
 	if err != nil {
 		err = &fhirapi.Error{
-			Message:   "Failed to search for DocumentReferences at NVI",
+			Message:   "Failed to search for List resources at NVI",
 			Cause:     err,
 			IssueType: fhir.IssueTypeTransient,
 		}
@@ -191,7 +208,7 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusOK, searchSet)
 }
 
-func (c Component) tokenizeIdentifiers(ctx context.Context, resource fhir.DocumentReference, localOrganizationURA string, audience string) (*fhir.DocumentReference, error) {
+func (c Component) tokenizeListIdentifiers(ctx context.Context, resource fhir.List, localOrganizationURA string, audience string) (*fhir.List, error) {
 	if resource.Subject == nil || resource.Subject.Identifier == nil {
 		return &resource, nil
 	}
