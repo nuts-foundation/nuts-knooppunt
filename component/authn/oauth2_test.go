@@ -23,7 +23,7 @@ import (
 
 func TestHTTPClient_IntegrationTest(t *testing.T) {
 	t.Run("proeftuin", func(t *testing.T) {
-		t.Skip()
+		//t.Skip()
 		const (
 			tokenEndpoint = "https://oauth.proeftuin.gf.irealisatie.nl/oauth/token"
 			audience      = "https://pseudoniemendienst.proeftuin.gf.irealisatie.nl/"

@@ -33,46 +33,44 @@ var bsnTokenIdentifier = fhir.Identifier{
 	Value:  to.Ptr("abcdefghi"),
 }
 
+// pseudoBSNIdentifier matches the subject identifier in the test bundle-transaction.json
+var pseudoBSNIdentifier = fhir.Identifier{
+	System: to.Ptr("http://fhir.nl/fhir/NamingSystem/pseudo-bsn"),
+	Value:  to.Ptr("UHN1ZWRvYnNuOiA5OTk5NDAwMw=="),
+}
+
 func TestComponent_handleRegister(t *testing.T) {
 	testCases := []struct {
-		name                       string
-		nviTransportError          error
-		requestBody                []byte
-		tenantID                   *string
-		expectedStatus             int
-		expectedOperationOutcome   *fhir.OperationOutcome
-		expectedNVICreatedResource fhir.DocumentReference
+		name                     string
+		nviTransportError        error
+		requestBody              []byte
+		tenantID                 *string
+		expectedStatus           int
+		expectedOperationOutcome *fhir.OperationOutcome
 	}{
 		{
-			name:                       "registered at NVI",
-			requestBody:                testUtil.ReadJSON(t, testdata.FS, "documentreference-bsn.json"),
-			expectedStatus:             http.StatusCreated,
-			expectedNVICreatedResource: testUtil.ParseJSON[fhir.DocumentReference](t, testdata.FS, "documentreference-tokenized.json"),
-		},
-		{
-			name:                       "sets profile if not set",
-			requestBody:                testUtil.ReadJSON(t, testdata.FS, "documentreference-without-profile.json"),
-			expectedStatus:             http.StatusCreated,
-			expectedNVICreatedResource: testUtil.ParseJSON[fhir.DocumentReference](t, testdata.FS, "documentreference-tokenized.json"),
+			name:           "registered at NVI",
+			requestBody:    testUtil.ReadJSON(t, testdata.FS, "bundle-transaction.json"),
+			expectedStatus: http.StatusOK,
 		},
 		{
 			name:              "NVI is down",
 			nviTransportError: assert.AnError,
-			requestBody:       testUtil.ReadJSON(t, testdata.FS, "documentreference-bsn.json"),
+			requestBody:       testUtil.ReadJSON(t, testdata.FS, "bundle-transaction.json"),
 			expectedStatus:    http.StatusServiceUnavailable,
 			expectedOperationOutcome: &fhir.OperationOutcome{
 				Issue: []fhir.OperationOutcomeIssue{
 					{
 						Severity:    fhir.IssueSeverityError,
 						Code:        fhir.IssueTypeTransient,
-						Diagnostics: to.Ptr("Failed to register DocumentReference at NVI"),
+						Diagnostics: to.Ptr("Failed to register Bundle at NVI"),
 					},
 				},
 			},
 		},
 		{
 			name:           "invalid tenant ID",
-			requestBody:    testUtil.ReadJSON(t, testdata.FS, "documentreference-bsn.json"),
+			requestBody:    testUtil.ReadJSON(t, testdata.FS, "bundle-transaction.json"),
 			expectedStatus: http.StatusBadRequest,
 			tenantID:       to.Ptr("invalid"),
 			expectedOperationOutcome: &fhir.OperationOutcome{
@@ -101,7 +99,7 @@ func TestComponent_handleRegister(t *testing.T) {
 
 			ctrl := gomock.NewController(t)
 			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
-			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, tenantURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
+			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), pseudoBSNIdentifier, tenantURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
 			nvi := &test.StubFHIRClient{
 				Error: testCase.nviTransportError,
 			}
@@ -112,7 +110,7 @@ func TestComponent_handleRegister(t *testing.T) {
 				pseudonymizer: pseudonymizer,
 				audience:      "nvi",
 			}
-			httpRequest := httptest.NewRequest("POST", "/nvi/DocumentReference", bytes.NewReader(testCase.requestBody))
+			httpRequest := httptest.NewRequest("POST", "/nvi/Bundle", bytes.NewReader(testCase.requestBody))
 			httpRequest.Header.Add("Content-Type", "application/fhir+json")
 			httpRequest.Header.Add("X-Tenant-ID", tenantID)
 			httpResponse := httptest.NewRecorder()
@@ -129,15 +127,16 @@ func TestComponent_handleRegister(t *testing.T) {
 				expectedJSON, _ := json.Marshal(testCase.expectedOperationOutcome)
 				require.JSONEq(t, string(expectedJSON), string(responseData))
 			}
-			if testCase.expectedStatus == http.StatusCreated {
-				require.Len(t, nvi.CreatedResources["DocumentReference"], 1)
-				actual := nvi.CreatedResources["DocumentReference"][0].(fhir.DocumentReference)
-				actualJSON, _ := json.Marshal(actual)
-				expectedJSON, _ := json.Marshal(testCase.expectedNVICreatedResource)
-				assert.JSONEq(t, string(expectedJSON), string(actualJSON))
-
-				t.Run("assert BSNs are translated", func(t *testing.T) {
-					assert.Equal(t, bsnTokenIdentifier, *actual.Subject.Identifier)
+			if testCase.expectedStatus == http.StatusOK {
+				t.Run("assert BSNs are translated in List entries", func(t *testing.T) {
+					require.Len(t, nvi.CreatedResources["List"], 1)
+					actual := nvi.CreatedResources["List"][0]
+					actualJSON, _ := json.Marshal(actual)
+					var actualList fhir.List
+					require.NoError(t, json.Unmarshal(actualJSON, &actualList))
+					require.NotNil(t, actualList.Subject)
+					require.NotNil(t, actualList.Subject.Identifier)
+					assert.Equal(t, bsnTokenIdentifier, *actualList.Subject.Identifier)
 				})
 			}
 		})
@@ -146,7 +145,8 @@ func TestComponent_handleRegister(t *testing.T) {
 }
 
 func TestComponent_handleSearch(t *testing.T) {
-	documentReference := testUtil.ParseJSON[fhir.DocumentReference](t, testdata.FS, "documentreference-tokenized.json")
+	// NVI stores List resources with tokenized (transport token) identifiers.
+	listResource := testUtil.ParseJSON[fhir.List](t, testdata.FS, "list-resource-tokenized.json")
 
 	testCases := []struct {
 		name                     string
@@ -160,13 +160,13 @@ func TestComponent_handleSearch(t *testing.T) {
 	}{
 		{
 			name:            "searches at NVI with POST",
-			nviResources:    []any{documentReference},
+			nviResources:    []any{listResource},
 			expectedStatus:  http.StatusOK,
 			expectedEntries: 1,
 		},
 		{
 			name:            "searches at NVI with GET",
-			nviResources:    []any{documentReference},
+			nviResources:    []any{listResource},
 			expectedStatus:  http.StatusOK,
 			expectedEntries: 1,
 			httpMethod:      "GET",
@@ -188,7 +188,7 @@ func TestComponent_handleSearch(t *testing.T) {
 		},
 		{
 			name:           "NVI returns next page",
-			nviResources:   []any{documentReference, documentReference},
+			nviResources:   []any{listResource, listResource},
 			searchParams:   "_count=1",
 			expectedStatus: http.StatusUnprocessableEntity,
 			expectedOperationOutcome: &fhir.OperationOutcome{
@@ -210,7 +210,7 @@ func TestComponent_handleSearch(t *testing.T) {
 					{
 						Severity:    fhir.IssueSeverityError,
 						Code:        fhir.IssueTypeTransient,
-						Diagnostics: to.Ptr("Failed to search for DocumentReferences at NVI"),
+						Diagnostics: to.Ptr("Failed to search for List resources at NVI"),
 					},
 				},
 			},
@@ -232,6 +232,7 @@ func TestComponent_handleSearch(t *testing.T) {
 					return nvi, nil
 				},
 				pseudonymizer: pseudonymizer,
+				audience:      "nvi",
 			}
 
 			searchParams := testCase.searchParams
@@ -241,9 +242,9 @@ func TestComponent_handleSearch(t *testing.T) {
 
 			var httpRequest *http.Request
 			if testCase.httpMethod == "GET" {
-				httpRequest = httptest.NewRequest("GET", "/nvi/DocumentReference?"+searchParams, nil)
+				httpRequest = httptest.NewRequest("GET", "/nvi/List?"+searchParams, nil)
 			} else {
-				httpRequest = httptest.NewRequest("POST", "/nvi/DocumentReference/_search", bytes.NewReader([]byte(searchParams)))
+				httpRequest = httptest.NewRequest("POST", "/nvi/List/_search", bytes.NewReader([]byte(searchParams)))
 				httpRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 			}
 			httpRequest.Header.Add("X-Tenant-ID", coding.URANamingSystem+"|"+localURA)
@@ -261,7 +262,7 @@ func TestComponent_handleSearch(t *testing.T) {
 			} else {
 				t.Run("assert BSNs are translated to transport tokens, as search input to NVI", func(t *testing.T) {
 					require.Len(t, nvi.Searches, 1)
-					assert.Equal(t, "DocumentReference?patient%3Aidentifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn-transport-token%7Cabcdefghi", nvi.Searches[0])
+					assert.Equal(t, "List?patient%3Aidentifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn-transport-token%7Cabcdefghi", nvi.Searches[0])
 				})
 			}
 			if testCase.expectedEntries > 0 {
