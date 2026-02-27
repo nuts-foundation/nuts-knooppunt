@@ -307,6 +307,9 @@ func Test_enrichPolicyInputWithCapabilityStatement(t *testing.T) {
 		}
 
 		enriched, _ := enrichPolicyInputWithCapabilityStatement(context.Background(), original, "mcsd_update")
-		assert.NotEqual(t, original, enriched)
+		// ensure the original policy input was not modified
+		assert.False(t, original.Action.FHIRRest.CapabilityChecked)
+		// ensure the enriched policy input reflects the capability check
+		assert.True(t, enriched.Action.FHIRRest.CapabilityChecked)
 	})
 }
