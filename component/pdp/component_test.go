@@ -117,6 +117,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		properties           map[string]any
 		mainReasonCodes      []TypeResultCode
 		policyReasonCodes    map[string][]TypeResultCode
+		policyAllow          map[string]bool // which policies should allow (true) or deny (false)
 	}
 	runTest := func(t *testing.T, tc testCase) {
 		t.Helper()
@@ -187,10 +188,31 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				}
 			}
 		}
+		if tc.policyAllow != nil {
+			for policyName, expectedAllow := range tc.policyAllow {
+				policyResult, ok := response.Result[policyName]
+				require.True(t, ok, "expected policy result for policy %s not found in response", policyName)
+				assert.Equal(t, expectedAllow, policyResult.Allow, "expected policy %s allow to be %v, got %v", policyName, expectedAllow, policyResult.Allow)
+			}
+		}
 	}
 
 	t.Run("bgz", func(t *testing.T) {
 		testCases := []testCase{
+			{
+				name:                 "allow - multiple policies, first denies but second allows",
+				clientQualifications: []string{"medicatieoverdracht", "bgz"},
+				httpRequest:          `GET /Patient?_include=Patient:general-practitioner&_id=1000`,
+				decision:             true,
+				policyReasonCodes: map[string][]TypeResultCode{
+					"medicatieoverdracht": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+					"bgz":                 {},
+				},
+				policyAllow: map[string]bool{
+					"medicatieoverdracht": false,
+					"bgz":                 true,
+				},
+			},
 			{
 				name:                 "disallow - Mitz consent not given",
 				clientQualifications: []string{"bgz"},
