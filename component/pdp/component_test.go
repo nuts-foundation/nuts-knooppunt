@@ -244,6 +244,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				name:                 "disallow - Patient query with wrong _include parameter",
 				clientQualifications: []string{"bgz"},
 				httpRequest:          `GET /Patient?_include=Patient:organization`,
+				decision:             false,
 				policyReasonCodes: map[string][]TypeResultCode{
 					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
 				},
@@ -252,6 +253,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				name:                 "disallow - Patient query with additional parameters",
 				clientQualifications: []string{"bgz"},
 				httpRequest:          `GET /Patient?_include=Patient:general-practitioner&name=John`,
+				decision:             false,
 				policyReasonCodes: map[string][]TypeResultCode{
 					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
 				},
@@ -260,6 +262,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				name:                 "disallow - Patient query without patient_id or patient_bsn",
 				clientQualifications: []string{"bgz"},
 				httpRequest:          `GET /Patient?_include=Patient:general-practitioner`,
+				decision:             false,
 				policyReasonCodes: map[string][]TypeResultCode{
 					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
 				},

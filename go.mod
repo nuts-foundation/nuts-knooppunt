@@ -9,6 +9,7 @@ replace github.com/nuts-foundation/nuts-knooppunt/test/testdata => ./test/testda
 require (
 	github.com/SanteonNL/go-fhir-client v0.6.1
 	github.com/beevik/etree v1.6.0
+	github.com/cloudflare/circl v1.6.3
 	github.com/docker/docker v28.2.2+incompatible
 	github.com/go-jose/go-jose/v4 v4.1.3
 	github.com/google/uuid v1.6.0
@@ -18,6 +19,7 @@ require (
 	github.com/knadh/koanf/providers/structs v1.0.0
 	github.com/knadh/koanf/v2 v2.2.2
 	github.com/lestrrat-go/jwx/v2 v2.1.6
+	github.com/mitchellh/copystructure v1.2.0
 	github.com/nuts-foundation/nuts-node v1.0.1-0.20260225105905-5fd918b4d6a6
 	github.com/open-policy-agent/opa v1.12.3
 	github.com/pkg/errors v0.9.1
@@ -75,7 +77,6 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/containerd/containerd/v2 v2.2.0 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
@@ -175,7 +176,6 @@ require (
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1 // indirect
 	github.com/minio/highwayhash v1.0.3 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
-	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
