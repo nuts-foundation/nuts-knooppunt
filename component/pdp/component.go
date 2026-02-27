@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -103,6 +104,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		policySet[policy] = struct{}{}
 	}
 	policyNames = maps.Keys(policySet)
+	slices.Sort(policyNames)
 
 	// Step 1: Providing a policy is required for every PDP request. We can short-circuit here, no need to process the request.
 	if len(policyNames) == 0 {
@@ -133,16 +135,18 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 	policyInput := *policyInputPtr
 
-	// Step 3: Enrich the policy input with data gathered from the policy information point (if available)
+	// Step 2: Enrich the policy input with data gathered from the policy information point (if available)
 	policyInput, resultReasons = c.enrichPolicyInputWithPIP(r.Context(), policyInput)
 	response.Result.Reasons = append(response.Result.Reasons, resultReasons...)
 
-	// Step 2: Check consent at Mitz
+	// Step 3: Check consent at Mitz
 	policyInput, resultReasons = c.enrichPolicyInputWithMitz(r.Context(), policyInput)
 	response.Result.Reasons = append(response.Result.Reasons, resultReasons...)
 
 	// Evaluate all known policies
 	for _, policyName := range policyNames {
+		thisPolicyInput := policyInput.Copy()
+
 		// OPA doesn't support dashes in package and rule names, so we replace them with underscores.
 		policyName = strings.ReplaceAll(policyName, "-", "_")
 
@@ -166,18 +170,20 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 
 		var policyResultReasons []ResultReason
 
-		// Step 3: Check FHIR Capability Statement
-		policyInput, policyResultReasons = enrichPolicyInputWithCapabilityStatement(r.Context(), policyInput, policyName)
+		// Step 4: Check FHIR Capability Statement
+		thisPolicyInput, policyResultReasons = enrichPolicyInputWithCapabilityStatement(r.Context(), thisPolicyInput, policyName)
 
-		// Step 6: Evaluate using Open Policy Agent
-		policyResult, err := c.evalRegoPolicy(r.Context(), policyName, policyInput)
+		// Step 5: Evaluate using Open Policy Agent
+		policyResult, err := c.evalRegoPolicy(r.Context(), policyName, thisPolicyInput)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "failed to evaluate rego policy", logging.Error(err), slog.String("policy", policyName))
 			policyResult = &PolicyResult{
-				Reasons: append(policyResult.Reasons, ResultReason{
-					Code:        TypeResultCodeNotImplemented,
-					Description: "failed to evaluate rego policy",
-				}),
+				Reasons: []ResultReason{
+					{
+						Code:        TypeResultCodeNotImplemented,
+						Description: "failed to evaluate rego policy: " + err.Error(),
+					},
+				},
 			}
 		}
 		policyResult.Reasons = append(policyResultReasons, policyResult.Reasons...)

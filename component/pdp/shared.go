@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/mitchellh/copystructure"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/open-policy-agent/opa/v1/sdk"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -103,6 +104,14 @@ type PolicyInput struct {
 	Resource PolicyResource `json:"resource"`
 	Action   PolicyAction   `json:"action"`
 	Context  PolicyContext  `json:"context"`
+}
+
+func (p PolicyInput) Copy() PolicyInput {
+	result, err := copystructure.Copy(p)
+	if err != nil {
+		panic(fmt.Sprintf("failed to copy PolicyInput: %v", err))
+	}
+	return result.(PolicyInput)
 }
 
 type PolicyResource struct {

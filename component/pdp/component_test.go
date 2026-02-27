@@ -201,16 +201,16 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		testCases := []testCase{
 			{
 				name:                 "allow - multiple policies, first denies but second allows",
-				clientQualifications: []string{"medicatieoverdracht", "bgz"},
-				httpRequest:          `GET /Patient?_include=Patient:general-practitioner&_id=1000`,
+				clientQualifications: []string{"mcsd_update", "bgz"}, // they are evaluated in alphabetic order
+				httpRequest:          `GET /Organization`,
 				decision:             true,
 				policyReasonCodes: map[string][]TypeResultCode{
-					"medicatieoverdracht": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
-					"bgz":                 {},
+					"mcsd_update": {},
+					"bgz":         {TypeResultCodeNotAllowed, TypeResultCodeInformational},
 				},
 				policyAllow: map[string]bool{
-					"medicatieoverdracht": false,
-					"bgz":                 true,
+					"mcsd_update": true,
+					"bgz":         false,
 				},
 			},
 			{
