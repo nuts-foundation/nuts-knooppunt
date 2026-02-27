@@ -93,17 +93,19 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 					},
 				},
 			},
+			Policies: map[string]PolicyResult{},
 		}, http.StatusBadRequest)
 		return
 	}
 
-	policyNames := input.Subject.Properties.ClientQualifications
-	// deduplicate policies, just in case
+	// deduplicate and normalize policies
 	policySet := make(map[string]struct{})
-	for _, policy := range policyNames {
-		policySet[policy] = struct{}{}
+	for _, policyName := range input.Subject.Properties.ClientQualifications {
+		// OPA doesn't support dashes in package and rule names, so we replace them with underscores.
+		policyName = strings.ReplaceAll(policyName, "-", "_")
+		policySet[policyName] = struct{}{}
 	}
-	policyNames = maps.Keys(policySet)
+	policyNames := maps.Keys(policySet)
 	slices.Sort(policyNames)
 
 	// Step 1: Providing a policy is required for every PDP request. We can short-circuit here, no need to process the request.
@@ -117,6 +119,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 					},
 				},
 			},
+			Policies: map[string]PolicyResult{},
 		})
 		return
 	}
@@ -146,9 +149,6 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	// Evaluate all known policies
 	for _, policyName := range policyNames {
 		thisPolicyInput := policyInput.Copy()
-
-		// OPA doesn't support dashes in package and rule names, so we replace them with underscores.
-		policyName = strings.ReplaceAll(policyName, "-", "_")
 
 		// Check if the policy exists
 		policyExists, err := c.policyExists(r.Context(), policyName)
