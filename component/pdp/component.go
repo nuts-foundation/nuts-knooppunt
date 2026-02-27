@@ -84,7 +84,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	input := reqBody.Input
 	if err != nil {
 		writeResponseWithCode(r.Context(), w, PDPResponse{
-			PolicyResult: PolicyResult{
+			Result: PolicyResult{
 				Reasons: []ResultReason{
 					{
 						Code:        TypeResultCodeUnexpectedInput,
@@ -107,7 +107,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	// Step 1: Providing a policy is required for every PDP request. We can short-circuit here, no need to process the request.
 	if len(policyNames) == 0 {
 		writeResponse(r.Context(), w, PDPResponse{
-			PolicyResult: PolicyResult{
+			Result: PolicyResult{
 				Reasons: []ResultReason{
 					{
 						Code:        TypeResultCodeMissingRequiredValue,
@@ -120,14 +120,14 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := PDPResponse{
-		Result: make(map[string]PolicyResult),
+		Policies: make(map[string]PolicyResult),
 	}
 
 	// Step 2: Parse the PDP input and translate to the policy input
 	policyInputPtr, resultReasons := NewPolicyInput(reqBody)
 	if policyInputPtr == nil {
 		// Invalid request
-		response.Reasons = append(response.Reasons, resultReasons...)
+		response.Result.Reasons = append(response.Result.Reasons, resultReasons...)
 		writeResponse(r.Context(), w, response)
 		return
 	}
@@ -135,11 +135,11 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Step 3: Enrich the policy input with data gathered from the policy information point (if available)
 	policyInput, resultReasons = c.enrichPolicyInputWithPIP(r.Context(), policyInput)
-	response.Reasons = append(response.Reasons, resultReasons...)
+	response.Result.Reasons = append(response.Result.Reasons, resultReasons...)
 
 	// Step 2: Check consent at Mitz
 	policyInput, resultReasons = c.enrichPolicyInputWithMitz(r.Context(), policyInput)
-	response.Reasons = append(response.Reasons, resultReasons...)
+	response.Result.Reasons = append(response.Result.Reasons, resultReasons...)
 
 	// Evaluate all known policies
 	for _, policyName := range policyNames {
@@ -150,14 +150,14 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		policyExists, err := c.policyExists(r.Context(), policyName)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "failed to check if policy exists", logging.Error(err), slog.String("policy", policyName))
-			response.Reasons = append(response.Reasons, ResultReason{
+			response.Result.Reasons = append(response.Result.Reasons, ResultReason{
 				Code:        TypeResultCodeInternalError,
 				Description: fmt.Sprintf("failed to check if policy exists: %v", err),
 			})
 			continue
 		}
 		if !policyExists {
-			response.Reasons = append(response.Reasons, ResultReason{
+			response.Result.Reasons = append(response.Result.Reasons, ResultReason{
 				Code:        TypeResultCodeNotImplemented,
 				Description: fmt.Sprintf("unknown policy: %s", policyName),
 			})
@@ -181,10 +181,10 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		policyResult.Reasons = append(policyResultReasons, policyResult.Reasons...)
-		response.Result[policyName] = *policyResult
+		response.Policies[policyName] = *policyResult
 		if policyResult.Allow {
 			// Found policy that allows access, no need to evaluate other policies
-			response.Allow = true
+			response.Result.Allow = true
 			break
 		}
 	}

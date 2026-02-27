@@ -60,9 +60,9 @@ func TestHandleMainPolicy(t *testing.T) {
 		var actual PDPResponse
 		err := json.NewDecoder(httpResponse.Body).Decode(&actual)
 		require.NoError(t, err)
-		require.False(t, actual.Allow)
-		assert.Len(t, actual.Reasons, 1)
-		assert.Equal(t, TypeResultCodeUnexpectedInput, actual.Reasons[0].Code)
+		require.False(t, actual.Result.Allow)
+		assert.Len(t, actual.Result.Reasons, 1)
+		assert.Equal(t, TypeResultCodeUnexpectedInput, actual.Result.Reasons[0].Code)
 	})
 }
 
@@ -158,23 +158,23 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		}
 		response := executePDPRequest(t, service, pdpRequest)
 		if tc.decision {
-			assert.True(t, response.Allow, tc.name)
+			assert.True(t, response.Result.Allow, tc.name)
 		} else {
-			assert.False(t, response.Allow, tc.name)
+			assert.False(t, response.Result.Allow, tc.name)
 		}
 		for _, expectedCode := range tc.mainReasonCodes {
 			found := false
-			for _, reason := range response.Reasons {
+			for _, reason := range response.Result.Reasons {
 				if reason.Code == expectedCode {
 					found = true
 					break
 				}
 			}
-			assert.True(t, found, "expected reason code %s not found in response (got: %v)", expectedCode, response.Reasons)
+			assert.True(t, found, "expected reason code %s not found in response (got: %v)", expectedCode, response.Result.Reasons)
 		}
 		if tc.policyReasonCodes != nil {
 			for policyName, expectedCodes := range tc.policyReasonCodes {
-				policyResult, ok := response.Result[policyName]
+				policyResult, ok := response.Policies[policyName]
 				require.True(t, ok, "expected policy result for policy %s not found in response", policyName)
 				for _, expectedCode := range expectedCodes {
 					found := false
@@ -190,7 +190,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		}
 		if tc.policyAllow != nil {
 			for policyName, expectedAllow := range tc.policyAllow {
-				policyResult, ok := response.Result[policyName]
+				policyResult, ok := response.Policies[policyName]
 				require.True(t, ok, "expected policy result for policy %s not found in response", policyName)
 				assert.Equal(t, expectedAllow, policyResult.Allow, "expected policy %s allow to be %v, got %v", policyName, expectedAllow, policyResult.Allow)
 			}

@@ -69,7 +69,7 @@ func Test_BGZAuthorization(t *testing.T) {
 		err = resp.Body.Close()
 		require.NoError(t, err)
 
-		assert.True(t, pdpResponse.Allow)
-		assert.Empty(t, pdpResponse.Reasons)
+		assert.True(t, pdpResponse.Result.Allow)
+		assert.Empty(t, pdpResponse.Result.Reasons)
 	})
 }

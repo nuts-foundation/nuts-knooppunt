@@ -145,8 +145,8 @@ type PDPRequest struct {
 }
 
 type PDPResponse struct {
-	PolicyResult
-	Result map[string]PolicyResult `json:"result"`
+	Result   PolicyResult            `json:"result"`
+	Policies map[string]PolicyResult `json:"policies"`
 }
 
 type PolicyResult struct {
@@ -180,23 +180,6 @@ func (p *PolicyResult) AddReasons(input []string, format string, code TypeResult
 		} else {
 			p.Reasons = append(p.Reasons, reason)
 		}
-	}
-}
-
-// Allow helper for creating an allowed result without reasons
-func Allow() PolicyResult {
-	return PolicyResult{
-		Allow: true,
-	}
-}
-
-// Deny Helper for creating a result with a single deny reason
-func Deny(reason ResultReason) PolicyResult {
-	return PolicyResult{
-		Allow: false,
-		Reasons: []ResultReason{
-			reason,
-		},
 	}
 }
 
