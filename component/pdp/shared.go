@@ -13,33 +13,28 @@ import (
 )
 
 type PDPInput struct {
-	Subject Subject     `json:"subject"`
-	Request HTTPRequest `json:"request"`
-	Context PDPContext  `json:"context"`
+	Subject PolicySubject `json:"subject"`
+	Request HTTPRequest   `json:"request"`
+	Context PDPContext    `json:"context"`
 }
 
-type Subject struct {
-	Type       string            `json:"type"`
-	Id         string            `json:"id"`
-	Properties SubjectProperties `json:"properties"`
+type PDPSubject struct {
+	OtherProps               map[string]any `json:"-"`
+	Active                   bool           `json:"active"`
+	ClientId                 string         `json:"client_id"`
+	Scope                    string         `json:"scope"`
+	UserId                   string         `json:"user_id"`
+	UserRole                 string         `json:"user_role"`
+	OrganizationUra          string         `json:"organization_ura"`
+	OrganizationName         string         `json:"organization_name"`
+	OrganizationFacilityType string         `json:"organization_facility_type"`
 }
 
-var _ json.Unmarshaler = (*SubjectProperties)(nil)
-var _ json.Marshaler = (*SubjectProperties)(nil)
+var _ json.Unmarshaler = (*PDPSubject)(nil)
+var _ json.Marshaler = (*PDPSubject)(nil)
 
-type SubjectProperties struct {
-	OtherProps            map[string]any `json:"-"`
-	ClientId              string         `json:"client_id"`
-	ClientQualifications  []string       `json:"client_qualifications"`
-	SubjectId             string         `json:"subject_id"`
-	SubjectOrganizationId string         `json:"subject_organization_id"`
-	SubjectOrganization   string         `json:"subject_organization"`
-	SubjectFacilityType   string         `json:"subject_facility_type"`
-	SubjectRole           string         `json:"subject_role"`
-}
-
-func (s *SubjectProperties) UnmarshalJSON(data []byte) error {
-	type Alias SubjectProperties
+func (s *PDPSubject) UnmarshalJSON(data []byte) error {
+	type Alias PDPSubject
 	var tmp Alias
 	if err := json.Unmarshal(data, &tmp); err != nil {
 		return err
@@ -56,12 +51,12 @@ func (s *SubjectProperties) UnmarshalJSON(data []byte) error {
 	delete(tmp.OtherProps, "subject_organization")
 	delete(tmp.OtherProps, "subject_facility_type")
 	delete(tmp.OtherProps, "subject_role")
-	*s = SubjectProperties(tmp)
+	*s = PDPSubject(tmp)
 	return nil
 }
 
-func (s SubjectProperties) MarshalJSON() ([]byte, error) {
-	type Alias SubjectProperties
+func (s PDPSubject) MarshalJSON() ([]byte, error) {
+	type Alias PDPSubject
 	tmp := Alias(s)
 	data, err := json.Marshal(tmp)
 	if err != nil {
@@ -80,7 +75,7 @@ func (s SubjectProperties) MarshalJSON() ([]byte, error) {
 	return json.Marshal(baseMap)
 }
 
-type OtherSubjectProperties map[string]any
+type OtherPDPSubject map[string]any
 
 type HTTPRequest struct {
 	Method      string      `json:"method"`
@@ -99,10 +94,49 @@ type PDPContext struct {
 }
 
 type PolicyInput struct {
-	Subject  Subject        `json:"subject"`
+	Subject  PolicySubject  `json:"subject"`
 	Resource PolicyResource `json:"resource"`
 	Action   PolicyAction   `json:"action"`
 	Context  PolicyContext  `json:"context"`
+}
+
+type PolicySubject struct {
+	Client       PolicySubjectClient       `json:"client"`
+	Organization PolicySubjectOrganization `json:"organization"`
+	User         PolicySubjectUser         `json:"user"`
+	OtherProps   map[string]any            `json:"-"`
+}
+
+type PolicySubjectClient struct {
+	Id    string `json:"id"`
+	Scope string `json:"scope"`
+}
+type PolicySubjectOrganization struct {
+	Ura          string `json:"ura"`
+	Name         string `json:"name"`
+	FacilityType string `json:"facility_type"`
+}
+type PolicySubjectUser struct {
+	Id   string `json:"id"`
+	Role string `json:"role"`
+}
+
+func NewPolicySubject(pdpSubject PDPSubject) PolicySubject {
+
+	var policySubject PolicySubject
+	policySubject.Client.Id = pdpSubject.ClientId
+	policySubject.Client.Scope = pdpSubject.Scope
+
+	policySubject.User.Id = pdpSubject.UserId
+	policySubject.User.Role = pdpSubject.UserRole
+
+	policySubject.Organization.Ura = pdpSubject.OrganizationUra
+	policySubject.Organization.Name = pdpSubject.OrganizationName
+	policySubject.Organization.FacilityType = pdpSubject.OrganizationFacilityType
+
+	policySubject.OtherProps = pdpSubject.OtherProps
+
+	return policySubject
 }
 
 type PolicyResource struct {
