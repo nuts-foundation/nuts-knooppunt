@@ -60,9 +60,9 @@ func TestHandleMainPolicy(t *testing.T) {
 		var actual PDPResponse
 		err := json.NewDecoder(httpResponse.Body).Decode(&actual)
 		require.NoError(t, err)
-		require.False(t, actual.Result.Allow)
-		assert.Len(t, actual.Result.Reasons, 1)
-		assert.Equal(t, TypeResultCodeUnexpectedInput, actual.Result.Reasons[0].Code)
+		require.False(t, actual.Allow)
+		assert.Len(t, actual.Reasons, 1)
+		assert.Equal(t, TypeResultCodeUnexpectedInput, actual.Reasons[0].Code)
 	})
 }
 
@@ -115,7 +115,8 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		httpRequestBody      string
 		decision             bool
 		properties           map[string]any
-		reasonCodes          []TypeResultCode
+		mainReasonCodes      []TypeResultCode
+		policyReasonCodes    map[string][]TypeResultCode
 	}
 	runTest := func(t *testing.T, tc testCase) {
 		t.Helper()
@@ -156,22 +157,35 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		}
 		response := executePDPRequest(t, service, pdpRequest)
 		if tc.decision {
-			assert.True(t, response.Result.Allow, tc.name)
-			assert.Empty(t, response.Result.Reasons, tc.name)
-
+			assert.True(t, response.Allow, tc.name)
 		} else {
-			assert.False(t, response.Result.Allow, tc.name)
-			assert.NotEmpty(t, response.Result.Reasons, tc.name)
+			assert.False(t, response.Allow, tc.name)
 		}
-		for _, expectedCode := range tc.reasonCodes {
+		for _, expectedCode := range tc.mainReasonCodes {
 			found := false
-			for _, reason := range response.Result.Reasons {
+			for _, reason := range response.Reasons {
 				if reason.Code == expectedCode {
 					found = true
 					break
 				}
 			}
-			assert.True(t, found, "expected reason code %s not found in response (got: %v)", expectedCode, response.Result.Reasons)
+			assert.True(t, found, "expected reason code %s not found in response (got: %v)", expectedCode, response.Reasons)
+		}
+		if tc.policyReasonCodes != nil {
+			for policyName, expectedCodes := range tc.policyReasonCodes {
+				policyResult, ok := response.Result[policyName]
+				require.True(t, ok, "expected policy result for policy %s not found in response", policyName)
+				for _, expectedCode := range expectedCodes {
+					found := false
+					for _, reason := range policyResult.Reasons {
+						if reason.Code == expectedCode {
+							found = true
+							break
+						}
+					}
+					assert.True(t, found, "expected reason code %s for policy %s not found in response (got: %v)", expectedCode, policyName, policyResult.Reasons)
+				}
+			}
 		}
 	}
 
@@ -182,7 +196,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				clientQualifications: []string{"bgz"},
 				httpRequest:          `GET /Patient?_include=Patient:general-practitioner&_id=1001`,
 				decision:             false,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				policyReasonCodes: map[string][]TypeResultCode{
+					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
 			},
 			{
 				name:                 "allow - correct Patient query with _include",
@@ -206,19 +222,25 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				name:                 "disallow - Patient query with wrong _include parameter",
 				clientQualifications: []string{"bgz"},
 				httpRequest:          `GET /Patient?_include=Patient:organization`,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				policyReasonCodes: map[string][]TypeResultCode{
+					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
 			},
 			{
 				name:                 "disallow - Patient query with additional parameters",
 				clientQualifications: []string{"bgz"},
 				httpRequest:          `GET /Patient?_include=Patient:general-practitioner&name=John`,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				policyReasonCodes: map[string][]TypeResultCode{
+					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
 			},
 			{
 				name:                 "disallow - Patient query without patient_id or patient_bsn",
 				clientQualifications: []string{"bgz"},
 				httpRequest:          `GET /Patient?_include=Patient:general-practitioner`,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				policyReasonCodes: map[string][]TypeResultCode{
+					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
 			},
 		}
 		for _, tc := range testCases {
@@ -252,14 +274,14 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Patient?identifier=123456789`,
 				decision:             false,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational, TypeResultCodeUnexpectedInput},
+				mainReasonCodes:      []TypeResultCode{TypeResultCodeUnexpectedInput},
 			},
 			{
 				name:                 "deny - Patient search with wrong identifier system",
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Patient?identifier=http://example.com/identifier|123456789`,
 				decision:             false,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational, TypeResultCodeUnexpectedInput},
+				mainReasonCodes:      []TypeResultCode{TypeResultCodeUnexpectedInput},
 			},
 			{
 				name:                 "allow - Consent search with patient, scope and category",
@@ -278,56 +300,71 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Consent?patient=Patient/1000,Patient/1001&_profile=http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2`,
 				decision:             false,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational, TypeResultCodeUnexpectedInput},
+				mainReasonCodes:      []TypeResultCode{TypeResultCodeUnexpectedInput},
 			},
 			{
 				name:                 "deny - Consent search without patient parameter",
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Consent?_profile=http://example.com/fhir/StructureDefinition/consent-profile`,
 				decision:             false,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				policyReasonCodes: map[string][]TypeResultCode{
+					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
 			},
 			{
 				name:                 "deny - Consent search without _profile parameter",
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Consent?patient=Patient/1000`,
 				decision:             false,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				policyReasonCodes: map[string][]TypeResultCode{
+					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
 			},
 			{
 				name:                 "deny - Consent search with empty patient parameter",
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Consent?patient=&_profile=http://example.com/fhir/StructureDefinition/consent-profile`,
 				decision:             false,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				policyReasonCodes: map[string][]TypeResultCode{
+					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
 			},
 			{
 				name:                 "deny - Patient search without patient_id or patient_bsn",
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Patient?`,
 				decision:             false,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				policyReasonCodes: map[string][]TypeResultCode{
+					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
 			},
 			{
 				name:                 "deny - Mitz consent check failure",
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|bsn:error`,
 				decision:             false,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational, TypeResultCodeInternalError},
+				mainReasonCodes:      []TypeResultCode{TypeResultCodeInternalError},
+				policyReasonCodes: map[string][]TypeResultCode{
+					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
 			},
 			{
 				name:                 "deny - Mitz consent not given",
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|bsn:deny`,
 				decision:             false,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				policyReasonCodes: map[string][]TypeResultCode{
+					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
 			},
 			{
 				name:                 "deny - unsupported resource type",
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Observation?patient=Patient/1000`,
 				decision:             false,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				policyReasonCodes: map[string][]TypeResultCode{
+					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
 			},
 		}
 		for _, tc := range testCases {
@@ -352,7 +389,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				clientQualifications: []string{"medicatieoverdracht"},
 				httpRequest:          `GET /List?patient=Patient/1000`,
 				decision:             false,
-				reasonCodes:          []TypeResultCode{TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				policyReasonCodes: map[string][]TypeResultCode{
+					"medicatieoverdracht": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
 				properties: OtherSubjectProperties{
 					"patient_enrollment_identifier": "http://fhir.nl/fhir/NamingSystem/bsn|123456789",
 				},

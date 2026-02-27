@@ -279,3 +279,34 @@ func TestComponent_allow_revinclude(t *testing.T) {
 	assert.Empty(t, resp)
 	assert.True(t, inp.Action.FHIRRest.CapabilityChecked)
 }
+
+func Test_enrichPolicyInputWithCapabilityStatement(t *testing.T) {
+	t.Run("policy input isn't modified", func(t *testing.T) {
+		original := PolicyInput{
+			Subject: Subject{
+				Properties: SubjectProperties{
+					ClientQualifications:  []string{"mcsd_update"},
+					SubjectOrganizationId: "00000666",
+				},
+			},
+			Resource: PolicyResource{
+				Type: to.Ptr(fhir.ResourceTypeOrganization),
+				Properties: PolicyResourceProperties{
+					ResourceId: "118876",
+				},
+			},
+			Action: PolicyAction{
+				ConnectionTypeCode: "hl7-fhir-rest",
+				FHIRRest: FHIRRestData{
+					InteractionType: fhir.TypeRestfulInteractionSearchType,
+				},
+			},
+			Context: PolicyContext{
+				DataHolderOrganizationId: "00000659",
+			},
+		}
+
+		enriched, _ := enrichPolicyInputWithCapabilityStatement(context.Background(), original, "mcsd_update")
+		assert.NotEqual(t, original, enriched)
+	})
+}

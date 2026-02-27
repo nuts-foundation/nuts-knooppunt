@@ -145,11 +145,11 @@ type PDPRequest struct {
 }
 
 type PDPResponse struct {
-	Result PolicyResult `json:"result"`
+	PolicyResult
+	Result map[string]PolicyResult `json:"result"`
 }
 
 type PolicyResult struct {
-	Policy  string         `json:"policy"`
 	Allow   bool           `json:"allow"`
 	Reasons []ResultReason `json:"reasons"`
 }
