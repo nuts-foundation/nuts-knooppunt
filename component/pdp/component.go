@@ -96,10 +96,10 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	qualifications := input.Subject.Properties.ClientQualifications
+	scopes := strings.Split(input.Subject.Scope, " ")
 
 	// Step 1: Providing a policy is required for every PDP request
-	if len(qualifications) == 0 {
+	if len(scopes) == 0 {
 		res := PolicyResult{
 			Allow: false,
 			Reasons: []ResultReason{
@@ -113,13 +113,13 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(qualifications) > 1 {
+	if len(scopes) > 1 {
 		res := PolicyResult{
 			Allow: false,
 			Reasons: []ResultReason{
 				{
 					Code:        TypeResultCodeNotImplemented,
-					Description: "providing multiple qualifications is not yet implemented",
+					Description: "providing multiple scopes is not yet implemented",
 				},
 			},
 		}
@@ -128,7 +128,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: Implement support for multiple scopes
-	policy := qualifications[0]
+	policy := scopes[0]
 	// OPA doesn't support dashes in package and rule names, so we replace them with underscores.
 	policy = strings.ReplaceAll(policy, "-", "_")
 

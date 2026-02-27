@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
@@ -13,9 +14,9 @@ import (
 )
 
 type PDPInput struct {
-	Subject PolicySubject `json:"subject"`
-	Request HTTPRequest   `json:"request"`
-	Context PDPContext    `json:"context"`
+	Subject PDPSubject  `json:"subject"`
+	Request HTTPRequest `json:"request"`
+	Context PDPContext  `json:"context"`
 }
 
 type PDPSubject struct {
@@ -45,12 +46,12 @@ func (s *PDPSubject) UnmarshalJSON(data []byte) error {
 	}
 	// remove standard properties from OtherProps
 	delete(tmp.OtherProps, "client_id")
-	delete(tmp.OtherProps, "client_qualifications")
-	delete(tmp.OtherProps, "subject_id")
-	delete(tmp.OtherProps, "subject_organization_id")
-	delete(tmp.OtherProps, "subject_organization")
-	delete(tmp.OtherProps, "subject_facility_type")
-	delete(tmp.OtherProps, "subject_role")
+	delete(tmp.OtherProps, "scope")
+	delete(tmp.OtherProps, "user_id")
+	delete(tmp.OtherProps, "user_role")
+	delete(tmp.OtherProps, "organization_ura")
+	delete(tmp.OtherProps, "organization_name")
+	delete(tmp.OtherProps, "organization_facility_type")
 	*s = PDPSubject(tmp)
 	return nil
 }
@@ -104,12 +105,12 @@ type PolicySubject struct {
 	Client       PolicySubjectClient       `json:"client"`
 	Organization PolicySubjectOrganization `json:"organization"`
 	User         PolicySubjectUser         `json:"user"`
-	OtherProps   map[string]any            `json:"-"`
+	OtherProps   map[string]any            `json:"other_props"`
 }
 
 type PolicySubjectClient struct {
-	Id    string `json:"id"`
-	Scope string `json:"scope"`
+	Id     string   `json:"id"`
+	Scopes []string `json:"scopes"`
 }
 type PolicySubjectOrganization struct {
 	Ura          string `json:"ura"`
@@ -125,7 +126,7 @@ func NewPolicySubject(pdpSubject PDPSubject) PolicySubject {
 
 	var policySubject PolicySubject
 	policySubject.Client.Id = pdpSubject.ClientId
-	policySubject.Client.Scope = pdpSubject.Scope
+	policySubject.Client.Scopes = strings.Split(pdpSubject.Scope, " ")
 
 	policySubject.User.Id = pdpSubject.UserId
 	policySubject.User.Role = pdpSubject.UserRole

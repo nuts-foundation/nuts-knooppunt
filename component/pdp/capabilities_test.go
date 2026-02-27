@@ -11,10 +11,12 @@ import (
 
 func TestComponent_reject_interaction(t *testing.T) {
 	input := PolicyInput{
-		Subject: Subject{
-			Properties: SubjectProperties{
-				ClientQualifications:  []string{"mcsd_update"},
-				SubjectOrganizationId: "00000666",
+		Subject: PolicySubject{
+			Client: PolicySubjectClient{
+				Scopes: []string{"mcsd_query"},
+			},
+			Organization: PolicySubjectOrganization{
+				Ura: "00000666",
 			},
 		},
 		Resource: PolicyResource{
@@ -41,10 +43,12 @@ func TestComponent_reject_interaction(t *testing.T) {
 
 func TestComponent_allow_interaction(t *testing.T) {
 	input := PolicyInput{
-		Subject: Subject{
-			Properties: SubjectProperties{
-				ClientQualifications:  []string{"mcsd_update"},
-				SubjectOrganizationId: "00000666",
+		Subject: PolicySubject{
+			Client: PolicySubjectClient{
+				Scopes: []string{"mcsd_query"},
+			},
+			Organization: PolicySubjectOrganization{
+				Ura: "00000666",
 			},
 		},
 		Resource: PolicyResource{
@@ -71,10 +75,12 @@ func TestComponent_allow_interaction(t *testing.T) {
 
 func TestComponent_allow_search_param(t *testing.T) {
 	input := PolicyInput{
-		Subject: Subject{
-			Properties: SubjectProperties{
-				ClientQualifications:  []string{"mcsd_update"},
-				SubjectOrganizationId: "00000666",
+		Subject: PolicySubject{
+			Client: PolicySubjectClient{
+				Scopes: []string{"mcsd_query"},
+			},
+			Organization: PolicySubjectOrganization{
+				Ura: "00000666",
 			},
 		},
 		Resource: PolicyResource{
@@ -102,10 +108,12 @@ func TestComponent_allow_search_param(t *testing.T) {
 
 func TestComponent_reject_search_param(t *testing.T) {
 	input := PolicyInput{
-		Subject: Subject{
-			Properties: SubjectProperties{
-				ClientQualifications:  []string{"mcsd_update"},
-				SubjectOrganizationId: "00000666",
+		Subject: PolicySubject{
+			Client: PolicySubjectClient{
+				Scopes: []string{"mcsd_query"},
+			},
+			Organization: PolicySubjectOrganization{
+				Ura: "00000666",
 			},
 		},
 		Resource: PolicyResource{
@@ -133,10 +141,12 @@ func TestComponent_reject_search_param(t *testing.T) {
 
 func TestComponent_reject_interaction_type(t *testing.T) {
 	input := PolicyInput{
-		Subject: Subject{
-			Properties: SubjectProperties{
-				ClientQualifications:  []string{"mcsd_update"},
-				SubjectOrganizationId: "00000666",
+		Subject: PolicySubject{
+			Client: PolicySubjectClient{
+				Scopes: []string{"mcsd_query"},
+			},
+			Organization: PolicySubjectOrganization{
+				Ura: "00000666",
 			},
 		},
 		Action: PolicyAction{
@@ -158,10 +168,12 @@ func TestComponent_reject_interaction_type(t *testing.T) {
 
 func TestComponent_allow_include(t *testing.T) {
 	input := PolicyInput{
-		Subject: Subject{
-			Properties: SubjectProperties{
-				ClientQualifications:  []string{"mcsd_query"},
-				SubjectOrganizationId: "00000666",
+		Subject: PolicySubject{
+			Client: PolicySubjectClient{
+				Scopes: []string{"mcsd_query"},
+			},
+			Organization: PolicySubjectOrganization{
+				Ura: "00000666",
 			},
 		},
 		Resource: PolicyResource{
@@ -189,10 +201,12 @@ func TestComponent_allow_include(t *testing.T) {
 
 func TestComponent_reject_include(t *testing.T) {
 	input := PolicyInput{
-		Subject: Subject{
-			Properties: SubjectProperties{
-				ClientQualifications:  []string{"mcsd_query"},
-				SubjectOrganizationId: "00000666",
+		Subject: PolicySubject{
+			Client: PolicySubjectClient{
+				Scopes: []string{"mcsd_query"},
+			},
+			Organization: PolicySubjectOrganization{
+				Ura: "00000666",
 			},
 		},
 		Resource: PolicyResource{
@@ -220,10 +234,12 @@ func TestComponent_reject_include(t *testing.T) {
 
 func TestComponent_reject_revinclude(t *testing.T) {
 	input := PolicyInput{
-		Subject: Subject{
-			Properties: SubjectProperties{
-				ClientQualifications:  []string{"mcsd_query"},
-				SubjectOrganizationId: "00000666",
+		Subject: PolicySubject{
+			Client: PolicySubjectClient{
+				Scopes: []string{"mcsd_query"},
+			},
+			Organization: PolicySubjectOrganization{
+				Ura: "00000666",
 			},
 		},
 		Resource: PolicyResource{
@@ -251,10 +267,12 @@ func TestComponent_reject_revinclude(t *testing.T) {
 
 func TestComponent_allow_revinclude(t *testing.T) {
 	input := PolicyInput{
-		Subject: Subject{
-			Properties: SubjectProperties{
-				ClientQualifications:  []string{"mcsd_query"},
-				SubjectOrganizationId: "00000666",
+		Subject: PolicySubject{
+			Client: PolicySubjectClient{
+				Scopes: []string{"mcsd_query"},
+			},
+			Organization: PolicySubjectOrganization{
+				Ura: "00000666",
 			},
 		},
 		Resource: PolicyResource{
