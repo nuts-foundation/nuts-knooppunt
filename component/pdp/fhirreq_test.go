@@ -325,11 +325,10 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, result := NewPolicyInput(pdpRequest)
-			assert.True(t, result.Allow)
-			require.Len(t, result.Reasons, 1)
-			assert.Equal(t, "patient_id: multiple patient parameters found", result.Reasons[0].Description)
-			assert.Empty(t, policyInput.Context.PatientID)
+			policyInput, resultReasons := NewPolicyInput(pdpRequest)
+			assert.Nil(t, policyInput)
+			require.Len(t, resultReasons, 1)
+			assert.Equal(t, "patient_id: multiple patient parameters found", resultReasons[0].Description)
 		})
 		t.Run("multiple _id parameters", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -347,11 +346,10 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, result := NewPolicyInput(pdpRequest)
-			assert.True(t, result.Allow)
-			require.Len(t, result.Reasons, 1)
-			assert.Equal(t, "patient_id: multiple _id parameters found", result.Reasons[0].Description)
-			assert.Empty(t, policyInput.Context.PatientID)
+			policyInput, resultReasons := NewPolicyInput(pdpRequest)
+			assert.Nil(t, policyInput)
+			require.Len(t, resultReasons, 1)
+			assert.Equal(t, "patient_id: multiple _id parameters found", resultReasons[0].Description)
 		})
 		t.Run("no patient ID provided", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -363,9 +361,9 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, result := NewPolicyInput(pdpRequest)
-			assert.True(t, result.Allow)
-			assert.Empty(t, result.Reasons)
+			policyInput, resultReasons := NewPolicyInput(pdpRequest)
+			require.NotNil(t, policyInput)
+			assert.Empty(t, resultReasons)
 			assert.Empty(t, policyInput.Context.PatientID)
 		})
 	})
@@ -425,9 +423,10 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, policyResult := NewPolicyInput(pdpRequest)
+			policyInput, resultReasons := NewPolicyInput(pdpRequest)
+			require.NotNil(t, policyInput)
 			assert.Equal(t, "900186021", policyInput.Context.PatientBSN)
-			assert.Empty(t, policyResult.Reasons)
+			assert.Empty(t, resultReasons)
 		})
 		t.Run("in POST body, unencoded (pipe character)", func(t *testing.T) {
 			pdpRequest := PDPRequest{
@@ -447,8 +446,9 @@ func TestNewPolicyInput(t *testing.T) {
 				},
 			}
 
-			policyInput, policyResult := NewPolicyInput(pdpRequest)
-			assert.True(t, policyResult.Allow)
+			policyInput, resultReasons := NewPolicyInput(pdpRequest)
+			require.NotNil(t, policyInput)
+			assert.Empty(t, resultReasons)
 			assert.Equal(t, []string{"http://fhir.nl/fhir/NamingSystem/bsn|775645332"}, policyInput.Action.FHIRRest.SearchParams["identifier"])
 			assert.Equal(t, "775645332", policyInput.Context.PatientBSN)
 		})
@@ -468,11 +468,10 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, result := NewPolicyInput(pdpRequest)
-			assert.True(t, result.Allow)
-			require.Len(t, result.Reasons, 1)
-			assert.Equal(t, "patient_bsn: expected identifier system to be 'http://fhir.nl/fhir/NamingSystem/bsn', found 'http://fhir.nl/fhir/NamingSystem/other'", result.Reasons[0].Description)
-			assert.Empty(t, policyInput.Context.PatientBSN)
+			policyInput, resultReasons := NewPolicyInput(pdpRequest)
+			assert.Nil(t, policyInput)
+			require.Len(t, resultReasons, 1)
+			assert.Equal(t, "patient_bsn: expected identifier system to be 'http://fhir.nl/fhir/NamingSystem/bsn', found 'http://fhir.nl/fhir/NamingSystem/other'", resultReasons[0].Description)
 		})
 		t.Run("provided by PEP", func(t *testing.T) {
 			pdpRequest := PDPRequest{

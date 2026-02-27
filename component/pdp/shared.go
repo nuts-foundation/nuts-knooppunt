@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/mitchellh/copystructure"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/open-policy-agent/opa/v1/sdk"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -105,6 +106,14 @@ type PolicyInput struct {
 	Context  PolicyContext  `json:"context"`
 }
 
+func (p PolicyInput) Copy() PolicyInput {
+	result, err := copystructure.Copy(p)
+	if err != nil {
+		panic(fmt.Sprintf("failed to copy PolicyInput: %v", err))
+	}
+	return result.(PolicyInput)
+}
+
 type PolicyResource struct {
 	Type       *fhir.ResourceType       `json:"type"`
 	Properties PolicyResourceProperties `json:"properties"`
@@ -145,11 +154,11 @@ type PDPRequest struct {
 }
 
 type PDPResponse struct {
-	Result PolicyResult `json:"result"`
+	Result   PolicyResult            `json:"result"`
+	Policies map[string]PolicyResult `json:"policies"`
 }
 
 type PolicyResult struct {
-	Policy  string         `json:"policy"`
 	Allow   bool           `json:"allow"`
 	Reasons []ResultReason `json:"reasons"`
 }
@@ -180,23 +189,6 @@ func (p *PolicyResult) AddReasons(input []string, format string, code TypeResult
 		} else {
 			p.Reasons = append(p.Reasons, reason)
 		}
-	}
-}
-
-// Allow helper for creating an allowed result without reasons
-func Allow() PolicyResult {
-	return PolicyResult{
-		Allow: true,
-	}
-}
-
-// Deny Helper for creating a result with a single deny reason
-func Deny(reason ResultReason) PolicyResult {
-	return PolicyResult{
-		Allow: false,
-		Reasons: []ResultReason{
-			reason,
-		},
 	}
 }
 

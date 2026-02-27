@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -83,98 +84,122 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	input := reqBody.Input
 	if err != nil {
-		res := PolicyResult{
-			Allow: false,
-			Reasons: []ResultReason{
-				{
-					Code:        TypeResultCodeUnexpectedInput,
-					Description: "unable to parse request body: " + err.Error(),
+		writeResponseWithCode(r.Context(), w, PDPResponse{
+			Result: PolicyResult{
+				Reasons: []ResultReason{
+					{
+						Code:        TypeResultCodeUnexpectedInput,
+						Description: "unable to parse request body: " + err.Error(),
+					},
 				},
 			},
-		}
-		writeResponseWithCode(r.Context(), w, res, http.StatusBadRequest)
+			Policies: map[string]PolicyResult{},
+		}, http.StatusBadRequest)
 		return
 	}
 
-	qualifications := input.Subject.Properties.ClientQualifications
+	// deduplicate and normalize policies
+	policySet := make(map[string]struct{})
+	for _, policyName := range input.Subject.Properties.ClientQualifications {
+		// OPA doesn't support dashes in package and rule names, so we replace them with underscores.
+		policyName = strings.ReplaceAll(policyName, "-", "_")
+		policySet[policyName] = struct{}{}
+	}
+	policyNames := maps.Keys(policySet)
+	slices.Sort(policyNames)
 
-	// Step 1: Providing a policy is required for every PDP request
-	if len(qualifications) == 0 {
-		res := PolicyResult{
-			Allow: false,
-			Reasons: []ResultReason{
-				{
-					Code:        TypeResultCodeMissingRequiredValue,
-					Description: "missing required value, no policy defined",
+	// Step 1: Providing a policy is required for every PDP request. We can short-circuit here, no need to process the request.
+	if len(policyNames) == 0 {
+		writeResponse(r.Context(), w, PDPResponse{
+			Result: PolicyResult{
+				Reasons: []ResultReason{
+					{
+						Code:        TypeResultCodeMissingRequiredValue,
+						Description: "missing required value, no policy defined",
+					},
 				},
 			},
-		}
-		writeResponse(r.Context(), w, res)
+			Policies: map[string]PolicyResult{},
+		})
 		return
 	}
 
-	if len(qualifications) > 1 {
-		res := PolicyResult{
-			Allow: false,
-			Reasons: []ResultReason{
-				{
-					Code:        TypeResultCodeNotImplemented,
-					Description: "providing multiple qualifications is not yet implemented",
-				},
-			},
-		}
-		writeResponse(r.Context(), w, res)
-		return
+	response := PDPResponse{
+		Policies: make(map[string]PolicyResult),
 	}
-
-	// TODO: Implement support for multiple scopes
-	policy := qualifications[0]
-	// OPA doesn't support dashes in package and rule names, so we replace them with underscores.
-	policy = strings.ReplaceAll(policy, "-", "_")
 
 	// Step 2: Parse the PDP input and translate to the policy input
-	policyInput, policyResult := NewPolicyInput(reqBody)
-	policyResult.Policy = policy
-	if !policyResult.Allow {
-		writeResponse(r.Context(), w, policyResult)
+	policyInputPtr, resultReasons := NewPolicyInput(reqBody)
+	if policyInputPtr == nil {
+		// Invalid request
+		response.Result.Reasons = append(response.Result.Reasons, resultReasons...)
+		writeResponse(r.Context(), w, response)
 		return
 	}
+	policyInput := *policyInputPtr
 
-	// Step 3: Enrich the policy input with data gathered from the policy information point (if available)
-	var resultReasons []ResultReason
+	// Step 2: Enrich the policy input with data gathered from the policy information point (if available)
 	policyInput, resultReasons = c.enrichPolicyInputWithPIP(r.Context(), policyInput)
-	policyResult.Reasons = append(policyResult.Reasons, resultReasons...)
+	response.Result.Reasons = append(response.Result.Reasons, resultReasons...)
 
-	// Step 4: Check FHIR Capability Statement
-	policyInput, resultReasons = enrichPolicyInputWithCapabilityStatement(r.Context(), policyInput, policy)
-	policyResult.Reasons = append(policyResult.Reasons, resultReasons...)
-
-	// Step 5: Check consent at Mitz
+	// Step 3: Check consent at Mitz
 	policyInput, resultReasons = c.enrichPolicyInputWithMitz(r.Context(), policyInput)
-	policyResult.Reasons = append(policyResult.Reasons, resultReasons...)
+	response.Result.Reasons = append(response.Result.Reasons, resultReasons...)
 
-	// Step 6: Evaluate using Open Policy Agent
-	regoPolicyResult, err := c.evalRegoPolicy(r.Context(), policy, policyInput)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "failed to evaluate rego policy", logging.Error(err), slog.String("policy", policy))
-		policyResult.Allow = false
-		policyResult.Reasons = append(policyResult.Reasons, ResultReason{
-			Code:        TypeResultCodeNotImplemented,
-			Description: "failed to evaluate rego policy",
-		})
-		writeResponse(r.Context(), w, policyResult)
-		return
+	// Evaluate all known policies
+	for _, policyName := range policyNames {
+		thisPolicyInput := policyInput.Copy()
+
+		// Check if the policy exists
+		policyExists, err := c.policyExists(r.Context(), policyName)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "failed to check if policy exists", logging.Error(err), slog.String("policy", policyName))
+			response.Result.Reasons = append(response.Result.Reasons, ResultReason{
+				Code:        TypeResultCodeInternalError,
+				Description: fmt.Sprintf("failed to check if policy exists: %v", err),
+			})
+			continue
+		}
+		if !policyExists {
+			response.Result.Reasons = append(response.Result.Reasons, ResultReason{
+				Code:        TypeResultCodeNotImplemented,
+				Description: fmt.Sprintf("unknown policy: %s", policyName),
+			})
+			continue
+		}
+
+		var policyResultReasons []ResultReason
+
+		// Step 4: Check FHIR Capability Statement
+		thisPolicyInput, policyResultReasons = enrichPolicyInputWithCapabilityStatement(r.Context(), thisPolicyInput, policyName)
+
+		// Step 5: Evaluate using Open Policy Agent
+		policyResult, err := c.evalRegoPolicy(r.Context(), policyName, thisPolicyInput)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "failed to evaluate rego policy", logging.Error(err), slog.String("policy", policyName))
+			policyResult = &PolicyResult{
+				Reasons: []ResultReason{
+					{
+						Code:        TypeResultCodeNotImplemented,
+						Description: "failed to evaluate rego policy: " + err.Error(),
+					},
+				},
+			}
+		}
+		policyResult.Reasons = append(policyResultReasons, policyResult.Reasons...)
+		response.Policies[policyName] = *policyResult
+		if policyResult.Allow {
+			// Found policy that allows access, no need to evaluate other policies
+			response.Result.Allow = true
+			break
+		}
 	}
-	regoPolicyResult.Reasons = append(policyResult.Reasons, regoPolicyResult.Reasons...)
-	writeResponse(r.Context(), w, *regoPolicyResult)
+
+	writeResponse(r.Context(), w, response)
 }
 
-func writeResponseWithCode(ctx context.Context, w http.ResponseWriter, result PolicyResult, statusCode int) {
-	resp := PDPResponse{
-		Result: result,
-	}
-
-	b, err := json.Marshal(resp)
+func writeResponseWithCode(ctx context.Context, w http.ResponseWriter, response PDPResponse, statusCode int) {
+	b, err := json.Marshal(response)
 	if err != nil {
 		http.Error(w, "failed to encode json output", http.StatusInternalServerError)
 		return
@@ -188,7 +213,7 @@ func writeResponseWithCode(ctx context.Context, w http.ResponseWriter, result Po
 	}
 }
 
-func writeResponse(ctx context.Context, w http.ResponseWriter, result PolicyResult) {
+func writeResponse(ctx context.Context, w http.ResponseWriter, result PDPResponse) {
 	writeResponseWithCode(ctx, w, result, http.StatusOK)
 }
 
@@ -255,4 +280,13 @@ func (c *Component) HandleGetBundle(w http.ResponseWriter, r *http.Request) {
 			slog.String("policyName", policyName),
 			logging.Error(err))
 	}
+}
+
+func (c *Component) policyExists(ctx context.Context, policy string) (bool, error) {
+	bundles, err := policies.Bundles(ctx)
+	if err != nil {
+		return false, err
+	}
+	_, found := bundles[policy]
+	return found, nil
 }
