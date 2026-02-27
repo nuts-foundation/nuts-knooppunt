@@ -10,35 +10,35 @@ import (
 
 func TestSubjectProperties_UnmarshalJSON(t *testing.T) {
 	t.Run("unmarshal", func(t *testing.T) {
-		const data = `{"client_qualifications": ["mcsd_update"], "subject_organization_id": "00000666", "other": "value"}`
-		var actual SubjectProperties
+		const data = `{"scope": "mcsd_update mscd_query", "organization_ura": "00000666", "other": "value"}`
+		var actual PDPSubject
 		err := json.Unmarshal([]byte(data), &actual)
 		require.NoError(t, err)
 
-		expected := SubjectProperties{
+		expected := PDPSubject{
 			OtherProps: map[string]any{
 				"other": "value",
 			},
-			ClientQualifications:  []string{"mcsd_update"},
-			SubjectOrganizationId: "00000666",
+			Scope:           "mcsd_update mscd_query",
+			OrganizationUra: "00000666",
 		}
 		require.Equal(t, expected, actual)
 	})
 	t.Run("marshal", func(t *testing.T) {
-		subjectProps := SubjectProperties{
+		subjectProps := PDPSubject{
 			OtherProps: map[string]any{
 				"other": "value",
 			},
-			ClientId:              "1",
-			SubjectId:             "2",
-			SubjectOrganization:   "3",
-			SubjectFacilityType:   "Z3",
-			SubjectRole:           "GP",
-			ClientQualifications:  []string{"mcsd_update"},
-			SubjectOrganizationId: "00000666",
+			ClientId:                 "1",
+			UserId:                   "2",
+			UserRole:                 "GP",
+			OrganizationUra:          "00000666",
+			OrganizationName:         "3",
+			OrganizationFacilityType: "Z3",
+			Scope:                    "mcsd_update",
 		}
 		data, err := json.Marshal(subjectProps)
 		require.NoError(t, err)
-		assert.JSONEq(t, `{"other":"value", "client_id":"1","client_qualifications":["mcsd_update"],"subject_id":"2","subject_organization_id":"00000666","subject_organization":"3","subject_facility_type":"Z3","subject_role":"GP"}`, string(data))
+		assert.JSONEq(t, `{"other":"value", "client_id":"1","scope":"mcsd_update","user_id":"2","organization_ura":"00000666","organization_name":"3","organization_facility_type":"Z3","user_role":"GP","active":false}`, string(data))
 	})
 }

@@ -8,12 +8,14 @@ import (
 
 func TestComponent_map_input_xacml(t *testing.T) {
 	input := PolicyInput{
-		Subject: Subject{
-			Properties: SubjectProperties{
-				SubjectRole:           "01.015",
-				SubjectId:             "000095254",
-				SubjectOrganizationId: "00000666",
-				SubjectFacilityType:   "Z3",
+		Subject: PolicySubject{
+			User: PolicySubjectUser{
+				Id:   "000095254",
+				Role: "01.015",
+			},
+			Organization: PolicySubjectOrganization{
+				Ura:          "00000666",
+				FacilityType: "Z3",
 			},
 		},
 		Context: PolicyContext{
