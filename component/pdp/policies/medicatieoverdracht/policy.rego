@@ -1,6 +1,7 @@
 package medicatieoverdracht
 
 import rego.v1
+import data.fhir
 
 #
 # This file implements the FHIR queries for the Medicatieoverdracht use case, as specified by https://informatiestandaarden.nictiz.nl/wiki/MedMij:V2019.01_FHIR_MedicationProcess
@@ -21,7 +22,7 @@ allow if {
 
 default request_conforms_fhir_capabilitystatement := false
 request_conforms_fhir_capabilitystatement if {
-    input.action.fhir_rest.capability_checked == true
+    fhir.capability_statement_allowed(input.capability_statement, input.resource.type, input.action.fhir_rest)
 }
 
 default patient_gave_mitz_consent := false

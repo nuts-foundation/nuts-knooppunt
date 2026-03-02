@@ -99,10 +99,11 @@ type PDPContext struct {
 }
 
 type PolicyInput struct {
-	Subject  Subject        `json:"subject"`
-	Resource PolicyResource `json:"resource"`
-	Action   PolicyAction   `json:"action"`
-	Context  PolicyContext  `json:"context"`
+	Subject             Subject                   `json:"subject"`
+	Resource            PolicyResource            `json:"resource"`
+	Action              PolicyAction              `json:"action"`
+	Context             PolicyContext             `json:"context"`
+	CapabilityStatement *fhir.CapabilityStatement `json:"capability_statement,omitempty"`
 }
 
 type PolicyResource struct {
@@ -123,12 +124,11 @@ type PolicyAction struct {
 }
 
 type FHIRRestData struct {
-	CapabilityChecked bool                        `json:"capability_checked"`
-	Include           []string                    `json:"include"`
-	InteractionType   fhir.TypeRestfulInteraction `json:"interaction_type"`
-	Operation         *string                     `json:"operation"`
-	Revinclude        []string                    `json:"revinclude"`
-	SearchParams      map[string][]string         `json:"search_params"`
+	Include         []string                    `json:"include"`
+	InteractionType fhir.TypeRestfulInteraction `json:"interaction_type"`
+	Operation       *string                     `json:"operation"`
+	Revinclude      []string                    `json:"revinclude"`
+	SearchParams    map[string][]string         `json:"search_params"`
 }
 
 type PolicyContext struct {

@@ -1,6 +1,7 @@
 package mcsd_update
 
 import rego.v1
+import data.fhir
 
 default allow := false
 allow if {
@@ -9,5 +10,6 @@ allow if {
 
 default request_conforms_fhir_capabilitystatement := false
 request_conforms_fhir_capabilitystatement if {
-    input.action.fhir_rest.capability_checked == true
+    fhir.capability_statement_allowed(input.capability_statement, input.resource.type, input.action.fhir_rest)
 }
+
