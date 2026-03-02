@@ -157,6 +157,7 @@ func TestComponent_handleSearch(t *testing.T) {
 		expectedEntries          int
 		expectedOperationOutcome *fhir.OperationOutcome
 		httpMethod               string
+		expectedSearch           string
 	}{
 		{
 			name:            "searches at NVI with POST",
@@ -187,9 +188,72 @@ func TestComponent_handleSearch(t *testing.T) {
 			},
 		},
 		{
+			name:           "missing identifier parameter",
+			nviResources:   nil,
+			searchParams:   "_count=10",
+			expectedStatus: http.StatusBadRequest,
+			expectedOperationOutcome: &fhir.OperationOutcome{
+				Issue: []fhir.OperationOutcomeIssue{
+					{
+						Severity:    fhir.IssueSeverityError,
+						Code:        fhir.IssueTypeInvalid,
+						Diagnostics: to.Ptr("at least one of patient:identifier, patient.identifier, subject:identifier, subject.identifier, or source.identifier is required"),
+					},
+				},
+			},
+		},
+		{
+			name:           "missing identifier parameter with GET",
+			nviResources:   nil,
+			searchParams:   "_count=10",
+			expectedStatus: http.StatusBadRequest,
+			httpMethod:     "GET",
+			expectedOperationOutcome: &fhir.OperationOutcome{
+				Issue: []fhir.OperationOutcomeIssue{
+					{
+						Severity:    fhir.IssueSeverityError,
+						Code:        fhir.IssueTypeInvalid,
+						Diagnostics: to.Ptr("at least one of patient:identifier, patient.identifier, subject:identifier, subject.identifier, or source.identifier is required"),
+					},
+				},
+			},
+		},
+		{
+			name:            "searches with patient.identifier",
+			nviResources:    []any{listResource},
+			searchParams:    "patient.identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value),
+			expectedStatus:  http.StatusOK,
+			expectedEntries: 1,
+			expectedSearch:  "List?patient.identifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn-transport-token%7Cabcdefghi",
+		},
+		{
+			name:            "searches with subject:identifier",
+			nviResources:    []any{listResource},
+			searchParams:    "subject:identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value),
+			expectedStatus:  http.StatusOK,
+			expectedEntries: 1,
+			expectedSearch:  "List?subject%3Aidentifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn-transport-token%7Cabcdefghi",
+		},
+		{
+			name:            "searches with subject.identifier",
+			nviResources:    []any{listResource},
+			searchParams:    "subject.identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value),
+			expectedStatus:  http.StatusOK,
+			expectedEntries: 1,
+			expectedSearch:  "List?subject.identifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn-transport-token%7Cabcdefghi",
+		},
+		{
+			name:            "searches with source.identifier",
+			nviResources:    []any{listResource},
+			searchParams:    "source.identifier=http%3A%2F%2Fexample.org%2Fdevice-identifiers%7CEHR-SYS-2024-001",
+			expectedStatus:  http.StatusOK,
+			expectedEntries: 1,
+			expectedSearch:  "List?source.identifier=http%3A%2F%2Fexample.org%2Fdevice-identifiers%7CEHR-SYS-2024-001",
+		},
+		{
 			name:           "NVI returns next page",
 			nviResources:   []any{listResource, listResource},
-			searchParams:   "_count=1",
+			searchParams:   "patient:identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value) + "&_count=1",
 			expectedStatus: http.StatusUnprocessableEntity,
 			expectedOperationOutcome: &fhir.OperationOutcome{
 				Issue: []fhir.OperationOutcomeIssue{
@@ -262,7 +326,11 @@ func TestComponent_handleSearch(t *testing.T) {
 			} else {
 				t.Run("assert BSNs are translated to transport tokens, as search input to NVI", func(t *testing.T) {
 					require.Len(t, nvi.Searches, 1)
-					assert.Equal(t, "List?patient%3Aidentifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn-transport-token%7Cabcdefghi", nvi.Searches[0])
+					expectedSearch := testCase.expectedSearch
+					if expectedSearch == "" {
+						expectedSearch = "List?patient%3Aidentifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn-transport-token%7Cabcdefghi"
+					}
+					assert.Equal(t, expectedSearch, nvi.Searches[0])
 				})
 			}
 			if testCase.expectedEntries > 0 {

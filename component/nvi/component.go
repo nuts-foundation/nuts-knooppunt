@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -73,6 +74,7 @@ func New(config Config, httpClientFn authn.HTTPClientProvider, pseudonymizer pse
 
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.Handle("POST /nvi", http.HandlerFunc(c.handleRegister))
+	internalMux.Handle("POST /nvi/", http.HandlerFunc(c.handleRegister))
 	internalMux.Handle("GET /nvi/List", http.HandlerFunc(c.handleSearch))
 	internalMux.Handle("POST /nvi/List/_search", http.HandlerFunc(c.handleSearch))
 }
@@ -128,6 +130,9 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 	requestHeaders := http.Header{
 		"X-Requester-URA": []string{*requesterURA.Value},
 	}
+	if bundleJSON, jsonErr := json.Marshal(bundle); jsonErr == nil {
+		slog.DebugContext(httpRequest.Context(), "Sending Bundle to NVI", "bundle", string(bundleJSON))
+	}
 	var result fhir.Bundle
 	err = fhirClient.CreateWithContext(httpRequest.Context(), bundle, &result, fhirclient.AtPath("/"), fhirclient.RequestHeaders(requestHeaders))
 	if err != nil {
@@ -156,12 +161,29 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		return
 	}
 
+	// Require at least one patient/subject/source identifier to prevent querying by empty values
+	hasIdentifier := false
+	for key := range fhirRequest.Parameters {
+		if key == "patient:identifier" || key == "patient.identifier" ||
+			key == "subject:identifier" || key == "subject.identifier" ||
+			key == "source.identifier" {
+			hasIdentifier = true
+			break
+		}
+	}
+	if !hasIdentifier {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, fhirapi.BadRequestError("at least one of patient:identifier, patient.identifier, subject:identifier, subject.identifier, or source.identifier is required", nil))
+		return
+	}
+
 	// Use BSN transport tokens to NVI, instead of BSNs
 	searchParams := url.Values{}
 	for key, values := range fhirRequest.Parameters {
 		newValues := append([]string{}, values...)
 		if key == "patient:identifier" ||
+			key == "patient.identifier" ||
 			key == "subject:identifier" ||
+			key == "subject.identifier" ||
 			strings.HasPrefix(key, coding.BSNNamingSystem) {
 			for i, value := range values {
 				newValue, err := c.tokenizeFHIRSearchToken(httpRequest.Context(), value, *requesterURA.Value, c.audience)
@@ -180,6 +202,8 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
 	}
+
+	// TODO: Remove this after migrating to real NVI
 	requestHeaders := http.Header{
 		"X-Requester-URA": []string{*requesterURA.Value},
 	}
