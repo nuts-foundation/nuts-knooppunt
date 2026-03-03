@@ -14,7 +14,7 @@ func startHAPI(t *testing.T, dockerNetworkName string) *url.URL {
 	ctx := t.Context()
 	req := testcontainers.ContainerRequest{
 		Name:         "knooppunt-unittest-fhirstore",
-		Image:        "fake-nvi-local",
+		Image:        "ghcr.io/nuts-foundation/fake-nvi:latest",
 		ExposedPorts: []string{"8080/tcp"},
 		//Networks:     []string{dockerNetworkName},
 		Env: map[string]string{
