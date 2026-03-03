@@ -1,6 +1,7 @@
 package pzp_gf
 
 import rego.v1
+import data.fhir
 
 #
 # This file implements the FHIR queries for PZP/ACP (Proactieve ZorgPlanning)
@@ -9,8 +10,14 @@ import rego.v1
 
 default allow := false
 allow if {
+    request_conforms_fhir_capabilitystatement
     patient_gave_mitz_consent
     is_allowed_query
+}
+
+default request_conforms_fhir_capabilitystatement := false
+request_conforms_fhir_capabilitystatement if {
+    fhir.capability_statement_allowed(input.capability_statement, input.resource.type, input.action.fhir_rest)
 }
 
 default patient_gave_mitz_consent := false
