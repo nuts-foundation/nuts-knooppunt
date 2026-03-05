@@ -169,21 +169,17 @@ function buildPDPRequest(introspection, request) {
     // Extract all PD-defined claims (non-standard OAuth/JWT claims)
     const pdClaims = extractPDClaims(introspection);
 
-    // Build properties object - use Object.assign since njs doesn't support spread operator
-    const properties = {
+    // Build attributes object - use Object.assign since njs doesn't support spread operator
+    const attributes = {
         client_id: introspection.client_id || '',
         client_qualifications: parseScopes(introspection.scope)
     };
     // Merge all PD-defined claims into properties
-    Object.assign(properties, pdClaims);
+    Object.assign(attributes, pdClaims);
 
     return {
         input: {
-            subject: {
-                type: 'organization',
-                id: introspection.client_id || '',
-                properties: properties
-            },
+            subject: attributes,
             request: {
                 method: request.variables.request_method || request.method || 'GET',
                 protocol: 'HTTP/1.1',
