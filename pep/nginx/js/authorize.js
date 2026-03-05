@@ -43,17 +43,6 @@ function getTokenType(request) {
 }
 
 /**
- * Parse OAuth scopes from space-separated string
- * @param {string} scopeString - Space-separated scopes
- * @returns {Array<string>} - Array of scopes
- */
-function parseScopes(scopeString) {
-    if (!scopeString) return [];
-    return scopeString.split(' ').filter(s => s.length > 0);
-}
-
-
-/**
  * Parse query parameters from query string
  * @param {string} queryString - Query string without leading ?
  * @returns {Object} - Map of param name to array of values
@@ -115,28 +104,6 @@ function normalizeClaimValue(value) {
 }
 
 /**
- * Extract non-standard claims from introspection response
- * Filters out standard OAuth/JWT/OIDC claims and returns all custom claims
- * (typically populated by the Presentation Definition on the authorization server)
- * @param {Object} introspection - Introspection response from Nuts node
- * @returns {Object} - Custom claims to forward to PDP
- */
-function extractPDClaims(introspection) {
-    if (!introspection || typeof introspection !== 'object') {
-        return {};
-    }
-    const claims = {};
-    const keys = Object.keys(introspection);
-    for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
-        if (!STANDARD_CLAIMS[key]) {
-            claims[key] = normalizeClaimValue(introspection[key]);
-        }
-    }
-    return claims;
-}
-
-/**
  * Build PDPInput request matching the Go PDPInput struct
  *
  * All non-standard claims from the introspection response are forwarded to the PDP.
@@ -165,18 +132,7 @@ function buildPDPRequest(introspection, request) {
     } else if (requestPath === fhirBasePath) {
         requestPath = '/';
     }
-
-    // Extract all PD-defined claims (non-standard OAuth/JWT claims)
-    const pdClaims = extractPDClaims(introspection);
-
-    // Build attributes object - use Object.assign since njs doesn't support spread operator
-    const attributes = {
-        client_id: introspection.client_id || '',
-        client_qualifications: parseScopes(introspection.scope)
-    };
-    // Merge all PD-defined claims into properties
-    Object.assign(attributes, pdClaims);
-
+    
     return {
         input: {
             subject: introspection,
@@ -393,10 +349,8 @@ export default {
     checkAuthorization,
     extractBearerToken,
     getTokenType,
-    parseScopes,
     parseQueryParams,
     normalizeClaimValue,
-    extractPDClaims,
     buildPDPRequest,
     validateDPoP,
     STANDARD_CLAIMS
