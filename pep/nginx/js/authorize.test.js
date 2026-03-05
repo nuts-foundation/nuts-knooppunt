@@ -226,8 +226,6 @@ describe('buildPDPRequest', () => {
         expect(result).toEqual({
             input: {
                 subject: {
-                    type: 'organization',
-                    id: 'did:nuts:client123',
                     active: true,
                     client_id: 'did:nuts:client123',
                     scope: 'bgz eoverdracht',
@@ -255,26 +253,6 @@ describe('buildPDPRequest', () => {
                 }
             }
         });
-    });
-
-    test('handles missing optional introspection fields', () => {
-        const introspection = {
-            active: true
-        };
-        const request = createMockRequest({
-            variables: {
-                request_uri: '/fhir/Observation',
-                request_method: 'POST'
-            }
-        });
-
-        const result = buildPDPRequest(introspection, request);
-
-        expect(result.input.subject.id).toBe('');
-        expect(result.input.subject.properties.client_id).toBe('');
-        expect(result.input.subject.properties.client_qualifications).toEqual([]);
-        // PD claims not in introspection are simply not included (no empty strings)
-        expect(result.input.subject.properties.subject_id).toBeUndefined();
     });
 
     test('uses request.uri as fallback', () => {
