@@ -41,10 +41,10 @@ func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
 		AuthorInstitutionID:    input.Context.DataHolderOrganizationId,
 		// This code is always the same, it's the code for _de gesloten vraag_
 		EventCode:              "GGC002",
-		SubjectRole:            input.Subject.Properties.SubjectRole,
-		ProviderID:             input.Subject.Properties.SubjectId,
-		ProviderInstitutionID:  input.Subject.Properties.SubjectOrganizationId,
-		ConsultingFacilityType: input.Subject.Properties.SubjectFacilityType,
+		SubjectRole:            input.Subject.User.Role,
+		ProviderID:             input.Subject.User.Id,
+		ProviderInstitutionID:  input.Subject.Organization.Ura,
+		ConsultingFacilityType: input.Subject.Organization.FacilityType,
 		PurposeOfUse:           "TREAT",
 	}
 }
@@ -67,19 +67,19 @@ func validateMitzInput(input PolicyInput) []ResultReason {
 			Message: "Could not complete Mitz consent check: Missing data holder organization ID",
 		},
 		{
-			Value:   input.Subject.Properties.SubjectRole,
+			Value:   input.Subject.User.Role,
 			Message: "Could not complete Mitz consent check: Missing subject role",
 		},
 		{
-			Value:   input.Subject.Properties.SubjectId,
+			Value:   input.Subject.User.Id,
 			Message: "Could not complete Mitz consent check: Missing subject id",
 		},
 		{
-			Value:   input.Subject.Properties.SubjectOrganizationId,
+			Value:   input.Subject.Organization.Ura,
 			Message: "Could not complete Mitz consent check: Missing subject organization ID",
 		},
 		{
-			Value:   input.Subject.Properties.SubjectFacilityType,
+			Value:   input.Subject.Organization.FacilityType,
 			Message: "Could not complete Mitz consent check: Missing subject facility type",
 		},
 	}

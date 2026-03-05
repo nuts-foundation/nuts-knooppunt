@@ -413,7 +413,8 @@ func NewPolicyInput(request PDPRequest) (*PolicyInput, error) {
 	}
 	decodeHTTPRequest.QueryParams = *decodedQueryParams
 
-	policyInput.Subject = request.Input.Subject
+	policyInput.Subject = NewPolicySubject(request.Input.Subject)
+
 	policyInput.Action.Request = decodeHTTPRequest
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType

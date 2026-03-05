@@ -48,7 +48,7 @@ requester_has_enrolled_patient if {
     # We must have a patient BSN
     not input.context.patient_bsn == ""
     is_string(input.context.patient_bsn)
-    concat("", ["http://fhir.nl/fhir/NamingSystem/bsn|", input.context.patient_bsn]) == input.subject.properties.patient_enrollment_identifier
+    concat("", ["http://fhir.nl/fhir/NamingSystem/bsn|", input.context.patient_bsn]) == input.subject.other_props.patient_enrollment_identifier
 }
 
 # GET [base]/MedicationRequest
