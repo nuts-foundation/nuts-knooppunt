@@ -4,7 +4,7 @@
  */
 
 import authorize from './authorize.js';
-import { jest } from '@jest/globals';
+import {jest} from '@jest/globals';
 
 const {
     extractBearerToken,
@@ -18,10 +18,10 @@ const {
 } = authorize;
 
 function createMockRequest(overrides = {}) {
-    const { variables, headersIn, method, ...rest } = overrides;
+    const {variables, headersIn, method, ...rest} = overrides;
     const effectiveMethod = method || 'GET';
     return {
-        headersIn: { ...headersIn },
+        headersIn: {...headersIn},
         variables: {
             request_uri: '',
             request_method: effectiveMethod,
@@ -50,14 +50,14 @@ function createMockSubrequestResponse(status, body) {
 describe('extractBearerToken', () => {
     test('extracts valid bearer token', () => {
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'Bearer abc123' }
+            headersIn: {'Authorization': 'Bearer abc123'}
         });
         expect(extractBearerToken(request)).toBe('abc123');
     });
 
     test('extracts DPoP token', () => {
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'DPoP xyz789' }
+            headersIn: {'Authorization': 'DPoP xyz789'}
         });
         expect(extractBearerToken(request)).toBe('xyz789');
     });
@@ -69,21 +69,21 @@ describe('extractBearerToken', () => {
 
     test('returns null for invalid format', () => {
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'Basic abc123' }
+            headersIn: {'Authorization': 'Basic abc123'}
         });
         expect(extractBearerToken(request)).toBeNull();
     });
 
     test('handles case-insensitive Bearer keyword', () => {
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'BEARER token123' }
+            headersIn: {'Authorization': 'BEARER token123'}
         });
         expect(extractBearerToken(request)).toBe('token123');
     });
 
     test('handles case-insensitive DPoP keyword', () => {
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'DPOP token456' }
+            headersIn: {'Authorization': 'DPOP token456'}
         });
         expect(extractBearerToken(request)).toBe('token456');
     });
@@ -92,14 +92,14 @@ describe('extractBearerToken', () => {
 describe('getTokenType', () => {
     test('returns bearer for Bearer token', () => {
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'Bearer abc123' }
+            headersIn: {'Authorization': 'Bearer abc123'}
         });
         expect(getTokenType(request)).toBe('bearer');
     });
 
     test('returns dpop for DPoP token', () => {
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'DPoP xyz789' }
+            headersIn: {'Authorization': 'DPoP xyz789'}
         });
         expect(getTokenType(request)).toBe('dpop');
     });
@@ -111,7 +111,7 @@ describe('getTokenType', () => {
 
     test('returns null for invalid format', () => {
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'Basic abc123' }
+            headersIn: {'Authorization': 'Basic abc123'}
         });
         expect(getTokenType(request)).toBeNull();
     });
@@ -142,7 +142,7 @@ describe('normalizeClaimValue', () => {
     });
 
     test('converts plain objects to JSON string', () => {
-        const obj = { key: 'value', nested: { a: 1 } };
+        const obj = {key: 'value', nested: {a: 1}};
         expect(normalizeClaimValue(obj)).toBe('{"key":"value","nested":{"a":1}}');
     });
 
@@ -241,7 +241,7 @@ describe('extractPDClaims', () => {
     test('converts object claims to JSON strings', () => {
         const introspection = {
             active: true,
-            complex_claim: { nested: 'value', arr: [1, 2] }
+            complex_claim: {nested: 'value', arr: [1, 2]}
         };
 
         const claims = extractPDClaims(introspection);
@@ -439,7 +439,7 @@ describe('buildPDPRequest', () => {
     });
 
     test('uses request.uri as fallback', () => {
-        const introspection = { active: true, client_id: 'test' };
+        const introspection = {active: true, client_id: 'test'};
         const request = createMockRequest({
             uri: '/fhir/Patient/123',
             method: 'GET',
@@ -453,7 +453,7 @@ describe('buildPDPRequest', () => {
     });
 
     test('prefers request.variables over request object', () => {
-        const introspection = { active: true, client_id: 'test' };
+        const introspection = {active: true, client_id: 'test'};
         const request = createMockRequest({
             method: 'GET',
             uri: '/fallback',
@@ -471,7 +471,7 @@ describe('buildPDPRequest', () => {
     });
 
     test('passes request body for POST search', () => {
-        const introspection = { active: true, client_id: 'test' };
+        const introspection = {active: true, client_id: 'test'};
         const searchBody = 'patient=Patient/123&_include=Observation:subject';
         const request = createMockRequest({
             uri: '/fhir/Observation/_search',
@@ -490,7 +490,7 @@ describe('buildPDPRequest', () => {
 describe('validateDPoP', () => {
     test('returns valid when no cnf claim present', async () => {
         const request = createMockRequest();
-        const introspection = { active: true };
+        const introspection = {active: true};
 
         const result = await validateDPoP(request, introspection);
 
@@ -499,7 +499,7 @@ describe('validateDPoP', () => {
 
     test('returns valid when cnf has no jkt', async () => {
         const request = createMockRequest();
-        const introspection = { active: true, cnf: {} };
+        const introspection = {active: true, cnf: {}};
 
         const result = await validateDPoP(request, introspection);
 
@@ -508,11 +508,11 @@ describe('validateDPoP', () => {
 
     test('returns invalid when cnf.jkt present but DPoP header missing', async () => {
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'DPoP token123' }
+            headersIn: {'Authorization': 'DPoP token123'}
         });
         const introspection = {
             active: true,
-            cnf: { jkt: 'thumbprint123' }
+            cnf: {jkt: 'thumbprint123'}
         };
 
         const result = await validateDPoP(request, introspection);
@@ -523,7 +523,7 @@ describe('validateDPoP', () => {
 
     test('calls Nuts node validation endpoint with correct payload', async () => {
         const mockSubrequest = jest.fn().mockResolvedValue(
-            createMockSubrequestResponse(200, { valid: true })
+            createMockSubrequestResponse(200, {valid: true})
         );
         const request = createMockRequest({
             headersIn: {
@@ -539,7 +539,7 @@ describe('validateDPoP', () => {
         });
         const introspection = {
             active: true,
-            cnf: { jkt: 'thumbprint123' }
+            cnf: {jkt: 'thumbprint123'}
         };
 
         const result = await validateDPoP(request, introspection);
@@ -575,7 +575,7 @@ describe('validateDPoP', () => {
         });
         const introspection = {
             active: true,
-            cnf: { jkt: 'thumbprint123' }
+            cnf: {jkt: 'thumbprint123'}
         };
 
         const result = await validateDPoP(request, introspection);
@@ -586,7 +586,7 @@ describe('validateDPoP', () => {
 
     test('returns invalid when validation response has valid: false', async () => {
         const mockSubrequest = jest.fn().mockResolvedValue(
-            createMockSubrequestResponse(200, { valid: false, reason: 'expired' })
+            createMockSubrequestResponse(200, {valid: false, reason: 'expired'})
         );
         const request = createMockRequest({
             headersIn: {
@@ -602,7 +602,7 @@ describe('validateDPoP', () => {
         });
         const introspection = {
             active: true,
-            cnf: { jkt: 'thumbprint123' }
+            cnf: {jkt: 'thumbprint123'}
         };
 
         const result = await validateDPoP(request, introspection);
@@ -627,7 +627,7 @@ describe('validateDPoP', () => {
         });
         const introspection = {
             active: true,
-            cnf: { jkt: 'thumbprint123' }
+            cnf: {jkt: 'thumbprint123'}
         };
 
         const result = await validateDPoP(request, introspection);
@@ -638,7 +638,7 @@ describe('validateDPoP', () => {
 });
 
 describe('checkAuthorization integration', () => {
-    const { checkAuthorization } = authorize;
+    const {checkAuthorization} = authorize;
     const originalEnv = process.env;
 
     beforeEach(() => {
@@ -668,10 +668,10 @@ describe('checkAuthorization integration', () => {
 
     test('returns 401 when token introspection returns inactive', async () => {
         const mockSubrequest = jest.fn().mockResolvedValue(
-            createMockSubrequestResponse(200, { active: false })
+            createMockSubrequestResponse(200, {active: false})
         );
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'Bearer test-token' },
+            headersIn: {'Authorization': 'Bearer test-token'},
             subrequest: mockSubrequest
         });
 
@@ -686,7 +686,7 @@ describe('checkAuthorization integration', () => {
             createMockSubrequestResponse(500, {})
         );
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'Bearer test-token' },
+            headersIn: {'Authorization': 'Bearer test-token'},
             subrequest: mockSubrequest
         });
 
@@ -705,10 +705,10 @@ describe('checkAuthorization integration', () => {
             }))
             // Second call: PDP
             .mockResolvedValueOnce(createMockSubrequestResponse(200, {
-                result: { allow: true }
+                allow: true
             }));
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'Bearer test-token' },
+            headersIn: {'Authorization': 'Bearer test-token'},
             variables: {
                 request_uri: '/fhir/Patient/123',
                 request_method: 'GET'
@@ -732,13 +732,16 @@ describe('checkAuthorization integration', () => {
             }))
             // Second call: PDP
             .mockResolvedValueOnce(createMockSubrequestResponse(200, {
-                result: {
-                    allow: false,
-                    reasons: [{ code: 'not_allowed', description: 'No consent' }]
+                allow: false,
+                results: {
+                    "bgz": {
+                        allow: false,
+                        reasons: [{code: 'not_allowed', description: 'No consent'}]
+                    }
                 }
             }));
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'Bearer test-token' },
+            headersIn: {'Authorization': 'Bearer test-token'},
             variables: {
                 request_uri: '/fhir/Patient/123',
                 request_method: 'GET'
@@ -761,10 +764,10 @@ describe('checkAuthorization integration', () => {
             }))
             // PDP returns malformed response (allow is string instead of boolean)
             .mockResolvedValueOnce(createMockSubrequestResponse(200, {
-                result: { allow: 'true' }
+                result: {allow: 'true'}
             }));
         const request = createMockRequest({
-            headersIn: { 'Authorization': 'Bearer test-token' },
+            headersIn: {'Authorization': 'Bearer test-token'},
             variables: {
                 request_uri: '/fhir/Patient/123',
                 request_method: 'GET'
@@ -775,7 +778,7 @@ describe('checkAuthorization integration', () => {
         await checkAuthorization(request);
 
         expect(request.return).toHaveBeenCalledWith(502);
-        expect(request.error).toHaveBeenCalledWith('Malformed PDP response: missing result.allow boolean');
+        expect(request.error).toHaveBeenCalledWith('Malformed PDP response: missing allow boolean');
     });
 
     test('returns 401 when DPoP validation fails', async () => {
@@ -784,7 +787,7 @@ describe('checkAuthorization integration', () => {
             .mockResolvedValueOnce(createMockSubrequestResponse(200, {
                 active: true,
                 client_id: 'did:nuts:test',
-                cnf: { jkt: 'thumbprint123' }
+                cnf: {jkt: 'thumbprint123'}
             }))
             // Second call: DPoP validation fails
             .mockResolvedValueOnce(createMockSubrequestResponse(200, {
@@ -836,7 +839,7 @@ describe('checkAuthorization integration', () => {
                 active: true,
                 client_id: 'did:nuts:victim',
                 scope: 'bgz',
-                cnf: { jkt: 'victim-key-thumbprint' }  // Token is DPoP-bound
+                cnf: {jkt: 'victim-key-thumbprint'}  // Token is DPoP-bound
             }));
 
         // Attacker presents stolen token as Bearer (no DPoP header)

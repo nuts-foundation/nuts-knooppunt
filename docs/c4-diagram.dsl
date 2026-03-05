@@ -21,6 +21,12 @@ workspace "Knooppunt" "Description" {
                     nvi = softwareSystem "NVI" "Nationale Verwijs Index, contains entries with URA and patient" {
                         tags "External System,localization"
                     }
+                    prs = softwareSystem "PRS" "Pseudoniemen Register Service, performs OPRF evaluation for pseudonymization" {
+                        tags "External System,localization"
+                    }
+                    authzServer = softwareSystem "Authorization Server" "OAuth2 authorization server for authenticating to PRS and NVI" {
+                        tags "External System,localization"
+                    }
                     otv = softwareSystem "OTV" "Mitz national system, containing patient consents" "External System" {
                         tags "External System,consent,authorization"
                     }
@@ -45,14 +51,19 @@ workspace "Knooppunt" "Description" {
                     viewer = container "Viewer" "Request healthcare data from other Care Providers" {
                         tags "External System,dataexchange"
                     }
+
+                    authnServer = container "AuthN Server" "Authenticate & issue access tokens" {
+                        tags "External System,authentication"
+                    }
+                    authnClient = container "AuthN Client" "Request access tokens" {
+                        tags "External System,authentication"
+                    }
                 }
             }
 
         }
 
         group "Local Systems" {
-
-
             xis = softwareSystem "XIS" "Local XIS consisting of EHR and Knooppunt services" {
                 ehr = container "EHR" {
                     tags "addressing,localization,dataexchange,authentication,authorization"
@@ -91,7 +102,13 @@ workspace "Knooppunt" "Description" {
                         tags "dataexchange,authorization"
                     }
 
-                    oidcProvider = component "OIDC Provider" "Authenticate users against Dezi" {
+                    authnClient = component "AuthN Client" "Request access tokens" "Nuts Node" {
+                        tags "authentication"
+                    }
+                    vwsAuthnClient = component "AuthN Client\n(VWS services)" "Request access tokens" {
+                        tags "localization"
+                    }
+                    authnServer = component "AuthN Server" "Authenticate & issue access tokens" "Nuts Node"{
                         tags "authentication"
                     }
                 }
@@ -146,6 +163,15 @@ workspace "Knooppunt" "Description" {
         xis.ehr.localizationClient -> xis.kp.nviGateway "Publish and find localization data\nhttp://knooppunt:8081/nvi" FHIR {
             tags "localization"
         }
+        xis.kp.nviGateway -> xis.kp.vwsAuthnClient "Authenticate to authz server for NVI access" "OAuth2 Client Credentials" {
+            tags "localization"
+        }
+        xis.kp.vwsAuthnClient -> authzServer "Request access tokens" "OAuth2 Client Credentials" {
+            tags "localization"
+        }
+        xis.kp.nviGateway -> prs "Request OPRF evaluation for pseudonymization" REST {
+            tags "localization"
+        }
         xis.kp.nviGateway -> nvi "Publish and find localization data\n(pseudonymized)" FHIR {
             tags "localization"
         }
@@ -160,13 +186,19 @@ workspace "Knooppunt" "Description" {
         #
         # GF Authentication transactions
         #
-        xis.ehr -> xis.kp "Log in user" "OIDC" {
+        xis.ehr -> dezi "Authenticate healthcare professionals" "OIDC Code Flow" {
             tags "authentication"
         }
-        xis.ehr -> xis.kp.oidcProvider "Log in user" "OIDC AuthZ Code" {
+        xis.ehr -> xis.kp "Get access token" {
             tags "authentication"
         }
-        xis.kp.oidcProvider -> dezi "Authenticate user" "OIDC AuthZ Code" {
+        xis.ehr -> xis.kp.authnClient "Get access token" "REST" {
+            tags "authentication"
+        }
+        xis.kp.authnClient -> remoteXIS.authnServer "Request access tokens" "OAuth2" {
+            tags "authentication"
+        }
+        remoteXIS.authnClient -> xis.kp.authnServer "Request access tokens" "OAuth2" {
             tags "authentication"
         }
 
@@ -182,6 +214,9 @@ workspace "Knooppunt" "Description" {
         #
         remoteXIS.viewer -> xis.pep "Request patient healthcare data" "FHIR STU3/R4" {
             tags "dataexchange"
+        }
+        xis.pep -> xis.kp.authnServer "Authenticate request" "OAuth2 Token Introspection\n(RFC 7662)" {
+            tags "dataexchange,authorization"
         }
         xis.pep -> xis.kp.pdp "Authorize request" "OPA / AuthzAPI" {
             tags "dataexchange,authorization"

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -92,3 +93,20 @@ func TokenToIdentifier(token string) (*fhir.Identifier, error) {
 	}
 	return &result, nil
 }
+
+func ReferencesType(ref string, resourceType string) bool {
+	if !localLiteralReferencePattern.MatchString(ref) {
+		// not allowed
+		return false
+	}
+	return strings.HasPrefix(ref, resourceType+"/")
+}
+
+func IDFromReference(ref string, resourceType string) string {
+	if !ReferencesType(ref, resourceType) {
+		return ""
+	}
+	return strings.TrimPrefix(ref, resourceType+"/")
+}
+
+var localLiteralReferencePattern = regexp.MustCompile(`^[a-zA-Z]+/[A-Za-z0-9\-.]{1,64}$`)

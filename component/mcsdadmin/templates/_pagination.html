@@ -1,0 +1,79 @@
+{{define "_pagination"}}
+{{if gt .Pagination.TotalPages 1}}
+<nav aria-label="Page navigation">
+    <div class="d-flex justify-content-between align-items-center mt-3">
+        <div class="text-muted">
+            Showing {{.Pagination.ShowingFrom}}
+            to {{.Pagination.ShowingTo}}
+            of {{.Pagination.TotalItems}} items
+        </div>
+        <ul class="pagination mb-0">
+            {{if .Pagination.HasPrev}}
+            <li class="page-item">
+                <a class="page-link" href="?page={{.Pagination.PrevPage}}&pageSize={{.Pagination.PageSize}}" aria-label="Previous">
+                    <span aria-hidden="true">&laquo;</span>
+                </a>
+            </li>
+            {{else}}
+            <li class="page-item disabled">
+                <span class="page-link">&laquo;</span>
+            </li>
+            {{end}}
+
+            {{/* Show first page */}}
+            {{if .Pagination.ShowFirst}}
+            <li class="page-item">
+                <a class="page-link" href="?page=1&pageSize={{.Pagination.PageSize}}">1</a>
+            </li>
+            {{if .Pagination.ShowFirstEllipsis}}
+            <li class="page-item disabled">
+                <span class="page-link">...</span>
+            </li>
+            {{end}}
+            {{end}}
+
+            {{/* Show pages around current */}}
+            {{$current := .Pagination.CurrentPage}}
+            {{$pageSize := .Pagination.PageSize}}
+            {{range $page := .Pagination.PageWindow}}
+            <li class="page-item {{if eq $page $current}}active{{end}}">
+                <a class="page-link" href="?page={{$page}}&pageSize={{$pageSize}}">{{$page}}</a>
+            </li>
+            {{end}}
+
+            {{/* Show last page */}}
+            {{if .Pagination.ShowLast}}
+            {{if .Pagination.ShowLastEllipsis}}
+            <li class="page-item disabled">
+                <span class="page-link">...</span>
+            </li>
+            {{end}}
+            <li class="page-item">
+                <a class="page-link" href="?page={{.Pagination.TotalPages}}&pageSize={{.Pagination.PageSize}}">{{.Pagination.TotalPages}}</a>
+            </li>
+            {{end}}
+
+            {{if .Pagination.HasNext}}
+            <li class="page-item">
+                <a class="page-link" href="?page={{.Pagination.NextPage}}&pageSize={{.Pagination.PageSize}}" aria-label="Next">
+                    <span aria-hidden="true">&raquo;</span>
+                </a>
+            </li>
+            {{else}}
+            <li class="page-item disabled">
+                <span class="page-link">&raquo;</span>
+            </li>
+            {{end}}
+        </ul>
+        <div>
+            <select class="form-select form-select-sm" onchange="window.location.href='?page=1&pageSize=' + this.value" style="width: auto;">
+                <option value="10" {{if eq .Pagination.PageSize 10}}selected{{end}}>10 per page</option>
+                <option value="20" {{if eq .Pagination.PageSize 20}}selected{{end}}>20 per page</option>
+                <option value="50" {{if eq .Pagination.PageSize 50}}selected{{end}}>50 per page</option>
+                <option value="100" {{if eq .Pagination.PageSize 100}}selected{{end}}>100 per page</option>
+            </select>
+        </div>
+    </div>
+</nav>
+{{end}}
+{{end}}

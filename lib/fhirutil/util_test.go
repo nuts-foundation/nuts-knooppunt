@@ -148,3 +148,146 @@ func TestBuildSourceURL(t *testing.T) {
 		})
 	}
 }
+
+func TestReferencesType(t *testing.T) {
+	tests := []struct {
+		name         string
+		ref          string
+		resourceType string
+		expected     bool
+	}{
+		{
+			name:         "valid reference",
+			ref:          "Organization/123",
+			resourceType: "Organization",
+			expected:     true,
+		},
+		{
+			name:         "valid reference with UUID",
+			ref:          "Patient/550e8400-e29b-41d4-a716-446655440000",
+			resourceType: "Patient",
+			expected:     true,
+		},
+		{
+			name:         "wrong resource type",
+			ref:          "Organization/123",
+			resourceType: "Patient",
+			expected:     false,
+		},
+		{
+			name:         "subpath",
+			ref:          "Organization/123/_history/1",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
+			name:         "multiple refs",
+			ref:          "Organization/123,123",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
+			name:         "empty reference",
+			ref:          "",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
+			name:         "reference without ID",
+			ref:          "Organization/",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
+			name:         "type only without slash",
+			ref:          "Organization",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
+			name:         "partial type match",
+			ref:          "Org/123",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
+			name:         "type is prefix of reference type",
+			ref:          "OrganizationAffiliation/123",
+			resourceType: "Organization",
+			expected:     false,
+		},
+		{
+			name:         "case sensitive mismatch",
+			ref:          "organization/123",
+			resourceType: "Organization",
+			expected:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ReferencesType(tt.ref, tt.resourceType)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIDFromReference(t *testing.T) {
+	type args struct {
+		ref          string
+		resourceType string
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		{
+			name: "valid reference",
+			args: args{
+				ref:          "Organization/123",
+				resourceType: "Organization",
+			},
+			want: "123",
+		},
+		{
+			name: "reference with subpath",
+			args: args{
+				ref:          "Organization/123/_history/1",
+				resourceType: "Organization",
+			},
+			want: "",
+		},
+		{
+			name: "reference with wrong resource type",
+			args: args{
+				ref:          "Organization/123",
+				resourceType: "Patient",
+			},
+			want: "",
+		},
+		{
+			name: "reference without ID",
+			args: args{
+				ref:          "Organization/",
+				resourceType: "Organization",
+			},
+			want: "",
+		},
+		{
+			name: "reference without slash",
+			args: args{
+				ref:          "Organization",
+				resourceType: "Organization",
+			},
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IDFromReference(tt.args.ref, tt.args.resourceType); got != tt.want {
+				t.Errorf("IDFromReference() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

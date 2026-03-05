@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -47,7 +48,7 @@ var definitions = []PathDef{
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionDelete,
-		PathDef:     []string{"[type]?"},
+		PathDef:     []string{"[type]"},
 		Verb:        "DELETE",
 	},
 	{
@@ -57,18 +58,13 @@ var definitions = []PathDef{
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionSearchType,
-		PathDef:     []string{"[type]?"},
+		PathDef:     []string{"[type]"},
 		Verb:        "GET",
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionUpdate,
-		PathDef:     []string{"[type]?"},
+		PathDef:     []string{"[type]"},
 		Verb:        "PUT",
-	},
-	{
-		Interaction: fhir.TypeRestfulInteractionSearchType,
-		PathDef:     []string{"[type]", "_search?"},
-		Verb:        "POST",
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionSearchType,
@@ -77,7 +73,7 @@ var definitions = []PathDef{
 	},
 	{
 		Interaction: fhir.TypeRestfulInteractionSearchSystem,
-		PathDef:     []string{"?"},
+		PathDef:     []string{},
 		Verb:        "GET",
 	},
 	{
@@ -137,6 +133,19 @@ var definitions = []PathDef{
 	},
 }
 
+func init() {
+	// Sanity check: verify that all path definitions are valid
+	for _, def := range definitions {
+		for _, pathPart := range def.PathDef {
+			if pathPart == "" {
+				// Fine to panic here, since it's an unrecoverable error.
+				// It will be checked on startup (due to the init function).
+				panic(fmt.Sprintf("invalid path definition: empty path part in interaction %s", def.Interaction))
+			}
+		}
+	}
+}
+
 var regexId = regexp.MustCompile(`^[A-Za-z0-9\-\.]{1,64}$`)
 var regexOperation = regexp.MustCompile(`^\$[a-z\-\.]+$`)
 
@@ -172,14 +181,6 @@ func parsePath(def PathDef, req HTTPRequest) (Tokens, bool) {
 		switch part {
 		case "[type]":
 			ptr, ok := parseResourceType(path[idx])
-			if !ok {
-				return Tokens{}, false
-			}
-			out.ResourceType = ptr
-			continue
-		case "[type]?":
-			str := strings.TrimSuffix(path[idx], "?")
-			ptr, ok := parseResourceType(str)
 			if !ok {
 				return Tokens{}, false
 			}
@@ -246,7 +247,7 @@ func parseRequestPath(request HTTPRequest) (Tokens, bool) {
 }
 
 type Params struct {
-	SearchParams map[string]string
+	SearchParams map[string][]string
 	Revinclude   []string
 	Include      []string
 }
@@ -293,17 +294,20 @@ func groupParams(queryParams url.Values) Params {
 	for _, p := range resultParams {
 		delete(queryParams, p)
 	}
-
-	// Convert remaining query params to map
-	params.SearchParams = make(map[string]string)
-	for key, values := range queryParams {
-		// Join multiple values with comma
-		params.SearchParams[key] = strings.Join(values, ",")
-	}
+	params.SearchParams = queryParams
 
 	return params
 }
 
+// derivePatientId tries to derive the patient ID from the request path and query parameters.
+// It returns an error if the patient ID cannot be derived due to invalid input.
+// It returns an empty string if the patient ID cannot be derived but there is no invalid input (e.g. patient parameter is not present).
+// Currently, it supports the following cases:
+// - The request is for a Patient resource (e.g. GET /Patient/12345)
+// - The request is a search interaction with a 'patient' parameter (e.g. GET /Observation?patient=Patient/12345)
+// - The request is a search interaction with a 'subject' parameter referencing a patient (e.g. GET /Observation?subject=Patient/12345)
+//
+// If the subject parameter is present but does not reference exactly one Patient (for example, when multiple values are supplied), the function returns an error.
 func derivePatientId(tokens Tokens, queryParams url.Values) (string, error) {
 	if tokens.ResourceType != nil && *tokens.ResourceType == fhir.ResourceTypePatient {
 		// https://fhir.example.org/Patient/12345
@@ -315,19 +319,47 @@ func derivePatientId(tokens Tokens, queryParams url.Values) (string, error) {
 		return getSingleParameter(queryParams, "_id")
 	}
 
-	// TODO: make this resource-specific
-	// https://fhir.example.org/Encounter?patient=Patient/12345
-	patientInParams := len(queryParams["patient"]) == 1
-	if patientInParams {
-		refStr := queryParams["patient"][0]
-		parts := strings.Split(refStr, "/")
-		return parts[len(parts)-1], nil
-	}
+	// Otherwise, we can only derive patient ID for search interactions with patient parameter
+	// Theoretically, this could apply to other interactions as well (conditional update),
+	// but those are edge cases we don't need to support right now.
+	if tokens.Interaction == fhir.TypeRestfulInteractionSearchType {
+		var candidates []string
+		// try 'patient'
+		patientID, err := getSingleParameter(queryParams, "patient")
+		if err != nil {
+			return "", err
+		}
+		if patientID != "" {
+			if !fhirutil.ReferencesType(patientID, "Patient") {
+				return "", errors.New("patient parameter does not reference a Patient resource")
+			}
+			candidates = append(candidates, fhirutil.IDFromReference(patientID, "Patient"))
+		}
+		// try 'subject'
+		var subjectID string
+		for _, subject := range queryParams["subject"] {
+			if fhirutil.ReferencesType(subject, "Patient") {
+				subjectID = subject
+				break
+			}
+		}
+		if subjectID != "" {
+			// Sanity/security check, prevent vulnerabilities with queries like these: CarePlan?subject=Patient/12345,Observation/67890
+			// Not sure if this actually prevents something, but we can always remove it.
+			if len(queryParams["subject"]) > 1 {
+				return "", errors.New("multiple subject parameters found (including 1 Patient reference), unable to determine patient ID")
+			}
+			candidates = append(candidates, fhirutil.IDFromReference(subjectID, "Patient"))
+		}
 
-	if len(queryParams["patient"]) > 1 {
-		return "", fmt.Errorf("multiple patient parameters found")
+		if len(candidates) == 1 {
+			return candidates[0], nil
+		} else if len(candidates) > 1 {
+			// Not an actual vulnerability, as multiple search params in FHIR act as AND operator,
+			// but we can't let a random one win for authZ decision, so still error out.
+			return "", errors.New("multiple patient references found in patient and subject parameters, unable to determine patient ID")
+		}
 	}
-
 	return "", nil
 }
 
@@ -370,17 +402,14 @@ func getSingleParameter(params url.Values, name string) (string, error) {
 	return value, nil
 }
 
-func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
+func NewPolicyInput(request PDPRequest) (*PolicyInput, error) {
 	var policyInput PolicyInput
 
 	// URL decode query parameters
 	decodeHTTPRequest := request.Input.Request
 	decodedQueryParams, err := urlValuesDecode(request.Input.Request.QueryParams)
 	if err != nil {
-		return policyInput, Deny(ResultReason{
-			Code:        TypeResultCodeUnexpectedInput,
-			Description: "unable to decode query parameters: " + err.Error(),
-		})
+		return nil, fmt.Errorf("unable to decode query parameters: %w", err)
 	}
 	decodeHTTPRequest.QueryParams = *decodedQueryParams
 
@@ -393,17 +422,13 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	isFhirAPI := request.Input.Context.ConnectionTypeCode == "hl7-fhir-rest"
 	if !isFhirAPI {
 		// This is not a FHIR request
-		return policyInput, Allow()
+		return &policyInput, nil
 	}
 	policyInput.Action.ConnectionTypeCode = "hl7-fhir-rest"
 
 	tokens, ok := parseRequestPath(request.Input.Request)
 	if !ok {
-		reason := ResultReason{
-			Code:        TypeResultCodeUnexpectedInput,
-			Description: "unable to parse FHIR request",
-		}
-		return policyInput, Deny(reason)
+		return nil, errors.New("unable to parse FHIR request")
 	}
 
 	if tokens.ResourceType != nil {
@@ -435,11 +460,7 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	if paramsInBody {
 		decodedBody, err := url.ParseQuery(request.Input.Request.Body)
 		if err != nil {
-			reason := ResultReason{
-				Code:        TypeResultCodeUnexpectedInput,
-				Description: fmt.Sprintf("could not parse form encoded request body: %v", err),
-			}
-			return PolicyInput{}, Deny(reason)
+			return nil, fmt.Errorf("could not parse form encoded request body: %w", err)
 		}
 		rawParams = decodedBody
 	} else {
@@ -452,31 +473,28 @@ func NewPolicyInput(request PDPRequest) (PolicyInput, PolicyResult) {
 	policyInput.Action.FHIRRest.SearchParams = params.SearchParams
 
 	// Read patient resource ID from request
-	result := Allow()
+	var errs []error
 	patientId, err := derivePatientId(tokens, rawParams)
 	if err != nil {
-		result.Reasons = append(result.Reasons, ResultReason{
-			Code:        TypeResultCodeUnexpectedInput,
-			Description: "patient_id: " + err.Error(),
-		})
+		errs = append(errs, fmt.Errorf("patient_id: %w", err))
 	} else {
-		policyInput.Action.FHIRRest.PatientID = patientId
+		policyInput.Context.PatientID = patientId
 	}
 
 	// Read patient BSN from request
 	if policyInput.Context.PatientBSN == "" {
 		patientBSN, err := derivePatientBSN(tokens, rawParams)
 		if err != nil {
-			result.Reasons = append(result.Reasons, ResultReason{
-				Code:        TypeResultCodeUnexpectedInput,
-				Description: "patient_bsn: " + err.Error(),
-			})
+			errs = append(errs, fmt.Errorf("patient_bsn: %w", err))
 		} else {
 			policyInput.Context.PatientBSN = patientBSN
 		}
 	}
 
-	return policyInput, result
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+	return &policyInput, nil
 }
 
 func urlValuesDecode(in url.Values) (*url.Values, error) {

@@ -34,5 +34,11 @@ func IDFromRequest(httpRequest *http.Request) (*fhir.Identifier, error) {
 			IssueType: fhir.IssueTypeValue,
 		}
 	}
+	if identifier.Value == nil || *identifier.Value == "" {
+		return nil, &fhirapi.Error{
+			Message:   "invalid tenant ID in request header, missing value",
+			IssueType: fhir.IssueTypeValue,
+		}
+	}
 	return identifier, nil
 }

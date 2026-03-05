@@ -7,45 +7,30 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 )
 
-func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input PolicyInput) (PolicyInput, []ResultReason) {
+func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input *PolicyInput) (*PolicyInput, []ResultReason) {
+	input.Context.MitzConsent = false
 	// If this call doesn't relate to a BSN don't attempt Mitz
 	if input.Context.PatientBSN == "" {
-		input.Context.MitzConsent = false
 		return input, []ResultReason{}
 	}
 
-	resultReasons := validateMitzInput(input)
+	resultReasons := validateMitzInput(*input)
 	if len(resultReasons) > 0 {
 		return input, resultReasons
 	}
 
-	consentReq := xacmlFromInput(input)
+	consentReq := xacmlFromInput(*input)
 	consentResp, err := c.consentChecker.CheckConsent(ctx, consentReq)
 	if err != nil {
 		slog.WarnContext(ctx, "Mitz consent check failed", "error", err)
 		return input, []ResultReason{
 			{
 				Code:        TypeResultCodeInternalError,
-				Description: "internal error, could not complete consent check with Mitz: " + err.Error(),
+				Description: "could not complete consent check with Mitz: " + err.Error(),
 			},
 		}
 	}
-
-	allow := false
-	if consentResp.Decision == xacml.DecisionPermit {
-		allow = true
-	}
-
-	if !allow {
-		return input, []ResultReason{
-			{
-				Code:        TypeResultCodeNotAllowed,
-				Description: "not allowed, denied by Mitz",
-			},
-		}
-	}
-
-	input.Context.MitzConsent = true
+	input.Context.MitzConsent = consentResp.Decision == xacml.DecisionPermit
 	return input, nil
 }
 

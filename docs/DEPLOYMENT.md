@@ -94,17 +94,14 @@ This is typically a reverse proxy that performs authentication and authorization
 
 An example PEP using NGINX [can be found here](../pep).
 
-### Authentication
-
-You can use the OIDC Provider in the Knooppunt for user authentication, which abstracts intricacies of Dezi.
-
-Otherwise, you need to directly integrate with Dezi yourself.
-
 #### Nuts node
 The Knooppunt can be deployed with an embedded Nuts node. If a vendor has an existing Nuts node,
 or wants to have the Nuts node deployed separately, the Knooppunt can use that Nuts node instead.
 
 Use [`nuts.enabled`](./CONFIGURATION.md) to configure the embedded or existing Nuts node.
+
+Note that you MUST configure the `url` (or `NUTS_URL`) property in the Nuts configuration to point to the **publicly accessible** base URL of the Knooppunt (the URL under which other Nuts nodes and clients can reach it). This is the URL the Nuts node advertises externally.
+The Knooppunt runs the embedded Nuts node on `/nuts`, so if the Knooppunt is publicly reachable at `https://knooppunt.example.com/`, the Nuts node URL must be `https://knooppunt.example.com/nuts` (not an internal-only address such as `http://knooppunt:8080/nuts`).
 
 ### Tracing
 

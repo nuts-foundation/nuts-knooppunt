@@ -74,15 +74,16 @@ func (m *ClosedQuestionService) handleXACMLAuthz(w http.ResponseWriter, r *http.
 
 	// Store raw XML request for verification
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.requests = append(m.requests, body)
-	var decision string
+	var decision = m.ResponseDecision
 	if strings.Contains(string(body), "bsn:deny") {
 		decision = "Deny"
-	} else {
-		decision = m.ResponseDecision
+	} else if strings.Contains(string(body), "bsn:error") {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	message := m.ResponseMessage
-	m.mu.Unlock()
 
 	// Build XACML SOAP response XML
 	responseXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>

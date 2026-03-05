@@ -44,6 +44,18 @@ func TestIDFromRequest(t *testing.T) {
 		require.Equal(t, "invalid tenant ID in request header, expected system: "+coding.URANamingSystem, fhirError.Message)
 		require.Equal(t, fhir.IssueTypeValue, fhirError.IssueType)
 	})
+	t.Run("no value", func(t *testing.T) {
+		hdrs := http.Header{}
+		hdrs.Set("X-Tenant-ID", coding.URANamingSystem+"|")
+		request := http.Request{
+			Header: hdrs,
+		}
+		_, err := IDFromRequest(&request)
+		fhirError := &fhirapi.Error{}
+		require.ErrorAs(t, err, &fhirError)
+		require.Equal(t, "invalid tenant ID in request header, missing value", fhirError.Message)
+		require.Equal(t, fhir.IssueTypeValue, fhirError.IssueType)
+	})
 	t.Run("valid", func(t *testing.T) {
 		hdrs := http.Header{}
 		hdrs.Set("X-Tenant-ID", coding.URANamingSystem+"|1")

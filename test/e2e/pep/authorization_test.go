@@ -213,6 +213,8 @@ func Test_PEPAuthorization(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
+		responseData, _ := io.ReadAll(resp.Body)
+		t.Logf("Response when consent denied: %s", string(responseData))
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
 }

@@ -92,7 +92,7 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 
 		care2CureReport := mapEntryContains(updateReport, "care2cure-admin")
 		require.Equal(t, 0, care2CureReport.CountCreated)
-		require.Equal(t, 1, care2CureReport.CountUpdated)
+		require.Equal(t, 2, care2CureReport.CountUpdated)
 
 		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
 		t.Run("assert updated endpoint in query directory", func(t *testing.T) {
@@ -442,6 +442,134 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 
 		// Verify the DeleteCount is 1 in the sync report (confirming DELETE was processed)
 		require.Equal(t, 1, care2CureReport2.CountDeleted, "DELETE operations should be processed and counted")
+	})
+}
+
+func Test_URAIdentifierChange(t *testing.T) {
+	t.Log("This test verifies that when an Organization's URA identifier changes, the system reruns the history query without _since parameter")
+
+	harnessDetail := harness.Start(t)
+
+	care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
+		UsePostSearch: false,
+	})
+
+	// Find the parent organization with URA 00000030
+	authoritativeURA := "00000030"
+	nonAuthoritativeURA := "99999999"
+
+	parentOrg, err := searchOrg(care2CureFHIRClient, authoritativeURA)
+	require.NoError(t, err, "Failed to search for parent organization")
+	require.NotNil(t, parentOrg, "Parent organization with URA 00000030 should exist")
+	require.NotNil(t, parentOrg.Id, "Parent organization should have an ID")
+
+	t.Log("Step 1: Change organization URA to non-authoritative URA (99999999)")
+	// Change the URA identifier to a non-authoritative value
+	updatedOrg := *parentOrg
+	for i, identifier := range updatedOrg.Identifier {
+		if identifier.System != nil && *identifier.System == coding.URANamingSystem {
+			updatedOrg.Identifier[i].Value = &nonAuthoritativeURA
+			break
+		}
+	}
+
+	err = care2CureFHIRClient.Update("Organization/"+*updatedOrg.Id, updatedOrg, nil)
+	require.NoError(t, err, "Failed to update organization URA identifier")
+
+	// Verify the URA was changed to non-authoritative value
+	var verifyOrg fhir.Organization
+	err = care2CureFHIRClient.Read("Organization/"+*updatedOrg.Id, &verifyOrg)
+	require.NoError(t, err)
+	foundNonAuthURA := false
+	for _, identifier := range verifyOrg.Identifier {
+		if identifier.System != nil && *identifier.System == coding.URANamingSystem {
+			require.Equal(t, nonAuthoritativeURA, *identifier.Value, "URA should be updated to non-authoritative value")
+			foundNonAuthURA = true
+			break
+		}
+	}
+	require.True(t, foundNonAuthURA, "Non-authoritative URA should be present in updated organization")
+
+	t.Log("Step 2: First sync - non-authoritative URA")
+	response1 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
+	require.NotNil(t, response1)
+
+	care2CureReport1 := mapEntryContains(response1, "care2cure-admin")
+	require.NotNil(t, care2CureReport1, "Care2Cure report should exist in first sync")
+
+	// Log the first sync report
+	t.Logf("First sync report: Created=%d, Updated=%d, Deleted=%d",
+		care2CureReport1.CountCreated, care2CureReport1.CountUpdated, care2CureReport1.CountDeleted)
+
+	// The organization with non-authoritative URA won't be synced to query directory
+	firstSyncTotal := care2CureReport1.CountCreated + care2CureReport1.CountUpdated
+
+	t.Log("Step 3: Change organization URA back to authoritative URA (00000030)")
+	// Now change it back to the authoritative URA
+	updatedOrg2 := verifyOrg
+	for i, identifier := range updatedOrg2.Identifier {
+		if identifier.System != nil && *identifier.System == coding.URANamingSystem {
+			updatedOrg2.Identifier[i].Value = &authoritativeURA
+			break
+		}
+	}
+
+	err = care2CureFHIRClient.Update("Organization/"+*updatedOrg2.Id, updatedOrg2, nil)
+	require.NoError(t, err, "Failed to update organization URA back to authoritative value")
+
+	// Verify the URA was changed back
+	var verifyOrg2 fhir.Organization
+	err = care2CureFHIRClient.Read("Organization/"+*updatedOrg2.Id, &verifyOrg2)
+	require.NoError(t, err)
+	foundAuthURA := false
+	for _, identifier := range verifyOrg2.Identifier {
+		if identifier.System != nil && *identifier.System == coding.URANamingSystem {
+			require.Equal(t, authoritativeURA, *identifier.Value, "URA should be back to authoritative value")
+			foundAuthURA = true
+			break
+		}
+	}
+	require.True(t, foundAuthURA, "Authoritative URA should be present in updated organization")
+
+	t.Log("Step 4: Second sync - should detect URA change and rerun without _since, syncing all resources")
+	response2 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
+
+	care2CureReport2 := mapEntryContains(response2, "care2cure-admin")
+	require.NotNil(t, care2CureReport2, "Care2Cure report should exist in second sync")
+
+	// Log the second sync report
+	t.Logf("Second sync report: Created=%d, Updated=%d, Deleted=%d, Errors=%v, Warnings=%v",
+		care2CureReport2.CountCreated, care2CureReport2.CountUpdated, care2CureReport2.CountDeleted,
+		care2CureReport2.Errors, care2CureReport2.Warnings)
+
+	// The system should have detected the URA change (from non-auth to auth) and rerun the full query
+	// This should sync MORE resources than the first sync because now the authoritative URA is present
+	secondSyncTotal := care2CureReport2.CountCreated + care2CureReport2.CountUpdated
+	t.Logf("First sync total: %d, Second sync total: %d", firstSyncTotal, secondSyncTotal)
+
+	require.True(t, secondSyncTotal > firstSyncTotal,
+		"Second sync should process more resources after URA changed from non-authoritative to authoritative")
+
+	// Verify no errors occurred during the sync
+	assert.Empty(t, care2CureReport2.Errors, "Should have no errors during sync with URA change")
+
+	// Verify the organization is searchable by the authoritative URA in the query directory
+	queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
+
+	t.Log("Step 5: Verifying organization with authoritative URA in query directory")
+
+	t.Run("assert organization with authoritative URA exists in query directory", func(t *testing.T) {
+		org, err := searchOrg(queryFHIRClient, authoritativeURA)
+		require.NoError(t, err)
+		require.NotNil(t, org, "Organization with authoritative URA should exist in query directory")
+		assert.Equal(t, *parentOrg.Name, *org.Name, "Organization name should match")
+	})
+
+	t.Run("non-authoritative URA should not return the organization", func(t *testing.T) {
+		// The non-authoritative URA was replaced, so searching by it should return nothing
+		org, err := searchOrg(queryFHIRClient, nonAuthoritativeURA)
+		require.NoError(t, err)
+		require.Nil(t, org, "Organization with non-authoritative URA should not exist in query directory")
 	})
 }
 
