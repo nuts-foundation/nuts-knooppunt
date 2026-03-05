@@ -308,8 +308,8 @@ point.
 
 The PDP is a single endpoint that requires the following input:
 
-- A valid client qualification
-- Information about the subject
+- One or more scopes
+- Introspected token data about a subject
 - HTTP request properties
 - Contextual information
 
@@ -320,13 +320,13 @@ POST http://someaddress:8081/pdp/v1/data/knooppunt/authz
 Content-Type: application/json
 ````
 
-The PDP will check the request against the policy associated with the client qualification (scope). It will perform the
-following checks:
+The PDP will check the request against a set of policies associated with the provided scopes. It will perform the
+following checks per scope:
 
 - Conformance to a capability statement
 - Conformance to a rego policy
 
-The client qualification is used to determine which policy is applied. Knooppunt currently ships with the following
+The provided oAuth scopes are used to determine which policy is applied. Knooppunt currently ships with the following
 policies:
 
 - `bgz`
@@ -341,25 +341,16 @@ An example requests looks like this:
 {
   "input": {
     "subject": {
-      "properties": {
-        "subject_id": "000095254",
-        "subject_role": "01.015",
-        "subject_organization_id": "00000666",
-        "subject_facility_type": "Z3",
-        "client_qualifications": [
-          "bgz"
-        ]
-      }
+      "user_id": "000095254",
+      "user_role": "01.015",
+      "organization_ura": "00000666",
+      "organization_facility_type": "Z3",
+      "scope": "bgz"
     },
     "request": {
       "method": "GET",
       "protocol": "HTTP/1.0",
-      "path": "/Patient?",
-      "query_params": {
-        "_include": [
-          "Patient:general-practitioner"
-        ]
-      }
+      "path": "/Patient?_include=Patient:general-practitioner"
     },
     "context": {
       "data_holder_organization_id": "00000659",
@@ -389,3 +380,14 @@ Some policies like `bgz` will attempt to answer _de Mitz gesloten vraag_.
 
 For this to work you will need to configure the Mitz module of Knooppunt and integrate a policy information point (see
 above). Otherwise, access will be rejected.
+
+### Integrating the PDP in a Policy Enforcement Point
+
+The PDP makes decisions based on the assumption that the requestor has validated the input. Make sure you are not
+passing in any data without verifying its validity.
+
+If you use Nuts authentication you can usually pass the introspected token data directly as the subject.
+
+We also provide a reference implementation of a policy enforcement point based on Nginx. It's available in the `/pep`
+folder in this repository.
+
