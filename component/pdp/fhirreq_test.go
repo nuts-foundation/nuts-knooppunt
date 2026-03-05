@@ -256,7 +256,7 @@ func TestComponent_groupParams(t *testing.T) {
 func TestNewPolicyInput(t *testing.T) {
 	t.Run("patient resource ID parsing", func(t *testing.T) {
 		t.Run("from Patient resource ID in path", func(t *testing.T) {
-			pdpRequest := PDPRequest{
+			decisionRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "GET",
@@ -268,11 +268,11 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, _ := NewPolicyInput(pdpRequest)
+			policyInput, _ := NewPolicyInput(decisionRequest)
 			assert.Equal(t, "12345", policyInput.Context.PatientID)
 		})
 		t.Run("from _id query parameter", func(t *testing.T) {
-			pdpRequest := PDPRequest{
+			decisionRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "GET",
@@ -287,11 +287,11 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, _ := NewPolicyInput(pdpRequest)
+			policyInput, _ := NewPolicyInput(decisionRequest)
 			assert.Equal(t, "56789", policyInput.Context.PatientID)
 		})
 		t.Run("from patient query parameter", func(t *testing.T) {
-			pdpRequest := PDPRequest{
+			decisionRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "GET",
@@ -306,11 +306,11 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, _ := NewPolicyInput(pdpRequest)
+			policyInput, _ := NewPolicyInput(decisionRequest)
 			assert.Equal(t, "98765", policyInput.Context.PatientID)
 		})
 		t.Run("multiple patient parameters", func(t *testing.T) {
-			pdpRequest := PDPRequest{
+			decisionRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "GET",
@@ -325,13 +325,12 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, resultReasons := NewPolicyInput(pdpRequest)
+			policyInput, err := NewPolicyInput(decisionRequest)
 			assert.Nil(t, policyInput)
-			require.Len(t, resultReasons, 1)
-			assert.Equal(t, "patient_id: multiple patient parameters found", resultReasons[0].Description)
+			assert.EqualError(t, err, "patient_id: multiple patient parameters found")
 		})
 		t.Run("multiple _id parameters", func(t *testing.T) {
-			pdpRequest := PDPRequest{
+			decisionRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "GET",
@@ -346,13 +345,12 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, resultReasons := NewPolicyInput(pdpRequest)
+			policyInput, err := NewPolicyInput(decisionRequest)
 			assert.Nil(t, policyInput)
-			require.Len(t, resultReasons, 1)
-			assert.Equal(t, "patient_id: multiple _id parameters found", resultReasons[0].Description)
+			assert.EqualError(t, err, "patient_id: multiple _id parameters found")
 		})
 		t.Run("no patient ID provided", func(t *testing.T) {
-			pdpRequest := PDPRequest{
+			decisionRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "GET",
@@ -361,7 +359,7 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, resultReasons := NewPolicyInput(pdpRequest)
+			policyInput, resultReasons := NewPolicyInput(decisionRequest)
 			require.NotNil(t, policyInput)
 			assert.Empty(t, resultReasons)
 			assert.Empty(t, policyInput.Context.PatientID)
@@ -369,7 +367,7 @@ func TestNewPolicyInput(t *testing.T) {
 	})
 	t.Run("patient BSN parsing", func(t *testing.T) {
 		t.Run("in query parameter, unencoded", func(t *testing.T) {
-			pdpRequest := PDPRequest{
+			decisionRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "GET",
@@ -384,11 +382,11 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, _ := NewPolicyInput(pdpRequest)
+			policyInput, _ := NewPolicyInput(decisionRequest)
 			assert.Equal(t, "900186021", policyInput.Context.PatientBSN)
 		})
 		t.Run("in query parameter, encoded", func(t *testing.T) {
-			pdpRequest := PDPRequest{
+			decisionRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "GET",
@@ -403,11 +401,11 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, _ := NewPolicyInput(pdpRequest)
+			policyInput, _ := NewPolicyInput(decisionRequest)
 			assert.Equal(t, "900186021", policyInput.Context.PatientBSN)
 		})
 		t.Run("in POST body, encoded", func(t *testing.T) {
-			pdpRequest := PDPRequest{
+			decisionRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "POST",
@@ -423,13 +421,13 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, resultReasons := NewPolicyInput(pdpRequest)
+			policyInput, resultReasons := NewPolicyInput(decisionRequest)
 			require.NotNil(t, policyInput)
 			assert.Equal(t, "900186021", policyInput.Context.PatientBSN)
 			assert.Empty(t, resultReasons)
 		})
 		t.Run("in POST body, unencoded (pipe character)", func(t *testing.T) {
-			pdpRequest := PDPRequest{
+			decisionRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "POST",
@@ -446,14 +444,14 @@ func TestNewPolicyInput(t *testing.T) {
 				},
 			}
 
-			policyInput, resultReasons := NewPolicyInput(pdpRequest)
+			policyInput, resultReasons := NewPolicyInput(decisionRequest)
 			require.NotNil(t, policyInput)
 			assert.Empty(t, resultReasons)
 			assert.Equal(t, []string{"http://fhir.nl/fhir/NamingSystem/bsn|775645332"}, policyInput.Action.FHIRRest.SearchParams["identifier"])
 			assert.Equal(t, "775645332", policyInput.Context.PatientBSN)
 		})
 		t.Run("incorrect system", func(t *testing.T) {
-			pdpRequest := PDPRequest{
+			decisionRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "GET",
@@ -468,13 +466,12 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, resultReasons := NewPolicyInput(pdpRequest)
+			policyInput, err := NewPolicyInput(decisionRequest)
 			assert.Nil(t, policyInput)
-			require.Len(t, resultReasons, 1)
-			assert.Equal(t, "patient_bsn: expected identifier system to be 'http://fhir.nl/fhir/NamingSystem/bsn', found 'http://fhir.nl/fhir/NamingSystem/other'", resultReasons[0].Description)
+			assert.EqualError(t, err, "patient_bsn: expected identifier system to be 'http://fhir.nl/fhir/NamingSystem/bsn', found 'http://fhir.nl/fhir/NamingSystem/other'")
 		})
 		t.Run("provided by PEP", func(t *testing.T) {
-			pdpRequest := PDPRequest{
+			decisionRequest := PDPRequest{
 				Input: PDPInput{
 					Request: HTTPRequest{
 						Method:   "GET",
@@ -490,7 +487,7 @@ func TestNewPolicyInput(t *testing.T) {
 					},
 				},
 			}
-			policyInput, _ := NewPolicyInput(pdpRequest)
+			policyInput, _ := NewPolicyInput(decisionRequest)
 			assert.Equal(t, "900186021", policyInput.Context.PatientBSN)
 		})
 	})

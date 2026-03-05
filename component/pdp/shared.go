@@ -154,7 +154,10 @@ type PDPRequest struct {
 }
 
 type PDPResponse struct {
-	Result   PolicyResult            `json:"result"`
+	Allow bool `json:"allow"`
+	// Error is an optional field that can be used to provide additional information about why a decision couldn't be made.
+	// This is intended for informational purposes and should not be used to determine the outcome of the decision (i.e. allow/deny).
+	Error    string                  `json:"error,omitempty"`
 	Policies map[string]PolicyResult `json:"policies"`
 }
 
@@ -195,13 +198,12 @@ func (p *PolicyResult) AddReasons(input []string, format string, code TypeResult
 type TypeResultCode string
 
 const (
-	TypeResultCodeMissingRequiredValue TypeResultCode = "missing_required_value"
-	TypeResultCodeUnexpectedInput      TypeResultCode = "unexpected_input"
-	TypeResultCodeNotAllowed           TypeResultCode = "not_allowed"
-	TypeResultCodeNotImplemented       TypeResultCode = "not_implemented"
-	TypeResultCodeInternalError        TypeResultCode = "internal_error"
-	TypeResultCodePIPError             TypeResultCode = "pip_error"
-	TypeResultCodeInformational        TypeResultCode = "info"
+	TypeResultCodeUnexpectedInput TypeResultCode = "unexpected_input"
+	TypeResultCodeNotAllowed      TypeResultCode = "not_allowed"
+	TypeResultCodeNotImplemented  TypeResultCode = "not_implemented"
+	TypeResultCodeInternalError   TypeResultCode = "internal_error"
+	TypeResultCodePIPError        TypeResultCode = "pip_error"
+	TypeResultCodeInformational   TypeResultCode = "info"
 )
 
 type PIPConfig struct {

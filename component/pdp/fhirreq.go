@@ -404,19 +404,14 @@ func getSingleParameter(params url.Values, name string) (string, error) {
 
 // NewPolicyInput creates a PolicyInput from the given PDPRequest.
 
-func NewPolicyInput(request PDPRequest) (*PolicyInput, []ResultReason) {
+func NewPolicyInput(request PDPRequest) (*PolicyInput, error) {
 	var policyInput PolicyInput
 
 	// URL decode query parameters
 	decodeHTTPRequest := request.Input.Request
 	decodedQueryParams, err := urlValuesDecode(request.Input.Request.QueryParams)
 	if err != nil {
-		return nil, []ResultReason{
-			{
-				Code:        TypeResultCodeUnexpectedInput,
-				Description: "unable to decode query parameters: " + err.Error(),
-			},
-		}
+		return nil, fmt.Errorf("unable to decode query parameters: %w", err)
 	}
 	decodeHTTPRequest.QueryParams = *decodedQueryParams
 
@@ -435,11 +430,7 @@ func NewPolicyInput(request PDPRequest) (*PolicyInput, []ResultReason) {
 
 	tokens, ok := parseRequestPath(request.Input.Request)
 	if !ok {
-		reason := ResultReason{
-			Code:        TypeResultCodeUnexpectedInput,
-			Description: "unable to parse FHIR request",
-		}
-		return nil, []ResultReason{reason}
+		return nil, errors.New("unable to parse FHIR request")
 	}
 
 	if tokens.ResourceType != nil {
@@ -471,12 +462,7 @@ func NewPolicyInput(request PDPRequest) (*PolicyInput, []ResultReason) {
 	if paramsInBody {
 		decodedBody, err := url.ParseQuery(request.Input.Request.Body)
 		if err != nil {
-			return nil, []ResultReason{
-				{
-					Code:        TypeResultCodeUnexpectedInput,
-					Description: fmt.Sprintf("could not parse form encoded request body: %v", err),
-				},
-			}
+			return nil, fmt.Errorf("could not parse form encoded request body: %w", err)
 		}
 		rawParams = decodedBody
 	} else {
@@ -489,13 +475,10 @@ func NewPolicyInput(request PDPRequest) (*PolicyInput, []ResultReason) {
 	policyInput.Action.FHIRRest.SearchParams = params.SearchParams
 
 	// Read patient resource ID from request
-	resultReasons := []ResultReason{}
+	var errs []error
 	patientId, err := derivePatientId(tokens, rawParams)
 	if err != nil {
-		resultReasons = append(resultReasons, ResultReason{
-			Code:        TypeResultCodeUnexpectedInput,
-			Description: "patient_id: " + err.Error(),
-		})
+		errs = append(errs, fmt.Errorf("patient_id: %w", err))
 	} else {
 		policyInput.Context.PatientID = patientId
 	}
@@ -504,17 +487,14 @@ func NewPolicyInput(request PDPRequest) (*PolicyInput, []ResultReason) {
 	if policyInput.Context.PatientBSN == "" {
 		patientBSN, err := derivePatientBSN(tokens, rawParams)
 		if err != nil {
-			resultReasons = append(resultReasons, ResultReason{
-				Code:        TypeResultCodeUnexpectedInput,
-				Description: "patient_bsn: " + err.Error(),
-			})
+			errs = append(errs, fmt.Errorf("patient_bsn: %w", err))
 		} else {
 			policyInput.Context.PatientBSN = patientBSN
 		}
 	}
 
-	if len(resultReasons) > 0 {
-		return nil, resultReasons
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
 	}
 	return &policyInput, nil
 }

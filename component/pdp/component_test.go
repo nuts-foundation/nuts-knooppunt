@@ -19,12 +19,12 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-// executePDPRequest is a helper function that sends a PDP request and returns the response
-func executePDPRequest(t *testing.T, service *Component, pdpRequest PDPRequest) PDPResponse {
+// executeDecisionRequest is a helper function that sends a PDP request and returns the response
+func executeDecisionRequest(t *testing.T, service *Component, decisionRequest PDPRequest) PDPResponse {
 	t.Helper()
 
 	// Marshal the request body
-	requestBody, err := json.Marshal(pdpRequest)
+	requestBody, err := json.Marshal(decisionRequest)
 	require.NoError(t, err)
 
 	// Create HTTP request
@@ -60,9 +60,8 @@ func TestHandleMainPolicy(t *testing.T) {
 		var actual PDPResponse
 		err := json.NewDecoder(httpResponse.Body).Decode(&actual)
 		require.NoError(t, err)
-		require.False(t, actual.Result.Allow)
-		assert.Len(t, actual.Result.Reasons, 1)
-		assert.Equal(t, TypeResultCodeUnexpectedInput, actual.Result.Reasons[0].Code)
+		require.False(t, actual.Allow)
+		assert.Equal(t, "unable to parse request body: invalid character 'i' looking for beginning of value", actual.Error)
 	})
 }
 
@@ -115,7 +114,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		httpRequestBody      string
 		decision             bool
 		properties           map[string]any
-		mainReasonCodes      []TypeResultCode
+		error                string
 		policyReasonCodes    map[string][]TypeResultCode
 		policyAllow          map[string]bool // which policies should allow (true) or deny (false)
 	}
@@ -125,7 +124,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		httpReqURL, err := url.Parse("http://localhost" + httpReqParts[1])
 		require.NoError(t, err)
 
-		pdpRequest := PDPRequest{
+		decisionRequest := PDPRequest{
 			Input: PDPInput{
 				Subject: Subject{
 					Properties: SubjectProperties{
@@ -154,23 +153,17 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			},
 		}
 		if tc.httpRequestBody != "" {
-			pdpRequest.Input.Request.Body = tc.httpRequestBody
+			decisionRequest.Input.Request.Body = tc.httpRequestBody
 		}
-		response := executePDPRequest(t, service, pdpRequest)
+		response := executeDecisionRequest(t, service, decisionRequest)
 		if tc.decision {
-			assert.True(t, response.Result.Allow, tc.name)
+			assert.True(t, response.Allow, tc.name)
+			assert.Empty(t, response.Error, "expected no error when decision is allow")
 		} else {
-			assert.False(t, response.Result.Allow, tc.name)
+			assert.False(t, response.Allow, tc.name)
 		}
-		for _, expectedCode := range tc.mainReasonCodes {
-			found := false
-			for _, reason := range response.Result.Reasons {
-				if reason.Code == expectedCode {
-					found = true
-					break
-				}
-			}
-			assert.True(t, found, "expected reason code %s not found in response (got: %v)", expectedCode, response.Result.Reasons)
+		if tc.error != "" || response.Error != "" {
+			assert.Equal(t, tc.error, response.Error, tc.name)
 		}
 		if tc.policyReasonCodes != nil {
 			for policyName, expectedCodes := range tc.policyReasonCodes {
@@ -296,14 +289,14 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Patient?identifier=123456789`,
 				decision:             false,
-				mainReasonCodes:      []TypeResultCode{TypeResultCodeUnexpectedInput},
+				error:                "invalid request: patient_bsn: expected identifier parameter in format 'system|value'",
 			},
 			{
 				name:                 "deny - Patient search with wrong identifier system",
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Patient?identifier=http://example.com/identifier|123456789`,
 				decision:             false,
-				mainReasonCodes:      []TypeResultCode{TypeResultCodeUnexpectedInput},
+				error:                "invalid request: patient_bsn: expected identifier system to be 'http://fhir.nl/fhir/NamingSystem/bsn', found 'http://example.com/identifier'",
 			},
 			{
 				name:                 "allow - Consent search with patient, scope and category",
@@ -322,7 +315,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Consent?patient=Patient/1000,Patient/1001&_profile=http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2`,
 				decision:             false,
-				mainReasonCodes:      []TypeResultCode{TypeResultCodeUnexpectedInput},
+				error:                "invalid request: patient_id: expected 1 value in patient parameter, found multiple",
 			},
 			{
 				name:                 "deny - Consent search without patient parameter",
@@ -365,9 +358,8 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				clientQualifications: []string{"pzp_gf"},
 				httpRequest:          `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|bsn:error`,
 				decision:             false,
-				mainReasonCodes:      []TypeResultCode{TypeResultCodeInternalError},
 				policyReasonCodes: map[string][]TypeResultCode{
-					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+					"pzp_gf": {TypeResultCodeInternalError, TypeResultCodeNotAllowed, TypeResultCodeInformational},
 				},
 			},
 			{
