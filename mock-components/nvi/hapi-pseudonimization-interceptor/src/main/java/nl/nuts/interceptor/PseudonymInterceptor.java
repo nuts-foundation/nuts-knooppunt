@@ -16,11 +16,16 @@ import nl.nuts.util.BsnUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.hl7.fhir.instance.model.api.IIdType;
-import org.hl7.fhir.r4.model.DocumentReference;
+import org.hl7.fhir.r4.model.CodeableConcept;
+import org.hl7.fhir.r4.model.Coding;
 import org.hl7.fhir.r4.model.Extension;
 import org.hl7.fhir.r4.model.IdType;
 import org.hl7.fhir.r4.model.Identifier;
 import org.hl7.fhir.r4.model.ListResource;
+import org.hl7.fhir.r4.model.OperationOutcome;
+import org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity;
+import org.hl7.fhir.r4.model.OperationOutcome.IssueType;
+import org.hl7.fhir.r4.model.OperationOutcome.OperationOutcomeIssueComponent;
 import org.hl7.fhir.r4.model.Reference;
 import org.hl7.fhir.r4.model.ResourceType;
 import org.springframework.stereotype.Component;
@@ -58,41 +63,9 @@ public class PseudonymInterceptor {
         if (!isEnabled(servletRequestDetails)) {
             return;
         }
-
-        final String resourceType = searchDetails.getResourceType();
-
-        if (ResourceType.DocumentReference.name().equals(resourceType)) {
-            preSearchDocumentReference(searchParameterMap);
-        } else if (ResourceType.List.name().equals(resourceType)) {
-            preSearchList(searchParameterMap);
+        if (!ResourceType.List.name().equals(searchDetails.getResourceType())) {
+            return;
         }
-    }
-
-    private void preSearchDocumentReference(final SearchParameterMap searchParameterMap) {
-        final List<List<IQueryParameterType>> patient = searchParameterMap.get(DocumentReference.SP_PATIENT);
-        final List<List<IQueryParameterType>> subject = searchParameterMap.get(DocumentReference.SP_SUBJECT);
-
-        final ReferenceParam modifiedPatient = modifySearchParameter(patient, false);
-        final ReferenceParam modifiedSubject = modifySearchParameter(subject, false);
-
-        if (modifiedPatient != null) {
-            searchParameterMap.remove(DocumentReference.SP_PATIENT);
-            searchParameterMap.add(DocumentReference.SP_PATIENT, modifiedPatient);
-        }
-
-        if (modifiedSubject != null) {
-            searchParameterMap.remove(DocumentReference.SP_SUBJECT);
-            searchParameterMap.add(DocumentReference.SP_SUBJECT, modifiedSubject);
-        }
-
-        log.info("{}", searchParameterMap);
-
-        if ((patient == null || patient.isEmpty()) && (subject == null || subject.isEmpty())) {
-            throw new IllegalArgumentException("You have to search by 'patient' or 'subject' (patient).");
-        }
-    }
-
-    private void preSearchList(final SearchParameterMap searchParameterMap) {
         final List<List<IQueryParameterType>> patient = searchParameterMap.get(ListResource.SP_PATIENT);
         final List<List<IQueryParameterType>> subject = searchParameterMap.get(ListResource.SP_SUBJECT);
         final List<List<IQueryParameterType>> source = searchParameterMap.get(ListResource.SP_SOURCE);
@@ -168,29 +141,35 @@ public class PseudonymInterceptor {
         return new ReferenceParam(String.format("%s/%s/%s", PSEUDO_BSN_SYSTEM, ResourceType.Patient.name(), tokenToPseudonym(identifierValue)));
     }
 
+    /**
+     * Triggers before a Resource (in our case a ListResource) is created. We take currently set
+     * ListResource.subject and create pseudonym from a token set on there
+     */
     @Hook(Pointcut.STORAGE_PRESTORAGE_RESOURCE_CREATED)
     public void resourceCreated(final IBaseResource newResource,
                                 final ServletRequestDetails servletRequestDetails) {
         if (!isEnabled(servletRequestDetails)) {
             return;
         }
+        if (!(newResource instanceof final ListResource list)) {
+            return;
+        }
 
         validateUraHeaderPresence(servletRequestDetails);
 
-        if (newResource instanceof final DocumentReference documentReference) {
-            validateCustodian(documentReference, servletRequestDetails);
-            modifyDocumentFromTokenToPseudonym(documentReference);
-            log.info("{}", FhirContext.forR4Cached().newJsonParser().encodeResourceToString(documentReference));
-        } else if (newResource instanceof final ListResource list) {
-            validateCustodian(list, servletRequestDetails);
-            modifyListSubjectFromTokenToPseudonym(list);
-            modifyListSourceFromTokenToPseudonym(list);
-            log.info("{}", FhirContext.forR4Cached().newJsonParser().encodeResourceToString(list));
-        }
+        // Validate custodian matches X-Requester-URA header
+        validateCustodian(list, servletRequestDetails);
+
+        modifyListSubjectFromTokenToPseudonym(list);
+        modifyListSourceFromTokenToPseudonym(list);
+        log.info("{}", FhirContext.forR4Cached().newJsonParser().encodeResourceToString(list));
     }
 
+
     /**
-     * Triggers before resources are shown. Converts pseudonyms back to audience-specific tokens.
+     * Triggers before a Resource (in our case a ListResource) is read (also invoked when a Resource is created,
+     * but is returned in a response to creation. We replace currently set ListResource.subject (which is a
+     * pseudonym) with an audience-specific token (audience information is obtained from @see REQUESTER_URA_HEADER).
      */
     @Hook(Pointcut.STORAGE_PRESHOW_RESOURCES)
     public void handlePreShowResources(final IPreResourceShowDetails requestDetails,
@@ -201,15 +180,11 @@ public class PseudonymInterceptor {
 
         validateUraHeaderPresence(servletRequestDetails);
 
-        final String audience = getUraHeader(servletRequestDetails);
         final List<IBaseResource> allResources = requestDetails.getAllResources();
-        allResources.forEach(resource -> {
-            if (resource instanceof final DocumentReference documentReference) {
-                modifyDocumentReferenceFromPseudonymToToken(documentReference, audience);
-            } else if (resource instanceof final ListResource list) {
-                modifyListFromPseudonymToToken(list, audience);
-            }
-        });
+        allResources.stream()
+                .filter(aResource -> aResource instanceof ListResource)
+                .forEach(list -> modifyDocumentFromPseudonymToToken((ListResource) list,
+                                                                    getUraHeader(servletRequestDetails)));
     }
 
     private void validateUraHeaderPresence(final ServletRequestDetails servletRequestDetails) {
@@ -224,7 +199,7 @@ public class PseudonymInterceptor {
         return servletRequestDetails.getHeader(REQUESTER_URA_HEADER);
     }
 
-    private void modifyDocumentReferenceFromPseudonymToToken(final DocumentReference resource, final String audience) {
+    private void modifyDocumentFromPseudonymToToken(final ListResource resource, final String audience) {
         final Reference subject = resource.getSubject();
         if (subject == null) {
             return;
@@ -240,34 +215,6 @@ public class PseudonymInterceptor {
         identifier.setSystem(BSN_TOKEN_SYSTEM);
         identifier.setValue(token);
         resource.setSubject(new Reference().setIdentifier(identifier));
-    }
-
-    private void modifyListFromPseudonymToToken(final ListResource resource, final String audience) {
-        final Reference subject = resource.getSubject();
-        if (subject == null) {
-            return;
-        }
-        final IIdType referenceElement = subject.getReferenceElement();
-        if (!PSEUDO_BSN_SYSTEM.equals(referenceElement.getBaseUrl())) {
-            return;
-        }
-
-        log.trace("Found identifier: system={}, value={}", referenceElement.getBaseUrl(), referenceElement.getIdPart());
-        final String token = pseudonymToToken(referenceElement.getIdPart(), audience);
-        final Identifier identifier = new Identifier();
-        identifier.setSystem(BSN_TOKEN_SYSTEM);
-        identifier.setValue(token);
-        resource.setSubject(new Reference().setIdentifier(identifier));
-    }
-
-    private void modifyDocumentFromTokenToPseudonym(final DocumentReference docRef) {
-        final Identifier identifier = docRef.getSubject().getIdentifier();
-        if (identifier == null || !BSN_TOKEN_SYSTEM.equals(identifier.getSystem())) {
-            return;
-        }
-        log.trace("Found identifier: system={}, value={}", identifier.getSystem(), identifier.getValue());
-        final String pseudonym = tokenToPseudonym(identifier.getValue());
-        docRef.setSubject(identifierToReference(PSEUDO_BSN_SYSTEM, ResourceType.Patient.name(), pseudonym));
     }
 
     private void modifyListSubjectFromTokenToPseudonym(final ListResource docRef) {
@@ -286,7 +233,8 @@ public class PseudonymInterceptor {
             return;
         }
         log.trace("Found identifier: system={}, value={}", identifier.getSystem(), identifier.getValue());
-        docRef.setSource(identifierToReference(identifier.getSystem(), ResourceType.Device.name(), identifier.getValue()));
+        docRef.setSource(
+                identifierToReference(identifier.getSystem(), ResourceType.Device.name(), identifier.getValue()));
     }
 
     /**
@@ -314,44 +262,21 @@ public class PseudonymInterceptor {
     }
 
     /**
-     * Validates that DocumentReference.custodian matches the X-Requester-URA header.
-     */
-    private void validateCustodian(final DocumentReference documentReference,
-                                   final ServletRequestDetails servletRequestDetails) {
-        final String requesterURA = servletRequestDetails.getHeader(REQUESTER_URA_HEADER);
-        if (StringUtils.isEmpty(requesterURA)) {
-            return;
-        }
-
-        final Reference custodian = documentReference.getCustodian();
-
-        if (custodian.getIdentifier().isEmpty() && !custodian.isEmpty()) {
-            // means that it's actually a reference to the Organization
-            // meaning we'd ideally then need to fetch it and check of Organization.identifier matches
-            // our header, but we won't do that... so just let it pass in this case
-            return;
-        }
-
-        final String custodianURA = extractURAFromCustodian(custodian);
-        if (!requesterURA.equals(custodianURA)) {
-            throw new IllegalArgumentException(
-                    String.format("DocumentReference.custodian URA (%s) does not match %s header (%s)",
-                                  custodianURA, REQUESTER_URA_HEADER, requesterURA));
-        }
-
-        log.debug("Custodian URA validation successful: {}", custodianURA);
-    }
-
-    /**
-     * Validates that ListResource custodian extension matches the X-Requester-URA header.
+     * Validates that ListResource.custodian matches the X-Requester-URA header.
+     * The custodian should be a reference to an Organization with an identifier containing the URA.
+     *
+     * @param list the ListResource to validate
+     * @param servletRequestDetails the request details containing headers
+     * @throws IllegalArgumentException if custodian doesn't match the X-Requester-URA header
      */
     private void validateCustodian(final ListResource list,
                                    final ServletRequestDetails servletRequestDetails) {
         final String requesterURA = servletRequestDetails.getHeader(REQUESTER_URA_HEADER);
+
+        // If no header is present, we can't validate, let it pass
         if (StringUtils.isEmpty(requesterURA)) {
             return;
         }
-
         final String LIST_CUSTODIAN_URL = "http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian";
         final Extension custodianExtension = list.getExtensionByUrl(LIST_CUSTODIAN_URL);
         if (custodianExtension == null) {
@@ -368,7 +293,10 @@ public class PseudonymInterceptor {
             return;
         }
 
+        // Extract URA from custodian
         final String custodianURA = extractURAFromCustodian(custodianReference);
+
+        // Validate that custodian URA matches the requester URA
         if (!requesterURA.equals(custodianURA)) {
             throw new IllegalArgumentException(
                     String.format("List.custodian URA (%s) does not match %s header (%s)",
@@ -397,3 +325,6 @@ public class PseudonymInterceptor {
         return null;
     }
 }
+
+
+

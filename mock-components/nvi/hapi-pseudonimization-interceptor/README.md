@@ -1,6 +1,10 @@
 # HAPI FHIR Pseudonymization Interceptor
 
-This interceptor provides automatic pseudonymization for BSN tokens in FHIR DocumentReference resources (`DocumentReference.subject.as(Identifier)`). It converts BSN tokens to pseudonyms for storage and back to audience-specific tokens for retrieval.
+This interceptor provides automatic pseudonymization for BSN tokens in FHIR List resources. It converts BSN tokens to pseudonyms for storage and back to audience-specific tokens for retrieval.
+
+It handles two identifier fields:
+- `List.subject.as(Identifier)` — the patient, stored as a pseudonym
+- `List.source.as(Identifier)` — the source device, stored as a direct reference (no pseudonymization)
 
 ## Overview
 
@@ -8,7 +12,7 @@ The interceptor handles the conversion between:
 - **BSN Tokens** (transport format): `token-{audience}-{transformedBSN}-{nonce}`
 - **Pseudonyms** (storage format): `ps-{audience}-{transformedBSN}`
 
-All DocumentReference resources are stored with pseudonyms internally, but clients interact using BSN tokens.
+All List resources are stored with pseudonyms internally, but clients interact using BSN tokens.
 
 ## Configuration
 
@@ -26,38 +30,54 @@ The following environment variables can be configured:
 
 HAPI FHIR does not natively support the `:identifier` modifier for reference search parameters. This means searches like:
 ```
-GET /DocumentReference?subject:identifier=system|value
+GET /List?subject:identifier=system|value
 ```
 are not supported out of the box.
 
 ### Our Workaround
 
-Instead of storing DocumentReference.subject as an Identifier, we **convert it to a Reference** with a specially formatted ID:
+Instead of storing `List.subject` or `List.source` as an Identifier, we **convert them to References** with a specially formatted ID:
 
-**What the client sends (POST):**
+**What the client sends (POST — a Bundle containing a List):**
 ```json
 {
-  "resourceType": "DocumentReference",
-  "subject": {
-    "identifier": {
-      "system": "http://example.com/BSNToken",
-      "value": "token-hospital-abc123-def456"
-    }
-  }
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [{
+    "resource": {
+      "resourceType": "List",
+      "subject": {
+        "identifier": {
+          "system": "http://example.com/BSNToken",
+          "value": "token-hospital-abc123-def456"
+        }
+      },
+      "source": {
+        "identifier": {
+          "system": "http://example.com/deviceSystem",
+          "value": "device-id-xyz"
+        }
+      }
+    },
+    "request": { "method": "POST", "url": "List" }
+  }]
 }
 ```
 
 **What gets stored internally:**
 ```json
 {
-  "resourceType": "DocumentReference",
+  "resourceType": "List",
   "subject": {
     "reference": "http://example.com/pseudoBSN/Patient/ps-nvi-1-abc123"
+  },
+  "source": {
+    "reference": "http://example.com/deviceSystem/Device/device-id-xyz"
   }
 }
 ```
 
-The pseudonym is embedded as a Patient reference ID, allowing HAPI to perform efficient reference searches.
+The pseudonym is embedded as a Patient reference ID, and the source identifier as a Device reference ID, allowing HAPI to perform efficient reference searches.
 
 Note: For this to work, we need to enable external references with `hapi.fhir.allow_external_references: true`.
 
@@ -65,53 +85,74 @@ Note: For this to work, we need to enable external references with `hapi.fhir.al
 
 When a client searches using:
 ```
-GET /DocumentReference?subject:identifier=http://example.com/BSNToken|token-hospital-abc123-def456
+GET /List?subject:identifier=http://example.com/BSNToken|token-hospital-abc123-def456
 ```
 
 The interceptor:
 1. Intercepts the search parameter
 2. Extracts the BSN token from the identifier
-3. Converts it to a pseudonym 
-4. Replaces the search parameter with a reference search :
+3. Converts it to a pseudonym
+4. Replaces the search parameter with a reference search:
    ```
    http://example.com/pseudoBSN/Patient/ps-nvi-1-abc123
    ```
+
+For `source`, no pseudonymization happens — the identifier is passed through as a Device reference:
+```
+GET /List?source:identifier=http://example.com/deviceSystem|device-id-xyz
+→ source=http://example.com/deviceSystem/Device/device-id-xyz
+```
 
 This happens transparently - the client thinks it's using `:identifier` modifier, but internally we convert it to a reference search that HAPI supports natively.
 
 ## Supported API Operations
 
-All operations require `X-Requester-URA` header. This value needs to match DocumentReference.custodian.identifier.where(system='http://fhir.nl/fhir/NamingSystem/ura').value
+All operations require `X-Requester-URA` header. This value needs to match the List extension URA.
 
-### 1. POST DocumentReference (Create)
+### 1. POST Bundle (Create)
+
+Creating a List is done by posting a FHIR transaction Bundle. The Bundle contains the List resource. The interceptor processes each List entry within the Bundle.
 
 **Request:**
 ```http
-POST /DocumentReference
+POST /
 X-Requester-URA: hospital
 Content-Type: application/fhir+json
 
 {
-  "resourceType": "DocumentReference",
-  "subject": {
-    "identifier": {
-      "system": "http://example.com/BSNToken",
-      "value": "token-hospital-abc123-def456"
-    }
-  },
-  ...
+  "resourceType": "Bundle",
+  "type": "transaction",
+  "entry": [{
+    "resource": {
+      "resourceType": "List",
+      "subject": {
+        "identifier": {
+          "system": "http://example.com/BSNToken",
+          "value": "token-hospital-abc123-def456"
+        }
+      },
+      "source": {
+        "identifier": {
+          "system": "http://example.com/deviceSystem",
+          "value": "device-id-xyz"
+        }
+      },
+      ...
+    },
+    "request": { "method": "POST", "url": "List" }
+  }]
 }
 ```
 
 **Behavior:**
-1. Token is converted to pseudonym and stored as a reference
-2. Resource is created successfully
-3. Response returns the created resource with the token converted back to the requester's audience
+1. `List.subject` token is converted to a pseudonym and stored as a Patient reference
+2. `List.source` identifier is stored as a Device reference (no pseudonymization)
+3. Response returns the created resource with the subject token converted back to the requester's audience
 
 **Response:**
 ```json
 {
-  "resourceType": "DocumentReference",
+  "resourceType": "List",
   "id": "123",
   "subject": {
     "identifier": {
@@ -123,11 +164,11 @@ Content-Type: application/fhir+json
 }
 ```
 
-### 2. GET DocumentReference/{id} (Read Single Resource)
+### 2. GET List/{id} (Read Single Resource)
 
 **Request:**
 ```http
-GET /DocumentReference/123
+GET /List/123
 X-Requester-URA: clinic-west
 ```
 
@@ -139,7 +180,7 @@ X-Requester-URA: clinic-west
 **Response:**
 ```json
 {
-  "resourceType": "DocumentReference",
+  "resourceType": "List",
   "id": "123",
   "subject": {
     "identifier": {
@@ -153,24 +194,24 @@ X-Requester-URA: clinic-west
 
 **Without X-Requester-URA Header:**
 ```http
-GET /DocumentReference/123
+GET /List/123
 ```
 
 **Behavior:** Returns `IllegalArgumentException`:
 ```
-Resource can not be retrieved due to the fact there is no X-Requester-URA header present.
+'X-Requester-URA' header is mandatory.
 ```
 
-### 3. GET DocumentReference?subject:identifier=... or DocumentReference?patient:identifier=... (Search by Subject or Patient Identifier)
+### 3. GET List?subject:identifier=... or List?patient:identifier=... (Search by Subject or Patient)
 
 **Request:**
 ```http
-GET /DocumentReference?subject:identifier=http://example.com/BSNToken|token-hospital-abc123-def456
+GET /List?subject:identifier=http://example.com/BSNToken|token-hospital-abc123-def456
 X-Requester-URA: clinic-west
 ```
 
 **Behavior:**
-1. Interceptor intercepts search 
+1. Interceptor intercepts search
 2. Extracts BSN token from the identifier parameter
 3. Converts token to pseudonym
 4. Replaces search parameter with reference: `subject=http://example.com/pseudoBSN/Patient/ps-nvi-1-abc123`
@@ -184,7 +225,7 @@ X-Requester-URA: clinic-west
   "type": "searchset",
   "entry": [{
     "resource": {
-      "resourceType": "DocumentReference",
+      "resourceType": "List",
       "id": "123",
       "subject": {
         "identifier": {
@@ -198,11 +239,26 @@ X-Requester-URA: clinic-west
 }
 ```
 
+### 4. GET List?source:identifier=... (Search by Source)
+
+**Request:**
+```http
+GET /List?source:identifier=http://example.com/deviceSystem|device-id-xyz
+X-Requester-URA: clinic-west
+```
+
+**Behavior:**
+1. Interceptor intercepts search
+2. Extracts system and value from the identifier parameter
+3. Replaces search parameter with a Device reference: `source=http://example.com/deviceSystem/Device/device-id-xyz`
+4. HAPI executes the reference search
+5. Found resources are converted back to tokens for the requester's audience
+
+No pseudonymization is applied to the source — the identifier is passed through as-is.
+
 ### Search Requirements
 
-
-- At least one search parameter (`subject` or `patient`) must be provided
-- If neither is provided, returns `IllegalArgumentException`: "You have to search by 'patient' or 'subject' (patient)."
+At least one search parameter (`subject`, `patient`, or `source`) must be provided. If none is provided, returns `IllegalArgumentException`: "You have to search by 'patient' or 'subject' (patient) or 'source'."
 
 ## Architecture
 
@@ -212,20 +268,18 @@ X-Requester-URA: clinic-west
 2. **PseudonymInterceptor** - HAPI FHIR interceptor with hooks:
    - `STORAGE_PRESTORAGE_RESOURCE_CREATED` - Converts tokens to pseudonyms before storage
    - `STORAGE_PRESHOW_RESOURCES` - Converts pseudonyms to tokens before presentation
-   - `STORAGE_PRESEARCH_REGISTERED` - Converts search parameters from tokens to pseudonyms
-   - `SERVER_OUTGOING_RESPONSE` - Handles POST responses without audience header
+   - `STORAGE_PRESEARCH_REGISTERED` - Converts search parameters from tokens/identifiers to references
 
 ### Data Flow
 
-#### Storage (POST):
+#### Storage (POST Bundle):
 ```
-Client Token (BSNToken)
+Client sends Bundle with List entries containing BSN tokens
     ↓
 [Interceptor: STORAGE_PRESTORAGE_RESOURCE_CREATED]
     ↓
-Convert to Pseudonym
-    ↓
-Store as Reference: {baseUrl}/Patient/{pseudonym}
+List.subject: Convert BSN token → Pseudonym, store as Patient reference
+List.source:  Store identifier as Device reference (no pseudonymization)
     ↓
 Database
 ```
@@ -238,12 +292,12 @@ Pseudonym Reference
     ↓
 [Interceptor: STORAGE_PRESHOW_RESOURCES]
     ↓
-Convert to Token (audience-specific)
+Convert to Token (audience-specific, from X-Requester-URA)
     ↓
 Client Token (BSNToken)
 ```
 
-#### Search:
+#### Search by subject/patient:
 ```
 Client Search: ?subject:identifier=BSNToken|token-xxx
     ↓
@@ -263,6 +317,26 @@ Convert Pseudonyms → Tokens (audience-specific)
     ↓
 Client Results
 ```
+
+#### Search by source:
+```
+Client Search: ?source:identifier=system|value
+    ↓
+[Interceptor: STORAGE_PRESEARCH_REGISTERED]
+    ↓
+Replace: ?source=system/Device/value
+    ↓
+HAPI Search Engine
+    ↓
+Results
+    ↓
+[Interceptor: STORAGE_PRESHOW_RESOURCES]
+    ↓
+Convert subject pseudonyms → tokens (audience-specific)
+    ↓
+Client Results
+```
+
 ## Test
 
 Run tests with:
@@ -280,8 +354,9 @@ docker run -p 8080:8080 nvi
 
 ### Interact
 ```http request
-POST /fhir/DocumentReference
-GET /fhir/DocumentReference/{id}
-GET /fhir/DocumentReference?subject:identifier=http://example.com/BSNToken|token-nvi-38bf96b43cbb92b830-e60a7ad0
-POST /fhir/DocumentReference/_search
+POST /fhir/
+GET /fhir/List/{id}
+GET /fhir/List?subject:identifier=http://example.com/BSNToken|token-nvi-38bf96b43cbb92b830-e60a7ad0
+GET /fhir/List?source:identifier=http://example.com/deviceSystem|device-id-xyz
+POST /fhir/List/_search
 ```

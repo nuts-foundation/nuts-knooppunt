@@ -1,0 +1,32 @@
+{
+  "resourceType": "List",
+  "id": "list-001",
+  "extension": [
+    {
+      "url": "http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian",
+      "valueReference": {
+        "identifier": {
+          "system": "http://fhir.nl/fhir/NamingSystem/ura",
+          "value": "11111111"
+        }
+      }
+    }
+  ],
+  "subject": {
+    "identifier": {
+      "system": "http://fhir.nl/fhir/NamingSystem/bsn-transport-token",
+      "value": "abcdefghi"
+    }
+  },
+  "status": "current",
+  "mode": "working",
+  "code": {
+    "coding": [
+      {
+        "system": "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-zorgcontext-cs",
+        "code": "LABBEPALING",
+        "display": "Labuitslag"
+      }
+    ]
+  }
+}
