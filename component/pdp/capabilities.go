@@ -29,6 +29,7 @@ func readCapability(ctx context.Context, name string) (fhir.CapabilityStatement,
 }
 
 func enrichPolicyInputWithCapabilityStatement(ctx context.Context, input PolicyInput, policy string) (PolicyInput, []ResultReason) {
+	input.Action.FHIRRest.CapabilityChecked = false
 	// Skip capability checking for requests that don't target a specific resource type (e.g., /metadata, /)
 	if input.Resource.Type == nil {
 		return input, nil

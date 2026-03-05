@@ -371,18 +371,18 @@ async function checkAuthorization(request) {
         }
 
         // Validate PDP response schema
-        if (!pdpResult.result || typeof pdpResult.result.allow !== 'boolean') {
-            request.error(`Malformed PDP response: missing result.allow boolean`);
+        if (typeof pdpResult.allow !== 'boolean') {
+            request.error(`Malformed PDP response: missing allow boolean`);
             request.return(502);
             return;
         }
 
         // Step 6: Enforce decision
-        if (pdpResult.result.allow) {
+        if (pdpResult.allow === true) {
             request.log('Access ALLOWED by PDP');
             request.return(200);
         } else {
-            const reasons = (pdpResult.result && pdpResult.result.reasons) ? pdpResult.result.reasons : [];
+            const reasons = pdpResult.reasons ? pdpResult.reasons : [];
             request.warn(`Access DENIED by PDP: ${JSON.stringify(reasons)}`);
             request.return(403);
         }

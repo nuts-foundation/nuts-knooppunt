@@ -73,8 +73,7 @@ func (c *Component) evalRegoPolicy(ctx context.Context, policy string, policyInp
 		return nil, fmt.Errorf("unexpected 'allow' result type (expected bool, was %T)", allowValue)
 	}
 	policyResult := PolicyResult{
-		Allow:  allowed,
-		Policy: policy,
+		Allow: allowed,
 	}
 	if !allowed {
 		policyResult.Reasons = []ResultReason{

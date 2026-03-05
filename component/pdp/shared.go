@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/mitchellh/copystructure"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/open-policy-agent/opa/v1/sdk"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -105,6 +106,14 @@ type PolicyInput struct {
 	Context  PolicyContext  `json:"context"`
 }
 
+func (p PolicyInput) Copy() PolicyInput {
+	result, err := copystructure.Copy(p)
+	if err != nil {
+		panic(fmt.Sprintf("failed to copy PolicyInput: %v", err))
+	}
+	return result.(PolicyInput)
+}
+
 type PolicyResource struct {
 	Type       *fhir.ResourceType       `json:"type"`
 	Properties PolicyResourceProperties `json:"properties"`
@@ -145,11 +154,14 @@ type PDPRequest struct {
 }
 
 type PDPResponse struct {
-	Result PolicyResult `json:"result"`
+	Allow bool `json:"allow"`
+	// Error is an optional field that can be used to provide additional information about why a decision couldn't be made.
+	// This is intended for informational purposes and should not be used to determine the outcome of the decision (i.e. allow/deny).
+	Error    string                  `json:"error,omitempty"`
+	Policies map[string]PolicyResult `json:"policies"`
 }
 
 type PolicyResult struct {
-	Policy  string         `json:"policy"`
 	Allow   bool           `json:"allow"`
 	Reasons []ResultReason `json:"reasons"`
 }
@@ -163,53 +175,15 @@ func (r ResultReason) String() string {
 	return fmt.Sprintf("%s - %s", r.Code, r.Description)
 }
 
-func (p *PolicyResult) AddReasons(input []string, format string, code TypeResultCode) {
-	isNewSlice := cap(p.Reasons) == 0
-	if isNewSlice {
-		p.Reasons = make([]ResultReason, len(input))
-	}
-
-	for i, str := range input {
-		reason := ResultReason{
-			Code:        code,
-			Description: fmt.Sprintf(format, str),
-		}
-
-		if isNewSlice {
-			p.Reasons[i] = reason
-		} else {
-			p.Reasons = append(p.Reasons, reason)
-		}
-	}
-}
-
-// Allow helper for creating an allowed result without reasons
-func Allow() PolicyResult {
-	return PolicyResult{
-		Allow: true,
-	}
-}
-
-// Deny Helper for creating a result with a single deny reason
-func Deny(reason ResultReason) PolicyResult {
-	return PolicyResult{
-		Allow: false,
-		Reasons: []ResultReason{
-			reason,
-		},
-	}
-}
-
 type TypeResultCode string
 
 const (
-	TypeResultCodeMissingRequiredValue TypeResultCode = "missing_required_value"
-	TypeResultCodeUnexpectedInput      TypeResultCode = "unexpected_input"
-	TypeResultCodeNotAllowed           TypeResultCode = "not_allowed"
-	TypeResultCodeNotImplemented       TypeResultCode = "not_implemented"
-	TypeResultCodeInternalError        TypeResultCode = "internal_error"
-	TypeResultCodePIPError             TypeResultCode = "pip_error"
-	TypeResultCodeInformational        TypeResultCode = "info"
+	TypeResultCodeUnexpectedInput TypeResultCode = "unexpected_input"
+	TypeResultCodeNotAllowed      TypeResultCode = "not_allowed"
+	TypeResultCodeNotImplemented  TypeResultCode = "not_implemented"
+	TypeResultCodeInternalError   TypeResultCode = "internal_error"
+	TypeResultCodePIPError        TypeResultCode = "pip_error"
+	TypeResultCodeInformational   TypeResultCode = "info"
 )
 
 type PIPConfig struct {
