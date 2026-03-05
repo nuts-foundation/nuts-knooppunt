@@ -19,12 +19,12 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-// executeDecisionRequest is a helper function that sends a PDP request and returns the response
-func executeDecisionRequest(t *testing.T, service *Component, decisionRequest PDPRequest) PDPResponse {
+// executePDPRequest is a helper function that sends a PDP request and returns the response
+func executePDPRequest(t *testing.T, service *Component, pdpRequest PDPRequest) PDPResponse {
 	t.Helper()
 
 	// Marshal the request body
-	requestBody, err := json.Marshal(decisionRequest)
+	requestBody, err := json.Marshal(pdpRequest)
 	require.NoError(t, err)
 
 	// Create HTTP request
@@ -124,7 +124,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		httpReqURL, err := url.Parse("http://localhost" + httpReqParts[1])
 		require.NoError(t, err)
 
-		decisionRequest := PDPRequest{
+		pdpRequest := PDPRequest{
 			Input: PDPInput{
 				Subject: Subject{
 					Properties: SubjectProperties{
@@ -153,9 +153,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			},
 		}
 		if tc.httpRequestBody != "" {
-			decisionRequest.Input.Request.Body = tc.httpRequestBody
+			pdpRequest.Input.Request.Body = tc.httpRequestBody
 		}
-		response := executeDecisionRequest(t, service, decisionRequest)
+		response := executePDPRequest(t, service, pdpRequest)
 		if tc.decision {
 			assert.True(t, response.Allow, tc.name)
 			assert.Empty(t, response.Error, "expected no error when decision is allow")
