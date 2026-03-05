@@ -12,6 +12,7 @@ import (
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/from"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/stretchr/testify/assert"
@@ -37,11 +38,7 @@ func executePDPRequest(t *testing.T, service *Component, pdpRequest PDPRequest) 
 	// Call the handler
 	service.HandleMainPolicy(w, req)
 
-	// Check the response
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response PDPResponse
-	err = json.NewDecoder(w.Body).Decode(&response)
+	response, err := from.JSONResponse[PDPResponse](w.Result())
 	require.NoError(t, err)
 
 	return response
