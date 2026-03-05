@@ -179,7 +179,7 @@ function buildPDPRequest(introspection, request) {
 
     return {
         input: {
-            subject: attributes,
+            subject: introspection,
             request: {
                 method: request.variables.request_method || request.method || 'GET',
                 protocol: 'HTTP/1.1',
