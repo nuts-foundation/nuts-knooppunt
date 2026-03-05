@@ -402,8 +402,6 @@ func getSingleParameter(params url.Values, name string) (string, error) {
 	return value, nil
 }
 
-// NewPolicyInput creates a PolicyInput from the given PDPRequest.
-
 func NewPolicyInput(request PDPRequest) (*PolicyInput, error) {
 	var policyInput PolicyInput
 

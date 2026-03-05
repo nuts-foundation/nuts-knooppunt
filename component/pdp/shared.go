@@ -175,26 +175,6 @@ func (r ResultReason) String() string {
 	return fmt.Sprintf("%s - %s", r.Code, r.Description)
 }
 
-func (p *PolicyResult) AddReasons(input []string, format string, code TypeResultCode) {
-	isNewSlice := cap(p.Reasons) == 0
-	if isNewSlice {
-		p.Reasons = make([]ResultReason, len(input))
-	}
-
-	for i, str := range input {
-		reason := ResultReason{
-			Code:        code,
-			Description: fmt.Sprintf(format, str),
-		}
-
-		if isNewSlice {
-			p.Reasons[i] = reason
-		} else {
-			p.Reasons = append(p.Reasons, reason)
-		}
-	}
-}
-
 type TypeResultCode string
 
 const (
