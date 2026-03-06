@@ -59,7 +59,7 @@ func Test_BGZAuthorization(t *testing.T) {
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 
-		var pdpResponse pdp.PDPResponse
+		var pdpResponse pdp.APIResponse
 		responseData, _ := io.ReadAll(resp.Body)
 		err = json.NewDecoder(bytes.NewReader(responseData)).Decode(&pdpResponse)
 		require.NoError(t, err)

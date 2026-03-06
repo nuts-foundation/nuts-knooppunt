@@ -21,7 +21,7 @@ import (
 )
 
 // executePDPRequest is a helper function that sends a PDP request and returns the response
-func executePDPRequest(t *testing.T, service *Component, pdpRequest PDPRequest) PDPResponse {
+func executePDPRequest(t *testing.T, service *Component, pdpRequest APIRequest) APIResponse {
 	t.Helper()
 
 	// Marshal the request body
@@ -38,7 +38,7 @@ func executePDPRequest(t *testing.T, service *Component, pdpRequest PDPRequest) 
 	// Call the handler
 	service.HandleMainPolicy(w, req)
 
-	response, err := from.JSONResponse[PDPResponse](w.Result())
+	response, err := from.JSONResponse[APIResponse](w.Result())
 	require.NoError(t, err)
 
 	return response
@@ -54,7 +54,7 @@ func TestHandleMainPolicy(t *testing.T) {
 		service.HandleMainPolicy(httpResponse, httpRequest)
 
 		assert.Equal(t, http.StatusBadRequest, httpResponse.Code)
-		var actual PDPResponse
+		var actual APIResponse
 		err := json.NewDecoder(httpResponse.Body).Decode(&actual)
 		require.NoError(t, err)
 		require.False(t, actual.Allow)
@@ -121,9 +121,9 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		httpReqURL, err := url.Parse("http://localhost" + httpReqParts[1])
 		require.NoError(t, err)
 
-		pdpRequest := PDPRequest{
-			Input: PDPInput{
-				Subject: PDPSubject{
+		pdpRequest := APIRequest{
+			Input: APIInput{
+				Subject: APISubject{
 					OtherProps:               tc.properties,
 					Scope:                    tc.scope,
 					OrganizationUra:          "00000001",
@@ -140,7 +140,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 						"Content-Type": {"application/fhir+json"},
 					},
 				},
-				Context: PDPContext{
+				Context: APIContext{
 					DataHolderOrganizationId: "00000002",
 					DataHolderFacilityType:   "TODO",
 					ConnectionTypeCode:       "hl7-fhir-rest",

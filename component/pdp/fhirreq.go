@@ -402,7 +402,7 @@ func getSingleParameter(params url.Values, name string) (string, error) {
 	return value, nil
 }
 
-func NewPolicyInput(request PDPRequest) (*PolicyInput, error) {
+func NewPolicyInput(request APIRequest) (*PolicyInput, error) {
 	var policyInput PolicyInput
 
 	// URL decode query parameters

@@ -11,11 +11,11 @@ import (
 func TestSubjectProperties_UnmarshalJSON(t *testing.T) {
 	t.Run("unmarshal", func(t *testing.T) {
 		const data = `{"scope": "mcsd_update mscd_query", "organization_ura": "00000666", "other": "value"}`
-		var actual PDPSubject
+		var actual APISubject
 		err := json.Unmarshal([]byte(data), &actual)
 		require.NoError(t, err)
 
-		expected := PDPSubject{
+		expected := APISubject{
 			OtherProps: map[string]any{
 				"other": "value",
 			},
@@ -25,7 +25,7 @@ func TestSubjectProperties_UnmarshalJSON(t *testing.T) {
 		require.Equal(t, expected, actual)
 	})
 	t.Run("marshal", func(t *testing.T) {
-		subjectProps := PDPSubject{
+		subjectProps := APISubject{
 			OtherProps: map[string]any{
 				"other": "value",
 			},

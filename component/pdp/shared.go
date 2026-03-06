@@ -14,13 +14,13 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-type PDPInput struct {
-	Subject PDPSubject  `json:"subject"`
+type APIInput struct {
+	Subject APISubject  `json:"subject"`
 	Request HTTPRequest `json:"request"`
-	Context PDPContext  `json:"context"`
+	Context APIContext  `json:"context"`
 }
 
-type PDPSubject struct {
+type APISubject struct {
 	OtherProps               map[string]any `json:"-"`
 	Active                   bool           `json:"active"`
 	ClientId                 string         `json:"client_id"`
@@ -32,11 +32,11 @@ type PDPSubject struct {
 	OrganizationFacilityType string         `json:"organization_facility_type"`
 }
 
-var _ json.Unmarshaler = (*PDPSubject)(nil)
-var _ json.Marshaler = (*PDPSubject)(nil)
+var _ json.Unmarshaler = (*APISubject)(nil)
+var _ json.Marshaler = (*APISubject)(nil)
 
-func (s *PDPSubject) UnmarshalJSON(data []byte) error {
-	type Alias PDPSubject
+func (s *APISubject) UnmarshalJSON(data []byte) error {
+	type Alias APISubject
 	var tmp Alias
 	if err := json.Unmarshal(data, &tmp); err != nil {
 		return err
@@ -53,12 +53,12 @@ func (s *PDPSubject) UnmarshalJSON(data []byte) error {
 	delete(tmp.OtherProps, "organization_ura")
 	delete(tmp.OtherProps, "organization_name")
 	delete(tmp.OtherProps, "organization_facility_type")
-	*s = PDPSubject(tmp)
+	*s = APISubject(tmp)
 	return nil
 }
 
-func (s PDPSubject) MarshalJSON() ([]byte, error) {
-	type Alias PDPSubject
+func (s APISubject) MarshalJSON() ([]byte, error) {
+	type Alias APISubject
 	tmp := Alias(s)
 	data, err := json.Marshal(tmp)
 	if err != nil {
@@ -77,8 +77,6 @@ func (s PDPSubject) MarshalJSON() ([]byte, error) {
 	return json.Marshal(baseMap)
 }
 
-type OtherPDPSubject map[string]any
-
 type HTTPRequest struct {
 	Method      string      `json:"method"`
 	Protocol    string      `json:"protocol"` // "HTTP/1.0"
@@ -88,7 +86,7 @@ type HTTPRequest struct {
 	Body        string      `json:"body"`
 }
 
-type PDPContext struct {
+type APIContext struct {
 	ConnectionTypeCode       string `json:"connection_type_code"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
 	DataHolderOrganizationId string `json:"data_holder_organization_id"`
@@ -145,20 +143,20 @@ type PolicySubjectUser struct {
 	Role string `json:"role"`
 }
 
-func NewPolicySubject(pdpSubject PDPSubject) PolicySubject {
+func NewPolicySubject(apiSubject APISubject) PolicySubject {
 
 	var policySubject PolicySubject
-	policySubject.Client.Id = pdpSubject.ClientId
-	policySubject.Client.Scopes = strings.Split(pdpSubject.Scope, " ")
+	policySubject.Client.Id = apiSubject.ClientId
+	policySubject.Client.Scopes = strings.Split(apiSubject.Scope, " ")
 
-	policySubject.User.Id = pdpSubject.UserId
-	policySubject.User.Role = pdpSubject.UserRole
+	policySubject.User.Id = apiSubject.UserId
+	policySubject.User.Role = apiSubject.UserRole
 
-	policySubject.Organization.Ura = pdpSubject.OrganizationUra
-	policySubject.Organization.Name = pdpSubject.OrganizationName
-	policySubject.Organization.FacilityType = pdpSubject.OrganizationFacilityType
+	policySubject.Organization.Ura = apiSubject.OrganizationUra
+	policySubject.Organization.Name = apiSubject.OrganizationName
+	policySubject.Organization.FacilityType = apiSubject.OrganizationFacilityType
 
-	policySubject.OtherProps = pdpSubject.OtherProps
+	policySubject.OtherProps = apiSubject.OtherProps
 
 	return policySubject
 }
@@ -206,11 +204,11 @@ type PolicyContext struct {
 	PurposeOfUse             string `json:"purpose_of_use"`
 }
 
-type PDPRequest struct {
-	Input PDPInput `json:"input"`
+type APIRequest struct {
+	Input APIInput `json:"input"`
 }
 
-type PDPResponse struct {
+type APIResponse struct {
 	Allow bool `json:"allow"`
 	// Error is an optional field that can be used to provide additional information about why a decision couldn't be made.
 	// This is intended for informational purposes and should not be used to determine the outcome of the decision (i.e. allow/deny).
