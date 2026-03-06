@@ -91,7 +91,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scopes := strings.Split(input.Subject.Scope, " ")
+	scopes := strings.Fields(input.Subject.Scope)
 
 	// deduplicate and normalize policies
 	policySet := make(map[string]struct{})
