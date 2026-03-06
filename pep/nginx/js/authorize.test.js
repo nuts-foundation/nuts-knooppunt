@@ -208,11 +208,11 @@ describe('buildPDPRequest', () => {
             active: true,
             client_id: 'did:nuts:client123',
             scope: 'bgz eoverdracht',
-            subject_id: 'practitioner-456',
-            subject_role: '01.015',
-            subject_organization_id: '00000020',
-            subject_organization: 'Requesting Hospital',
-            subject_facility_type: 'Z3'
+            user_id: 'practitioner-456',
+            user_role: '01.015',
+            organization_ur: '00000020',
+            organization_name: 'Requesting Hospital',
+            organization_facility_type: 'Z3'
         };
         const request = createMockRequest({
             variables: {
@@ -229,11 +229,11 @@ describe('buildPDPRequest', () => {
                     active: true,
                     client_id: 'did:nuts:client123',
                     scope: 'bgz eoverdracht',
-                    subject_id: 'practitioner-456',
-                    subject_role: '01.015',
-                    subject_organization_id: '00000020',
-                    subject_organization: 'Requesting Hospital',
-                    subject_facility_type: 'Z3'
+                    user_id: 'practitioner-456',
+                    user_role: '01.015',
+                    organization_ur: '00000020',
+                    organization_name: 'Requesting Hospital',
+                    organization_facility_type: 'Z3'
                 },
                 request: {
                     method: 'GET',
