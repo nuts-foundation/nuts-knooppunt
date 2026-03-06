@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSubjectProperties_UnmarshalJSON(t *testing.T) {
+func TestAPISubjectProperties_UnmarshalJSON(t *testing.T) {
 	t.Run("unmarshal", func(t *testing.T) {
 		const data = `{"scope": "mcsd_update mscd_query", "organization_ura": "00000666", "other": "value"}`
 		var actual APISubject
