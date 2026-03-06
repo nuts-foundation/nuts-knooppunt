@@ -148,7 +148,7 @@ func NewPolicySubject(apiSubject APISubject) PolicySubject {
 
 	var policySubject PolicySubject
 	policySubject.Client.Id = apiSubject.ClientId
-	policySubject.Client.Scopes = strings.Split(apiSubject.Scope, " ")
+	policySubject.Client.Scopes = strings.Fields(apiSubject.Scope)
 
 	policySubject.User.Id = apiSubject.UserId
 	policySubject.User.Role = apiSubject.UserRole
