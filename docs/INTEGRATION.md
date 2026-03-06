@@ -96,7 +96,8 @@ header:
 X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|<URA>
 ```
 
-Make sure you've configured the `authn.minvws` and `pseudo` properties to allow the Knooppunt to authenticate to the NVI service and pseudonymize BSNs.
+Make sure you've configured the `authn.minvws` and `pseudo` properties to allow the Knooppunt to authenticate to the NVI
+service and pseudonymize BSNs.
 
 ## Consent MITZ
 
@@ -239,10 +240,11 @@ The EHR will need to:
 The Knooppunt will:
 
 - Perform access token request at remote EHRs (Nuts node) for outbound data exchanges.
-  - If user is involved: take the decrypted ID token (Dezi) to include in the access token request
+    - If user is involved: take the decrypted ID token (Dezi) to include in the access token request
 - Validate the organization credentials and end-user credential (Dezi ID token) for inbound data exchanges.
 
-For more information on the Knooppunt's authentication endpoints, see the [Nuts node API reference](https://nuts-node.readthedocs.io/en/stable/pages/integrating/api.html).
+For more information on the Knooppunt's authentication endpoints, see
+the [Nuts node API reference](https://nuts-node.readthedocs.io/en/stable/pages/integrating/api.html).
 
 ### Getting an access token
 
@@ -262,9 +264,9 @@ Content-Type: application/json
 To provide an end-user identity, include the `id_token` field with the decrypted ID token from Dezi.
 If no end-user identity is required, you may omit the `id_token` field.
 
-Note that to successfully negotiate an access token, the local Nuts node must have been loaded with the right credentials.
+Note that to successfully negotiate an access token, the local Nuts node must have been loaded with the right
+credentials.
 Which credentials are required, depends on the use case.
-
 
 ### Verifying access tokens
 
@@ -299,7 +301,12 @@ Example:
   "employee_initials": "J.",
   "employee_surname_prefix": "van der",
   "employee_surname": "Broek",
-  "employee_roles": ["01.041", "30.000", "01.010", "01.011"]
+  "employee_roles": [
+    "01.041",
+    "30.000",
+    "01.010",
+    "01.011"
+  ]
 }
 ```
 
@@ -314,7 +321,7 @@ The PDP is a single endpoint that requires the following input:
 
 - One or more scopes
 - Introspected token data about a subject
-- HTTP request properties
+- the HTTP request
 - Contextual information
 
 The endpoint can be reached on the internal port of Knooppunt.
@@ -330,14 +337,16 @@ following checks per scope:
 - Conformance to a capability statement
 - Conformance to a rego policy
 
-The provided oAuth scopes are used to determine which policy is applied. Knooppunt currently ships with the following
-policies:
+The provided oAuth scopes are used to determine which policy is applied. Knooppunt currently ships with policies such
+as:
 
 - `bgz`
 - `eoverdracht_notification`
 - `mcsd_update`
 - `mcsd_query`
 - `pzp_gf`
+
+A complete list can be found in the policies directory: `/component/pdp/policies`
 
 An example requests looks like this:
 
@@ -375,8 +384,8 @@ To come to a policy decision the PDP might need additional information from a po
 
 Read our [configuration guide](/docs/CONFIGURATION.md) to see the options for configuring this endpoint.
 
-Currently, this method is used to exchange a patientID for a BSN by looking up a patient record. The PIP should be a
-FHIR R4 Rest compatible API.
+Currently, this method is used to exchange a patient ID (e.g. FHIR resource ID) for a BSN by looking up a patient
+record. The PIP should be a FHIR R4 Rest compatible API.
 
 ### Answering _de gesloten vraag_ using the PDP
 
@@ -394,4 +403,5 @@ If you use Nuts authentication you can usually pass the introspected token data 
 
 We also provide a reference implementation of a policy enforcement point based on Nginx. It's available in the `/pep`
 folder in this repository.
+
 
