@@ -24,13 +24,11 @@ func Test_BGZAuthorization(t *testing.T) {
 		pdpJSON := `{
 		  "input": {
 			"subject": {
-			  "properties": {
-				"subject_id": "000095254",
-				"subject_role": "01.015",
-				"subject_organization_id": "00000666",
-				"subject_facility_type": "Z3",
-				"client_qualifications": ["bgz"]
-			  }
+			  "user_id": "000095254",
+			  "user_role": "01.015",
+			  "organization_ura": "00000666",
+			  "organization_facility_type": "Z3",
+			  "scope": "bgz"
 			},
 			"request": {
 			  "method": "GET",
@@ -61,7 +59,7 @@ func Test_BGZAuthorization(t *testing.T) {
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 
-		var pdpResponse pdp.PDPResponse
+		var pdpResponse pdp.APIResponse
 		responseData, _ := io.ReadAll(resp.Body)
 		err = json.NewDecoder(bytes.NewReader(responseData)).Decode(&pdpResponse)
 		require.NoError(t, err)

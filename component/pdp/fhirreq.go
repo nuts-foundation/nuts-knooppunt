@@ -402,7 +402,7 @@ func getSingleParameter(params url.Values, name string) (string, error) {
 	return value, nil
 }
 
-func NewPolicyInput(request PDPRequest) (*PolicyInput, error) {
+func NewPolicyInput(request APIRequest) (*PolicyInput, error) {
 	var policyInput PolicyInput
 
 	// URL decode query parameters
@@ -413,7 +413,8 @@ func NewPolicyInput(request PDPRequest) (*PolicyInput, error) {
 	}
 	decodeHTTPRequest.QueryParams = *decodedQueryParams
 
-	policyInput.Subject = request.Input.Subject
+	policyInput.Subject = NewPolicySubject(request.Input.Subject)
+
 	policyInput.Action.Request = decodeHTTPRequest
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType

@@ -126,13 +126,13 @@ func Test_PEPAuthorization(t *testing.T) {
 	// Verify the introspection contains expected claims (using exact PDP field names from PD)
 	assert.True(t, introspection["active"].(bool), "Token should be active")
 	// From X509Credential
-	assert.NotEmpty(t, introspection["subject_organization_id"], "subject_organization_id claim should be present")
-	assert.NotEmpty(t, introspection["subject_organization"], "subject_organization claim should be present")
+	assert.NotEmpty(t, introspection["organization_ura"], "organization_ura claim should be present")
+	assert.NotEmpty(t, introspection["organization_name"], "organization_name claim should be present")
 	// From NutsEmployeeCredential
-	assert.NotEmpty(t, introspection["subject_id"], "subject_id claim should be present")
-	assert.NotEmpty(t, introspection["subject_role"], "subject_role claim should be present")
+	assert.NotEmpty(t, introspection["user_id"], "user_id claim should be present")
+	assert.NotEmpty(t, introspection["user_role"], "user_role claim should be present")
 	// From HealthcareProviderRoleTypeCredential
-	assert.NotEmpty(t, introspection["subject_facility_type"], "subject_facility_type claim should be present")
+	assert.NotEmpty(t, introspection["organization_facility_type"], "organization_facility_type claim should be present")
 
 	// Verify DPoP token has cnf claim (proof-of-possession binding)
 	assert.NotNil(t, introspection["cnf"], "DPoP token should have cnf claim")
