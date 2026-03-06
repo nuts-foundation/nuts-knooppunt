@@ -102,11 +102,33 @@ type PolicyInput struct {
 	Context  PolicyContext  `json:"context"`
 }
 
+type OtherProps map[string]any
+
 type PolicySubject struct {
+	OtherProps   `json:"-"`
 	Client       PolicySubjectClient       `json:"client"`
 	Organization PolicySubjectOrganization `json:"organization"`
 	User         PolicySubjectUser         `json:"user"`
-	OtherProps   map[string]any            `json:"other_props"`
+}
+
+func (s PolicySubject) MarshalJSON() ([]byte, error) {
+	type Alias PolicySubject
+	tmp := Alias(s)
+	data, err := json.Marshal(tmp)
+	if err != nil {
+		return nil, err
+	}
+	if len(s.OtherProps) == 0 {
+		return data, nil
+	}
+	var baseMap map[string]any
+	if err := json.Unmarshal(data, &baseMap); err != nil {
+		return nil, err
+	}
+	for k, v := range s.OtherProps {
+		baseMap[k] = v
+	}
+	return json.Marshal(baseMap)
 }
 
 type PolicySubjectClient struct {
