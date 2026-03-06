@@ -46,6 +46,7 @@ func (s *APISubject) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	// remove standard properties from OtherProps
+	delete(tmp.OtherProps, "active")
 	delete(tmp.OtherProps, "client_id")
 	delete(tmp.OtherProps, "scope")
 	delete(tmp.OtherProps, "user_id")
