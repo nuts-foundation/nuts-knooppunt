@@ -394,7 +394,7 @@ Some policies like `bgz` will attempt to answer _de Mitz gesloten vraag_.
 For this to work you will need to configure the Mitz module of Knooppunt and integrate a policy information point (see
 above). Otherwise, access will be rejected.
 
-### Integrating the PDP in a Policy Enforcement Point
+### Integrating the PDP with a Policy Enforcement Point
 
 The PDP makes decisions based on the assumption that the requestor has validated the input. Make sure you are not
 passing in any data without verifying its validity.
