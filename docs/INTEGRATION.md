@@ -16,8 +16,10 @@ This document describes how to integrate with the Knooppunt.
 This chapter describes how to integrate with the addressing generic function of the Knooppunt,
 based on the mCSD (Mobile Care Services Discovery) profile. It provides the following:
 
-- Synchronization from remote mCSD Administration Directories to your local mCSD Query Directory, so it can be used to find organizations, endpoints, etc.
-- Optional: an embedded mCSD Administration Directory web application to manage your local mCSD Administration Directory.
+- Synchronization from remote mCSD Administration Directories to your local mCSD Query Directory, so it can be used to
+  find organizations, endpoints, etc.
+- Optional: an embedded mCSD Administration Directory web application to manage your local mCSD Administration
+  Directory.
 
 ### Pre-requisites
 
@@ -28,17 +30,20 @@ You need to provide an mCSD Administration Directory, which is typically:
     - manually, e.g. using the embedded mCSD Admin web application (configure `mcsdadmin.fhirbaseurl`),
     - synchronized from another source in some way.
 
-You also need to provide a FHIR server as mCSD Query Directory, to which mCSD resources are synchronized, e.g. HAPI FHIR.
+You also need to provide a FHIR server as mCSD Query Directory, to which mCSD resources are synchronized, e.g. HAPI
+FHIR.
 
 Then, configure:
 
 - the Root Administration Directory to synchronize from (`mcsd.admin.<key>.fhirbaseurl`),
 - the local Query Directory to synchronize to (`mcsd.query.fhirbaseurl`), and
-- (optional) directories to exclude from synchronization (`mcsd.adminexclude`), which is useful to prevent self-referencing loops when your own query directory appears as a discovered Endpoint.
+- (optional) directories to exclude from synchronization (`mcsd.adminexclude`), which is useful to prevent
+  self-referencing loops when your own query directory appears as a discovered Endpoint.
 
 ### Triggering synchronization
 
-To synchronize remote mCSD Directories to your local query directory, use the following endpoint to trigger a synchronization:
+To synchronize remote mCSD Directories to your local query directory, use the following endpoint to trigger a
+synchronization:
 
 ```http
 POST http://localhost:8081/mcsd/update
@@ -64,7 +69,8 @@ It will return a JSON report of the update per mCSD Administration Directory tha
 
 ### Using the mCSD Administration Application
 
-The Knooppunt contains a web-application to manually manage the mCSD Administration Directory entries (e.g. create organizations and endpoints).
+The Knooppunt contains a web-application to manually manage the mCSD Administration Directory entries (e.g. create
+organizations and endpoints).
 
 You can find the mCSD Admin application at:
 
@@ -83,13 +89,15 @@ You can create or search for DocumentReference resources using the following end
     - [POST http://localhost:8081/nvi/DocumentReference/_search](http://localhost:8081/nvi/DocumentReference/_search)
     - [GET http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
 
-These endpoints need the URA of the requesting care organization. You provide this URA using the `X-Tenant-ID` HTTP header:
+These endpoints need the URA of the requesting care organization. You provide this URA using the `X-Tenant-ID` HTTP
+header:
 
 ```http
 X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|<URA>
 ```
 
-Make sure you've configured the `authn.minvws` and `pseudo` properties to allow the Knooppunt to authenticate to the NVI service and pseudonymize BSNs.
+Make sure you've configured the `authn.minvws` and `pseudo` properties to allow the Knooppunt to authenticate to the NVI
+service and pseudonymize BSNs.
 
 ## Consent MITZ
 
@@ -203,13 +211,15 @@ mitz:
 2. **Configured endpoint**: If no endpoint is provided in the request, the configured `notify_endpoint` is used
 3. **Missing endpoint**: If neither is provided, a warning is logged and the subscription may fail at MITZ
 
-**Recommendation**: Always configure `notify_endpoint` to ensure subscriptions work without requiring clients to specify endpoints.
+**Recommendation**: Always configure `notify_endpoint` to ensure subscriptions work without requiring clients to specify
+endpoints.
 
 ### Subscription Behavior
 
 1. **Validation**: Knooppunt validates the subscription meets MITZ requirements
 2. **Extension Addition**: Automatically adds gateway and source system OIDs
-3. **Endpoint Setting**: Uses configured `notify_endpoint` if no endpoint provided in request (see [Notification Endpoint Configuration](#notification-endpoint-configuration))
+3. **Endpoint Setting**: Uses configured `notify_endpoint` if no endpoint provided in request (
+   see [Notification Endpoint Configuration](#notification-endpoint-configuration))
 4. **Forwarding**: Sends subscription to MITZ with mTLS authentication
 5. **Response**: Returns created subscription with ID
 
@@ -230,10 +240,11 @@ The EHR will need to:
 The Knooppunt will:
 
 - Perform access token request at remote EHRs (Nuts node) for outbound data exchanges.
-  - If user is involved: take the decrypted ID token (Dezi) to include in the access token request
+    - If user is involved: take the decrypted ID token (Dezi) to include in the access token request
 - Validate the organization credentials and end-user credential (Dezi ID token) for inbound data exchanges.
 
-For more information on the Knooppunt's authentication endpoints, see the [Nuts node API reference](https://nuts-node.readthedocs.io/en/stable/pages/integrating/api.html).
+For more information on the Knooppunt's authentication endpoints, see
+the [Nuts node API reference](https://nuts-node.readthedocs.io/en/stable/pages/integrating/api.html).
 
 ### Getting an access token
 
@@ -253,9 +264,9 @@ Content-Type: application/json
 To provide an end-user identity, include the `id_token` field with the decrypted ID token from Dezi.
 If no end-user identity is required, you may omit the `id_token` field.
 
-Note that to successfully negotiate an access token, the local Nuts node must have been loaded with the right credentials.
+Note that to successfully negotiate an access token, the local Nuts node must have been loaded with the right
+credentials.
 Which credentials are required, depends on the use case.
-
 
 ### Verifying access tokens
 
@@ -290,8 +301,107 @@ Example:
   "employee_initials": "J.",
   "employee_surname_prefix": "van der",
   "employee_surname": "Broek",
-  "employee_roles": ["01.041", "30.000", "01.010", "01.011"]
+  "employee_roles": [
+    "01.041",
+    "30.000",
+    "01.010",
+    "01.011"
+  ]
 }
 ```
 
 Note that the returned fields depend on the Nuts Access Policy that was loaded in the Knooppunt.
+
+## Authorization
+
+This chapter describes how to use the Knooppunt to support in making authorization decisions using its policy decision
+point.
+
+The PDP is a single endpoint that requires the following input:
+
+- One or more scopes
+- Introspected token data about a subject
+- the HTTP request
+- Contextual information
+
+The endpoint can be reached on the internal port of Knooppunt.
+
+````http request
+POST http://someaddress:8081/pdp/v1/data/knooppunt/authz
+Content-Type: application/json
+````
+
+The PDP will check the request against a set of policies associated with the provided scopes. It will perform the
+following checks per scope:
+
+- Conformance to a capability statement
+- Conformance to a rego policy
+
+The provided oAuth scopes are used to determine which policy is applied. Knooppunt currently ships with policies such
+as:
+
+- `bgz`
+- `eoverdracht_notification`
+- `mcsd_update`
+- `mcsd_query`
+- `pzp_gf`
+
+A complete list can be found in the policies directory: `/component/pdp/policies`
+
+An example requests looks like this:
+
+```json
+{
+  "input": {
+    "subject": {
+      "user_id": "000095254",
+      "user_role": "01.015",
+      "organization_ura": "00000666",
+      "organization_facility_type": "Z3",
+      "scope": "bgz"
+    },
+    "request": {
+      "method": "GET",
+      "protocol": "HTTP/1.0",
+      "path": "/Patient?_include=Patient:general-practitioner"
+    },
+    "context": {
+      "data_holder_organization_id": "00000659",
+      "data_holder_facility_type": "Z3",
+      "connection_type_code": "hl7-fhir-rest"
+    }
+  }
+}
+```
+
+The file [pdp.http](/docs/test-scripts/pdp.http) in the repository contains additional examples.
+
+[The type declaration](/component/pdp/shared.go) `PDPInput` lists the full range of supported options.
+
+### Policy Information Points
+
+To come to a policy decision the PDP might need additional information from a policy information point (PIP).
+
+Read our [configuration guide](/docs/CONFIGURATION.md) to see the options for configuring this endpoint.
+
+Currently, this method is used to exchange a patient ID (e.g. FHIR resource ID) for a BSN by looking up a patient
+record. The PIP should be a FHIR R4 Rest compatible API.
+
+### Answering _de gesloten vraag_ using the PDP
+
+Some policies like `bgz` will attempt to answer _de Mitz gesloten vraag_.
+
+For this to work you will need to configure the Mitz module of Knooppunt and integrate a policy information point (see
+above). Otherwise, access will be rejected.
+
+### Integrating the PDP with a Policy Enforcement Point
+
+The PDP makes decisions based on the assumption that the requestor has validated the input. Make sure you are not
+passing in any data without verifying its validity.
+
+If you use Nuts authentication you can pass the introspected token data directly as the subject.
+
+We also provide a reference implementation of a policy enforcement point based on Nginx. It's available in the `/pep`
+folder in this repository.
+
+
