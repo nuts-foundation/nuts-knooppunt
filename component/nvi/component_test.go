@@ -232,7 +232,7 @@ func TestComponent_handleSearch(t *testing.T) {
 			searchParams:    "source:identifier=http%3A%2F%2Fexample.org%2Fdevice-identifiers%7CEHR-SYS-2024-001",
 			expectedStatus:  http.StatusOK,
 			expectedEntries: 1,
-			expectedSearch:  "List?source.identifier=http%3A%2F%2Fexample.org%2Fdevice-identifiers%7CEHR-SYS-2024-001",
+			expectedSearch:  "List?source%3Aidentifier=http%3A%2F%2Fexample.org%2Fdevice-identifiers%7CEHR-SYS-2024-001",
 		},
 		{
 			name:           "NVI returns next page",
