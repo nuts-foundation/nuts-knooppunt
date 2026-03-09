@@ -399,7 +399,7 @@ above). Otherwise, access will be rejected.
 The PDP makes decisions based on the assumption that the requestor has validated the input. Make sure you are not
 passing in any data without verifying its validity.
 
-If you use Nuts authentication you can usually pass the introspected token data directly as the subject.
+If you use Nuts authentication you can pass the introspected token data directly as the subject.
 
 We also provide a reference implementation of a policy enforcement point based on Nginx. It's available in the `/pep`
 folder in this repository.
