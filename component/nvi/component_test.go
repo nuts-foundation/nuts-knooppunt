@@ -219,14 +219,6 @@ func TestComponent_handleSearch(t *testing.T) {
 			},
 		},
 		{
-			name:            "searches with patient.identifier",
-			nviResources:    []any{listResource},
-			searchParams:    "patient.identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value),
-			expectedStatus:  http.StatusOK,
-			expectedEntries: 1,
-			expectedSearch:  "List?patient.identifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn-transport-token%7Cabcdefghi",
-		},
-		{
 			name:            "searches with subject:identifier",
 			nviResources:    []any{listResource},
 			searchParams:    "subject:identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value),
@@ -235,17 +227,9 @@ func TestComponent_handleSearch(t *testing.T) {
 			expectedSearch:  "List?subject%3Aidentifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn-transport-token%7Cabcdefghi",
 		},
 		{
-			name:            "searches with subject.identifier",
-			nviResources:    []any{listResource},
-			searchParams:    "subject.identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value),
-			expectedStatus:  http.StatusOK,
-			expectedEntries: 1,
-			expectedSearch:  "List?subject.identifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn-transport-token%7Cabcdefghi",
-		},
-		{
 			name:            "searches with source.identifier",
 			nviResources:    []any{listResource},
-			searchParams:    "source.identifier=http%3A%2F%2Fexample.org%2Fdevice-identifiers%7CEHR-SYS-2024-001",
+			searchParams:    "source:identifier=http%3A%2F%2Fexample.org%2Fdevice-identifiers%7CEHR-SYS-2024-001",
 			expectedStatus:  http.StatusOK,
 			expectedEntries: 1,
 			expectedSearch:  "List?source.identifier=http%3A%2F%2Fexample.org%2Fdevice-identifiers%7CEHR-SYS-2024-001",

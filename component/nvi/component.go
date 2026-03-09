@@ -164,15 +164,15 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 	// Require at least one patient/subject/source identifier to prevent querying by empty values
 	hasIdentifier := false
 	for key := range fhirRequest.Parameters {
-		if key == "patient:identifier" || key == "patient.identifier" ||
-			key == "subject:identifier" || key == "subject.identifier" ||
-			key == "source.identifier" {
+		if key == "patient:identifier" ||
+			key == "subject:identifier" ||
+			key == "source:identifier" {
 			hasIdentifier = true
 			break
 		}
 	}
 	if !hasIdentifier {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, fhirapi.BadRequestError("at least one of patient:identifier, patient.identifier, subject:identifier, subject.identifier, or source.identifier is required", nil))
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, fhirapi.BadRequestError("at least one of patient:identifier, subject:identifier or source:identifier is required", nil))
 		return
 	}
 
@@ -181,9 +181,7 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 	for key, values := range fhirRequest.Parameters {
 		newValues := append([]string{}, values...)
 		if key == "patient:identifier" ||
-			key == "patient.identifier" ||
 			key == "subject:identifier" ||
-			key == "subject.identifier" ||
 			strings.HasPrefix(key, coding.BSNNamingSystem) {
 			for i, value := range values {
 				newValue, err := c.tokenizeFHIRSearchToken(httpRequest.Context(), value, *requesterURA.Value, c.audience)
