@@ -80,20 +80,22 @@ func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *
 }
 
 func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
-	var reqBody PDPRequest
+	var reqBody APIRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	input := reqBody.Input
 	if err != nil {
-		writeResponseWithCode(r.Context(), w, PDPResponse{
+		writeResponseWithCode(r.Context(), w, APIResponse{
 			Error:    "unable to parse request body: " + err.Error(),
 			Policies: map[string]PolicyResult{},
 		}, http.StatusBadRequest)
 		return
 	}
 
+	scopes := strings.Fields(input.Subject.Scope)
+
 	// deduplicate and normalize policies
 	policySet := make(map[string]struct{})
-	for _, policyName := range input.Subject.Properties.ClientQualifications {
+	for _, policyName := range scopes {
 		// OPA doesn't support dashes in package and rule names, so we replace them with underscores.
 		policyName = strings.ReplaceAll(policyName, "-", "_")
 		policySet[policyName] = struct{}{}
@@ -103,14 +105,14 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 
 	// Step 1: Providing a policy is required for every PDP request. We can short-circuit here, no need to process the request.
 	if len(policyNames) == 0 {
-		writeResponse(r.Context(), w, PDPResponse{
+		writeResponse(r.Context(), w, APIResponse{
 			Error:    "missing required value, no policy defined",
 			Policies: map[string]PolicyResult{},
 		})
 		return
 	}
 
-	response := PDPResponse{
+	response := APIResponse{
 		Policies: make(map[string]PolicyResult),
 	}
 
@@ -118,7 +120,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	policyInputTemplate, err := NewPolicyInput(reqBody)
 	if err != nil {
 		// Invalid request
-		writeResponse(r.Context(), w, PDPResponse{
+		writeResponse(r.Context(), w, APIResponse{
 			Error: "invalid request: " + err.Error(),
 		})
 		return
@@ -209,7 +211,7 @@ func writeResponseWithCode(ctx context.Context, w http.ResponseWriter, response 
 	}
 }
 
-func writeResponse(ctx context.Context, w http.ResponseWriter, result PDPResponse) {
+func writeResponse(ctx context.Context, w http.ResponseWriter, result APIResponse) {
 	writeResponseWithCode(ctx, w, result, http.StatusOK)
 }
 

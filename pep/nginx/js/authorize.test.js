@@ -9,10 +9,8 @@ import {jest} from '@jest/globals';
 const {
     extractBearerToken,
     getTokenType,
-    parseScopes,
     parseQueryParams,
     normalizeClaimValue,
-    extractPDClaims,
     buildPDPRequest,
     validateDPoP
 } = authorize;
@@ -153,164 +151,6 @@ describe('normalizeClaimValue', () => {
     });
 });
 
-describe('extractPDClaims', () => {
-    test('extracts non-standard claims from introspection', () => {
-        const introspection = {
-            active: true,
-            client_id: 'did:nuts:123',
-            scope: 'bgz',
-            iss: 'https://auth.example.com',
-            subject_id: 'practitioner-456',
-            subject_role: 'doctor',
-            custom_claim: 'custom_value'
-        };
-
-        const claims = extractPDClaims(introspection);
-
-        // Should include PD-defined claims
-        expect(claims.subject_id).toBe('practitioner-456');
-        expect(claims.subject_role).toBe('doctor');
-        expect(claims.custom_claim).toBe('custom_value');
-
-        // Should exclude standard OAuth/JWT claims
-        expect(claims.active).toBeUndefined();
-        expect(claims.client_id).toBeUndefined();
-        expect(claims.scope).toBeUndefined();
-        expect(claims.iss).toBeUndefined();
-    });
-
-    test('preserves primitive types from introspection', () => {
-        const introspection = {
-            active: true,
-            numeric_claim: 12345,
-            boolean_claim: false,
-            string_claim: 'hello',
-            array_claim: ['a', 'b', 'c']
-        };
-
-        const claims = extractPDClaims(introspection);
-
-        expect(claims.numeric_claim).toBe(12345);
-        expect(claims.boolean_claim).toBe(false);
-        expect(claims.string_claim).toBe('hello');
-        expect(claims.array_claim).toEqual(['a', 'b', 'c']);
-        expect(Array.isArray(claims.array_claim)).toBe(true);
-    });
-
-    test('handles null and undefined values', () => {
-        const introspection = {
-            active: true,
-            null_claim: null,
-            undefined_claim: undefined
-        };
-
-        const claims = extractPDClaims(introspection);
-
-        expect(claims.null_claim).toBe('');
-        expect(claims.undefined_claim).toBe('');
-    });
-
-    test('returns empty object when only standard claims present', () => {
-        const introspection = {
-            active: true,
-            client_id: 'test',
-            scope: 'bgz',
-            iss: 'issuer',
-            iat: 1234567890,
-            exp: 1234567890
-        };
-
-        const claims = extractPDClaims(introspection);
-
-        expect(Object.keys(claims)).toHaveLength(0);
-    });
-
-    test('handles null input gracefully', () => {
-        expect(extractPDClaims(null)).toEqual({});
-    });
-
-    test('handles undefined input gracefully', () => {
-        expect(extractPDClaims(undefined)).toEqual({});
-    });
-
-    test('handles non-object input gracefully', () => {
-        expect(extractPDClaims('string')).toEqual({});
-        expect(extractPDClaims(123)).toEqual({});
-    });
-
-    test('converts object claims to JSON strings', () => {
-        const introspection = {
-            active: true,
-            complex_claim: {nested: 'value', arr: [1, 2]}
-        };
-
-        const claims = extractPDClaims(introspection);
-
-        expect(claims.complex_claim).toBe('{"nested":"value","arr":[1,2]}');
-    });
-
-    test('preserves array claims as arrays', () => {
-        const introspection = {
-            active: true,
-            roles: ['doctor', 'nurse'],
-            permissions: ['read', 'write', 'delete']
-        };
-
-        const claims = extractPDClaims(introspection);
-
-        expect(claims.roles).toEqual(['doctor', 'nurse']);
-        expect(Array.isArray(claims.roles)).toBe(true);
-        expect(claims.permissions).toEqual(['read', 'write', 'delete']);
-    });
-
-    test('filters additional OIDC standard claims', () => {
-        const introspection = {
-            active: true,
-            azp: 'authorized-party',
-            nonce: 'random-nonce',
-            auth_time: 1234567890,
-            sid: 'session-id',
-            at_hash: 'hash',
-            custom_claim: 'should-be-included'
-        };
-
-        const claims = extractPDClaims(introspection);
-
-        // OIDC standard claims should be filtered
-        expect(claims.azp).toBeUndefined();
-        expect(claims.nonce).toBeUndefined();
-        expect(claims.auth_time).toBeUndefined();
-        expect(claims.sid).toBeUndefined();
-        expect(claims.at_hash).toBeUndefined();
-
-        // Custom claims should be included
-        expect(claims.custom_claim).toBe('should-be-included');
-    });
-});
-
-describe('parseScopes', () => {
-    test('parses space-separated scopes', () => {
-        expect(parseScopes('bgz eoverdracht')).toEqual(['bgz', 'eoverdracht']);
-    });
-
-    test('handles single scope', () => {
-        expect(parseScopes('bgz')).toEqual(['bgz']);
-    });
-
-    test('handles empty string', () => {
-        expect(parseScopes('')).toEqual([]);
-    });
-
-    test('handles null/undefined', () => {
-        expect(parseScopes(null)).toEqual([]);
-        expect(parseScopes(undefined)).toEqual([]);
-    });
-
-    test('filters out empty segments', () => {
-        expect(parseScopes('bgz  eoverdracht')).toEqual(['bgz', 'eoverdracht']);
-    });
-});
-
 describe('parseQueryParams', () => {
     test('parses simple query params', () => {
         expect(parseQueryParams('_id=123&status=active')).toEqual({
@@ -368,11 +208,11 @@ describe('buildPDPRequest', () => {
             active: true,
             client_id: 'did:nuts:client123',
             scope: 'bgz eoverdracht',
-            subject_id: 'practitioner-456',
-            subject_role: '01.015',
-            subject_organization_id: '00000020',
-            subject_organization: 'Requesting Hospital',
-            subject_facility_type: 'Z3'
+            user_id: 'practitioner-456',
+            user_role: '01.015',
+            organization_ur: '00000020',
+            organization_name: 'Requesting Hospital',
+            organization_facility_type: 'Z3'
         };
         const request = createMockRequest({
             variables: {
@@ -386,17 +226,14 @@ describe('buildPDPRequest', () => {
         expect(result).toEqual({
             input: {
                 subject: {
-                    type: 'organization',
-                    id: 'did:nuts:client123',
-                    properties: {
-                        client_id: 'did:nuts:client123',
-                        client_qualifications: ['bgz', 'eoverdracht'],
-                        subject_id: 'practitioner-456',
-                        subject_role: '01.015',
-                        subject_organization_id: '00000020',
-                        subject_organization: 'Requesting Hospital',
-                        subject_facility_type: 'Z3'
-                    }
+                    active: true,
+                    client_id: 'did:nuts:client123',
+                    scope: 'bgz eoverdracht',
+                    user_id: 'practitioner-456',
+                    user_role: '01.015',
+                    organization_ur: '00000020',
+                    organization_name: 'Requesting Hospital',
+                    organization_facility_type: 'Z3'
                 },
                 request: {
                     method: 'GET',
@@ -416,26 +253,6 @@ describe('buildPDPRequest', () => {
                 }
             }
         });
-    });
-
-    test('handles missing optional introspection fields', () => {
-        const introspection = {
-            active: true
-        };
-        const request = createMockRequest({
-            variables: {
-                request_uri: '/fhir/Observation',
-                request_method: 'POST'
-            }
-        });
-
-        const result = buildPDPRequest(introspection, request);
-
-        expect(result.input.subject.id).toBe('');
-        expect(result.input.subject.properties.client_id).toBe('');
-        expect(result.input.subject.properties.client_qualifications).toEqual([]);
-        // PD claims not in introspection are simply not included (no empty strings)
-        expect(result.input.subject.properties.subject_id).toBeUndefined();
     });
 
     test('uses request.uri as fallback', () => {

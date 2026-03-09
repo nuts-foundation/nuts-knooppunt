@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/mitchellh/copystructure"
@@ -13,34 +14,29 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-type PDPInput struct {
-	Subject Subject     `json:"subject"`
+type APIInput struct {
+	Subject APISubject  `json:"subject"`
 	Request HTTPRequest `json:"request"`
-	Context PDPContext  `json:"context"`
+	Context APIContext  `json:"context"`
 }
 
-type Subject struct {
-	Type       string            `json:"type"`
-	Id         string            `json:"id"`
-	Properties SubjectProperties `json:"properties"`
+type APISubject struct {
+	OtherProps               map[string]any `json:"-"`
+	Active                   bool           `json:"active"`
+	ClientId                 string         `json:"client_id"`
+	Scope                    string         `json:"scope"`
+	UserId                   string         `json:"user_id"`
+	UserRole                 string         `json:"user_role"`
+	OrganizationUra          string         `json:"organization_ura"`
+	OrganizationName         string         `json:"organization_name"`
+	OrganizationFacilityType string         `json:"organization_facility_type"`
 }
 
-var _ json.Unmarshaler = (*SubjectProperties)(nil)
-var _ json.Marshaler = (*SubjectProperties)(nil)
+var _ json.Unmarshaler = (*APISubject)(nil)
+var _ json.Marshaler = (*APISubject)(nil)
 
-type SubjectProperties struct {
-	OtherProps            map[string]any `json:"-"`
-	ClientId              string         `json:"client_id"`
-	ClientQualifications  []string       `json:"client_qualifications"`
-	SubjectId             string         `json:"subject_id"`
-	SubjectOrganizationId string         `json:"subject_organization_id"`
-	SubjectOrganization   string         `json:"subject_organization"`
-	SubjectFacilityType   string         `json:"subject_facility_type"`
-	SubjectRole           string         `json:"subject_role"`
-}
-
-func (s *SubjectProperties) UnmarshalJSON(data []byte) error {
-	type Alias SubjectProperties
+func (s *APISubject) UnmarshalJSON(data []byte) error {
+	type Alias APISubject
 	var tmp Alias
 	if err := json.Unmarshal(data, &tmp); err != nil {
 		return err
@@ -50,19 +46,20 @@ func (s *SubjectProperties) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	// remove standard properties from OtherProps
+	delete(tmp.OtherProps, "active")
 	delete(tmp.OtherProps, "client_id")
-	delete(tmp.OtherProps, "client_qualifications")
-	delete(tmp.OtherProps, "subject_id")
-	delete(tmp.OtherProps, "subject_organization_id")
-	delete(tmp.OtherProps, "subject_organization")
-	delete(tmp.OtherProps, "subject_facility_type")
-	delete(tmp.OtherProps, "subject_role")
-	*s = SubjectProperties(tmp)
+	delete(tmp.OtherProps, "scope")
+	delete(tmp.OtherProps, "user_id")
+	delete(tmp.OtherProps, "user_role")
+	delete(tmp.OtherProps, "organization_ura")
+	delete(tmp.OtherProps, "organization_name")
+	delete(tmp.OtherProps, "organization_facility_type")
+	*s = APISubject(tmp)
 	return nil
 }
 
-func (s SubjectProperties) MarshalJSON() ([]byte, error) {
-	type Alias SubjectProperties
+func (s APISubject) MarshalJSON() ([]byte, error) {
+	type Alias APISubject
 	tmp := Alias(s)
 	data, err := json.Marshal(tmp)
 	if err != nil {
@@ -81,8 +78,6 @@ func (s SubjectProperties) MarshalJSON() ([]byte, error) {
 	return json.Marshal(baseMap)
 }
 
-type OtherSubjectProperties map[string]any
-
 type HTTPRequest struct {
 	Method      string      `json:"method"`
 	Protocol    string      `json:"protocol"` // "HTTP/1.0"
@@ -92,7 +87,7 @@ type HTTPRequest struct {
 	Body        string      `json:"body"`
 }
 
-type PDPContext struct {
+type APIContext struct {
 	ConnectionTypeCode       string `json:"connection_type_code"`
 	DataHolderFacilityType   string `json:"data_holder_facility_type"`
 	DataHolderOrganizationId string `json:"data_holder_organization_id"`
@@ -100,10 +95,71 @@ type PDPContext struct {
 }
 
 type PolicyInput struct {
-	Subject  Subject        `json:"subject"`
+	Subject  PolicySubject  `json:"subject"`
 	Resource PolicyResource `json:"resource"`
 	Action   PolicyAction   `json:"action"`
 	Context  PolicyContext  `json:"context"`
+}
+
+type OtherProps map[string]any
+
+type PolicySubject struct {
+	OtherProps   `json:"-"`
+	Client       PolicySubjectClient       `json:"client"`
+	Organization PolicySubjectOrganization `json:"organization"`
+	User         PolicySubjectUser         `json:"user"`
+}
+
+func (s PolicySubject) MarshalJSON() ([]byte, error) {
+	type Alias PolicySubject
+	tmp := Alias(s)
+	data, err := json.Marshal(tmp)
+	if err != nil {
+		return nil, err
+	}
+	if len(s.OtherProps) == 0 {
+		return data, nil
+	}
+	var baseMap map[string]any
+	if err := json.Unmarshal(data, &baseMap); err != nil {
+		return nil, err
+	}
+	for k, v := range s.OtherProps {
+		baseMap[k] = v
+	}
+	return json.Marshal(baseMap)
+}
+
+type PolicySubjectClient struct {
+	Id     string   `json:"id"`
+	Scopes []string `json:"scopes"`
+}
+type PolicySubjectOrganization struct {
+	Ura          string `json:"ura"`
+	Name         string `json:"name"`
+	FacilityType string `json:"facility_type"`
+}
+type PolicySubjectUser struct {
+	Id   string `json:"id"`
+	Role string `json:"role"`
+}
+
+func NewPolicySubject(apiSubject APISubject) PolicySubject {
+
+	var policySubject PolicySubject
+	policySubject.Client.Id = apiSubject.ClientId
+	policySubject.Client.Scopes = strings.Fields(apiSubject.Scope)
+
+	policySubject.User.Id = apiSubject.UserId
+	policySubject.User.Role = apiSubject.UserRole
+
+	policySubject.Organization.Ura = apiSubject.OrganizationUra
+	policySubject.Organization.Name = apiSubject.OrganizationName
+	policySubject.Organization.FacilityType = apiSubject.OrganizationFacilityType
+
+	policySubject.OtherProps = apiSubject.OtherProps
+
+	return policySubject
 }
 
 func (p PolicyInput) Copy() PolicyInput {
@@ -149,11 +205,11 @@ type PolicyContext struct {
 	PurposeOfUse             string `json:"purpose_of_use"`
 }
 
-type PDPRequest struct {
-	Input PDPInput `json:"input"`
+type APIRequest struct {
+	Input APIInput `json:"input"`
 }
 
-type PDPResponse struct {
+type APIResponse struct {
 	Allow bool `json:"allow"`
 	// Error is an optional field that can be used to provide additional information about why a decision couldn't be made.
 	// This is intended for informational purposes and should not be used to determine the outcome of the decision (i.e. allow/deny).
