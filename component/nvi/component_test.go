@@ -197,7 +197,7 @@ func TestComponent_handleSearch(t *testing.T) {
 					{
 						Severity:    fhir.IssueSeverityError,
 						Code:        fhir.IssueTypeInvalid,
-						Diagnostics: to.Ptr("at least one of patient:identifier, patient.identifier, subject:identifier, subject.identifier, or source.identifier is required"),
+						Diagnostics: to.Ptr("at least one of patient:identifier, subject:identifier or source:identifier is required"),
 					},
 				},
 			},
@@ -213,7 +213,7 @@ func TestComponent_handleSearch(t *testing.T) {
 					{
 						Severity:    fhir.IssueSeverityError,
 						Code:        fhir.IssueTypeInvalid,
-						Diagnostics: to.Ptr("at least one of patient:identifier, patient.identifier, subject:identifier, subject.identifier, or source.identifier is required"),
+						Diagnostics: to.Ptr("at least one of patient:identifier, subject:identifier or source:identifier is required"),
 					},
 				},
 			},
