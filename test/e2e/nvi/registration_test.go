@@ -95,28 +95,28 @@ func Test_Registration(t *testing.T) {
 	err = nviGatewayClient.CreateWithContext(t.Context(), newRegistrationBundle(t), &result2, fhirclient.AtPath("/"), requestHeaders)
 	require.NoError(t, err)
 
-	t.Run("search by patient.identifier", func(t *testing.T) {
+	t.Run("search by patient:identifier", func(t *testing.T) {
 		var searchSet fhir.Bundle
 		err := nviGatewayClient.Search("List", url.Values{
-			"patient.identifier": []string{bsnSystem + "|" + bsnValue},
+			"patient:identifier": []string{bsnSystem + "|" + bsnValue},
 		}, &searchSet, requestHeaders)
 		require.NoError(t, err)
 		require.Len(t, searchSet.Entry, 2)
 	})
 
-	t.Run("search by subject.identifier", func(t *testing.T) {
+	t.Run("search by subject:identifier", func(t *testing.T) {
 		var searchSet fhir.Bundle
 		err := nviGatewayClient.Search("List", url.Values{
-			"subject.identifier": []string{bsnSystem + "|" + bsnValue},
+			"subject:identifier": []string{bsnSystem + "|" + bsnValue},
 		}, &searchSet, requestHeaders)
 		require.NoError(t, err)
 		require.Len(t, searchSet.Entry, 2)
 	})
 
-	t.Run("search by source.identifier", func(t *testing.T) {
+	t.Run("search by source:identifier", func(t *testing.T) {
 		var searchSet fhir.Bundle
 		err := nviGatewayClient.Search("List", url.Values{
-			"source.identifier": []string{sourceIdentSystem + "|" + sourceIdentValue},
+			"source:identifier": []string{sourceIdentSystem + "|" + sourceIdentValue},
 		}, &searchSet, requestHeaders)
 		require.NoError(t, err)
 		require.Len(t, searchSet.Entry, 2)
