@@ -17,7 +17,7 @@ func TestIntegration(t *testing.T) {
 	const (
 		tokenEndpoint = "https://oauth.proeftuin.gf.irealisatie.nl/oauth/token"
 		prsBaseURL    = "https://pseudoniemendienst.proeftuin.gf.irealisatie.nl"
-		ura           = "90000311" // adjust this to your own
+		ura           = "90000308" // adjust this to your own
 		uraNVI        = "90000901"
 		certFile      = "../authn/cert.pem"
 		keyFile       = "../authn/cert-key.pem"

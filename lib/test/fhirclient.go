@@ -282,7 +282,7 @@ func (s *StubFHIRClient) SearchWithContext(ctx context.Context, resourceType str
 			filterCandidates(func(candidate BaseResource) bool {
 				return candidate.asMap()["status"] == value
 			})
-		case "patient:identifier":
+		case "patient:identifier", "subject:identifier":
 			filterCandidates(func(candidate BaseResource) bool {
 				subject, ok := candidate.asMap()["subject"].(map[string]any)
 				if !ok {
@@ -296,6 +296,8 @@ func (s *StubFHIRClient) SearchWithContext(ctx context.Context, resourceType str
 				return (token[0] == "" || identifier["system"].(string) == token[0]) &&
 					(token[1] == "" || identifier["value"].(string) == token[1])
 			})
+		case "source:identifier":
+			// Pass-through: no filtering in stub, NVI handles this query
 		default:
 			return fmt.Errorf("unsupported query parameter: %s", name)
 		}
