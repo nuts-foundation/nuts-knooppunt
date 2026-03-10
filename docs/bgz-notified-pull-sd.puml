@@ -1,0 +1,97 @@
+@startuml
+
+title BgZ Verwijzing: Notified Pull
+
+box "Sending XIS (Verwijzende partij)"
+    actor User as "Clinician"
+    participant ehr_s as "EHR\n[ FHIR Server ]"
+    participant kp_s as "Knooppunt\n[ PEP / OAuth ]"
+end box
+
+box "Addressing (mCSD)"
+    participant mcsd as "mCSD Directory\n[ Knooppunt ]"
+end box
+
+box "Receiving XIS (Ontvangende partij)"
+    participant kp_r as "Knooppunt\n[ PEP / OAuth ]"
+    participant ehr_r as "EHR\n[ FHIR Client ]"
+end box
+
+== Step 1: Create BgZ Workflow Task at sending party (optional) ==
+
+User -> ehr_s : Initiate BgZ referral
+
+activate ehr_s
+
+ehr_s -> kp_s : [FHIR STU3] POST /Task\nProfile: BgZ-verwijzing-Task\nstatus=requested, intent=proposal\ncode=3457005 "verwijzen van patiënt"\ninput=[FHIR query parameters per BgZ dataset]
+activate kp_s
+    kp_s --> ehr_s : 201 Created\n(Task/{workflow-task-id})
+deactivate kp_s
+
+== Step 2: Locate notification endpoint of receiving party ==
+
+ehr_s -> mcsd : [FHIR R4] GET /Organization?identifier=URA|{ura}&_include=Organization:endpoint
+activate mcsd
+    mcsd --> ehr_s : 200 OK\n(Organization + Endpoints)
+deactivate mcsd
+
+ehr_s -> ehr_s : Select endpoint\nwith type=Twiin-TA-notification
+
+== Step 3: Send Notified Pull task to receiving party ==
+
+note over ehr_s, kp_r
+  Notification Task (pull-notification) contains:
+  - code=pull-notification
+  - requester.onBehalfOf = sending org URA
+  - owner = receiving org URA
+  - basedOn = Task/{workflow-task-id}  (if workflow task was created)
+  - input[authorization-base] = OAuth authorization base URL
+  - input[get-workflow-task] = true
+  - input[FHIR queries] = BgZ dataset queries  (if no workflow task)
+end note
+
+ehr_s -> kp_r : [FHIR STU3] POST {notification-endpoint}/Task\ncode: pull-notification
+activate kp_r
+    kp_r --> ehr_s : 201 Created\n(Task/{notification-task-id})
+deactivate kp_r
+
+deactivate ehr_s
+
+== Step 4: Receiving party pulls BgZ Workflow Task ==
+
+ehr_r -> kp_r : Get access token for sending party\n[OAuth2] client_credentials / JWT grant
+activate kp_r
+    kp_r --> ehr_r : 200 OK\n(access_token, scope=bgz-sender)
+deactivate kp_r
+
+ehr_r -> ehr_r : Read notification Task;\nextract basedOn = Task/{workflow-task-id}\nand authorization-base
+
+ehr_r -> kp_s : [FHIR STU3] GET /Task/{workflow-task-id}\nAuthorization: Bearer {access_token}
+activate kp_s
+    kp_s -> kp_s : Validate access token\nEvaluate policy (PDP)
+    kp_s -> ehr_s : [FHIR STU3] GET /Task/{workflow-task-id}
+    activate ehr_s
+        ehr_s --> kp_s : 200 OK\n(Task with BgZ FHIR query inputs)
+    deactivate ehr_s
+    kp_s --> ehr_r : 200 OK\n(Task)
+deactivate kp_s
+
+== Step 5: Receiving party pulls BgZ dataset ==
+
+ehr_r -> ehr_r : Extract FHIR query parameters\nfrom Task.input (BgZ dataset queries)
+
+loop For each BgZ FHIR query in Task.input
+    ehr_r -> kp_s : [FHIR STU3] GET /{resource}?{query}\nAuthorization: Bearer {access_token}
+    activate kp_s
+        kp_s -> kp_s : Validate access token\nEvaluate policy (PDP)
+        kp_s -> ehr_s : [FHIR STU3] GET /{resource}?{query}
+        activate ehr_s
+            ehr_s --> kp_s : 200 OK\n(Bundle)
+        deactivate ehr_s
+        kp_s --> ehr_r : 200 OK\n(Bundle)
+    deactivate kp_s
+end
+
+ehr_r --> ehr_r : Process incoming BgZ dataset
+
+@enduml
