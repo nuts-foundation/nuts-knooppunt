@@ -37,14 +37,23 @@ activate mcsd
     mcsd --> ehr_s : 200 OK\n(Organization + Endpoints)
 deactivate mcsd
 
-ehr_s -> ehr_s : Select endpoint\nwith type=eOverdracht-notification
+ehr_s -> ehr_s : Select endpoint\nwith type=Twiin-TA-notification
 
-== Step 3: Send notification to receiving party ==
+== Step 3: Send Notified Pull task to receiving party ==
 
-ehr_s -> kp_r : [FHIR STU3] POST {notification-endpoint}/Task/{id}
-note right : Notification references the Task\ncreated at the sending party
+note over ehr_s, kp_r
+  Notification Task (pull-notification) contains:
+  - code=pull-notification
+  - requester.onBehalfOf = sending org URA
+  - owner = receiving org URA
+  - basedOn = Task/{eoverdracht-task-id}
+  - input[authorization-base] = OAuth authorization base URL
+  - input[get-workflow-task] = true
+end note
+
+ehr_s -> kp_r : [FHIR STU3] POST {notification-endpoint}/Task\ncode: pull-notification
 activate kp_r
-    kp_r --> ehr_s : 200 OK
+    kp_r --> ehr_s : 201 Created\n(Task/{notification-task-id})
 deactivate kp_r
 
 deactivate ehr_s
@@ -56,10 +65,12 @@ activate kp_r
     kp_r --> ehr_r : 200 OK\n(access_token, scope=eOverdracht-sender)
 deactivate kp_r
 
-ehr_r -> kp_s : [FHIR STU3] GET /Task/{id}\nAuthorization: Bearer {access_token}
+ehr_r -> ehr_r : Read notification Task;\nextract basedOn = Task/{eoverdracht-task-id}\nand authorization-base
+
+ehr_r -> kp_s : [FHIR STU3] GET /Task/{eoverdracht-task-id}\nAuthorization: Bearer {access_token}
 activate kp_s
     kp_s -> kp_s : Validate access token\nEvaluate policy (PDP)
-    kp_s -> ehr_s : [FHIR STU3] GET /Task/{id}
+    kp_s -> ehr_s : [FHIR STU3] GET /Task/{eoverdracht-task-id}
     activate ehr_s
         ehr_s --> kp_s : 200 OK\n(Task)
     deactivate ehr_s
@@ -70,10 +81,10 @@ deactivate kp_s
 
 ehr_r -> ehr_r : Extract Composition reference\nfrom Task.input
 
-ehr_r -> kp_s : [FHIR STU3] GET /Composition/{id}\nAuthorization: Bearer {access_token}
+ehr_r -> kp_s : [FHIR STU3] GET /Composition/{composition-id}\nAuthorization: Bearer {access_token}
 activate kp_s
     kp_s -> kp_s : Validate access token\nEvaluate policy (PDP)
-    kp_s -> ehr_s : [FHIR STU3] GET /Composition/{id}
+    kp_s -> ehr_s : [FHIR STU3] GET /Composition/{composition-id}
     activate ehr_s
         ehr_s --> kp_s : 200 OK\n(Composition / overdrachtsbericht)
     deactivate ehr_s
