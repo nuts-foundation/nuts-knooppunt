@@ -67,13 +67,15 @@ increasing consistency and allowing policies to be 1 package.
 - Flexible scopes are harder to reason about from a governance perspective; use case-specific guardrails become less explicit.
 - A more complex scope evaluation mechanism increases the attack surface and makes authorization audits more difficult.
 - If a PDP isn't built-in to the Nuts node, it requires deploying an additional component (policy evaluator), increasing operational complexity.
+  - Existing v2 use cases (Huisartsinzage, Thuismonitoring) can rely on what's currently available in the Nuts node
+  - New use cases that want to use flexible scopes can integrate with the PDP for scope evaluation.
 
 #### Impact
 
 - As we're dropping the fixed set of credential requirements, we need to specify how to map credentials to identities (e.g. end-user, organization, client) in a flexible way.
   - This could be done using an Open Policy Agent/Rego policy as well, allowing flexible mapping of credentials to identities.
 - Specify protocol for evaluating flexible scopes, either through configuration or integration with a policy engine.
-- Devise a migration path for existing v6 use cases, or keep it backwards compatible by supporting both Nuts access policy/presentation definitions and dynamic scope evaluation.
+- Devise a migration path for existing v2 use cases, or keep it backwards compatible by supporting both Nuts access policy/presentation definitions and dynamic scope evaluation.
 
 ### Combine use case specific scopes with flexible scopes
 
