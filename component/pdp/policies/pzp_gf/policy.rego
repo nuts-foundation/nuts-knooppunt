@@ -26,7 +26,7 @@ is_allowed_query if {
     # identifier: exactly 1 identifier of type BSN
     is_string(input.context.patient_bsn)
     input.context.patient_bsn != ""
-    startswith(input.action.fhir_rest.search_params.identifier[0], "http://fhir.nl/fhir/NamingSystem/bsn|")
+    startswith(input.action.fhir_rest.search_params.identifier[0][0], "http://fhir.nl/fhir/NamingSystem/bsn|")
 }
 
 # GET [base]/Consent?patient={reference}&scope=http://terminology.hl7.org/CodeSystem/consentscope|treatment&category=http://snomed.info/sct|129125009
@@ -36,7 +36,7 @@ is_allowed_query if {
     # patient: reference Patient resource
     is_string(input.context.patient_id)
     input.context.patient_id != ""
-    startswith(input.action.fhir_rest.search_params.patient[0], "Patient/")
-    input.action.fhir_rest.search_params.scope == ["http://terminology.hl7.org/CodeSystem/consentscope|treatment"]
-    input.action.fhir_rest.search_params.category == ["http://snomed.info/sct|129125009"]
+    startswith(input.action.fhir_rest.search_params.patient[0][0], "Patient/")
+    input.action.fhir_rest.search_params.scope == [["http://terminology.hl7.org/CodeSystem/consentscope|treatment"]]
+    input.action.fhir_rest.search_params.category == [["http://snomed.info/sct|129125009"]]
 }
