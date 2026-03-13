@@ -382,6 +382,51 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			})
 		}
 	})
+	t.Run("search_params_test_policy", func(t *testing.T) {
+		testCases := []testCase{
+			{
+				name:                 "allow - OR: category=a,b (comma-separated, single param)",
+				clientQualifications: []string{"search_params_test_policy"},
+				httpRequest:          `GET /Observation?category=a,b&patient=Patient/1000`,
+				decision:             true,
+			},
+			{
+				name:                 "allow - AND: category=1&category=2 (repeated param)",
+				clientQualifications: []string{"search_params_test_policy"},
+				httpRequest:          `GET /Observation?category=1&category=2&patient=Patient/1000`,
+				decision:             true,
+			},
+			{
+				name:                 "allow - AND of ORs: category=a,b&category=1",
+				clientQualifications: []string{"search_params_test_policy"},
+				httpRequest:          `GET /Observation?category=a,b&category=1&patient=Patient/1000`,
+				decision:             true,
+			},
+			{
+				name:                 "deny - wrong OR order does not match AND rule: category=1&category=a,b",
+				clientQualifications: []string{"search_params_test_policy"},
+				httpRequest:          `GET /Observation?category=1&category=a,b&patient=Patient/1000`,
+				decision:             false,
+			},
+			{
+				name:                 "deny - only one of the two AND values present",
+				clientQualifications: []string{"search_params_test_policy"},
+				httpRequest:          `GET /Observation?category=1&patient=Patient/1000`,
+				decision:             false,
+			},
+			{
+				name:                 "deny - OR values in wrong order",
+				clientQualifications: []string{"search_params_test_policy"},
+				httpRequest:          `GET /Observation?category=b,a&patient=Patient/1000`,
+				decision:             false,
+			},
+		}
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				runTest(t, tc)
+			})
+		}
+	})
 	t.Run("medicatieoverdracht", func(t *testing.T) {
 		testCases := []testCase{
 			{
