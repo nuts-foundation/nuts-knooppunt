@@ -40,6 +40,7 @@ Workflow Task, Profile: http://nictiz.nl/fhir/StructureDefinition/BgZ-verwijzing
 - intent=proposal
 - code=3457005 "verwijzen van patiënt"
 - input=[FHIR query parameters per BgZ dataset]
+- extension for selected healthcareservice (for routing purposes): Extension.where(url='http://fhir.nl/fhir/NamingSystem/HealthcareService').value.as(Reference)
 end note
 deactivate kp_s
 
@@ -117,4 +118,15 @@ end
 
 ehr_r --> ehr_r : Process incoming BgZ dataset
 
+== Step 7: Receiving party routes to the right location==
+note over ehr_r
+ The receiving organization has to show that the hand-off/referral comes to the right location/part
+ of the organisation instead of a general or organization-wide list/inbox.
+end note
+ehr_r --> ehr_r : Read Task(workflow task)\nextension.where(url='http://fhir.nl/fhir/NamingSystem/HealthcareService')'.value
+activate mcsd_r
+    ehr_r->mcsd_r: GET /HeatlhcareService
+    ehr_r<--mcsd_r: 200 OK\n(HealthcareService)
+deactivate mcsd_r
+ehr_r --> ehr_r: display HealthcareService.name\nshowcasing routing capabilities
 @enduml
