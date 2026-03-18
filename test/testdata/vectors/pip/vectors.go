@@ -29,10 +29,82 @@ func Patients() []fhir.Patient {
 	}
 }
 
+func Organizations() []fhir.Organization {
+	return []fhir.Organization{
+		{
+			Id: to.Ptr("7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F"),
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("00000030"),
+				},
+			},
+		},
+		{
+			Id: to.Ptr("873236BC-73E9-4AF2-20FB-A4CA28CA3CC7"),
+			Identifier: []fhir.Identifier{
+				{
+					System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+					Value:  to.Ptr("00000040"),
+				},
+			},
+		},
+	}
+}
+
+func Consents() []fhir.Consent {
+	return []fhir.Consent{
+		{
+			Id: to.Ptr("D3D29954-2559-4226-FD45-3C6C3632C5C4"),
+			Organization: []fhir.Reference{
+				{
+					Reference: to.Ptr("Organization/7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F"),
+					Type:      to.Ptr("Organization"),
+				},
+			},
+			Provision: to.Ptr(fhir.ConsentProvision{
+				Type: to.Ptr(fhir.ConsentProvisionTypePermit),
+				Actor: []fhir.ConsentProvisionActor{
+					{
+						Reference: fhir.Reference{
+							Reference: to.Ptr("Organization/873236BC-73E9-4AF2-20FB-A4CA28CA3CC7"),
+							Type:      to.Ptr("Organization"),
+						},
+					},
+				},
+				Data: []fhir.ConsentProvisionData{
+					{
+						Reference: fhir.Reference{
+							Reference: to.Ptr("Patient/3E439979-017F-40AA-594D-EBCF880FFD97"),
+							Type:      to.Ptr("Patient"),
+						},
+					},
+				},
+				Action: []fhir.CodeableConcept{
+					{
+						Coding: []fhir.Coding{
+							{
+								System: to.Ptr("http://terminology.hl7.org/CodeSystem/consentaction"),
+								Code:   to.Ptr("access"),
+							},
+						},
+					},
+				},
+			}),
+		},
+	}
+}
+
 func Resources(fhirBaseURL *url.URL) []fhir.HasId {
 	var resources []fhir.HasId
-	for _, endpoint := range Patients() {
-		resources = append(resources, &endpoint)
+	for _, patient := range Patients() {
+		resources = append(resources, &patient)
+	}
+	for _, org := range Organizations() {
+		resources = append(resources, &org)
+	}
+	for _, consent := range Consents() {
+		resources = append(resources, &consent)
 	}
 	return resources
 }

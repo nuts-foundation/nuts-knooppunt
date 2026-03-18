@@ -1,0 +1,12 @@
+### Show all consent resources
+
+GET http://localhost:7050/fhir/policy-information-point/Organization
+Accept: application/json
+
+### Testing query capability of PIP
+
+GET http://localhost:7050/fhir/policy-information-point/Consent?
+    data=Patient/3E439979-017F-40AA-594D-EBCF880FFD97&
+    organization.identifier=http://fhir.nl/fhir/NamingSystem/ura|00000030&
+    actor.identifier=http://fhir.nl/fhir/NamingSystem/ura|00000040
+Accept: application/json
