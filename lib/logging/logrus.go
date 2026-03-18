@@ -4,16 +4,21 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"sync"
 
 	"github.com/sirupsen/logrus"
 )
+
+var initLogrusOnce sync.Once
 
 // InitLogrus configures the global logrus logger to route all log output through slog.
 // This ensures libraries that use logrus (e.g. OPA, nuts-node) participate in the
 // centralized slog pipeline, including OpenTelemetry export.
 func InitLogrus() {
-	logrus.AddHook(&logrusSlogBridgeHook{})
-	logrus.StandardLogger().SetOutput(&devNullWriter{})
+	initLogrusOnce.Do(func() {
+		logrus.AddHook(&logrusSlogBridgeHook{})
+		logrus.StandardLogger().SetOutput(&devNullWriter{})
+	})
 }
 
 var _ logrus.Hook = (*logrusSlogBridgeHook)(nil)
