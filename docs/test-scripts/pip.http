@@ -1,6 +1,6 @@
 ### Show all consent resources
 
-GET http://localhost:7050/fhir/policy-information-point/Organization
+GET http://localhost:7050/fhir/policy-information-point/Consent
 Accept: application/json
 
 ### Testing query capability of PIP
