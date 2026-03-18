@@ -31,7 +31,7 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 			Identifier []fhir.Identifier `json:"identifier"`
 		}
 		path := fmt.Sprintf("Patient/%s", policyInput.Context.PatientID)
-		err := client.Read(path, &patient, fhirclient.QueryParam("_elements", "identifier"))
+		err := client.ReadWithContext(ctx, path, &patient, fhirclient.QueryParam("_elements", "identifier"))
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to get patient identifiers from PIP", logging.Error(err))
 			return policyInput, []ResultReason{
