@@ -83,7 +83,7 @@ ehr_r->ehr_r: Find Organization.endpoint where\nEndpoint.payloadType=http://nict
 
 == Step 5: Receiving party pulls eOverdracht Task ==
 
-ehr_r->mcsd_r: Find OAuth endpoint tied to that Organization (Endpoint.payloadType = Nuts-Oauth2)
+ehr_r->mcsd_r: Find OAuth endpoint tied to that Organization (Endpoint.payloadType = Nuts-OAuth)
 activate mcsd_r
     mcsd_r --> ehr_r : OAuth Endpoint
 deactivate mcsd_r
