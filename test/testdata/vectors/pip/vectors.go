@@ -55,7 +55,8 @@ func Organizations() []fhir.Organization {
 func Consents() []fhir.Consent {
 	return []fhir.Consent{
 		{
-			Id: to.Ptr("D3D29954-2559-4226-FD45-3C6C3632C5C4"),
+			Id:     to.Ptr("D3D29954-2559-4226-FD45-3C6C3632C5C4"),
+			Status: fhir.ConsentStateActive,
 			Organization: []fhir.Reference{
 				{
 					Reference: to.Ptr("Organization/7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F"),
