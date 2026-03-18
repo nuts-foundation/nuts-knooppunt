@@ -87,7 +87,7 @@ ehr_r->mcsd_r: Find OAuth endpoint tied to that Organization (Endpoint.payloadTy
 activate mcsd_r
     mcsd_r --> ehr_r : OAuth Endpoint
 deactivate mcsd_r
-ehr_r -> kp_r : Get access token for sending party\n[OAuth2] client_credentials / JWT grant
+ehr_r -> kp_r : Get access token for sending party\n(scope=bgz-sender)
 activate kp_r
     kp_r --> ehr_r : 200 OK\n(access_token, scope=bgz-sender)
 deactivate kp_r
