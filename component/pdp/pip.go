@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
@@ -28,7 +29,7 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 
 		var patient fhir.Patient
 		path := fmt.Sprintf("Patient/%s", policyInput.Context.PatientID)
-		err := client.Read(path, &patient)
+		err := client.Read(path, &patient, fhirclient.QueryParam("_elements", "identifier"))
 		if err != nil {
 			slog.WarnContext(ctx, "Failed to get patient record from PIP", logging.Error(err))
 			return policyInput, []ResultReason{
