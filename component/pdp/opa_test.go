@@ -24,6 +24,8 @@ func (h *captureHandler) Enabled(_ context.Context, _ slog.Level) bool { return 
 func (h *captureHandler) Handle(_ context.Context, r slog.Record) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	// Clone the record to avoid storing references to data that may be invalid after Handle returns.
+	r = r.Clone()
 	h.records = append(h.records, r)
 	return nil
 }
