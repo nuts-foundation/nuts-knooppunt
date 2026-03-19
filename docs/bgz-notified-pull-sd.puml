@@ -56,6 +56,15 @@ ehr_s -> ehr_s : Select endpoint\nwith type=Twiin-TA-notification
 
 == Step 3: Send Notified Pull task to receiving party ==
 
+ehr_s->mcsd_s: Find OAuth endpoint tied to the receiver
+activate mcsd_s
+    mcsd_s --> ehr_s : OAuth Endpoint
+deactivate mcsd_s
+ehr_s -> kp_s : Get access token for sending party\n(scope=ta-np-notification)
+activate kp_s
+    kp_s --> ehr_s : 200 OK\n(access_token, scope=ta-np-notification)
+deactivate kp_s
+
 note over ehr_s, kp_r
   Notification Task (pull-notification) contains:
   - code.coding=pull-notification, http://fhir.nl/fhir/NamingSystem/TaskCode
@@ -65,10 +74,13 @@ note over ehr_s, kp_r
   - input[get-workflow-task] = true
 end note
 
-ehr_s -> ehr_r : [FHIR STU3] POST {notification-endpoint}/Task
-activate ehr_r
-    ehr_r --> ehr_s : 201 Created\n(Task/{notification-task-id})
-deactivate ehr_r
+ehr_s -> kp_r : [FHIR STU3] POST {notification-endpoint}/Task\nAuthorization: Bearer {access_token}
+activate kp_r
+    kp_r -> kp_r : Validate access token\nEvaluate policy (PDP)
+    kp_r --> ehr_r : [FHIR STU3] POST {notification-endpoint}/Task
+    ehr_r --> kp_r : 201 Created\n(Task/{notification-task-id})
+    kp_r --> ehr_s : 201 Created\n(Task/{notification-task-id})
+deactivate kp_r
 
 deactivate ehr_s
 
