@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
-import { oidcConfig } from './authConfig';
+import { authConfig } from './authConfig';
 import { practitionerApi } from './api/practitionerApi';
 
 const AuthContext = createContext();
@@ -14,13 +13,6 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [userManager] = useState(() => {
-    return new UserManager({
-      ...oidcConfig,
-      userStore: new WebStorageStateStore({ store: window.localStorage }),
-    });
-  });
-
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [practitionerId, setPractitionerId] = useState(null);
@@ -37,9 +29,9 @@ export const AuthProvider = ({ children }) => {
     ensuringPractitionerRef.current = true;
 
     try {
-      const userId = user?.profile?.sub;
-      const userName = user?.profile?.name || user?.profile?.email || 'Unknown User';
-      const userEmail = user?.profile?.email;
+      const userId = user?.sub || user?.dezi_nummer;
+      const userName = user?.name || 'Unknown User';
+      const userEmail = user?.email;
 
       if (!userId) {
         console.warn('No user ID found in profile');
@@ -77,60 +69,67 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  useEffect(() => {
-    // Load user on mount
-    userManager.getUser().then(async (user) => {
-      if (user && !user.expired) {
-        setUser(user);
-        await ensurePractitioner(user);
+  // Function to fetch user info from the auth server
+  const fetchUserInfo = async () => {
+    try {
+      const response = await fetch(`${authConfig.baseUrl}/userinfo`, {
+        credentials: 'include', // Include cookies
+      });
+
+      if (response.ok) {
+        const userInfo = await response.json();
+        setUser(userInfo);
+        await ensurePractitioner(userInfo);
+        return userInfo;
+      } else if (response.status === 401) {
+        // Not authenticated
+        setUser(null);
+        return null;
+      } else {
+        console.error('Failed to fetch user info:', response.statusText);
+        return null;
       }
-      setIsLoading(false);
-    });
+    } catch (err) {
+      console.error('Error fetching user info:', err);
+      return null;
+    }
+  };
 
-    // Listen for user loaded event
-    const handleUserLoaded = async (user) => {
-      setUser(user);
-      await ensurePractitioner(user);
-      setIsLoading(false);
-    };
-
-    // Listen for user unloaded event
-    const handleUserUnloaded = () => {
-      setUser(null);
-    };
-
-    userManager.events.addUserLoaded(handleUserLoaded);
-    userManager.events.addUserUnloaded(handleUserUnloaded);
-
-    return () => {
-      userManager.events.removeUserLoaded(handleUserLoaded);
-      userManager.events.removeUserUnloaded(handleUserUnloaded);
-    };
-  }, [userManager]);
+  useEffect(() => {
+    // Check if user is already authenticated on mount
+    fetchUserInfo().finally(() => setIsLoading(false));
+  }, []);
 
   const login = () => {
-    return userManager.signinRedirect();
+    // Redirect to the auth server's login endpoint
+    const returnUrl = window.location.href;
+    window.location.href = `${authConfig.baseUrl}/login?return_url=${encodeURIComponent(returnUrl)}`;
   };
 
-  const logout = () => {
+  const logout = async () => {
     setUser(null);
     setPractitionerId(null);
-    return userManager.signoutRedirect();
-  };
-
-  const handleCallback = () => {
-    return userManager.signinRedirectCallback();
+    
+    try {
+      // Call logout endpoint
+      await fetch(`${authConfig.baseUrl}/logout`, {
+        credentials: 'include',
+      });
+    } catch (err) {
+      console.error('Error during logout:', err);
+    }
+    
+    // Redirect to home
+    window.location.href = '/';
   };
 
   const value = {
     user,
     isLoading,
-    isAuthenticated: !!user && !user.expired,
+    isAuthenticated: !!user,
     practitionerId,
     login,
     logout,
-    handleCallback,
-    userManager,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
