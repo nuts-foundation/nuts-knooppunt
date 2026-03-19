@@ -106,21 +106,10 @@ export const AuthProvider = ({ children }) => {
     window.location.href = `${authConfig.baseUrl}/login?return_url=${encodeURIComponent(returnUrl)}`;
   };
 
-  const logout = async () => {
+  const logout = () => {
     setUser(null);
     setPractitionerId(null);
-    
-    try {
-      // Call logout endpoint
-      await fetch(`${authConfig.baseUrl}/logout`, {
-        credentials: 'include',
-      });
-    } catch (err) {
-      console.error('Error during logout:', err);
-    }
-    
-    // Redirect to home
-    window.location.href = '/';
+    window.location.href = `${authConfig.baseUrl}/logout`;
   };
 
   const value = {

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthProvider';
 
 function HomePage() {
@@ -59,17 +60,17 @@ function HomePage() {
                   Access and manage patient health records securely through the
                   Dezi authentication infrastructure.
                 </p>
-                <a href="/patients" className="button" style={{ marginTop: '15px', display: 'inline-block' }}>
+                <Link to="/patients" className="button" style={{ marginTop: '15px', display: 'inline-block' }}>
                   View Patients
-                </a>
+                </Link>
               </div>
 
               <div className="card">
                 <h3>📝 Patient Consents</h3>
                 <p>Manage consent records that grant or deny access to patient data for organizations.</p>
-                <a href="/consents" className="button" style={{ marginTop: '15px', display: 'inline-block' }}>
+                <Link to="/consents" className="button" style={{ marginTop: '15px', display: 'inline-block' }}>
                   Manage Consents
-                </a>
+                </Link>
               </div>
 
               <div className="card">

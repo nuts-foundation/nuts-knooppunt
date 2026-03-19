@@ -306,7 +306,6 @@ func handleUserinfo(w http.ResponseWriter, r *http.Request) {
 func handleLogout(w http.ResponseWriter, r *http.Request) {
 	log.Println("Handling logout")
 
-	// Clear session cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:   "sessionID",
 		Value:  "",
@@ -314,8 +313,7 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 		MaxAge: -1,
 	})
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "logged out"})
+	http.Redirect(w, r, frontendBaseURL, http.StatusFound)
 }
 
 // Provide OIDC configuration for the demo-ehr frontend

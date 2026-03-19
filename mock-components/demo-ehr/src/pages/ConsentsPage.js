@@ -1,4 +1,5 @@
 import React, {useEffect, useState} from 'react';
+import {Link} from 'react-router-dom';
 import {useAuth} from '../AuthProvider';
 import {consentApi} from '../api/consentApi';
 import {patientApi} from '../api/patientApi';
@@ -157,7 +158,7 @@ function ConsentsPage() {
                     <h2 style={{margin: 0}}>Consents</h2>
                     <div style={{display: 'flex', gap: '10px'}}>
                         <button className="button" onClick={openNew}>➕ New Consent</button>
-                        <a className="button button-secondary" href="/patients">← Patients</a>
+                        <Link className="button button-secondary" to="/patients">← Patients</Link>
                     </div>
                 </div>
                 {loading ? (
