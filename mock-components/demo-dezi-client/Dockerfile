@@ -29,5 +29,5 @@ COPY cert.pem cert-key.pem ./
 EXPOSE 8090
 
 # Run the application
-CMD ["./dezi-client"]
+CMD ["./demo-dezi-client"]
 

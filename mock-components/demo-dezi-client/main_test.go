@@ -121,5 +121,3 @@ func TestParseVerklaringJWT(t *testing.T) {
 		t.Errorf("Expected rol_code 01.000, got %s", verklaring.RolCode)
 	}
 }
-
-

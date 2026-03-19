@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  dezi-client:
+  demo-dezi-client:
     build:
       context: .
       dockerfile: Dockerfile

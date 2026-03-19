@@ -182,7 +182,6 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:    time.Now(),
 	}
 
-
 	// Build authorization URL
 	authURL := fmt.Sprintf("%s/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=openid&state=%s&code_challenge=%s&code_challenge_method=S256&nonce=%s&display=page&prompt=login",
 		deziAuthority,
@@ -456,42 +455,42 @@ func decryptUserinfoJWE(jweToken string) (*UserinfoEnvelope, error) {
 	log.Printf("Attempting to decrypt/parse userinfo response")
 	log.Printf("Response length: %d bytes", len(jweToken))
 	log.Printf("Full response:\n%s", jweToken)
-	
+
 	// Count the parts to determine format
 	parts := strings.Split(jweToken, ".")
 	log.Printf("Response has %d parts", len(parts))
-	
+
 	if len(parts) == 3 {
 		// This is a JWT (JWS - signed), not JWE (encrypted)
 		log.Printf("Response is a signed JWT (3 parts), not an encrypted JWE (5 parts)")
 		log.Printf("Parsing as JWT instead...")
-		
+
 		// Parse as JWT - decode the payload directly
 		payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode JWT payload: %w", err)
 		}
-		
+
 		log.Printf("Decoded JWT payload: %s", string(payload))
-		
+
 		var envelope UserinfoEnvelope
 		if err := json.Unmarshal(payload, &envelope); err != nil {
 			return nil, fmt.Errorf("failed to parse envelope: %w", err)
 		}
-		
+
 		// Log the envelope
 		envelopeJSON, _ := json.MarshalIndent(envelope, "", "  ")
 		log.Printf("Userinfo Envelope:\n%s", string(envelopeJSON))
-		
+
 		return &envelope, nil
 	}
-	
+
 	if len(parts) != 5 {
 		return nil, fmt.Errorf("invalid format: expected 5 parts (JWE) or 3 parts (JWT), got %d", len(parts))
 	}
-	
+
 	log.Printf("Response is a JWE (5 parts), decrypting...")
-	
+
 	// Load private key for JWE decryption
 	keyData, err := os.ReadFile(keyFile)
 	if err != nil {
@@ -611,5 +610,3 @@ func getEnv(key, defaultValue string) string {
 	}
 	return defaultValue
 }
-
-
