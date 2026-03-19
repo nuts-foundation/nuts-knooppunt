@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
@@ -26,15 +27,17 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 	if policyInput.Context.PatientID != "" && policyInput.Context.PatientBSN == "" {
 		client := c.pipClient
 
-		var patient fhir.Patient
+		var patient struct {
+			Identifier []fhir.Identifier `json:"identifier"`
+		}
 		path := fmt.Sprintf("Patient/%s", policyInput.Context.PatientID)
-		err := client.Read(path, &patient)
+		err := client.ReadWithContext(ctx, path, &patient, fhirclient.QueryParam("_elements", "identifier"))
 		if err != nil {
-			slog.WarnContext(ctx, "Failed to get patient record from PIP", logging.Error(err))
+			slog.WarnContext(ctx, "Failed to get patient identifiers from PIP", logging.Error(err))
 			return policyInput, []ResultReason{
 				{
 					Code:        TypeResultCodePIPError,
-					Description: fmt.Sprintf("failed to get patient record from PIP, policy input might not be complete: %v", err),
+					Description: fmt.Sprintf("failed to get patient identifiers from PIP, policy input might not be complete: %v", err),
 				},
 			}
 		}
