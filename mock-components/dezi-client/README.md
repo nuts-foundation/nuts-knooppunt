@@ -1,0 +1,73 @@
+# Dezi OIDC Client
+
+Reference implementation for authenticating with Dezi (Dutch healthcare OIDC provider).
+
+## Quick Start
+
+```bash
+make run
+```
+
+## Configuration
+
+Via environment variables (or use defaults):
+
+```bash
+export DEZI_AUTHORITY=https://acceptatie.auth.dezi.nl
+export DEZI_CLIENT_ID=212bd7bd-bb63-487b-81b2-00079716072d
+export DEZI_REDIRECT_URI=http://localhost:8090/callback
+export SERVER_PORT=8090
+```
+
+## Endpoints
+
+- `GET /.well-known/openid-configuration` - OIDC discovery
+- `GET /login?return_url=...` - Start login
+- `GET /callback` - OAuth callback
+- `GET /userinfo` - Get user info (authenticated)
+- `GET /logout` - Logout
+- `GET /health` - Health check
+
+## What It Does
+
+Implements OIDC Authorization Code Flow with PKCE to connect demo-ehr to Dezi:
+
+1. Generates PKCE challenge/verifier
+2. Redirects to Dezi for authentication
+3. Exchanges code for access token
+4. Fetches and parses userinfo (JWT format)
+5. Extracts verklaring (healthcare worker declaration)
+
+## Integration with demo-ehr
+
+Update `demo-ehr/src/authConfig.js`:
+
+```javascript
+export const oidcConfig = {
+  authority: 'http://localhost:8090',
+  client_id: 'demo-ehr',
+  redirect_uri: 'http://localhost:3000/callback',
+  response_type: 'code',
+  scope: 'openid',
+  loadUserInfo: true,
+};
+```
+
+## Implementation Notes
+
+- **Userinfo format**: Dezi acceptatie returns signed JWT (3 parts), not encrypted JWE (5 parts). Code handles both.
+- **Sessions**: Stored in-memory using state as key. Lost on restart.
+- **PKCE**: Uses S256 challenge method as required by Dezi spec.
+- **Logging**: Logs ID token, userinfo envelope, and decoded verklaring for debugging.
+
+## Commands
+
+```bash
+make build  # Build binary
+make test   # Run tests
+make run    # Build and run
+make clean  # Clean up
+```
+
+Based on [Dezi spec v0.7](koppelvlakspecificatie-dezi-voor-platform-en-softwareleveranciers-v0-7.pdf)
+
