@@ -41,8 +41,8 @@ func createOPAService(ctx context.Context, opaBundleBaseURL string) (*sdk.OPA, e
 	result, err := sdk.New(ctx, sdk.Options{
 		ID:            "knooppunt-pdp",
 		Config:        bytes.NewReader(configData),
-		Logger:        logging.New(),
-		ConsoleLogger: logging.New(),
+		Logger:        logging.Get(),
+		ConsoleLogger: logging.Get(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OPA SDK instance: %w", err)

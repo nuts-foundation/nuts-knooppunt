@@ -13,22 +13,17 @@ import (
 
 	knooppuntCore "github.com/nuts-foundation/nuts-knooppunt/cmd/core"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/netutil"
 	"github.com/nuts-foundation/nuts-node/cmd"
 	"github.com/nuts-foundation/nuts-node/core"
 	httpEngine "github.com/nuts-foundation/nuts-node/http"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 )
 
 var _ component.Lifecycle = (*Component)(nil)
 
 func New(config Config) (*Component, error) {
-	// Nuts node uses logrus, register a hook to convert logrus logs to slog.
-	logrus.AddHook(&logrusSlogBridgeHook{})
-	// set nil logger to avoid logrus output
-	logrus.StandardLogger().SetOutput(&devNullWriter{})
-
 	internalPort, err := netutil.FreeTCPPort()
 	if err != nil {
 		return nil, err
@@ -79,7 +74,7 @@ func (c *Component) Start() error {
 		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr.Host,
 		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr.Host,
 		"NUTS_DATADIR":               dataDir,
-		"NUTS_VERBOSITY":             GetLogrusLevel(slog.LevelDebug), // TODO: use configured log level when supported
+		"NUTS_VERBOSITY":             logging.GetLogrusLevel(slog.LevelDebug), // TODO: use configured log level when supported
 		"NUTS_STRICTMODE":            strconv.FormatBool(c.coreConfig.StrictMode),
 	}
 	// Pass tracing config to nuts-node so it creates its own TracerProvider

@@ -17,6 +17,7 @@ func Init() {
 		}),
 	}
 	slog.SetDefault(slog.New(handler))
+	InitLogrus()
 }
 
 // ContextHandler wraps a slog.Handler and automatically adds trace context to log records.
