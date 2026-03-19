@@ -22,9 +22,6 @@ WORKDIR /root/
 # Copy the binary from builder
 COPY --from=builder /app/dezi-client .
 
-# Copy certificates
-COPY cert.pem cert-key.pem ./
-
 # Expose port
 EXPOSE 8090
 
