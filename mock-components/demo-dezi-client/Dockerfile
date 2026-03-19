@@ -10,7 +10,7 @@ RUN go mod download
 COPY main.go ./
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o dezi-client main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o app main.go
 
 # Final stage
 FROM alpine:latest
@@ -20,11 +20,11 @@ RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 
 # Copy the binary from builder
-COPY --from=builder /app/dezi-client .
+COPY --from=builder /app/app .
 
 # Expose port
 EXPOSE 8090
 
 # Run the application
-CMD ["./demo-dezi-client"]
+CMD ["./app"]
 
