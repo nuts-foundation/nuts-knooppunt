@@ -218,9 +218,14 @@ services:
       - "3000:3000"
     volumes:
       - ./demo-ehr/src:/app/src
-      - ./demo-ehr/public/env-config.js:/app/public/env-config.js
     environment:
       - CHOKIDAR_USEPOLLING=true
+      - PUBLIC_URL=.
+      - REACT_APP_AUTH_BASE_URL=http://localhost:8090
+      - REACT_APP_FHIR_BASE_URL=
+      - REACT_APP_FHIR_STU3_BASE_URL=
+      - REACT_APP_FHIR_MCSD_QUERY_BASE_URL=
+      - REACT_APP_ORGANIZATION_URA=
     stdin_open: true
     tty: true
 
