@@ -52,6 +52,14 @@ func Organizations() []fhir.Organization {
 	}
 }
 
+func Observations() []fhir.Observation {
+	return []fhir.Observation{
+		{
+			Id: to.Ptr("7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F"),
+		},
+	}
+}
+
 func Consents() []fhir.Consent {
 	return []fhir.Consent{
 		{
@@ -106,6 +114,9 @@ func Resources(fhirBaseURL *url.URL) []fhir.HasId {
 	}
 	for _, consent := range Consents() {
 		resources = append(resources, &consent)
+	}
+	for _, org := range Observations() {
+		resources = append(resources, &org)
 	}
 	return resources
 }

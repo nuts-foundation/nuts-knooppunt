@@ -39,8 +39,8 @@ func enrichPolicyInputWithCapabilityStatement(ctx context.Context, input PolicyI
 	if err != nil {
 		return input, []ResultReason{
 			{
-				Code:        TypeResultCodeUnexpectedInput,
-				Description: "FHIR CapabilityStatement check failed: " + err.Error(),
+				Code:        TypeResultCodeInformational,
+				Description: "No valid FHIR CapabilityStatement found for scope: " + err.Error(),
 			},
 		}
 	}
