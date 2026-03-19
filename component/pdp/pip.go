@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -69,5 +71,75 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 		}
 		policyInput.Context.PatientBSN = *bsn.Value
 	}
+
+	// Check for local consent resources
+	if policyInput.Action.FHIRRest.InteractionType == fhir.TypeRestfulInteractionRead {
+		client := c.pipClient
+
+		//	GET http://localhost:7050/fhir/policy-information-point/Consent?
+		//	data=Patient/3E439979-017F-40AA-594D-EBCF880FFD97&
+		//		organization:identifier=http://fhir.nl/fhir/NamingSystem/ura|00000030&
+		//      actor:identifier=http://fhir.nl/fhir/NamingSystem/ura|00000040
+
+		var searchResult fhir.Bundle
+		client.SearchWithContext(ctx, "Consent", url.Values{
+			"data": []string{policyInput.Resource.Id},
+		}, &searchResult)
+
+		type Ruling struct {
+			ProvisionType fhir.ConsentProvisionType
+			// Not in use until we implement specificity rules
+			// Specificity   int
+		}
+		var rulings []Ruling
+
+		err := fhirutil.VisitBundleResources[fhir.Consent](&searchResult, func(consent *fhir.Consent) error {
+			var applyRuling bool
+
+			applyRuling = consent.Status == fhir.ConsentStateActive
+
+			applyRuling = applyRuling && coding.CodablesIncludesCode(consent.Provision.Action, fhir.Coding{
+				System: to.Ptr("http://terminology.hl7.org/CodeSystem/consentaction"),
+				Code:   to.Ptr("access"),
+			})
+
+			applyRuling = applyRuling && consent.Provision.Type != nil
+
+			rulings = append(rulings, Ruling{
+				ProvisionType: *consent.Provision.Type,
+			})
+
+			return nil
+		})
+		if err != nil {
+			return policyInput, []ResultReason{
+				{
+					Code:        TypeResultCodePIPError,
+					Description: "Error occurred while parsing consent resources in bundle",
+				},
+			}
+		}
+
+		var finalRuling bool
+		for _, ruling := range rulings {
+			if ruling.ProvisionType == fhir.ConsentProvisionTypeDeny {
+				finalRuling = false
+				// In case of an objection and a consent with equal specificness: Objections supersede consents
+				// Therefore we stop processing rulings once we have a single objection
+				break
+			}
+
+			if ruling.ProvisionType == fhir.ConsentProvisionTypePermit {
+				finalRuling = true
+			}
+		}
+
+		if finalRuling {
+			policyInput.Resource.Consents = append(policyInput.Resource.Consents, PolicyConsent{
+				Scope: "eoverdracht",
+			})
+		}
+	}
+
 	return policyInput, nil
 }
