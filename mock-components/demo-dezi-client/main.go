@@ -249,7 +249,7 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Set access token cookie
 	http.SetCookie(w, &http.Cookie{
-		Name:     "dezi_access_token",
+		Name:     "sessionID",
 		Value:    accessSessionID,
 		Path:     "/",
 		HttpOnly: true,
