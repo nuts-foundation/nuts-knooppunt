@@ -20,10 +20,8 @@ func TestComponent_reject_interaction(t *testing.T) {
 			},
 		},
 		Resource: PolicyResource{
+			Id:   "118876",
 			Type: to.Ptr(fhir.ResourceTypeOrganization),
-			Properties: PolicyResourceProperties{
-				ResourceId: "118876",
-			},
 		},
 		Action: PolicyAction{
 			ConnectionTypeCode: "hl7-fhir-rest",
@@ -53,9 +51,7 @@ func TestComponent_allow_interaction(t *testing.T) {
 		},
 		Resource: PolicyResource{
 			Type: to.Ptr(fhir.ResourceTypeOrganization),
-			Properties: PolicyResourceProperties{
-				ResourceId: "118876",
-			},
+			Id:   "118876",
 		},
 		Action: PolicyAction{
 			ConnectionTypeCode: "hl7-fhir-rest",
@@ -85,9 +81,7 @@ func TestComponent_allow_search_param(t *testing.T) {
 		},
 		Resource: PolicyResource{
 			Type: to.Ptr(fhir.ResourceTypeOrganization),
-			Properties: PolicyResourceProperties{
-				ResourceId: "118876",
-			},
+			Id:   "118876",
 		},
 		Action: PolicyAction{
 			ConnectionTypeCode: "hl7-fhir-rest",
@@ -118,9 +112,7 @@ func TestComponent_reject_search_param(t *testing.T) {
 		},
 		Resource: PolicyResource{
 			Type: to.Ptr(fhir.ResourceTypeOrganization),
-			Properties: PolicyResourceProperties{
-				ResourceId: "118876",
-			},
+			Id:   "118876",
 		},
 		Action: PolicyAction{
 			ConnectionTypeCode: "hl7-fhir-rest",
@@ -178,9 +170,7 @@ func TestComponent_allow_include(t *testing.T) {
 		},
 		Resource: PolicyResource{
 			Type: to.Ptr(fhir.ResourceTypeLocation),
-			Properties: PolicyResourceProperties{
-				ResourceId: "88716123",
-			},
+			Id:   "118876",
 		},
 		Action: PolicyAction{
 			ConnectionTypeCode: "hl7-fhir-rest",
@@ -211,9 +201,7 @@ func TestComponent_reject_include(t *testing.T) {
 		},
 		Resource: PolicyResource{
 			Type: to.Ptr(fhir.ResourceTypeEndpoint),
-			Properties: PolicyResourceProperties{
-				ResourceId: "88716123",
-			},
+			Id:   "118876",
 		},
 		Action: PolicyAction{
 			ConnectionTypeCode: "hl7-fhir-rest",
@@ -244,9 +232,7 @@ func TestComponent_reject_revinclude(t *testing.T) {
 		},
 		Resource: PolicyResource{
 			Type: to.Ptr(fhir.ResourceTypePractitioner),
-			Properties: PolicyResourceProperties{
-				ResourceId: "88716123",
-			},
+			Id:   "118876",
 		},
 		Action: PolicyAction{
 			ConnectionTypeCode: "hl7-fhir-rest",
@@ -277,9 +263,7 @@ func TestComponent_allow_revinclude(t *testing.T) {
 		},
 		Resource: PolicyResource{
 			Type: to.Ptr(fhir.ResourceTypeOrganization),
-			Properties: PolicyResourceProperties{
-				ResourceId: "88716123",
-			},
+			Id:   "118876",
 		},
 		Action: PolicyAction{
 			ConnectionTypeCode: "hl7-fhir-rest",
