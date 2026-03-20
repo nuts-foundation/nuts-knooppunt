@@ -132,10 +132,10 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					UserRole:                 "TODO",
 				},
 				Request: HTTPRequest{
-					Method:      httpReqParts[0],
-					Protocol:    "HTTP/1.1",
-					Path:        httpReqURL.Path,
-					QueryParams: httpReqURL.Query(),
+					Method:   httpReqParts[0],
+					Protocol: "HTTP/1.1",
+					Path:     httpReqURL.Path,
+					Query:    httpReqURL.RawQuery,
 					Header: http.Header{
 						"Content-Type": {"application/fhir+json"},
 					},

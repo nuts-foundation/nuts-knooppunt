@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -79,12 +78,12 @@ func (s APISubject) MarshalJSON() ([]byte, error) {
 }
 
 type HTTPRequest struct {
-	Method      string      `json:"method"`
-	Protocol    string      `json:"protocol"` // "HTTP/1.0"
-	Path        string      `json:"path"`
-	QueryParams url.Values  `json:"query_params"`
-	Header      http.Header `json:"header"`
-	Body        string      `json:"body"`
+	Method   string      `json:"method"`
+	Protocol string      `json:"protocol"` // "HTTP/1.0"
+	Path     string      `json:"path"`
+	Query    string      `json:"query"`
+	Header   http.Header `json:"header"`
+	Body     string      `json:"body"`
 }
 
 type APIContext struct {

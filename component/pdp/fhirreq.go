@@ -413,17 +413,9 @@ func getSingleParameter(params url.Values, name string) (string, error) {
 func NewPolicyInput(request APIRequest) (*PolicyInput, error) {
 	var policyInput PolicyInput
 
-	// URL decode query parameters
-	decodeHTTPRequest := request.Input.Request
-	decodedQueryParams, err := urlValuesDecode(request.Input.Request.QueryParams)
-	if err != nil {
-		return nil, fmt.Errorf("unable to decode query parameters: %w", err)
-	}
-	decodeHTTPRequest.QueryParams = *decodedQueryParams
-
 	policyInput.Subject = NewPolicySubject(request.Input.Subject)
 
-	policyInput.Action.Request = decodeHTTPRequest
+	policyInput.Action.Request = request.Input.Request
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
 	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
@@ -473,7 +465,11 @@ func NewPolicyInput(request APIRequest) (*PolicyInput, error) {
 		}
 		rawParams = decodedBody
 	} else {
-		rawParams = *decodedQueryParams
+		parsedQuery, err := url.ParseQuery(request.Input.Request.Query)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse query string: %w", err)
+		}
+		rawParams = parsedQuery
 	}
 
 	params := groupParams(rawParams)
@@ -504,18 +500,4 @@ func NewPolicyInput(request APIRequest) (*PolicyInput, error) {
 		return nil, errors.Join(errs...)
 	}
 	return &policyInput, nil
-}
-
-func urlValuesDecode(in url.Values) (*url.Values, error) {
-	out := make(url.Values)
-	for key, values := range in {
-		for _, value := range values {
-			decodedValue, err := url.QueryUnescape(value)
-			if err != nil {
-				return nil, fmt.Errorf("parameter '%s': %w", key, err)
-			}
-			out.Add(key, decodedValue)
-		}
-	}
-	return &out, nil
 }

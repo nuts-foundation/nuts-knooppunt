@@ -314,9 +314,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Patient",
-						QueryParams: url.Values{
-							"_id": []string{"56789"},
-						},
+						Query:    "_id=56789",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
@@ -333,9 +331,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Encounter",
-						QueryParams: url.Values{
-							"patient": []string{"Patient/98765"},
-						},
+						Query:    "patient=Patient%2F98765",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
@@ -352,9 +348,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Encounter",
-						QueryParams: url.Values{
-							"patient": []string{"Patient/123", "Patient/456"},
-						},
+						Query:    "patient=Patient%2F123&patient=Patient%2F456",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
@@ -372,9 +366,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Patient",
-						QueryParams: url.Values{
-							"_id": []string{"123", "456"},
-						},
+						Query:    "_id=123&_id=456",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
@@ -409,9 +401,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Patient",
-						QueryParams: url.Values{
-							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn|900186021"},
-						},
+						Query:    "identifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn%7C900186021",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
@@ -428,9 +418,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Patient",
-						QueryParams: url.Values{
-							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn%7C900186021"},
-						},
+						Query:    "identifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn%7C900186021",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
@@ -493,9 +481,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Patient",
-						QueryParams: url.Values{
-							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/other|900186021"},
-						},
+						Query:    "identifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fother%7C900186021",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
