@@ -327,10 +327,9 @@ func derivePatientId(tokens Tokens, queryParams url.Values) (string, error) {
 		return getSingleParameter(queryParams, "_id")
 	}
 
-	// Otherwise, we can only derive patient ID for search interactions with patient parameter
-	// Theoretically, this could apply to other interactions as well (conditional update),
-	// but those are edge cases we don't need to support right now.
-	if tokens.Interaction == fhir.TypeRestfulInteractionSearchType {
+	// Otherwise, derive patient ID from patient/subject parameters for search and operation interactions.
+	if tokens.Interaction == fhir.TypeRestfulInteractionSearchType ||
+		tokens.Interaction == fhir.TypeRestfulInteractionOperation {
 		var candidates []string
 		// try 'patient'
 		patientID, err := getSingleParameter(queryParams, "patient")

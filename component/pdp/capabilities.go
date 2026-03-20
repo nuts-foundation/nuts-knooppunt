@@ -67,6 +67,7 @@ func evalInteraction(
 		fhir.TypeRestfulInteractionHistoryType,
 		fhir.TypeRestfulInteractionCreate,
 		fhir.TypeRestfulInteractionSearchType,
+		fhir.TypeRestfulInteractionOperation,
 	}
 
 	props := input.Action.FHIRRest
@@ -78,6 +79,28 @@ func evalInteraction(
 				Description: "restful interaction type not supported",
 			},
 		}
+	}
+
+	// For operations, check that the operation is listed in the capability statement.
+	// Operations are defined at rest level with a definition URL ending in {ResourceType}-{operationName}.
+	if props.InteractionType == fhir.TypeRestfulInteractionOperation {
+		operationAllowed := false
+		for _, rest := range statement.Rest {
+			for _, op := range rest.Operation {
+				if op.Name == *props.Operation {
+					operationAllowed = true
+				}
+			}
+		}
+		if !operationAllowed {
+			return []ResultReason{
+				{
+					Code:        TypeResultCodeNotAllowed,
+					Description: fmt.Sprintf("operation %s not allowed on %s", *props.Operation, *input.Resource.Type),
+				},
+			}
+		}
+		return nil
 	}
 
 	var resourceDescriptions []fhir.CapabilityStatementRestResource

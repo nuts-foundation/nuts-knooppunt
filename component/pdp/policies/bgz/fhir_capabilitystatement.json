@@ -549,7 +549,7 @@
       ],
       "operation": [
         {
-          "name": "Last N Observations Query",
+          "name": "lastn",
           "definition": "http://hl7.org/fhir/OperationDefinition/Observation-lastn"
         }
       ]

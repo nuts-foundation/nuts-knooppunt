@@ -437,6 +437,66 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					"pzp_gf": {TypeResultCodeInternalError},
 				},
 			},
+			{
+				name:        "allow - correct Patient query with BSN",
+				scope:       "bgz",
+				httpRequest: `GET /Patient?_include=Patient:general-practitioner&_id=1000`,
+				decision:    true,
+			},
+			{
+				name:        "allow - correct MedicationDispense query with category and _include",
+				scope:       "bgz",
+				httpRequest: `GET /MedicationDispense?category=http://snomed.info/sct|422037009&_include=MedicationDispense:medication&patient=Patient/1000`,
+				decision:    true,
+			},
+			{
+				name:        "allow - correct Observation lastn query with single code",
+				scope:       "bgz",
+				httpRequest: `GET /Observation/$lastn?code=http://snomed.info/sct|365508006&patient=Patient/1000`,
+				decision:    true,
+			},
+			{
+				name:        "allow - correct Observation lastn query with multiple codes",
+				scope:       "bgz",
+				httpRequest: `GET /Observation/$lastn?code=http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9&patient=Patient/1000`,
+				decision:    true,
+			},
+			{
+				name:        "allow - correct Observation lastn query with multiple codes turned around",
+				scope:       "bgz",
+				httpRequest: `GET /Observation/$lastn?code=http://loinc.org|8306-3,http://loinc.org|8302-2,http://loinc.org|8308-9&patient=Patient/1000`,
+				decision:    true,
+			},
+			{
+				name:        "allow - correct Observation lastn query with additional not supported param",
+				scope:       "bgz",
+				httpRequest: `GET /Observation/$lastn?code=http://loinc.org|8306-3,http://loinc.org|8302-2,http://loinc.org|8308-9,http://loinc.org|8308-19&patient=Patient/1000`,
+				decision:    false,
+			},
+			{
+				name:        "disallow - Patient query with wrong _include parameter",
+				scope:       "bgz",
+				httpRequest: `GET /Patient?_include=Patient:organization`,
+				policyReasonCodes: map[string][]TypeResultCode{
+					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
+			},
+			{
+				name:        "disallow - Patient query with additional parameters",
+				scope:       "bgz",
+				httpRequest: `GET /Patient?_include=Patient:general-practitioner&name=John`,
+				policyReasonCodes: map[string][]TypeResultCode{
+					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+				},
+			},
+			{
+				name:        "disallow - Patient query without patient_id or patient_bsn",
+				scope:       "bgz",
+				httpRequest: `GET /Patient?_include=Patient:general-practitioner`,
+				policyReasonCodes: map[string][]TypeResultCode{
+					"pzp_gf": {TypeResultCodeInternalError},
+				},
+			},
 		}
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
