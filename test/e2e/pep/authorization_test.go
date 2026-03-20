@@ -18,13 +18,14 @@ import (
 )
 
 // Test_PEPAuthorization tests the PEP authorization flow with real Nuts node
-// credential validation using the medicatieoverdracht scope and its real
-// access policy from config/policies/.
+// credential validation using the medicatieoverdracht scope. The access policy
+// in testdata/ is based on config/policies/medicatieoverdracht-policy.json with
+// additional claim mappings for MITZ input validation (see accesspolicy.json).
 //
 // This test validates the FULL credential flow:
 //   - X509Credential issued via go-didx509-toolkit from test certificates
 //   - HealthCareProfessionalDelegationCredential and PatientEnrollmentCredential (self-attested, #406)
-//   - Real Presentation Definition validation (from config/policies/medicatieoverdracht-policy.json)
+//   - Presentation Definition validation
 //   - Real token introspection with extracted claims
 //   - PEP authorization through Knooppunt PDP
 //   - Mitz consent checking (mocked)
