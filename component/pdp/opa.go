@@ -8,19 +8,14 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/policies"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/open-policy-agent/opa/v1/logging"
 	"github.com/open-policy-agent/opa/v1/sdk"
 )
 
 // createOPAService creates a new Open Policy Agent instance with embedded policy bundles
-func createOPAService(ctx context.Context, opaBundleBaseURL string) (*sdk.OPA, error) {
+func createOPAService(ctx context.Context, opaBundleBaseURL string, bundles map[string][]byte) (*sdk.OPA, error) {
 	configBundles := map[string]any{}
-	bundles, err := policies.Bundles(ctx)
-	if err != nil {
-		return nil, err
-	}
 	for bundleName := range bundles {
 		configBundles[bundleName] = map[string]any{
 			"resource": fmt.Sprintf("%s.tar.gz", bundleName),

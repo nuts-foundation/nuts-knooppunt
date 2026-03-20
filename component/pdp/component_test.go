@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
+	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/policies"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/from"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
@@ -207,7 +208,24 @@ func TestHandleMainPolicy_CaseInsensitivePolicyNames(t *testing.T) {
 }
 
 func TestHandleMainPolicy_Integration(t *testing.T) {
+	// Load all bundles including test_ prefixed ones for unit testing purposes.
+	// Test bundles are excluded from production bundle loading (policies.Bundles),
+	// but are needed here to test AND/OR search param logic via evalRegoPolicy.
+	allBundles, err := policies.GenerateBundles(func(name string) bool { return false })
+	require.NoError(t, err)
+
 	mux := http.NewServeMux()
+	// Serve all bundles (including test_ ones) over HTTP so OPA can fetch them.
+	mux.HandleFunc("GET /pdp/bundles/{policyName}", func(w http.ResponseWriter, r *http.Request) {
+		policyName := strings.TrimSuffix(r.PathValue("policyName"), ".tar.gz")
+		data, found := allBundles[policyName]
+		if !found {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/gzip")
+		_, _ = w.Write(data)
+	})
 	httpServer := httptest.NewServer(mux)
 	defer httpServer.Close()
 
@@ -291,9 +309,10 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 	service.opaBundleBaseURL = httpServer.URL + "/pdp/bundles/"
 	service.pipClient = pipClient
 
-	service.RegisterHttpHandlers(nil, mux)
-
-	require.NoError(t, service.Start())
+	// Start OPA with all bundles including test_ ones
+	opaService, err := createOPAService(t.Context(), service.opaBundleBaseURL, allBundles)
+	require.NoError(t, err)
+	service.opaService = opaService
 	defer func() {
 		require.NoError(t, service.Stop(context.Background()))
 	}()
@@ -454,48 +473,76 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			})
 		}
 	})
-	t.Run("search_params_test_policy", func(t *testing.T) {
+	t.Run("test_search_params policy - blocked at handler", func(t *testing.T) {
+		// test_ prefixed scopes must be rejected by the HTTP handler with 400
+		body, _ := json.Marshal(APIRequest{
+			Input: APIInput{
+				Subject: APISubject{Scope: "test_search_params"},
+				Request: HTTPRequest{Method: "GET", Path: "/Observation", Query: "category=a,b&patient=Patient%2F1000"},
+				Context: APIContext{ConnectionTypeCode: "hl7-fhir-rest"},
+			},
+		})
+		req := httptest.NewRequest("POST", "/pdp", bytes.NewReader(body))
+		w := httptest.NewRecorder()
+		service.HandleMainPolicy(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		var response APIResponse
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&response))
+		assert.False(t, response.Allow)
+		assert.Contains(t, response.Error, "policy not allowed")
+	})
+	t.Run("test_search_params policy - search param AND/OR via evalRegoPolicy", func(t *testing.T) {
+		type testCase struct {
+			name     string
+			query    string
+			expected bool
+		}
 		testCases := []testCase{
 			{
-				name:        "allow - OR: category=a,b (comma-separated, single param)",
-				scope:       "search_params_test_policy",
-				httpRequest: `GET /Observation?category=a,b&patient=Patient/1000`,
-				decision:    true,
+				name:     "allow - OR: category=a,b (comma-separated, single param)",
+				query:    "category=a,b&patient=Patient%2F1000",
+				expected: true,
 			},
 			{
-				name:        "allow - AND: category=1&category=2 (repeated param)",
-				scope:       "search_params_test_policy",
-				httpRequest: `GET /Observation?category=1&category=2&patient=Patient/1000`,
-				decision:    true,
+				name:     "allow - AND: category=1&category=2 (repeated param)",
+				query:    "category=1&category=2&patient=Patient%2F1000",
+				expected: true,
 			},
 			{
-				name:        "allow - AND of ORs: category=a,b&category=1",
-				scope:       "search_params_test_policy",
-				httpRequest: `GET /Observation?category=a,b&category=1&patient=Patient/1000`,
-				decision:    true,
+				name:     "allow - AND of ORs: category=a,b&category=1",
+				query:    "category=a,b&category=1&patient=Patient%2F1000",
+				expected: true,
 			},
 			{
-				name:        "deny - wrong OR order does not match AND rule: category=1&category=a,b",
-				scope:       "search_params_test_policy",
-				httpRequest: `GET /Observation?category=1&category=a,b&patient=Patient/1000`,
-				decision:    false,
+				name:     "deny - wrong OR order does not match AND rule: category=1&category=a,b",
+				query:    "category=1&category=a,b&patient=Patient%2F1000",
+				expected: false,
 			},
 			{
-				name:        "deny - only one of the two AND values present",
-				scope:       "search_params_test_policy",
-				httpRequest: `GET /Observation?category=1&patient=Patient/1000`,
-				decision:    false,
+				name:     "deny - only one of the two AND values present",
+				query:    "category=1&patient=Patient%2F1000",
+				expected: false,
 			},
 			{
-				name:        "deny - OR values in wrong order",
-				scope:       "search_params_test_policy",
-				httpRequest: `GET /Observation?category=b,a&patient=Patient/1000`,
-				decision:    false,
+				name:     "deny - OR values in wrong order",
+				query:    "category=b,a&patient=Patient%2F1000",
+				expected: false,
 			},
 		}
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				runTest(t, tc)
+				apiRequest := APIRequest{
+					Input: APIInput{
+						Subject: APISubject{Scope: "test_search_params"},
+						Request: HTTPRequest{Method: "GET", Path: "/Observation", Query: tc.query},
+						Context: APIContext{ConnectionTypeCode: "hl7-fhir-rest"},
+					},
+				}
+				policyInput, err := NewPolicyInput(apiRequest)
+				require.NoError(t, err)
+				result, err := service.evalRegoPolicy(t.Context(), "test_search_params", *policyInput)
+				require.NoError(t, err)
+				assert.Equal(t, tc.expected, result.Allow)
 			})
 		}
 	})

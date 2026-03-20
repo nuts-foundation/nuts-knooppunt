@@ -55,7 +55,11 @@ func New(config Config, consentChecker mitz.ConsentChecker) (*Component, error) 
 }
 
 func (c *Component) Start() error {
-	opaService, err := createOPAService(context.Background(), c.opaBundleBaseURL)
+	bundles, err := policies.Bundles(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to load policy bundles: %w", err)
+	}
+	opaService, err := createOPAService(context.Background(), c.opaBundleBaseURL, bundles)
 	if err != nil {
 		return fmt.Errorf("failed to initialize Open Policy Agent service: %w", err)
 	}
@@ -103,6 +107,15 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	slices.Sort(policyNames)
 
 	// Step 1: Providing a policy is required for every PDP request. We can short-circuit here, no need to process the request.
+	for _, policyName := range policyNames {
+		if strings.HasPrefix(policyName, "test_") {
+			writeResponseWithCode(r.Context(), w, APIResponse{
+				Error:    fmt.Sprintf("policy not allowed: %s", policyName),
+				Policies: map[string]PolicyResult{},
+			}, http.StatusBadRequest)
+			return
+		}
+	}
 	if len(policyNames) == 0 {
 		writeResponse(r.Context(), w, APIResponse{
 			Error:    "missing required value, no policy defined",
