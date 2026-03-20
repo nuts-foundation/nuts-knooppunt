@@ -248,6 +248,30 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				decision:    true,
 			},
 			{
+				name:        "allow - correct Observation lastn query with single code",
+				scope:       "bgz",
+				httpRequest: `GET /Observation/$lastn?code=http://snomed.info/sct|365508006&patient=Patient/1000`,
+				decision:    true,
+			},
+			{
+				name:        "allow - correct Observation lastn query with multiple codes",
+				scope:       "bgz",
+				httpRequest: `GET /Observation/$lastn?code=http://loinc.org|8302-2,http://loinc.org|8306-3,http://loinc.org|8308-9&patient=Patient/1000`,
+				decision:    true,
+			},
+			{
+				name:        "allow - correct Observation lastn query with multiple codes turned around",
+				scope:       "bgz",
+				httpRequest: `GET /Observation/$lastn?code=http://loinc.org|8306-3,http://loinc.org|8302-2,http://loinc.org|8308-9&patient=Patient/1000`,
+				decision:    true,
+			},
+			{
+				name:        "allow - correct Observation lastn query with additional not supported param",
+				scope:       "bgz",
+				httpRequest: `GET /Observation/$lastn?code=http://loinc.org|8306-3,http://loinc.org|8302-2,http://loinc.org|8308-9,http://loinc.org|8308-19&patient=Patient/1000`,
+				decision:    false,
+			},
+			{
 				name:        "disallow - Patient query with wrong _include parameter",
 				scope:       "bgz",
 				httpRequest: `GET /Patient?_include=Patient:organization`,
