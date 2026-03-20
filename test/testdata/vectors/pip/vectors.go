@@ -65,6 +65,14 @@ func Consents() []fhir.Consent {
 		{
 			Id:     to.Ptr("D3D29954-2559-4226-FD45-3C6C3632C5C4"),
 			Status: fhir.ConsentStateActive,
+			Scope: fhir.CodeableConcept{
+				Coding: []fhir.Coding{
+					{
+						System: to.Ptr("http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-consent-scope"),
+						Code:   to.Ptr("eoverdracht"),
+					},
+				},
+			},
 			Organization: []fhir.Reference{
 				{
 					Reference: to.Ptr("Organization/7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F"),
@@ -84,8 +92,8 @@ func Consents() []fhir.Consent {
 				Data: []fhir.ConsentProvisionData{
 					{
 						Reference: fhir.Reference{
-							Reference: to.Ptr("Patient/3E439979-017F-40AA-594D-EBCF880FFD97"),
-							Type:      to.Ptr("Patient"),
+							Reference: to.Ptr("Observation/7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F"),
+							Type:      to.Ptr("Observation"),
 						},
 					},
 				},
@@ -112,11 +120,11 @@ func Resources(fhirBaseURL *url.URL) []fhir.HasId {
 	for _, org := range Organizations() {
 		resources = append(resources, &org)
 	}
-	for _, consent := range Consents() {
-		resources = append(resources, &consent)
-	}
 	for _, org := range Observations() {
 		resources = append(resources, &org)
+	}
+	for _, consent := range Consents() {
+		resources = append(resources, &consent)
 	}
 	return resources
 }

@@ -6,9 +6,15 @@ Accept: application/json
 ### Testing query capability of PIP
 
 GET http://localhost:7050/fhir/policy-information-point/Consent?
-    data=Patient/3E439979-017F-40AA-594D-EBCF880FFD97&
+    data=Observation/7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F
     organization:identifier=http://fhir.nl/fhir/NamingSystem/ura|00000030&
     actor:identifier=http://fhir.nl/fhir/NamingSystem/ura|00000040
+Accept: application/json
+
+### Testing minimal consent query
+
+GET http://localhost:7050/fhir/policy-information-point/Consent?
+    data=Observation/7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F
 Accept: application/json
 
 ### Testing PDP call that results in a PIP consent request
@@ -27,7 +33,7 @@ Content-Type: application/json
     "request": {
       "method": "GET",
       "protocol": "HTTP/1.0",
-      "path": "/Patient/3E439979-017F-40AA-594D-EBCF880FFD97"
+      "path": "/Observation/7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F"
     },
     "context": {
       "data_holder_organization_id": "90000697",

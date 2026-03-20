@@ -87,6 +87,7 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 		}, &searchResult)
 
 		type Ruling struct {
+			Scope         string
 			ProvisionType fhir.ConsentProvisionType
 			// Not in use until we implement specificity rules
 			// Specificity   int
@@ -94,6 +95,13 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 		var rulings []Ruling
 
 		err := fhirutil.VisitBundleResources[fhir.Consent](&searchResult, func(consent *fhir.Consent) error {
+			if len(consent.Scope.Coding) != 1 && consent.Scope.Coding[0].Code != nil {
+				// Only continue if there's a single simple code
+				// Complex coding scheme's not supported for now
+				return nil
+			}
+			scope := *consent.Scope.Coding[0].Code
+
 			var applyRuling bool
 
 			applyRuling = consent.Status == fhir.ConsentStateActive
@@ -106,6 +114,7 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 			applyRuling = applyRuling && consent.Provision.Type != nil
 
 			rulings = append(rulings, Ruling{
+				Scope:         scope,
 				ProvisionType: *consent.Provision.Type,
 			})
 
@@ -120,24 +129,31 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 			}
 		}
 
-		var finalRuling bool
+		finalRulings := map[string]bool{}
 		for _, ruling := range rulings {
+			// In case of an objection and a consent with equal specificness: Objections supersede consents
+			// Therefore if we recorded an objection we will stop processing further rulings
+			if finalRulings[ruling.Scope] == false {
+				continue
+			}
+
 			if ruling.ProvisionType == fhir.ConsentProvisionTypeDeny {
-				finalRuling = false
-				// In case of an objection and a consent with equal specificness: Objections supersede consents
-				// Therefore we stop processing rulings once we have a single objection
-				break
+				finalRulings[ruling.Scope] = false
+				continue
 			}
 
 			if ruling.ProvisionType == fhir.ConsentProvisionTypePermit {
-				finalRuling = true
+				finalRulings[ruling.Scope] = true
+				continue
 			}
 		}
 
-		if finalRuling {
-			policyInput.Resource.Consents = append(policyInput.Resource.Consents, PolicyConsent{
-				Scope: "eoverdracht",
-			})
+		for scope, consentGranted := range finalRulings {
+			if consentGranted {
+				policyInput.Resource.Consents = append(policyInput.Resource.Consents, PolicyConsent{
+					Scope: scope,
+				})
+			}
 		}
 	}
 
