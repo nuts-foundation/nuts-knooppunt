@@ -1,4 +1,4 @@
-package search_params_test_policy
+package test_search_params
 
 import rego.v1
 
