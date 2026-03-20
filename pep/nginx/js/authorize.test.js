@@ -9,7 +9,6 @@ import {jest} from '@jest/globals';
 const {
     extractBearerToken,
     getTokenType,
-    parseQueryParams,
     normalizeClaimValue,
     buildPDPRequest,
     validateDPoP
@@ -151,42 +150,6 @@ describe('normalizeClaimValue', () => {
     });
 });
 
-describe('parseQueryParams', () => {
-    test('parses simple query params', () => {
-        expect(parseQueryParams('_id=123&status=active')).toEqual({
-            '_id': ['123'],
-            'status': ['active']
-        });
-    });
-
-    test('handles multiple values for same key', () => {
-        expect(parseQueryParams('status=active&status=pending')).toEqual({
-            'status': ['active', 'pending']
-        });
-    });
-
-    test('handles empty query string', () => {
-        expect(parseQueryParams('')).toEqual({});
-    });
-
-    test('handles null/undefined', () => {
-        expect(parseQueryParams(null)).toEqual({});
-        expect(parseQueryParams(undefined)).toEqual({});
-    });
-
-    test('decodes URL-encoded values', () => {
-        expect(parseQueryParams('name=John%20Doe&filter=type%3DPatient')).toEqual({
-            'name': ['John Doe'],
-            'filter': ['type=Patient']
-        });
-    });
-
-    test('throws on malformed percent-encoding', () => {
-        // Invalid percent-encoding should throw URIError for explicit 400 response
-        expect(() => parseQueryParams('patient=%ZZ&valid=ok')).toThrow(URIError);
-    });
-});
-
 describe('buildPDPRequest', () => {
     const originalEnv = process.env;
 
@@ -239,9 +202,7 @@ describe('buildPDPRequest', () => {
                     method: 'GET',
                     protocol: 'HTTP/1.1',
                     path: '/Patient/patient-123', // /fhir/ prefix is stripped
-                    query_params: {
-                        '_include': ['Patient:organization']
-                    },
+                    query: '_include=Patient:organization',
                     header: {},
                     body: ''
                 },
