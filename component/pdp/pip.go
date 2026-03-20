@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"slices"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
@@ -76,11 +77,8 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 	if policyInput.Action.FHIRRest.InteractionType == fhir.TypeRestfulInteractionRead {
 		client := c.pipClient
 
-		//	GET http://localhost:7050/fhir/policy-information-point/Consent?
+		//	GET http://0.0.0.0:7050/fhir/policy-information-point/Consent?
 		//	data=Patient/3E439979-017F-40AA-594D-EBCF880FFD97&
-		//		organization:identifier=http://fhir.nl/fhir/NamingSystem/ura|00000030&
-		//      actor:identifier=http://fhir.nl/fhir/NamingSystem/ura|00000040
-
 		var searchResult fhir.Bundle
 		client.SearchWithContext(ctx, "Consent", url.Values{
 			"data": []string{policyInput.Resource.Id},
@@ -111,12 +109,25 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 				Code:   to.Ptr("access"),
 			})
 
+			var orgUras []string
+			for _, orgRef := range consent.Organization {
+				if orgRef.Identifier != nil {
+					ident := *orgRef.Identifier
+					if ident.System != nil && *ident.System == "http://fhir.nl/fhir/NamingSystem/ura" {
+						orgUras = append(orgUras, *ident.Value)
+					}
+				}
+			}
+			applyRuling = applyRuling && slices.Contains(orgUras, policyInput.Context.DataHolderOrganizationId)
+
 			applyRuling = applyRuling && consent.Provision.Type != nil
 
-			rulings = append(rulings, Ruling{
-				Scope:         scope,
-				ProvisionType: *consent.Provision.Type,
-			})
+			if applyRuling {
+				rulings = append(rulings, Ruling{
+					Scope:         scope,
+					ProvisionType: *consent.Provision.Type,
+				})
+			}
 
 			return nil
 		})
@@ -133,7 +144,8 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 		for _, ruling := range rulings {
 			// In case of an objection and a consent with equal specificness: Objections supersede consents
 			// Therefore if we recorded an objection we will stop processing further rulings
-			if finalRulings[ruling.Scope] == false {
+			current, ok := finalRulings[ruling.Scope]
+			if ok && current == false {
 				continue
 			}
 

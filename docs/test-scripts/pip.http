@@ -36,7 +36,7 @@ Content-Type: application/json
       "path": "/Observation/7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F"
     },
     "context": {
-      "data_holder_organization_id": "90000697",
+      "data_holder_organization_id": "00000030",
       "data_holder_facility_type": "Z3",
       "connection_type_code": "hl7-fhir-rest"
     }

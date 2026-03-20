@@ -75,8 +75,10 @@ func Consents() []fhir.Consent {
 			},
 			Organization: []fhir.Reference{
 				{
-					Reference: to.Ptr("Organization/7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F"),
-					Type:      to.Ptr("Organization"),
+					Identifier: to.Ptr(fhir.Identifier{
+						System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+						Value:  to.Ptr("00000030"),
+					}),
 				},
 			},
 			Provision: to.Ptr(fhir.ConsentProvision{
