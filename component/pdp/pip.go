@@ -90,6 +90,7 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 			entries = append(entries, searchSet.Entry...)
 			return true, nil
 		})
+		slog.Error("Failed to paginating consent call results", logging.Error(err))
 		if err != nil {
 			return policyInput, []ResultReason{
 				{
@@ -158,6 +159,7 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 			return nil
 		})
 		if err != nil {
+			slog.Error("Failed to parse consent resources in bundle", logging.Error(err))
 			return policyInput, []ResultReason{
 				{
 					Code:        TypeResultCodePIPError,
