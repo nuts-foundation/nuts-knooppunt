@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
+	"slices"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -72,5 +75,129 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 		}
 		policyInput.Context.PatientBSN = *bsn.Value
 	}
+
+	// Check for local consent resources
+	if policyInput.Action.FHIRRest.InteractionType == fhir.TypeRestfulInteractionRead {
+		client := c.pipClient
+
+		//	GET http://0.0.0.0:7050/fhir/policy-information-point/Consent?
+		//	data=Patient/3E439979-017F-40AA-594D-EBCF880FFD97&
+		var searchResult fhir.Bundle
+		client.SearchWithContext(ctx, "Consent", url.Values{
+			"data": []string{policyInput.Resource.Id},
+		}, &searchResult)
+
+		var entries []fhir.BundleEntry
+		err := fhirclient.Paginate(ctx, client, searchResult, func(searchSet *fhir.Bundle) (bool, error) {
+			entries = append(entries, searchSet.Entry...)
+			return true, nil
+		})
+		slog.ErrorContext(ctx, "Failed to paginating consent call results", logging.Error(err))
+		if err != nil {
+			return policyInput, []ResultReason{
+				{
+					Code:        TypeResultCodePIPError,
+					Description: "Error occurred while paginating consent call results",
+				},
+			}
+		}
+
+		type Ruling struct {
+			Scope         string
+			ProvisionType fhir.ConsentProvisionType
+			// Not in use until we implement specificity rules
+			// Specificity   int
+		}
+		var rulings []Ruling
+
+		err = fhirutil.VisitBundleResources[fhir.Consent](&searchResult, func(consent *fhir.Consent) error {
+			if len(consent.Scope.Coding) != 1 && consent.Scope.Coding[0].Code != nil {
+				// Only continue if there's a single simple code
+				// Complex coding scheme's not supported for now
+				return nil
+			}
+			scope := *consent.Scope.Coding[0].Code
+
+			var applyRuling bool
+
+			applyRuling = consent.Status == fhir.ConsentStateActive
+
+			applyRuling = applyRuling && coding.CodablesIncludesCode(consent.Provision.Action, fhir.Coding{
+				System: to.Ptr("http://terminology.hl7.org/CodeSystem/consentaction"),
+				Code:   to.Ptr("access"),
+			})
+
+			var orgUras []string
+			for _, orgRef := range consent.Organization {
+				if orgRef.Identifier != nil {
+					ident := *orgRef.Identifier
+					if ident.System != nil && *ident.System == "http://fhir.nl/fhir/NamingSystem/ura" {
+						orgUras = append(orgUras, *ident.Value)
+					}
+				}
+			}
+			applyRuling = applyRuling && slices.Contains(orgUras, policyInput.Context.DataHolderOrganizationId)
+
+			var actorUras []string
+			for _, actor := range consent.Provision.Actor {
+				if actor.Reference.Identifier != nil {
+					ident := *actor.Reference.Identifier
+					if ident.System != nil && *ident.System == "http://fhir.nl/fhir/NamingSystem/ura" {
+						actorUras = append(actorUras, *ident.Value)
+					}
+				}
+			}
+			applyRuling = applyRuling && slices.Contains(actorUras, policyInput.Subject.Organization.Ura)
+
+			applyRuling = applyRuling && consent.Provision.Type != nil
+
+			if applyRuling {
+				rulings = append(rulings, Ruling{
+					Scope:         scope,
+					ProvisionType: *consent.Provision.Type,
+				})
+			}
+
+			return nil
+		})
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to parse consent resources in bundle", logging.Error(err))
+			return policyInput, []ResultReason{
+				{
+					Code:        TypeResultCodePIPError,
+					Description: "Error occurred while parsing consent resources in bundle",
+				},
+			}
+		}
+
+		finalRulings := map[string]bool{}
+		for _, ruling := range rulings {
+			// In case of an objection and a consent with equal specificness: Objections supersede consents
+			// Therefore if we recorded an objection we will stop processing further rulings
+			current, ok := finalRulings[ruling.Scope]
+			if ok && current == false {
+				continue
+			}
+
+			if ruling.ProvisionType == fhir.ConsentProvisionTypeDeny {
+				finalRulings[ruling.Scope] = false
+				continue
+			}
+
+			if ruling.ProvisionType == fhir.ConsentProvisionTypePermit {
+				finalRulings[ruling.Scope] = true
+				continue
+			}
+		}
+
+		for scope, consentGranted := range finalRulings {
+			if consentGranted {
+				policyInput.Resource.Consents = append(policyInput.Resource.Consents, PolicyConsent{
+					Scope: scope,
+				})
+			}
+		}
+	}
+
 	return policyInput, nil
 }

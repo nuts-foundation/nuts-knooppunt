@@ -435,10 +435,10 @@ func NewPolicyInput(request APIRequest) (*PolicyInput, error) {
 	if tokens.ResourceType != nil {
 		policyInput.Resource.Type = tokens.ResourceType
 		if tokens.ResourceId != "" {
-			policyInput.Resource.Properties.ResourceId = tokens.ResourceId
+			policyInput.Resource.Id = tokens.ResourceId
 		}
 		if tokens.VersionId != "" {
-			policyInput.Resource.Properties.VersionId = tokens.VersionId
+			policyInput.Resource.VersionId = tokens.VersionId
 		}
 	}
 
