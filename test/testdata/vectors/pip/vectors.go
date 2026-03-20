@@ -86,8 +86,10 @@ func Consents() []fhir.Consent {
 				Actor: []fhir.ConsentProvisionActor{
 					{
 						Reference: fhir.Reference{
-							Reference: to.Ptr("Organization/873236BC-73E9-4AF2-20FB-A4CA28CA3CC7"),
-							Type:      to.Ptr("Organization"),
+							Identifier: to.Ptr(fhir.Identifier{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("00000040"),
+							}),
 						},
 					},
 				},

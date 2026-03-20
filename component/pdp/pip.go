@@ -120,6 +120,17 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 			}
 			applyRuling = applyRuling && slices.Contains(orgUras, policyInput.Context.DataHolderOrganizationId)
 
+			var actorUras []string
+			for _, actor := range consent.Provision.Actor {
+				if actor.Reference.Identifier != nil {
+					ident := *actor.Reference.Identifier
+					if ident.System != nil && *ident.System == "http://fhir.nl/fhir/NamingSystem/ura" {
+						actorUras = append(actorUras, *ident.Value)
+					}
+				}
+			}
+			applyRuling = applyRuling && slices.Contains(actorUras, policyInput.Subject.Organization.Ura)
+
 			applyRuling = applyRuling && consent.Provision.Type != nil
 
 			if applyRuling {

@@ -26,7 +26,7 @@ Content-Type: application/json
     "subject": {
       "user_id": "000095254",
       "user_role": "01.015",
-      "organization_ura": "00000666",
+      "organization_ura": "00000040",
       "organization_facility_type": "Z3",
       "scope": "eoverdracht-receiver"
     },
