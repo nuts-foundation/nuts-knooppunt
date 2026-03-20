@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"slices"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
@@ -84,6 +85,20 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 			"data": []string{policyInput.Resource.Id},
 		}, &searchResult)
 
+		var entries []fhir.BundleEntry
+		err := fhirclient.Paginate(ctx, client, searchResult, func(searchSet *fhir.Bundle) (bool, error) {
+			entries = append(entries, searchSet.Entry...)
+			return true, nil
+		})
+		if err != nil {
+			return policyInput, []ResultReason{
+				{
+					Code:        TypeResultCodePIPError,
+					Description: "Error occurred while paginating consent call results",
+				},
+			}
+		}
+
 		type Ruling struct {
 			Scope         string
 			ProvisionType fhir.ConsentProvisionType
@@ -92,7 +107,7 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 		}
 		var rulings []Ruling
 
-		err := fhirutil.VisitBundleResources[fhir.Consent](&searchResult, func(consent *fhir.Consent) error {
+		err = fhirutil.VisitBundleResources[fhir.Consent](&searchResult, func(consent *fhir.Consent) error {
 			if len(consent.Scope.Coding) != 1 && consent.Scope.Coding[0].Code != nil {
 				// Only continue if there's a single simple code
 				// Complex coding scheme's not supported for now
