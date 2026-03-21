@@ -58,8 +58,8 @@ type Component struct {
 }
 
 type Config struct {
-	Enabled        bool   `koanf:"enabled"`
-	TracingConfig  TracingConfig
+	Enabled       bool `koanf:"enabled"`
+	TracingConfig TracingConfig
 }
 
 type TracingConfig struct {
@@ -71,11 +71,12 @@ func (c *Component) Start() error {
 	const dataDir = "data/nuts"
 	const configFile = "config/nuts.yml"
 	envVars := map[string]string{
-		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr.Host,
-		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr.Host,
-		"NUTS_DATADIR":               dataDir,
-		"NUTS_VERBOSITY":             logging.GetLogrusLevel(slog.LevelDebug), // TODO: use configured log level when supported
-		"NUTS_STRICTMODE":            strconv.FormatBool(c.coreConfig.StrictMode),
+		"NUTS_HTTP_INTERNAL_ADDRESS":     c.internalAddr.Host,
+		"NUTS_HTTP_PUBLIC_ADDRESS":       c.publicAddr.Host,
+		"NUTS_DATADIR":                   dataDir,
+		"NUTS_VERBOSITY":                 logging.GetLogrusLevel(slog.LevelDebug), // TODO: use configured log level when supported
+		"NUTS_STRICTMODE":                strconv.FormatBool(c.coreConfig.StrictMode),
+		"NUTS_STORAGE_BBOLT_LOCKTIMEOUT": "5s",
 	}
 	// Pass tracing config to nuts-node so it creates its own TracerProvider
 	// with service.name="nuts-node". It will use the same OTLP endpoint but
