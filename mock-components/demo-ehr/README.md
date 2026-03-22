@@ -168,7 +168,7 @@ The application includes example FHIR resources for testing:
 ### Frontend
 - **Framework**: React 18.2
 - **Routing**: React Router DOM 6.20
-- **Authentication**: OIDC Client TS 3.0
+- **Authentication**: Delegated to demo-dezi-client (via `/login` and `/userinfo`)
 - **Proxy**: HTTP Proxy Middleware 3.0
 
 ### API Modules
@@ -200,16 +200,15 @@ Application configuration is managed through environment variables. The applicat
 
 ### Environment Variables
 
-Configure the following environment variables (see `docker-compose.yml` profile `demoehr`):
+These are injected at container startup via `entrypoint.sh` into `public/env-config.js`, so the image does not need to be rebuilt when configuration changes.
 
-| Variable | Description | Default/Example |
-|----------|-------------|-----------------|
-| `REACT_APP_AUTHORITY` | OIDC authority endpoint for authentication | `http://localhost:8080/auth` |
-| `REACT_APP_FHIR_BASE_URL` | FHIR R4 base URL for patient data | `https://server.fire.ly/R4` |
-| `REACT_APP_FHIR_STU3_BASE_URL` | FHIR STU3 base URL for BGZ/eOverdracht tasks | `https://server.fire.ly/R3` |
-| `REACT_APP_FHIR_MCSD_QUERY_BASE_URL` | mCSD Query Directory FHIR endpoint | `http://localhost:7050/fhir/knpt-mcsd-query` |
-| `REACT_APP_ORGANIZATION_URA` | Organization URA identifier (optional) | - |
-| `CHOKIDAR_USEPOLLING` | Enable polling for hot reload in Docker | `true` |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AUTH_BASE_URL` | Base URL of demo-dezi-client | `http://localhost:8090` |
+| `FHIR_BASE_URL` | FHIR R4 base URL for patient data | - |
+| `FHIR_STU3_BASE_URL` | FHIR STU3 base URL for BGZ/eOverdracht tasks | - |
+| `FHIR_MCSD_QUERY_BASE_URL` | mCSD Query Directory FHIR endpoint | - |
+| `ORGANIZATION_URA` | Organization URA identifier (optional) | - |
 
 ### Docker Compose Configuration
 
@@ -236,32 +235,55 @@ demo-ehr:
     - ./demo-ehr/public:/app/public
   environment:
     - CHOKIDAR_USEPOLLING=true
-    - REACT_APP_AUTHORITY=http://localhost:8080/auth
-    - REACT_APP_FHIR_BASE_URL=https://server.fire.ly/R4
-    - REACT_APP_FHIR_STU3_BASE_URL=https://server.fire.ly/R3
-    - REACT_APP_FHIR_MCSD_QUERY_BASE_URL=http://localhost:7050/fhir/knpt-mcsd-query
+    - AUTH_BASE_URL=http://localhost:8090
+    - FHIR_BASE_URL=https://server.fire.ly/R4
+    - FHIR_STU3_BASE_URL=https://server.fire.ly/R3
+    - FHIR_MCSD_QUERY_BASE_URL=http://localhost:7050/fhir/knpt-mcsd-query
 ```
 
 ### Local Development Configuration
 
-For local development without Docker, create a `.env` file in the `demo-ehr` directory:
+For local development without Docker, edit `public/env-config.js` directly:
 
-```bash
-REACT_APP_AUTHORITY=http://localhost:8081
-REACT_APP_FHIR_BASE_URL=http://localhost:7050/fhir/sunflower-patients
-REACT_APP_FHIR_STU3_BASE_URL=http://localhost:7060/fhir
-REACT_APP_FHIR_MCSD_QUERY_BASE_URL=http://localhost:7050/fhir/knpt-mcsd-query
+```javascript
+window._env_ = {
+  AUTH_BASE_URL: 'http://localhost:8090',
+  FHIR_BASE_URL: 'http://localhost:7050/fhir/sunflower-patients',
+  FHIR_STU3_BASE_URL: 'http://localhost:7060/fhir',
+  FHIR_MCSD_QUERY_BASE_URL: 'http://localhost:8080/fhir',
+  ORGANIZATION_URA: '',
+};
 ```
 
-### OIDC Configuration
+### Authentication Configuration
 
-OIDC settings are configured in `authConfig.js`:
+Authentication is delegated to the **demo-dezi-client** service, which handles the complete OIDC flow with Dezi. Demo EHR is a simple client that:
 
-- **Authority**: `http://localhost:8081` (or from `REACT_APP_AUTHORITY`)
-- **Client ID**: `demo-ehr`
-- **Client Secret**: `demo-ehr-secret`
-- **Redirect URI**: `http://localhost:3000/callback`
-- **Scopes**: `openid profile`
+1. Redirects to `/login` for authentication
+2. Calls `/userinfo` to get user data  
+3. Calls `/logout` to end the session
+
+Configure the auth base URL in `authConfig.js`:
+
+```javascript
+export const authConfig = {
+  baseUrl: process.env.REACT_APP_AUTH_BASE_URL || 'http://localhost:8090',
+};
+```
+
+**Required Service**: demo-dezi-client must be running on port 8090 (or configured URL)
+
+**Architecture**:
+```
+[demo-ehr :3000] → [demo-dezi-client :8090] → [Dezi auth.dezi.nl]
+```
+
+**User Data**: Receives Dezi verklaring (healthcare worker declaration) with:
+- `dezi_nummer` - Healthcare worker ID
+- `name` - Full name
+- `rol_naam` - Professional role
+- `abonnee_naam` - Organization name
+- `verklaring_id` - Declaration ID
 
 ### Knooppunt Configuration
 
@@ -307,24 +329,6 @@ mcsdadmin:
   fhirbaseurl: "http://localhost:7050/fhir/knpt-mcsd-admin"
 ```
 
-#### OIDC Client Registration
-
-Register the demo-ehr application as an OIDC client:
-
-```yaml
-authn:
-  oidc:
-    # ... existing configuration ...
-    clients:
-      # ... existing clients ...
-      - id: "demo-ehr"
-        secret: "demo-ehr-secret"
-        redirecturls:
-          - "http://localhost:3000/callback"
-```
-
-**Important:** The client ID, secret, and redirect URL must match the values in `demo-ehr/src/authConfig.js`.
-
 #### Complete Configuration Example
 
 Here's a complete example of the required sections in `config/knooppunt.yml`:
@@ -348,14 +352,6 @@ mcsd:
 
 mcsdadmin:
   fhirbaseurl: "http://localhost:7050/fhir/knpt-mcsd-admin"
-
-authn:
-  oidc:
-    clients:
-      - id: "demo-ehr"
-        secret: "demo-ehr-secret"
-        redirecturls:
-          - "http://localhost:3000/callback"
 ```
 
 ## FHIR Profiles and Standards
