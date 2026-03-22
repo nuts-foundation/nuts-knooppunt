@@ -42,27 +42,6 @@ function getTokenType(request) {
     return match ? match[1].toLowerCase() : null;
 }
 
-/**
- * Parse query parameters from query string
- * @param {string} queryString - Query string without leading ?
- * @returns {Object} - Map of param name to array of values
- * @throws {URIError} - If URL decoding fails (malformed percent-encoding)
- */
-function parseQueryParams(queryString) {
-    if (!queryString) return {};
-    const params = {};
-    queryString.split('&').forEach(pair => {
-        const idx = pair.indexOf('=');
-        if (idx > 0) {
-            const key = decodeURIComponent(pair.substring(0, idx));
-            const value = decodeURIComponent(pair.substring(idx + 1));
-            if (!params[key]) params[key] = [];
-            params[key].push(value);
-        }
-    });
-    return params;
-}
-
 // Standard OAuth/JWT/OIDC claims that should not be forwarded to PDP
 // These are either handled specially (client_id, scope) or are token metadata
 // Using object instead of Set for njs compatibility
@@ -140,7 +119,7 @@ function buildPDPRequest(introspection, request) {
                 method: request.variables.request_method || request.method || 'GET',
                 protocol: 'HTTP/1.1',
                 path: requestPath || '/',
-                query_params: parseQueryParams(queryString),
+                query: queryString || '',
                 header: {},
                 body: request.requestText || ''
             },
@@ -280,16 +259,7 @@ async function checkAuthorization(request) {
 
         // Step 4: Build PDPInput request
         let pdpRequest;
-        try {
-            pdpRequest = buildPDPRequest(introspection, request);
-        } catch (e) {
-            if (e instanceof URIError) {
-                request.error(`Malformed URL encoding in request: ${e.message}`);
-                request.return(400);
-                return;
-            }
-            throw e;
-        }
+        pdpRequest = buildPDPRequest(introspection, request);
 
         request.log(`Calling PDP: client_id=${pdpRequest.input.subject.id}, ` +
             `path=${pdpRequest.input.request.path}, method=${pdpRequest.input.request.method}`);
@@ -349,7 +319,6 @@ export default {
     checkAuthorization,
     extractBearerToken,
     getTokenType,
-    parseQueryParams,
     normalizeClaimValue,
     buildPDPRequest,
     validateDPoP,

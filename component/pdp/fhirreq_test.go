@@ -239,7 +239,7 @@ func TestComponent_groupParams(t *testing.T) {
 		}
 
 		groupedParam := groupParams(queryParams)
-		assert.Equal(t, []string{"1985-04-01"}, groupedParam.SearchParams["_since"])
+		assert.Equal(t, [][]string{{"1985-04-01"}}, groupedParam.SearchParams["_since"])
 		assert.Contains(t, groupedParam.Include, "Location:managingOrganization")
 		assert.Contains(t, groupedParam.Revinclude, "PractitionerRole:Location")
 	})
@@ -250,6 +250,42 @@ func TestComponent_groupParams(t *testing.T) {
 		}
 		params := groupParams(queryParams)
 		assert.Empty(t, params.SearchParams)
+	})
+
+	t.Run("OR: comma-separated values in single param become inner slice", func(t *testing.T) {
+		// ?category=a,b  →  category is a OR b
+		queryParams := map[string][]string{
+			"category": {"a,b"},
+		}
+		params := groupParams(queryParams)
+		assert.Equal(t, [][]string{{"a", "b"}}, params.SearchParams["category"])
+	})
+
+	t.Run("AND: repeated param key becomes outer slice", func(t *testing.T) {
+		// ?category=1&category=2  →  category is 1 AND category is 2
+		queryParams := map[string][]string{
+			"category": {"1", "2"},
+		}
+		params := groupParams(queryParams)
+		assert.Equal(t, [][]string{{"1"}, {"2"}}, params.SearchParams["category"])
+	})
+
+	t.Run("AND of ORs: repeated param with comma-separated values", func(t *testing.T) {
+		// ?category=a,b&category=1  →  (category is a OR b) AND (category is 1)
+		queryParams := map[string][]string{
+			"category": {"a,b", "1"},
+		}
+		params := groupParams(queryParams)
+		assert.Equal(t, [][]string{{"a", "b"}, {"1"}}, params.SearchParams["category"])
+	})
+
+	t.Run("single value stays single", func(t *testing.T) {
+		// ?status=active  →  status is active
+		queryParams := map[string][]string{
+			"status": {"active"},
+		}
+		params := groupParams(queryParams)
+		assert.Equal(t, [][]string{{"active"}}, params.SearchParams["status"])
 	})
 }
 
@@ -278,9 +314,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Patient",
-						QueryParams: url.Values{
-							"_id": []string{"56789"},
-						},
+						Query:    "_id=56789",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
@@ -297,9 +331,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Encounter",
-						QueryParams: url.Values{
-							"patient": []string{"Patient/98765"},
-						},
+						Query:    "patient=Patient%2F98765",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
@@ -316,9 +348,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Encounter",
-						QueryParams: url.Values{
-							"patient": []string{"Patient/123", "Patient/456"},
-						},
+						Query:    "patient=Patient%2F123&patient=Patient%2F456",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
@@ -336,9 +366,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Patient",
-						QueryParams: url.Values{
-							"_id": []string{"123", "456"},
-						},
+						Query:    "_id=123&_id=456",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
@@ -373,9 +401,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Patient",
-						QueryParams: url.Values{
-							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn|900186021"},
-						},
+						Query:    "identifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn%7C900186021",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
@@ -392,9 +418,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Patient",
-						QueryParams: url.Values{
-							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/bsn%7C900186021"},
-						},
+						Query:    "identifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn%7C900186021",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",
@@ -447,7 +471,7 @@ func TestNewPolicyInput(t *testing.T) {
 			policyInput, resultReasons := NewPolicyInput(pdpRequest)
 			require.NotNil(t, policyInput)
 			assert.Empty(t, resultReasons)
-			assert.Equal(t, []string{"http://fhir.nl/fhir/NamingSystem/bsn|775645332"}, policyInput.Action.FHIRRest.SearchParams["identifier"])
+			assert.Equal(t, [][]string{{"http://fhir.nl/fhir/NamingSystem/bsn|775645332"}}, policyInput.Action.FHIRRest.SearchParams["identifier"])
 			assert.Equal(t, "775645332", policyInput.Context.PatientBSN)
 		})
 		t.Run("incorrect system", func(t *testing.T) {
@@ -457,9 +481,7 @@ func TestNewPolicyInput(t *testing.T) {
 						Method:   "GET",
 						Protocol: "HTTP/1.1",
 						Path:     "/Patient",
-						QueryParams: url.Values{
-							"identifier": []string{"http://fhir.nl/fhir/NamingSystem/other|900186021"},
-						},
+						Query:    "identifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fother%7C900186021",
 					},
 					Context: APIContext{
 						ConnectionTypeCode: "hl7-fhir-rest",

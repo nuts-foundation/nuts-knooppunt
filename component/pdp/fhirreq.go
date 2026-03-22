@@ -247,7 +247,7 @@ func parseRequestPath(request HTTPRequest) (Tokens, bool) {
 }
 
 type Params struct {
-	SearchParams map[string][]string
+	SearchParams map[string][][]string
 	Revinclude   []string
 	Include      []string
 }
@@ -294,7 +294,15 @@ func groupParams(queryParams url.Values) Params {
 	for _, p := range resultParams {
 		delete(queryParams, p)
 	}
-	params.SearchParams = queryParams
+
+	params.SearchParams = make(map[string][][]string, len(queryParams))
+	for key, andGroups := range queryParams {
+		groups := make([][]string, len(andGroups))
+		for i, andGroup := range andGroups {
+			groups[i] = strings.Split(andGroup, ",")
+		}
+		params.SearchParams[key] = groups
+	}
 
 	return params
 }
@@ -319,10 +327,9 @@ func derivePatientId(tokens Tokens, queryParams url.Values) (string, error) {
 		return getSingleParameter(queryParams, "_id")
 	}
 
-	// Otherwise, we can only derive patient ID for search interactions with patient parameter
-	// Theoretically, this could apply to other interactions as well (conditional update),
-	// but those are edge cases we don't need to support right now.
-	if tokens.Interaction == fhir.TypeRestfulInteractionSearchType {
+	// Otherwise, derive patient ID from patient/subject parameters for search and operation interactions.
+	if tokens.Interaction == fhir.TypeRestfulInteractionSearchType ||
+		tokens.Interaction == fhir.TypeRestfulInteractionOperation {
 		var candidates []string
 		// try 'patient'
 		patientID, err := getSingleParameter(queryParams, "patient")
@@ -405,17 +412,9 @@ func getSingleParameter(params url.Values, name string) (string, error) {
 func NewPolicyInput(request APIRequest) (*PolicyInput, error) {
 	var policyInput PolicyInput
 
-	// URL decode query parameters
-	decodeHTTPRequest := request.Input.Request
-	decodedQueryParams, err := urlValuesDecode(request.Input.Request.QueryParams)
-	if err != nil {
-		return nil, fmt.Errorf("unable to decode query parameters: %w", err)
-	}
-	decodeHTTPRequest.QueryParams = *decodedQueryParams
-
 	policyInput.Subject = NewPolicySubject(request.Input.Subject)
 
-	policyInput.Action.Request = decodeHTTPRequest
+	policyInput.Action.Request = request.Input.Request
 	policyInput.Context.DataHolderOrganizationId = request.Input.Context.DataHolderOrganizationId
 	policyInput.Context.DataHolderFacilityType = request.Input.Context.DataHolderFacilityType
 	policyInput.Context.PatientBSN = request.Input.Context.PatientBSN
@@ -465,7 +464,11 @@ func NewPolicyInput(request APIRequest) (*PolicyInput, error) {
 		}
 		rawParams = decodedBody
 	} else {
-		rawParams = *decodedQueryParams
+		parsedQuery, err := url.ParseQuery(request.Input.Request.Query)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse query string: %w", err)
+		}
+		rawParams = parsedQuery
 	}
 
 	params := groupParams(rawParams)
@@ -496,18 +499,4 @@ func NewPolicyInput(request APIRequest) (*PolicyInput, error) {
 		return nil, errors.Join(errs...)
 	}
 	return &policyInput, nil
-}
-
-func urlValuesDecode(in url.Values) (*url.Values, error) {
-	out := make(url.Values)
-	for key, values := range in {
-		for _, value := range values {
-			decodedValue, err := url.QueryUnescape(value)
-			if err != nil {
-				return nil, fmt.Errorf("parameter '%s': %w", key, err)
-			}
-			out.Add(key, decodedValue)
-		}
-	}
-	return &out, nil
 }

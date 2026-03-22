@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -79,12 +78,12 @@ func (s APISubject) MarshalJSON() ([]byte, error) {
 }
 
 type HTTPRequest struct {
-	Method      string      `json:"method"`
-	Protocol    string      `json:"protocol"` // "HTTP/1.0"
-	Path        string      `json:"path"`
-	QueryParams url.Values  `json:"query_params"`
-	Header      http.Header `json:"header"`
-	Body        string      `json:"body"`
+	Method   string      `json:"method"`
+	Protocol string      `json:"protocol"` // "HTTP/1.0"
+	Path     string      `json:"path"`
+	Query    string      `json:"query"`
+	Header   http.Header `json:"header"`
+	Body     string      `json:"body"`
 }
 
 type APIContext struct {
@@ -194,7 +193,11 @@ type FHIRRestData struct {
 	InteractionType   fhir.TypeRestfulInteraction `json:"interaction_type"`
 	Operation         *string                     `json:"operation"`
 	Revinclude        []string                    `json:"revinclude"`
-	SearchParams      map[string][]string         `json:"search_params"`
+	// SearchParams holds FHIR search parameters with their AND/OR structure preserved.
+	// The outer slice represents AND-groups (one entry per repeated query key, e.g. ?category=A&category=B → [["A"], ["B"]]).
+	// The inner slice represents OR-values (comma-separated within one key, e.g. ?category=A,B → [["A", "B"]]).
+	// Example: ?category=A,B&category=C → [["A", "B"], ["C"]] meaning (A or B) and (C).
+	SearchParams map[string][][]string `json:"search_params"`
 }
 
 type PolicyContext struct {
