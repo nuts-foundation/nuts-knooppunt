@@ -515,6 +515,8 @@ github.com/nuts-foundation/go-stoabs v1.11.0 h1:q18jVruPdFcVhodDrnKuhq/24i0pUC/Y
 github.com/nuts-foundation/go-stoabs v1.11.0/go.mod h1:w2OgcHXO0Jl/vN1nG0ksApaeOaPOY3sSBJLaZz7cCY0=
 github.com/nuts-foundation/nuts-node v1.0.1-0.20260323085106-49e28c47d90c h1:ewug6MxhBPuerX1PLV2vUEHmGfOz/FbaROHvSYuUDvw=
 github.com/nuts-foundation/nuts-node v1.0.1-0.20260323085106-49e28c47d90c/go.mod h1:Yz6M23sJFwmvV34i6y1aWsS26l6ZGRRrRdz/eCvdKmQ=
+github.com/nuts-foundation/nuts-node v1.0.1-0.20260323122022-3dc7c6113d1c h1:nu/iEOB3emlb5HRq/3px+Ya27qU17+0mhF260z74ORo=
+github.com/nuts-foundation/nuts-node v1.0.1-0.20260323122022-3dc7c6113d1c/go.mod h1:Yz6M23sJFwmvV34i6y1aWsS26l6ZGRRrRdz/eCvdKmQ=
 github.com/nuts-foundation/sqlite v1.0.0 h1:gLKyVIHZqYfYpEy5Ji6vjNUH8rs0luiY3DWNcOSBBzM=
 github.com/nuts-foundation/sqlite v1.0.0/go.mod h1:2GHDXCw5Sul9L3h8T5k0+558scm4ol4iXG+wVyYqueI=
 github.com/nxadm/tail v1.4.8 h1:nPr65rt6Y5JFSKQO7qToXr7pePgD6Gwiw05lkbyAQTE=

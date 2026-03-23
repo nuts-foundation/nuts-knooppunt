@@ -20,7 +20,7 @@ require (
 	github.com/knadh/koanf/v2 v2.3.2
 	github.com/lestrrat-go/jwx/v2 v2.1.6
 	github.com/mitchellh/copystructure v1.2.0
-	github.com/nuts-foundation/nuts-node v1.0.1-0.20260323085106-49e28c47d90c
+	github.com/nuts-foundation/nuts-node v1.0.1-0.20260323122022-3dc7c6113d1c
 	github.com/open-policy-agent/opa v1.12.3
 	github.com/pkg/errors v0.9.1
 	github.com/russellhaering/goxmldsig v1.5.0
