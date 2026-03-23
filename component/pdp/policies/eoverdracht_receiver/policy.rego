@@ -9,3 +9,8 @@ allow if {
     some consent in input.resource.consents
     consent.scope == "eoverdracht"
 }
+
+allow if {
+    input.action.request.method == "PUT"
+    input.resource.type == "Task"
+}
