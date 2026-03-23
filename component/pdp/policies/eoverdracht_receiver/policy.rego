@@ -12,5 +12,7 @@ allow if {
 
 allow if {
     input.action.request.method == "PUT"
+    input.action.fhir_rest.interaction_type == "update"
     input.resource.type == "Task"
+    input.resource.id != ""
 }
