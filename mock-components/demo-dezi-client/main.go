@@ -108,6 +108,7 @@ type UserInfo struct {
 	RolCode       string      `json:"rol_code"`
 	RolNaam       string      `json:"rol_naam"`
 	VerklaringID  string      `json:"verklaring_id"`
+	VerklaringJWT string      `json:"verklaring"`
 	Verklaring    *Verklaring `json:"verklaring_details,omitempty"`
 }
 
@@ -429,9 +430,10 @@ func getUserinfo(accessToken string) (*UserInfo, error) {
 
 	// Build UserInfo response
 	userInfo := &UserInfo{
-		Sub:          fmt.Sprintf("dezi:%s", envelope.VerklaringID),
-		VerklaringID: envelope.VerklaringID,
-		Verklaring:   verklaring,
+		Sub:           fmt.Sprintf("dezi:%s", envelope.VerklaringID),
+		VerklaringID:  envelope.VerklaringID,
+		VerklaringJWT: envelope.Verklaring,
+		Verklaring:    verklaring,
 	}
 
 	if verklaring != nil {
