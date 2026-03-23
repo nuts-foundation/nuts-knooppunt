@@ -150,6 +150,30 @@ func Test_EOverdrachtAuthorize(t *testing.T) {
 			}`,
 			allow: false,
 		},
+		{
+			name: "authorize task notification using the PDP",
+			pdpJSON: `{
+			  "input": {
+				"subject": {
+				  "user_id": "000095254",
+				  "user_role": "01.015",
+				  "organization_ura": "00000666",
+				  "organization_facility_type": "Z3",
+				  "scope": "eoverdracht_notification"
+				},
+				"request": {
+				  "method": "POST",
+				  "protocol": "HTTP/1.0",
+				  "path": "/Task"
+				},
+				"context": {
+				  "data_holder_organization_id": "00000659",
+				  "data_holder_facility_type": "Z3"
+				}
+			  }
+			}`,
+			allow: true,
+		},
 	}
 
 	for _, testCase := range testCases {

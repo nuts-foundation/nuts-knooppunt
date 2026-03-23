@@ -77,7 +77,8 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 	}
 
 	// Check for local consent resources
-	if policyInput.Action.FHIRRest.InteractionType == fhir.TypeRestfulInteractionRead {
+	if policyInput.Action.ConnectionTypeCode == "hl7-fhir-rest" &&
+		policyInput.Action.FHIRRest.InteractionType == fhir.TypeRestfulInteractionRead {
 		client := c.pipClient
 
 		//	GET http://0.0.0.0:7050/fhir/policy-information-point/Consent?
