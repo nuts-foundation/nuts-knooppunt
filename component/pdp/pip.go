@@ -97,21 +97,6 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 			}
 		}
 
-		var entries []fhir.BundleEntry
-		err = fhirclient.Paginate(ctx, client, searchResult, func(searchSet *fhir.Bundle) (bool, error) {
-			entries = append(entries, searchSet.Entry...)
-			return true, nil
-		})
-		if err != nil {
-			slog.ErrorContext(ctx, "PIP consent paginated retrieval failed", logging.Error(err))
-			return policyInput, []ResultReason{
-				{
-					Code:        TypeResultCodePIPError,
-					Description: "Error occurred while retrieving paginated consents",
-				},
-			}
-		}
-
 		type Ruling struct {
 			Scope         string
 			ProvisionType fhir.ConsentProvisionType
@@ -120,62 +105,68 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 		}
 		var rulings []Ruling
 
-		err = fhirutil.VisitBundleResources[fhir.Consent](&searchResult, func(consent *fhir.Consent) error {
-			if len(consent.Scope.Coding) != 1 && consent.Scope.Coding[0].Code != nil {
-				// Only continue if there's a single simple code
-				// Complex coding scheme's not supported for now
-				return nil
-			}
-			scope := *consent.Scope.Coding[0].Code
-
-			var applyRuling bool
-
-			applyRuling = consent.Status == fhir.ConsentStateActive
-
-			applyRuling = applyRuling && coding.CodablesIncludesCode(consent.Provision.Action, fhir.Coding{
-				System: to.Ptr("http://terminology.hl7.org/CodeSystem/consentaction"),
-				Code:   to.Ptr("access"),
-			})
-
-			var orgUras []string
-			for _, orgRef := range consent.Organization {
-				if orgRef.Identifier != nil {
-					ident := *orgRef.Identifier
-					if ident.System != nil && *ident.System == "http://fhir.nl/fhir/NamingSystem/ura" {
-						orgUras = append(orgUras, *ident.Value)
-					}
+		err = fhirclient.Paginate(ctx, client, searchResult, func(searchSet *fhir.Bundle) (bool, error) {
+			innerErr := fhirutil.VisitBundleResources[fhir.Consent](searchSet, func(consent *fhir.Consent) error {
+				if len(consent.Scope.Coding) != 1 || consent.Scope.Coding[0].Code == nil {
+					// Only continue if there's a single simple code
+					// Complex coding scheme's not supported for now
+					return nil
 				}
-			}
-			applyRuling = applyRuling && slices.Contains(orgUras, policyInput.Context.DataHolderOrganizationId)
+				scope := *consent.Scope.Coding[0].Code
 
-			var actorUras []string
-			for _, actor := range consent.Provision.Actor {
-				if actor.Reference.Identifier != nil {
-					ident := *actor.Reference.Identifier
-					if ident.System != nil && *ident.System == "http://fhir.nl/fhir/NamingSystem/ura" {
-						actorUras = append(actorUras, *ident.Value)
-					}
-				}
-			}
-			applyRuling = applyRuling && slices.Contains(actorUras, policyInput.Subject.Organization.Ura)
+				var applyRuling bool
 
-			applyRuling = applyRuling && consent.Provision.Type != nil
+				applyRuling = consent.Status == fhir.ConsentStateActive
 
-			if applyRuling {
-				rulings = append(rulings, Ruling{
-					Scope:         scope,
-					ProvisionType: *consent.Provision.Type,
+				applyRuling = applyRuling && coding.CodablesIncludesCode(consent.Provision.Action, fhir.Coding{
+					System: to.Ptr("http://terminology.hl7.org/CodeSystem/consentaction"),
+					Code:   to.Ptr("access"),
 				})
-			}
 
-			return nil
+				var orgUras []string
+				for _, orgRef := range consent.Organization {
+					if orgRef.Identifier != nil {
+						ident := *orgRef.Identifier
+						if ident.System != nil && *ident.System == "http://fhir.nl/fhir/NamingSystem/ura" {
+							orgUras = append(orgUras, *ident.Value)
+						}
+					}
+				}
+				applyRuling = applyRuling && slices.Contains(orgUras, policyInput.Context.DataHolderOrganizationId)
+
+				var actorUras []string
+				for _, actor := range consent.Provision.Actor {
+					if actor.Reference.Identifier != nil {
+						ident := *actor.Reference.Identifier
+						if ident.System != nil && *ident.System == "http://fhir.nl/fhir/NamingSystem/ura" {
+							actorUras = append(actorUras, *ident.Value)
+						}
+					}
+				}
+				applyRuling = applyRuling && slices.Contains(actorUras, policyInput.Subject.Organization.Ura)
+
+				applyRuling = applyRuling && consent.Provision.Type != nil
+
+				if applyRuling {
+					rulings = append(rulings, Ruling{
+						Scope:         scope,
+						ProvisionType: *consent.Provision.Type,
+					})
+				}
+
+				return nil
+			})
+			if innerErr != nil {
+				return false, innerErr
+			}
+			return true, nil
 		})
 		if err != nil {
-			slog.ErrorContext(ctx, "Failed to parse consent resources in bundle", logging.Error(err))
+			slog.ErrorContext(ctx, "PIP consent paginated retrieval failed", logging.Error(err))
 			return policyInput, []ResultReason{
 				{
 					Code:        TypeResultCodePIPError,
-					Description: "Error occurred while parsing consent resources in bundle",
+					Description: "Error occurred while retrieving paginated consents",
 				},
 			}
 		}
