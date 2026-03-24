@@ -11,7 +11,6 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
-	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -78,14 +77,15 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 
 	// Check for local consent resources
 	if policyInput.Action.ConnectionTypeCode == "hl7-fhir-rest" &&
-		policyInput.Action.FHIRRest.InteractionType == fhir.TypeRestfulInteractionRead {
+		policyInput.Action.FHIRRest.InteractionType == fhir.TypeRestfulInteractionRead &&
+		policyInput.Resource.Type != nil {
 		client := c.pipClient
 
 		//	GET http://0.0.0.0:7050/fhir/policy-information-point/Consent?
 		//	data=Patient/3E439979-017F-40AA-594D-EBCF880FFD97&
 		var searchResult fhir.Bundle
 		err := client.SearchWithContext(ctx, "Consent", url.Values{
-			"data": []string{policyInput.Resource.Id},
+			"data": []string{policyInput.Resource.Type.String() + "/" + policyInput.Resource.Id},
 		}, &searchResult)
 		if err != nil {
 			slog.ErrorContext(ctx, "PIP consent retrieval failed", logging.Error(err))
@@ -111,6 +111,7 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 				},
 			}
 		}
+		searchResult.Entry = entries
 
 		type Ruling struct {
 			Scope         string
@@ -133,8 +134,8 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 			applyRuling = consent.Status == fhir.ConsentStateActive
 
 			applyRuling = applyRuling && coding.CodablesIncludesCode(consent.Provision.Action, fhir.Coding{
-				System: to.Ptr("http://terminology.hl7.org/CodeSystem/consentaction"),
-				Code:   to.Ptr("access"),
+				System: new("http://terminology.hl7.org/CodeSystem/consentaction"),
+				Code:   new("access"),
 			})
 
 			var orgUras []string
