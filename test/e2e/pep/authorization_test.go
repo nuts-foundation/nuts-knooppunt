@@ -18,12 +18,14 @@ import (
 )
 
 // Test_PEPAuthorization tests the PEP authorization flow with real Nuts node
-// credential validation.
+// credential validation using the medicatieoverdracht scope. The access policy
+// in testdata/ is based on config/policies/medicatieoverdracht-policy.json with
+// additional claim mappings for MITZ input validation (see accesspolicy.json).
 //
 // This test validates the FULL credential flow:
 //   - X509Credential issued via go-didx509-toolkit from test certificates
-//   - NutsEmployeeCredential and HealthcareProviderRoleTypeCredential (self-attested)
-//   - Real Presentation Definition validation
+//   - HealthCareProfessionalDelegationCredential and PatientEnrollmentCredential (self-attested, #406)
+//   - Presentation Definition validation
 //   - Real token introspection with extracted claims
 //   - PEP authorization through Knooppunt PDP
 //   - Mitz consent checking (mocked)
@@ -32,67 +34,50 @@ func Test_PEPAuthorization(t *testing.T) {
 		t.Skip("Skipping e2e test in short mode")
 	}
 
-	// Check if Docker is available
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skip("Docker not available, skipping e2e test")
 	}
 
-	// Get absolute paths to test resources
 	certsDir, err := filepath.Abs("certs")
 	require.NoError(t, err)
 	testdataDir, err := filepath.Abs("testdata")
 	require.NoError(t, err)
 
-	// Verify certificate files exist
 	chainPath := filepath.Join(certsDir, "requester-chain.pem")
 	keyPath := filepath.Join(certsDir, "requester.key")
 	if _, err := os.Stat(chainPath); os.IsNotExist(err) {
 		t.Fatalf("Certificate chain not found. Run: cd certs && ./generate-root-ca.sh && ./issue-cert.sh requester 'Test Hospital B.V.' Amsterdam 0 87654321 0")
 	}
 
-	// Start the PEP test harness (Knooppunt with Nuts + PDP + mock MITZ + HAPI)
 	pep := harness.StartPEP(t, harness.PEPTestConfig{
 		CertsDir:    certsDir,
 		TestDataDir: testdataDir,
 	})
-	t.Logf("Knooppunt started at: %s (with embedded Nuts node at /nuts)", pep.KnooppuntURL)
 
-	// Create a test patient in HAPI
 	createTestPatient(t, pep.HAPIBaseURL)
 
-	// Create subject (DID) in embedded Nuts node
 	subjectName := "requester"
 	subjectDID := createSubject(t, pep.NutsAPI, subjectName)
 	t.Logf("Created subject DID: %s", subjectDID)
 
-	// Issue X509Credential using go-didx509-toolkit
 	x509Credential := issueX509Credential(t, chainPath, keyPath, subjectDID)
-	t.Logf("X509Credential issued (first 100 chars): %s...", x509Credential[:min(100, len(x509Credential))])
-
-	// Store X509Credential in wallet
 	storeCredential(t, pep.NutsAPI, subjectName, x509Credential)
-	t.Log("X509Credential stored in wallet")
-
-	// Register on Discovery Service (before requesting token)
 	registerOnDiscovery(t, pep.NutsAPI, subjectName)
-	t.Log("Registered on Discovery Service")
 
-	// Start PEP container pointing to Knooppunt (which provides both PDP and Nuts APIs)
 	pepConfig := harness.PEPConfig{
 		FHIRBackendHost:           "host.docker.internal",
 		FHIRBackendPort:           pep.HAPIBaseURL.Port(),
-		FHIRBasePath:              "/fhir",         // incoming path clients use
-		FHIRUpstreamPath:          "/fhir/DEFAULT", // HAPI multi-tenant partition
+		FHIRBasePath:              "/fhir",
+		FHIRUpstreamPath:          "/fhir/DEFAULT",
 		KnooppuntPDPHost:          "host.docker.internal",
 		KnooppuntPDPPort:          pep.KnooppuntURL.Port(),
 		NutsNodeHost:              "host.docker.internal",
-		NutsNodePort:              pep.KnooppuntURL.Port(), // Nuts APIs are at /nuts on Knooppunt
+		NutsNodePort:              pep.KnooppuntURL.Port(),
 		DataHolderOrganizationURA: "12345678",
 		DataHolderFacilityType:    "Z3",
 	}
 	pepResult := harness.StartPEPContainer(t, pepConfig)
 	pepBaseURL := pepResult.URL
-	// Add cleanup to print logs on failure
 	t.Cleanup(func() {
 		logs, _ := pepResult.Container.Logs(t.Context())
 		if logs != nil {
@@ -101,41 +86,37 @@ func Test_PEPAuthorization(t *testing.T) {
 			logs.Close()
 		}
 	})
-	t.Logf("PEP started at: %s", pepBaseURL)
 
-	// Request both Bearer and DPoP tokens to test both paths
-	// The authorization server URL uses the public Nuts URL (the node talks to itself)
 	authServer := pep.NutsPublicURL.JoinPath("oauth2", subjectName).String()
+	const scope = "medicatieoverdracht"
 
-	// Get Bearer token for some tests
-	bearerToken := requestAccessToken(t, pep.NutsAPI, subjectName, authServer, "bgz", "Bearer")
-	t.Logf("Bearer token obtained: %s...", bearerToken.AccessToken[:min(50, len(bearerToken.AccessToken))])
+	// Get Bearer token
+	bearerToken := requestAccessToken(t, pep.NutsAPI, subjectName, authServer, scope, "Bearer")
 	assert.Equal(t, "Bearer", bearerToken.TokenType)
 
-	// Get DPoP token for DPoP tests
-	dpopToken := requestAccessToken(t, pep.NutsAPI, subjectName, authServer, "bgz", "DPoP")
-	t.Logf("DPoP token obtained: %s...", dpopToken.AccessToken[:min(50, len(dpopToken.AccessToken))])
-	t.Logf("DPoP key ID: %s", dpopToken.DPoPKID)
+	// Get DPoP token
+	dpopToken := requestAccessToken(t, pep.NutsAPI, subjectName, authServer, scope, "DPoP")
 	assert.Equal(t, "DPoP", dpopToken.TokenType)
-	assert.NotEmpty(t, dpopToken.DPoPKID, "DPoP token should have dpop_kid")
+	assert.NotEmpty(t, dpopToken.DPoPKID)
 
-	// Introspect DPoP token to verify claims are extracted
+	// Introspect and verify all claims including PatientEnrollmentCredential (#406)
 	introspection := introspectToken(t, pep.NutsAPI, dpopToken.AccessToken)
 	t.Logf("Introspection response: %+v", introspection)
 
-	// Verify the introspection contains expected claims (using exact PDP field names from PD)
-	assert.True(t, introspection["active"].(bool), "Token should be active")
+	assert.True(t, introspection["active"].(bool))
 	// From X509Credential
-	assert.NotEmpty(t, introspection["organization_ura"], "organization_ura claim should be present")
-	assert.NotEmpty(t, introspection["organization_name"], "organization_name claim should be present")
-	// From NutsEmployeeCredential
-	assert.NotEmpty(t, introspection["user_id"], "user_id claim should be present")
-	assert.NotEmpty(t, introspection["user_role"], "user_role claim should be present")
-	// From HealthcareProviderRoleTypeCredential
-	assert.NotEmpty(t, introspection["organization_facility_type"], "organization_facility_type claim should be present")
-
-	// Verify DPoP token has cnf claim (proof-of-possession binding)
-	assert.NotNil(t, introspection["cnf"], "DPoP token should have cnf claim")
+	assert.NotEmpty(t, introspection["organization_ura"])
+	assert.NotEmpty(t, introspection["organization_name"])
+	// From HealthCareProfessionalDelegationCredential
+	assert.NotEmpty(t, introspection["delegation_role_code"])
+	assert.NotEmpty(t, introspection["delegation_registered_by"])
+	// From PatientEnrollmentCredential (AORTA inschrijftoken equivalent)
+	assert.Equal(t, "http://fhir.nl/fhir/NamingSystem/bsn|900186021",
+		introspection["patient_enrollment_identifier"],
+		"patient_enrollment_identifier should contain the patient BSN")
+	assert.NotEmpty(t, introspection["patient_enrollment_registered_by"])
+	// DPoP binding
+	assert.NotNil(t, introspection["cnf"])
 
 	t.Run("unauthorized request without token", func(t *testing.T) {
 		req, err := http.NewRequest("GET", pepBaseURL.JoinPath("fhir", "Patient", "patient-123").String(), nil)
@@ -151,10 +132,9 @@ func Test_PEPAuthorization(t *testing.T) {
 	t.Run("authorized request with Bearer token", func(t *testing.T) {
 		pep.MockMitz.SetResponse("Permit", "Consent granted")
 
-		targetURL := pepBaseURL.JoinPath("fhir", "Condition").String() + "?patient=Patient/patient-123"
+		targetURL := pepBaseURL.JoinPath("fhir", "MedicationRequest").String() + "?patient=Patient/patient-123"
 		req, err := http.NewRequest("GET", targetURL, nil)
 		require.NoError(t, err)
-
 		req.Header.Set("Authorization", "Bearer "+bearerToken.AccessToken)
 
 		resp, err := http.DefaultClient.Do(req)
@@ -164,28 +144,21 @@ func Test_PEPAuthorization(t *testing.T) {
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 
-		assert.Equal(t, http.StatusOK, resp.StatusCode, "Expected successful authorization with Bearer token")
+		assert.Equal(t, http.StatusOK, resp.StatusCode, "Expected successful authorization with Bearer token: %s", string(body))
 		assert.Contains(t, string(body), "Bundle")
 	})
 
 	t.Run("authorized request with DPoP token", func(t *testing.T) {
 		pep.MockMitz.SetResponse("Permit", "Consent granted")
 
-		// The PEP constructs the DPoP validation URL with https:// scheme (assuming TLS in production)
-		// So the proof must use https:// even though we're testing over http://
-		targetPath := "/fhir/Condition?patient=Patient/patient-123"
+		targetPath := "/fhir/MedicationRequest?patient=Patient/patient-123"
 		dpopURL := "https://" + pepBaseURL.Host + targetPath
-		t.Logf("DPoP proof URL: %s", dpopURL)
 
-		// Create DPoP proof using embedded Nuts node (with the same key that bound the token)
 		dpopProof := createDPoPProof(t, pep.NutsAPI, dpopToken.DPoPKID, "GET", dpopURL, dpopToken.AccessToken)
-		t.Logf("DPoP proof created: %s...", dpopProof[:min(50, len(dpopProof))])
 
-		targetURL := pepBaseURL.JoinPath("fhir", "Condition").String() + "?patient=Patient/patient-123"
+		targetURL := pepBaseURL.JoinPath("fhir", "MedicationRequest").String() + "?patient=Patient/patient-123"
 		req, err := http.NewRequest("GET", targetURL, nil)
 		require.NoError(t, err)
-
-		// Use DPoP authorization scheme with proof header
 		req.Header.Set("Authorization", "DPoP "+dpopToken.AccessToken)
 		req.Header.Set("DPoP", dpopProof)
 
@@ -203,18 +176,15 @@ func Test_PEPAuthorization(t *testing.T) {
 	t.Run("denied request when consent is denied", func(t *testing.T) {
 		pep.MockMitz.SetResponse("Deny", "No consent found")
 
-		targetURL := pepBaseURL.JoinPath("fhir", "Condition").String() + "?patient=Patient/patient-123"
+		targetURL := pepBaseURL.JoinPath("fhir", "MedicationRequest").String() + "?patient=Patient/patient-123"
 		req, err := http.NewRequest("GET", targetURL, nil)
 		require.NoError(t, err)
-
 		req.Header.Set("Authorization", "Bearer "+bearerToken.AccessToken)
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 
-		responseData, _ := io.ReadAll(resp.Body)
-		t.Logf("Response when consent denied: %s", string(responseData))
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
 }
@@ -312,26 +282,26 @@ type tokenResult struct {
 func requestAccessToken(t *testing.T, nutsAPI func(string) string, subject, authServer, scope, tokenType string) tokenResult {
 	t.Helper()
 
-	employeeCredential := map[string]any{
-		"@context": []string{
-			"https://www.w3.org/2018/credentials/v1",
-			"https://nuts.nl/credentials/v1",
+	credentials := []any{
+		// HealthCareProfessionalDelegationCredential: mandaat/delegation of the healthcare professional
+		map[string]any{
+			"@context": []string{"https://www.w3.org/2018/credentials/v1"},
+			"type":     []string{"VerifiableCredential", "HealthCareProfessionalDelegationCredential"},
+			"credentialSubject": map[string]any{
+				"registeredBy": "urn:oid:2.16.528.1.1007.3.1.12345",
+				"roleCode":     "01.015",
+				"facilityType": "Z3",
+			},
 		},
-		"type": []string{"VerifiableCredential", "NutsEmployeeCredential"},
-		"credentialSubject": map[string]any{
-			"identifier": "urn:oid:2.16.528.1.1007.3.1.12345",
-			"name":       "Dr. Jan de Vries",
-			"roleName":   "Medisch Specialist",
-		},
-	}
-
-	providerTypeCredential := map[string]any{
-		"@context": []string{
-			"https://www.w3.org/2018/credentials/v1",
-		},
-		"type": []string{"VerifiableCredential", "HealthcareProviderRoleTypeCredential"},
-		"credentialSubject": map[string]any{
-			"roleCodeNL": "Z3",
+		// PatientEnrollmentCredential: the VC equivalent of the AORTA inschrijftoken.
+		// Passed per-request because the credential is patient-specific (#406).
+		map[string]any{
+			"@context": []string{"https://www.w3.org/2018/credentials/v1"},
+			"type":     []string{"VerifiableCredential", "PatientEnrollmentCredential"},
+			"credentialSubject": map[string]any{
+				"patientId":    "http://fhir.nl/fhir/NamingSystem/bsn|900186021",
+				"registeredBy": "urn:oid:2.16.528.1.1007.3.1.12345",
+			},
 		},
 	}
 
@@ -339,7 +309,7 @@ func requestAccessToken(t *testing.T, nutsAPI func(string) string, subject, auth
 	reqBody := map[string]any{
 		"authorization_server": authServer,
 		"scope":                scope,
-		"credentials":          []any{employeeCredential, providerTypeCredential},
+		"credentials":          credentials,
 		"token_type":           tokenType,
 	}
 	body, _ := json.Marshal(reqBody)
