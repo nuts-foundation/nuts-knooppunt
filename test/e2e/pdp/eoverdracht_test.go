@@ -34,7 +34,7 @@ func Test_EOverdrachtAuthorize(t *testing.T) {
 				  "user_role": "01.015",
 				  "organization_ura": "00000040",
 				  "organization_facility_type": "Z3",
-				  "scope": "eoverdracht-receiver"
+				  "scope": "eoverdracht-sender"
 				},
 				"request": {
 				  "method": "GET",
@@ -59,7 +59,7 @@ func Test_EOverdrachtAuthorize(t *testing.T) {
 				  "user_role": "01.015",
 				  "organization_ura": "00000040",
 				  "organization_facility_type": "Z3",
-				  "scope": "eoverdracht-receiver"
+				  "scope": "eoverdracht-sender"
 				},
 				"request": {
 				  "method": "GET",
@@ -84,7 +84,7 @@ func Test_EOverdrachtAuthorize(t *testing.T) {
 				  "user_role": "01.015",
 				  "organization_ura": "00000041",
 				  "organization_facility_type": "Z3",
-				  "scope": "eoverdracht-receiver"
+				  "scope": "eoverdracht-sender"
 				},
 				"request": {
 				  "method": "GET",
@@ -109,11 +109,11 @@ func Test_EOverdrachtAuthorize(t *testing.T) {
 				  "user_role": "01.015",
 				  "organization_ura": "00000040",
 				  "organization_facility_type": "Z3",
-				  "scope": "eoverdracht-receiver"
+				  "scope": "eoverdracht-sender"
 				},
 				"request": {
 				  "method": "PUT",
-				  "protocol": "HTTP/1.0",
+				  "protocol": "HTTP/1.0", 
 				  "path": "/Task/B033BD18-60A0-4648-3219-AC2A7A27C049"
 				},
 				"context": {
@@ -134,7 +134,7 @@ func Test_EOverdrachtAuthorize(t *testing.T) {
 				  "user_role": "01.015",
 				  "organization_ura": "00000040",
 				  "organization_facility_type": "Z3",
-				  "scope": "eoverdracht-receiver"
+				  "scope": "eoverdracht-sender"
 				},
 				"request": {
 				  "method": "PUT",
@@ -159,7 +159,7 @@ func Test_EOverdrachtAuthorize(t *testing.T) {
 				  "user_role": "01.015",
 				  "organization_ura": "00000666",
 				  "organization_facility_type": "Z3",
-				  "scope": "eoverdracht_notification"
+				  "scope": "eoverdracht-receiver"
 				},
 				"request": {
 				  "method": "POST",
