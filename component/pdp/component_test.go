@@ -97,7 +97,7 @@ func TestHandleMainPolicy_WithoutMitz(t *testing.T) {
 		response := executePDPRequest(t, service, APIRequest{
 			Input: APIInput{
 				Subject: APISubject{
-					Scope:                    "bgz",
+					Scope:                    "mcsd_update",
 					OrganizationUra:          "00000001",
 					OrganizationFacilityType: "TODO",
 					UserId:                   "TODO",
@@ -106,11 +106,7 @@ func TestHandleMainPolicy_WithoutMitz(t *testing.T) {
 				Request: HTTPRequest{
 					Method:   "GET",
 					Protocol: "HTTP/1.1",
-					Path:     "/Patient",
-					QueryParams: url.Values{
-						"_include": {"Patient:general-practitioner"},
-						"_id":      {"1000"},
-					},
+					Path:     "/Organization",
 					Header: http.Header{
 						"Content-Type": {"application/fhir+json"},
 					},
@@ -123,8 +119,9 @@ func TestHandleMainPolicy_WithoutMitz(t *testing.T) {
 			},
 		})
 		assert.Empty(t, response.Error)
-		_, hasBGZPolicy := response.Policies["bgz"]
-		assert.True(t, hasBGZPolicy, "expected bgz policy to be evaluated")
+		mcsdPolicy, hasPolicy := response.Policies["mcsd_update"]
+		require.True(t, hasPolicy, "expected mcsd_update policy to be evaluated")
+		assert.True(t, mcsdPolicy.Allow, "expected mcsd_update policy to allow the request")
 	})
 }
 
