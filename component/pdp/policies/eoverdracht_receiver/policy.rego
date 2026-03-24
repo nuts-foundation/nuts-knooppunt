@@ -4,6 +4,7 @@ import rego.v1
 
 default allow := false
 allow if {
-    some consent in input.resource.consents
-    consent.scope == "eoverdracht"
+    input.subject.organization.ura != ""
+    input.action.request.method == "POST"
+    input.action.request.path == "/Task"
 }

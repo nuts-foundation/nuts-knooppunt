@@ -98,6 +98,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	for _, policyName := range scopes {
 		// OPA doesn't support dashes in package and rule names, so we replace them with underscores.
 		policyName = strings.ReplaceAll(policyName, "-", "_")
+		policyName = strings.ToLower(policyName)
 		policySet[policyName] = struct{}{}
 	}
 	policyNames := maps.Keys(policySet)
