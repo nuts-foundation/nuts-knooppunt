@@ -9,9 +9,14 @@ import (
 
 func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input *PolicyInput) (*PolicyInput, []ResultReason) {
 	input.Context.MitzConsent = false
+	// If Mitz is not configured, skip consent check
+	if c.consentChecker == nil {
+		slog.DebugContext(ctx, "Mitz consent checker not configured, skipping consent check")
+		return input, nil
+	}
 	// If this call doesn't relate to a BSN don't attempt Mitz
 	if input.Context.PatientBSN == "" {
-		return input, []ResultReason{}
+		return input, nil
 	}
 
 	resultReasons := validateMitzInput(*input)
