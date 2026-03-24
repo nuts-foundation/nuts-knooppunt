@@ -74,24 +74,25 @@ func Start(ctx context.Context, config Config) error {
 	components = append(components, authnComponent)
 
 	// Create MITZ component
+	var consentChecker mitz.ConsentChecker
 	if config.MITZ.Enabled() {
 		mitzComponent, err := mitz.New(config.MITZ)
 		if err != nil {
 			return errors.Wrap(err, "failed to create MITZ component")
 		}
 		components = append(components, mitzComponent)
-
-		// Create PDP component
-		if config.PDP.Enabled {
-			pdpComponent, err := pdp.New(config.PDP, mitzComponent)
-			if err != nil {
-				return errors.Wrap(err, "failed to create PDP component")
-			}
-			components = append(components, pdpComponent)
-		}
-
+		consentChecker = mitzComponent
 	} else {
 		slog.InfoContext(ctx, "MITZ component is disabled")
+	}
+
+	// Create PDP component
+	if config.PDP.Enabled {
+		pdpComponent, err := pdp.New(config.PDP, consentChecker)
+		if err != nil {
+			return errors.Wrap(err, "failed to create PDP component")
+		}
+		components = append(components, pdpComponent)
 	}
 
 	// Create NVI component

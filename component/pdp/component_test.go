@@ -62,6 +62,72 @@ func TestHandleMainPolicy(t *testing.T) {
 	})
 }
 
+func TestHandleMainPolicy_WithoutMitz(t *testing.T) {
+	mux := http.NewServeMux()
+	httpServer := httptest.NewServer(mux)
+	defer httpServer.Close()
+
+	pipClient := &test.StubFHIRClient{
+		Resources: []any{
+			fhir.Patient{
+				Id: to.Ptr("1000"),
+				Identifier: []fhir.Identifier{
+					{
+						System: to.Ptr(coding.BSNNamingSystem),
+						Value:  to.Ptr("123456789"),
+					},
+				},
+			},
+		},
+	}
+
+	service, err := New(Config{Enabled: true}, nil)
+	require.NoError(t, err)
+	service.opaBundleBaseURL = httpServer.URL + "/pdp/bundles/"
+	service.pipClient = pipClient
+
+	service.RegisterHttpHandlers(nil, mux)
+
+	require.NoError(t, service.Start())
+	defer func() {
+		require.NoError(t, service.Stop(context.Background()))
+	}()
+
+	t.Run("policy evaluation works without Mitz", func(t *testing.T) {
+		response := executePDPRequest(t, service, APIRequest{
+			Input: APIInput{
+				Subject: APISubject{
+					Scope:                    "bgz",
+					OrganizationUra:          "00000001",
+					OrganizationFacilityType: "TODO",
+					UserId:                   "TODO",
+					UserRole:                 "TODO",
+				},
+				Request: HTTPRequest{
+					Method:   "GET",
+					Protocol: "HTTP/1.1",
+					Path:     "/Patient",
+					QueryParams: url.Values{
+						"_include": {"Patient:general-practitioner"},
+						"_id":      {"1000"},
+					},
+					Header: http.Header{
+						"Content-Type": {"application/fhir+json"},
+					},
+				},
+				Context: APIContext{
+					DataHolderOrganizationId: "00000002",
+					DataHolderFacilityType:   "TODO",
+					ConnectionTypeCode:       "hl7-fhir-rest",
+				},
+			},
+		})
+		assert.Empty(t, response.Error)
+		_, hasBGZPolicy := response.Policies["bgz"]
+		assert.True(t, hasBGZPolicy, "expected bgz policy to be evaluated")
+	})
+}
+
 func TestHandleMainPolicy_Integration(t *testing.T) {
 	mux := http.NewServeMux()
 	httpServer := httptest.NewServer(mux)
