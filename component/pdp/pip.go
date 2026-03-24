@@ -11,7 +11,6 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
-	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -78,30 +77,41 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 
 	// Check for local consent resources
 	if policyInput.Action.ConnectionTypeCode == "hl7-fhir-rest" &&
-		policyInput.Action.FHIRRest.InteractionType == fhir.TypeRestfulInteractionRead {
+		policyInput.Action.FHIRRest.InteractionType == fhir.TypeRestfulInteractionRead &&
+		policyInput.Resource.Type != nil {
 		client := c.pipClient
 
 		//	GET http://0.0.0.0:7050/fhir/policy-information-point/Consent?
 		//	data=Patient/3E439979-017F-40AA-594D-EBCF880FFD97&
 		var searchResult fhir.Bundle
-		client.SearchWithContext(ctx, "Consent", url.Values{
-			"data": []string{policyInput.Resource.Id},
+		err := client.SearchWithContext(ctx, "Consent", url.Values{
+			"data": []string{policyInput.Resource.Type.String() + "/" + policyInput.Resource.Id},
 		}, &searchResult)
-
-		var entries []fhir.BundleEntry
-		err := fhirclient.Paginate(ctx, client, searchResult, func(searchSet *fhir.Bundle) (bool, error) {
-			entries = append(entries, searchSet.Entry...)
-			return true, nil
-		})
-		slog.ErrorContext(ctx, "Failed to paginating consent call results", logging.Error(err))
 		if err != nil {
+			slog.ErrorContext(ctx, "PIP consent retrieval failed", logging.Error(err))
 			return policyInput, []ResultReason{
 				{
 					Code:        TypeResultCodePIPError,
-					Description: "Error occurred while paginating consent call results",
+					Description: "Error occurred while retrieving consents",
 				},
 			}
 		}
+
+		var entries []fhir.BundleEntry
+		err = fhirclient.Paginate(ctx, client, searchResult, func(searchSet *fhir.Bundle) (bool, error) {
+			entries = append(entries, searchSet.Entry...)
+			return true, nil
+		})
+		if err != nil {
+			slog.ErrorContext(ctx, "PIP consent paginated retrieval failed", logging.Error(err))
+			return policyInput, []ResultReason{
+				{
+					Code:        TypeResultCodePIPError,
+					Description: "Error occurred while retrieving paginated consents",
+				},
+			}
+		}
+		searchResult.Entry = entries
 
 		type Ruling struct {
 			Scope         string
@@ -124,8 +134,8 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 			applyRuling = consent.Status == fhir.ConsentStateActive
 
 			applyRuling = applyRuling && coding.CodablesIncludesCode(consent.Provision.Action, fhir.Coding{
-				System: to.Ptr("http://terminology.hl7.org/CodeSystem/consentaction"),
-				Code:   to.Ptr("access"),
+				System: new("http://terminology.hl7.org/CodeSystem/consentaction"),
+				Code:   new("access"),
 			})
 
 			var orgUras []string
