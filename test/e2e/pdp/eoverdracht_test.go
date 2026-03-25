@@ -164,7 +164,7 @@ func Test_EOverdrachtAuthorize(t *testing.T) {
 				"request": {
 				  "method": "POST",
 				  "protocol": "HTTP/1.0",
-				  "path": "/Task"
+				  "path": "/"
 				},
 				"context": {
 				  "data_holder_organization_id": "00000659",
