@@ -174,7 +174,7 @@ func readBundles(bundleDir string) error {
 		scope = strings.ToLower(scope)
 
 		if _, exists := bundles[scope]; exists {
-			return fmt.Errorf("duplicate policy after case normalization: %s", scope)
+			return fmt.Errorf("duplicate policy after normalization (lowercase and '-' to '_'): original bundle %q, normalized name %q", entry.Name(), scope)
 		}
 
 		// Read the bundle file
