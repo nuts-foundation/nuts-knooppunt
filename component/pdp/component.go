@@ -128,11 +128,10 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 3: Enrich the policy input with data gathered from the policy information point (if available)
-	var resultReasons []ResultReason
-	policyInputTemplate, resultReasons = c.enrichPolicyInputWithPIP(r.Context(), policyInputTemplate)
-
+	policyInputTemplate, resultReasonsPIP := c.enrichPolicyInputWithPIP(r.Context(), policyInputTemplate)
 	// Step 4: Check consent at Mitz
-	policyInputTemplate, resultReasons = c.enrichPolicyInputWithMitz(r.Context(), policyInputTemplate)
+	policyInputTemplate, resultReasonsMitz := c.enrichPolicyInputWithMitz(r.Context(), policyInputTemplate)
+	resultReasons := slices.Concat(resultReasonsPIP, resultReasonsMitz)
 
 	// Evaluate all policies
 	for _, policyName := range policyNames {
