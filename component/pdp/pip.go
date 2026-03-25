@@ -25,6 +25,13 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 		}
 	}
 
+	policyInput, reasonsBSN := c.enrichBSN(ctx, policyInput)
+	policyInput, reasonsConsent := c.enrichConsent(ctx, policyInput)
+
+	return policyInput, slices.Concat(reasonsBSN, reasonsConsent)
+}
+
+func (c *Component) enrichBSN(ctx context.Context, policyInput *PolicyInput) (*PolicyInput, []ResultReason) {
 	// If we have a patientId try and fetch the BSN
 	if policyInput.Context.PatientID != "" && policyInput.Context.PatientBSN == "" {
 		client := c.pipClient
@@ -74,7 +81,10 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 		}
 		policyInput.Context.PatientBSN = *bsn.Value
 	}
+	return policyInput, nil
+}
 
+func (c *Component) enrichConsent(ctx context.Context, policyInput *PolicyInput) (*PolicyInput, []ResultReason) {
 	// Check for local consent resources
 	if policyInput.Action.ConnectionTypeCode == "hl7-fhir-rest" &&
 		policyInput.Action.FHIRRest.InteractionType == fhir.TypeRestfulInteractionRead &&
@@ -209,6 +219,5 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 			}
 		}
 	}
-
 	return policyInput, nil
 }
