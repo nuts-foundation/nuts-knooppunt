@@ -60,12 +60,14 @@ func New(config Config, httpClientFn authn.HTTPClientProvider, pseudonymizer pse
 		fhirClientFn: func(ctx context.Context, uraNumber string) (fhirclient.Client, error) {
 			// TODO: Cache the HTTP client per URA number, instead of creating a new one for each request.
 			//       That would also allow caching the access tokens obtained from the OAuth2 server.
-			httpClient, err := httpClientFn(ctx, []string{"epd:read", "epd:write"}, uraNumber, baseURL.String())
+			httpClient, err := httpClientFn(ctx, []string{"epd:read", "epd:write"}, uraNumber, baseURL.Scheme+"://"+baseURL.Host)
 			if err != nil {
 				return nil, err
 			}
 			httpClient.Transport = tracing.WrapTransport(httpClient.Transport)
-			return fhirclient.New(baseURL, httpClient, fhirutil.ClientConfig()), nil
+			clientConfig := fhirutil.ClientConfig()
+			clientConfig.UsePostSearch = false // nvi doesn't support POST searches
+			return fhirclient.New(baseURL, httpClient, clientConfig), nil
 		},
 		pseudonymizer: pseudonymizer,
 		audience:      config.Audience,
@@ -131,10 +133,14 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 		"X-Requester-URA": []string{*requesterURA.Value},
 	}
 	if bundleJSON, jsonErr := json.Marshal(bundle); jsonErr == nil {
-		slog.DebugContext(httpRequest.Context(), "Sending Bundle to NVI", "bundle", string(bundleJSON))
+		nviURL := ""
+		if c.fhirBaseURL != nil {
+			nviURL = c.fhirBaseURL.String()
+		}
+		slog.DebugContext(httpRequest.Context(), "Sending Bundle to NVI", "bundle", string(bundleJSON), "nvi_url", nviURL, "requester_ura", *requesterURA.Value, "audience", c.audience)
 	}
 	var result fhir.Bundle
-	err = fhirClient.CreateWithContext(httpRequest.Context(), bundle, &result, fhirclient.AtPath("/"), fhirclient.RequestHeaders(requestHeaders))
+	err = fhirClient.CreateWithContext(httpRequest.Context(), bundle, &result, fhirclient.AtPath(""), fhirclient.RequestHeaders(requestHeaders))
 	if err != nil {
 		err = &fhirapi.Error{
 			Message:   "Failed to register Bundle at NVI",
@@ -201,12 +207,8 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		return
 	}
 
-	// TODO: Remove this after migrating to real NVI
-	requestHeaders := http.Header{
-		"X-Requester-URA": []string{*requesterURA.Value},
-	}
 	var searchSet fhir.Bundle
-	err = fhirClient.SearchWithContext(httpRequest.Context(), "List", searchParams, &searchSet, fhirclient.RequestHeaders(requestHeaders))
+	err = fhirClient.SearchWithContext(httpRequest.Context(), "List", searchParams, &searchSet)
 	if err != nil {
 		err = &fhirapi.Error{
 			Message:   "Failed to search for List resources at NVI",
