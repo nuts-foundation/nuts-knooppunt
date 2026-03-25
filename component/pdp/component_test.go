@@ -125,6 +125,87 @@ func TestHandleMainPolicy_WithoutMitz(t *testing.T) {
 	})
 }
 
+func TestHandleMainPolicy_CaseInsensitivePolicyNames(t *testing.T) {
+	mux := http.NewServeMux()
+	httpServer := httptest.NewServer(mux)
+	defer httpServer.Close()
+
+	service, err := New(Config{Enabled: true}, nil)
+	require.NoError(t, err)
+	service.opaBundleBaseURL = httpServer.URL + "/pdp/bundles/"
+	service.pipClient = &test.StubFHIRClient{}
+
+	service.RegisterHttpHandlers(nil, mux)
+
+	require.NoError(t, service.Start())
+	defer func() {
+		require.NoError(t, service.Stop(context.Background()))
+	}()
+
+	t.Run("mixed case scope resolves to correct policy", func(t *testing.T) {
+		response := executePDPRequest(t, service, APIRequest{
+			Input: APIInput{
+				Subject: APISubject{
+					Scope:                    "MCSD-Update",
+					OrganizationUra:          "00000001",
+					OrganizationFacilityType: "TODO",
+					UserId:                   "TODO",
+					UserRole:                 "TODO",
+				},
+				Request: HTTPRequest{
+					Method:   "GET",
+					Protocol: "HTTP/1.1",
+					Path:     "/Organization",
+					Header: http.Header{
+						"Content-Type": {"application/fhir+json"},
+					},
+				},
+				Context: APIContext{
+					DataHolderOrganizationId: "00000002",
+					DataHolderFacilityType:   "TODO",
+					ConnectionTypeCode:       "hl7-fhir-rest",
+				},
+			},
+		})
+		assert.Empty(t, response.Error)
+		mcsdPolicy, hasPolicy := response.Policies["mcsd_update"]
+		require.True(t, hasPolicy, "expected mcsd_update policy to be evaluated")
+		assert.True(t, mcsdPolicy.Allow, "expected mcsd_update policy to allow the request")
+	})
+
+	t.Run("duplicate scope with different casing is deduplicated", func(t *testing.T) {
+		response := executePDPRequest(t, service, APIRequest{
+			Input: APIInput{
+				Subject: APISubject{
+					Scope:                    "mcsd_update MCSD_UPDATE Mcsd_Update",
+					OrganizationUra:          "00000001",
+					OrganizationFacilityType: "TODO",
+					UserId:                   "TODO",
+					UserRole:                 "TODO",
+				},
+				Request: HTTPRequest{
+					Method:   "GET",
+					Protocol: "HTTP/1.1",
+					Path:     "/Organization",
+					Header: http.Header{
+						"Content-Type": {"application/fhir+json"},
+					},
+				},
+				Context: APIContext{
+					DataHolderOrganizationId: "00000002",
+					DataHolderFacilityType:   "TODO",
+					ConnectionTypeCode:       "hl7-fhir-rest",
+				},
+			},
+		})
+		assert.Empty(t, response.Error)
+		assert.Len(t, response.Policies, 1, "duplicate scopes with different casing should be deduplicated")
+		mcsdPolicy, hasPolicy := response.Policies["mcsd_update"]
+		require.True(t, hasPolicy, "expected mcsd_update policy to be evaluated")
+		assert.True(t, mcsdPolicy.Allow)
+	})
+}
+
 func TestHandleMainPolicy_Integration(t *testing.T) {
 	mux := http.NewServeMux()
 	httpServer := httptest.NewServer(mux)

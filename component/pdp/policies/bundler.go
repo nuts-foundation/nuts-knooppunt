@@ -169,8 +169,13 @@ func readBundles(bundleDir string) error {
 			continue
 		}
 
-		// Extract scope name from filename (remove .tar.gz extension)
 		scope := strings.TrimSuffix(entry.Name(), ".tar.gz")
+		scope = strings.ReplaceAll(scope, "-", "_")
+		scope = strings.ToLower(scope)
+
+		if _, exists := bundles[scope]; exists {
+			return fmt.Errorf("duplicate policy after case normalization: %s", scope)
+		}
 
 		// Read the bundle file
 		bundleData, err := os.ReadFile(entryPath)
