@@ -557,7 +557,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				decision:    false,
 			},
 			{
-				name:        "deny - Task update with non-existent resource returns pip_error",
+				name:        "allow - Task update with non-existent resource returns pip_error",
 				scope:       "eoverdracht-sender",
 				httpRequest: `PUT /Task/nonexistent`,
 				decision:    true,

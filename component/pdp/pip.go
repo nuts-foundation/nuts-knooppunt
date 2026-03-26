@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/url"
 	"slices"
+	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
@@ -85,10 +86,16 @@ func (c *Component) enrichBSN(ctx context.Context, policyInput *PolicyInput) (*P
 	return policyInput, nil
 }
 
+// Could be made configurable in the future
+const pipTimeout = 10 * time.Second
+
 func (c *Component) enrichResourceContent(ctx context.Context, policyInput *PolicyInput) (*PolicyInput, []ResultReason) {
 	if policyInput.Resource.Type == nil || policyInput.Resource.Id == "" {
 		return policyInput, nil
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, pipTimeout)
+	defer cancel()
 
 	client := c.pipClient
 	path := fmt.Sprintf("%s/%s", policyInput.Resource.Type.String(), policyInput.Resource.Id)
@@ -100,7 +107,7 @@ func (c *Component) enrichResourceContent(ctx context.Context, policyInput *Poli
 		return policyInput, []ResultReason{
 			{
 				Code:        TypeResultCodePIPError,
-				Description: fmt.Sprintf("failed to get resource content from PIP: %v", err),
+				Description: "failed to get resource content from PIP",
 			},
 		}
 	}
