@@ -157,7 +157,7 @@ func (c *Component) enrichConsent(ctx context.Context, policyInput *PolicyInput)
 		var rulings []Ruling
 
 		err = fhirutil.VisitBundleResources[fhir.Consent](&searchResult, func(consent *fhir.Consent) error {
-			if len(consent.Scope.Coding) != 1 && consent.Scope.Coding[0].Code != nil {
+			if len(consent.Scope.Coding) != 1 || consent.Scope.Coding[0].Code == nil {
 				// Only continue if there's a single simple code
 				// Complex coding scheme's not supported for now
 				return nil
