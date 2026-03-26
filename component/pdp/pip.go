@@ -27,8 +27,9 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 
 	policyInput, reasonsBSN := c.enrichBSN(ctx, policyInput)
 	policyInput, reasonsConsent := c.enrichConsent(ctx, policyInput)
+	policyInput, reasonsContent := c.enrichResourceContent(ctx, policyInput)
 
-	return policyInput, slices.Concat(reasonsBSN, reasonsConsent)
+	return policyInput, slices.Concat(reasonsBSN, reasonsConsent, reasonsContent)
 }
 
 func (c *Component) enrichBSN(ctx context.Context, policyInput *PolicyInput) (*PolicyInput, []ResultReason) {
@@ -81,6 +82,30 @@ func (c *Component) enrichBSN(ctx context.Context, policyInput *PolicyInput) (*P
 		}
 		policyInput.Context.PatientBSN = *bsn.Value
 	}
+	return policyInput, nil
+}
+
+func (c *Component) enrichResourceContent(ctx context.Context, policyInput *PolicyInput) (*PolicyInput, []ResultReason) {
+	if policyInput.Resource.Type == nil || policyInput.Resource.Id == "" {
+		return policyInput, nil
+	}
+
+	client := c.pipClient
+	path := fmt.Sprintf("%s/%s", policyInput.Resource.Type.String(), policyInput.Resource.Id)
+
+	var content map[string]any
+	err := client.ReadWithContext(ctx, path, &content)
+	if err != nil {
+		slog.WarnContext(ctx, "Failed to get resource content from PIP", logging.Error(err))
+		return policyInput, []ResultReason{
+			{
+				Code:        TypeResultCodePIPError,
+				Description: fmt.Sprintf("failed to get resource content from PIP: %v", err),
+			},
+		}
+	}
+
+	policyInput.Resource.Content = content
 	return policyInput, nil
 }
 
