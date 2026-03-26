@@ -182,33 +182,3 @@ Content-Type: application/json
     }
   }
 }
-
-### Testing simons call
-POST http://localhost:8081/pdp/v1/data/knooppunt/authz
-Content-Type: application/json
-
-{
-  "input": {
-    "subject": {
-      "organization_id": "did:web:development.nedap-nuts.nl:iam:1c935e1a-1d0c-4b0f-89a0-2b516588cf3a",
-      "scope": "eOverdracht-sender",
-      "iss": "https://development.nedap-nuts.nl/oauth2/did:nuts:Eb1U3ap94wcziQhUfZSWJqqcuTj6SzJgGYhXKqWFC5Lv",
-      "active": true,
-      "organization_ura": "90000380",
-      "organization_name": "Tést Zorginstelling 01",
-      "exp": 1774430020,
-      "iat": 1774429120,
-      "client_id": "https://development.nedap-nuts.nl/oauth2/did:nuts:Eb1U3ap94wcziQhUfZSWJqqcuTj6SzJgGYhXKqWFC5Lv"
-    },
-    "request": {
-      "method": "GET",
-      "protocol": "HTTP/1.0",
-      "path": "/Patient/Client.8de8df90-b321-4f19-bbaa-4c041ff9d5ef"
-    },
-    "context": {
-      "data_holder_organization_id": "90000380",
-      "data_holder_facility_type": "Z4",
-      "connection_type_code": "hl7-fhir-rest"
-    }
-  }
-}
