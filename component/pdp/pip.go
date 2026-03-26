@@ -94,9 +94,8 @@ func (c *Component) enrichConsent(ctx context.Context, policyInput *PolicyInput)
 		//	GET http://0.0.0.0:7050/fhir/policy-information-point/Consent?
 		//	data=Patient/3E439979-017F-40AA-594D-EBCF880FFD97&
 		var searchResult fhir.Bundle
-		resourceStr := policyInput.Resource.Type.String()
 		err := client.SearchWithContext(ctx, "Consent", url.Values{
-			"data": []string{resourceStr + "/" + policyInput.Resource.Id},
+			"data": []string{policyInput.Resource.Type.String() + "/" + policyInput.Resource.Id},
 		}, &searchResult)
 		if err != nil {
 			slog.ErrorContext(ctx, "PIP consent retrieval failed", logging.Error(err))
