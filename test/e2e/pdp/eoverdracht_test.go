@@ -174,6 +174,31 @@ func Test_EOverdrachtAuthorize(t *testing.T) {
 			}`,
 			allow: true,
 		},
+		{
+			name: "authorize document operation on composition",
+			pdpJSON: `{
+			  "input": {
+				"subject": {
+				  "user_id": "000095254",
+				  "user_role": "01.015",
+				  "organization_ura": "00000040",
+				  "organization_facility_type": "Z3",
+				  "scope": "eOverdracht-sender"
+				},
+				"request": {
+				  "method": "GET",
+				  "protocol": "HTTP/1.0",
+				  "path": "/Composition/21ef0423-018b-40e7-adfd-7f4317f01c8f/$document"
+				},
+				"context": {
+				  "data_holder_organization_id": "00000030",
+				  "data_holder_facility_type": "Z3",
+			      "connection_type_code": "hl7-fhir-rest"
+				}
+			  }
+			}`,
+			allow: true,
+		},
 	}
 
 	for _, testCase := range testCases {

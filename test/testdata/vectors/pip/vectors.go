@@ -60,6 +60,14 @@ func Observations() []fhir.Observation {
 	}
 }
 
+func Compositions() []fhir.Composition {
+	return []fhir.Composition{
+		{
+			Id: to.Ptr("21ef0423-018b-40e7-adfd-7f4317f01c8f"),
+		},
+	}
+}
+
 func Consents() []fhir.Consent {
 	return []fhir.Consent{
 		{
@@ -100,6 +108,12 @@ func Consents() []fhir.Consent {
 							Type:      to.Ptr("Observation"),
 						},
 					},
+					{
+						Reference: fhir.Reference{
+							Reference: to.Ptr("Composition/21ef0423-018b-40e7-adfd-7f4317f01c8f"),
+							Type:      to.Ptr("Composition"),
+						},
+					},
 				},
 				Action: []fhir.CodeableConcept{
 					{
@@ -125,6 +139,9 @@ func Resources(fhirBaseURL *url.URL) []fhir.HasId {
 		resources = append(resources, &org)
 	}
 	for _, org := range Observations() {
+		resources = append(resources, &org)
+	}
+	for _, org := range Compositions() {
 		resources = append(resources, &org)
 	}
 	for _, consent := range Consents() {
