@@ -68,6 +68,14 @@ func Compositions() []fhir.Composition {
 	}
 }
 
+func Task() []fhir.Task {
+	return []fhir.Task{
+		{
+			Id: to.Ptr("12AF22F3-2DE5-47E1-B3CB-B053C8621F84"),
+		},
+	}
+}
+
 func Consents() []fhir.Consent {
 	return []fhir.Consent{
 		{
@@ -114,6 +122,12 @@ func Consents() []fhir.Consent {
 							Type:      to.Ptr("Composition"),
 						},
 					},
+					{
+						Reference: fhir.Reference{
+							Reference: to.Ptr("Task/12AF22F3-2DE5-47E1-B3CB-B053C8621F84"),
+							Type:      to.Ptr("Task"),
+						},
+					},
 				},
 				Action: []fhir.CodeableConcept{
 					{
@@ -142,6 +156,9 @@ func Resources(fhirBaseURL *url.URL) []fhir.HasId {
 		resources = append(resources, &org)
 	}
 	for _, org := range Compositions() {
+		resources = append(resources, &org)
+	}
+	for _, org := range Task() {
 		resources = append(resources, &org)
 	}
 	for _, consent := range Consents() {

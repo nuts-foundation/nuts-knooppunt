@@ -11,6 +11,7 @@ allow if {
 allow if {
     is_task_resource
     is_update_interaction
+    has_local_consent
 }
 
 allow if {
