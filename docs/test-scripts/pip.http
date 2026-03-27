@@ -1,0 +1,45 @@
+### Show all consent resources
+
+GET http://localhost:7050/fhir/policy-information-point/Consent
+Accept: application/json
+
+### Testing query capability of PIP
+
+GET http://localhost:7050/fhir/policy-information-point/Consent?
+    data=Observation/7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F
+    organization:identifier=http://fhir.nl/fhir/NamingSystem/ura|00000030&
+    actor:identifier=http://fhir.nl/fhir/NamingSystem/ura|00000040
+Accept: application/json
+
+### Testing minimal consent query
+
+GET http://localhost:7050/fhir/policy-information-point/Consent?
+    data=Observation/7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F
+Accept: application/json
+
+### Testing PDP call that results in a PIP consent request
+POST http://localhost:8081/pdp/v1/data/knooppunt/authz
+Content-Type: application/json
+
+{
+  "input": {
+    "subject": {
+      "user_id": "000095254",
+      "user_role": "01.015",
+      "organization_ura": "00000040",
+      "organization_facility_type": "Z3",
+      "scope": "eoverdracht-receiver"
+    },
+    "request": {
+      "method": "GET",
+      "protocol": "HTTP/1.0",
+      "path": "/Observation/7DC623BA-0EF1-42AD-0AAD-F4D034F67C9F"
+    },
+    "context": {
+      "data_holder_organization_id": "00000030",
+      "data_holder_facility_type": "Z3",
+      "connection_type_code": "hl7-fhir-rest"
+    }
+  }
+}
+

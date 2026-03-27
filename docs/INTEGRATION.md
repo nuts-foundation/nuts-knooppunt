@@ -239,12 +239,13 @@ The EHR will need to:
 
 The Knooppunt will:
 
-- Perform access token request at remote EHRs (Nuts node) for outbound data exchanges.
-    - If user is involved: take the decrypted ID token (Dezi) to include in the access token request
-- Validate the organization credentials and end-user credential (Dezi ID token) for inbound data exchanges.
+- Perform access token request at remote EHRs for outbound data exchanges (Nuts node).
+    - If user is involved: take the attestation ("verklaring") the Dezi OIDC UserInfo object, to include in the access token request
+- Validate the organization credentials and end-user credential (Dezi) for inbound data exchanges (Nuts node).
+    - Note: make sure the Nuts node trusts the right Dezi JKU using the `vcr.dezi.allowedjku` property. See the [Nuts configuration guide](https://nuts-node.readthedocs.io/en/project-gf/pages/deployment/configuration.html#server-options) for more information.
 
 For more information on the Knooppunt's authentication endpoints, see
-the [Nuts node API reference](https://nuts-node.readthedocs.io/en/stable/pages/integrating/api.html).
+the [Nuts node API reference](https://nuts-node.readthedocs.io/en/project-gf/pages/integrating/api.html).
 
 ### Getting an access token
 
@@ -264,8 +265,7 @@ Content-Type: application/json
 To provide an end-user identity, include the `id_token` field with the decrypted ID token from Dezi.
 If no end-user identity is required, you may omit the `id_token` field.
 
-Note that to successfully negotiate an access token, the local Nuts node must have been loaded with the right
-credentials.
+Note that to successfully negotiate an access token, the local Nuts node must have been loaded with the right credentials.
 Which credentials are required, depends on the use case.
 
 ### Verifying access tokens

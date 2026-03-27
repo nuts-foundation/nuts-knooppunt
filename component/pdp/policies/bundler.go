@@ -21,6 +21,14 @@ var policies embed.FS
 // This is populated lazily when first accessed
 var bundles map[string][]byte
 
+// NormalizePolicyName normalizes a policy name by replacing dashes with underscores
+// (OPA doesn't support dashes in package/rule names) and lowercasing.
+func NormalizePolicyName(name string) string {
+	name = strings.ReplaceAll(name, "-", "_")
+	name = strings.ToLower(name)
+	return name
+}
+
 // Bundles returns the embedded OPA bundles in gzipped tar format, keyed by scope name.
 // They are generated on first access.
 func Bundles(ctx context.Context) (map[string][]byte, error) {
@@ -169,8 +177,11 @@ func readBundles(bundleDir string) error {
 			continue
 		}
 
-		// Extract scope name from filename (remove .tar.gz extension)
-		scope := strings.TrimSuffix(entry.Name(), ".tar.gz")
+		scope := NormalizePolicyName(strings.TrimSuffix(entry.Name(), ".tar.gz"))
+
+		if _, exists := bundles[scope]; exists {
+			return fmt.Errorf("duplicate policy after normalization (lowercase and '-' to '_'): original bundle %q, normalized name %q", entry.Name(), scope)
+		}
 
 		// Read the bundle file
 		bundleData, err := os.ReadFile(entryPath)

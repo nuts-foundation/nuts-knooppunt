@@ -96,8 +96,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	// deduplicate and normalize policies
 	policySet := make(map[string]struct{})
 	for _, policyName := range scopes {
-		// OPA doesn't support dashes in package and rule names, so we replace them with underscores.
-		policyName = strings.ReplaceAll(policyName, "-", "_")
+		policyName = policies.NormalizePolicyName(policyName)
 		policySet[policyName] = struct{}{}
 	}
 	policyNames := maps.Keys(policySet)
@@ -127,11 +126,10 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 3: Enrich the policy input with data gathered from the policy information point (if available)
-	var resultReasons []ResultReason
-	policyInputTemplate, resultReasons = c.enrichPolicyInputWithPIP(r.Context(), policyInputTemplate)
-
+	policyInputTemplate, resultReasonsPIP := c.enrichPolicyInputWithPIP(r.Context(), policyInputTemplate)
 	// Step 4: Check consent at Mitz
-	policyInputTemplate, resultReasons = c.enrichPolicyInputWithMitz(r.Context(), policyInputTemplate)
+	policyInputTemplate, resultReasonsMitz := c.enrichPolicyInputWithMitz(r.Context(), policyInputTemplate)
+	resultReasons := slices.Concat(resultReasonsPIP, resultReasonsMitz)
 
 	// Evaluate all policies
 	for _, policyName := range policyNames {

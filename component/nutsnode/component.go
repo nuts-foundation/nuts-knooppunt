@@ -13,22 +13,17 @@ import (
 
 	knooppuntCore "github.com/nuts-foundation/nuts-knooppunt/cmd/core"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/netutil"
 	"github.com/nuts-foundation/nuts-node/cmd"
 	"github.com/nuts-foundation/nuts-node/core"
 	httpEngine "github.com/nuts-foundation/nuts-node/http"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
 )
 
 var _ component.Lifecycle = (*Component)(nil)
 
 func New(config Config) (*Component, error) {
-	// Nuts node uses logrus, register a hook to convert logrus logs to slog.
-	logrus.AddHook(&logrusSlogBridgeHook{})
-	// set nil logger to avoid logrus output
-	logrus.StandardLogger().SetOutput(&devNullWriter{})
-
 	internalPort, err := netutil.FreeTCPPort()
 	if err != nil {
 		return nil, err
@@ -63,8 +58,8 @@ type Component struct {
 }
 
 type Config struct {
-	Enabled        bool   `koanf:"enabled"`
-	TracingConfig  TracingConfig
+	Enabled       bool `koanf:"enabled"`
+	TracingConfig TracingConfig
 }
 
 type TracingConfig struct {
@@ -76,11 +71,12 @@ func (c *Component) Start() error {
 	const dataDir = "data/nuts"
 	const configFile = "config/nuts.yml"
 	envVars := map[string]string{
-		"NUTS_HTTP_INTERNAL_ADDRESS": c.internalAddr.Host,
-		"NUTS_HTTP_PUBLIC_ADDRESS":   c.publicAddr.Host,
-		"NUTS_DATADIR":               dataDir,
-		"NUTS_VERBOSITY":             GetLogrusLevel(slog.LevelDebug), // TODO: use configured log level when supported
-		"NUTS_STRICTMODE":            strconv.FormatBool(c.coreConfig.StrictMode),
+		"NUTS_HTTP_INTERNAL_ADDRESS":     c.internalAddr.Host,
+		"NUTS_HTTP_PUBLIC_ADDRESS":       c.publicAddr.Host,
+		"NUTS_DATADIR":                   dataDir,
+		"NUTS_VERBOSITY":                 logging.GetLogrusLevel(slog.LevelDebug), // TODO: use configured log level when supported
+		"NUTS_STRICTMODE":                strconv.FormatBool(c.coreConfig.StrictMode),
+		"NUTS_STORAGE_BBOLT_LOCKTIMEOUT": "5s",
 	}
 	// Pass tracing config to nuts-node so it creates its own TracerProvider
 	// with service.name="nuts-node". It will use the same OTLP endpoint but

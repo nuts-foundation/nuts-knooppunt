@@ -1,0 +1,144 @@
+@startuml
+
+title eOverdracht: Notified Pull
+
+box "Sending XIS (Verwijzende partij)"
+    actor User as "Clinician"
+    participant ehr_s as "EHR\n[ FHIR ]"
+    participant kp_s as "Knooppunt"
+end box
+
+box "Addressing (mCSD)"
+    participant mcsd_s as "mCSD Admin Directory (sender)"
+    participant mcsd_r as "mCSD Admin Directory (receiver)"
+end box
+
+box "Receiving XIS (Ontvangende partij)"
+    participant kp_r as "Knooppunt"
+    participant ehr_r as "EHR\n[ FHIR ]"
+end box
+
+== Step 0: mCSD population ==
+
+ehr_r -> mcsd_r : [FHIR R4] POST /Organization\n[FHIR R4] POST /HealthcareService (i.e. 6VV)\n[FHIR R4] POST /Location\n[FHIR R4] POST /Endpoint\n(Endpoint.payloadType = Twiin-TA-notification)
+
+ehr_s -> mcsd_s : [FHIR R4] POST /Organization\n[FHIR R4] POST /Endpoint\n(Endpoint.payloadType = http://nictiz.nl/fhir/CapabilityStatement/eOverdracht-servercapabilities)
+
+mcsd_s <-> mcsd_r : sync
+
+== Step 1: Create eOverdracht Task at sending party ==
+
+User -> ehr_s : Initiate care handover
+
+activate ehr_s
+
+ehr_s -> ehr_s : [FHIR STU3] POST /Task
+
+note over ehr_s, kp_r
+Workflow Task, Profile: http://nictiz.nl/fhir/StructureDefinition/eOverdracht-Task, contains
+- status=in-progress
+- intent=order
+- code=308292007 "Overdracht van zorg"
+- extension for selected healthcareservice (for routing purposes): Extension.where(url='http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/task-stu3-healthcareservice').value.as(Reference)
+- extension for selected location (for routing purposes): Extension.where(url='http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/task-stu3-location').value.as(Reference)
+end note
+deactivate kp_s
+
+== Step 2: Locate notification endpoint of receiving party ==
+'http://fhir.nl/fhir/NamingSystem/ura
+ehr_s -> mcsd_s : [FHIR R4] GET /HealthcareService?type=desired-type (i.e. 6VV)
+ehr_s -> mcsd_s : [FHIR R4] GET required endpoint connected to this HealthcareService, i.e. through HealthcareService.endpoint\nwhere Endpoint.payloadType = Twiin-TA-notification
+activate mcsd_s
+    mcsd_s --> ehr_s : 200 OK\n(HealthcareService + Endpoints)
+deactivate mcsd_s
+ehr_s -> ehr_s : Select endpoint\nwith type=Twiin-TA-notification
+
+
+== Step 3: Send Notified Pull task to receiving party ==
+
+ehr_s->mcsd_s: Find OAuth endpoint tied to the receiver
+activate mcsd_s
+    mcsd_s --> ehr_s : OAuth Endpoint
+deactivate mcsd_s
+ehr_s -> kp_s : Get access token for sending party\n(scope=ta-np-notification)
+activate kp_s
+    kp_s --> ehr_s : 200 OK\n(access_token, scope=ta-np-notification)
+deactivate kp_s
+
+note over ehr_s, kp_r
+  Notification Task (pull-notification) contains:
+  - code.coding=pull-notification, http://fhir.nl/fhir/NamingSystem/TaskCode
+  - requester.onBehalfOf.identifier = sending org URA (system: http://fhir.nl/fhir/NamingSystem/ura)
+  - owner.identifier = receiving org URA (system: http://fhir.nl/fhir/NamingSystem/ura)
+  - basedOn = Task/{workflow-task-id}
+  - input[get-workflow-task] = true
+end note
+
+ehr_s -> kp_r : [FHIR STU3] POST {notification-endpoint}/Task\nAuthorization: Bearer {access_token}
+activate kp_r
+    kp_r -> kp_r : Validate access token\nEvaluate policy (PDP)
+    kp_r --> ehr_r : [FHIR STU3] POST {notification-endpoint}/Task
+    ehr_r --> kp_r : 201 Created\n(Task/{notification-task-id})
+    kp_r --> ehr_s : 201 Created\n(Task/{notification-task-id})
+deactivate kp_r
+
+== Step 4: Locate eOverdracht Server endpoint of sending party ==
+
+ehr_r->ehr_r: Read notification Task;\nextract requester.onBehalfOf.Identifier
+ehr_r -> mcsd_r : [FHIR R4] GET /Organization?identifier=http://fhir.nl/fhir/NamingSystem/ura|extracted-ura
+activate mcsd_r
+    mcsd_r --> ehr_r : 200 OK\n(Organization)
+deactivate mcsd_r
+ehr_r->ehr_r: Find Organization.endpoint where\nEndpoint.payloadType=http://nictiz.nl/fhir/CapabilityStatement/eOverdracht-servercapabilities
+
+== Step 5: Receiving party pulls eOverdracht Task ==
+
+ehr_r->mcsd_r: Find OAuth endpoint tied to that Organization (Endpoint.payloadType = Nuts-OAuth)
+activate mcsd_r
+    mcsd_r --> ehr_r : OAuth Endpoint
+deactivate mcsd_r
+ehr_r -> kp_r : Get access token for sending party\n[OAuth2] client_credentials / JWT grant
+activate kp_r
+    kp_r --> ehr_r : 200 OK\n(access_token, scope=eOverdracht-sender)
+deactivate kp_r
+
+ehr_r -> ehr_r : Read notification Task;\nextract basedOn = Task/{workflow-task-id}
+ehr_r -> kp_s : [FHIR STU3] GET /Task/{workflow-task-id}\nAuthorization: Bearer {access_token}
+activate kp_s
+    kp_s -> kp_s : Validate access token\nEvaluate policy (PDP)
+    kp_s -> ehr_s : [FHIR STU3] GET /Task/{workflow-task-id}
+    activate ehr_s
+        ehr_s --> kp_s : 200 OK\n(Workflow Task)
+    deactivate ehr_s
+    kp_s --> ehr_r : 200 OK\n(Task)
+deactivate kp_s
+
+== Step 6: Receiving party pulls clinical document (Composition) ==
+
+ehr_r -> ehr_r : Extract Composition reference\nfrom Task.input
+
+ehr_r -> kp_s : [FHIR STU3] GET /Composition/{id}
+    activate kp_s
+        kp_s -> kp_s : Validate access token\nEvaluate policy (PDP)
+        kp_s -> ehr_s : [FHIR STU3] GET /Composition/{id}
+        activate ehr_s
+            ehr_s --> kp_s : 200 OK\n(Composition)
+        deactivate ehr_s
+        kp_s --> ehr_r : 200 OK\n(Composition)
+    deactivate kp_s
+
+ehr_r --> ehr_r : Process incoming care handover document
+
+== Step 7: Receiving party routes to the right location==
+note over ehr_r
+ The receiving organization has to show that the hand-off/referral comes to the right location/part
+ of the organisation instead of a general or organization-wide list/inbox.
+end note
+ehr_r --> ehr_r : Read Task(workflow task)\nextension.where(url='http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/task-stu3-healthcareservice')'.value
+ehr_r --> ehr_r : Read Task(workflow task)\nextension.where(url='http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/task-stu3-location')'.value
+activate mcsd_r
+    ehr_r->mcsd_r: GET /HeatlhcareService\nGET /Location
+    ehr_r<--mcsd_r: 200 OK\n(HealthcareService, Location)
+deactivate mcsd_r
+ehr_r --> ehr_r: display HealthcareService.name\nand Location on UI,\nshowcasing routing capabilities
+@enduml

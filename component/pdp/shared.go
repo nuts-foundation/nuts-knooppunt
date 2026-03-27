@@ -171,13 +171,14 @@ func (p PolicyInput) Copy() PolicyInput {
 }
 
 type PolicyResource struct {
-	Type       *fhir.ResourceType       `json:"type"`
-	Properties PolicyResourceProperties `json:"properties"`
+	Id        string             `json:"id"`
+	Type      *fhir.ResourceType `json:"type"`
+	VersionId string             `json:"version_id"`
+	Consents  []PolicyConsent    `json:"consents"`
 }
 
-type PolicyResourceProperties struct {
-	ResourceId string `json:"resource_id"`
-	VersionId  string `json:"version_id"`
+type PolicyConsent struct {
+	Scope string `json:"scope"`
 }
 
 type PolicyAction struct {

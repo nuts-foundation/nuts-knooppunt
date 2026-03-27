@@ -1,54 +1,70 @@
 {
-  "bgz": {
+  "medicatieoverdracht": {
     "organization": {
       "format": {
+        "ldp_vc": {
+          "proof_type": [
+            "JsonWebSignature2020"
+          ]
+        },
         "jwt_vc": {
-          "alg": ["PS256", "ES256", "RS256"]
+          "alg": [
+            "PS256",
+            "RS256"
+          ]
         },
         "jwt_vp": {
-          "alg": ["ES256", "PS256", "RS256"]
-        },
-        "ldp_vc": {
-          "proof_type": ["JsonWebSignature2020"]
+          "alg": [
+            "ES256"
+          ]
         }
       },
-      "id": "pd_bgz_care_organization",
-      "name": "BgZ Care organization",
-      "purpose": "Authorization for BgZ (Basisgegevensset Zorg) access",
+      "id": "pd_any_care_organization",
+      "name": "Care organization",
+      "purpose": "Finding a care organization",
       "input_descriptors": [
         {
-          "id": "id_x509credential",
-          "name": "Care organization identity from UZI certificate",
+          "id": "id_uzicert_uracredential",
+          "name": "Care organization identity from fake UZI-server certificate",
           "purpose": "Finding a care organization for authorizing access to medical metadata.",
           "constraints": {
             "fields": [
               {
-                "path": ["$.type"],
+                "path": [
+                  "$.type"
+                ],
                 "filter": {
-                  "type": "array",
-                  "contains": {
-                    "const": "X509Credential"
-                  }
+                  "type": "string",
+                  "const": "X509Credential"
                 }
               },
               {
-                "path": ["$.issuer"],
-                "purpose": "Only accept credentials from our test CA",
+                "id": "organization_id",
+                "path": [
+                  "$.credentialSubject[0].id",
+                  "$.credentialSubject.id"
+                ],
                 "filter": {
                   "type": "string",
-                  "pattern": "^did:x509:0:sha256:OPYJNiIh8WSwSDzJL0R2d2yPlolN9eAzZ8zvfMK3lcM::.*$"
+                  "pattern": "^did:web:"
                 }
               },
               {
                 "id": "organization_name",
-                "path": ["$.credentialSubject[0].subject.O", "$.credentialSubject.subject.O"],
+                "path": [
+                  "$.credentialSubject[0].subject.O",
+                  "$.credentialSubject.subject.O"
+                ],
                 "filter": {
                   "type": "string"
                 }
               },
               {
                 "id": "organization_ura",
-                "path": ["$.credentialSubject[0].san.otherName", "$.credentialSubject.san.otherName"],
+                "path": [
+                  "$.credentialSubject[0].san.otherName",
+                  "$.credentialSubject.san.otherName"
+                ],
                 "filter": {
                   "type": "string",
                   "pattern": "^[0-9.]+-\\d+-\\d+-S-(\\d+)-00\\.000-\\d+$"
@@ -58,30 +74,45 @@
           }
         },
         {
-          "id": "id_nuts_employee_credential",
-          "name": "Employee identity",
-          "purpose": "Identify the employee making the request for accountability and consent verification.",
+          "id": "id_patient_enrollment",
+          "name": "The patient enrollment credential",
           "constraints": {
             "fields": [
               {
-                "path": ["$.type"],
+                "path": [
+                  "$.type"
+                ],
                 "filter": {
-                  "type": "array",
-                  "contains": {
-                    "const": "NutsEmployeeCredential"
-                  }
+                  "type": "string",
+                  "const": "PatientEnrollmentCredential"
                 }
               },
               {
-                "id": "user_id",
-                "path": ["$.credentialSubject.identifier"],
+                "path": [
+                  "$.credentialSubject[0].id",
+                  "$.credentialSubject.id"
+                ],
+                "filter": {
+                  "type": "string",
+                  "pattern": "^did:web:"
+                }
+              },
+              {
+                "id": "patient_enrollment_identifier",
+                "path": [
+                  "$.credentialSubject[0].patientId",
+                  "$.credentialSubject.patientId"
+                ],
                 "filter": {
                   "type": "string"
                 }
               },
               {
-                "id": "user_role",
-                "path": ["$.credentialSubject.roleName"],
+                "id": "patient_enrollment_registered_by",
+                "path": [
+                  "$.credentialSubject[0].registeredBy",
+                  "$.credentialSubject.registeredBy"
+                ],
                 "filter": {
                   "type": "string"
                 }
@@ -90,23 +121,75 @@
           }
         },
         {
-          "id": "id_healthcare_provider_role_type_credential",
-          "name": "Healthcare provider role type",
-          "purpose": "Identify the facility type of the requesting organization for Mitz consent verification.",
+          "id": "id_healthcare_professional_delegation",
+          "name": "The healthcare professional delegation credential",
           "constraints": {
             "fields": [
               {
-                "path": ["$.type"],
+                "path": [
+                  "$.type"
+                ],
                 "filter": {
-                  "type": "array",
-                  "contains": {
-                    "const": "HealthcareProviderRoleTypeCredential"
-                  }
+                  "type": "string",
+                  "const": "HealthCareProfessionalDelegationCredential"
+                }
+              },
+              {
+                "path": [
+                  "$.credentialSubject[0].id",
+                  "$.credentialSubject.id"
+                ],
+                "filter": {
+                  "type": "string",
+                  "pattern": "^did:web:"
+                }
+              },
+              {
+                "id": "delegation_registered_by",
+                "path": [
+                  "$.credentialSubject[0].registeredBy",
+                  "$.credentialSubject.registeredBy"
+                ],
+                "filter": {
+                  "type": "string"
+                }
+              },
+              {
+                "id": "delegation_role_code",
+                "path": [
+                  "$.credentialSubject[0].roleCode",
+                  "$.credentialSubject.roleCode"
+                ],
+                "filter": {
+                  "type": "string"
+                }
+              },
+              {
+                "id": "user_id",
+                "path": [
+                  "$.credentialSubject[0].registeredBy",
+                  "$.credentialSubject.registeredBy"
+                ],
+                "filter": {
+                  "type": "string"
+                }
+              },
+              {
+                "id": "user_role",
+                "path": [
+                  "$.credentialSubject[0].roleCode",
+                  "$.credentialSubject.roleCode"
+                ],
+                "filter": {
+                  "type": "string"
                 }
               },
               {
                 "id": "organization_facility_type",
-                "path": ["$.credentialSubject.roleCodeNL"],
+                "path": [
+                  "$.credentialSubject[0].facilityType",
+                  "$.credentialSubject.facilityType"
+                ],
                 "filter": {
                   "type": "string"
                 }
