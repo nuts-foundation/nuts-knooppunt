@@ -152,9 +152,9 @@ func Resources(fhirBaseURL *url.URL) []fhir.HasId {
 	for _, org := range Organizations() {
 		resources = append(resources, &org)
 	}
-	for _, org := range Observations() {
-		resources = append(resources, &org)
-	}
+for _, curr := range Observations() {
+resources = append(resources, &curr)
+}
 	for _, curr := range Compositions() {
 		resources = append(resources, &curr)
 	}
