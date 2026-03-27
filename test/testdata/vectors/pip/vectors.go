@@ -155,11 +155,11 @@ func Resources(fhirBaseURL *url.URL) []fhir.HasId {
 	for _, org := range Observations() {
 		resources = append(resources, &org)
 	}
-	for _, org := range Compositions() {
-		resources = append(resources, &org)
+	for _, curr := range Compositions() {
+		resources = append(resources, &curr)
 	}
-	for _, org := range Task() {
-		resources = append(resources, &org)
+	for _, curr := range Task() {
+		resources = append(resources, &curr)
 	}
 	for _, consent := range Consents() {
 		resources = append(resources, &consent)
