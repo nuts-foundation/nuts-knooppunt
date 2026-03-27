@@ -60,6 +60,22 @@ func Observations() []fhir.Observation {
 	}
 }
 
+func Compositions() []fhir.Composition {
+	return []fhir.Composition{
+		{
+			Id: to.Ptr("21ef0423-018b-40e7-adfd-7f4317f01c8f"),
+		},
+	}
+}
+
+func Tasks() []fhir.Task {
+	return []fhir.Task{
+		{
+			Id: to.Ptr("12AF22F3-2DE5-47E1-B3CB-B053C8621F84"),
+		},
+	}
+}
+
 func Consents() []fhir.Consent {
 	return []fhir.Consent{
 		{
@@ -100,6 +116,18 @@ func Consents() []fhir.Consent {
 							Type:      to.Ptr("Observation"),
 						},
 					},
+					{
+						Reference: fhir.Reference{
+							Reference: to.Ptr("Composition/21ef0423-018b-40e7-adfd-7f4317f01c8f"),
+							Type:      to.Ptr("Composition"),
+						},
+					},
+					{
+						Reference: fhir.Reference{
+							Reference: to.Ptr("Task/12AF22F3-2DE5-47E1-B3CB-B053C8621F84"),
+							Type:      to.Ptr("Task"),
+						},
+					},
 				},
 				Action: []fhir.CodeableConcept{
 					{
@@ -124,8 +152,14 @@ func Resources(fhirBaseURL *url.URL) []fhir.HasId {
 	for _, org := range Organizations() {
 		resources = append(resources, &org)
 	}
-	for _, org := range Observations() {
-		resources = append(resources, &org)
+	for _, curr := range Observations() {
+		resources = append(resources, &curr)
+	}
+	for _, curr := range Compositions() {
+		resources = append(resources, &curr)
+	}
+	for _, curr := range Tasks() {
+		resources = append(resources, &curr)
 	}
 	for _, consent := range Consents() {
 		resources = append(resources, &consent)
