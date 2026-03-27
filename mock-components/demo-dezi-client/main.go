@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-jose/go-jose/v4"
@@ -31,29 +32,15 @@ var (
 )
 
 // Session storage (in-memory, for demo purposes)
-var sessions = make(map[string]*Session)
+var sessions sync.Map
 
 type Session struct {
 	CodeVerifier string
+	AccessToken  string
 	State        string
 	Nonce        string
 	ReturnURL    string
 	CreatedAt    time.Time
-}
-
-type OIDCConfig struct {
-	Issuer                            string   `json:"issuer"`
-	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
-	TokenEndpoint                     string   `json:"token_endpoint"`
-	UserinfoEndpoint                  string   `json:"userinfo_endpoint"`
-	JwksURI                           string   `json:"jwks_uri"`
-	ResponseTypesSupported            []string `json:"response_types_supported"`
-	SubjectTypesSupported             []string `json:"subject_types_supported"`
-	IDTokenSigningAlgValuesSupported  []string `json:"id_token_signing_alg_values_supported"`
-	ScopesSupported                   []string `json:"scopes_supported"`
-	GrantTypesSupported               []string `json:"grant_types_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
-	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
 }
 
 type TokenResponse struct {
@@ -123,7 +110,6 @@ func main() {
 	http.HandleFunc("/callback", handleCallback)
 	http.HandleFunc("/userinfo", handleUserinfo)
 	http.HandleFunc("/logout", handleLogout)
-	http.HandleFunc("/.well-known/openid-configuration", handleOIDCConfig)
 
 	// CORS middleware
 	handler := corsMiddleware(http.DefaultServeMux)
@@ -175,13 +161,13 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	nonce := generateRandomString(32)
 
 	// Store session with state as key (simpler for demo)
-	sessions[state] = &Session{
+	sessions.Store(state, &Session{
 		CodeVerifier: codeVerifier,
 		State:        state,
 		Nonce:        nonce,
 		ReturnURL:    returnURL,
 		CreatedAt:    time.Now(),
-	}
+	})
 
 	// Build authorization URL
 	authURL := fmt.Sprintf("%s/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=openid&state=%s&code_challenge=%s&code_challenge_method=S256&nonce=%s&display=page&prompt=login",
@@ -211,11 +197,12 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Look up session by state
-	session, exists := sessions[state]
+	v, exists := sessions.Load(state)
 	if !exists {
 		http.Error(w, "Invalid or expired session", http.StatusBadRequest)
 		return
 	}
+	session := v.(*Session)
 
 	// Get authorization code
 	code := r.URL.Query().Get("code")
@@ -241,12 +228,12 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Store the access token in a new session
 	accessSessionID := generateRandomString(32)
-	sessions[accessSessionID] = &Session{
-		CodeVerifier: tokenResp.AccessToken, // Reuse CodeVerifier field to store access token
-		Nonce:        session.Nonce,
-		ReturnURL:    session.ReturnURL,
-		CreatedAt:    time.Now(),
-	}
+	sessions.Store(accessSessionID, &Session{
+		AccessToken: tokenResp.AccessToken,
+		Nonce:       session.Nonce,
+		ReturnURL:   session.ReturnURL,
+		CreatedAt:   time.Now(),
+	})
 
 	// Set access token cookie
 	http.SetCookie(w, &http.Cookie{
@@ -260,7 +247,7 @@ func handleCallback(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Clean up the original session
-	delete(sessions, state)
+	sessions.Delete(state)
 
 	// Redirect back to frontend
 	returnURL := session.ReturnURL
@@ -283,13 +270,14 @@ func handleUserinfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, exists := sessions[cookie.Value]
+	v2, exists := sessions.Load(cookie.Value)
 	if !exists {
 		http.Error(w, "Invalid session", http.StatusUnauthorized)
 		return
 	}
+	session := v2.(*Session)
 
-	accessToken := session.CodeVerifier // We stored the access token here
+	accessToken := session.AccessToken
 
 	// Get userinfo from Dezi
 	userinfo, err := getUserinfo(accessToken)
@@ -307,6 +295,10 @@ func handleUserinfo(w http.ResponseWriter, r *http.Request) {
 func handleLogout(w http.ResponseWriter, r *http.Request) {
 	log.Println("Handling logout")
 
+	if cookie, err := r.Cookie("sessionID"); err == nil {
+		sessions.Delete(cookie.Value)
+	}
+
 	http.SetCookie(w, &http.Cookie{
 		Name:   "sessionID",
 		Value:  "",
@@ -315,25 +307,6 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 	})
 
 	http.Redirect(w, r, frontendBaseURL, http.StatusFound)
-}
-
-// Provide OIDC configuration for the demo-ehr frontend
-func handleOIDCConfig(w http.ResponseWriter, r *http.Request) {
-	baseURL := fmt.Sprintf("http://localhost:%s", serverPort)
-	config := map[string]interface{}{
-		"issuer":                                baseURL,
-		"authorization_endpoint":                baseURL + "/login",
-		"token_endpoint":                        baseURL + "/token",
-		"userinfo_endpoint":                     baseURL + "/userinfo",
-		"end_session_endpoint":                  baseURL + "/logout",
-		"response_types_supported":              []string{"code"},
-		"subject_types_supported":               []string{"public"},
-		"id_token_signing_alg_values_supported": []string{"RS256"},
-		"scopes_supported":                      []string{"openid"},
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config)
 }
 
 // Exchange authorization code for access token
@@ -591,7 +564,9 @@ func generateCodeChallenge(verifier string) string {
 
 func generateRandomString(length int) string {
 	b := make([]byte, length)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(err)
+	}
 	return base64.RawURLEncoding.EncodeToString(b)[:length]
 }
 

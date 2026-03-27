@@ -22,7 +22,6 @@ FRONTEND_BASE_URL=http://localhost:3000
 
 ## Endpoints
 
-- `GET /.well-known/openid-configuration` - OIDC discovery
 - `GET /login?return_url=...` - Start login
 - `GET /callback` - OAuth callback
 - `GET /userinfo` - Get user info (authenticated)
@@ -40,18 +39,7 @@ Implements OIDC Authorization Code Flow with PKCE to connect demo-ehr to Dezi:
 
 ## Integration with demo-ehr
 
-Update `demo-ehr/src/authConfig.js`:
-
-```javascript
-export const oidcConfig = {
-  authority: 'http://localhost:8090',
-  client_id: 'demo-ehr',
-  redirect_uri: 'http://localhost:3000/callback',
-  response_type: 'code',
-  scope: 'openid',
-  loadUserInfo: true,
-};
-```
+Set `REACT_APP_AUTH_BASE_URL=http://localhost:8090` in demo-ehr's environment.
 
 ## Running
 
@@ -79,5 +67,5 @@ docker-compose up
 - **Logging**: Logs ID token, userinfo envelope, and decoded verklaring for debugging.
 
 
-Based on [Dezi spec v0.7](koppelvlakspecificatie-dezi-voor-platform-en-softwareleveranciers-v0-7.pdf)
+Based on Dezi spec v0.7.
 

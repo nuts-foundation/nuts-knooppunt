@@ -109,7 +109,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setUser(null);
     setPractitionerId(null);
-    window.location.href = `${authConfig.baseUrl}/logout`;
+    window.location.href = `${authConfig.baseUrl}/logout?return_url=${encodeURIComponent(window.location.href)}`;
   };
 
   const value = {

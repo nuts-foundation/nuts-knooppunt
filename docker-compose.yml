@@ -220,7 +220,7 @@ services:
       - ./demo-ehr/src:/app/src
     environment:
       - CHOKIDAR_USEPOLLING=true
-      - PUBLIC_URL=.
+      - PUBLIC_URL=/
       - REACT_APP_AUTH_BASE_URL=http://localhost:8090
       - REACT_APP_FHIR_BASE_URL=
       - REACT_APP_FHIR_STU3_BASE_URL=
