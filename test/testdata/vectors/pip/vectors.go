@@ -68,7 +68,7 @@ func Compositions() []fhir.Composition {
 	}
 }
 
-func Task() []fhir.Task {
+func Tasks() []fhir.Task {
 	return []fhir.Task{
 		{
 			Id: to.Ptr("12AF22F3-2DE5-47E1-B3CB-B053C8621F84"),
@@ -152,13 +152,13 @@ func Resources(fhirBaseURL *url.URL) []fhir.HasId {
 	for _, org := range Organizations() {
 		resources = append(resources, &org)
 	}
-for _, curr := range Observations() {
-resources = append(resources, &curr)
-}
+	for _, curr := range Observations() {
+		resources = append(resources, &curr)
+	}
 	for _, curr := range Compositions() {
 		resources = append(resources, &curr)
 	}
-	for _, curr := range Task() {
+	for _, curr := range Tasks() {
 		resources = append(resources, &curr)
 	}
 	for _, consent := range Consents() {
