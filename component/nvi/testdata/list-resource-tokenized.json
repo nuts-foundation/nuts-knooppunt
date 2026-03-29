@@ -14,7 +14,7 @@
   ],
   "subject": {
     "identifier": {
-      "system": "http://fhir.nl/fhir/NamingSystem/bsn-transport-token",
+      "system": "http://minvws.github.io/generiekefuncties-docs/NamingSystem/nvi-identifier",
       "value": "abcdefghi"
     }
   },

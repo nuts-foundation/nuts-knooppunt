@@ -33,12 +33,6 @@ var bsnTokenIdentifier = fhir.Identifier{
 	Value:  to.Ptr("abcdefghi"),
 }
 
-// pseudoBSNIdentifier matches the subject identifier in the test bundle-transaction.json
-var pseudoBSNIdentifier = fhir.Identifier{
-	System: to.Ptr("http://fhir.nl/fhir/NamingSystem/pseudo-bsn"),
-	Value:  to.Ptr("UHN1ZWRvYnNuOiA5OTk5NDAwMw=="),
-}
-
 func TestComponent_handleRegister(t *testing.T) {
 	testCases := []struct {
 		name                     string
@@ -99,7 +93,7 @@ func TestComponent_handleRegister(t *testing.T) {
 
 			ctrl := gomock.NewController(t)
 			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
-			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), pseudoBSNIdentifier, tenantURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
+			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, tenantURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
 			nvi := &test.StubFHIRClient{
 				Error: testCase.nviTransportError,
 			}
@@ -142,6 +136,356 @@ func TestComponent_handleRegister(t *testing.T) {
 		})
 	}
 
+}
+
+func TestComponent_handleRegisterList(t *testing.T) {
+	listResource := fhir.List{
+		Subject: &fhir.Reference{
+			Identifier: &bsnIdentifier,
+		},
+	}
+	listJSON, _ := json.Marshal(listResource)
+
+	testCases := []struct {
+		name                     string
+		nviTransportError        error
+		requestBody              []byte
+		tenantID                 *string
+		expectedStatus           int
+		expectedOperationOutcome *fhir.OperationOutcome
+	}{
+		{
+			name:           "registered List at NVI",
+			requestBody:    listJSON,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:              "NVI is down",
+			nviTransportError: assert.AnError,
+			requestBody:       listJSON,
+			expectedStatus:    http.StatusServiceUnavailable,
+			expectedOperationOutcome: &fhir.OperationOutcome{
+				Issue: []fhir.OperationOutcomeIssue{
+					{
+						Severity:    fhir.IssueSeverityError,
+						Code:        fhir.IssueTypeTransient,
+						Diagnostics: to.Ptr("Failed to register List at NVI"),
+					},
+				},
+			},
+		},
+		{
+			name:           "invalid tenant ID",
+			requestBody:    listJSON,
+			expectedStatus: http.StatusBadRequest,
+			tenantID:       to.Ptr("invalid"),
+			expectedOperationOutcome: &fhir.OperationOutcome{
+				Issue: []fhir.OperationOutcomeIssue{
+					{
+						Severity:    fhir.IssueSeverityError,
+						Code:        fhir.IssueTypeValue,
+						Diagnostics: to.Ptr("invalid tenant ID in request header"),
+					},
+				},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			tenantURA := "1"
+			tenantID := coding.URANamingSystem + "|" + tenantURA
+			if testCase.tenantID != nil {
+				tenantID = *testCase.tenantID
+				identifier, err := fhirutil.TokenToIdentifier(*testCase.tenantID)
+				if err == nil && identifier.Value != nil {
+					tenantURA = *identifier.Value
+				}
+			}
+
+			ctrl := gomock.NewController(t)
+			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
+			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, tenantURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
+			nvi := &test.StubFHIRClient{
+				Error: testCase.nviTransportError,
+			}
+			component := Component{
+				fhirClientFn: func(_ context.Context, _ string) (fhirclient.Client, error) {
+					return nvi, nil
+				},
+				pseudonymizer: pseudonymizer,
+				audience:      "nvi",
+			}
+			httpRequest := httptest.NewRequest("POST", "/nvi/List", bytes.NewReader(testCase.requestBody))
+			httpRequest.Header.Add("Content-Type", "application/fhir+json")
+			httpRequest.Header.Add("X-Tenant-ID", tenantID)
+			httpResponse := httptest.NewRecorder()
+
+			component.handleRegisterList(httpResponse, httpRequest)
+
+			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
+			responseData, _ := io.ReadAll(httpResponse.Body)
+
+			if testCase.expectedOperationOutcome != nil {
+				var operationOutcome fhir.OperationOutcome
+				err := json.Unmarshal(responseData, &operationOutcome)
+				require.NoError(t, err)
+				expectedJSON, _ := json.Marshal(testCase.expectedOperationOutcome)
+				require.JSONEq(t, string(expectedJSON), string(responseData))
+			}
+			if testCase.expectedStatus == http.StatusOK {
+				t.Run("assert BSN is translated in List subject", func(t *testing.T) {
+					require.Len(t, nvi.CreatedResources["List"], 1)
+					actual := nvi.CreatedResources["List"][0]
+					actualJSON, _ := json.Marshal(actual)
+					var actualList fhir.List
+					require.NoError(t, json.Unmarshal(actualJSON, &actualList))
+					require.NotNil(t, actualList.Subject)
+					require.NotNil(t, actualList.Subject.Identifier)
+					assert.Equal(t, bsnTokenIdentifier, *actualList.Subject.Identifier)
+				})
+			}
+		})
+	}
+}
+
+func TestComponent_handleReadList(t *testing.T) {
+	listResource := testUtil.ParseJSON[fhir.List](t, testdata.FS, "list-resource-tokenized.json")
+
+	testCases := []struct {
+		name                     string
+		id                       string
+		nviResources             []any
+		nviTransportError        error
+		expectedStatus           int
+		expectedOperationOutcome *fhir.OperationOutcome
+	}{
+		{
+			name:           "reads List from NVI",
+			id:             *listResource.Id,
+			nviResources:   []any{listResource},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:              "NVI is down",
+			id:                "some-id",
+			nviTransportError: assert.AnError,
+			expectedStatus:    http.StatusServiceUnavailable,
+			expectedOperationOutcome: &fhir.OperationOutcome{
+				Issue: []fhir.OperationOutcomeIssue{
+					{
+						Severity:    fhir.IssueSeverityError,
+						Code:        fhir.IssueTypeTransient,
+						Diagnostics: to.Ptr("Failed to read List at NVI"),
+					},
+				},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			const localURA = "1"
+			ctrl := gomock.NewController(t)
+			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
+			nvi := &test.StubFHIRClient{
+				Resources: testCase.nviResources,
+				Error:     testCase.nviTransportError,
+			}
+			component := Component{
+				fhirClientFn: func(_ context.Context, _ string) (fhirclient.Client, error) {
+					return nvi, nil
+				},
+				pseudonymizer: pseudonymizer,
+				audience:      "nvi",
+			}
+			httpRequest := httptest.NewRequest("GET", "/nvi/List/"+testCase.id, nil)
+			httpRequest.SetPathValue("id", testCase.id)
+			httpRequest.Header.Add("X-Tenant-ID", coding.URANamingSystem+"|"+localURA)
+			httpResponse := httptest.NewRecorder()
+
+			component.handleReadList(httpResponse, httpRequest)
+
+			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
+			responseData, _ := io.ReadAll(httpResponse.Body)
+
+			if testCase.expectedOperationOutcome != nil {
+				var operationOutcome fhir.OperationOutcome
+				err := json.Unmarshal(responseData, &operationOutcome)
+				require.NoError(t, err)
+				expectedJSON, _ := json.Marshal(testCase.expectedOperationOutcome)
+				require.JSONEq(t, string(expectedJSON), string(responseData))
+			} else {
+				var result fhir.List
+				err := json.Unmarshal(responseData, &result)
+				require.NoError(t, err)
+				assert.Equal(t, testCase.id, *result.Id)
+			}
+		})
+	}
+}
+
+func TestComponent_handleDeleteListByID(t *testing.T) {
+	testCases := []struct {
+		name                     string
+		id                       string
+		nviTransportError        error
+		expectedStatus           int
+		expectedOperationOutcome *fhir.OperationOutcome
+	}{
+		{
+			name:           "deletes List from NVI",
+			id:             "list-001",
+			expectedStatus: http.StatusNoContent,
+		},
+		{
+			name:              "NVI is down",
+			id:                "list-001",
+			nviTransportError: assert.AnError,
+			expectedStatus:    http.StatusServiceUnavailable,
+			expectedOperationOutcome: &fhir.OperationOutcome{
+				Issue: []fhir.OperationOutcomeIssue{
+					{
+						Severity:    fhir.IssueSeverityError,
+						Code:        fhir.IssueTypeTransient,
+						Diagnostics: to.Ptr("Failed to delete List at NVI"),
+					},
+				},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			const localURA = "1"
+			ctrl := gomock.NewController(t)
+			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
+			nvi := &test.StubFHIRClient{
+				Error: testCase.nviTransportError,
+			}
+			component := Component{
+				fhirClientFn: func(_ context.Context, _ string) (fhirclient.Client, error) {
+					return nvi, nil
+				},
+				pseudonymizer: pseudonymizer,
+				audience:      "nvi",
+			}
+			httpRequest := httptest.NewRequest("DELETE", "/nvi/List/"+testCase.id, nil)
+			httpRequest.SetPathValue("id", testCase.id)
+			httpRequest.Header.Add("X-Tenant-ID", coding.URANamingSystem+"|"+localURA)
+			httpResponse := httptest.NewRecorder()
+
+			component.handleDeleteListByID(httpResponse, httpRequest)
+
+			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
+			if testCase.expectedOperationOutcome != nil {
+				responseData, _ := io.ReadAll(httpResponse.Body)
+				var operationOutcome fhir.OperationOutcome
+				err := json.Unmarshal(responseData, &operationOutcome)
+				require.NoError(t, err)
+				expectedJSON, _ := json.Marshal(testCase.expectedOperationOutcome)
+				require.JSONEq(t, string(expectedJSON), string(responseData))
+			} else {
+				assert.Equal(t, []string{"List/" + testCase.id}, nvi.Deletions)
+			}
+		})
+	}
+}
+
+func TestComponent_handleDeleteListByParams(t *testing.T) {
+	testCases := []struct {
+		name                     string
+		nviTransportError        error
+		searchParams             string
+		expectedStatus           int
+		expectedDeletion         string
+		expectedOperationOutcome *fhir.OperationOutcome
+	}{
+		{
+			name:             "deletes by subject:identifier (BSN tokenized)",
+			searchParams:     "subject:identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value),
+			expectedStatus:   http.StatusNoContent,
+			expectedDeletion: "List?subject%3Aidentifier=http%3A%2F%2Fminvws.github.io%2Fgeneriekefuncties-docs%2FNamingSystem%2Fnvi-identifier%7Cabcdefghi",
+		},
+		{
+			name:             "patient:identifier is mapped to subject:identifier",
+			searchParams:     "patient:identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value),
+			expectedStatus:   http.StatusNoContent,
+			expectedDeletion: "List?subject%3Aidentifier=http%3A%2F%2Fminvws.github.io%2Fgeneriekefuncties-docs%2FNamingSystem%2Fnvi-identifier%7Cabcdefghi",
+		},
+		{
+			name:             "deletes by source:identifier (not tokenized)",
+			searchParams:     "source:identifier=http%3A%2F%2Fexample.org%2Fdevice-identifiers%7CEHR-SYS-2024-001",
+			expectedStatus:   http.StatusNoContent,
+			expectedDeletion: "List?source%3Aidentifier=http%3A%2F%2Fexample.org%2Fdevice-identifiers%7CEHR-SYS-2024-001",
+		},
+		{
+			name:           "missing identifier parameter",
+			searchParams:   "_count=10",
+			expectedStatus: http.StatusBadRequest,
+			expectedOperationOutcome: &fhir.OperationOutcome{
+				Issue: []fhir.OperationOutcomeIssue{
+					{
+						Severity:    fhir.IssueSeverityError,
+						Code:        fhir.IssueTypeInvalid,
+						Diagnostics: to.Ptr("at least one of patient:identifier, subject:identifier or source:identifier is required"),
+					},
+				},
+			},
+		},
+		{
+			name:              "NVI is down",
+			searchParams:      "subject:identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value),
+			nviTransportError: assert.AnError,
+			expectedStatus:    http.StatusServiceUnavailable,
+			expectedOperationOutcome: &fhir.OperationOutcome{
+				Issue: []fhir.OperationOutcomeIssue{
+					{
+						Severity:    fhir.IssueSeverityError,
+						Code:        fhir.IssueTypeTransient,
+						Diagnostics: to.Ptr("Failed to delete List at NVI"),
+					},
+				},
+			},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			const localURA = "1"
+			ctrl := gomock.NewController(t)
+			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
+			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, localURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
+			nvi := &test.StubFHIRClient{
+				Error: testCase.nviTransportError,
+			}
+			component := Component{
+				fhirClientFn: func(_ context.Context, _ string) (fhirclient.Client, error) {
+					return nvi, nil
+				},
+				pseudonymizer: pseudonymizer,
+				audience:      "nvi",
+			}
+			httpRequest := httptest.NewRequest("DELETE", "/nvi/List?"+testCase.searchParams, nil)
+			httpRequest.Header.Add("X-Tenant-ID", coding.URANamingSystem+"|"+localURA)
+			httpResponse := httptest.NewRecorder()
+
+			component.handleDeleteListByParams(httpResponse, httpRequest)
+
+			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
+			responseData, _ := io.ReadAll(httpResponse.Body)
+			if testCase.expectedOperationOutcome != nil {
+				var operationOutcome fhir.OperationOutcome
+				err := json.Unmarshal(responseData, &operationOutcome)
+				require.NoError(t, err)
+				expectedJSON, _ := json.Marshal(testCase.expectedOperationOutcome)
+				require.JSONEq(t, string(expectedJSON), string(responseData))
+			} else {
+				require.Len(t, nvi.Deletions, 1)
+				assert.Equal(t, testCase.expectedDeletion, nvi.Deletions[0])
+			}
+		})
+	}
 }
 
 func TestComponent_handleSearch(t *testing.T) {
@@ -224,7 +568,7 @@ func TestComponent_handleSearch(t *testing.T) {
 			searchParams:    "subject:identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value),
 			expectedStatus:  http.StatusOK,
 			expectedEntries: 1,
-			expectedSearch:  "List?subject%3Aidentifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn-transport-token%7Cabcdefghi",
+			expectedSearch:  "List?subject%3Aidentifier=http%3A%2F%2Fminvws.github.io%2Fgeneriekefuncties-docs%2FNamingSystem%2Fnvi-identifier%7Cabcdefghi",
 		},
 		{
 			name:            "searches with source.identifier",
@@ -312,7 +656,7 @@ func TestComponent_handleSearch(t *testing.T) {
 					require.Len(t, nvi.Searches, 1)
 					expectedSearch := testCase.expectedSearch
 					if expectedSearch == "" {
-						expectedSearch = "List?patient%3Aidentifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn-transport-token%7Cabcdefghi"
+						expectedSearch = "List?subject%3Aidentifier=http%3A%2F%2Fminvws.github.io%2Fgeneriekefuncties-docs%2FNamingSystem%2Fnvi-identifier%7Cabcdefghi"
 					}
 					assert.Equal(t, expectedSearch, nvi.Searches[0])
 				})
