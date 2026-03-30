@@ -20,8 +20,9 @@ jobs:
 
     - name: Run OPA policy tests
       run: |
-        opa test component/pdp/policies/ --coverage | tee /tmp/opa-coverage.json
-        coverage=$(jq '.coverage' /tmp/opa-coverage.json)
+        set -o pipefail
+        opa test component/pdp/policies/ --coverage --format=json | tee /tmp/opa-coverage.json
+        coverage=$(jq -r '.coverage' /tmp/opa-coverage.json)
         echo "## OPA Policy Coverage: ${coverage}%" >> $GITHUB_STEP_SUMMARY
 
     - name: Check OPA policy syntax
