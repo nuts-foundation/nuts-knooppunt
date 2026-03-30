@@ -299,6 +299,25 @@ func (s *StubFHIRClient) SearchWithContext(ctx context.Context, resourceType str
 				return (token[0] == "" || identifier["system"].(string) == token[0]) &&
 					(token[1] == "" || identifier["value"].(string) == token[1])
 			})
+		case "data":
+			filterCandidates(func(candidate BaseResource) bool {
+				if candidate.Type != "Consent" {
+					return false
+				}
+				var consent fhir.Consent
+				if err := json.Unmarshal(candidate.Data, &consent); err != nil {
+					panic(err)
+				}
+				if consent.Provision == nil {
+					return false
+				}
+				for _, data := range consent.Provision.Data {
+					if data.Reference.Reference != nil && *data.Reference.Reference == value {
+						return true
+					}
+				}
+				return false
+			})
 		case "source:identifier":
 			// Pass-through: no filtering in stub, NVI handles this query
 		default:

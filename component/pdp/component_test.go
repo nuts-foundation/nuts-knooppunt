@@ -241,6 +241,45 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					},
 				},
 			},
+			fhir.Composition{
+				Id: to.Ptr("comp-1"),
+			},
+			fhir.Consent{
+				Id:     to.Ptr("consent-1"),
+				Status: fhir.ConsentStateActive,
+				Scope: fhir.CodeableConcept{
+					Coding: []fhir.Coding{
+						{Code: to.Ptr("eoverdracht")},
+					},
+				},
+				Organization: []fhir.Reference{
+					{Identifier: &fhir.Identifier{
+						System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+						Value:  to.Ptr("00000002"),
+					}},
+				},
+				Provision: &fhir.ConsentProvision{
+					Type: to.Ptr(fhir.ConsentProvisionTypePermit),
+					Actor: []fhir.ConsentProvisionActor{
+						{Reference: fhir.Reference{
+							Identifier: &fhir.Identifier{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("00000001"),
+							},
+						}},
+					},
+					Data: []fhir.ConsentProvisionData{
+						{Reference: fhir.Reference{Reference: to.Ptr("Task/task-1")}},
+						{Reference: fhir.Reference{Reference: to.Ptr("Composition/comp-1")}},
+					},
+					Action: []fhir.CodeableConcept{
+						{Coding: []fhir.Coding{{
+							System: to.Ptr("http://terminology.hl7.org/CodeSystem/consentaction"),
+							Code:   to.Ptr("access"),
+						}}},
+					},
+				},
+			},
 		},
 	}
 
@@ -539,16 +578,22 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 	t.Run("eoverdracht_sender", func(t *testing.T) {
 		testCases := []testCase{
 			{
-				name:        "allow - Task update fetches resource content from PIP",
+				name:        "allow - Task update with local consent",
 				scope:       "eoverdracht-sender",
 				httpRequest: `PUT /Task/task-1`,
 				decision:    true,
 			},
 			{
-				name:        "deny - Task read without local consent",
+				name:        "allow - Task read with local consent",
 				scope:       "eoverdracht-sender",
 				httpRequest: `GET /Task/task-1`,
-				decision:    false,
+				decision:    true,
+			},
+			{
+				name:        "allow - Composition $document with local consent",
+				scope:       "eoverdracht-sender",
+				httpRequest: `GET /Composition/comp-1/$document`,
+				decision:    true,
 			},
 			{
 				name:        "deny - Task delete",
@@ -557,10 +602,10 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				decision:    false,
 			},
 			{
-				name:        "allow - Task update with non-existent resource returns pip_error",
+				name:        "deny - Task update without local consent returns pip_error",
 				scope:       "eoverdracht-sender",
 				httpRequest: `PUT /Task/nonexistent`,
-				decision:    true,
+				decision:    false,
 				policyReasonCodes: map[string][]TypeResultCode{
 					"eoverdracht_sender": {TypeResultCodePIPError},
 				},
