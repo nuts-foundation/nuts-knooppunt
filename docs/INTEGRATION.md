@@ -137,14 +137,14 @@ pseudo:
   prsurl: "https://pseudoniemendienst.proeftuin.gf.irealisatie.nl"
 ```
 
-| Property                       | Description                                                        |
-|--------------------------------|--------------------------------------------------------------------|
-| `nvi.baseurl`                  | Base URL of the NVI FHIR endpoint                                  |
-| `nvi.audience`                 | URA of the NVI service provider, used as the pseudonymization audience |
-| `authn.minvws.tlscertfile`     | Path to the UZI/mTLS certificate (PFX or PEM) for OAuth2 authentication |
-| `authn.minvws.tlskeypassword`  | Password for the PFX certificate (omit when using separate PEM key file) |
-| `authn.minvws.tokenendpoint`   | OAuth2 token endpoint of the MinVWS authorization server          |
-| `pseudo.prsurl`                | Base URL of the pseudonymization service (PRS)                     |
+| Property                      | Description                                                              |
+|-------------------------------|--------------------------------------------------------------------------|
+| `nvi.baseurl`                 | Base URL of the NVI FHIR endpoint                                        |
+| `nvi.audience`                | URA of the NVI service provider, used as the pseudonymization audience   |
+| `authn.minvws.tlscertfile`    | Path to the UZI/mTLS certificate (PFX or PEM) for OAuth2 authentication  |
+| `authn.minvws.tlskeypassword` | Password for the PFX certificate (omit when using separate PEM key file) |
+| `authn.minvws.tokenendpoint`  | OAuth2 token endpoint of the MinVWS authorization server                 |
+| `pseudo.prsurl`               | Base URL of the pseudonymization service (PRS)                           |
 
 ### Registering a List (via Bundle)
 

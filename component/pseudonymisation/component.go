@@ -76,7 +76,7 @@ func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identi
 		return nil, err
 	}
 
-	// Step 5: Extract the blind factor so the consuming system (NVI) can deblind
+	// Step 5: Extract the blind factor so the consuming system can deblind
 	blindFactorBytes, err := blinded.finalizeData.CopyBlinds()[0].MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("marshaling blind factor: %w", err)
