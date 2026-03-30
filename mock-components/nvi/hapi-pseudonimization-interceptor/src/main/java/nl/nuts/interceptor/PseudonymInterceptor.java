@@ -10,25 +10,15 @@ import ca.uhn.fhir.rest.api.server.IPreResourceShowDetails;
 import ca.uhn.fhir.rest.param.ReferenceParam;
 import ca.uhn.fhir.rest.server.servlet.ServletRequestDetails;
 import ca.uhn.fhir.rest.server.util.ICachedSearchDetails;
-import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import nl.nuts.util.BsnUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.hl7.fhir.instance.model.api.IIdType;
-import org.hl7.fhir.r4.model.CodeableConcept;
-import org.hl7.fhir.r4.model.Coding;
-import org.hl7.fhir.r4.model.Extension;
-import org.hl7.fhir.r4.model.IdType;
-import org.hl7.fhir.r4.model.Identifier;
-import org.hl7.fhir.r4.model.ListResource;
-import org.hl7.fhir.r4.model.OperationOutcome;
-import org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity;
-import org.hl7.fhir.r4.model.OperationOutcome.IssueType;
-import org.hl7.fhir.r4.model.OperationOutcome.OperationOutcomeIssueComponent;
-import org.hl7.fhir.r4.model.Reference;
-import org.hl7.fhir.r4.model.ResourceType;
+import org.hl7.fhir.r4.model.*;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 @Component
 @Interceptor
@@ -37,8 +27,13 @@ public class PseudonymInterceptor {
 
     private static final String PSEUDO_BSN_SYSTEM = System.getenv().getOrDefault(
             "PSEUDO_BSN_SYSTEM", "http://fhir.nl/fhir/NamingSystem/bsn-pseudonym");
+    /**
+     * @deprecated use BSN_TOKEN_SYSTEM_NEW
+     */
+    @Deprecated
     private static final String BSN_TOKEN_SYSTEM = System.getenv().getOrDefault(
             "BSN_TOKEN_SYSTEM", "http://fhir.nl/fhir/NamingSystem/bsn-transport-token");
+    private static final String BSN_TOKEN_SYSTEM_NEW = "http://minvws.github.io/generiekefuncties-docs/NamingSystem/nvi-identifier"; // for fake nvi to be hackwards compatible, both of these are checked
     private static final String NVI_AUDIENCE = System.getenv().getOrDefault(
             "NVI_AUDIENCE", "nvi-1");
     private static final String INTERCEPTOR_ENABLED_FOR_TENANT = System.getenv().getOrDefault(
@@ -134,7 +129,7 @@ public class PseudonymInterceptor {
             return new ReferenceParam(String.format("%s/%s/%s", system, ResourceType.Device.name(), identifierValue));
         }
 
-        if (!BSN_TOKEN_SYSTEM.equals(system)) {
+        if (!BSN_TOKEN_SYSTEM.equals(system) && !BSN_TOKEN_SYSTEM_NEW.equals(system)) {
             return null;
         }
         log.info("Converting token to pseudonym in search parameter: {}", identifierValue);
@@ -184,7 +179,7 @@ public class PseudonymInterceptor {
         allResources.stream()
                 .filter(aResource -> aResource instanceof ListResource)
                 .forEach(list -> modifyDocumentFromPseudonymToToken((ListResource) list,
-                                                                    getUraHeader(servletRequestDetails)));
+                        getUraHeader(servletRequestDetails)));
     }
 
     private void validateUraHeaderPresence(final ServletRequestDetails servletRequestDetails) {
@@ -212,14 +207,15 @@ public class PseudonymInterceptor {
         log.trace("Found identifier: system={}, value={}", referenceElement.getBaseUrl(), referenceElement.getIdPart());
         final String token = pseudonymToToken(referenceElement.getIdPart(), audience);
         final Identifier identifier = new Identifier();
-        identifier.setSystem(BSN_TOKEN_SYSTEM);
+        identifier.setSystem(BSN_TOKEN_SYSTEM_NEW);
         identifier.setValue(token);
         resource.setSubject(new Reference().setIdentifier(identifier));
     }
 
     private void modifyListSubjectFromTokenToPseudonym(final ListResource docRef) {
         final Identifier identifier = docRef.getSubject().getIdentifier();
-        if (identifier == null || !BSN_TOKEN_SYSTEM.equals(identifier.getSystem())) {
+        if (identifier == null || (!BSN_TOKEN_SYSTEM.equals(identifier.getSystem())
+                && !BSN_TOKEN_SYSTEM_NEW.equals(identifier.getSystem()))) {
             return;
         }
         log.trace("Found identifier: system={}, value={}", identifier.getSystem(), identifier.getValue());
@@ -265,7 +261,7 @@ public class PseudonymInterceptor {
      * Validates that ListResource.custodian matches the X-Requester-URA header.
      * The custodian should be a reference to an Organization with an identifier containing the URA.
      *
-     * @param list the ListResource to validate
+     * @param list                  the ListResource to validate
      * @param servletRequestDetails the request details containing headers
      * @throws IllegalArgumentException if custodian doesn't match the X-Requester-URA header
      */
@@ -300,7 +296,7 @@ public class PseudonymInterceptor {
         if (!requesterURA.equals(custodianURA)) {
             throw new IllegalArgumentException(
                     String.format("List.custodian URA (%s) does not match %s header (%s)",
-                                  custodianURA, REQUESTER_URA_HEADER, requesterURA));
+                            custodianURA, REQUESTER_URA_HEADER, requesterURA));
         }
 
         log.debug("Custodian URA validation successful: {}", custodianURA);
