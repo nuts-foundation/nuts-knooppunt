@@ -5,9 +5,15 @@ This document describes how to integrate with the Knooppunt.
 ## Table of Contents
 
 - [Addressing](#addressing)
-- [NVI](#nvi)
-- [Consent (MITZ)](#consent-mitz)
+- [Localization (NVI)](#nvi)
+- [Online Consent (MITZ)](#consent-mitz)
 - [Authentication](#authentication)
+- [Authorization](#authorization)
+  - [Prerequisites](#prerequisites)
+  - [Evaluation](#evaluation)
+  - [Explicit consent using MITZ](#explicit-consent-using-mitz-de-gesloten-vraag)
+  - [Policy Information Point](#policy-information-point)
+  - [Security Considerations](#security-considerations)
 
 ---
 
@@ -428,16 +434,11 @@ Example:
   "organization_ura": "12345678",
   "organization_name": "Hospital East",
   "organization_city": "Amsterdam",
-  "employee_identifier": "87654321",
-  "employee_initials": "J.",
-  "employee_surname_prefix": "van der",
-  "employee_surname": "Broek",
-  "employee_roles": [
-    "01.041",
-    "30.000",
-    "01.010",
-    "01.011"
-  ]
+  "user_id": "87654321",
+  "user_initials": "J.",
+  "user_surname_prefix": "van der",
+  "user_surname": "Broek",
+  "user_role": "01.041"
 }
 ```
 
@@ -445,43 +446,59 @@ Note that the returned fields depend on the Nuts Access Policy that was loaded i
 
 ## Authorization
 
-This chapter describes how to use the Knooppunt to support in making authorization decisions using its policy decision
-point.
+This chapter describes how to use the Knooppunt to support in making authorization decisions for data exchanges using its policy decision
+point (PDP). The PDP is called by the Policy Enforcement Point (PEP) on every inbound request.
+The PEP passes the [token introspection result](#verifying-access-tokens) together with details about the incoming
+request to the PDP, which then returns an allow/deny decision.
 
-The PDP is a single endpoint that requires the following input:
+The supported policies are embedded, and can be found in `/component/pdp/policies`.
 
-- One or more scopes
-- Introspected token data about a subject
-- the HTTP request
-- Contextual information
+### Prerequisites
 
-The endpoint can be reached on the internal port of Knooppunt.
+- **Policy enforcement point (PEP)**: a reverse proxy (e.g. NGINX or HAProxy) that introspects incoming access tokens and calls the PDP. A reference NGINX implementation is available in the [/pep](/pep) directory.
+- **Policy information point (PIP)**: a FHIR R4 REST-compatible API for:
+  - policies that use implicit consent (e.g. eOverdracht)
+  - policies that use explicit consent from Mitz, which require looking up the patient BSN from the FHIR resource ID.
+- **MITZ**: the MITZ module must be configured for policies that require explicit patient consent (implemented through MITZ' _gesloten vraag_)
 
-````http request
-POST http://someaddress:8081/pdp/v1/data/knooppunt/authz
-Content-Type: application/json
-````
+### Evaluation
 
-The PDP will check the request against a set of policies associated with the provided scopes. It will perform the
-following checks per scope:
+The PDP evaluates the request against the policies associated with the provided scopes. The checks performed depend
+on the policy; examples include FHIR Capability Statement conformance, required search parameters, explicit patient
+consent, and implicit consent (_veronderstelde toestemming_).
 
-- Conformance to a capability statement
-- Conformance to a rego policy
+The endpoint can be reached on the internal port (`:8081`) of Knooppunt on `/pdp/v1/data/knooppunt/authz`.
 
-The provided oAuth scopes are used to determine which policy is applied. Knooppunt currently ships with policies such
-as:
+#### PDP Request
 
-- `bgz`
-- `eoverdracht_notification`
-- `mcsd_update`
-- `mcsd_query`
-- `pzp_gf`
+The request must be in JSON format, and can contain the following properties:
 
-A complete list can be found in the policies directory: `/component/pdp/policies`
+| Field | Required | Description | Example |
+|---|---|---|---|
+| `subject.scope` | Required | Space-separated OAuth scopes that determine which policies are evaluated | `"bgz"` |
+| `subject.client_id` | Optional | Client identifier from the access token | `"https://example.com/oauth2"` |
+| `subject.organization_ura` | Required | URA of the requesting organization | `"00000666"` |
+| `subject.organization_name` | Optional | Name of the requesting organization | `"Hospital West"` |
+| `subject.organization_facility_type` | Optional | Facility type code of the requesting organization | `"Z3"` |
+| `subject.user_id` | Optional | Identifier of the end user; omit if no user is involved | `"000095254"` |
+| `subject.user_role` | Optional | Role code of the end user; omit if no user is involved | `"01.015"` |
+| `request.method` | Required | HTTP method | `"GET"` |
+| `request.protocol` | Required | HTTP protocol version | `"HTTP/1.0"` |
+| `request.path` | Required | Request path without query string | `"/Patient"` |
+| `request.query_params` | Optional | Query parameter names mapped to arrays of values | `{"_include": ["Patient:general-practitioner"]}` |
+| `context.connection_type_code` | Required | Type of connection; use `hl7-fhir-rest` for FHIR REST APIs | `"hl7-fhir-rest"` |
+| `context.data_holder_organization_id` | Required | URA of the organization that holds the data being requested | `"00000659"` |
+| `context.data_holder_facility_type` | Optional | Facility type code of the data-holding organization | `"Z3"` |
+| `context.patient_bsn` | Optional | BSN of the patient; may be omitted if the PIP is configured and the patient ID can be derived from the request path | `"900186021"` |
+
+The `subject` can be set directly to the claims from the token introspection response (see [Verifying access tokens](#verifying-access-tokens)) — no transformation needed.
 
 An example requests looks like this:
 
-```json
+```http request
+POST http://localhost:8081/pdp/v1/data/knooppunt/authz
+Content-Type: application/json
+
 {
   "input": {
     "subject": {
@@ -494,7 +511,10 @@ An example requests looks like this:
     "request": {
       "method": "GET",
       "protocol": "HTTP/1.0",
-      "path": "/Patient?_include=Patient:general-practitioner"
+      "path": "/Patient",
+      "query_params": {
+        "_include": ["Patient:general-practitioner"]
+      }
     },
     "context": {
       "data_holder_organization_id": "00000659",
@@ -507,32 +527,204 @@ An example requests looks like this:
 
 The file [pdp.http](/docs/test-scripts/pdp.http) in the repository contains additional examples.
 
-[The type declaration](/component/pdp/shared.go) `PDPInput` lists the full range of supported options.
+#### PDP Response
 
-### Policy Information Points
+The response is a JSON object. The PEP must use the root `allow` field to allow or deny access.
+
+The `policies` field is informational (e.g. for logging) and shows the result per policy.
+
+| Field | Description |
+|---|---|
+| `allow` | `true` if the request is allowed, `false` otherwise |
+| `policies` | Object containing the result per evaluated policy |
+| `policies.<name>.allow` | Whether this policy allowed the request |
+| `policies.<name>.reasons` | Array of reasons explaining the decision |
+| `policies.<name>.reasons[].code` | Reason code (e.g. `not_allowed`, `pip_error`, `info`) |
+| `policies.<name>.reasons[].description` | Human-readable explanation |
+
+Example response:
+
+```json
+{
+  "allow": true,
+  "policies": {
+    "bgz": {
+      "allow": true,
+      "reasons": [
+        {
+          "code": "info",
+          "description": "MITZ consent granted"
+        }
+      ]
+    }
+  }
+}
+```
+
+### Explicit consent using MITZ (_de gesloten vraag_)
+
+Some policies like `bgz` query MITZ (_de gesloten vraag_) to verify whether the patient has given consent for this exchange.
+
+For this to work you will need to configure the Mitz module of Knooppunt and integrate a policy information point (see
+above). Otherwise, access will be rejected.
+
+### Policy Information Point
 
 To come to a policy decision the PDP might need additional information from a policy information point (PIP).
 
 Read our [configuration guide](/docs/CONFIGURATION.md) to see the options for configuring this endpoint.
 
-Currently, this method is used to exchange a patient ID (e.g. FHIR resource ID) for a BSN by looking up a patient
-record. The PIP should be a FHIR R4 Rest compatible API.
+The PIP is a FHIR R4 REST-compatible API used for two purposes:
 
-### Answering _de gesloten vraag_ using the PDP
+1. **Patient BSN lookup**: to find a patient's BSN given their FHIR resource ID patient.
+2. **Implied consent lookup**: to find consents giving access to the requested FHIR resource. 
 
-Some policies like `bgz` will attempt to answer _de Mitz gesloten vraag_.
+#### Patient BSN Lookup
 
-For this to work you will need to configure the Mitz module of Knooppunt and integrate a policy information point (see
-above). Otherwise, access will be rejected.
+The PDP performs the following call to resolve a patient resource ID to a BSN:
 
-### Integrating the PDP with a Policy Enforcement Point
+```http
+GET /Patient/{id}?_elements=identifier
+```
 
-The PDP makes decisions based on the assumption that the requestor has validated the input. Make sure you are not
-passing in any data without verifying its validity.
+The PDP looks for an identifier with system `http://fhir.nl/fhir/NamingSystem/bsn` and uses its value as the BSN.
 
-If you use Nuts authentication you can pass the introspected token data directly as the subject.
+Example response:
 
-We also provide a reference implementation of a policy enforcement point based on Nginx. It's available in the `/pep`
-folder in this repository.
+```json
+{
+  "resourceType": "Patient",
+  "id": "3E439979-017F-40AA-594D-EBCF880FFD97",
+  "identifier": [
+    {
+      "system": "http://fhir.nl/fhir/NamingSystem/bsn",
+      "value": "176286603"
+    }
+  ]
+}
+```
 
+#### Implied consent lookup
+
+Some policies use **implied consent** to control access to specific FHIR resources. Rather than
+querying MITZ for population-level consent, the PDP searches the EHR's PIP for `Consent` resources that
+explicitly permit or deny access to an individual resource, using the `data` search parameter:
+
+```http
+GET /Consent?data={ResourceType}/{resourceId}
+```
+
+This returns all Consent resources whose `provision.data.reference` refers to the given resource.
+The PDP follows pagination links automatically, so the PIP may return results across multiple pages.
+
+This is triggered whenever the PDP input includes a resource ID and type with connection type `hl7-fhir-rest`.
+The `eoverdracht_sender` policy is an example that relies on this mechanism: it checks that a Consent with
+scope `eoverdracht` permits the requesting organization to access the specific resource.
+
+##### Resource Requirements
+
+For a Consent resource to influence the policy decision, it must satisfy all of the following conditions:
+
+| Field | Required value |
+|---|---|
+| `status` | `active` |
+| `scope.coding[0].code` | The policy scope (e.g. `eoverdracht`) |
+| `scope.coding[0].system` | `http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-consent-scope` |
+| `organization[].identifier.system` | `http://fhir.nl/fhir/NamingSystem/ura` |
+| `organization[].identifier.value` | URA of the data-holding organization (`context.data_holder_organization_id`) |
+| `provision.type` | `permit` or `deny` |
+| `provision.action[].coding` | Must include code `access` from system `http://terminology.hl7.org/CodeSystem/consentaction` |
+| `provision.actor[].reference.identifier.system` | `http://fhir.nl/fhir/NamingSystem/ura` |
+| `provision.actor[].reference.identifier.value` | URA of the requesting organization (`subject.organization.ura`) |
+| `provision.data[].reference.reference` | Reference to the governed resource (e.g. `Task/12AF22F3-...`) |
+
+Only Consent resources where **both** the data holder's URA matches `context.data_holder_organization_id`
+**and** the actor's URA matches `subject.organization.ura` are applied to the policy decision.
+
+##### Ruling Precedence
+
+When multiple matching Consent resources exist for the same scope:
+- **`deny` supersedes `permit`**: if any Consent has `provision.type = deny` for a given scope, that scope is
+  denied even if a `permit` Consent with equal specificity also exists.
+
+##### Example
+
+The following Consent permits organization `00000040` to access a specific `Task` and `Composition` resource held by
+organization `00000030` under the `eoverdracht` scope:
+
+```json
+{
+  "resourceType": "Consent",
+  "status": "active",
+  "scope": {
+    "coding": [
+      {
+        "system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-consent-scope",
+        "code": "eoverdracht"
+      }
+    ]
+  },
+  "organization": [
+    {
+      "identifier": {
+        "system": "http://fhir.nl/fhir/NamingSystem/ura",
+        "value": "00000030"
+      }
+    }
+  ],
+  "provision": {
+    "type": "permit",
+    "action": [
+      {
+        "coding": [
+          {
+            "system": "http://terminology.hl7.org/CodeSystem/consentaction",
+            "code": "access"
+          }
+        ]
+      }
+    ],
+    "actor": [
+      {
+        "reference": {
+          "identifier": {
+            "system": "http://fhir.nl/fhir/NamingSystem/ura",
+            "value": "00000040"
+          }
+        }
+      }
+    ],
+    "data": [
+      {
+        "reference": {
+          "reference": "Task/12AF22F3-2DE5-47E1-B3CB-B053C8621F84",
+          "type": "Task"
+        }
+      },
+      {
+        "reference": {
+          "reference": "Composition/21ef0423-018b-40e7-adfd-7f4317f01c8f",
+          "type": "Composition"
+        }
+      }
+    ]
+  }
+}
+```
+
+Note that some fields required by FHIR R4 but ignored by the PDP are omitted for brevity.
+
+When the PDP evaluates a request for `Task/12AF22F3-2DE5-47E1-B3CB-B053C8621F84`, it calls
+`GET /Consent?data=Task/12AF22F3-2DE5-47E1-B3CB-B053C8621F84` on the PIP, finds this Consent,
+and uses it to evaluate the `eoverdracht_sender` policy, which then allows the request.
+
+### Security Considerations
+
+- **Use token introspection for identity claims**: Never use identity claims provided by the client directly as
+  `subject` input. Always derive identity claims from the token introspection response.
+- **Deny on error**: If the PDP is unreachable or returns an error, the PEP must deny access. Never default to allow.
+- **PIP access**: The PIP should only be accessible from the Knooppunt, not from external parties, as it exposes
+  patient data used for authorization decisions.
+- **Minimize PIP data exposure**: The PIP should honor the `_elements` parameter so that only the requested fields
+  are returned, minimizing the patient data sent to the PDP.
 
