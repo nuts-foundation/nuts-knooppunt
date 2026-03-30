@@ -209,15 +209,35 @@ services:
     profiles:
       - pep
 
+  demo-dezi-client:
+    image: ghcr.io/nuts-foundation/demo-dezi-client:latest
+    build:
+      context: ./mock-components/demo-dezi-client
+      dockerfile: Dockerfile
+    profiles:
+      - demoehr
+    container_name: demo-dezi-client
+    ports:
+      - "8090:8090"
+    environment:
+      DEZI_AUTHORITY: https://acceptatie.auth.dezi.nl
+      DEZI_CLIENT_ID: cb96e3fb-394c-4d12-b2b2-7a1a7bbe0b02
+      DEZI_REDIRECT_URI: http://localhost:8090/callback
+      SERVER_PORT: 8090
+      FRONTEND_BASE_URL: http://localhost:8091
+
   demo-ehr:
     image: ghcr.io/nuts-foundation/demo-ehr:latest
+    build:
+      context: ./mock-components/demo-ehr
+      dockerfile: Dockerfile
     profiles:
       - demoehr
     container_name: demo-ehr
     ports:
-      - "3000:3000"
+      - "8091:3000"
     volumes:
-      - ./demo-ehr/src:/app/src
+      - ./mock-components/demo-ehr/src:/app/src
     environment:
       - CHOKIDAR_USEPOLLING=true
       - PUBLIC_URL=/

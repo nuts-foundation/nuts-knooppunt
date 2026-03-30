@@ -2,6 +2,19 @@
 
 A demonstration Electronic Health Record (EHR) application for showcasing Dutch healthcare data exchange use cases, specifically focusing on BGZ (Basisgegevensset Zorg) exchange and eOverdracht (care handover) workflows.
 
+## Getting Started
+
+Start the Demo EHR together with the Demo Dezi Client (handles Dezi login) using Docker Compose from the repository root:
+
+```bash
+docker compose --profile demoehr up
+```
+
+Then open **http://localhost:8091** in your browser.
+
+The Demo EHR requires a running Knooppunt instance (started separately via `docker compose up`).
+For authentication to work, the Demo Dezi Client also needs a valid CIBG Dezi client registration and configuration.
+
 ## Overview
 
 The Demo EHR app is a React-based web application that demonstrates how healthcare providers can exchange patient data using FHIR standards and the Nuts infrastructure. It implements two primary use cases:
@@ -216,29 +229,6 @@ The demo-ehr service is available as a Docker Compose profile. Start with:
 docker compose --profile demoehr up
 ```
 
-The service configuration from `docker-compose.yml`:
-
-```yaml
-demo-ehr:
-  build:
-    context: ./demo-ehr
-    dockerfile: Dockerfile
-  image: demo-ehr:latest
-  profiles:
-    - demoehr
-  ports:
-    - "3000:3000"
-  volumes:
-    - ./demo-ehr/src:/app/src
-    - ./demo-ehr/public:/app/public
-  environment:
-    - CHOKIDAR_USEPOLLING=true
-    - REACT_APP_AUTH_BASE_URL=http://localhost:8090
-    - REACT_APP_FHIR_BASE_URL=https://server.fire.ly/R4
-    - REACT_APP_FHIR_STU3_BASE_URL=https://server.fire.ly/R3
-    - REACT_APP_FHIR_MCSD_QUERY_BASE_URL=http://localhost:7050/fhir/knpt-mcsd-query
-    - REACT_APP_ORGANIZATION_URA=
-```
 
 ### Local Development Configuration
 
