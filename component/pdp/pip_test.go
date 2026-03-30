@@ -2,6 +2,7 @@ package pdp
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
@@ -80,7 +81,12 @@ func TestEnrichResourceContent(t *testing.T) {
 		assert.Nil(t, result.Resource.Content)
 	})
 
-	t.Run("returns pip_error when resource not found", func(t *testing.T) {
+	t.Run("returns pip_error and logs URL when resource not found", func(t *testing.T) {
+		handler := &captureHandler{}
+		originalDefault := slog.Default()
+		slog.SetDefault(slog.New(handler))
+		defer slog.SetDefault(originalDefault)
+
 		component := &Component{
 			pipClient: &test.StubFHIRClient{},
 		}
@@ -96,5 +102,18 @@ func TestEnrichResourceContent(t *testing.T) {
 		require.Len(t, reasons, 1)
 		assert.Equal(t, TypeResultCodePIPError, reasons[0].Code)
 		assert.Nil(t, result.Resource.Content)
+
+		// Verify the log contains the full PIP URL
+		var loggedURL string
+		for _, record := range handler.records {
+			record.Attrs(func(attr slog.Attr) bool {
+				if attr.Key == "url" {
+					loggedURL = attr.Value.String()
+					return false
+				}
+				return true
+			})
+		}
+		assert.Equal(t, "https://example.com/fhir/Task/nonexistent", loggedURL)
 	})
 }

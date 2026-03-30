@@ -97,13 +97,12 @@ func (c *Component) enrichResourceContent(ctx context.Context, policyInput *Poli
 	ctx, cancel := context.WithTimeout(ctx, pipTimeout)
 	defer cancel()
 
-	client := c.pipClient
 	path := fmt.Sprintf("%s/%s", policyInput.Resource.Type.String(), policyInput.Resource.Id)
 
 	var content map[string]any
-	err := client.ReadWithContext(ctx, path, &content)
+	err := c.pipClient.ReadWithContext(ctx, path, &content)
 	if err != nil {
-		slog.WarnContext(ctx, "Failed to get resource content from PIP", logging.Error(err))
+		slog.WarnContext(ctx, "Failed to get resource content from PIP", "url", c.pipClient.Path(path).String(), logging.Error(err))
 		return policyInput, []ResultReason{
 			{
 				Code:        TypeResultCodePIPError,
