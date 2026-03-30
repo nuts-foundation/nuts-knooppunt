@@ -379,9 +379,12 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
 	}
-
+	// needed only for our fake NVI, otherwise it's not required
+	requestHeaders := http.Header{
+		"X-Requester-URA": []string{*requesterURA.Value},
+	}
 	var searchSet fhir.Bundle
-	err = fhirClient.SearchWithContext(httpRequest.Context(), "List", searchParams, &searchSet)
+	err = fhirClient.SearchWithContext(httpRequest.Context(), "List", searchParams, &searchSet, fhirclient.RequestHeaders(requestHeaders))
 	if err != nil {
 		err = &fhirapi.Error{
 			Message:   "Failed to search for List resources at NVI",
