@@ -19,7 +19,7 @@ PRS -> PRS : evaluate with PRS secret key
 PRS --> C1 : evaluated_blinded_output\n+ encrypted JWE for NVI
 
 == Step 4: Register at NVI ==
-C1 -> NVI : POST /NVIDataReference\n(JWE evaluated_blinded_output + URA + careContext)
+C1 -> NVI : POST Bundle /\n(JWE evaluated_blinded_output + URA + careContext)
 
 == Step 5: NVI Processing ==
 NVI -> NVI : decrypt JWE

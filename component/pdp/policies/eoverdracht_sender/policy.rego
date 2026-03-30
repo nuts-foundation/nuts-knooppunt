@@ -11,6 +11,13 @@ allow if {
 allow if {
     is_task_resource
     is_update_interaction
+    has_local_consent
+}
+
+allow if {
+    is_composition_resource
+    is_document_operation
+    has_local_consent
 }
 
 is_read_interaction if {
@@ -30,4 +37,14 @@ is_task_resource if {
 is_update_interaction if {
     input.action.request.method == "PUT"
     input.action.fhir_rest.interaction_type == "update"
+}
+
+is_composition_resource if {
+    input.resource.type == "Composition"
+    input.resource.id != ""              
+}
+
+is_document_operation if {
+    input.action.fhir_rest.interaction_type == "operation"
+    input.action.fhir_rest.operation == "document"
 }

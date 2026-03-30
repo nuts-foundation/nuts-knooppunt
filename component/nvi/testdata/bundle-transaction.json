@@ -14,7 +14,7 @@
             "valueReference": {
               "identifier": {
                 "system": "http://fhir.nl/fhir/NamingSystem/ura",
-                "value": "11111111"
+                "value": "90000308"
               }
             },
             "url": "http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian"
@@ -22,14 +22,14 @@
         ],
         "subject": {
           "identifier": {
-            "system": "http://fhir.nl/fhir/NamingSystem/pseudo-bsn",
-            "value": "UHN1ZWRvYnNuOiA5OTk5NDAwMw=="
+            "system": "http://fhir.nl/fhir/NamingSystem/bsn",
+            "value": "123456789"
           }
         },
         "source": {
           "identifier": {
-            "system": "https://cp1-test.example.org/device-identifiers",
-            "value": "EHR-SYS-2024-001"
+            "system": "urn:ietf:rfc:3986",
+            "value": "EHR-SYS-2024-999"
           },
           "type": "Device"
         },
@@ -47,7 +47,7 @@
           "coding": [
             {
               "code": "MEDAFSPRAAK",
-              "system": "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-zorgcontext-cs",
+              "system": "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs",
               "display": "Medicatieafspraak"
             }
           ]

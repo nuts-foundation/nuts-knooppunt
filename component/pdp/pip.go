@@ -118,7 +118,7 @@ func (c *Component) enrichResourceContent(ctx context.Context, policyInput *Poli
 func (c *Component) enrichConsent(ctx context.Context, policyInput *PolicyInput) (*PolicyInput, []ResultReason) {
 	// Check for local consent resources
 	if policyInput.Action.ConnectionTypeCode == "hl7-fhir-rest" &&
-		policyInput.Action.FHIRRest.InteractionType == fhir.TypeRestfulInteractionRead &&
+		policyInput.Resource.Id != "" &&
 		policyInput.Resource.Type != nil {
 		client := c.pipClient
 

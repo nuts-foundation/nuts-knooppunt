@@ -2,6 +2,7 @@ package pseudonymisation
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -56,10 +57,17 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		// Verify result
 		assert.NotNil(t, result)
 		assert.Equal(t, coding.BSNTransportTokenNamingSystem, *result.System)
-		assert.Equal(t, "pseudonym-12345-abc", *result.Value)
 		assert.NotEmpty(t, receivedRequest.EncryptedPersonalID)
 		assert.Equal(t, "ura:1234", receivedRequest.RecipientOrganization)
 		assert.Equal(t, "nationale-verwijsindex", receivedRequest.RecipientScope)
+
+		// Value must be a base64url-encoded JSON with blind_factor and evaluated_output
+		decoded, err := base64.RawURLEncoding.DecodeString(*result.Value)
+		require.NoError(t, err)
+		var si subjectIdentifier
+		require.NoError(t, json.Unmarshal(decoded, &si))
+		assert.NotEmpty(t, si.BlindFactor)
+		assert.Equal(t, "pseudonym-12345-abc", si.EvaluatedOutput)
 
 		t.Logf("Transport token: %s", *result.Value)
 	})

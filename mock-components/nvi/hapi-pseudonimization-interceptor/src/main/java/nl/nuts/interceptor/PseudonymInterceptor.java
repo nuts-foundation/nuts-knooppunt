@@ -10,25 +10,14 @@ import ca.uhn.fhir.rest.api.server.IPreResourceShowDetails;
 import ca.uhn.fhir.rest.param.ReferenceParam;
 import ca.uhn.fhir.rest.server.servlet.ServletRequestDetails;
 import ca.uhn.fhir.rest.server.util.ICachedSearchDetails;
-import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import nl.nuts.util.BsnUtil;
-import org.apache.commons.lang3.StringUtils;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.hl7.fhir.instance.model.api.IIdType;
-import org.hl7.fhir.r4.model.CodeableConcept;
-import org.hl7.fhir.r4.model.Coding;
-import org.hl7.fhir.r4.model.Extension;
-import org.hl7.fhir.r4.model.IdType;
-import org.hl7.fhir.r4.model.Identifier;
-import org.hl7.fhir.r4.model.ListResource;
-import org.hl7.fhir.r4.model.OperationOutcome;
-import org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity;
-import org.hl7.fhir.r4.model.OperationOutcome.IssueType;
-import org.hl7.fhir.r4.model.OperationOutcome.OperationOutcomeIssueComponent;
-import org.hl7.fhir.r4.model.Reference;
-import org.hl7.fhir.r4.model.ResourceType;
+import org.hl7.fhir.r4.model.*;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 @Component
 @Interceptor
@@ -37,13 +26,16 @@ public class PseudonymInterceptor {
 
     private static final String PSEUDO_BSN_SYSTEM = System.getenv().getOrDefault(
             "PSEUDO_BSN_SYSTEM", "http://fhir.nl/fhir/NamingSystem/bsn-pseudonym");
+    /**
+     * @deprecated use BSN_TOKEN_SYSTEM_NEW
+     */
+    @Deprecated
     private static final String BSN_TOKEN_SYSTEM = System.getenv().getOrDefault(
             "BSN_TOKEN_SYSTEM", "http://fhir.nl/fhir/NamingSystem/bsn-transport-token");
-    private static final String NVI_AUDIENCE = System.getenv().getOrDefault(
-            "NVI_AUDIENCE", "nvi-1");
+    private static final String BSN_TOKEN_SYSTEM_NEW = "http://minvws.github.io/generiekefuncties-docs/NamingSystem/nvi-identifier"; // for fake nvi to be hackwards compatible, both of these are checked
     private static final String INTERCEPTOR_ENABLED_FOR_TENANT = System.getenv().getOrDefault(
             "NVI_TENANT", "nvi");
-    private static final String REQUESTER_URA_HEADER = "X-Requester-URA";
+    private static final String LIST_EXTENSION_CUSTODIAN_URL = "http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian";
 
     private final BsnUtil bsnUtil;
 
@@ -134,7 +126,7 @@ public class PseudonymInterceptor {
             return new ReferenceParam(String.format("%s/%s/%s", system, ResourceType.Device.name(), identifierValue));
         }
 
-        if (!BSN_TOKEN_SYSTEM.equals(system)) {
+        if (!BSN_TOKEN_SYSTEM.equals(system) && !BSN_TOKEN_SYSTEM_NEW.equals(system)) {
             return null;
         }
         log.info("Converting token to pseudonym in search parameter: {}", identifierValue);
@@ -155,11 +147,6 @@ public class PseudonymInterceptor {
             return;
         }
 
-        validateUraHeaderPresence(servletRequestDetails);
-
-        // Validate custodian matches X-Requester-URA header
-        validateCustodian(list, servletRequestDetails);
-
         modifyListSubjectFromTokenToPseudonym(list);
         modifyListSourceFromTokenToPseudonym(list);
         log.info("{}", FhirContext.forR4Cached().newJsonParser().encodeResourceToString(list));
@@ -169,7 +156,7 @@ public class PseudonymInterceptor {
     /**
      * Triggers before a Resource (in our case a ListResource) is read (also invoked when a Resource is created,
      * but is returned in a response to creation. We replace currently set ListResource.subject (which is a
-     * pseudonym) with an audience-specific token (audience information is obtained from @see REQUESTER_URA_HEADER).
+     * pseudonym) with an audience-specific token
      */
     @Hook(Pointcut.STORAGE_PRESHOW_RESOURCES)
     public void handlePreShowResources(final IPreResourceShowDetails requestDetails,
@@ -178,25 +165,29 @@ public class PseudonymInterceptor {
             return;
         }
 
-        validateUraHeaderPresence(servletRequestDetails);
-
         final List<IBaseResource> allResources = requestDetails.getAllResources();
         allResources.stream()
                 .filter(aResource -> aResource instanceof ListResource)
                 .forEach(list -> modifyDocumentFromPseudonymToToken((ListResource) list,
-                                                                    getUraHeader(servletRequestDetails)));
+                        getListCustodianUra((ListResource) list)));
     }
 
-    private void validateUraHeaderPresence(final ServletRequestDetails servletRequestDetails) {
-        final String audience = getUraHeader(servletRequestDetails);
-        if (StringUtils.isBlank(audience)) {
+    private String getListCustodianUra(final ListResource listResource) {
+        final Extension custodianExtension = listResource.getExtensionByUrl(LIST_EXTENSION_CUSTODIAN_URL);
+        if (custodianExtension == null) {
             throw new IllegalArgumentException(
-                    String.format("'%s' header is mandatory.", REQUESTER_URA_HEADER));
+                    String.format("List.extension with url %s not present", LIST_EXTENSION_CUSTODIAN_URL));
         }
-    }
 
-    private String getUraHeader(final ServletRequestDetails servletRequestDetails) {
-        return servletRequestDetails.getHeader(REQUESTER_URA_HEADER);
+        final Reference custodianReference = (Reference) custodianExtension.getValue();
+
+        if (custodianReference.getIdentifier().isEmpty() && !custodianReference.isEmpty()) {
+            throw new IllegalArgumentException(
+                    String.format("List.extension.url(%s).identifier is empty", LIST_EXTENSION_CUSTODIAN_URL));
+        }
+
+        // Extract URA from custodian
+        return extractURAFromCustodian(custodianReference);
     }
 
     private void modifyDocumentFromPseudonymToToken(final ListResource resource, final String audience) {
@@ -212,14 +203,15 @@ public class PseudonymInterceptor {
         log.trace("Found identifier: system={}, value={}", referenceElement.getBaseUrl(), referenceElement.getIdPart());
         final String token = pseudonymToToken(referenceElement.getIdPart(), audience);
         final Identifier identifier = new Identifier();
-        identifier.setSystem(BSN_TOKEN_SYSTEM);
+        identifier.setSystem(BSN_TOKEN_SYSTEM_NEW);
         identifier.setValue(token);
         resource.setSubject(new Reference().setIdentifier(identifier));
     }
 
     private void modifyListSubjectFromTokenToPseudonym(final ListResource docRef) {
         final Identifier identifier = docRef.getSubject().getIdentifier();
-        if (identifier == null || !BSN_TOKEN_SYSTEM.equals(identifier.getSystem())) {
+        if (identifier == null || (!BSN_TOKEN_SYSTEM.equals(identifier.getSystem())
+                && !BSN_TOKEN_SYSTEM_NEW.equals(identifier.getSystem()))) {
             return;
         }
         log.trace("Found identifier: system={}, value={}", identifier.getSystem(), identifier.getValue());
@@ -259,51 +251,6 @@ public class PseudonymInterceptor {
         final String token = bsnUtil.pseudonymToTransportToken(pseudonym, audience);
         log.trace("Converted pseudonym to token: {}", token);
         return token;
-    }
-
-    /**
-     * Validates that ListResource.custodian matches the X-Requester-URA header.
-     * The custodian should be a reference to an Organization with an identifier containing the URA.
-     *
-     * @param list the ListResource to validate
-     * @param servletRequestDetails the request details containing headers
-     * @throws IllegalArgumentException if custodian doesn't match the X-Requester-URA header
-     */
-    private void validateCustodian(final ListResource list,
-                                   final ServletRequestDetails servletRequestDetails) {
-        final String requesterURA = servletRequestDetails.getHeader(REQUESTER_URA_HEADER);
-
-        // If no header is present, we can't validate, let it pass
-        if (StringUtils.isEmpty(requesterURA)) {
-            return;
-        }
-        final String LIST_CUSTODIAN_URL = "http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian";
-        final Extension custodianExtension = list.getExtensionByUrl(LIST_CUSTODIAN_URL);
-        if (custodianExtension == null) {
-            throw new IllegalArgumentException(
-                    String.format("List.extension with url %s not present", LIST_CUSTODIAN_URL));
-        }
-
-        final Reference custodianReference = (Reference) custodianExtension.getValue();
-
-        if (custodianReference.getIdentifier().isEmpty() && !custodianReference.isEmpty()) {
-            // means that it's actually a reference to the Organization
-            // meaning we'd ideally then need to fetch it and check of Organization.identifier matches
-            // our header, but we won't do that... so just let it pass in this case
-            return;
-        }
-
-        // Extract URA from custodian
-        final String custodianURA = extractURAFromCustodian(custodianReference);
-
-        // Validate that custodian URA matches the requester URA
-        if (!requesterURA.equals(custodianURA)) {
-            throw new IllegalArgumentException(
-                    String.format("List.custodian URA (%s) does not match %s header (%s)",
-                                  custodianURA, REQUESTER_URA_HEADER, requesterURA));
-        }
-
-        log.debug("Custodian URA validation successful: {}", custodianURA);
     }
 
     /**

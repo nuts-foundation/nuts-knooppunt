@@ -30,14 +30,19 @@ func deriveKey(identifier prsIdentifier, recipientOrganizationURA string, recipi
 	return key, nil
 }
 
-func blindIdentifier(identifier prsIdentifier, recipientOrganization string, recipientScope string) ([]byte, error) {
+type blindedIdentifier struct {
+	blindedInput []byte
+	finalizeData *oprf.FinalizeData
+}
+
+func blindIdentifier(identifier prsIdentifier, recipientOrganization string, recipientScope string) (*blindedIdentifier, error) {
 	derivedInput, err := deriveKey(identifier, recipientOrganization, recipientScope)
 	if err != nil {
 		return nil, fmt.Errorf("deriving key: %w", err)
 	}
 
 	client := oprf.NewClient(oprf.SuiteRistretto255)
-	_, blindedInput, err := client.Blind([][]byte{derivedInput})
+	finalizeData, blindedInput, err := client.Blind([][]byte{derivedInput})
 	if err != nil {
 		return nil, fmt.Errorf("oprf: %w", err)
 	}
@@ -45,5 +50,8 @@ func blindIdentifier(identifier prsIdentifier, recipientOrganization string, rec
 	if err != nil {
 		return nil, fmt.Errorf("oprf marshaling blinded input: %w", err)
 	}
-	return blindedInputData, nil
+	return &blindedIdentifier{
+		blindedInput: blindedInputData,
+		finalizeData: finalizeData,
+	}, nil
 }
