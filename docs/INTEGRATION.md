@@ -82,22 +82,153 @@ http://localhost:8080/mcsdadmin
 
 This chapter describes how to integrate with the NVI (Nederlandse VerwijsIndex) service using the Knooppunt.
 
-You can create or search for DocumentReference resources using the following endpoints:
+The Knooppunt handles BSN pseudonymization transparently: BSNs in `subject.identifier` and search/delete parameters are
+converted to NVI transport tokens before forwarding to NVI. You always work with plain BSNs on the Knooppunt side.
 
-- Registration endpoint: [POST http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
-- Search endpoint:
-    - [POST http://localhost:8081/nvi/DocumentReference/_search](http://localhost:8081/nvi/DocumentReference/_search)
-    - [GET http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
+### Prerequisites
 
-These endpoints need the URA of the requesting care organization. You provide this URA using the `X-Tenant-ID` HTTP
-header:
+Before you can use the NVI integration, you need to request the following from iRealisatie:
 
-```http
-X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|<URA>
+1. **UZI/mTLS certificate** — used to authenticate to the MinVWS OAuth2 token endpoint. iRealisatie issues this
+   certificate for the proeftuin environment.
+2. **Test URA number** — a fake URA number assigned to your organization for use in the proeftuin environment.
+
+The test URA must be included in every `List` resource you register, as the `nl-gf-localization-custodian` extension:
+
+```json
+{
+  "resourceType": "List",
+  "extension": [
+    {
+      "url": "http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian",
+      "valueReference": {
+        "identifier": {
+          "system": "http://fhir.nl/fhir/NamingSystem/ura",
+          "value": "<your-test-ura>"
+        }
+      }
+    }
+  ],
+  "..."
+}
 ```
 
-Make sure you've configured the `authn.minvws` and `pseudo` properties to allow the Knooppunt to authenticate to the NVI
-service and pseudonymize BSNs.
+This extension identifies your organization as the custodian of the registration in the NVI.
+
+### Configuration
+
+Three sections in `knooppunt.yml` are required:
+
+```yaml
+# NVI service endpoint and audience (URA of the NVI service provider)
+nvi:
+  baseurl: "https://nvi.proeftuin.gf.irealisatie.nl/v1-poc/fhir"
+  audience: "90000901"
+
+# mTLS client certificate used to authenticate to the MinVWS OAuth2 token endpoint
+authn:
+  minvws:
+    tlscertfile: "/path/to/uzi-certificate.pfx"
+    tlskeypassword: "<pfx-password>"
+    tokenendpoint: "https://oauth.proeftuin.gf.irealisatie.nl/oauth/token"
+
+# Pseudonymization service used to convert BSNs to NVI transport tokens
+pseudo:
+  prsurl: "https://pseudoniemendienst.proeftuin.gf.irealisatie.nl"
+```
+
+| Property                      | Description                                                              |
+|-------------------------------|--------------------------------------------------------------------------|
+| `nvi.baseurl`                 | Base URL of the NVI FHIR endpoint                                        |
+| `nvi.audience`                | URA of the NVI service provider, used as the pseudonymization audience   |
+| `authn.minvws.tlscertfile`    | Path to the UZI/mTLS certificate (PFX or PEM) for OAuth2 authentication  |
+| `authn.minvws.tlskeypassword` | Password for the PFX certificate (omit when using separate PEM key file) |
+| `authn.minvws.tokenendpoint`  | OAuth2 token endpoint of the MinVWS authorization server                 |
+| `pseudo.prsurl`               | Base URL of the pseudonymization service (PRS)                           |
+
+### Registering a List (via Bundle)
+
+To register a `List` resource wrapped in a transaction `Bundle` (see for example: [nvi.http](/docs/test-scripts/nvi.http)):
+
+```http
+POST http://localhost:8081/nvi
+Content-Type: application/fhir+json
+```
+
+The bundle must contain a `List` resource. The `subject.identifier` BSN is pseudonymized before forwarding.
+
+### Registering a List directly
+
+To register a `List` resource directly without wrapping it in a Bundle (see for example: [nvi.http](/docs/test-scripts/nvi.http)):
+
+```http
+POST http://localhost:8081/nvi/List
+Content-Type: application/fhir+json
+```
+
+### Reading a List by ID
+
+```http
+GET http://localhost:8081/nvi/List/{id}
+```
+
+### Searching for List resources
+
+```http
+GET  http://localhost:8081/nvi/List?<params>
+POST http://localhost:8081/nvi/List/_search
+Content-Type: application/x-www-form-urlencoded
+```
+
+At least one of the following parameters is required:
+
+| Parameter            | Description                                  |
+|----------------------|----------------------------------------------|
+| `patient:identifier` | Patient BSN (`<system>\|<value>`)            |
+| `subject:identifier` | Subject BSN (`<system>\|<value>`)            |
+| `source:identifier`  | Source device identifier (not pseudonymized) |
+
+Additional optional parameters:
+
+| Parameter | Description                                        |
+|-----------|----------------------------------------------------|
+| `code`    | List category code (`http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs\|<value>`)           |
+
+BSN values in `patient:identifier` and `subject:identifier` are pseudonymized before forwarding to NVI.
+
+### Deleting a List by ID
+
+```http
+DELETE http://localhost:8081/nvi/List/{id}
+```
+
+Returns `204 No Content` on success.
+
+### Deleting List resources by parameters
+
+```http
+DELETE http://localhost:8081/nvi/List?<params>
+```
+
+At least one of the following parameters is required:
+
+| Parameter            | Description                                  |
+|----------------------|----------------------------------------------|
+| `patient:identifier` | Patient BSN (`<system>\|<value>`)            |
+| `subject:identifier` | Subject BSN (`<system>\|<value>`)            |
+| `source:identifier`  | Source device identifier (not pseudonymized) |
+
+Additional optional parameters:
+
+| Parameter | Description                                        |
+|-----------|----------------------------------------------------|
+| `code`    | List category code (`http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs\|<value>`)           |
+
+BSN values in `patient:identifier` and `subject:identifier` are pseudonymized before forwarding to NVI.
+Returns `204 No Content` on success.
+
+The file [nvi.http](/docs/test-scripts/nvi.http) in the repository contains additional examples.
+
 
 ## Consent MITZ
 

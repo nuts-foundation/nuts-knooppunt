@@ -60,12 +60,14 @@ func New(config Config, httpClientFn authn.HTTPClientProvider, pseudonymizer pse
 		fhirClientFn: func(ctx context.Context, uraNumber string) (fhirclient.Client, error) {
 			// TODO: Cache the HTTP client per URA number, instead of creating a new one for each request.
 			//       That would also allow caching the access tokens obtained from the OAuth2 server.
-			httpClient, err := httpClientFn(ctx, []string{"epd:read", "epd:write"}, uraNumber, baseURL.String())
+			httpClient, err := httpClientFn(ctx, []string{"epd:read", "epd:write"}, uraNumber, baseURL.Scheme+"://"+baseURL.Host)
 			if err != nil {
 				return nil, err
 			}
-			httpClient.Transport = tracing.WrapTransport(httpClient.Transport)
-			return fhirclient.New(baseURL, httpClient, fhirutil.ClientConfig()), nil
+			httpClient.Transport = &loggingTransport{next: tracing.WrapTransport(httpClient.Transport)}
+			clientConfig := fhirutil.ClientConfig()
+			clientConfig.UsePostSearch = false // nvi doesn't support POST searches
+			return fhirclient.New(baseURL, httpClient, clientConfig), nil
 		},
 		pseudonymizer: pseudonymizer,
 		audience:      config.Audience,
@@ -75,7 +77,11 @@ func New(config Config, httpClientFn authn.HTTPClientProvider, pseudonymizer pse
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.Handle("POST /nvi", http.HandlerFunc(c.handleRegister))
 	internalMux.Handle("POST /nvi/", http.HandlerFunc(c.handleRegister))
+	internalMux.Handle("POST /nvi/List", http.HandlerFunc(c.handleRegisterList))
 	internalMux.Handle("GET /nvi/List", http.HandlerFunc(c.handleSearch))
+	internalMux.Handle("GET /nvi/List/{id}", http.HandlerFunc(c.handleReadList))
+	internalMux.Handle("DELETE /nvi/List/{id}", http.HandlerFunc(c.handleDeleteListByID))
+	internalMux.Handle("DELETE /nvi/List", http.HandlerFunc(c.handleDeleteListByParams))
 	internalMux.Handle("POST /nvi/List/_search", http.HandlerFunc(c.handleSearch))
 }
 
@@ -126,15 +132,9 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
 	}
-	// TODO: Remove this after migrating to real NVI
-	requestHeaders := http.Header{
-		"X-Requester-URA": []string{*requesterURA.Value},
-	}
-	if bundleJSON, jsonErr := json.Marshal(bundle); jsonErr == nil {
-		slog.DebugContext(httpRequest.Context(), "Sending Bundle to NVI", "bundle", string(bundleJSON))
-	}
+
 	var result fhir.Bundle
-	err = fhirClient.CreateWithContext(httpRequest.Context(), bundle, &result, fhirclient.AtPath("/"), fhirclient.RequestHeaders(requestHeaders))
+	err = fhirClient.CreateWithContext(httpRequest.Context(), bundle, &result, fhirclient.AtPath(""))
 	if err != nil {
 		err = &fhirapi.Error{
 			Message:   "Failed to register Bundle at NVI",
@@ -146,6 +146,177 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 	}
 
 	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusOK, result)
+}
+
+func (c Component) handleRegisterList(httpResponse http.ResponseWriter, httpRequest *http.Request) {
+	requesterURA, err := tenants.IDFromRequest(httpRequest)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	fhirRequest, err := fhirapi.ParseRequest[fhir.List](httpRequest)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	tokenizedList, err := c.tokenizeListIdentifiers(httpRequest.Context(), fhirRequest.Resource, *requesterURA.Value, c.audience)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	fhirClient, err := c.fhirClientFn(httpRequest.Context(), *requesterURA.Value)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	var result fhir.List
+	err = fhirClient.CreateWithContext(httpRequest.Context(), tokenizedList, &result, fhirclient.AtPath("List"))
+	if err != nil {
+		err = &fhirapi.Error{
+			Message:   "Failed to register List at NVI",
+			Cause:     err,
+			IssueType: fhir.IssueTypeTransient,
+		}
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusOK, result)
+}
+
+func (c Component) handleReadList(httpResponse http.ResponseWriter, httpRequest *http.Request) {
+	requesterURA, err := tenants.IDFromRequest(httpRequest)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	id := httpRequest.PathValue("id")
+
+	fhirClient, err := c.fhirClientFn(httpRequest.Context(), *requesterURA.Value)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	var result fhir.List
+	err = fhirClient.ReadWithContext(httpRequest.Context(), "List/"+id, &result)
+	if err != nil {
+		err = &fhirapi.Error{
+			Message:   "Failed to read List at NVI",
+			Cause:     err,
+			IssueType: fhir.IssueTypeTransient,
+		}
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusOK, result)
+}
+
+func (c Component) handleDeleteListByID(httpResponse http.ResponseWriter, httpRequest *http.Request) {
+	requesterURA, err := tenants.IDFromRequest(httpRequest)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	id := httpRequest.PathValue("id")
+
+	fhirClient, err := c.fhirClientFn(httpRequest.Context(), *requesterURA.Value)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	err = fhirClient.DeleteWithContext(httpRequest.Context(), "List/"+id)
+	if err != nil {
+		err = &fhirapi.Error{
+			Message:   "Failed to delete List at NVI",
+			Cause:     err,
+			IssueType: fhir.IssueTypeTransient,
+		}
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	httpResponse.WriteHeader(http.StatusNoContent)
+}
+
+func (c Component) handleDeleteListByParams(httpResponse http.ResponseWriter, httpRequest *http.Request) {
+	requesterURA, err := tenants.IDFromRequest(httpRequest)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	fhirRequest, err := fhirapi.ParseRequest[fhir.List](httpRequest)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	// Require at least one patient/subject/source identifier to prevent deleting by empty values
+	hasIdentifier := false
+	for key := range fhirRequest.Parameters {
+		if key == "patient:identifier" ||
+			key == "subject:identifier" ||
+			key == "source:identifier" {
+			hasIdentifier = true
+			break
+		}
+	}
+	if !hasIdentifier {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, fhirapi.BadRequestError("at least one of patient:identifier, subject:identifier or source:identifier is required", nil))
+		return
+	}
+
+	// Use BSN transport tokens to NVI, instead of BSNs
+	deleteParams := url.Values{}
+	// NVI only supports subject:identifier, so patient:identifier is mapped to subject:identifier.
+	for key, values := range fhirRequest.Parameters {
+		newValues := append([]string{}, values...)
+		nviKey := key
+		if key == "patient:identifier" {
+			nviKey = "subject:identifier"
+		}
+		if key == "patient:identifier" ||
+			key == "subject:identifier" ||
+			strings.HasPrefix(key, coding.BSNNamingSystem) {
+			for i, value := range values {
+				newValue, err := c.tokenizeFHIRSearchToken(httpRequest.Context(), value, *requesterURA.Value, c.audience)
+				if err != nil {
+					fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+					return
+				}
+				newValues[i] = newValue
+			}
+		}
+		deleteParams[nviKey] = append(deleteParams[nviKey], newValues...)
+	}
+
+	fhirClient, err := c.fhirClientFn(httpRequest.Context(), *requesterURA.Value)
+	if err != nil {
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	err = fhirClient.DeleteWithContext(httpRequest.Context(), "List?"+deleteParams.Encode())
+	if err != nil {
+		err = &fhirapi.Error{
+			Message:   "Failed to delete List at NVI",
+			Cause:     err,
+			IssueType: fhir.IssueTypeTransient,
+		}
+		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
+		return
+	}
+
+	httpResponse.WriteHeader(http.StatusNoContent)
 }
 
 func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *http.Request) {
@@ -176,10 +347,15 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		return
 	}
 
-	// Use BSN transport tokens to NVI, instead of BSNs
+	// Use BSN transport tokens to NVI, instead of BSNs.
+	// NVI only supports subject:identifier, so patient:identifier is mapped to subject:identifier.
 	searchParams := url.Values{}
 	for key, values := range fhirRequest.Parameters {
 		newValues := append([]string{}, values...)
+		nviKey := key
+		if key == "patient:identifier" {
+			nviKey = "subject:identifier"
+		}
 		if key == "patient:identifier" ||
 			key == "subject:identifier" ||
 			strings.HasPrefix(key, coding.BSNNamingSystem) {
@@ -192,7 +368,7 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 				newValues[i] = newValue
 			}
 		}
-		searchParams[key] = newValues
+		searchParams[nviKey] = append(searchParams[nviKey], newValues...)
 	}
 
 	fhirClient, err := c.fhirClientFn(httpRequest.Context(), *requesterURA.Value)
@@ -201,12 +377,8 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		return
 	}
 
-	// TODO: Remove this after migrating to real NVI
-	requestHeaders := http.Header{
-		"X-Requester-URA": []string{*requesterURA.Value},
-	}
 	var searchSet fhir.Bundle
-	err = fhirClient.SearchWithContext(httpRequest.Context(), "List", searchParams, &searchSet, fhirclient.RequestHeaders(requestHeaders))
+	err = fhirClient.SearchWithContext(httpRequest.Context(), "List", searchParams, &searchSet)
 	if err != nil {
 		err = &fhirapi.Error{
 			Message:   "Failed to search for List resources at NVI",
@@ -280,6 +452,21 @@ func (c Component) Start() error {
 
 func (c Component) Stop(ctx context.Context) error {
 	return nil
+}
+
+type loggingTransport struct {
+	next http.RoundTripper
+}
+
+func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	slog.DebugContext(req.Context(), "NVI request", "method", req.Method, "url", req.URL.String())
+	resp, err := t.next.RoundTrip(req)
+	if err != nil {
+		slog.DebugContext(req.Context(), "NVI request failed", "method", req.Method, "url", req.URL.String(), "error", err)
+		return nil, err
+	}
+	slog.DebugContext(req.Context(), "NVI response", "method", req.Method, "url", req.URL.String(), "status", resp.StatusCode)
+	return resp, nil
 }
 
 func hasNextLink(bundle *fhir.Bundle) bool {

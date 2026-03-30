@@ -4,6 +4,7 @@ package pseudonymisation
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -64,22 +65,49 @@ func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identi
 	}
 
 	// Step 2 & 3: Blind the identifier (internally derives key and blinds)
-	blindedInputData, err := blindIdentifier(prsID, recipientURA, scope)
+	blinded, err := blindIdentifier(prsID, recipientURA, scope)
 	if err != nil {
 		return nil, fmt.Errorf("blinding identifier: %w", err)
 	}
 
-	// Step 4: Call PRS to get the pseudonymized identifier
-	// PRS returns the final pseudonymized BSN (deblinding happens at the consuming system/NVI)
-	pseudonymizedBSN, err := c.callPRSEvaluate(ctx, localOrganizationURA, recipientURA, scope, blindedInputData)
+	// Step 4: Call PRS to evaluate the blinded input; PRS returns the evaluated output as a JWE
+	evaluatedOutput, err := c.callPRSEvaluate(ctx, localOrganizationURA, recipientURA, scope, blinded.blindedInput)
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 5: Extract the blind factor so the consuming system can deblind
+	blindFactorBytes, err := blinded.finalizeData.CopyBlinds()[0].MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("marshaling blind factor: %w", err)
+	}
+
+	// Build the subject identifier value as a base64url-encoded JSON object per spec
+	subjectIdentifierValue, err := marshalSubjectIdentifier(blindFactorBytes, evaluatedOutput)
 	if err != nil {
 		return nil, err
 	}
 
 	return &fhir.Identifier{
 		System: to.Ptr(coding.BSNTransportTokenNamingSystem),
-		Value:  &pseudonymizedBSN,
+		Value:  &subjectIdentifierValue,
 	}, nil
+}
+
+type subjectIdentifier struct {
+	BlindFactor     []byte `json:"blind_factor"`
+	EvaluatedOutput string `json:"evaluated_output"`
+}
+
+func marshalSubjectIdentifier(blindFactor []byte, evaluatedOutput string) (string, error) {
+	data, err := json.Marshal(subjectIdentifier{
+		BlindFactor:     blindFactor,
+		EvaluatedOutput: evaluatedOutput,
+	})
+	if err != nil {
+		return "", fmt.Errorf("marshaling subject identifier: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(data), nil
 }
 
 type prsIdentifier struct {

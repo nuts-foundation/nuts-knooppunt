@@ -45,6 +45,9 @@ type StubFHIRClient struct {
 	// Error is an error that will be returned by all methods of this client.
 	Error    error
 	Searches []string
+	// Deletions is a list of paths that have been deleted using this client.
+	// It's not used by the client itself, but can be used by tests to verify that the client has been used correctly.
+	Deletions []string
 }
 
 func (s StubFHIRClient) Read(path string, target any, opts ...fhirclient.Option) error {
@@ -425,18 +428,16 @@ func (s StubFHIRClient) UpdateWithContext(ctx context.Context, path string, reso
 	panic("implement me")
 }
 
-func (s StubFHIRClient) Delete(path string, opts ...fhirclient.Option) error {
-	if s.Error != nil {
-		return s.Error
-	}
-	panic("implement me")
+func (s *StubFHIRClient) Delete(path string, opts ...fhirclient.Option) error {
+	return s.DeleteWithContext(context.Background(), path, opts...)
 }
 
-func (s StubFHIRClient) DeleteWithContext(ctx context.Context, path string, opts ...fhirclient.Option) error {
+func (s *StubFHIRClient) DeleteWithContext(_ context.Context, path string, opts ...fhirclient.Option) error {
 	if s.Error != nil {
 		return s.Error
 	}
-	panic("implement me")
+	s.Deletions = append(s.Deletions, path)
+	return nil
 }
 
 func (s StubFHIRClient) Path(path ...string) *url.URL {
