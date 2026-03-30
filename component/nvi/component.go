@@ -132,12 +132,9 @@ func (c Component) handleRegister(httpResponse http.ResponseWriter, httpRequest 
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
 	}
-	// needed only for our fake NVI, otherwise it's not required
-	requestHeaders := http.Header{
-		"X-Requester-URA": []string{*requesterURA.Value},
-	}
+
 	var result fhir.Bundle
-	err = fhirClient.CreateWithContext(httpRequest.Context(), bundle, &result, fhirclient.AtPath(""), fhirclient.RequestHeaders(requestHeaders))
+	err = fhirClient.CreateWithContext(httpRequest.Context(), bundle, &result, fhirclient.AtPath(""))
 	if err != nil {
 		err = &fhirapi.Error{
 			Message:   "Failed to register Bundle at NVI",
@@ -379,12 +376,9 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
 		return
 	}
-	// needed only for our fake NVI, otherwise it's not required
-	requestHeaders := http.Header{
-		"X-Requester-URA": []string{*requesterURA.Value},
-	}
+
 	var searchSet fhir.Bundle
-	err = fhirClient.SearchWithContext(httpRequest.Context(), "List", searchParams, &searchSet, fhirclient.RequestHeaders(requestHeaders))
+	err = fhirClient.SearchWithContext(httpRequest.Context(), "List", searchParams, &searchSet)
 	if err != nil {
 		err = &fhirapi.Error{
 			Message:   "Failed to search for List resources at NVI",
