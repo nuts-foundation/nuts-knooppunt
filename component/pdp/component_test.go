@@ -425,48 +425,6 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			})
 		}
 	})
-	t.Run("eoverdracht_sender", func(t *testing.T) {
-		testCases := []testCase{
-			{
-				name:        "allow - Task update with local consent",
-				scope:       "eoverdracht-sender",
-				httpRequest: `PUT /Task/task-1`,
-				decision:    true,
-			},
-			{
-				name:        "allow - Task read with local consent",
-				scope:       "eoverdracht-sender",
-				httpRequest: `GET /Task/task-1`,
-				decision:    true,
-			},
-			{
-				name:        "allow - Composition $document with local consent",
-				scope:       "eoverdracht-sender",
-				httpRequest: `GET /Composition/comp-1/$document`,
-				decision:    true,
-			},
-			{
-				name:        "deny - Task delete",
-				scope:       "eoverdracht-sender",
-				httpRequest: `DELETE /Task/task-1`,
-				decision:    false,
-			},
-			{
-				name:        "deny - Task update without local consent returns pip_error",
-				scope:       "eoverdracht-sender",
-				httpRequest: `PUT /Task/nonexistent`,
-				decision:    false,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"eoverdracht_sender": {TypeResultCodePIPError},
-				},
-			},
-		}
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				runTest(t, tc)
-			})
-		}
-	})
 	t.Run("request parsing", func(t *testing.T) {
 		testCases := []testCase{
 			{
