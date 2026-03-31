@@ -13,7 +13,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install OPA
+    - name: Set up OPA
       uses: open-policy-agent/setup-opa@v2
       with:
         version: 1.x
