@@ -231,11 +231,61 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 					},
 				},
 			},
+			fhir.Task{
+				Id:     to.Ptr("task-1"),
+				Status: fhir.TaskStatusRequested,
+				Owner: &fhir.Reference{
+					Identifier: &fhir.Identifier{
+						System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+						Value:  to.Ptr("00000001"),
+					},
+				},
+			},
+			fhir.Composition{
+				Id: to.Ptr("comp-1"),
+			},
+			fhir.Consent{
+				Id:     to.Ptr("consent-1"),
+				Status: fhir.ConsentStateActive,
+				Scope: fhir.CodeableConcept{
+					Coding: []fhir.Coding{
+						{Code: to.Ptr("eoverdracht")},
+					},
+				},
+				Organization: []fhir.Reference{
+					{Identifier: &fhir.Identifier{
+						System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+						Value:  to.Ptr("00000002"),
+					}},
+				},
+				Provision: &fhir.ConsentProvision{
+					Type: to.Ptr(fhir.ConsentProvisionTypePermit),
+					Actor: []fhir.ConsentProvisionActor{
+						{Reference: fhir.Reference{
+							Identifier: &fhir.Identifier{
+								System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+								Value:  to.Ptr("00000001"),
+							},
+						}},
+					},
+					Data: []fhir.ConsentProvisionData{
+						{Reference: fhir.Reference{Reference: to.Ptr("Task/task-1")}},
+						{Reference: fhir.Reference{Reference: to.Ptr("Composition/comp-1")}},
+					},
+					Action: []fhir.CodeableConcept{
+						{Coding: []fhir.Coding{{
+							System: to.Ptr("http://terminology.hl7.org/CodeSystem/consentaction"),
+							Code:   to.Ptr("access"),
+						}}},
+					},
+				},
+			},
 		},
 	}
 
 	service, err := New(Config{
 		Enabled: true,
+		PIP:     PIPConfig{ResourceContentEnabled: true},
 	}, mitz.NewTestInstance(t))
 	require.NoError(t, err)
 	service.opaBundleBaseURL = httpServer.URL + "/pdp/bundles/"
@@ -366,6 +416,48 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				decision:    false,
 				policyReasonCodes: map[string][]TypeResultCode{
 					"pzp_gf": {TypeResultCodeInternalError},
+				},
+			},
+		}
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				runTest(t, tc)
+			})
+		}
+	})
+	t.Run("eoverdracht_sender", func(t *testing.T) {
+		testCases := []testCase{
+			{
+				name:        "allow - Task update with local consent",
+				scope:       "eoverdracht-sender",
+				httpRequest: `PUT /Task/task-1`,
+				decision:    true,
+			},
+			{
+				name:        "allow - Task read with local consent",
+				scope:       "eoverdracht-sender",
+				httpRequest: `GET /Task/task-1`,
+				decision:    true,
+			},
+			{
+				name:        "allow - Composition $document with local consent",
+				scope:       "eoverdracht-sender",
+				httpRequest: `GET /Composition/comp-1/$document`,
+				decision:    true,
+			},
+			{
+				name:        "deny - Task delete",
+				scope:       "eoverdracht-sender",
+				httpRequest: `DELETE /Task/task-1`,
+				decision:    false,
+			},
+			{
+				name:        "deny - Task update without local consent returns pip_error",
+				scope:       "eoverdracht-sender",
+				httpRequest: `PUT /Task/nonexistent`,
+				decision:    false,
+				policyReasonCodes: map[string][]TypeResultCode{
+					"eoverdracht_sender": {TypeResultCodePIPError},
 				},
 			},
 		}
