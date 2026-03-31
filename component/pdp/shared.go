@@ -245,7 +245,8 @@ const (
 )
 
 type PIPConfig struct {
-	URL string `koanf:"url"`
+	URL                    string `koanf:"url"`
+	ResourceContentEnabled bool   `koanf:"resourcecontentenabled"`
 }
 
 type Config struct {

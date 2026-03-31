@@ -26,6 +26,7 @@ func TestEnrichResourceContent(t *testing.T) {
 		}
 
 		component := &Component{
+			Config: Config{PIP: PIPConfig{ResourceContentEnabled: true}},
 			pipClient: &test.StubFHIRClient{
 				Resources: []any{task},
 			},

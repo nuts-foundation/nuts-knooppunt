@@ -285,6 +285,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 
 	service, err := New(Config{
 		Enabled: true,
+		PIP:     PIPConfig{ResourceContentEnabled: true},
 	}, mitz.NewTestInstance(t))
 	require.NoError(t, err)
 	service.opaBundleBaseURL = httpServer.URL + "/pdp/bundles/"

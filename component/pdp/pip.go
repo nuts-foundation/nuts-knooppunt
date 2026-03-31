@@ -28,7 +28,11 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 
 	policyInput, reasonsBSN := c.enrichBSN(ctx, policyInput)
 	policyInput, reasonsConsent := c.enrichConsent(ctx, policyInput)
-	policyInput, reasonsContent := c.enrichResourceContent(ctx, policyInput)
+
+	var reasonsContent []ResultReason
+	if c.Config.PIP.ResourceContentEnabled {
+		policyInput, reasonsContent = c.enrichResourceContent(ctx, policyInput)
+	}
 
 	return policyInput, slices.Concat(reasonsBSN, reasonsConsent, reasonsContent)
 }
