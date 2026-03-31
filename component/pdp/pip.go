@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/url"
 	"slices"
+	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
@@ -28,7 +29,12 @@ func (c *Component) enrichPolicyInputWithPIP(ctx context.Context, policyInput *P
 	policyInput, reasonsBSN := c.enrichBSN(ctx, policyInput)
 	policyInput, reasonsConsent := c.enrichConsent(ctx, policyInput)
 
-	return policyInput, slices.Concat(reasonsBSN, reasonsConsent)
+	var reasonsContent []ResultReason
+	if c.Config.PIP.ResourceContentEnabled {
+		policyInput, reasonsContent = c.enrichResourceContent(ctx, policyInput)
+	}
+
+	return policyInput, slices.Concat(reasonsBSN, reasonsConsent, reasonsContent)
 }
 
 func (c *Component) enrichBSN(ctx context.Context, policyInput *PolicyInput) (*PolicyInput, []ResultReason) {
@@ -84,6 +90,35 @@ func (c *Component) enrichBSN(ctx context.Context, policyInput *PolicyInput) (*P
 	return policyInput, nil
 }
 
+// Could be made configurable in the future
+const pipTimeout = 10 * time.Second
+
+func (c *Component) enrichResourceContent(ctx context.Context, policyInput *PolicyInput) (*PolicyInput, []ResultReason) {
+	if policyInput.Resource.Type == nil || policyInput.Resource.Id == "" {
+		return policyInput, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, pipTimeout)
+	defer cancel()
+
+	path := fmt.Sprintf("%s/%s", policyInput.Resource.Type.String(), policyInput.Resource.Id)
+
+	var content map[string]any
+	err := c.pipClient.ReadWithContext(ctx, path, &content)
+	if err != nil {
+		slog.WarnContext(ctx, "Failed to get resource content from PIP", "url", c.pipClient.Path(path).String(), logging.Error(err))
+		return policyInput, []ResultReason{
+			{
+				Code:        TypeResultCodePIPError,
+				Description: "failed to get resource content from PIP",
+			},
+		}
+	}
+
+	policyInput.Resource.Content = content
+	return policyInput, nil
+}
+
 func (c *Component) enrichConsent(ctx context.Context, policyInput *PolicyInput) (*PolicyInput, []ResultReason) {
 	// Check for local consent resources
 	if policyInput.Action.ConnectionTypeCode == "hl7-fhir-rest" &&
@@ -132,7 +167,7 @@ func (c *Component) enrichConsent(ctx context.Context, policyInput *PolicyInput)
 		var rulings []Ruling
 
 		err = fhirutil.VisitBundleResources[fhir.Consent](&searchResult, func(consent *fhir.Consent) error {
-			if len(consent.Scope.Coding) != 1 && consent.Scope.Coding[0].Code != nil {
+			if len(consent.Scope.Coding) != 1 || consent.Scope.Coding[0].Code == nil {
 				// Only continue if there's a single simple code
 				// Complex coding scheme's not supported for now
 				return nil

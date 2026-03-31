@@ -174,6 +174,7 @@ type PolicyResource struct {
 	Id        string             `json:"id"`
 	Type      *fhir.ResourceType `json:"type"`
 	VersionId string             `json:"version_id"`
+	Content   map[string]any     `json:"content,omitempty"`
 	Consents  []PolicyConsent    `json:"consents"`
 }
 
@@ -244,7 +245,8 @@ const (
 )
 
 type PIPConfig struct {
-	URL string `koanf:"url"`
+	URL                    string `koanf:"url"`
+	ResourceContentEnabled bool   `koanf:"resourcecontentenabled"`
 }
 
 type Config struct {
