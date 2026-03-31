@@ -329,71 +329,19 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		}
 	}
 
-	t.Run("bgz", func(t *testing.T) {
+	// Policy-specific allow/deny rules are tested in OPA policy tests (*_test.rego).
+	// These integration tests focus on the Go handler pipeline: multi-policy evaluation,
+	// PIP enrichment, Mitz integration, request parsing, and input validation.
+	t.Run("multi-policy evaluation", func(t *testing.T) {
 		testCases := []testCase{
 			{
-				name:        "allow - multiple policies, first denies but second allows",
+				name:        "first policy denies but second allows",
 				scope:       "mcsd_update bgz",
 				httpRequest: `GET /Organization`,
 				decision:    true,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"mcsd_update": {},
-					"bgz":         {TypeResultCodeNotAllowed, TypeResultCodeInformational},
-				},
 				policyAllow: map[string]bool{
 					"mcsd_update": true,
 					"bgz":         false,
-				},
-			},
-			{
-				name:        "disallow - Mitz consent not given",
-				scope:       "bgz",
-				httpRequest: `GET /Patient?_include=Patient:general-practitioner&_id=1001`,
-				decision:    false,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
-				},
-			},
-			{
-				name:        "allow - correct Patient query with _include",
-				scope:       "bgz",
-				httpRequest: `GET /Patient?_include=Patient:general-practitioner&_id=1000`,
-				decision:    true,
-			},
-			{
-				name:        "allow - correct Patient query with BSN",
-				scope:       "bgz",
-				httpRequest: `GET /Patient?_include=Patient:general-practitioner&_id=1000`,
-				decision:    true,
-			},
-			{
-				name:        "allow - correct MedicationDispense query with category and _include",
-				scope:       "bgz",
-				httpRequest: `GET /MedicationDispense?category=http://snomed.info/sct|422037009&_include=MedicationDispense:medication&patient=Patient/1000`,
-				decision:    true,
-			},
-			{
-				name:        "disallow - Patient query with wrong _include parameter",
-				scope:       "bgz",
-				httpRequest: `GET /Patient?_include=Patient:organization`,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
-				},
-			},
-			{
-				name:        "disallow - Patient query with additional parameters",
-				scope:       "bgz",
-				httpRequest: `GET /Patient?_include=Patient:general-practitioner&name=John`,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
-				},
-			},
-			{
-				name:        "disallow - Patient query without patient_id or patient_bsn",
-				scope:       "bgz",
-				httpRequest: `GET /Patient?_include=Patient:general-practitioner`,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"bgz": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
 				},
 			},
 		}
@@ -403,94 +351,13 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			})
 		}
 	})
-	t.Run("pzp", func(t *testing.T) {
+	t.Run("mitz integration", func(t *testing.T) {
 		testCases := []testCase{
 			{
-				name:        "allow - dash is normalized to underscore",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|123456789`,
-				decision:    true,
-			},
-			{
-				name:        "allow - patient identifier is encoded",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn%7C123456789`,
-				decision:    true,
-			},
-			{
-				name:        "allow - Patient search with BSN identifier",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|123456789`,
-				decision:    true,
-			},
-			{
-				name:        "deny - Patient search without BSN namespace",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Patient?identifier=123456789`,
+				name:        "deny - Mitz consent not given",
+				scope:       "bgz",
+				httpRequest: `GET /Patient?_include=Patient:general-practitioner&_id=1001`,
 				decision:    false,
-				error:       "invalid request: patient_bsn: expected identifier parameter in format 'system|value'",
-			},
-			{
-				name:        "deny - Patient search with wrong identifier system",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Patient?identifier=http://example.com/identifier|123456789`,
-				decision:    false,
-				error:       "invalid request: patient_bsn: expected identifier system to be 'http://fhir.nl/fhir/NamingSystem/bsn', found 'http://example.com/identifier'",
-			},
-			{
-				name:        "allow - Consent search with patient, scope and category",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Consent?patient=Patient/1000&scope=http://terminology.hl7.org/CodeSystem/consentscope|treatment&category=http://snomed.info/sct|129125009`,
-				decision:    true,
-			},
-			{
-				name:        "allow - Consent search with patient, scope, category and include",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Consent?patient=Patient/1000&scope=http://terminology.hl7.org/CodeSystem/consentscope|treatment&category=http://snomed.info/sct|129125009&_include=Consent:actor`,
-				decision:    true,
-			},
-			{
-				name:        "deny - Consent search with multiple patient refs",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Consent?patient=Patient/1000,Patient/1001&_profile=http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2`,
-				decision:    false,
-				error:       "invalid request: patient_id: expected 1 value in patient parameter, found multiple",
-			},
-			{
-				name:        "deny - Consent search without patient parameter",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Consent?_profile=http://example.com/fhir/StructureDefinition/consent-profile`,
-				decision:    false,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
-				},
-			},
-			{
-				name:        "deny - Consent search without _profile parameter",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Consent?patient=Patient/1000`,
-				decision:    false,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
-				},
-			},
-			{
-				name:        "deny - Consent search with empty patient parameter",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Consent?patient=&_profile=http://example.com/fhir/StructureDefinition/consent-profile`,
-				decision:    false,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
-				},
-			},
-			{
-				name:        "deny - Patient search without patient_id or patient_bsn",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Patient?`,
-				decision:    false,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
-				},
 			},
 			{
 				name:        "deny - Mitz consent check failure",
@@ -498,25 +365,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				httpRequest: `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|bsn:error`,
 				decision:    false,
 				policyReasonCodes: map[string][]TypeResultCode{
-					"pzp_gf": {TypeResultCodeInternalError, TypeResultCodeNotAllowed, TypeResultCodeInformational},
-				},
-			},
-			{
-				name:        "deny - Mitz consent not given",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|bsn:deny`,
-				decision:    false,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
-				},
-			},
-			{
-				name:        "deny - unsupported resource type",
-				scope:       "pzp-gf",
-				httpRequest: `GET /Observation?patient=Patient/1000`,
-				decision:    false,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"pzp_gf": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
+					"pzp_gf": {TypeResultCodeInternalError},
 				},
 			},
 		}
@@ -526,25 +375,48 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			})
 		}
 	})
-	t.Run("medicatieoverdracht", func(t *testing.T) {
+	t.Run("request parsing", func(t *testing.T) {
 		testCases := []testCase{
 			{
-				name:        "allow - MedicationRequest with correct category and _include",
+				name:        "encoded query parameter is decoded",
+				scope:       "pzp-gf",
+				httpRequest: `GET /Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn%7C123456789`,
+				decision:    true,
+			},
+			{
+				name:        "invalid identifier format",
+				scope:       "pzp-gf",
+				httpRequest: `GET /Patient?identifier=123456789`,
+				decision:    false,
+				error:       "invalid request: patient_bsn: expected identifier parameter in format 'system|value'",
+			},
+			{
+				name:        "multiple patient refs rejected",
+				scope:       "pzp-gf",
+				httpRequest: `GET /Consent?patient=Patient/1000,Patient/1001&_profile=http://nictiz.nl/fhir/StructureDefinition/nl-core-TreatmentDirective2`,
+				decision:    false,
+				error:       "invalid request: patient_id: expected 1 value in patient parameter, found multiple",
+			},
+		}
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				runTest(t, tc)
+			})
+		}
+	})
+	t.Run("pip enrichment", func(t *testing.T) {
+		testCases := []testCase{
+			{
+				name:        "BSN enriched from PIP allows bgz request",
+				scope:       "bgz",
+				httpRequest: `GET /Patient?_include=Patient:general-practitioner&_id=1000`,
+				decision:    true,
+			},
+			{
+				name:        "OtherProps flow through to policy input",
 				scope:       "medicatieoverdracht",
 				httpRequest: `GET /MedicationRequest?category=http://snomed.info/sct|422037009&_include=MedicationRequest:medication&patient=Patient/1000`,
 				decision:    true,
-				properties: map[string]any{
-					"patient_enrollment_identifier": "http://fhir.nl/fhir/NamingSystem/bsn|123456789",
-				},
-			},
-			{
-				name:        "deny - List search",
-				scope:       "medicatieoverdracht",
-				httpRequest: `GET /List?patient=Patient/1000`,
-				decision:    false,
-				policyReasonCodes: map[string][]TypeResultCode{
-					"medicatieoverdracht": {TypeResultCodeNotAllowed, TypeResultCodeInformational},
-				},
 				properties: map[string]any{
 					"patient_enrollment_identifier": "http://fhir.nl/fhir/NamingSystem/bsn|123456789",
 				},
