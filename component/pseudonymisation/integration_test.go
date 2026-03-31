@@ -4,7 +4,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/nuts-foundation/nuts-knooppunt/cmd/core"
 	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
@@ -31,13 +30,12 @@ func TestIntegration(t *testing.T) {
 		t.Skipf("Key file not found: %s", keyFile)
 	}
 
-	authnComponent, err := authn.New(authn.Config{
+	authnComponent := authn.New(authn.Config{
 		MinVWS: authn.MinistryAuthConfig{
 			Config:        tlsutil.Config{TLSCertFile: certFile, TLSKeyFile: keyFile},
 			TokenEndpoint: tokenEndpoint,
 		},
-	}, nil, core.Config{})
-	require.NoError(t, err)
+	})
 
 	prsComponent := New(Config{
 		PRSBaseURL: prsBaseURL,
