@@ -12,7 +12,22 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    
+
+    - name: Set up OPA
+      uses: open-policy-agent/setup-opa@v2
+      with:
+        version: 1.x
+
+    - name: Run OPA policy tests
+      run: |
+        set -o pipefail
+        opa test component/pdp/policies/ --coverage --format=json | tee /tmp/opa-coverage.json
+        coverage=$(jq -r '.coverage' /tmp/opa-coverage.json)
+        echo "## OPA Policy Coverage: ${coverage}%" >> $GITHUB_STEP_SUMMARY
+
+    - name: Check OPA policy syntax
+      run: opa check --strict component/pdp/policies/
+
     - name: Set up Go
       uses: actions/setup-go@v5
       with:

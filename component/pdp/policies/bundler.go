@@ -131,8 +131,8 @@ func generateBundle(policyDir, bundlePath, policyName string) error {
 
 	// Add all files from the policy directory to the bundle
 	for _, entry := range entries {
-		// Skip subdirectories
-		if entry.IsDir() {
+		// Skip subdirectories and OPA test files
+		if entry.IsDir() || strings.HasSuffix(entry.Name(), "_test.rego") {
 			continue
 		}
 
