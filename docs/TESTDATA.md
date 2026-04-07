@@ -3,6 +3,14 @@
 This document describes the external systems that provide identity data, and the constraints that test data must
 satisfy.
 
+## Open Questions
+
+- **Dezi URA cross-check**: Will LSP/AORTA-GtK omit the URA comparison between DeziUserCredential and X509Credential for
+  the PoC phase?
+- **NVI/PRS LDN certificate**: Does the GIS-VN/LDN certificate support being used across multiple care organization
+  URAs? Currently not working — tracked in [#469](https://github.com/nuts-foundation/nuts-knooppunt/issues/469)
+- **Mitz**: does Mitz accept any URA, or do they need to be registered?
+
 ## Identity Attributes
 
 ### URA
@@ -20,12 +28,12 @@ The care organization identifier (URA) must match across systems, otherwise:
 
 | System/Feature  | Relevance of URA                                                                         | Source of URA                                           |
 |-----------------|------------------------------------------------------------------------------------------|---------------------------------------------------------|
-| **Dezi**        | Identifies the organization on behalf of which the care giver is acting                  | `abonneenummer` in the Dezi token                       |
+| **Dezi**        | Identifies the care giver, and on behalf of which care organization they are acting      | `abonneenummer` in the Dezi token                       |
 | **Nuts AuthN**  | Identifies the care organization in the X509Credential; used to authorize token requests | X509Credential, derived from the UZI Server Certificate |
-| **EHR**         | Identifies the EHR's organization; used to look up the correct mCSD resources            | Configured by the EHR vendor                            |
+| **EHR**         | Maps URA to a tenant in the EHR                                                          | Configured by the EHR vendor                            |
 | **NVI and PRS** | Identifies the care organization when registering and querying the referral index        | Client certificate for MinVWS GF services               |
 | **LRZa**        | Primary identifier of the care organization in the national registry                     | Authoritative source                                    |
-| **Mitz**        | Identifies the subscribing organization in consent registrations                         | URA from the X509Credential presented at subscription   |
+| **Mitz**        | Identifies the subscribing organization in consent registrations and loggingß            | X509Credential, derived from the UZI Server Certificate |
 | **LSP**         | Identifies care organization in the X509Credential                                       | X509Credential, derived from the UZI Server Certificate |
 
 ### UZI number
@@ -51,11 +59,12 @@ Notes:
 - Dezi: During the PoC phase, we most probably won't align Dezi URAs with the rest of the ecosystem, as:
     - The change management on CIBG Dezi side will probably take too long
     - During the PoCs, only LSP/AORTA-GtK will verify the DeziUserCredential.
-      - We can ask them not compare the URA from Dezi token v.s. the URA from the X509Credential
-      - Vice versa (LSP querying Nuts), Dezi is out of scope.
-- NVI/PRS: vendors are supplied with an LDN certificate, which we assume can be used with any (authorized) URA. This is very practical for vendors using 1 certificate for multiple care organizations.
+        - We can ask them not compare the URA from Dezi token v.s. the URA from the X509Credential
+        - Vice versa (LSP querying Nuts), Dezi is out of scope.
+- NVI/PRS: vendors are supplied with an LDN certificate, which we assume can be used with any (authorized) URA. This is
+  very practical for vendors using 1 certificate for multiple care organizations.
     - But: it does not appear to work, we're checking with MinVWS how this should work.
-    - See [https://github.com/nuts-foundation/nuts-knooppunt/issues/469](https://github.com/nuts-foundation/nuts-knooppunt/issues/469)
+    - See [#469](https://github.com/nuts-foundation/nuts-knooppunt/issues/469)
 
 During PoC phase, do the following things to line up the URAs:
 
@@ -64,8 +73,10 @@ During PoC phase, do the following things to line up the URAs:
    2.1. Register the organization in [LRZa](https://lrza-test.nuts-services.nl/) with that URA.
    2.2. Register the mCSD resources in the local mCSD Admin Directory under that URA.
 3. Nuts AuthN:
-   3.1. Using the [Fake CA](https://github.com/nuts-foundation/go-didx509-toolkit/tree/main/test_ca), issue a UZI Server Certificate with that URA.
-   3.2. Using the did:x509 toolkit, issue the X509Credential, and load it into the wallet (Nuts subject) for that particular care organization
+   3.1. Using the [Fake CA](https://github.com/nuts-foundation/go-didx509-toolkit/tree/main/test_ca), issue a UZI Server
+   Certificate with that URA.
+   3.2. Using the did:x509 toolkit, issue the X509Credential, and load it into the wallet (Nuts subject) for that
+   particular care organization
 4. NVI/PRS:
    4.1. Request a certificate with that URA for the iRealisatie Proeftuin.
    4.2. When requesting an access token, use the URA as `iss` and `sub` claim in the JWT bearer grant token.
@@ -77,7 +88,9 @@ During PoC phase, do the following things to line up the URAs:
 In an ideal world, URAs would line up so we can properly authorize URAs, but we lack the following:
 
 - A more flexible Dezi testset, e.g. each vendor should be able to get a range of URAs they can use.
-  - Because this is missing, we can't authorize the URA from Dezi when its token is used in data exchanges
-- A more flexible CIBG Test CA that allows the vendor to specify the URA for the certificate (most important), and the organization name (less important).
-  - Because this is missing, we use our own Fake CIBG CA. 
-- Support for the GIS-VN/LDN certificate in NVI/PRS so vendors can use 1 certificate for all of their care organizations.
+    - Because this is missing, we can't authorize the URA from Dezi when its token is used in data exchanges
+- A more flexible CIBG Test CA that allows the vendor to specify the URA for the certificate (most important), and the
+  organization name (less important).
+    - Because this is missing, we use our own Fake CIBG CA.
+- Support for the GIS-VN/LDN certificate in NVI/PRS so vendors can use 1 certificate for all of their care
+  organizations.
