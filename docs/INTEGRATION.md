@@ -146,6 +146,21 @@ pseudo:
 | `authn.minvws.tokenendpoint`  | OAuth2 token endpoint of the MinVWS authorization server                 |
 | `pseudo.prsurl`               | Base URL of the pseudonymization service (PRS)                           |
 
+### Required request header: X-Tenant-ID
+
+Every request to the NVI endpoints must include the `X-Tenant-ID` header identifying your organization:
+
+```http
+X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|<your-ura>
+```
+
+This header is required because BSN pseudonymization is tenant-specific: the Knooppunt uses your URA to generate
+transport tokens, so the same BSN produces a different token for each organization. Without this header the
+Knooppunt cannot pseudonymize the BSN and will return `400 Bad Request`.
+
+The URA value must match the one you received from iRealisatie (see [Prerequisites](#prerequisites)) and the
+`nl-gf-localization-custodian` extension in your `List` resources.
+
 ### Registering a List (via Bundle)
 
 To register a `List` resource wrapped in a transaction `Bundle` (see for example: [nvi.http](/docs/test-scripts/nvi.http)):
