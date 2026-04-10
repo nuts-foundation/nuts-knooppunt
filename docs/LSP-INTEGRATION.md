@@ -35,7 +35,7 @@ The PSA defines specific OAuth `scope` values for token requests (PSA 10.9). Fit
 | Credential                                   | VP                 | PSA section | Nuts querying AORTA (outbound)      | AORTA querying Nuts (inbound)       |
 |----------------------------------------------|--------------------|-------------|-------------------------------------|-------------------------------------|
 | `PatientEnrollmentCredential`                | `assertion`        | 10.6.5      | Supported                           | Supported                           |
-| `HealthcareOrganizationCredential`           | `assertion`        | 10.6.3      | **Gap** — not yet supported by Nuts | **Gap** — not yet supported by Nuts |
+| `HealthcareOrganizationCredential`           | `assertion`        | 10.6.3      | Supported, not validated — TBD      | Supported, not validated — TBD      |
 | `HealthCareProfessionalDelegationCredential` | `assertion`        | 10.6.4      | Supported                           | Supported                           |
 | `ServiceProviderCredential`                  | `client_assertion` | 10.6.6      | Out of scope                        | Out of scope                        |
 | `ServiceProviderDelegationCredential`        | `client_assertion` | 10.6.7      | Out of scope                        | Out of scope                        |
@@ -54,7 +54,7 @@ issuer — including `HealthcareOrganizationCredential` — fall through to the 
 properly verified. This issue implements the generic validation rules from PSA 10.6.2 for all credential
 types regardless of their `type` field.
 
-Gaps resolved: `HealthcareOrganizationCredential` validation.
+Gaps resolved: `HealthcareOrganizationCredential` validation (TBD — may already be supported).
 
 ### [nuts-foundation/nuts-node#4078](https://github.com/nuts-foundation/nuts-node/issues/4078) — Client-side RFC 7523 JWT Bearer grant (Nuts querying AORTA)
 
@@ -75,6 +75,6 @@ from PSA 10.6.
 
 The `client_assertion` VP is accepted but not validated (out of scope).
 
-Gaps resolved: inbound `jwt-bearer` grant, inbound validation of `HealthcareOrganizationCredential`.
+Gaps resolved: inbound `jwt-bearer` grant, inbound validation of `HealthcareOrganizationCredential` (TBD — may already be supported).
 
 Depends on: [nuts-foundation/nuts-node#4079](https://github.com/nuts-foundation/nuts-node/issues/4079), [nuts-foundation/nuts-node#4078](https://github.com/nuts-foundation/nuts-node/issues/4078).
