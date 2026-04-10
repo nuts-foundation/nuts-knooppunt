@@ -131,32 +131,11 @@ func generateBundle(policyName string) ([]byte, error) {
 		}
 	}
 
-	for _, entry := range entries {
-		entryPath := filepath.Join(bundleDir, entry.Name())
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".tar.gz") {
-			continue
-		}
-
-		scope := NormalizePolicyName(strings.TrimSuffix(entry.Name(), ".tar.gz"))
-
-		if _, exists := bundles[scope]; exists {
-			return fmt.Errorf("duplicate policy after normalization (lowercase and '-' to '_'): original bundle %q, normalized name %q", entry.Name(), scope)
-		}
-
-		// Read the bundle file
-		bundleData, err := os.ReadFile(entryPath)
-		if err != nil {
-			return fmt.Errorf("failed to read bundle %s: %w", entryPath, err)
-		}
-
-		bundles[scope] = bundleData
+	if err := tarWriter.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close tar writer: %w", err)
 	}
-
-		if err := tarWriter.Close(); err != nil {
-			return nil, fmt.Errorf("failed to close tar writer: %w", err)
-		}
-		if err := gzipWriter.Close(); err != nil {
-			return nil, fmt.Errorf("failed to close gzip writer: %w", err)
-		}
+	if err := gzipWriter.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close gzip writer: %w", err)
+	}
 	return buf.Bytes(), nil
 }
