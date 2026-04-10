@@ -34,9 +34,9 @@ The PSA defines specific OAuth `scope` values for token requests (PSA 10.9). Fit
 
 | Credential                                   | VP                 | PSA section | Nuts querying AORTA (outbound)      | AORTA querying Nuts (inbound)       |
 |----------------------------------------------|--------------------|-------------|-------------------------------------|-------------------------------------|
-| `PatientEnrollmentCredential`                | `assertion`        | 10.6.5      | Supported                           | Supported                           |
+| `PatientEnrollmentCredential`                | `assertion`        | 10.6.5      | Supported, not validated — TBD      | Supported, not validated — TBD      |
 | `HealthcareOrganizationCredential`           | `assertion`        | 10.6.3      | Supported, not validated — TBD      | Supported, not validated — TBD      |
-| `HealthCareProfessionalDelegationCredential` | `assertion`        | 10.6.4      | Supported                           | Supported                           |
+| `HealthCareProfessionalDelegationCredential` | `assertion`        | 10.6.4      | Supported, not validated — TBD      | Supported, not validated — TBD      |
 | `ServiceProviderCredential`                  | `client_assertion` | 10.6.6      | Out of scope                        | Out of scope                        |
 | `ServiceProviderDelegationCredential`        | `client_assertion` | 10.6.7      | Out of scope                        | Out of scope                        |
 
