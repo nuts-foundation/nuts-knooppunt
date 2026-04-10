@@ -494,7 +494,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 				scope:       "bgz",
 				httpRequest: `GET /Patient?_include=Patient:general-practitioner`,
 				policyReasonCodes: map[string][]TypeResultCode{
-					"pzp_gf": {TypeResultCodeInternalError},
+					"bgz": {TypeResultCodeNotAllowed},
 				},
 			},
 		}
