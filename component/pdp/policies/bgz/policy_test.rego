@@ -90,7 +90,7 @@ test_allow_observation_lastn_category if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"interaction_type": "operation",
-			"operation": "$lastn",
+			"operation": "lastn",
 			"include": [],
 			"search_params": {"category": [["http://snomed.info/sct|118228005", "http://snomed.info/sct|384821006"]]},
 		}},
@@ -111,7 +111,7 @@ test_allow_observation_lastn_code_365508006 if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"interaction_type": "operation",
-			"operation": "$lastn",
+			"operation": "lastn",
 			"include": [],
 			"search_params": {"code": [["http://snomed.info/sct|365508006"]]},
 		}},
@@ -233,7 +233,7 @@ test_allow_observation_lastn_blood_pressure if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"interaction_type": "operation",
-			"operation": "$lastn",
+			"operation": "lastn",
 			"include": [],
 			"search_params": {"code": [["http://loinc.org|85354-9"]]},
 		}},
@@ -246,7 +246,7 @@ test_allow_observation_lastn_body_measurements if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"interaction_type": "operation",
-			"operation": "$lastn",
+			"operation": "lastn",
 			"include": [],
 			"search_params": {"code": [["http://loinc.org|8302-2", "http://loinc.org|8306-3", "http://loinc.org|8308-9"]]},
 		}},
@@ -259,7 +259,7 @@ test_allow_observation_lastn_lab_results if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"interaction_type": "operation",
-			"operation": "$lastn",
+			"operation": "lastn",
 			"include": ["Observation:related-target", "Observation:specimen"],
 			"search_params": {"category": [["http://snomed.info/sct|275711006"]]},
 		}},
