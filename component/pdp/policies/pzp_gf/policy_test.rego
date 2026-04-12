@@ -7,7 +7,7 @@ import data.pzp_gf
 base_patient_input := {
 	"action": {"fhir_rest": {
 		"interaction_type": "search-type",
-		"search_params": {"identifier": ["http://fhir.nl/fhir/NamingSystem/bsn|123456789"]},
+		"search_params": {"identifier": [["http://fhir.nl/fhir/NamingSystem/bsn|123456789"]]},
 	}},
 	"context": {
 		"mitz_consent": true,
@@ -20,9 +20,9 @@ base_consent_input := {
 	"action": {"fhir_rest": {
 		"interaction_type": "search-type",
 		"search_params": {
-			"patient": ["Patient/123"],
-			"scope": ["http://terminology.hl7.org/CodeSystem/consentscope|treatment"],
-			"category": ["http://snomed.info/sct|129125009"],
+			"patient": [["Patient/123"]],
+			"scope": [["http://terminology.hl7.org/CodeSystem/consentscope|treatment"]],
+			"category": [["http://snomed.info/sct|129125009"]],
 		},
 	}},
 	"context": {
@@ -48,7 +48,7 @@ test_deny_patient_search_empty_bsn if {
 
 test_deny_patient_search_wrong_identifier_system if {
 	not pzp_gf.allow with input as object.union(base_patient_input, {
-		"action": {"fhir_rest": {"search_params": {"identifier": ["http://other-system|123456789"]}}},
+		"action": {"fhir_rest": {"search_params": {"identifier": [["http://other-system|123456789"]]}}},
 	})
 }
 
@@ -64,19 +64,19 @@ test_deny_consent_search_without_patient_id if {
 
 test_deny_consent_search_wrong_scope if {
 	not pzp_gf.allow with input as object.union(base_consent_input, {
-		"action": {"fhir_rest": {"search_params": {"scope": ["http://terminology.hl7.org/CodeSystem/consentscope|research"]}}},
+		"action": {"fhir_rest": {"search_params": {"scope": [["http://terminology.hl7.org/CodeSystem/consentscope|research"]]}}},
 	})
 }
 
 test_deny_consent_search_wrong_category if {
 	not pzp_gf.allow with input as object.union(base_consent_input, {
-		"action": {"fhir_rest": {"search_params": {"category": ["http://snomed.info/sct|999999"]}}},
+		"action": {"fhir_rest": {"search_params": {"category": [["http://snomed.info/sct|999999"]]}}},
 	})
 }
 
 test_deny_consent_search_patient_ref_no_prefix if {
 	not pzp_gf.allow with input as object.union(base_consent_input, {
-		"action": {"fhir_rest": {"search_params": {"patient": ["123"]}}},
+		"action": {"fhir_rest": {"search_params": {"patient": [["123"]]}}},
 	})
 }
 

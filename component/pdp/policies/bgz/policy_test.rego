@@ -68,7 +68,7 @@ test_allow_consent_search_category_11291 if {
 		"resource": {"type": "Consent"},
 		"action": {"fhir_rest": {
 			"include": [],
-			"search_params": {"category": ["http://snomed.info/sct|11291000146105"]},
+			"search_params": {"category": [["http://snomed.info/sct|11291000146105"]]},
 		}},
 	})
 }
@@ -79,7 +79,7 @@ test_allow_consent_search_category_11341 if {
 		"resource": {"type": "Consent"},
 		"action": {"fhir_rest": {
 			"include": [],
-			"search_params": {"category": ["http://snomed.info/sct|11341000146107"]},
+			"search_params": {"category": [["http://snomed.info/sct|11341000146107"]]},
 		}},
 	})
 }
@@ -90,9 +90,9 @@ test_allow_observation_lastn_category if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"interaction_type": "operation",
-			"operation": "$lastn",
+			"operation": "lastn",
 			"include": [],
-			"search_params": {"category": ["http://snomed.info/sct|118228005", "http://snomed.info/sct|384821006"]},
+			"search_params": {"category": [["http://snomed.info/sct|118228005", "http://snomed.info/sct|384821006"]]},
 		}},
 	})
 }
@@ -111,9 +111,9 @@ test_allow_observation_lastn_code_365508006 if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"interaction_type": "operation",
-			"operation": "$lastn",
+			"operation": "lastn",
 			"include": [],
-			"search_params": {"code": ["http://snomed.info/sct|365508006"]},
+			"search_params": {"code": [["http://snomed.info/sct|365508006"]]},
 		}},
 	})
 }
@@ -124,7 +124,7 @@ test_allow_observation_search_code_228366006 if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"include": [],
-			"search_params": {"code": ["http://snomed.info/sct|228366006"]},
+			"search_params": {"code": [["http://snomed.info/sct|228366006"]]},
 		}},
 	})
 }
@@ -135,7 +135,7 @@ test_allow_observation_search_code_228273003 if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"include": [],
-			"search_params": {"code": ["http://snomed.info/sct|228273003"]},
+			"search_params": {"code": [["http://snomed.info/sct|228273003"]]},
 		}},
 	})
 }
@@ -146,7 +146,7 @@ test_allow_observation_search_code_365980008 if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"include": [],
-			"search_params": {"code": ["http://snomed.info/sct|365980008"]},
+			"search_params": {"code": [["http://snomed.info/sct|365980008"]]},
 		}},
 	})
 }
@@ -181,7 +181,7 @@ test_allow_medication_statement_search if {
 		"resource": {"type": "MedicationStatement"},
 		"action": {"fhir_rest": {
 			"include": ["MedicationStatement:medication"],
-			"search_params": {"category": ["urn:oid:2.16.840.1.113883.2.4.3.11.60.20.77.5.3|6"]},
+			"search_params": {"category": [["urn:oid:2.16.840.1.113883.2.4.3.11.60.20.77.5.3|6"]]},
 		}},
 	})
 }
@@ -192,7 +192,7 @@ test_allow_medication_request_search if {
 		"resource": {"type": "MedicationRequest"},
 		"action": {"fhir_rest": {
 			"include": ["MedicationRequest:medication"],
-			"search_params": {"category": ["http://snomed.info/sct|16076005"]},
+			"search_params": {"category": [["http://snomed.info/sct|16076005"]]},
 		}},
 	})
 }
@@ -203,7 +203,7 @@ test_allow_medication_dispense_search if {
 		"resource": {"type": "MedicationDispense"},
 		"action": {"fhir_rest": {
 			"include": ["MedicationDispense:medication"],
-			"search_params": {"category": ["http://snomed.info/sct|422037009"]},
+			"search_params": {"category": [["http://snomed.info/sct|422037009"]]},
 		}},
 	})
 }
@@ -222,7 +222,7 @@ test_allow_immunization_search if {
 		"resource": {"type": "Immunization"},
 		"action": {"fhir_rest": {
 			"include": [],
-			"search_params": {"status": ["completed"]},
+			"search_params": {"status": [["completed"]]},
 		}},
 	})
 }
@@ -233,9 +233,9 @@ test_allow_observation_lastn_blood_pressure if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"interaction_type": "operation",
-			"operation": "$lastn",
+			"operation": "lastn",
 			"include": [],
-			"search_params": {"code": ["http://loinc.org|85354-9"]},
+			"search_params": {"code": [["http://loinc.org|85354-9"]]},
 		}},
 	})
 }
@@ -246,9 +246,9 @@ test_allow_observation_lastn_body_measurements if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"interaction_type": "operation",
-			"operation": "$lastn",
+			"operation": "lastn",
 			"include": [],
-			"search_params": {"code": ["http://loinc.org|8302-2", "http://loinc.org|8306-3", "http://loinc.org|8308-9"]},
+			"search_params": {"code": [["http://loinc.org|8302-2", "http://loinc.org|8306-3", "http://loinc.org|8308-9"]]},
 		}},
 	})
 }
@@ -259,9 +259,9 @@ test_allow_observation_lastn_lab_results if {
 		"resource": {"type": "Observation"},
 		"action": {"fhir_rest": {
 			"interaction_type": "operation",
-			"operation": "$lastn",
+			"operation": "lastn",
 			"include": ["Observation:related-target", "Observation:specimen"],
-			"search_params": {"category": ["http://snomed.info/sct|275711006"]},
+			"search_params": {"category": [["http://snomed.info/sct|275711006"]]},
 		}},
 	})
 }
@@ -272,7 +272,7 @@ test_allow_procedure_search if {
 		"resource": {"type": "Procedure"},
 		"action": {"fhir_rest": {
 			"include": [],
-			"search_params": {"category": ["http://snomed.info/sct|387713003"]},
+			"search_params": {"category": [["http://snomed.info/sct|387713003"]]},
 		}},
 	})
 }
@@ -283,11 +283,11 @@ test_allow_encounter_search if {
 		"resource": {"type": "Encounter"},
 		"action": {"fhir_rest": {
 			"include": [],
-			"search_params": {"class": [
+			"search_params": {"class": [[
 				"http://hl7.org/fhir/v3/ActCode|IMP",
 				"http://hl7.org/fhir/v3/ActCode|ACUTE",
 				"http://hl7.org/fhir/v3/ActCode|NONAC",
-			]},
+			]]},
 		}},
 	})
 }
@@ -298,7 +298,7 @@ test_allow_procedure_request_search if {
 		"resource": {"type": "ProcedureRequest"},
 		"action": {"fhir_rest": {
 			"include": [],
-			"search_params": {"status": ["active"]},
+			"search_params": {"status": [["active"]]},
 		}},
 	})
 }
@@ -317,7 +317,7 @@ test_allow_device_request_search if {
 		"resource": {"type": "DeviceRequest"},
 		"action": {"fhir_rest": {
 			"include": ["DeviceRequest:device"],
-			"search_params": {"status": ["active"]},
+			"search_params": {"status": [["active"]]},
 		}},
 	})
 }
@@ -328,7 +328,7 @@ test_allow_appointment_search if {
 		"resource": {"type": "Appointment"},
 		"action": {"fhir_rest": {
 			"include": [],
-			"search_params": {"status": ["booked", "pending", "proposed"]},
+			"search_params": {"status": [["booked", "pending", "proposed"]]},
 		}},
 	})
 }
@@ -339,7 +339,7 @@ test_allow_document_reference_search if {
 		"resource": {"type": "DocumentReference"},
 		"action": {"fhir_rest": {
 			"include": [],
-			"search_params": {"status": ["current"]},
+			"search_params": {"status": [["current"]]},
 		}},
 	})
 }
@@ -373,7 +373,7 @@ test_deny_wrong_search_params if {
 		"resource": {"type": "MedicationRequest"},
 		"action": {"fhir_rest": {
 			"include": ["MedicationRequest:medication"],
-			"search_params": {"category": ["http://snomed.info/sct|387713003"]},
+			"search_params": {"category": [["http://snomed.info/sct|387713003"]]},
 		}},
 	})
 }

@@ -34,10 +34,7 @@ func Test_BGZAuthorization(t *testing.T) {
 			  "method": "GET",
 			  "protocol": "HTTP/1.0",
 			  "path": "/Patient",
-			  "query_params": {
- 			    "_include": ["Patient:general-practitioner"],
-				"_id": ["3E439979-017F-40AA-594D-EBCF880FFD97"]
-              }
+			  "query": "_include=Patient%3Ageneral-practitioner&_id=3E439979-017F-40AA-594D-EBCF880FFD97"
 			},
 			"context": {
 			  "data_holder_organization_id": "00000659",
