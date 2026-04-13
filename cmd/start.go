@@ -67,10 +67,7 @@ func Start(ctx context.Context, config Config) error {
 	}
 
 	// Create AuthN component
-	authnComponent, err := authn.New(config.AuthN, httpComponent, config.Config)
-	if err != nil {
-		return errors.Wrap(err, "failed to create AuthN component")
-	}
+	authnComponent := authn.New(config.AuthN)
 	components = append(components, authnComponent)
 
 	// Create MITZ component
