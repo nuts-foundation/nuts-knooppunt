@@ -30,6 +30,10 @@ with two separate JWT assertions carrying Verifiable Presentations:
 
 The PSA defines specific OAuth `scope` values for token requests (PSA 10.9). Fit-gap analysis for scope handling is **TBD**.
 
+| Capability                         | Nuts querying AORTA (outbound)                                                                              | AORTA querying Nuts (inbound)                                                                               |
+|------------------------------------|-------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| Multiple scopes in a token request | Supported (via `policy_id` parameter)                                                                       | **Gap** — Nuts node only supports a single scope per token request ([nuts-node#4144](https://github.com/nuts-foundation/nuts-node/issues/4144)) |
+
 ### Verifiable Credentials
 
 | Credential                                   | VP                 | PSA section | Nuts querying AORTA (outbound)      | AORTA querying Nuts (inbound)       |
