@@ -82,3 +82,10 @@ The `client_assertion` VP is accepted but not validated (out of scope).
 Gaps resolved: inbound `jwt-bearer` grant, inbound validation of `HealthcareOrganizationCredential` (TBD — may already be supported).
 
 Depends on: [nuts-foundation/nuts-node#4079](https://github.com/nuts-foundation/nuts-node/issues/4079), [nuts-foundation/nuts-node#4078](https://github.com/nuts-foundation/nuts-node/issues/4078).
+
+### [nuts-foundation/nuts-node#4144](https://github.com/nuts-foundation/nuts-node/issues/4144) — Support multiple scopes in inbound token request
+
+Nuts' authorization server currently only accepts a single scope per token request. LSP requires multiple
+scopes to be specified in a single request. This issue adds support for multiple scopes on the inbound flow.
+
+Gaps resolved: inbound multiple scopes.
