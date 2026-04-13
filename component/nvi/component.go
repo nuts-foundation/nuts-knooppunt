@@ -403,6 +403,9 @@ func (c Component) handleSearch(httpResponse http.ResponseWriter, httpRequest *h
 }
 
 func (c Component) tokenizeListIdentifiers(ctx context.Context, resource fhir.List, localOrganizationURA string, audience string) (*fhir.List, error) {
+	if err := c.reconcileCustodianExtension(&resource, localOrganizationURA); err != nil {
+		return nil, err
+	}
 	if resource.Subject == nil || resource.Subject.Identifier == nil {
 		return &resource, nil
 	}
@@ -412,6 +415,37 @@ func (c Component) tokenizeListIdentifiers(ctx context.Context, resource fhir.Li
 	}
 	resource.Subject.Identifier = tokenizedIdentifier
 	return &resource, nil
+}
+
+// reconcileCustodianExtension ensures the custodian extension in the List matches the tenant URA from the request header.
+// If the extension is absent, it is added. If it is present but has a different URA, an error is returned.
+func (c Component) reconcileCustodianExtension(resource *fhir.List, localOrganizationURA string) error {
+	for _, ext := range resource.Extension {
+		if ext.Url != coding.NVICustodianExtensionURL {
+			continue
+		}
+		if ext.ValueReference == nil || ext.ValueReference.Identifier == nil || ext.ValueReference.Identifier.Value == nil {
+			break
+		}
+		if *ext.ValueReference.Identifier.Value != localOrganizationURA {
+			return fhirapi.BadRequestError(
+				fmt.Sprintf("custodian extension URA (%s) does not match tenant ID header (%s)", *ext.ValueReference.Identifier.Value, localOrganizationURA),
+				nil,
+			)
+		}
+		return nil
+	}
+	// Extension absent or incomplete — add/replace it.
+	resource.Extension = append(resource.Extension, fhir.Extension{
+		Url: coding.NVICustodianExtensionURL,
+		ValueReference: &fhir.Reference{
+			Identifier: &fhir.Identifier{
+				System: to.Ptr(coding.URANamingSystem),
+				Value:  to.Ptr(localOrganizationURA),
+			},
+		},
+	})
+	return nil
 }
 
 // tokenizeFHIRSearchToken converts a FHIR search token  (<system>|<value>) to a BSN transport token value.

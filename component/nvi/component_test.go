@@ -77,11 +77,27 @@ func TestComponent_handleRegister(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:           "custodian URA mismatch",
+			requestBody:    testUtil.ReadJSON(t, testdata.FS, "bundle-transaction.json"),
+			expectedStatus: http.StatusBadRequest,
+			tenantID:       to.Ptr(coding.URANamingSystem + "|99999999"),
+			expectedOperationOutcome: &fhir.OperationOutcome{
+				Issue: []fhir.OperationOutcomeIssue{
+					{
+						Severity:    fhir.IssueSeverityError,
+						Code:        fhir.IssueTypeInvalid,
+						Diagnostics: to.Ptr("custodian extension URA (90000308) does not match tenant ID header (99999999)"),
+					},
+				},
+			},
+		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			tenantURA := "1"
+			// bundle-transaction.json has custodian URA "90000308", so the tenant ID must match.
+			tenantURA := "90000308"
 			tenantID := coding.URANamingSystem + "|" + tenantURA
 			if testCase.tenantID != nil {
 				tenantID = *testCase.tenantID
@@ -146,6 +162,38 @@ func TestComponent_handleRegisterList(t *testing.T) {
 	}
 	listJSON, _ := json.Marshal(listResource)
 
+	listWithMatchingCustodian := fhir.List{
+		Extension: []fhir.Extension{
+			{
+				Url: coding.NVICustodianExtensionURL,
+				ValueReference: &fhir.Reference{
+					Identifier: &fhir.Identifier{
+						System: to.Ptr(coding.URANamingSystem),
+						Value:  to.Ptr("1"),
+					},
+				},
+			},
+		},
+		Subject: &fhir.Reference{Identifier: &bsnIdentifier},
+	}
+	listWithMatchingCustodianJSON, _ := json.Marshal(listWithMatchingCustodian)
+
+	listWithMismatchedCustodian := fhir.List{
+		Extension: []fhir.Extension{
+			{
+				Url: coding.NVICustodianExtensionURL,
+				ValueReference: &fhir.Reference{
+					Identifier: &fhir.Identifier{
+						System: to.Ptr(coding.URANamingSystem),
+						Value:  to.Ptr("99999999"),
+					},
+				},
+			},
+		},
+		Subject: &fhir.Reference{Identifier: &bsnIdentifier},
+	}
+	listWithMismatchedCustodianJSON, _ := json.Marshal(listWithMismatchedCustodian)
+
 	testCases := []struct {
 		name                     string
 		nviTransportError        error
@@ -158,6 +206,30 @@ func TestComponent_handleRegisterList(t *testing.T) {
 			name:           "registered List at NVI",
 			requestBody:    listJSON,
 			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "custodian extension absent: gets populated from tenant header",
+			requestBody:    listJSON,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "custodian extension matches tenant header",
+			requestBody:    listWithMatchingCustodianJSON,
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "custodian extension does not match tenant header",
+			requestBody:    listWithMismatchedCustodianJSON,
+			expectedStatus: http.StatusBadRequest,
+			expectedOperationOutcome: &fhir.OperationOutcome{
+				Issue: []fhir.OperationOutcomeIssue{
+					{
+						Severity:    fhir.IssueSeverityError,
+						Code:        fhir.IssueTypeInvalid,
+						Diagnostics: to.Ptr("custodian extension URA (99999999) does not match tenant ID header (1)"),
+					},
+				},
+			},
 		},
 		{
 			name:              "NVI is down",
@@ -243,6 +315,24 @@ func TestComponent_handleRegisterList(t *testing.T) {
 					require.NotNil(t, actualList.Subject)
 					require.NotNil(t, actualList.Subject.Identifier)
 					assert.Equal(t, bsnTokenIdentifier, *actualList.Subject.Identifier)
+				})
+				t.Run("assert custodian extension is present with tenant URA", func(t *testing.T) {
+					require.Len(t, nvi.CreatedResources["List"], 1)
+					actual := nvi.CreatedResources["List"][0]
+					actualJSON, _ := json.Marshal(actual)
+					var actualList fhir.List
+					require.NoError(t, json.Unmarshal(actualJSON, &actualList))
+					var found bool
+					for _, ext := range actualList.Extension {
+						if ext.Url == coding.NVICustodianExtensionURL {
+							require.NotNil(t, ext.ValueReference)
+							require.NotNil(t, ext.ValueReference.Identifier)
+							require.NotNil(t, ext.ValueReference.Identifier.Value)
+							assert.Equal(t, tenantURA, *ext.ValueReference.Identifier.Value)
+							found = true
+						}
+					}
+					assert.True(t, found, "custodian extension should be present")
 				})
 			}
 		})
