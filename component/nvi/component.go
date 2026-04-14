@@ -435,7 +435,7 @@ func (c Component) reconcileCustodianExtension(resource *fhir.List, localOrganiz
 		}
 		return nil
 	}
-	// Extension absent or incomplete — add/replace it.
+	// Extension absent or incomplete — add it.
 	resource.Extension = append(resource.Extension, fhir.Extension{
 		Url: coding.NVICustodianExtensionURL,
 		ValueReference: &fhir.Reference{

@@ -50,9 +50,9 @@ Content-Type: application/fhir+json
         "code": {
           "coding": [
             {
-              "code": "MEDAFSPRAAK",
+              "code": "MedicationRequest",
               "system": "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs",
-              "display": "Medicatieafspraak"
+              "display": "Medication Request"
             }
           ]
         }
@@ -105,9 +105,9 @@ Content-Type: application/fhir+json
   "code": {
     "coding": [
       {
-        "code": "MEDAFSPRAAK",
+        "code": "MedicationRequest",
         "system": "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs",
-        "display": "Medicatieafspraak"
+        "display": "Medication Request"
       }
     ]
   }
@@ -118,8 +118,8 @@ GET http://localhost:8081/nvi/List?patient:identifier=http://fhir.nl/fhir/Naming
 Accept: application/fhir+json
 
 ### NVI Search by patient and code
-GET http://localhost:8081/nvi/List?patient:identifier=http://fhir.nl/fhir/NamingSystem/bsn|123456789&code=MEDAFSPRAAK
-GET http://localhost:8081/nvi/List?patient:identifier=http://fhir.nl/fhir/NamingSystem/bsn|123456789&code=http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs|MEDAFSPRAAK
+GET http://localhost:8081/nvi/List?patient:identifier=http://fhir.nl/fhir/NamingSystem/bsn|123456789&code=MedicationRequest
+GET http://localhost:8081/nvi/List?patient:identifier=http://fhir.nl/fhir/NamingSystem/bsn|123456789&code=http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs|MedicationRequest
 Accept: application/fhir+json
 
 ### NVI Search by patient and device

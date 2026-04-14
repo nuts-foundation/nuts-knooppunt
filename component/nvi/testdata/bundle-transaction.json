@@ -46,9 +46,9 @@
         "code": {
           "coding": [
             {
-              "code": "MEDAFSPRAAK",
+              "code": "MedicationRequest",
               "system": "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs",
-              "display": "Medicatieafspraak"
+              "display": "Medication Request"
             }
           ]
         }

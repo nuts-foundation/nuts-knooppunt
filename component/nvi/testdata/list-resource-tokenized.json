@@ -23,9 +23,9 @@
   "code": {
     "coding": [
       {
-        "system": "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-zorgcontext-cs",
-        "code": "LABBEPALING",
-        "display": "Labuitslag"
+        "system": "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs",
+        "code": "MedicationRequest",
+        "display": "Medication Request"
       }
     ]
   }
