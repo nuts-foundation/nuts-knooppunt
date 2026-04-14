@@ -424,12 +424,13 @@ func (c Component) reconcileCustodianExtension(resource *fhir.List, localOrganiz
 		if ext.Url != coding.NVICustodianExtensionURL {
 			continue
 		}
-		if ext.ValueReference == nil || ext.ValueReference.Identifier == nil || ext.ValueReference.Identifier.Value == nil {
-			break
+		extValue := ""
+		if ext.ValueReference != nil && ext.ValueReference.Identifier != nil && ext.ValueReference.Identifier.Value != nil {
+			extValue = *ext.ValueReference.Identifier.Value
 		}
-		if *ext.ValueReference.Identifier.Value != localOrganizationURA {
+		if extValue != localOrganizationURA {
 			return fhirapi.BadRequestError(
-				fmt.Sprintf("custodian extension URA (%s) does not match tenant ID header (%s)", *ext.ValueReference.Identifier.Value, localOrganizationURA),
+				fmt.Sprintf("custodian extension URA (%s) does not match tenant ID header (%s)", extValue, localOrganizationURA),
 				nil,
 			)
 		}
