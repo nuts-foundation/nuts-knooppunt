@@ -151,10 +151,10 @@ func (c *Component) CheckConsent(ctx context.Context, authzReq xacml.AuthzReques
 		return nil, fmt.Errorf("failed to create authorization decision query: %w", err)
 	}
 
-	// Log the XML request
+	// Log the XML request with every BSN-scoped InstanceIdentifier redacted.
 	slog.DebugContext(ctx, "Sending consent check request to MITZ",
 		slog.String("endpoint", c.consentCheckEndpoint),
-		slog.String("xmlPayload", authnDecisionQueryXml))
+		slog.String("xmlPayload", xacml.RedactBSN(authnDecisionQueryXml)))
 
 	// Create HTTP request with XML payload
 	httpReq, err := http.NewRequestWithContext(
@@ -185,14 +185,19 @@ func (c *Component) CheckConsent(ctx context.Context, authzReq xacml.AuthzReques
 		return nil, fmt.Errorf("failed to read consent check response: %w", err)
 	}
 
-	// Log response
+	// Redact every BSN-scoped InstanceIdentifier before the body touches a log
+	// or an error chain. MITZ echoes the resource-id (BSN) back in the response
+	// because IncludeInResult="true" is set on the request, and may also include
+	// BSNs we never sent (e.g. of a legal representative).
+	redactedBody := xacml.RedactBSN(string(responseBody))
+
 	slog.DebugContext(ctx, "Received consent check response from MITZ",
 		slog.Int("statusCode", resp.StatusCode),
-		slog.String("responseBody", string(responseBody)))
+		slog.String("responseBody", redactedBody))
 
 	// Check for non-2xx status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("consent check failed with status %d: %s", resp.StatusCode, string(responseBody))
+		return nil, fmt.Errorf("consent check failed with status %d: %s", resp.StatusCode, redactedBody)
 	}
 
 	// Parse the XACML response to extract the decision
@@ -408,3 +413,4 @@ func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpReques
 	// so we trust that if CreateWithContext succeeds, the subscription was accepted
 	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusCreated, resource)
 }
+
