@@ -12,13 +12,15 @@ const redactedExtension = `extension="[REDACTED]"`
 // They match InstanceIdentifier elements scoped to the BSN root OID and
 // rewrite only the `extension` attribute, leaving sibling attributes intact.
 // Redaction is keyed on the root OID (not on a known BSN value) so BSNs
-// echoed back by MITZ that we never sent ourselves are also scrubbed.
+// echoed back by MITZ that were never sent in the original request are
+// also scrubbed.
 var (
+	bsnOIDPattern            = regexp.QuoteMeta(BSNRootOID)
 	reBSNExtensionBeforeRoot = regexp.MustCompile(
-		`extension="[^"]*"(\s+(?:[A-Za-z:][A-Za-z0-9:]*="[^"]*"\s+)*root="2\.16\.840\.1\.113883\.2\.4\.6\.3")`,
+		`extension="[^"]*"(\s+(?:[A-Za-z:][A-Za-z0-9:]*="[^"]*"\s+)*root="` + bsnOIDPattern + `")`,
 	)
 	reBSNRootBeforeExtension = regexp.MustCompile(
-		`(root="2\.16\.840\.1\.113883\.2\.4\.6\.3"(?:\s+[A-Za-z:][A-Za-z0-9:]*="[^"]*")*\s+)extension="[^"]*"`,
+		`(root="` + bsnOIDPattern + `"(?:\s+[A-Za-z:][A-Za-z0-9:]*="[^"]*")*\s+)extension="[^"]*"`,
 	)
 )
 

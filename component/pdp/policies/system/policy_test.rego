@@ -165,7 +165,7 @@ test_case_insensitive_uri_match if {
 test_empty_header_map_produces_no_patch if {
 	event := object.union(base_event, {"input": {"action": {"request": {"header": {}}}}})
 	patches := log.mask with input as event
-	not "/input/action/request/header" in patches
+	not any_patch_for_path(patches, "/input/action/request/header")
 }
 
 # any_patch_for_path returns true if the mask set contains a patch (either the
