@@ -2,10 +2,6 @@ package xacml
 
 import "regexp"
 
-// BSNRootOID is the HL7 root OID identifying a BSN (Dutch social security number)
-// inside an HL7 InstanceIdentifier element.
-const BSNRootOID = "2.16.840.1.113883.2.4.6.3"
-
 const redactedExtension = `extension="[REDACTED]"`
 
 // Two patterns cover both attribute orderings XACML emitters may produce.
