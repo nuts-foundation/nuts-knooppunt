@@ -44,10 +44,11 @@ func Start(ctx context.Context, config Config) error {
 		return errors.Wrap(err, "failed to create mCSD Update Client")
 	}
 	httpComponent := libHTTPComponent.New(config.HTTP, publicMux, internalMux)
+	statusComponent := status.New()
 	components := []component.Lifecycle{
 		mcsdUpdateClient,
 		mcsdadmin.New(config.MCSDAdmin),
-		status.New(),
+		statusComponent,
 		httpComponent,
 	}
 
@@ -118,6 +119,10 @@ func Start(ctx context.Context, config Config) error {
 		}
 		slog.DebugContext(ctx, "Component started", logging.Component(cmp))
 	}
+
+	// Mark the system ready only after all components have started, so /status
+	// doesn't report 200 before dependent state (e.g. PDP's OPA service) is initialized.
+	statusComponent.SetReady()
 
 	slog.DebugContext(ctx, "System started, waiting for shutdown...")
 	<-ctx.Done()
