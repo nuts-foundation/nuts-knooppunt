@@ -1094,6 +1094,18 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 						"address": "https://stale.example.org/fhir"
 					},
 					"request": {"method": "POST", "url": "Endpoint/ep"}
+				},
+				{
+					"fullUrl": "http://test.example.org/fhir/Endpoint/orphan",
+					"resource": {
+						"resourceType": "Endpoint",
+						"id": "orphan",
+						"meta": {"versionId": "1", "lastUpdated": "2026-01-01T00:00:00Z"},
+						"status": "active",
+						"payloadType": [{"coding": [{"system": "http://example.org", "code": "other"}]}],
+						"address": "https://orphan.example.org/fhir"
+					},
+					"request": {"method": "POST", "url": "Endpoint/orphan"}
 				}
 			]
 		}`
@@ -1117,8 +1129,11 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		}`
 
 		// HealthcareService with two versions (newest-first), same id, same
-		// fullUrl, different names. Only the current version should reach the
-		// query directory after sync.
+		// fullUrl. The old version (v1) references Endpoint/orphan; the
+		// current (v2) does not. This exercises the allHealthcareServices
+		// dedupe fix: without it, validation of Endpoint/orphan would pass
+		// via the stale v1 reference even though no current resource points
+		// at it.
 		hsBundle := `{
 			"resourceType": "Bundle",
 			"type": "history",
@@ -1141,7 +1156,8 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 						"id": "hs",
 						"meta": {"versionId": "1", "lastUpdated": "2026-01-01T00:00:00Z"},
 						"name": "Stale Service",
-						"providedBy": {"reference": "Organization/org"}
+						"providedBy": {"reference": "Organization/org"},
+						"endpoint": [{"reference": "Endpoint/orphan"}]
 					},
 					"request": {"method": "POST", "url": "HealthcareService/hs"}
 				}
@@ -1203,7 +1219,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
 		}
 
-		_, err = component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint", "Organization", "HealthcareService"}, true, "00005098")
+		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint", "Organization", "HealthcareService"}, true, "00005098")
 		require.NoError(t, err)
 
 		var currentRegistered, staleRegistered bool
@@ -1228,6 +1244,19 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		var ep fhir.Endpoint
 		require.NoError(t, json.Unmarshal(raw, &ep))
 		assert.Equal(t, "https://current.example.org/fhir", ep.Address, "only the current Endpoint address should be synced")
+
+		// Endpoint/orphan is only referenced by the stale HS v1, not by any
+		// Organization or by the current HS v2. The allHealthcareServices
+		// dedupe fix is what makes this validation reject the orphan: without
+		// the dedupe the stale reference keeps it "alive".
+		var orphanRejected bool
+		for _, w := range report.Warnings {
+			if strings.Contains(w, "orphan") && strings.Contains(w, "endpoint must be referenced") {
+				orphanRejected = true
+				break
+			}
+		}
+		assert.True(t, orphanRejected, "orphan Endpoint must be rejected because no current resource references it. Got warnings: %v", report.Warnings)
 	})
 
 	t.Run("respects allowedResourceTypes parameter and only queries specified resource types", func(t *testing.T) {
