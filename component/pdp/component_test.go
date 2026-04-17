@@ -551,6 +551,24 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 		assert.False(t, response.Allow)
 		assert.Contains(t, response.Error, "policy not allowed")
 	})
+	t.Run("system policy - blocked at handler", func(t *testing.T) {
+		// The `system` bundle hosts OPA infrastructure (decision-log masking) and is not invokable as a policy.
+		body, _ := json.Marshal(APIRequest{
+			Input: APIInput{
+				Subject: APISubject{Scope: "system"},
+				Request: HTTPRequest{Method: "GET", Path: "/Patient"},
+				Context: APIContext{ConnectionTypeCode: "hl7-fhir-rest"},
+			},
+		})
+		req := httptest.NewRequest("POST", "/pdp", bytes.NewReader(body))
+		w := httptest.NewRecorder()
+		service.HandleMainPolicy(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		var response APIResponse
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&response))
+		assert.False(t, response.Allow)
+		assert.Contains(t, response.Error, "policy not allowed")
+	})
 	t.Run("test_search_params policy - search param AND/OR via evalRegoPolicy", func(t *testing.T) {
 		type testCase struct {
 			name     string

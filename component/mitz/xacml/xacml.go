@@ -12,6 +12,10 @@ import (
 	dsig "github.com/russellhaering/goxmldsig"
 )
 
+// BSNRootOID is the HL7 root OID identifying a BSN (Dutch social security number)
+// inside an HL7 InstanceIdentifier element.
+const BSNRootOID = "2.16.840.1.113883.2.4.6.3"
+
 // CreateAuthzDecisionQuery generates an unsigned SOAP envelope containing an XACML authorization decision query
 // based on the example.xml structure
 func CreateAuthzDecisionQuery(req AuthzRequest) (string, error) {
@@ -72,7 +76,7 @@ func createAuthzDecisionQuery(req AuthzRequest, signingConfig *SigningConfig) (s
 	// Resource ID (Patient BSN)
 	addHL7InstanceIdentifierAttribute(resourceAttrs,
 		"urn:oasis:names:tc:xacml:2.0:resource:resource-id",
-		"2.16.840.1.113883.2.4.6.3",
+		BSNRootOID,
 		req.PatientBSN)
 
 	// Healthcare Facility Type

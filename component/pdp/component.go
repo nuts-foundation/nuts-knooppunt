@@ -86,7 +86,6 @@ func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *
 func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	var reqBody APIRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
-	input := reqBody.Input
 	if err != nil {
 		writeResponseWithCode(r.Context(), w, APIResponse{
 			Error:    "unable to parse request body: " + err.Error(),
@@ -94,6 +93,7 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		}, http.StatusBadRequest)
 		return
 	}
+	input := reqBody.Input
 
 	scopes := strings.Fields(input.Subject.Scope)
 
@@ -107,8 +107,9 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	slices.Sort(policyNames)
 
 	// Step 1: Providing a policy is required for every PDP request. We can short-circuit here, no need to process the request.
+	// The `system` bundle hosts OPA infrastructure rules (e.g. decision-log masking) and is not directly invokable.
 	for _, policyName := range policyNames {
-		if strings.HasPrefix(policyName, "test_") {
+		if strings.HasPrefix(policyName, "test_") || policyName == "system" {
 			writeResponseWithCode(r.Context(), w, APIResponse{
 				Error:    fmt.Sprintf("policy not allowed: %s", policyName),
 				Policies: map[string]PolicyResult{},
