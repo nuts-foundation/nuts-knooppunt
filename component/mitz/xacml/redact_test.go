@@ -22,7 +22,14 @@ func TestRedactBSN_RequestXML(t *testing.T) {
 	}
 	xml, err := CreateAuthzDecisionQuery(req)
 	require.NoError(t, err)
-	require.Contains(t, xml, "900186021")
+
+	// Serializer-shape guard: RedactBSN's regexes assume the current etree
+	// serialization (double-quoted attributes, no spaces around `=`, bare
+	// local-name attributes). If a future change to the serializer breaks any
+	// of these assumptions this assertion fails first, naming the cause
+	// rather than having the redaction assertion fail ambiguously.
+	require.Contains(t, xml, `extension="900186021"`, "serializer shape drift: expected double-quoted attribute without spaces")
+	require.Contains(t, xml, `root="`+BSNRootOID+`"`, "serializer shape drift: expected bare root attribute with BSN OID")
 
 	redacted := RedactBSN(xml)
 
@@ -33,6 +40,34 @@ func TestRedactBSN_RequestXML(t *testing.T) {
 	assert.Contains(t, redacted, "000095254", "ProviderID must be preserved")
 	assert.Contains(t, redacted, "00000666", "ProviderInstitutionID must be preserved")
 	assert.Contains(t, redacted, "XACMLAuthzDecisionQuery")
+}
+
+// The signed request path adds an XML-DSig Signature element to the XACML
+// query. Redaction must keep working on that serialized output.
+func TestRedactBSN_SignedRequestXML(t *testing.T) {
+	signingConfig := generateTestSigningConfig(t)
+	req := AuthzRequest{
+		PatientBSN:             "900186021",
+		HealthcareFacilityType: "Z3",
+		AuthorInstitutionID:    "00000659",
+		EventCode:              "GGC002",
+		SubjectRole:            "01.015",
+		ProviderID:             "000095254",
+		ProviderInstitutionID:  "00000666",
+		ConsultingFacilityType: "Z3",
+		PurposeOfUse:           "TREAT",
+	}
+	xml, err := CreateSignedAuthzDecisionQuery(req, signingConfig)
+	require.NoError(t, err)
+	require.Contains(t, xml, "900186021")
+	require.Contains(t, xml, "ds:SignedInfo", "sanity: signed path must produce a Signature element")
+
+	redacted := RedactBSN(xml)
+
+	assert.NotContains(t, redacted, "900186021", "BSN must not appear in redacted signed payload")
+	assert.Contains(t, redacted, "[REDACTED]")
+	assert.Contains(t, redacted, "ds:SignedInfo", "signature structure must be preserved")
+	assert.Contains(t, redacted, "00000659", "non-BSN identifiers must be preserved")
 }
 
 func TestRedactBSN_ForeignBSNInResponse(t *testing.T) {
