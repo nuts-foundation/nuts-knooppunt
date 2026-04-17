@@ -1038,6 +1038,198 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		assert.Equal(t, 1, report2.CountDeleted, "Should have 1 deleted resource")
 	})
 
+	t.Run("history with changed Endpoint address registers only the current version (#409)", func(t *testing.T) {
+		// Regression test for issue #409. When an Endpoint's address changes
+		// across _history versions, the previous code iterated all versions
+		// and let the last-iterated overwrite the map keyed by fullUrl. FHIR
+		// _history returns newest-first, so the oldest (stale) address won
+		// and got registered as the administration directory.
+		// discoverAndRegisterEndpoints must operate on the deduplicated history
+		// so only the current version (by meta.lastUpdated) is registered.
+		//
+		// The test also covers the HealthcareService collection used for
+		// validation, which had the same inconsistency: all history versions
+		// were fed to downstream validation, so a stale version that
+		// historically referenced an Endpoint could keep that Endpoint
+		// "referenced" even when the current version no longer did.
+		//
+		// Deduplication keys off meta.lastUpdated via isMoreRecent, so every
+		// history entry in this fixture has a distinct lastUpdated timestamp.
+
+		ctx := context.Background()
+
+		// Bundle ordered newest-first, matching typical FHIR _history output.
+		// The buggy code path iterates in slice order and assigns to
+		// endpoints[fullUrl]; the last write (the stale v1) would win.
+		endpointBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": [
+				{
+					"fullUrl": "http://test.example.org/fhir/Endpoint/ep",
+					"resource": {
+						"resourceType": "Endpoint",
+						"id": "ep",
+						"meta": {"versionId": "2", "lastUpdated": "2026-02-01T00:00:00Z"},
+						"status": "active",
+						"payloadType": [{"coding": [{
+							"system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities",
+							"code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"
+						}]}],
+						"address": "https://current.example.org/fhir"
+					},
+					"request": {"method": "PUT", "url": "Endpoint/ep/_history/2"}
+				},
+				{
+					"fullUrl": "http://test.example.org/fhir/Endpoint/ep",
+					"resource": {
+						"resourceType": "Endpoint",
+						"id": "ep",
+						"meta": {"versionId": "1", "lastUpdated": "2026-01-01T00:00:00Z"},
+						"status": "active",
+						"payloadType": [{"coding": [{
+							"system": "http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities",
+							"code": "http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"
+						}]}],
+						"address": "https://stale.example.org/fhir"
+					},
+					"request": {"method": "POST", "url": "Endpoint/ep"}
+				}
+			]
+		}`
+
+		orgBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": [{
+				"fullUrl": "http://test.example.org/fhir/Organization/org",
+				"resource": {
+					"resourceType": "Organization",
+					"id": "org",
+					"meta": {"versionId": "1", "lastUpdated": "2026-01-01T00:00:00Z"},
+					"identifier": [{"system": "http://fhir.nl/fhir/NamingSystem/ura", "value": "00005098"}],
+					"active": true,
+					"endpoint": [{"reference": "Endpoint/ep"}],
+					"name": "Parent Org"
+				},
+				"request": {"method": "POST", "url": "Organization/org"}
+			}]
+		}`
+
+		// HealthcareService with two versions (newest-first), same id, same
+		// fullUrl, different names. Only the current version should reach the
+		// query directory after sync.
+		hsBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": [
+				{
+					"fullUrl": "http://test.example.org/fhir/HealthcareService/hs",
+					"resource": {
+						"resourceType": "HealthcareService",
+						"id": "hs",
+						"meta": {"versionId": "2", "lastUpdated": "2026-02-01T00:00:00Z"},
+						"name": "Current Service",
+						"providedBy": {"reference": "Organization/org"}
+					},
+					"request": {"method": "PUT", "url": "HealthcareService/hs/_history/2"}
+				},
+				{
+					"fullUrl": "http://test.example.org/fhir/HealthcareService/hs",
+					"resource": {
+						"resourceType": "HealthcareService",
+						"id": "hs",
+						"meta": {"versionId": "1", "lastUpdated": "2026-01-01T00:00:00Z"},
+						"name": "Stale Service",
+						"providedBy": {"reference": "Organization/org"}
+					},
+					"request": {"method": "POST", "url": "HealthcareService/hs"}
+				}
+			]
+		}`
+
+		emptyBundle := `{"resourceType": "Bundle", "type": "history", "entry": []}`
+
+		mux := http.NewServeMux()
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		mux.HandleFunc("/fhir/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(endpointBundle))
+		})
+		mux.HandleFunc("/fhir/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(orgBundle))
+		})
+		mux.HandleFunc("/fhir/Organization", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(orgBundle))
+		})
+		mux.HandleFunc("/fhir/Location/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(emptyBundle))
+		})
+		mux.HandleFunc("/fhir/HealthcareService/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(hsBundle))
+		})
+		mux.HandleFunc("/fhir/PractitionerRole/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(emptyBundle))
+		})
+		mux.HandleFunc("/fhir/Practitioner/_history", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(emptyBundle))
+		})
+
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{FHIRBaseURL: "http://example.com/local/fhir"}
+		config.AdministrationDirectories = map[string]DirectoryConfig{
+			"test-dir": {FHIRBaseURL: server.URL + "/fhir"},
+		}
+		component, err := New(config)
+		require.NoError(t, err)
+
+		capturingClient := &test.StubFHIRClient{}
+		component.fhirQueryClient = capturingClient
+		component.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
+			if baseURL.String() == server.URL+"/fhir" {
+				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
+			}
+			if baseURL.String() == "http://example.com/local/fhir" {
+				return capturingClient
+			}
+			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
+		}
+
+		_, err = component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint", "Organization", "HealthcareService"}, true, "00005098")
+		require.NoError(t, err)
+
+		var currentRegistered, staleRegistered bool
+		for _, dir := range component.administrationDirectories {
+			switch dir.fhirBaseURL {
+			case "https://current.example.org/fhir":
+				currentRegistered = true
+			case "https://stale.example.org/fhir":
+				staleRegistered = true
+			}
+		}
+		assert.True(t, currentRegistered, "current Endpoint address must be registered")
+		assert.False(t, staleRegistered, "stale Endpoint address from older history version must not be registered")
+
+		// The mCSD-directory Endpoint bypasses the "no sync in discovery mode"
+		// rule and is written to the query directory. Verify end-to-end that
+		// only the current version made it through the transaction.
+		createdEndpoints := capturingClient.CreatedResources["Endpoint"]
+		require.Len(t, createdEndpoints, 1, "only the current Endpoint version should be created")
+		raw, err := json.Marshal(createdEndpoints[0])
+		require.NoError(t, err)
+		var ep fhir.Endpoint
+		require.NoError(t, json.Unmarshal(raw, &ep))
+		assert.Equal(t, "https://current.example.org/fhir", ep.Address, "only the current Endpoint address should be synced")
+	})
+
 	t.Run("respects allowedResourceTypes parameter and only queries specified resource types", func(t *testing.T) {
 		// This test verifies that updateFromDirectory only queries the resource types
 		// specified in the allowedResourceTypes parameter, not all resource types.

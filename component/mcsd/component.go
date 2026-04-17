@@ -383,9 +383,13 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
 	deduplicatedEntries := deduplicateHistoryEntries(entries)
 
-	// Filter to only include HealthcareService resources
+	// Filter to only include HealthcareService resources. Use deduplicated
+	// history so older versions don't linger in the slice used by downstream
+	// validation (see #409): without this an HS version that historically
+	// referenced an Endpoint but no longer does would still keep that
+	// Endpoint "referenced" during validation.
 	var allHealthcareServices []fhir.HealthcareService
-	for _, entry := range entries {
+	for _, entry := range deduplicatedEntries {
 		if entry.Resource == nil {
 			continue
 		}
@@ -435,9 +439,13 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		}
 	}
 
-	// Handle Endpoint discovery and registration
+	// Handle Endpoint discovery and registration. Use the deduplicated entries
+	// so only the current version of each Endpoint (by meta.lastUpdated) is
+	// considered; otherwise older history versions with stale addresses can
+	// overwrite the current one in the per-fullUrl map and get registered
+	// instead (#409).
 	if allowDiscovery {
-		report = c.discoverAndRegisterEndpoints(ctx, entries, parentOrganizationsMap, report)
+		report = c.discoverAndRegisterEndpoints(ctx, deduplicatedEntries, parentOrganizationsMap, report)
 	}
 
 	slog.DebugContext(ctx, "Got mCSD entries", logging.FHIRServer(fhirBaseURLRaw), slog.Int("count", len(tx.Entry)))
