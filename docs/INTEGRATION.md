@@ -9,11 +9,11 @@ This document describes how to integrate with the Knooppunt.
 - [Online Consent (MITZ)](#consent-mitz)
 - [Authentication](#authentication)
 - [Authorization](#authorization)
-  - [Prerequisites](#prerequisites)
-  - [Evaluation](#evaluation)
-  - [Explicit consent using MITZ](#explicit-consent-using-mitz-de-gesloten-vraag)
-  - [Policy Information Point](#policy-information-point)
-  - [Security Considerations](#security-considerations)
+    - [Prerequisites](#prerequisites)
+    - [Evaluation](#evaluation)
+    - [Explicit consent using MITZ](#explicit-consent-using-mitz-de-gesloten-vraag)
+    - [Policy Information Point](#policy-information-point)
+    - [Security Considerations](#security-considerations)
 
 ---
 
@@ -169,7 +169,8 @@ The URA value must match the one you received from iRealisatie (see [Prerequisit
 
 ### Registering a List (via Bundle)
 
-To register a `List` resource wrapped in a transaction `Bundle` (see for example: [nvi.http](/docs/test-scripts/nvi.http)):
+To register a `List` resource wrapped in a transaction `Bundle` (see for
+example: [nvi.http](/docs/test-scripts/nvi.http)):
 
 ```http
 POST http://localhost:8081/nvi
@@ -180,7 +181,8 @@ The bundle must contain a `List` resource. The `subject.identifier` BSN is pseud
 
 ### Registering a List directly
 
-To register a `List` resource directly without wrapping it in a Bundle (see for example: [nvi.http](/docs/test-scripts/nvi.http)):
+To register a `List` resource directly without wrapping it in a Bundle (see for
+example: [nvi.http](/docs/test-scripts/nvi.http)):
 
 ```http
 POST http://localhost:8081/nvi/List
@@ -211,9 +213,9 @@ At least one of the following parameters is required:
 
 Additional optional parameters:
 
-| Parameter | Description                                        |
-|-----------|----------------------------------------------------|
-| `code`    | List category code (`http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs\|<value>`)           |
+| Parameter | Description                                                                                                        |
+|-----------|--------------------------------------------------------------------------------------------------------------------|
+| `code`    | List category code (`http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs\|<value>`) |
 
 BSN values in `patient:identifier` and `subject:identifier` are pseudonymized before forwarding to NVI.
 
@@ -241,15 +243,14 @@ At least one of the following parameters is required:
 
 Additional optional parameters:
 
-| Parameter | Description                                        |
-|-----------|----------------------------------------------------|
-| `code`    | List category code (`http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs\|<value>`)           |
+| Parameter | Description                                                                                                        |
+|-----------|--------------------------------------------------------------------------------------------------------------------|
+| `code`    | List category code (`http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs\|<value>`) |
 
 BSN values in `patient:identifier` and `subject:identifier` are pseudonymized before forwarding to NVI.
 Returns `204 No Content` on success.
 
 The file [nvi.http](/docs/test-scripts/nvi.http) in the repository contains additional examples.
-
 
 ## Consent MITZ
 
@@ -392,9 +393,12 @@ The EHR will need to:
 The Knooppunt will:
 
 - Perform access token request at remote EHRs for outbound data exchanges (Nuts node).
-    - If user is involved: take the attestation ("verklaring") the Dezi OIDC UserInfo object, to include in the access token request
+    - If user is involved: take the attestation ("verklaring") the Dezi OIDC UserInfo object, to include in the access
+      token request
 - Validate the organization credentials and end-user credential (Dezi) for inbound data exchanges (Nuts node).
-    - Note: make sure the Nuts node trusts the right Dezi JKU using the `vcr.dezi.allowedjku` property. See the [Nuts configuration guide](https://nuts-node.readthedocs.io/en/project-gf/pages/deployment/configuration.html#server-options) for more information.
+    - Note: make sure the Nuts node trusts the right Dezi JKU using the `vcr.dezi.allowedjku` property. See
+      the [Nuts configuration guide](https://nuts-node.readthedocs.io/en/project-gf/pages/deployment/configuration.html#server-options)
+      for more information.
 
 For more information on the Knooppunt's authentication endpoints, see
 the [Nuts node API reference](https://nuts-node.readthedocs.io/en/project-gf/pages/integrating/api.html).
@@ -417,7 +421,8 @@ Content-Type: application/json
 To provide an end-user identity, include the `id_token` field with the decrypted ID token from Dezi.
 If no end-user identity is required, you may omit the `id_token` field.
 
-Note that to successfully negotiate an access token, the local Nuts node must have been loaded with the right credentials.
+Note that to successfully negotiate an access token, the local Nuts node must have been loaded with the right
+credentials.
 Which credentials are required, depends on the use case.
 
 ### Verifying access tokens
@@ -461,7 +466,8 @@ Note that the returned fields depend on the Nuts Access Policy that was loaded i
 
 ## Authorization
 
-This chapter describes how to use the Knooppunt to support in making authorization decisions for data exchanges using its policy decision
+This chapter describes how to use the Knooppunt to support in making authorization decisions for data exchanges using
+its policy decision
 point (PDP). The PDP is called by the Policy Enforcement Point (PEP) on every inbound request.
 The PEP passes the [token introspection result](#verifying-access-tokens) together with details about the incoming
 request to the PDP, which then returns an allow/deny decision.
@@ -470,11 +476,13 @@ The supported policies are embedded, and can be found in `/component/pdp/policie
 
 ### Prerequisites
 
-- **Policy enforcement point (PEP)**: a reverse proxy (e.g. NGINX or HAProxy) that introspects incoming access tokens and calls the PDP. A reference NGINX implementation is available in the [/pep](/pep) directory.
+- **Policy enforcement point (PEP)**: a reverse proxy (e.g. NGINX or HAProxy) that introspects incoming access tokens
+  and calls the PDP. A reference NGINX implementation is available in the [/pep](/pep) directory.
 - **Policy information point (PIP)**: a FHIR R4 REST-compatible API for:
-  - policies that use implicit consent (e.g. eOverdracht)
-  - policies that use explicit consent from Mitz, which require looking up the patient BSN from the FHIR resource ID.
-- **MITZ**: the MITZ module must be configured for policies that require explicit patient consent (implemented through MITZ' _gesloten vraag_)
+    - policies that use implicit consent (e.g. eOverdracht)
+    - policies that use explicit consent from Mitz, which require looking up the patient BSN from the FHIR resource ID.
+- **MITZ**: the MITZ module must be configured for policies that require explicit patient consent (implemented through
+  MITZ' _gesloten vraag_)
 
 ### Evaluation
 
@@ -488,25 +496,26 @@ The endpoint can be reached on the internal port (`:8081`) of Knooppunt on `/pdp
 
 The request must be in JSON format, and can contain the following properties:
 
-| Field | Required | Description | Example |
-|---|---|---|---|
-| `subject.scope` | Required | Space-separated OAuth scopes that determine which policies are evaluated | `"bgz"` |
-| `subject.client_id` | Optional | Client identifier from the access token | `"https://example.com/oauth2"` |
-| `subject.organization_ura` | Required | URA of the requesting organization | `"00000666"` |
-| `subject.organization_name` | Optional | Name of the requesting organization | `"Hospital West"` |
-| `subject.organization_facility_type` | Optional | Facility type code of the requesting organization | `"Z3"` |
-| `subject.user_id` | Optional | Identifier of the end user; omit if no user is involved | `"000095254"` |
-| `subject.user_role` | Optional | Role code of the end user; omit if no user is involved | `"01.015"` |
-| `request.method` | Required | HTTP method | `"GET"` |
-| `request.protocol` | Required | HTTP protocol version | `"HTTP/1.0"` |
-| `request.path` | Required | Request path without query string | `"/Patient"` |
-| `request.query_params` | Optional | Query parameter names mapped to arrays of values | `{"_include": ["Patient:general-practitioner"]}` |
-| `context.connection_type_code` | Required | Type of connection; use `hl7-fhir-rest` for FHIR REST APIs | `"hl7-fhir-rest"` |
-| `context.data_holder_organization_id` | Required | URA of the organization that holds the data being requested | `"00000659"` |
-| `context.data_holder_facility_type` | Optional | Facility type code of the data-holding organization | `"Z3"` |
-| `context.patient_bsn` | Optional | BSN of the patient; may be omitted if the PIP is configured and the patient ID can be derived from the request path | `"900186021"` |
+| Field                                 | Required | Description                                                                                                         | Example                                          |
+|---------------------------------------|----------|---------------------------------------------------------------------------------------------------------------------|--------------------------------------------------|
+| `subject.scope`                       | Required | Space-separated OAuth scopes that determine which policies are evaluated                                            | `"bgz"`                                          |
+| `subject.client_id`                   | Optional | Client identifier from the access token                                                                             | `"https://example.com/oauth2"`                   |
+| `subject.organization_ura`            | Required | URA of the requesting organization                                                                                  | `"00000666"`                                     |
+| `subject.organization_name`           | Optional | Name of the requesting organization                                                                                 | `"Hospital West"`                                |
+| `subject.organization_facility_type`  | Optional | Facility type code of the requesting organization                                                                   | `"Z3"`                                           |
+| `subject.user_id`                     | Optional | Identifier of the end user; omit if no user is involved                                                             | `"000095254"`                                    |
+| `subject.user_role`                   | Optional | Role code of the end user; omit if no user is involved                                                              | `"01.015"`                                       |
+| `request.method`                      | Required | HTTP method                                                                                                         | `"GET"`                                          |
+| `request.protocol`                    | Required | HTTP protocol version                                                                                               | `"HTTP/1.0"`                                     |
+| `request.path`                        | Required | Request path without query string                                                                                   | `"/Patient"`                                     |
+| `request.query_params`                | Optional | Query parameter names mapped to arrays of values                                                                    | `{"_include": ["Patient:general-practitioner"]}` |
+| `context.connection_type_code`        | Required | Type of connection; use `hl7-fhir-rest` for FHIR REST APIs                                                          | `"hl7-fhir-rest"`                                |
+| `context.data_holder_organization_id` | Required | URA of the organization that holds the data being requested                                                         | `"00000659"`                                     |
+| `context.data_holder_facility_type`   | Optional | Facility type code of the data-holding organization                                                                 | `"Z3"`                                           |
+| `context.patient_bsn`                 | Optional | BSN of the patient; may be omitted if the PIP is configured and the patient ID can be derived from the request path | `"900186021"`                                    |
 
-The `subject` can be set directly to the claims from the token introspection response (see [Verifying access tokens](#verifying-access-tokens)) — no transformation needed.
+The `subject` can be set directly to the claims from the token introspection response (
+see [Verifying access tokens](#verifying-access-tokens)) — no transformation needed.
 
 An example requests looks like this:
 
@@ -548,14 +557,14 @@ The response is a JSON object. The PEP must use the root `allow` field to allow 
 
 The `policies` field is informational (e.g. for logging) and shows the result per policy.
 
-| Field | Description |
-|---|---|
-| `allow` | `true` if the request is allowed, `false` otherwise |
-| `policies` | Object containing the result per evaluated policy |
-| `policies.<name>.allow` | Whether this policy allowed the request |
-| `policies.<name>.reasons` | Array of reasons explaining the decision |
-| `policies.<name>.reasons[].code` | Reason code (e.g. `not_allowed`, `pip_error`, `info`) |
-| `policies.<name>.reasons[].description` | Human-readable explanation |
+| Field                                   | Description                                           |
+|-----------------------------------------|-------------------------------------------------------|
+| `allow`                                 | `true` if the request is allowed, `false` otherwise   |
+| `policies`                              | Object containing the result per evaluated policy     |
+| `policies.<name>.allow`                 | Whether this policy allowed the request               |
+| `policies.<name>.reasons`               | Array of reasons explaining the decision              |
+| `policies.<name>.reasons[].code`        | Reason code (e.g. `not_allowed`, `pip_error`, `info`) |
+| `policies.<name>.reasons[].description` | Human-readable explanation                            |
 
 Example response:
 
@@ -578,7 +587,8 @@ Example response:
 
 ### Explicit consent using MITZ (_de gesloten vraag_)
 
-Some policies like `bgz` query MITZ (_de gesloten vraag_) to verify whether the patient has given consent for this exchange.
+Some policies like `bgz` query MITZ (_de gesloten vraag_) to verify whether the patient has given consent for this
+exchange.
 
 For this to work you will need to configure the Mitz module of Knooppunt and integrate a policy information point (see
 above). Otherwise, access will be rejected.
@@ -589,10 +599,19 @@ To come to a policy decision the PDP might need additional information from a po
 
 Read our [configuration guide](/docs/CONFIGURATION.md) to see the options for configuring this endpoint.
 
-The PIP is a FHIR R4 REST-compatible API used for two purposes:
+The PIP must be a FHIR R4 REST-compatible API. It is called exclusively by the Knooppunt and must not be
+accessible to external parties (see [Security Considerations](#security-considerations)).
 
-1. **Patient BSN lookup**: to find a patient's BSN given their FHIR resource ID patient.
-2. **Implied consent lookup**: to find consents giving access to the requested FHIR resource. 
+The PIP must support the following capabilities:
+
+| # | Capability             | Endpoint                                        | Required                                          |
+|---|------------------------|-------------------------------------------------|---------------------------------------------------|
+| 1 | Patient BSN lookup     | `GET /Patient/{id}?_elements=identifier`        | Always                                            |
+| 2 | Implied consent search | `GET /Consent?data={ResourceType}/{resourceId}` | Always                                            |
+| 3 | Resource content fetch | `GET /{ResourceType}/{id}`                      | Only when `pdp.pip.resourcecontentenabled = true` |
+
+A FHIR CapabilityStatement for the PIP server is available at
+[/docs/pip-capability-statement.json](/docs/pip-capability-statement.json).
 
 #### Patient BSN Lookup
 
@@ -640,18 +659,18 @@ scope `eoverdracht` permits the requesting organization to access the specific r
 
 For a Consent resource to influence the policy decision, it must satisfy all of the following conditions:
 
-| Field | Required value |
-|---|---|
-| `status` | `active` |
-| `scope.coding[0].code` | The policy scope (e.g. `eoverdracht`) |
-| `scope.coding[0].system` | `http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-consent-scope` |
-| `organization[].identifier.system` | `http://fhir.nl/fhir/NamingSystem/ura` |
-| `organization[].identifier.value` | URA of the data-holding organization (`context.data_holder_organization_id`) |
-| `provision.type` | `permit` or `deny` |
-| `provision.action[].coding` | Must include code `access` from system `http://terminology.hl7.org/CodeSystem/consentaction` |
-| `provision.actor[].reference.identifier.system` | `http://fhir.nl/fhir/NamingSystem/ura` |
-| `provision.actor[].reference.identifier.value` | URA of the requesting organization (`subject.organization.ura`) |
-| `provision.data[].reference.reference` | Reference to the governed resource (e.g. `Task/12AF22F3-...`) |
+| Field                                           | Required value                                                                               |
+|-------------------------------------------------|----------------------------------------------------------------------------------------------|
+| `status`                                        | `active`                                                                                     |
+| `scope.coding[0].code`                          | The policy scope (e.g. `eoverdracht`)                                                        |
+| `scope.coding[0].system`                        | `http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-consent-scope`    |
+| `organization[].identifier.system`              | `http://fhir.nl/fhir/NamingSystem/ura`                                                       |
+| `organization[].identifier.value`               | URA of the data-holding organization (`context.data_holder_organization_id`)                 |
+| `provision.type`                                | `permit` or `deny`                                                                           |
+| `provision.action[].coding`                     | Must include code `access` from system `http://terminology.hl7.org/CodeSystem/consentaction` |
+| `provision.actor[].reference.identifier.system` | `http://fhir.nl/fhir/NamingSystem/ura`                                                       |
+| `provision.actor[].reference.identifier.value`  | URA of the requesting organization (`subject.organization.ura`)                              |
+| `provision.data[].reference.reference`          | Reference to the governed resource (e.g. `Task/12AF22F3-...`)                                |
 
 Only Consent resources where **both** the data holder's URA matches `context.data_holder_organization_id`
 **and** the actor's URA matches `subject.organization.ura` are applied to the policy decision.
@@ -659,6 +678,7 @@ Only Consent resources where **both** the data holder's URA matches `context.dat
 ##### Ruling Precedence
 
 When multiple matching Consent resources exist for the same scope:
+
 - **`deny` supersedes `permit`**: if any Consent has `provision.type = deny` for a given scope, that scope is
   denied even if a `permit` Consent with equal specificity also exists.
 
@@ -732,6 +752,35 @@ Note that some fields required by FHIR R4 but ignored by the PDP are omitted for
 When the PDP evaluates a request for `Task/12AF22F3-2DE5-47E1-B3CB-B053C8621F84`, it calls
 `GET /Consent?data=Task/12AF22F3-2DE5-47E1-B3CB-B053C8621F84` on the PIP, finds this Consent,
 and uses it to evaluate the `eoverdracht_sender` policy, which then allows the request.
+
+#### Resource Content Fetch
+
+When `pdp.pip.resourcecontentenabled = true`, the PDP fetches the full content of the targeted resource and
+makes it available to policies as `resource.content`. This allows policies to make decisions based on the
+actual data in the resource.
+
+The PDP performs the following call:
+
+```http
+GET /{ResourceType}/{id}
+```
+
+The response must be the full FHIR resource in JSON format. Example:
+
+```http
+GET /Task/12AF22F3-2DE5-47E1-B3CB-B053C8621F84
+```
+
+```json
+{
+  "resourceType": "Task",
+  "id": "12AF22F3-2DE5-47E1-B3CB-B053C8621F84",
+  "status": "requested",
+  "..."
+}
+```
+
+This capability is disabled by default and only needs to be supported when the feature flag is enabled.
 
 ### Security Considerations
 
