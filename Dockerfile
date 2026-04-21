@@ -24,7 +24,8 @@ FROM alpine:3.22.0
 RUN apk update \
   && apk add --no-cache \
   tzdata \
-  curl
+  curl \
+  ca-certificates
 
 # add the trusted CAs to the image
 COPY pki/cacerts/* /usr/local/share/ca-certificates/
