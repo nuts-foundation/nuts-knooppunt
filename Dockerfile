@@ -25,6 +25,11 @@ RUN apk update \
   && apk add --no-cache \
   tzdata \
   curl
+
+# add the trusted CAs to the image
+COPY pki/cacerts/* /usr/local/share/ca-certificates/
+RUN update-ca-certificates
+
 COPY --from=builder /app/bin /app/bin
 
 HEALTHCHECK --start-period=30s --timeout=5s --interval=10s \
