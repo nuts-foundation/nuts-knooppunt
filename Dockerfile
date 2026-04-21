@@ -24,7 +24,13 @@ FROM alpine:3.22.0
 RUN apk update \
   && apk add --no-cache \
   tzdata \
-  curl
+  curl \
+  ca-certificates
+
+# add the trusted CAs to the image
+COPY pki/cacerts/* /usr/local/share/ca-certificates/
+RUN update-ca-certificates
+
 COPY --from=builder /app/bin /app/bin
 
 HEALTHCHECK --start-period=30s --timeout=5s --interval=10s \
