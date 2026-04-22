@@ -111,6 +111,9 @@ function buildPDPRequest(introspection, request) {
     } else if (requestPath === fhirBasePath) {
         requestPath = '/';
     }
+
+    const contentTypeValue = request.headersIn['Content-Type'] || request.headersIn['content-type'] || '';
+    const contentType = contentTypeValue ? [contentTypeValue] : [''];
     
     return {
         input: {
@@ -120,7 +123,9 @@ function buildPDPRequest(introspection, request) {
                 protocol: 'HTTP/1.1',
                 path: requestPath || '/',
                 query: queryString || '',
-                header: {},
+                header: {
+                    "Content-Type": contentType
+                },
                 body: request.requestText || ''
             },
             context: {
@@ -192,25 +197,23 @@ async function validateDPoP(request, introspection) {
 }
 
 /**
- * Main authorization function called by NGINX auth_request
+ * Main authorization routine used by request handlers
  * @param {Object} request - NGINX request object
  */
-async function checkAuthorization(request) {
+async function authorizeRequest(request) {
     try {
         // Step 1: Extract token from Authorization header
         const token = extractBearerToken(request);
         if (!token) {
             request.error('Missing or invalid Authorization header');
-            request.return(401);
-            return;
+            return { allowed: false, status: 401 };
         }
 
         // RFC 9449: If using DPoP authorization scheme, DPoP header is required
         const tokenType = getTokenType(request);
         if (tokenType === 'dpop' && !request.headersIn['DPoP']) {
             request.error('DPoP authorization scheme requires DPoP header');
-            request.return(401);
-            return;
+            return { allowed: false, status: 401 };
         }
 
         // Step 2: Introspect token via Nuts node (RFC 7662)
@@ -222,14 +225,12 @@ async function checkAuthorization(request) {
             });
         } catch (e) {
             request.error(`Token introspection failed: ${e}`);
-            request.return(502);
-            return;
+            return { allowed: false, status: 502 };
         }
 
         if (introspectionResponse.status !== 200) {
             request.error(`Token introspection returned ${introspectionResponse.status}`);
-            request.return(introspectionResponse.status === 401 ? 401 : 502);
-            return;
+            return { allowed: false, status: introspectionResponse.status === 401 ? 401 : 502 };
         }
 
         let introspection;
@@ -237,14 +238,12 @@ async function checkAuthorization(request) {
             introspection = JSON.parse(introspectionResponse.responseText);
         } catch (e) {
             request.error(`Invalid introspection response: ${e}`);
-            request.return(502);
-            return;
+            return { allowed: false, status: 502 };
         }
 
         if (!introspection.active) {
             request.error('Token is not active');
-            request.return(401);
-            return;
+            return { allowed: false, status: 401 };
         }
 
         request.log(`Token active: client_id=${introspection.client_id}, scope=${introspection.scope}`);
@@ -253,8 +252,7 @@ async function checkAuthorization(request) {
         const dpopResult = await validateDPoP(request, introspection);
         if (!dpopResult.valid) {
             request.error(`DPoP validation failed: ${dpopResult.reason}`);
-            request.return(401);
-            return;
+            return { allowed: false, status: 401 };
         }
 
         // Step 4: Build PDPInput request
@@ -273,14 +271,12 @@ async function checkAuthorization(request) {
             });
         } catch (e) {
             request.error(`PDP unreachable: ${e}`);
-            request.return(502);
-            return;
+            return { allowed: false, status: 502 };
         }
 
         if (pdpResponse.status !== 200) {
             request.error(`PDP returned ${pdpResponse.status}`);
-            request.return(502);
-            return;
+            return { allowed: false, status: 502 };
         }
 
         let pdpResult;
@@ -288,35 +284,51 @@ async function checkAuthorization(request) {
             pdpResult = JSON.parse(pdpResponse.responseText);
         } catch (e) {
             request.error(`Invalid PDP response: ${e}`);
-            request.return(502);
-            return;
+            return { allowed: false, status: 502 };
         }
 
         // Validate PDP response schema
         if (typeof pdpResult.allow !== 'boolean') {
             request.error(`Malformed PDP response: missing allow boolean`);
-            request.return(502);
-            return;
+            return { allowed: false, status: 502 };
         }
 
         // Step 6: Enforce decision
         if (pdpResult.allow === true) {
             request.log('Access ALLOWED by PDP');
-            request.return(200);
+            return { allowed: true, status: 200 };
         } else {
             const reasons = pdpResult.reasons ? pdpResult.reasons : [];
             request.warn(`Access DENIED by PDP: ${JSON.stringify(reasons)}`);
-            request.return(403);
+            return { allowed: false, status: 403 };
         }
 
     } catch (e) {
         request.error(`Authorization error: ${e}`);
-        request.return(500);
+        return { allowed: false, status: 500 };
     }
 }
 
+/**
+ * Authorize current request and proxy to the FHIR backend if allowed.
+ * This runs in the main request context (not auth_request subrequest), so
+ * request.requestText contains the original client body when buffered in memory.
+ * @param {Object} request - NGINX request object
+ */
+async function authorizeAndProxy(request) {
+    const decision = await authorizeRequest(request);
+
+    if (!decision.allowed) {
+        request.return(decision.status);
+        return;
+    }
+
+    request.internalRedirect('@fhir_backend_proxy');
+}
+
 export default {
-    checkAuthorization,
+    authorizeRequest,
+    authorizeAndProxy,
     extractBearerToken,
     getTokenType,
     normalizeClaimValue,
