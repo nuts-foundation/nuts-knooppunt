@@ -88,7 +88,7 @@ func Test_PEPAuthorization(t *testing.T) {
 	})
 
 	authServer := pep.NutsPublicURL.JoinPath("oauth2", subjectName).String()
-	const scope = "medicatieoverdracht"
+	const scope = "medicatieoverdracht-gf"
 
 	// Get Bearer token
 	bearerToken := requestAccessToken(t, pep.NutsAPI, subjectName, authServer, scope, "Bearer")
