@@ -18,6 +18,20 @@
       "mode": "server",
       "resource": [
         {
+          "type": "Patient",
+          "interaction": [
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "identifier",
+              "type": "token"
+            }
+          ]
+        },
+        {
           "type": "MedicationRequest",
           "interaction": [
             {
