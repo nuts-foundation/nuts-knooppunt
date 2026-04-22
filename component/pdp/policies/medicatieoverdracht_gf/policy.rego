@@ -1,4 +1,4 @@
-package medicatieoverdracht
+package medicatieoverdracht_gf
 
 import rego.v1
 

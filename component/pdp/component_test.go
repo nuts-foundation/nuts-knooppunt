@@ -624,7 +624,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			})
 		}
 	})
-	t.Run("medicatieoverdracht", func(t *testing.T) {
+	t.Run("medicatieoverdracht_gf", func(t *testing.T) {
 		testCases := []testCase{
 			{
 				name:        "BSN enriched from PIP allows bgz request",
@@ -634,7 +634,7 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			},
 			{
 				name:        "OtherProps flow through to policy input",
-				scope:       "medicatieoverdracht",
+				scope:       "medicatieoverdracht_gf",
 				httpRequest: `GET /MedicationRequest?category=http://snomed.info/sct|422037009&_include=MedicationRequest:medication&patient=Patient/1000`,
 				decision:    true,
 				properties: map[string]any{
