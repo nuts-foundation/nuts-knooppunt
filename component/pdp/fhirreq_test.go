@@ -450,6 +450,54 @@ func TestNewPolicyInput(t *testing.T) {
 			assert.Equal(t, "900186021", policyInput.Context.PatientBSN)
 			assert.Empty(t, resultReasons)
 		})
+		t.Run("in POST body, Content-Type variants", func(t *testing.T) {
+			// The PDP is the defensive boundary: it must tolerate RFC 7231-legal
+			// Content-Type variants (parameters, whitespace, case) regardless of
+			// how or whether an individual PEP normalizes the header.
+			cases := []struct {
+				name          string
+				contentType   string
+				expectAsForm  bool
+			}{
+				{"charset parameter with space (HAPI FHIR)", "application/x-www-form-urlencoded; charset=UTF-8", true},
+				{"charset parameter without space", "application/x-www-form-urlencoded;charset=utf-8", true},
+				{"uppercase media type", "APPLICATION/X-WWW-FORM-URLENCODED", true},
+				{"trailing whitespace", "application/x-www-form-urlencoded  ", true},
+				{"multipart/form-data is not form-encoded", "multipart/form-data; boundary=abc", false},
+				{"application/json is not form-encoded", "application/json", false},
+				{"malformed header falls through", "not a valid media type", false},
+			}
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					pdpRequest := APIRequest{
+						Input: APIInput{
+							Request: HTTPRequest{
+								Method:   "POST",
+								Protocol: "HTTP/1.1",
+								Path:     "/Patient/_search",
+								Header: http.Header{
+									"Content-Type": []string{tc.contentType},
+								},
+								Body: "identifier=http://fhir.nl/fhir/NamingSystem/bsn|900186021",
+							},
+							Context: APIContext{
+								ConnectionTypeCode: "hl7-fhir-rest",
+							},
+						},
+					}
+					policyInput, resultReasons := NewPolicyInput(pdpRequest)
+					require.NotNil(t, policyInput)
+					assert.Empty(t, resultReasons)
+					if tc.expectAsForm {
+						assert.Equal(t, "900186021", policyInput.Context.PatientBSN,
+							"body should be parsed as form data for %q", tc.contentType)
+					} else {
+						assert.Empty(t, policyInput.Context.PatientBSN,
+							"body should NOT be parsed as form data for %q", tc.contentType)
+					}
+				})
+			}
+		})
 		t.Run("in POST body, unencoded (pipe character)", func(t *testing.T) {
 			pdpRequest := APIRequest{
 				Input: APIInput{
