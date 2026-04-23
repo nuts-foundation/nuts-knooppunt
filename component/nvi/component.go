@@ -305,7 +305,13 @@ func (c Component) handleDeleteListByParams(httpResponse http.ResponseWriter, ht
 		return
 	}
 
-	err = fhirClient.DeleteWithContext(httpRequest.Context(), "List?"+deleteParams.Encode())
+	var deleteOpts []fhirclient.Option
+	for key, values := range deleteParams {
+		for _, value := range values {
+			deleteOpts = append(deleteOpts, fhirclient.QueryParam(key, value))
+		}
+	}
+	err = fhirClient.DeleteWithContext(httpRequest.Context(), "List", deleteOpts...)
 	if err != nil {
 		err = &fhirapi.Error{
 			Message:   "Failed to delete List at NVI",
