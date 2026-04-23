@@ -451,9 +451,12 @@ func NewPolicyInput(request APIRequest) (*PolicyInput, error) {
 	var rawParams url.Values
 	// Parse Content-Type per RFC 7231 so callers may include parameters
 	// (e.g. "; charset=UTF-8" sent by HAPI FHIR clients). A malformed
-	// header yields an empty mediaType, which correctly falls through
-	// to the query-string branch.
-	mediaType, _, _ := mime.ParseMediaType(request.Input.Request.Header.Get("Content-Type"))
+	// header is treated as non-form and correctly falls through to the
+	// query-string branch.
+	mediaType, _, err := mime.ParseMediaType(request.Input.Request.Header.Get("Content-Type"))
+	if err != nil {
+		mediaType = ""
+	}
 	hasFormData := mediaType == "application/x-www-form-urlencoded"
 	interWithBody := []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionSearchType,
