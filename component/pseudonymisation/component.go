@@ -95,13 +95,13 @@ func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identi
 }
 
 type subjectIdentifier struct {
-	BlindFactor     []byte `json:"blind_factor"`
+	BlindFactor     string `json:"blind_factor"`
 	EvaluatedOutput string `json:"evaluated_output"`
 }
 
 func marshalSubjectIdentifier(blindFactor []byte, evaluatedOutput string) (string, error) {
 	data, err := json.Marshal(subjectIdentifier{
-		BlindFactor:     blindFactor,
+		BlindFactor:     base64.RawURLEncoding.EncodeToString(blindFactor),
 		EvaluatedOutput: evaluatedOutput,
 	})
 	if err != nil {
@@ -119,7 +119,7 @@ type prsIdentifier struct {
 type prsEvaluateRequest struct {
 	RecipientOrganization string `json:"recipientOrganization"`
 	RecipientScope        string `json:"recipientScope"`
-	EncryptedPersonalID   []byte `json:"encryptedPersonalId"`
+	EncryptedPersonalID   string `json:"encryptedPersonalId"`
 }
 
 type prsEvaluateResponse struct {
@@ -136,7 +136,7 @@ func (c Component) callPRSEvaluate(ctx context.Context, localOrganizationURA str
 	requestBody := prsEvaluateRequest{
 		RecipientOrganization: "ura:" + recipientURA,
 		RecipientScope:        scope,
-		EncryptedPersonalID:   blindedInputData,
+		EncryptedPersonalID:   base64.RawURLEncoding.EncodeToString(blindedInputData),
 	}
 
 	bodyBytes, err := json.Marshal(requestBody)
