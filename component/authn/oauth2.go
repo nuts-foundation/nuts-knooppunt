@@ -141,8 +141,8 @@ func (t tokenSource) Token() (*oauth2.Token, error) {
 		"grant_type":              {"client_credentials"},
 		"scope":                   {strings.Join(t.scope, " ")},
 		"target_audience":         {t.targetAudience},
-		"client_assertion_type": {"urn:ietf:params:oauth:client-assertion-type:jwt-bearer"},
-		"client_assertion":      {string(jwtGrantTokenSigned)},
+		"client_credentials_type": {"urn:ietf:params:oauth:client-assertion-type:jwt-bearer"},
+		"client_credentials":      {string(jwtGrantTokenSigned)},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("request token: %w", err)
