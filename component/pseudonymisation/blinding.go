@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/cloudflare/circl/oprf"
 )
@@ -22,12 +21,8 @@ func deriveKey(identifier prsIdentifier, recipientOrganizationURA string, recipi
 		// can't happen
 		return nil, err
 	}
-	// Match Python json.dumps default: spaces after separators.
-	// Required because the PRS reference implementation uses this format for HKDF input.
-	identifierJSONSpaced := strings.ReplaceAll(string(identifierJSON), ",", ", ")
-	identifierJSONSpaced = strings.ReplaceAll(identifierJSONSpaced, ":", ": ")
 
-	key, err := hkdf.Key(sha256.New, []byte(identifierJSONSpaced), nil, info, sha256.Size)
+	key, err := hkdf.Key(sha256.New, identifierJSON, nil, info, sha256.Size)
 	if err != nil {
 		return nil, fmt.Errorf("deriving key: %w", err)
 	}
