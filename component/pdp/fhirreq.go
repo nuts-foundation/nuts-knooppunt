@@ -3,6 +3,7 @@ package pdp
 import (
 	"errors"
 	"fmt"
+	"mime"
 	"net/url"
 	"regexp"
 	"slices"
@@ -448,10 +449,15 @@ func NewPolicyInput(request APIRequest) (*PolicyInput, error) {
 	}
 
 	var rawParams url.Values
-	contentTypeParts := strings.Split(request.Input.Request.Header.Get("Content-Type"), ";")
-	hasFormData := slices.ContainsFunc(contentTypeParts, func(part string) bool {
-		return strings.TrimSpace(part) == "application/x-www-form-urlencoded"
-	})
+	// Parse Content-Type per RFC 7231 so callers may include parameters
+	// (e.g. "; charset=UTF-8" sent by HAPI FHIR clients). A malformed
+	// header is treated as non-form and correctly falls through to the
+	// query-string branch.
+	mediaType, _, err := mime.ParseMediaType(request.Input.Request.Header.Get("Content-Type"))
+	if err != nil {
+		mediaType = ""
+	}
+	hasFormData := mediaType == "application/x-www-form-urlencoded"
 	interWithBody := []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionSearchType,
 		fhir.TypeRestfulInteractionOperation,

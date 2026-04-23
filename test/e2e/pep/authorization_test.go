@@ -2,7 +2,10 @@ package pep
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -54,7 +57,7 @@ func Test_PEPAuthorization(t *testing.T) {
 		TestDataDir: testdataDir,
 	})
 
-	createTestPatient(t, pep.HAPIBaseURL)
+	createTestPatient(t, pep.HAPIBaseURL, "patient-123", "900186021")
 
 	subjectName := "requester"
 	subjectDID := createSubject(t, pep.NutsAPI, subjectName)
@@ -186,6 +189,89 @@ func Test_PEPAuthorization(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+
+	// Regression for #492: POST _search with form-encoded body must be authorized
+	// based on parameters in the body (not the empty query string) and the body
+	// must survive nginx's internalRedirect to the FHIR backend. HAPI FHIR clients
+	// send Content-Type with a charset suffix, so that variant is asserted here.
+	//
+	// The HAPI container is reused across go test runs, so the patient/medication
+	// are seeded with per-run unique IDs (same BSN, so the enrollment credential
+	// still matches) and cleaned up in t.Cleanup. Filtering by the unique patient
+	// reference isolates the assertion from any stale data from prior runs.
+	t.Run("authorized POST _search with form-encoded body and charset", func(t *testing.T) {
+		pep.MockMitz.SetResponse("Permit", "Consent granted")
+
+		suffix := randomSuffix(t)
+		patientID := "pep-post-search-patient-" + suffix
+		medID := "pep-post-search-med-" + suffix
+
+		createTestPatient(t, pep.HAPIBaseURL, patientID, "900186021")
+		createTestMedicationRequest(t, pep.HAPIBaseURL, medID, patientID)
+		t.Cleanup(func() {
+			deleteHAPIResource(t, pep.HAPIBaseURL, "MedicationRequest", medID)
+			deleteHAPIResource(t, pep.HAPIBaseURL, "Patient", patientID)
+		})
+
+		form := url.Values{}
+		form.Set("patient", "Patient/"+patientID)
+
+		targetURL := pepBaseURL.JoinPath("fhir", "MedicationRequest", "_search").String()
+		req, err := http.NewRequest("POST", targetURL, strings.NewReader(form.Encode()))
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+bearerToken.AccessToken)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		require.Equal(t, http.StatusOK, resp.StatusCode,
+			"POST _search must be allowed: PDP needs to see the body-derived patient parameter. Response: %s", string(body))
+		assert.True(t, strings.HasPrefix(resp.Header.Get("Content-Type"), "application/fhir+json"),
+			"Response Content-Type should be FHIR JSON, got %q", resp.Header.Get("Content-Type"))
+
+		var bundle struct {
+			ResourceType string `json:"resourceType"`
+			Entry        []struct {
+				Resource struct {
+					ResourceType string `json:"resourceType"`
+					ID           string `json:"id"`
+				} `json:"resource"`
+			} `json:"entry"`
+		}
+		require.NoError(t, json.Unmarshal(body, &bundle), "response must be a FHIR Bundle: %s", string(body))
+		assert.Equal(t, "Bundle", bundle.ResourceType)
+
+		// Filter is on a per-run unique patient reference. Body preservation through
+		// internalRedirect is the only way HAPI can narrow to exactly this one entry;
+		// an empty or dropped body would yield either an error or an unrelated page.
+		require.Len(t, bundle.Entry, 1, "expected exactly 1 MedicationRequest, got %d: %s", len(bundle.Entry), string(body))
+		assert.Equal(t, "MedicationRequest", bundle.Entry[0].Resource.ResourceType)
+		assert.Equal(t, medID, bundle.Entry[0].Resource.ID)
+	})
+
+	t.Run("denied POST _search when body is empty (no patient derivable)", func(t *testing.T) {
+		// Mitz is irrelevant here: the policy must already deny on missing patient context.
+		// This locks in fail-closed behavior on the body-derived path.
+		pep.MockMitz.SetResponse("Permit", "Consent granted")
+
+		targetURL := pepBaseURL.JoinPath("fhir", "MedicationRequest", "_search").String()
+		req, err := http.NewRequest("POST", targetURL, strings.NewReader(""))
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+bearerToken.AccessToken)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode,
+			"empty body means no patient context; policy must deny")
 	})
 }
 
@@ -380,23 +466,31 @@ func introspectToken(t *testing.T, nutsAPI func(string) string, token string) ma
 	return result
 }
 
-func createTestPatient(t *testing.T, hapiURL *url.URL) {
+// createTestPatient creates (or replaces) a Patient in HAPI. If bsn is empty,
+// the identifier block is omitted so the helper can also seed a bare patient
+// whose BSN is irrelevant to the test.
+func createTestPatient(t *testing.T, hapiURL *url.URL, id, bsn string) {
 	t.Helper()
 
-	patientJSON := `{
-		"resourceType": "Patient",
-		"id": "patient-123",
+	identifierBlock := ""
+	if bsn != "" {
+		identifierBlock = fmt.Sprintf(`,
 		"identifier": [{
 			"system": "http://fhir.nl/fhir/NamingSystem/bsn",
-			"value": "900186021"
-		}],
+			"value": %q
+		}]`, bsn)
+	}
+
+	patientJSON := fmt.Sprintf(`{
+		"resourceType": "Patient",
+		"id": %q%s,
 		"name": [{
 			"family": "Test",
 			"given": ["Patient"]
 		}]
-	}`
+	}`, id, identifierBlock)
 
-	req, err := http.NewRequest("PUT", hapiURL.JoinPath("DEFAULT", "Patient", "patient-123").String(), strings.NewReader(patientJSON))
+	req, err := http.NewRequest("PUT", hapiURL.JoinPath("DEFAULT", "Patient", id).String(), strings.NewReader(patientJSON))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/fhir+json")
 
@@ -404,4 +498,47 @@ func createTestPatient(t *testing.T, hapiURL *url.URL) {
 	require.NoError(t, err)
 	resp.Body.Close()
 	require.Contains(t, []int{http.StatusOK, http.StatusCreated}, resp.StatusCode)
+}
+
+func createTestMedicationRequest(t *testing.T, hapiURL *url.URL, id, patientID string) {
+	t.Helper()
+
+	medJSON := fmt.Sprintf(`{
+		"resourceType": "MedicationRequest",
+		"id": %q,
+		"status": "active",
+		"intent": "order",
+		"medicationCodeableConcept": {"text": "test medication"},
+		"subject": {"reference": "Patient/%s"}
+	}`, id, patientID)
+
+	req, err := http.NewRequest("PUT", hapiURL.JoinPath("DEFAULT", "MedicationRequest", id).String(), strings.NewReader(medJSON))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/fhir+json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	resp.Body.Close()
+	require.Contains(t, []int{http.StatusOK, http.StatusCreated}, resp.StatusCode)
+}
+
+func deleteHAPIResource(t *testing.T, hapiURL *url.URL, resourceType, id string) {
+	t.Helper()
+
+	req, err := http.NewRequest("DELETE", hapiURL.JoinPath("DEFAULT", resourceType, id).String(), nil)
+	require.NoError(t, err)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	resp.Body.Close()
+	// HAPI returns 200 or 204 on success, 404 if already deleted — all acceptable for cleanup.
+	require.Contains(t, []int{http.StatusOK, http.StatusNoContent, http.StatusNotFound}, resp.StatusCode)
+}
+
+func randomSuffix(t *testing.T) string {
+	t.Helper()
+	var b [6]byte
+	_, err := rand.Read(b[:])
+	require.NoError(t, err)
+	return hex.EncodeToString(b[:])
 }
