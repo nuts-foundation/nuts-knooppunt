@@ -119,7 +119,7 @@ type prsIdentifier struct {
 type prsEvaluateRequest struct {
 	RecipientOrganization string `json:"recipientOrganization"`
 	RecipientScope        string `json:"recipientScope"`
-	EncryptedPersonalID   string `json:"encryptedPersonalId"`
+	EncryptedPersonalID   []byte `json:"encryptedPersonalId"`
 }
 
 type prsEvaluateResponse struct {
@@ -136,7 +136,7 @@ func (c Component) callPRSEvaluate(ctx context.Context, localOrganizationURA str
 	requestBody := prsEvaluateRequest{
 		RecipientOrganization: "ura:" + recipientURA,
 		RecipientScope:        scope,
-		EncryptedPersonalID:   base64.RawURLEncoding.EncodeToString(blindedInputData),
+		EncryptedPersonalID:   blindedInputData,
 	}
 
 	bodyBytes, err := json.Marshal(requestBody)
