@@ -51,8 +51,17 @@ requester_has_enrolled_patient if {
     concat("", ["http://fhir.nl/fhir/NamingSystem/bsn|", input.context.patient_bsn]) == input.subject.patient_enrollment_identifier
 }
 
-# GET [base]/MedicationRequest
+# GET [base]/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|{value}
 default is_allowed_query := false
+is_allowed_query if {
+    input.resource.type == "Patient"
+    input.action.fhir_rest.interaction_type == "search-type"
+    is_string(input.context.patient_bsn)
+    input.context.patient_bsn != ""
+    startswith(input.action.fhir_rest.search_params.identifier[0][0], "http://fhir.nl/fhir/NamingSystem/bsn|")
+}
+
+# GET [base]/MedicationRequest
 is_allowed_query if {
     input.resource.type == "MedicationRequest"
     input.action.fhir_rest.interaction_type == "search-type"

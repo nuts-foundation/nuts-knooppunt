@@ -18,6 +18,20 @@ base_input := {
 	"subject": {"patient_enrollment_identifier": "http://fhir.nl/fhir/NamingSystem/bsn|999999999"},
 }
 
+base_patient_input := {
+	"action": {"fhir_rest": {
+		"capability_checked": true,
+		"interaction_type": "search-type",
+		"search_params": {"identifier": [["http://fhir.nl/fhir/NamingSystem/bsn|999999999"]]},
+	}},
+	"context": {
+		"mitz_consent": true,
+		"patient_bsn": "999999999",
+	},
+	"resource": {"type": "Patient"},
+	"subject": {"patient_enrollment_identifier": "http://fhir.nl/fhir/NamingSystem/bsn|999999999"},
+}
+
 # Direct rule tests for requester_has_enrolled_patient (complex BSN concatenation logic)
 
 test_requester_has_enrolled_patient_valid if {
@@ -56,8 +70,22 @@ test_allow_with_patient_bsn_identifier if {
 	medicatieoverdracht_gf.allow with input as object.union(base_input, {"context": {"patient_id": ""}})
 }
 
-test_deny_wrong_resource_type if {
-	not medicatieoverdracht_gf.allow with input as object.union(base_input, {"resource": {"type": "Patient"}})
+test_allow_patient_bsn_search if {
+	medicatieoverdracht_gf.allow with input as base_patient_input
+}
+
+test_deny_patient_search_without_mitz_consent if {
+	not medicatieoverdracht_gf.allow with input as object.union(base_patient_input, {"context": {"mitz_consent": false, "patient_bsn": "999999999"}})
+}
+
+test_deny_patient_search_empty_bsn if {
+	not medicatieoverdracht_gf.allow with input as object.union(base_patient_input, {"context": {"mitz_consent": true, "patient_bsn": ""}})
+}
+
+test_deny_patient_search_wrong_identifier_system if {
+	not medicatieoverdracht_gf.allow with input as object.union(base_patient_input, {
+		"action": {"fhir_rest": {"capability_checked": true, "interaction_type": "search-type", "search_params": {"identifier": [["http://other-system|999999999"]]}}},
+	})
 }
 
 test_deny_wrong_interaction_type if {
