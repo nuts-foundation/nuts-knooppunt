@@ -448,7 +448,10 @@ func NewPolicyInput(request APIRequest) (*PolicyInput, error) {
 	}
 
 	var rawParams url.Values
-	hasFormData := request.Input.Request.Header.Get("Content-Type") == "application/x-www-form-urlencoded"
+	contentTypeParts := strings.Split(request.Input.Request.Header.Get("Content-Type"), ";")
+	hasFormData := slices.ContainsFunc(contentTypeParts, func(part string) bool {
+		return strings.TrimSpace(part) == "application/x-www-form-urlencoded"
+	})
 	interWithBody := []fhir.TypeRestfulInteraction{
 		fhir.TypeRestfulInteractionSearchType,
 		fhir.TypeRestfulInteractionOperation,

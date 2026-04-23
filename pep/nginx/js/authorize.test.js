@@ -203,7 +203,9 @@ describe('buildPDPRequest', () => {
                     protocol: 'HTTP/1.1',
                     path: '/Patient/patient-123', // /fhir/ prefix is stripped
                     query: '_include=Patient:organization',
-                    header: {},
+                    header: {
+                        "Content-Type": ['']
+                    },
                     body: ''
                 },
                 context: {
@@ -415,8 +417,8 @@ describe('validateDPoP', () => {
     });
 });
 
-describe('checkAuthorization integration', () => {
-    const {checkAuthorization} = authorize;
+describe('authorizeRequest integration', () => {
+    const {authorizeRequest} = authorize;
     const originalEnv = process.env;
 
     beforeEach(() => {
@@ -438,9 +440,9 @@ describe('checkAuthorization integration', () => {
     test('returns 401 when no Authorization header', async () => {
         const request = createMockRequest();
 
-        await checkAuthorization(request);
+        const decision = await authorizeRequest(request);
 
-        expect(request.return).toHaveBeenCalledWith(401);
+        expect(decision).toEqual({allowed: false, status: 401});
         expect(request.error).toHaveBeenCalledWith('Missing or invalid Authorization header');
     });
 
@@ -453,9 +455,9 @@ describe('checkAuthorization integration', () => {
             subrequest: mockSubrequest
         });
 
-        await checkAuthorization(request);
+        const decision = await authorizeRequest(request);
 
-        expect(request.return).toHaveBeenCalledWith(401);
+        expect(decision).toEqual({allowed: false, status: 401});
         expect(request.error).toHaveBeenCalledWith('Token is not active');
     });
 
@@ -468,9 +470,9 @@ describe('checkAuthorization integration', () => {
             subrequest: mockSubrequest
         });
 
-        await checkAuthorization(request);
+        const decision = await authorizeRequest(request);
 
-        expect(request.return).toHaveBeenCalledWith(502);
+        expect(decision).toEqual({allowed: false, status: 502});
     });
 
     test('returns 200 when PDP allows', async () => {
@@ -494,9 +496,9 @@ describe('checkAuthorization integration', () => {
             subrequest: mockSubrequest
         });
 
-        await checkAuthorization(request);
+        const decision = await authorizeRequest(request);
 
-        expect(request.return).toHaveBeenCalledWith(200);
+        expect(decision).toEqual({allowed: true, status: 200});
         expect(request.log).toHaveBeenCalledWith('Access ALLOWED by PDP');
     });
 
@@ -527,9 +529,9 @@ describe('checkAuthorization integration', () => {
             subrequest: mockSubrequest
         });
 
-        await checkAuthorization(request);
+        const decision = await authorizeRequest(request);
 
-        expect(request.return).toHaveBeenCalledWith(403);
+        expect(decision).toEqual({allowed: false, status: 403});
         expect(request.warn).toHaveBeenCalled();
     });
 
@@ -553,9 +555,9 @@ describe('checkAuthorization integration', () => {
             subrequest: mockSubrequest
         });
 
-        await checkAuthorization(request);
+        const decision = await authorizeRequest(request);
 
-        expect(request.return).toHaveBeenCalledWith(502);
+        expect(decision).toEqual({allowed: false, status: 502});
         expect(request.error).toHaveBeenCalledWith('Malformed PDP response: missing allow boolean');
     });
 
@@ -585,9 +587,9 @@ describe('checkAuthorization integration', () => {
             subrequest: mockSubrequest
         });
 
-        await checkAuthorization(request);
+        const decision = await authorizeRequest(request);
 
-        expect(request.return).toHaveBeenCalledWith(401);
+        expect(decision).toEqual({allowed: false, status: 401});
         expect(request.error).toHaveBeenCalledWith('DPoP validation failed: invalid signature');
     });
 
@@ -600,9 +602,9 @@ describe('checkAuthorization integration', () => {
             }
         });
 
-        await checkAuthorization(request);
+        const decision = await authorizeRequest(request);
 
-        expect(request.return).toHaveBeenCalledWith(401);
+        expect(decision).toEqual({allowed: false, status: 401});
         expect(request.error).toHaveBeenCalledWith('DPoP authorization scheme requires DPoP header');
     });
 
@@ -633,10 +635,10 @@ describe('checkAuthorization integration', () => {
             subrequest: mockSubrequest
         });
 
-        await checkAuthorization(request);
+        const decision = await authorizeRequest(request);
 
         // Request MUST be blocked - DPoP proof required for tokens with cnf.jkt
-        expect(request.return).toHaveBeenCalledWith(401);
+        expect(decision).toEqual({allowed: false, status: 401});
         expect(request.error).toHaveBeenCalledWith('DPoP validation failed: DPoP header required but missing');
     });
 });
