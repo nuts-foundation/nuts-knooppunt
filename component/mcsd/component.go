@@ -91,6 +91,9 @@ type Config struct {
 
 type DirectoryConfig struct {
 	FHIRBaseURL string `koanf:"fhirbaseurl"`
+	// Trusted disables anti-spoofing validation on this directory's contents.
+	// Only safe for directories you control or otherwise trust (like the LRZA).
+	Trusted bool `koanf:"trusted"`
 }
 
 type UpdateReport map[string]DirectoryUpdateReport
