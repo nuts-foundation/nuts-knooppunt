@@ -1312,6 +1312,152 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 	})
 }
 
+func TestComponent_updateFromDirectory_trusted(t *testing.T) {
+	ctx := context.Background()
+
+	emptyHistoryBundle := `{"resourceType": "Bundle", "type": "history", "entry": []}`
+	emptySearchsetBundle := `{"resourceType": "Bundle", "type": "searchset", "entry": []}`
+
+	makeComponent := func(t *testing.T, server *httptest.Server) (*Component, *test.StubFHIRClient) {
+		capturingClient := &test.StubFHIRClient{}
+		config := DefaultConfig()
+		config.QueryDirectory = DirectoryConfig{FHIRBaseURL: "http://example.com/local/fhir"}
+		component, err := New(config)
+		require.NoError(t, err)
+		component.fhirQueryClient = capturingClient
+		component.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
+			if baseURL.String() == server.URL+"/fhir" {
+				return fhirclient.New(baseURL, http.DefaultClient, &fhirclient.Config{UsePostSearch: false})
+			}
+			return capturingClient
+		}
+		return component, capturingClient
+	}
+
+	t.Run("bypasses per-resource validation when trusted", func(t *testing.T) {
+		// Organization with no URA identifier and no partOf reference.
+		// Untrusted validation rejects this; trusted accepts it.
+		spoofedOrgHistoryBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"entry": [{
+				"fullUrl": "http://remote.example.org/fhir/Organization/spoofed",
+				"resource": {
+					"resourceType": "Organization",
+					"id": "spoofed",
+					"name": "Spoofed Org",
+					"active": true
+				},
+				"request": {"method": "POST", "url": "Organization/spoofed"}
+			}]
+		}`
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("/fhir/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(spoofedOrgHistoryBundle))
+		})
+		mux.HandleFunc("/fhir/Organization", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(emptySearchsetBundle))
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		// Untrusted: spoofed Organization rejected, no resources synced.
+		c1, client1 := makeComponent(t, server)
+		report, err := c1.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false, "", false)
+		require.NoError(t, err)
+		assert.Empty(t, report.Errors)
+		require.Len(t, report.Warnings, 1, "untrusted should reject spoofed Organization")
+		assert.Empty(t, client1.CreatedResources["Organization"])
+		assert.Equal(t, 0, report.CountCreated)
+
+		// Trusted: spoofed Organization accepted and synced.
+		c2, client2 := makeComponent(t, server)
+		report, err = c2.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false, "", true)
+		require.NoError(t, err)
+		assert.Empty(t, report.Errors)
+		assert.Empty(t, report.Warnings, "trusted should accept spoofed Organization")
+		assert.Len(t, client2.CreatedResources["Organization"], 1)
+		assert.Equal(t, 1, report.CountCreated)
+	})
+
+	t.Run("skips parent organization query when trusted and not discovering", func(t *testing.T) {
+		var orgQueryCount int
+		var mu sync.Mutex
+		mux := http.NewServeMux()
+		mux.HandleFunc("/fhir/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(emptyHistoryBundle))
+		})
+		mux.HandleFunc("/fhir/Organization", func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			orgQueryCount++
+			mu.Unlock()
+			_, _ = w.Write([]byte(emptySearchsetBundle))
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		c, _ := makeComponent(t, server)
+		_, err := c.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false, "", true)
+		require.NoError(t, err)
+
+		mu.Lock()
+		defer mu.Unlock()
+		assert.Equal(t, 0, orgQueryCount, "trusted+!discover should not query parent organizations")
+	})
+
+	t.Run("still uses _since for incremental sync when trusted", func(t *testing.T) {
+		// _since is stripped for Organization queries (see queryAllResourceTypes),
+		// so use Endpoint to verify incremental sync.
+		validEndpointHistoryBundle := `{
+			"resourceType": "Bundle",
+			"type": "history",
+			"meta": {"lastUpdated": "2025-01-01T00:00:00Z"},
+			"entry": [{
+				"fullUrl": "http://remote.example.org/fhir/Endpoint/ep1",
+				"resource": {
+					"resourceType": "Endpoint",
+					"id": "ep1",
+					"status": "active",
+					"address": "https://example.com/fhir",
+					"connectionType": {
+						"system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
+						"code": "hl7-fhir-rest"
+					},
+					"payloadType": [{
+						"coding": [{"system": "x", "code": "y"}]
+					}]
+				},
+				"request": {"method": "POST", "url": "Endpoint/ep1"}
+			}]
+		}`
+
+		var sinceParams []string
+		var mu sync.Mutex
+		mux := http.NewServeMux()
+		mux.HandleFunc("/fhir/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			sinceParams = append(sinceParams, r.URL.Query().Get("_since"))
+			mu.Unlock()
+			_, _ = w.Write([]byte(validEndpointHistoryBundle))
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		c, _ := makeComponent(t, server)
+		_, err := c.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint"}, false, "", true)
+		require.NoError(t, err)
+		_, err = c.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint"}, false, "", true)
+		require.NoError(t, err)
+
+		mu.Lock()
+		defer mu.Unlock()
+		require.Len(t, sinceParams, 2)
+		assert.Empty(t, sinceParams[0], "first update should not include _since")
+		assert.NotEmpty(t, sinceParams[1], "second update should include _since (trusted does not affect sync cadence)")
+	})
+}
+
 func startMockServer(t *testing.T, filesToServe map[string]string) *httptest.Server {
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
