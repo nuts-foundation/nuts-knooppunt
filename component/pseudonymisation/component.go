@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"path"
 
-	"github.com/gowebpki/jcs"
 	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/from"
@@ -140,13 +139,9 @@ func (c Component) callPRSEvaluate(ctx context.Context, localOrganizationURA str
 		EncryptedPersonalID:   blindedInputData,
 	}
 
-	rawBody, err := json.Marshal(requestBody)
+	bodyBytes, err := marshalPRS(requestBody)
 	if err != nil {
-		return "", err
-	}
-	bodyBytes, err := jcs.Transform(rawBody)
-	if err != nil {
-		return "", fmt.Errorf("canonicalizing PRS request body: %w", err)
+		return "", fmt.Errorf("marshaling PRS request body: %w", err)
 	}
 
 	requestURL, err := url.Parse(c.config.PRSBaseURL)
