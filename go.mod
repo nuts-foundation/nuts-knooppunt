@@ -12,6 +12,7 @@ require (
 	github.com/cloudflare/circl v1.6.3
 	github.com/docker/docker v28.2.2+incompatible
 	github.com/google/uuid v1.6.0
+	github.com/gowebpki/jcs v1.0.1
 	github.com/knadh/koanf/parsers/yaml v1.1.0
 	github.com/knadh/koanf/providers/env v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.1

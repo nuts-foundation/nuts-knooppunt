@@ -6,6 +6,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func Test_marshalPRS_identifier(t *testing.T) {
+	identifier := prsIdentifier{
+		LandCode: "NL",
+		Type:     "BSN",
+		Value:    "999940003",
+	}
+	out, err := marshalPRS(identifier)
+	require.NoError(t, err)
+	require.Equal(t, `{"landCode":"NL","type":"BSN","value":"999940003"}`, string(out))
+}
+
 func Test_deriveKey(t *testing.T) {
 	identifier := prsIdentifier{
 		LandCode: "NL",
