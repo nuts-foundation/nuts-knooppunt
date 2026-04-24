@@ -255,7 +255,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	result := make(UpdateReport)
 	for i := 0; i < len(c.administrationDirectories); i++ {
 		adminDirectory := c.administrationDirectories[i]
-		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover, adminDirectory.authoritativeUra)
+		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover, adminDirectory.authoritativeUra, adminDirectory.trusted)
 		if err != nil {
 			slog.ErrorContext(ctx, "mCSD Directory update failed", logging.FHIRServer(adminDirectory.fhirBaseURL), logging.Error(err))
 			report.Errors = append(report.Errors, err.Error())
@@ -338,8 +338,8 @@ func (c *Component) discoverAndRegisterEndpoints(ctx context.Context, entries []
 	return report
 }
 
-func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool, authoritativeUra string) (DirectoryUpdateReport, error) {
-	slog.InfoContext(ctx, "Updating from mCSD Directory", logging.FHIRServer(fhirBaseURLRaw), slog.Bool("discover", allowDiscovery), slog.Any("resourceTypes", allowedResourceTypes))
+func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool, authoritativeUra string, trusted bool) (DirectoryUpdateReport, error) {
+	slog.InfoContext(ctx, "Updating from mCSD Directory", logging.FHIRServer(fhirBaseURLRaw), slog.Bool("discover", allowDiscovery), slog.Bool("trusted", trusted), slog.Any("resourceTypes", allowedResourceTypes))
 	remoteAdminDirectoryFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
@@ -371,16 +371,20 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		return DirectoryUpdateReport{}, err
 	}
 
-	// Check if any Organization's URA identifier has changed between history versions
-	uraIdentifierChanged := checkForURAIdentifierChanges(entries)
-	if uraIdentifierChanged {
-		slog.WarnContext(ctx, "Detected URA identifier change in organization history. Rerunning history query without _since parameter.", logging.FHIRServer(fhirBaseURLRaw))
+	// Check if any Organization's URA identifier has changed between history versions.
+	// Skipped for trusted directories: a URA change is synced like any other change,
+	// since we don't validate against URA identifiers in trusted mode.
+	if !trusted {
+		uraIdentifierChanged := checkForURAIdentifierChanges(entries)
+		if uraIdentifierChanged {
+			slog.WarnContext(ctx, "Detected URA identifier change in organization history. Rerunning history query without _since parameter.", logging.FHIRServer(fhirBaseURLRaw))
 
-		// Remove _since parameter and rerun the query
-		searchParams.Del("_since")
-		entries, firstSearchSet, err = c.queryAllResourceTypes(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
-		if err != nil {
-			return DirectoryUpdateReport{}, err
+			// Remove _since parameter and rerun the query
+			searchParams.Del("_since")
+			entries, firstSearchSet, err = c.queryAllResourceTypes(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
+			if err != nil {
+				return DirectoryUpdateReport{}, err
+			}
 		}
 	}
 
@@ -406,17 +410,24 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		c.processEndpointDeletes(ctx, deduplicatedEntries)
 	}
 
-	// Find parent organizations with URA identifier and all organizations linked to them
-	// This is used when validating organizations that don't have their own URA identifier
-	parentOrganizationsMap, err := c.ensureParentOrganizationsMap(ctx, fhirBaseURLRaw, remoteAdminDirectoryFHIRClient, authoritativeUra)
-
-	if err != nil {
-		return DirectoryUpdateReport{}, fmt.Errorf("failed to build parent organization map: %w", err)
+	// Find parent organizations with URA identifier and all organizations linked to them.
+	// Used both for validating organizations that don't have their own URA identifier and
+	// for endpoint discovery. For trusted directories without discovery, neither applies
+	// so the map stays nil.
+	var parentOrganizationsMap parentOrganizationMap
+	if !trusted || allowDiscovery {
+		parentOrganizationsMap, err = c.ensureParentOrganizationsMap(ctx, fhirBaseURLRaw, remoteAdminDirectoryFHIRClient, authoritativeUra)
+		if err != nil {
+			return DirectoryUpdateReport{}, fmt.Errorf("failed to build parent organization map: %w", err)
+		}
 	}
 
-	// Validate all parent organizations once before processing resources
-	if err := ValidateParentOrganizations(parentOrganizationsMap); err != nil {
-		return DirectoryUpdateReport{}, fmt.Errorf("parent organization (one that supposedly has ura identifier - and only only) validation failed: %w", err)
+	// Validate all parent organizations once before processing resources.
+	// Skipped for trusted directories.
+	if !trusted {
+		if err := ValidateParentOrganizations(parentOrganizationsMap); err != nil {
+			return DirectoryUpdateReport{}, fmt.Errorf("parent organization (one that supposedly has ura identifier - and only only) validation failed: %w", err)
+		}
 	}
 
 	// Build transaction with deterministic conditional references
