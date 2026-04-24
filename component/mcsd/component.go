@@ -64,6 +64,11 @@ func makeDirectoryKey(fhirBaseURL, authoritativeUra string) string {
 //   - have the same mcsd-directory-endpoint as the directory being queried
 //   - These are mitigating measures to prevent an attacker to spoof another care organization.
 //   - The organization's mcsd-directory-endpoint must be discoverable through the root mCSD Directory.'
+//
+// A root directory may be marked as 'trusted' (DirectoryConfig.Trusted), which skips the per-resource
+// validation described above. This is intended for directories the operator controls or
+// otherwise trusts (e.g. the LRZA). Trust does not affect sync cadence — incremental sync via _since
+// still applies. Directories discovered from a trusted root are always registered as untrusted.
 type Component struct {
 	config            Config
 	fhirAdminClientFn func(baseURL *url.URL) fhirclient.Client
@@ -91,6 +96,9 @@ type Config struct {
 
 type DirectoryConfig struct {
 	FHIRBaseURL string `koanf:"fhirbaseurl"`
+	// Trusted disables anti-spoofing validation on this directory's contents.
+	// Only safe for directories you control or otherwise trust (like the LRZA).
+	Trusted bool `koanf:"trusted"`
 }
 
 type UpdateReport map[string]DirectoryUpdateReport
@@ -99,6 +107,7 @@ type administrationDirectory struct {
 	fhirBaseURL      string
 	resourceTypes    []string
 	discover         bool
+	trusted          bool   // Skip validation checks on this directory's contents
 	sourceURL        string // The fullUrl from the Bundle entry that created this Endpoint, used for unregistration on DELETE
 	authoritativeUra string // URA of the organization that is authoritative for this directory
 }
@@ -145,7 +154,7 @@ func New(config Config) (*Component, error) {
 		updateMux:              &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.AdministrationDirectories {
-		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true, "", ""); err != nil {
+		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true, "", "", rootDirectory.Trusted); err != nil {
 			return nil, fmt.Errorf("register root administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
 		}
 	}
@@ -178,7 +187,7 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 	})
 }
 
-func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool, sourceURL string, authoritativeUra string) error {
+func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool, sourceURL string, authoritativeUra string, trusted bool) error {
 	// Must be a valid http or https URL
 	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
 	if err != nil {
@@ -208,10 +217,11 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 		resourceTypes:    resourceTypes,
 		fhirBaseURL:      fhirBaseURL,
 		discover:         discover,
+		trusted:          trusted,
 		sourceURL:        sourceURL,
 		authoritativeUra: authoritativeUra,
 	})
-	slog.InfoContext(ctx, "Registered mCSD Directory", logging.FHIRServer(fhirBaseURL), slog.Bool("discover", discover))
+	slog.InfoContext(ctx, "Registered mCSD Directory", logging.FHIRServer(fhirBaseURL), slog.Bool("discover", discover), slog.Bool("trusted", trusted))
 	return nil
 }
 
@@ -250,7 +260,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	result := make(UpdateReport)
 	for i := 0; i < len(c.administrationDirectories); i++ {
 		adminDirectory := c.administrationDirectories[i]
-		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover, adminDirectory.authoritativeUra)
+		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover, adminDirectory.authoritativeUra, adminDirectory.trusted)
 		if err != nil {
 			slog.ErrorContext(ctx, "mCSD Directory update failed", logging.FHIRServer(adminDirectory.fhirBaseURL), logging.Error(err))
 			report.Errors = append(report.Errors, err.Error())
@@ -322,7 +332,7 @@ func (c *Component) discoverAndRegisterEndpoints(ctx context.Context, entries []
 			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
 				slog.DebugContext(ctx, "Discovered mCSD Directory", slog.String("address", endpoint.Address))
 
-				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, fullUrl, authoritativeUra)
+				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, fullUrl, authoritativeUra, false)
 				if err != nil {
 					report.Warnings = append(report.Warnings, fmt.Sprintf("failed to register discovered mCSD Directory at %s: %s", endpoint.Address, err.Error()))
 				}
@@ -333,8 +343,8 @@ func (c *Component) discoverAndRegisterEndpoints(ctx context.Context, entries []
 	return report
 }
 
-func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool, authoritativeUra string) (DirectoryUpdateReport, error) {
-	slog.InfoContext(ctx, "Updating from mCSD Directory", logging.FHIRServer(fhirBaseURLRaw), slog.Bool("discover", allowDiscovery), slog.Any("resourceTypes", allowedResourceTypes))
+func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool, authoritativeUra string, trusted bool) (DirectoryUpdateReport, error) {
+	slog.InfoContext(ctx, "Updating from mCSD Directory", logging.FHIRServer(fhirBaseURLRaw), slog.Bool("discover", allowDiscovery), slog.Bool("trusted", trusted), slog.Any("resourceTypes", allowedResourceTypes))
 	remoteAdminDirectoryFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
 	if err != nil {
 		return DirectoryUpdateReport{}, err
@@ -366,16 +376,20 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		return DirectoryUpdateReport{}, err
 	}
 
-	// Check if any Organization's URA identifier has changed between history versions
-	uraIdentifierChanged := checkForURAIdentifierChanges(entries)
-	if uraIdentifierChanged {
-		slog.WarnContext(ctx, "Detected URA identifier change in organization history. Rerunning history query without _since parameter.", logging.FHIRServer(fhirBaseURLRaw))
+	// Check if any Organization's URA identifier has changed between history versions.
+	// Skipped for trusted directories: a URA change is synced like any other change,
+	// since we don't validate against URA identifiers in trusted mode.
+	if !trusted {
+		uraIdentifierChanged := checkForURAIdentifierChanges(entries)
+		if uraIdentifierChanged {
+			slog.WarnContext(ctx, "Detected URA identifier change in organization history. Rerunning history query without _since parameter.", logging.FHIRServer(fhirBaseURLRaw))
 
-		// Remove _since parameter and rerun the query
-		searchParams.Del("_since")
-		entries, firstSearchSet, err = c.queryAllResourceTypes(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
-		if err != nil {
-			return DirectoryUpdateReport{}, err
+			// Remove _since parameter and rerun the query
+			searchParams.Del("_since")
+			entries, firstSearchSet, err = c.queryAllResourceTypes(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
+			if err != nil {
+				return DirectoryUpdateReport{}, err
+			}
 		}
 	}
 
@@ -401,17 +415,24 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		c.processEndpointDeletes(ctx, deduplicatedEntries)
 	}
 
-	// Find parent organizations with URA identifier and all organizations linked to them
-	// This is used when validating organizations that don't have their own URA identifier
-	parentOrganizationsMap, err := c.ensureParentOrganizationsMap(ctx, fhirBaseURLRaw, remoteAdminDirectoryFHIRClient, authoritativeUra)
-
-	if err != nil {
-		return DirectoryUpdateReport{}, fmt.Errorf("failed to build parent organization map: %w", err)
+	// Find parent organizations with URA identifier and all organizations linked to them.
+	// Used both for validating organizations that don't have their own URA identifier and
+	// for endpoint discovery. For trusted directories without discovery, neither applies
+	// so the map stays nil.
+	var parentOrganizationsMap parentOrganizationMap
+	if !trusted || allowDiscovery {
+		parentOrganizationsMap, err = c.ensureParentOrganizationsMap(ctx, fhirBaseURLRaw, remoteAdminDirectoryFHIRClient, authoritativeUra)
+		if err != nil {
+			return DirectoryUpdateReport{}, fmt.Errorf("failed to build parent organization map: %w", err)
+		}
 	}
 
-	// Validate all parent organizations once before processing resources
-	if err := ValidateParentOrganizations(parentOrganizationsMap); err != nil {
-		return DirectoryUpdateReport{}, fmt.Errorf("parent organization (one that supposedly has ura identifier - and only only) validation failed: %w", err)
+	// Validate all parent organizations once before processing resources.
+	// Skipped for trusted directories.
+	if !trusted {
+		if err := ValidateParentOrganizations(parentOrganizationsMap); err != nil {
+			return DirectoryUpdateReport{}, fmt.Errorf("parent organization (one that supposedly has ura identifier - and only only) validation failed: %w", err)
+		}
 	}
 
 	// Build transaction with deterministic conditional references
@@ -428,7 +449,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			continue
 		}
 		slog.DebugContext(ctx, "Processing entry", logging.FHIRServer(fhirBaseURLRaw), slog.String("url", entry.Request.Url))
-		_, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes}, parentOrganizationsMap, allHealthcareServices, allowDiscovery, fhirBaseURLRaw)
+		_, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes, Trusted: trusted}, parentOrganizationsMap, allHealthcareServices, allowDiscovery, fhirBaseURLRaw)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
