@@ -795,7 +795,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		})
 		component, err := New(DefaultConfig())
 		require.NoError(t, err)
-		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false, "")
+		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false, "", false)
 		require.NoError(t, err)
 		require.NotNil(t, report)
 		require.Len(t, report.Warnings, 1)
@@ -834,7 +834,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
 		}
 
-		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization", "Endpoint"}, false, "")
+		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization", "Endpoint"}, false, "", false)
 
 		require.NoError(t, err)
 		require.Empty(t, report.Errors, "Should not have errors after deduplication")
@@ -993,7 +993,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		}
 
 		// First update - should discover and register the Endpoint
-		report1, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint", "Organization"}, true, "")
+		report1, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint", "Organization"}, true, "", false)
 		require.NoError(t, err)
 		require.Empty(t, report1.Errors)
 		require.Equal(t, 1, report1.CountCreated, "Should have created 1 Endpoint")
@@ -1017,7 +1017,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		assert.Equal(t, "http://test.example.org/fhir/Endpoint/test-endpoint", registeredFullUrl, "Registered Endpoint should have fullUrl from Bundle entry")
 
 		// Second update - should process DELETE and unregister the Endpoint
-		report2, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint", "Organization"}, true, "")
+		report2, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint", "Organization"}, true, "", false)
 		require.NoError(t, err)
 		require.Empty(t, report2.Errors)
 
@@ -1101,7 +1101,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 
 		// Call updateFromDirectory with only Organization and Endpoint
 		allowedTypes := []string{"Organization", "Endpoint"}
-		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", allowedTypes, false, "")
+		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", allowedTypes, false, "", false)
 
 		require.NoError(t, err)
 		require.Empty(t, report.Errors)
@@ -1269,7 +1269,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		}
 
 		// Register the root directory (which will query using rootDirectoryResourceTypes: Organization, Endpoint)
-		err = component.registerAdministrationDirectory(ctx, server.URL+"/fhir", rootDirectoryResourceTypes, true, "", "")
+		err = component.registerAdministrationDirectory(ctx, server.URL+"/fhir", rootDirectoryResourceTypes, true, "", "", false)
 		require.NoError(t, err)
 
 		// First update should discover the endpoint from root directory and immediately query it
@@ -1346,7 +1346,7 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 		component, err := New(config)
 		require.NoError(t, err)
 
-		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "", "")
+		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "", "", false)
 
 		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
 		assert.Len(t, component.administrationDirectories, 0, "No directories should be registered")
@@ -1361,7 +1361,7 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 		require.NoError(t, err)
 
 		// Try to register with trailing slash - should still be excluded
-		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir/", []string{"Organization"}, false, "", "")
+		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir/", []string{"Organization"}, false, "", "", false)
 
 		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
 		assert.Len(t, component.administrationDirectories, 0, "No directories should be registered")
@@ -1376,7 +1376,7 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 		require.NoError(t, err)
 
 		// Try to register without trailing slash - should still be excluded due to trimming
-		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "", "")
+		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "", "", false)
 
 		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
 		assert.Len(t, component.administrationDirectories, 0, "No directories should be registered")
@@ -1390,7 +1390,7 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 		component, err := New(config)
 		require.NoError(t, err)
 
-		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir/", []string{"Organization"}, false, "", "")
+		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir/", []string{"Organization"}, false, "", "", false)
 
 		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
 		assert.Len(t, component.administrationDirectories, 0, "No directories should be registered")
@@ -1404,7 +1404,7 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 		component, err := New(config)
 		require.NoError(t, err)
 
-		err = component.registerAdministrationDirectory(context.Background(), "http://allowed.com/fhir", []string{"Organization"}, false, "", "")
+		err = component.registerAdministrationDirectory(context.Background(), "http://allowed.com/fhir", []string{"Organization"}, false, "", "", false)
 
 		require.NoError(t, err)
 		assert.Len(t, component.administrationDirectories, 1, "Directory should be registered")
@@ -1424,7 +1424,7 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 		require.NoError(t, err)
 
 		// Try to register the same URL as admin directory - should be excluded
-		err = component.registerAdministrationDirectory(context.Background(), ownFHIRBaseURL, []string{"Organization"}, true, "", "")
+		err = component.registerAdministrationDirectory(context.Background(), ownFHIRBaseURL, []string{"Organization"}, true, "", "", false)
 
 		require.NoError(t, err, "Should not error when URL is excluded, just skip registration")
 		assert.Len(t, component.administrationDirectories, 0, "Own directory should not be registered as admin directory")
@@ -1441,12 +1441,12 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 		require.NoError(t, err)
 
 		// Try to register excluded directories
-		err1 := component.registerAdministrationDirectory(context.Background(), "http://excluded1.com/fhir", []string{"Organization"}, false, "", "")
-		err2 := component.registerAdministrationDirectory(context.Background(), "http://excluded2.com/fhir", []string{"Organization"}, false, "", "")
-		err3 := component.registerAdministrationDirectory(context.Background(), "http://excluded3.com/fhir", []string{"Organization"}, false, "", "")
+		err1 := component.registerAdministrationDirectory(context.Background(), "http://excluded1.com/fhir", []string{"Organization"}, false, "", "", false)
+		err2 := component.registerAdministrationDirectory(context.Background(), "http://excluded2.com/fhir", []string{"Organization"}, false, "", "", false)
+		err3 := component.registerAdministrationDirectory(context.Background(), "http://excluded3.com/fhir", []string{"Organization"}, false, "", "", false)
 
 		// Register an allowed directory
-		err4 := component.registerAdministrationDirectory(context.Background(), "http://allowed.com/fhir", []string{"Organization"}, false, "", "")
+		err4 := component.registerAdministrationDirectory(context.Background(), "http://allowed.com/fhir", []string{"Organization"}, false, "", "", false)
 
 		require.NoError(t, err1, "Should not error when URL is excluded, just skip registration")
 		require.NoError(t, err2, "Should not error when URL is excluded, just skip registration")
@@ -1461,7 +1461,7 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 		component, err := New(config)
 		require.NoError(t, err)
 
-		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "", "")
+		err = component.registerAdministrationDirectory(context.Background(), "http://example.com/fhir", []string{"Organization"}, false, "", "", false)
 
 		require.NoError(t, err)
 		assert.Len(t, component.administrationDirectories, 1, "Directory should be registered when exclusion list is empty")
@@ -1476,7 +1476,7 @@ func TestComponent_registerAdministrationDirectory(t *testing.T) {
 		require.NoError(t, err)
 
 		// Invalid URL should return error, not silently skip
-		err = component.registerAdministrationDirectory(context.Background(), "not-a-valid-url", []string{"Organization"}, false, "", "")
+		err = component.registerAdministrationDirectory(context.Background(), "not-a-valid-url", []string{"Organization"}, false, "", "", false)
 
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid FHIR base URL")

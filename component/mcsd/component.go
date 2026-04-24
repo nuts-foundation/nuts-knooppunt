@@ -444,7 +444,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 			continue
 		}
 		slog.DebugContext(ctx, "Processing entry", logging.FHIRServer(fhirBaseURLRaw), slog.String("url", entry.Request.Url))
-		_, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes}, parentOrganizationsMap, allHealthcareServices, allowDiscovery, fhirBaseURLRaw)
+		_, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes, Trusted: trusted}, parentOrganizationsMap, allHealthcareServices, allowDiscovery, fhirBaseURLRaw)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
