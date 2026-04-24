@@ -102,6 +102,7 @@ type administrationDirectory struct {
 	fhirBaseURL      string
 	resourceTypes    []string
 	discover         bool
+	trusted          bool   // Skip validation checks on this directory's contents
 	sourceURL        string // The fullUrl from the Bundle entry that created this Endpoint, used for unregistration on DELETE
 	authoritativeUra string // URA of the organization that is authoritative for this directory
 }
@@ -148,7 +149,7 @@ func New(config Config) (*Component, error) {
 		updateMux:              &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.AdministrationDirectories {
-		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true, "", ""); err != nil {
+		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true, "", "", rootDirectory.Trusted); err != nil {
 			return nil, fmt.Errorf("register root administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
 		}
 	}
@@ -181,7 +182,7 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 	})
 }
 
-func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool, sourceURL string, authoritativeUra string) error {
+func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool, sourceURL string, authoritativeUra string, trusted bool) error {
 	// Must be a valid http or https URL
 	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
 	if err != nil {
@@ -211,10 +212,11 @@ func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBas
 		resourceTypes:    resourceTypes,
 		fhirBaseURL:      fhirBaseURL,
 		discover:         discover,
+		trusted:          trusted,
 		sourceURL:        sourceURL,
 		authoritativeUra: authoritativeUra,
 	})
-	slog.InfoContext(ctx, "Registered mCSD Directory", logging.FHIRServer(fhirBaseURL), slog.Bool("discover", discover))
+	slog.InfoContext(ctx, "Registered mCSD Directory", logging.FHIRServer(fhirBaseURL), slog.Bool("discover", discover), slog.Bool("trusted", trusted))
 	return nil
 }
 
@@ -325,7 +327,7 @@ func (c *Component) discoverAndRegisterEndpoints(ctx context.Context, entries []
 			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
 				slog.DebugContext(ctx, "Discovered mCSD Directory", slog.String("address", endpoint.Address))
 
-				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, fullUrl, authoritativeUra)
+				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, fullUrl, authoritativeUra, false)
 				if err != nil {
 					report.Warnings = append(report.Warnings, fmt.Sprintf("failed to register discovered mCSD Directory at %s: %s", endpoint.Address, err.Error()))
 				}
