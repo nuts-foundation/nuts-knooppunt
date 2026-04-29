@@ -2,7 +2,7 @@ import React from 'react';
 import { useAuth } from '../AuthProvider';
 
 function HomePage() {
-  const { user, isLoading, isAuthenticated, login, logout } = useAuth();
+  const { user, isLoading, isAuthenticated, login, devLogin, devLoginEnabled, logout } = useAuth();
 
   if (isLoading) {
     return <div className="loading">Loading...</div>;
@@ -44,6 +44,16 @@ function HomePage() {
             <button onClick={login} className="button">
               Login with Knooppunt
             </button>
+            {devLoginEnabled && (
+              <button
+                onClick={devLogin}
+                className="button button-secondary"
+                style={{ marginLeft: '10px' }}
+                title="Bypass OIDC for local development"
+              >
+                Dev login (skip OIDC)
+              </button>
+            )}
           </div>
         ) : (
           <div>

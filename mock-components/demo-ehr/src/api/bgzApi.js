@@ -1,5 +1,5 @@
 import {headersWithContentType} from "./fhir";
-import {config} from "../config";
+import {apiBase} from "../config";
 import bgzExampleBundle from "../bgz-example.json";
 
 export const bgzApi = {
@@ -32,7 +32,7 @@ export const bgzApi = {
         replacePatientReferences(bundle);
 
         // POST the bundle to the FHIR server
-        const url = config.fhirStu3BaseURL;
+        const url = apiBase.fhirStu3;
         const res = await fetch(url, {
             method: 'POST',
             headers: headersWithContentType,

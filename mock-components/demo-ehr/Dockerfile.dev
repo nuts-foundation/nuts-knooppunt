@@ -1,0 +1,10 @@
+# Development Dockerfile: runs the CRA dev server with hot reload.
+# Used by docker-compose for local development. The production image is built
+# from `Dockerfile` and serves the compiled build via Express.
+FROM node:18-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm install
+COPY . .
+EXPOSE 3000
+CMD ["npm", "start"]

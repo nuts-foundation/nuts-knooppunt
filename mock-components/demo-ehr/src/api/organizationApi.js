@@ -1,10 +1,10 @@
 import {headers} from "./fhir";
-import {config} from "../config";
+import {apiBase} from "../config";
 
 export const organizationApi = {
     async list() {
         // Query Organizations from mCSD Query Directory
-        const url = config.mcsdQueryBaseURL + '/Organization';
+        const url = apiBase.mcsd + '/Organization';
         const res = await fetch(url, {headers});
         if (!res.ok) throw new Error('List organizations failed: ' + res.statusText);
         const bundle = await res.json();
@@ -13,7 +13,7 @@ export const organizationApi = {
 
     async getById(id) {
         // Query single Organization by ID
-        const url = `${config.mcsdQueryBaseURL}/Organization/${id}`;
+        const url = `${apiBase.mcsd}/Organization/${id}`;
         const res = await fetch(url, {headers});
         if (!res.ok) {
             if (res.status === 404) {
@@ -30,7 +30,7 @@ export const organizationApi = {
         }
         // Query Organizations by multiple IDs using _id parameter
         const idsParam = ids.join(',');
-        const url = `${config.mcsdQueryBaseURL}/Organization?_id=${idsParam}`;
+        const url = `${apiBase.mcsd}/Organization?_id=${idsParam}`;
         const res = await fetch(url, {headers});
         if (!res.ok) throw new Error('Get organizations by IDs failed: ' + res.statusText);
         const bundle = await res.json();
@@ -39,7 +39,7 @@ export const organizationApi = {
 
     async getSubOrganizations(parentOrgId) {
         // Query sub-organizations (departments) by partOf reference
-        const url = `${config.mcsdQueryBaseURL}/Organization?partof=${parentOrgId}`;
+        const url = `${apiBase.mcsd}/Organization?partof=${parentOrgId}`;
         const res = await fetch(url, {headers});
         if (!res.ok) throw new Error('Get sub-organizations failed: ' + res.statusText);
         const bundle = await res.json();
@@ -48,7 +48,7 @@ export const organizationApi = {
 
     async getByURA(ura) {
         // Query Organization by URA identifier
-        const url = `${config.mcsdQueryBaseURL}/Organization?identifier=http://fhir.nl/fhir/NamingSystem/ura|${ura}`;
+        const url = `${apiBase.mcsd}/Organization?identifier=http://fhir.nl/fhir/NamingSystem/ura|${ura}`;
         const res = await fetch(url, {headers});
         if (!res.ok) {
             if (res.status === 404) {
@@ -164,7 +164,7 @@ export const organizationApi = {
                         const endpointId = ref.includes('/') ? ref.split('/').pop() : ref;
 
                         // Fetch the endpoint resource
-                        const endpointUrl = `${config.mcsdQueryBaseURL}/Endpoint/${endpointId}`;
+                        const endpointUrl = `${apiBase.mcsd}/Endpoint/${endpointId}`;
                         const res = await fetch(endpointUrl, {headers});
 
                         if (res.ok) {

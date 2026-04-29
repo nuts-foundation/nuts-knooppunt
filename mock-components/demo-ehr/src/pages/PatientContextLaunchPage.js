@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../AuthProvider';
 import { patientApi } from '../api/patientApi';
-import {config} from "../config";
+import {apiBase} from "../config";
 
 function PatientContextLaunchPage() {
   const { patientId } = useParams();
@@ -30,7 +30,7 @@ function PatientContextLaunchPage() {
     setLoading(true);
     setError(null);
     try {
-      const url = `${config.fhirBaseURL}/Patient/${patientId}`;
+      const url = `${apiBase.fhir}/Patient/${patientId}`;
       const res = await fetch(url, {
         headers: {
           'Accept': 'application/fhir+json',

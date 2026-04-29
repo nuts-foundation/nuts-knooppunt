@@ -612,7 +612,7 @@ function PatientsPage() {
         )}
 
         <div style={{ marginTop: '30px' }}>
-          <a href="/mock-components/demo-ehr/public" className="button button-secondary">
+          <a href="/" className="button button-secondary">
             ← Back to Dashboard
           </a>
         </div>

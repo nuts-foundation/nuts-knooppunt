@@ -1,6 +1,5 @@
 // NVI API client for querying DocumentReferences
 import { headers } from "./fhir";
-import { config } from "../config";
 
 export const nviApi = {
     /**

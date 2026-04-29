@@ -1,6 +1,6 @@
 // FHIR API client for fetching medication-related resources
 import { headers } from "./fhir";
-import { config } from "../config";
+import { apiBase } from "../config";
 
 export const medicationApi = {
     /**
@@ -11,7 +11,7 @@ export const medicationApi = {
     async getMedicationRequests(patientId) {
         try {
             const response = await fetch(
-                `${config.fhirBaseURL}/MedicationRequest?patient=${patientId}`,
+                `${apiBase.fhir}/MedicationRequest?patient=${patientId}`,
                 {
                     method: 'GET',
                     headers,
@@ -45,7 +45,7 @@ export const medicationApi = {
     async getMedicationDispenses(patientId) {
         try {
             const response = await fetch(
-                `${config.fhirBaseURL}/MedicationDispense?patient=${patientId}`,
+                `${apiBase.fhir}/MedicationDispense?patient=${patientId}`,
                 {
                     method: 'GET',
                     headers,

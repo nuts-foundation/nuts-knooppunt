@@ -1,10 +1,10 @@
 import {headers} from "./fhir";
-import {config} from "../config";
+import {apiBase} from "../config";
 
 export const taskShared = {
     async deleteTask(taskId) {
         // Delete a Task from the STU3 server
-        const url = `${config.fhirStu3BaseURL}/Task/${taskId}`;
+        const url = `${apiBase.fhirStu3}/Task/${taskId}`;
         const res = await fetch(url, {
             method: 'DELETE',
             headers: headers

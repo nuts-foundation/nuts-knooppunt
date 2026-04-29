@@ -2,6 +2,14 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 import { oidcConfig } from './authConfig';
 import { practitionerApi } from './api/practitionerApi';
+import {
+  buildDevUser,
+  clearDevUser,
+  isDevLoginEnabled,
+  isDevUser,
+  loadDevUser,
+  saveDevUser,
+} from './devAuth';
 
 const AuthContext = createContext();
 
@@ -78,14 +86,21 @@ export const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    // Load user on mount
-    userManager.getUser().then(async (user) => {
-      if (user && !user.expired) {
-        setUser(user);
-        await ensurePractitioner(user);
-      }
-      setIsLoading(false);
-    });
+    // Load user on mount. Dev sessions take precedence so a stale OIDC token
+    // can't shadow them on refresh.
+    const dev = isDevLoginEnabled() ? loadDevUser() : null;
+    if (dev) {
+      setUser(dev);
+      ensurePractitioner(dev).finally(() => setIsLoading(false));
+    } else {
+      userManager.getUser().then(async (user) => {
+        if (user && !user.expired) {
+          setUser(user);
+          await ensurePractitioner(user);
+        }
+        setIsLoading(false);
+      });
+    }
 
     // Listen for user loaded event
     const handleUserLoaded = async (user) => {
@@ -112,7 +127,25 @@ export const AuthProvider = ({ children }) => {
     return userManager.signinRedirect();
   };
 
+  const devLogin = async () => {
+    const u = buildDevUser();
+    saveDevUser(u);
+    setUser(u);
+    setIsLoading(true);
+    try {
+      await ensurePractitioner(u);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const logout = () => {
+    if (isDevUser(user)) {
+      clearDevUser();
+      setUser(null);
+      setPractitionerId(null);
+      return Promise.resolve();
+    }
     setUser(null);
     setPractitionerId(null);
     return userManager.signoutRedirect();
@@ -128,6 +161,8 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!user && !user.expired,
     practitionerId,
     login,
+    devLogin,
+    devLoginEnabled: isDevLoginEnabled(),
     logout,
     handleCallback,
     userManager,

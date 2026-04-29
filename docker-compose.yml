@@ -210,21 +210,24 @@ services:
       - pep
 
   demo-ehr:
-    image: ghcr.io/nuts-foundation/demo-ehr:latest
+    build:
+      context: ./mock-components/demo-ehr
+      dockerfile: Dockerfile.dev
     profiles:
       - demoehr
     container_name: demo-ehr
     ports:
       - "3000:3000"
     volumes:
-      - ./demo-ehr/src:/app/src
-      - ./demo-ehr/public:/app/public
+      - ./mock-components/demo-ehr/src:/app/src
+      - ./mock-components/demo-ehr/public:/app/public
     environment:
       - CHOKIDAR_USEPOLLING=true  # For hot reload on some systems
+      - REACT_APP_DEV_LOGIN=1      # Enables a "Dev login" button that bypasses OIDC; never set in deployed envs
       - REACT_APP_AUTHORITY=http://localhost:8080/auth
       - REACT_APP_FHIR_BASE_URL=https://server.fire.ly/R4      # adjust this to a local FHIR server or a different one if needed
       - REACT_APP_FHIR_STU3_BASE_URL=https://server.fire.ly/R3 # adjust this to a local FHIR server or a different one if needed
-      - REACT_APP_FHIR_MCSD_QUERY_BASE_URL=http://localhost:7050/fhir/knpt-mcsd-query
+      - REACT_APP_FHIR_MCSD_QUERY_BASE_URL=http://hapi-fhir:7050/fhir/knpt-mcsd-query
     stdin_open: true
     tty: true
 

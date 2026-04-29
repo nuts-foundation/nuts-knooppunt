@@ -1,10 +1,10 @@
 import {headers, headersWithContentType} from "./fhir";
-import {config} from "../config";
+import {apiBase, config} from "../config";
 
 export const eOverdrachtApi = {
     async getEOverdrachtTasks(patientId) {
         // Query Tasks by code (308292007 = "Overdracht van zorg") from STU3 server
-        const url = `${config.fhirStu3BaseURL}/Task?code=308292007${patientId ? `&patient=http://localhost:7050/fhir/sunflower-patients/Patient/${patientId}` : ''}`;
+        const url = `${apiBase.fhirStu3}/Task?code=308292007${patientId ? `&patient=http://localhost:7050/fhir/sunflower-patients/Patient/${patientId}` : ''}`;
         const res = await fetch(url, {headers});
         if (!res.ok) throw new Error('Get Tasks failed: ' + res.statusText);
         const bundle = await res.json();
@@ -76,7 +76,7 @@ export const eOverdrachtApi = {
             ]
         };
 
-        const url = `${config.fhirStu3BaseURL}/Task`;
+        const url = `${apiBase.fhirStu3}/Task`;
         const res = await fetch(url, {
             method: 'POST',
             headers: headersWithContentType,

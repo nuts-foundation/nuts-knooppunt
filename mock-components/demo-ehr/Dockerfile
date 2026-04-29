@@ -1,13 +1,18 @@
-# Simple development Dockerfile
+# --- Build stage: compile the React app ---
+FROM node:18-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# --- Runtime stage: minimal Node image serving the build + proxying FHIR ---
 FROM node:18-alpine
 WORKDIR /app
-# Copy package files
+ENV NODE_ENV=production
 COPY package.json package-lock.json ./
-# Install dependencies
-RUN npm install
-# Copy source code
-COPY . .
-# Expose port 3000
+RUN npm ci --omit=dev
+COPY server.js ./server.js
+COPY --from=build /app/build ./build
 EXPOSE 3000
-# Start the development server
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
