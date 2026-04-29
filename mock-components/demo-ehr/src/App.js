@@ -12,7 +12,7 @@ import './App.css';
 function App() {
   return (
     <AuthProvider>
-      <Router>
+      <Router basename={process.env.PUBLIC_URL || undefined}>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/callback" element={<CallbackPage />} />

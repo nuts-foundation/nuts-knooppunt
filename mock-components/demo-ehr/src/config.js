@@ -10,9 +10,13 @@ export const config = {
 
 // Relative paths the SPA uses for its own fetch() calls. The backend (server.js
 // in production, setupProxy.js under `npm start`) proxies these to the
-// configured upstreams and enforces an allowlist of operations.
+// configured upstreams and enforces an allowlist of operations. PUBLIC_URL is
+// baked at build time by CRA and is empty when serving at the host root.
+const publicUrl = process.env.PUBLIC_URL || '';
 export const apiBase = {
-    fhir: '/api/fhir',
-    fhirStu3: '/api/fhir-stu3',
-    mcsd: '/api/mcsd',
+    fhir: `${publicUrl}/api/fhir`,
+    fhirStu3: `${publicUrl}/api/fhir-stu3`,
+    mcsd: `${publicUrl}/api/mcsd`,
+    knooppunt: `${publicUrl}/api/knooppunt`,
+    dynamicProxy: `${publicUrl}/api/dynamic-proxy`,
 };

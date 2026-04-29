@@ -6,6 +6,12 @@ const allowlist = require('./proxy-allowlist');
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const STATIC_DIR = path.resolve(__dirname, 'build');
 
+// Optional path prefix for serving the SPA + proxies under a sub-path (e.g.
+// "/ehr"). Must match the PUBLIC_URL used at build time. Strip a trailing
+// slash so concatenations stay clean.
+const BASE_URL = (process.env.BASE_URL || '').replace(/\/+$/, '');
+const at = (p) => `${BASE_URL}${p}`;
+
 const KNOOPPUNT_BASE_URL = process.env.KNOOPPUNT_BASE_URL || 'http://knooppunt:8081';
 const FHIR_BASE_URL = process.env.FHIR_BASE_URL || process.env.REACT_APP_FHIR_BASE_URL;
 const FHIR_STU3_BASE_URL = process.env.FHIR_STU3_BASE_URL || process.env.REACT_APP_FHIR_STU3_BASE_URL;
@@ -40,11 +46,11 @@ function mountProxy(app, prefix, target, rules, label) {
 const app = express();
 app.disable('x-powered-by');
 
-app.get('/healthz', (_req, res) => res.json({ ok: true }));
+app.get(at('/healthz'), (_req, res) => res.json({ ok: true }));
 
 // Dynamic proxy (target supplied via X-Target-URL header).
 app.use(
-  '/api/dynamic-proxy',
+  at('/api/dynamic-proxy'),
   allowlist.makeGate('dynamic-proxy', allowlist.DYNAMIC),
   (req, res, next) => {
     const targetUrl = req.headers['x-target-url'];
@@ -63,7 +69,7 @@ app.use(
     const proxy = createProxyMiddleware({
       target: targetUrl,
       changeOrigin: true,
-      pathRewrite: { '^/api/dynamic-proxy': '' },
+      pathRewrite: { [`^${at('/api/dynamic-proxy')}`]: '' },
       logLevel: 'warn',
       onProxyReq: (proxyReq) => {
         proxyReq.removeHeader('x-target-url');
@@ -77,14 +83,19 @@ app.use(
   }
 );
 
-mountProxy(app, '/api/knooppunt', KNOOPPUNT_BASE_URL, allowlist.KNOOPPUNT, 'knooppunt');
-mountProxy(app, '/api/fhir', FHIR_BASE_URL, allowlist.FHIR_R4, 'fhir-r4');
-mountProxy(app, '/api/fhir-stu3', FHIR_STU3_BASE_URL, allowlist.FHIR_STU3, 'fhir-stu3');
-mountProxy(app, '/api/mcsd', FHIR_MCSD_QUERY_BASE_URL, allowlist.MCSD, 'mcsd');
+mountProxy(app, at('/api/knooppunt'), KNOOPPUNT_BASE_URL, allowlist.KNOOPPUNT, 'knooppunt');
+mountProxy(app, at('/api/fhir'), FHIR_BASE_URL, allowlist.FHIR_R4, 'fhir-r4');
+mountProxy(app, at('/api/fhir-stu3'), FHIR_STU3_BASE_URL, allowlist.FHIR_STU3, 'fhir-stu3');
+mountProxy(app, at('/api/mcsd'), FHIR_MCSD_QUERY_BASE_URL, allowlist.MCSD, 'mcsd');
 
-app.use(express.static(STATIC_DIR, { index: false }));
-app.get('*', (_req, res) => res.sendFile(path.join(STATIC_DIR, 'index.html')));
+if (BASE_URL) {
+  app.use(BASE_URL, express.static(STATIC_DIR, { index: false }));
+  app.get(`${BASE_URL}/*`, (_req, res) => res.sendFile(path.join(STATIC_DIR, 'index.html')));
+} else {
+  app.use(express.static(STATIC_DIR, { index: false }));
+  app.get('*', (_req, res) => res.sendFile(path.join(STATIC_DIR, 'index.html')));
+}
 
 app.listen(PORT, () => {
-  console.log(`demo-ehr server listening on :${PORT}`);
+  console.log(`demo-ehr server listening on :${PORT}${BASE_URL ? ` (base=${BASE_URL})` : ''}`);
 });

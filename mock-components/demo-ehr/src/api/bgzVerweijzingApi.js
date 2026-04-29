@@ -354,7 +354,7 @@ export const bgzVerweijzingApi = {
 
         console.log('Sending notification task to endpoint:', endpointAddress);
 
-        const url = '/api/dynamic-proxy/Task';
+        const url = `${apiBase.dynamicProxy}/Task`;
         const headers = {
             ...headersWithContentType,
             'X-Target-URL': endpointAddress
