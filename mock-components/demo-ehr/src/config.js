@@ -1,22 +1,22 @@
-// Absolute upstream URLs. Kept available so the frontend can embed them as
-// FHIR Reference values in resources sent to other parties (those URLs must be
-// publicly resolvable, not point at this app's local proxy).
+// Public upstream URLs. Used when embedding values into FHIR Reference fields
+// of resources sent to other parties (those URLs must be publicly resolvable,
+// not point at this app's local proxy).
+import { baseUrl, runtimeConfig } from './runtimeConfig';
+
 export const config = {
-    mcsdQueryBaseURL: process.env.REACT_APP_FHIR_MCSD_QUERY_BASE_URL,
-    fhirBaseURL: process.env.REACT_APP_FHIR_BASE_URL,
-    fhirStu3BaseURL: process.env.REACT_APP_FHIR_STU3_BASE_URL,
-    organizationURA: process.env.REACT_APP_ORGANIZATION_URA,
+    mcsdQueryBaseURL: runtimeConfig.mcsdQueryBaseURL,
+    fhirBaseURL: runtimeConfig.fhirBaseURL,
+    fhirStu3BaseURL: runtimeConfig.fhirStu3BaseURL,
+    organizationURA: runtimeConfig.organizationURA,
 };
 
 // Relative paths the SPA uses for its own fetch() calls. The backend (server.js
 // in production, setupProxy.js under `npm start`) proxies these to the
-// configured upstreams and enforces an allowlist of operations. PUBLIC_URL is
-// baked at build time by CRA and is empty when serving at the host root.
-const publicUrl = process.env.PUBLIC_URL || '';
+// configured upstreams and enforces an allowlist of operations.
 export const apiBase = {
-    fhir: `${publicUrl}/api/fhir`,
-    fhirStu3: `${publicUrl}/api/fhir-stu3`,
-    mcsd: `${publicUrl}/api/mcsd`,
-    knooppunt: `${publicUrl}/api/knooppunt`,
-    dynamicProxy: `${publicUrl}/api/dynamic-proxy`,
+    fhir: `${baseUrl}/api/fhir`,
+    fhirStu3: `${baseUrl}/api/fhir-stu3`,
+    mcsd: `${baseUrl}/api/mcsd`,
+    knooppunt: `${baseUrl}/api/knooppunt`,
+    dynamicProxy: `${baseUrl}/api/dynamic-proxy`,
 };

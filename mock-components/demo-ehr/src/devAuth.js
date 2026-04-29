@@ -2,11 +2,11 @@
 // login button only renders when the flag is set, and AuthProvider only
 // restores a stored dev session under the same flag.
 
+import { runtimeConfig } from './runtimeConfig';
+
 const DEV_USER_KEY = 'demo-ehr-dev-user';
 
-export const isDevLoginEnabled = () =>
-  process.env.REACT_APP_DEV_LOGIN === '1' ||
-  process.env.REACT_APP_DEV_LOGIN === 'true';
+export const isDevLoginEnabled = () => !!runtimeConfig.devLoginEnabled;
 
 // `sub` doubles as the requesting organization URA in
 // bgzVerweijzingApi.createBgZNotificatonTask, so use a URA-shaped value.

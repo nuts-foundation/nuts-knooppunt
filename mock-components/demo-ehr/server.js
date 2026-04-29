@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const { createProxyMiddleware } = require('http-proxy-middleware');
@@ -7,8 +8,8 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 const STATIC_DIR = path.resolve(__dirname, 'build');
 
 // Optional path prefix for serving the SPA + proxies under a sub-path (e.g.
-// "/ehr"). Must match the PUBLIC_URL used at build time. Strip a trailing
-// slash so concatenations stay clean.
+// "/ehr"). All runtime — no rebuild required. Trailing slash stripped so
+// concatenations stay clean.
 const BASE_URL = (process.env.BASE_URL || '').replace(/\/+$/, '');
 const at = (p) => `${BASE_URL}${p}`;
 
@@ -16,6 +17,34 @@ const KNOOPPUNT_BASE_URL = process.env.KNOOPPUNT_BASE_URL || 'http://knooppunt:8
 const FHIR_BASE_URL = process.env.FHIR_BASE_URL || process.env.REACT_APP_FHIR_BASE_URL;
 const FHIR_STU3_BASE_URL = process.env.FHIR_STU3_BASE_URL || process.env.REACT_APP_FHIR_STU3_BASE_URL;
 const FHIR_MCSD_QUERY_BASE_URL = process.env.FHIR_MCSD_QUERY_BASE_URL || process.env.REACT_APP_FHIR_MCSD_QUERY_BASE_URL;
+
+// Runtime config exposed to the SPA via window.__APP_CONFIG__. Anything the
+// browser needs to know that depends on deployment (paths, OIDC issuer,
+// reference URLs, feature flags) goes here.
+const APP_CONFIG = {
+  baseUrl: BASE_URL,
+  authority: process.env.REACT_APP_AUTHORITY || '',
+  fhirBaseURL: process.env.REACT_APP_FHIR_BASE_URL || '',
+  fhirStu3BaseURL: process.env.REACT_APP_FHIR_STU3_BASE_URL || '',
+  mcsdQueryBaseURL: process.env.REACT_APP_FHIR_MCSD_QUERY_BASE_URL || '',
+  organizationURA: process.env.REACT_APP_ORGANIZATION_URA || '',
+  devLoginEnabled:
+    process.env.DEV_LOGIN === '1' ||
+    process.env.DEV_LOGIN === 'true' ||
+    process.env.REACT_APP_DEV_LOGIN === '1' ||
+    process.env.REACT_APP_DEV_LOGIN === 'true',
+};
+
+// Read index.html once, inject <base href> + window.__APP_CONFIG__. The base
+// href is what makes CRA's relative asset paths (./static/...) resolve
+// correctly even when the user lands on a deep SPA route.
+const indexHtmlSrc = fs.readFileSync(path.join(STATIC_DIR, 'index.html'), 'utf8');
+const baseHref = `${BASE_URL || ''}/`;
+const safeConfig = JSON.stringify(APP_CONFIG).replace(/</g, '\\u003c');
+const injection =
+  `<base href="${baseHref}">` +
+  `<script>window.__APP_CONFIG__ = ${safeConfig};</script>`;
+const indexHtml = indexHtmlSrc.replace(/<head(\s[^>]*)?>/i, (m) => `${m}\n    ${injection}`);
 
 function mountProxy(app, prefix, target, rules, label) {
   if (!target) {
@@ -88,12 +117,13 @@ mountProxy(app, at('/api/fhir'), FHIR_BASE_URL, allowlist.FHIR_R4, 'fhir-r4');
 mountProxy(app, at('/api/fhir-stu3'), FHIR_STU3_BASE_URL, allowlist.FHIR_STU3, 'fhir-stu3');
 mountProxy(app, at('/api/mcsd'), FHIR_MCSD_QUERY_BASE_URL, allowlist.MCSD, 'mcsd');
 
+const sendIndex = (_req, res) => res.type('html').send(indexHtml);
 if (BASE_URL) {
   app.use(BASE_URL, express.static(STATIC_DIR, { index: false }));
-  app.get(`${BASE_URL}/*`, (_req, res) => res.sendFile(path.join(STATIC_DIR, 'index.html')));
+  app.get(`${BASE_URL}/*`, sendIndex);
 } else {
   app.use(express.static(STATIC_DIR, { index: false }));
-  app.get('*', (_req, res) => res.sendFile(path.join(STATIC_DIR, 'index.html')));
+  app.get('*', sendIndex);
 }
 
 app.listen(PORT, () => {
