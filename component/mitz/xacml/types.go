@@ -79,7 +79,7 @@ type AuthzRequest struct {
 	// Example: "000095254" (UZI number)
 	ProviderID string
 
-	// MandatedID UZI number of practitioner who delegated
+	// MandatedID is the UZI number of the practitioner acting under the mandate (delegated-to)
 	// Example: "000095254" (UZI number)
 	MandatedID *string
 
