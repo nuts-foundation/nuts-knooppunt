@@ -60,7 +60,7 @@ func xacmlFromInput(input PolicyInput) (xacml.AuthzRequest, error) {
 		// If the request is mandated, the practitioner who mandated is responsible
 		s, _ := delRegByProp.(string)
 		iden, err := fhirutil.TokenToIdentifier(s)
-		if err != nil && iden.Value != nil {
+		if err == nil && iden.Value != nil {
 			responsiblePractitioner = *iden.Value
 		} else {
 			return xacml.AuthzRequest{}, errors.New("invalid format for delegation_registered_by")
@@ -69,7 +69,7 @@ func xacmlFromInput(input PolicyInput) (xacml.AuthzRequest, error) {
 		if hasDelegatedRole {
 			s, _ = delRoleProp.(string)
 			iden, err = fhirutil.TokenToIdentifier(s)
-			if err != nil && iden.Value != nil {
+			if err == nil && iden.Value != nil {
 				responsiblePractitionerRole = *iden.Value
 			} else {
 				return xacml.AuthzRequest{}, errors.New("missing delegation_role_code")
