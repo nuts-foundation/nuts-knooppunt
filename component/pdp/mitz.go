@@ -7,7 +7,6 @@ import (
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
-	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 )
 
 func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input *PolicyInput) (*PolicyInput, []ResultReason) {
@@ -104,8 +103,8 @@ func xacmlFromInput(input PolicyInput) (xacml.AuthzRequest, error) {
 	}
 
 	if isDelegated {
-		// If the request is mandated add the practitioner that has been delegated to
-		req.MandatedID = to.Ptr(input.Subject.User.Id)
+		// If the request is mandated, add the practitioner that has been delegated to,
+		req.MandatedID = new(input.Subject.User.Id)
 	}
 	return req, nil
 }
