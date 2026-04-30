@@ -142,10 +142,6 @@ type PolicySubjectUser struct {
 	Id   string `json:"id"`
 	Role string `json:"role"`
 }
-type PolicySubjectDelegation struct {
-	RegisteredBy string `json:"registered_by"`
-	RoleCode     string `json:"role_code"`
-}
 
 func NewPolicySubject(apiSubject APISubject) PolicySubject {
 
