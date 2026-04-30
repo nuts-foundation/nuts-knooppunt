@@ -5,6 +5,8 @@ import (
 	"log/slog"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 )
 
 func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input *PolicyInput) (*PolicyInput, []ResultReason) {
@@ -40,18 +42,38 @@ func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input *Policy
 }
 
 func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
-	return xacml.AuthzRequest{
+	delRegByProp, isDelegated := input.Subject.OtherProps["delegation_registered_by"]
+	var responsiblePractitioner string
+	if isDelegated {
+		// If the request is mandated, the practitioner who mandated is responsible
+		s, _ := delRegByProp.(string)
+		iden, err := fhirutil.TokenToIdentifier(s)
+		if err != nil && iden.Value != nil {
+			responsiblePractitioner = *iden.Value
+		}
+	} else {
+		// If the request is not mandated the (Dezi) authenticated practitioner is responsible
+		responsiblePractitioner = input.Subject.User.Id
+	}
+
+	req := xacml.AuthzRequest{
 		PatientBSN:             input.Context.PatientBSN,
 		HealthcareFacilityType: input.Context.DataHolderFacilityType,
 		AuthorInstitutionID:    input.Context.DataHolderOrganizationId,
 		// This code is always the same, it's the code for _de gesloten vraag_
 		EventCode:              "GGC002",
 		SubjectRole:            input.Subject.User.Role,
-		ProviderID:             input.Subject.User.Id,
+		ProviderID:             responsiblePractitioner,
 		ProviderInstitutionID:  input.Subject.Organization.Ura,
 		ConsultingFacilityType: input.Subject.Organization.FacilityType,
 		PurposeOfUse:           "TREAT",
 	}
+
+	if isDelegated {
+		// If the request is mandated add the practitioner that has been delegated to
+		req.MandatedID = to.Ptr(input.Subject.User.Id)
+	}
+	return req
 }
 
 func validateMitzInput(input PolicyInput) []ResultReason {
@@ -73,19 +95,19 @@ func validateMitzInput(input PolicyInput) []ResultReason {
 		},
 		{
 			Value:   input.Subject.User.Role,
-			Message: "Could not complete Mitz consent check: Missing subject role",
+			Message: "Could not complete Mitz consent check: Missing subject user role",
 		},
 		{
 			Value:   input.Subject.User.Id,
-			Message: "Could not complete Mitz consent check: Missing subject id",
+			Message: "Could not complete Mitz consent check: Missing subject user id",
 		},
 		{
 			Value:   input.Subject.Organization.Ura,
-			Message: "Could not complete Mitz consent check: Missing subject organization ID",
+			Message: "Could not complete Mitz consent check: Missing subject organization URA",
 		},
 		{
 			Value:   input.Subject.Organization.FacilityType,
-			Message: "Could not complete Mitz consent check: Missing subject facility type",
+			Message: "Could not complete Mitz consent check: Missing subject organization facility type",
 		},
 	}
 

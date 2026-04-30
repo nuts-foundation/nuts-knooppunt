@@ -79,6 +79,10 @@ type AuthzRequest struct {
 	// Example: "000095254" (UZI number)
 	ProviderID string
 
+	// MandatedID UZI number of practitioner who delegated
+	// Example: "000095254" (UZI number)
+	MandatedID *string
+
 	// ProviderInstitutionID is the unique identifier (URA code) of the healthcare institution (consulting organization)
 	// REQUIRED - Identifies the consulting/responsible organization.
 	// Example: "00000666" (institution URA code)

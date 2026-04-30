@@ -29,6 +29,8 @@ type APISubject struct {
 	OrganizationUra          string         `json:"organization_ura"`
 	OrganizationName         string         `json:"organization_name"`
 	OrganizationFacilityType string         `json:"organization_facility_type"`
+	DelegationRegisteredBy   string         `json:"delegation_registered_by"`
+	DelegationRoleCode       string         `json:"delegation_role_code"`
 }
 
 var _ json.Unmarshaler = (*APISubject)(nil)
@@ -141,6 +143,10 @@ type PolicySubjectOrganization struct {
 type PolicySubjectUser struct {
 	Id   string `json:"id"`
 	Role string `json:"role"`
+}
+type PolicySubjectDelegation struct {
+	RegisteredBy string `json:"registered_by"`
+	RoleCode     string `json:"role_code"`
 }
 
 func NewPolicySubject(apiSubject APISubject) PolicySubject {

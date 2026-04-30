@@ -113,6 +113,15 @@ func createAuthzDecisionQuery(req AuthzRequest, signingConfig *SigningConfig) (s
 		req.SubjectRole,
 		"2.16.840.1.113883.2.4.15.111")
 
+	if req.MandatedID != nil {
+		// Mandated Identifier
+		addHL7InstanceIdentifierAttributeWithAssigningAuthority(subjectAttrs,
+			"urn:nl:otv:names:tc:1.0:subject:mandated",
+			"2.16.528.1.1007.3.1",
+			*req.MandatedID,
+			"CIBG")
+	}
+
 	// Provider Identifier
 	addHL7InstanceIdentifierAttributeWithAssigningAuthority(subjectAttrs,
 		"urn:ihe:iti:xua:2017:subject:provider-identifier",
