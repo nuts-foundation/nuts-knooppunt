@@ -54,6 +54,10 @@ func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input *Policy
 func xacmlFromInput(input PolicyInput) (xacml.AuthzRequest, error) {
 	delRegByProp, isDelegated := input.Subject.OtherProps["delegation_registered_by"]
 	delRoleProp, hasDelegatedRole := input.Subject.OtherProps["delegation_role_code"]
+	if isDelegated && !hasDelegatedRole {
+		return xacml.AuthzRequest{}, errors.New("inconsistent credentials, delegation_role_code without a delegation_registered_by present")
+	}
+
 	var responsiblePractitioner string
 	var responsiblePractitionerRole string
 	if isDelegated {
