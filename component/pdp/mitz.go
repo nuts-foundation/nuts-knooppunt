@@ -2,6 +2,7 @@ package pdp
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
@@ -26,7 +27,16 @@ func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input *Policy
 		return input, resultReasons
 	}
 
-	consentReq := xacmlFromInput(*input)
+	consentReq, err := xacmlFromInput(*input)
+	if err != nil {
+		slog.WarnContext(ctx, "Mitz consent check failed", "error", err)
+		return input, []ResultReason{
+			{
+				Code:        TypeResultCodeUnexpectedInput,
+				Description: "could not complete consent check with Mitz: " + err.Error(),
+			},
+		}
+	}
 	consentResp, err := c.consentChecker.CheckConsent(ctx, consentReq)
 	if err != nil {
 		slog.WarnContext(ctx, "Mitz consent check failed", "error", err)
@@ -41,19 +51,39 @@ func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input *Policy
 	return input, nil
 }
 
-func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
+func xacmlFromInput(input PolicyInput) (xacml.AuthzRequest, error) {
 	delRegByProp, isDelegated := input.Subject.OtherProps["delegation_registered_by"]
+	delRoleProp, hasDelegatedRole := input.Subject.OtherProps["delegation_role_code"]
 	var responsiblePractitioner string
+	var responsiblePractitionerRole string
 	if isDelegated {
 		// If the request is mandated, the practitioner who mandated is responsible
 		s, _ := delRegByProp.(string)
 		iden, err := fhirutil.TokenToIdentifier(s)
 		if err != nil && iden.Value != nil {
 			responsiblePractitioner = *iden.Value
+		} else {
+			return xacml.AuthzRequest{}, errors.New("invalid format for delegation_registered_by")
 		}
+
+		if hasDelegatedRole {
+			s, _ = delRoleProp.(string)
+			iden, err = fhirutil.TokenToIdentifier(s)
+			if err != nil && iden.Value != nil {
+				responsiblePractitionerRole = *iden.Value
+			} else {
+				return xacml.AuthzRequest{}, errors.New("missing delegation_role_code")
+			}
+		} else {
+			// Subject role is a mandatory field is Mitz
+			// If the responsibility is delegated but there is no role, we can only error out
+			return xacml.AuthzRequest{}, errors.New("missing delegation_role_code")
+		}
+
 	} else {
 		// If the request is not mandated the (Dezi) authenticated practitioner is responsible
 		responsiblePractitioner = input.Subject.User.Id
+		responsiblePractitionerRole = input.Subject.User.Role
 	}
 
 	req := xacml.AuthzRequest{
@@ -62,7 +92,7 @@ func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
 		AuthorInstitutionID:    input.Context.DataHolderOrganizationId,
 		// This code is always the same, it's the code for _de gesloten vraag_
 		EventCode:              "GGC002",
-		SubjectRole:            input.Subject.User.Role,
+		SubjectRole:            responsiblePractitionerRole,
 		ProviderID:             responsiblePractitioner,
 		ProviderInstitutionID:  input.Subject.Organization.Ura,
 		ConsultingFacilityType: input.Subject.Organization.FacilityType,
@@ -73,7 +103,7 @@ func xacmlFromInput(input PolicyInput) xacml.AuthzRequest {
 		// If the request is mandated add the practitioner that has been delegated to
 		req.MandatedID = to.Ptr(input.Subject.User.Id)
 	}
-	return req
+	return req, nil
 }
 
 func validateMitzInput(input PolicyInput) []ResultReason {
