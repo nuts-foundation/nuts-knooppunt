@@ -46,7 +46,7 @@ func TestComponent_xacmlFromInput_Delegation(t *testing.T) {
 		delegatorID   = "000012345"
 		delegatorRole = "30.000"
 		regByToken    = "http://fhir.nl/fhir/NamingSystem/uzi-nr-pers|" + delegatorID
-		roleCodeToken = "http://fhir.nl/fhir/NamingSystem/uzi-rolcode" + delegatorRole
+		roleCodeToken = "http://fhir.nl/fhir/NamingSystem/uzi-rolcode|" + delegatorRole
 	)
 
 	t.Run("uses delegating practitioner as responsible and sets MandatedID to authenticated user", func(t *testing.T) {
