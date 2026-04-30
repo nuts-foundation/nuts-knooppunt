@@ -72,7 +72,7 @@ func xacmlFromInput(input PolicyInput) (xacml.AuthzRequest, error) {
 			if err == nil && iden.Value != nil {
 				responsiblePractitionerRole = *iden.Value
 			} else {
-				return xacml.AuthzRequest{}, errors.New("missing delegation_role_code")
+				return xacml.AuthzRequest{}, errors.New("malformed delegation_role_code")
 			}
 		} else {
 			// Subject role is a mandatory field is Mitz
