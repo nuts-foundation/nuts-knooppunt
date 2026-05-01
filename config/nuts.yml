@@ -7,4 +7,4 @@ auth:
     - dummy
 
 policy:
-  directory: "/app/config/policy"
+  directory: "./config/policy"
