@@ -139,9 +139,9 @@ func (c Component) callPRSEvaluate(ctx context.Context, localOrganizationURA str
 		EncryptedPersonalID:   blindedInputData,
 	}
 
-	bodyBytes, err := json.Marshal(requestBody)
+	bodyBytes, err := marshalPRS(requestBody)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("marshaling PRS request body: %w", err)
 	}
 
 	requestURL, err := url.Parse(c.config.PRSBaseURL)
