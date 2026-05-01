@@ -374,8 +374,8 @@ func requestAccessToken(t *testing.T, nutsAPI func(string) string, subject, auth
 			"@context": []string{"https://www.w3.org/2018/credentials/v1"},
 			"type":     []string{"VerifiableCredential", "HealthCareProfessionalDelegationCredential"},
 			"credentialSubject": map[string]any{
-				"registeredBy": "urn:oid:2.16.528.1.1007.3.1.12345",
-				"roleCode":     "01.015",
+				"registeredBy": "http://fhir.nl/fhir/NamingSystem/uzi-nr-pers|000012345",
+				"roleCode":     "http://fhir.nl/fhir/NamingSystem/role-code-pers|01.015",
 				"facilityType": "Z3",
 			},
 		},
