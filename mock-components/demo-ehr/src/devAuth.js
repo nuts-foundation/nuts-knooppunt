@@ -1,4 +1,4 @@
-// Dev-only login that bypasses OIDC. Gated behind REACT_APP_DEV_LOGIN; the
+// Dev-only login that bypasses Dezi auth. Gated behind REACT_APP_DEV_LOGIN; the
 // login button only renders when the flag is set, and AuthProvider only
 // restores a stored dev session under the same flag.
 
@@ -8,17 +8,14 @@ const DEV_USER_KEY = 'demo-ehr-dev-user';
 
 export const isDevLoginEnabled = () => !!runtimeConfig.devLoginEnabled;
 
+// Flat user shape mirrors what the demo-dezi-client backend returns from
+// /userinfo, so the rest of the app sees a consistent user object.
 // `sub` doubles as the requesting organization URA in
 // bgzVerweijzingApi.createBgZNotificatonTask, so use a URA-shaped value.
 export const buildDevUser = () => ({
-  profile: {
-    sub: '00000666',
-    name: 'Dev User',
-    email: 'dev@example.local',
-    client_id: 'demo-ehr-dev',
-  },
-  scopes: ['openid', 'profile'],
-  expires_at: Math.floor(Date.now() / 1000) + 24 * 60 * 60,
+  sub: '00000666',
+  name: 'Dev User',
+  email: 'dev@example.local',
   __devUser: true,
 });
 

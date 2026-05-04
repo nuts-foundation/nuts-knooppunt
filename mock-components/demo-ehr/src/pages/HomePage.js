@@ -20,7 +20,7 @@ function HomePage() {
           {isAuthenticated && (
             <div className="user-info">
               <span className="user-name">
-                Logged in as: {user.profile.name ? `${user.profile.name} (${user.profile.sub})` : user.profile.sub}
+                Logged in as: {user.name || user.sub}
               </span>
               <button onClick={logout} className="button button-secondary">
                 Logout
@@ -36,14 +36,14 @@ function HomePage() {
             <h2>Welcome to Demo EHR</h2>
             <p>
               This is a demonstration Electronic Health Record system that uses
-              the Nuts Knooppunt for secure authentication.
+              Dezi for secure authentication.
             </p>
             <p>
               To access patient records and other features, please log in using
               your credentials.
             </p>
             <button onClick={login} className="button">
-              Login with Knooppunt
+              Login with Dezi
             </button>
             {devLoginEnabled && (
               <button
@@ -59,7 +59,7 @@ function HomePage() {
         ) : (
           <div>
             <div className="welcome-section" style={{ marginBottom: '20px' }}>
-              <h2>Welcome back{user.profile.name ? `, ${user.profile.name}` : ''}!</h2>
+              <h2>Welcome back{user.name ? `, ${user.name}` : ''}!</h2>
               <p>You have successfully logged in to the Demo EHR system.</p>
             </div>
 
@@ -68,7 +68,7 @@ function HomePage() {
                 <h3>📋 Patient Records</h3>
                 <p>
                   Access and manage patient health records securely through the
-                  Nuts Knooppunt infrastructure.
+                  Dezi authentication infrastructure.
                 </p>
                 <Link to="/patients" className="button" style={{ marginTop: '15px', display: 'inline-block' }}>
                   View Patients
@@ -99,22 +99,32 @@ function HomePage() {
                 <div className="info-grid">
                   <div className="info-item">
                     <span className="info-label">Subject:</span>
-                    <span className="info-value">{user.profile.sub}</span>
+                    <span className="info-value">{user.sub}</span>
                   </div>
-                  <div className="info-item">
-                    <span className="info-label">Client ID:</span>
-                    <span className="info-value">{user.profile.client_id}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">Scopes:</span>
-                    <span className="info-value">{user.scopes?.join(', ')}</span>
-                  </div>
-                  <div className="info-item">
-                    <span className="info-label">Expires:</span>
-                    <span className="info-value">
-                      {new Date(user.expires_at * 1000).toLocaleString()}
-                    </span>
-                  </div>
+                  {user.dezi_nummer && (
+                    <div className="info-item">
+                      <span className="info-label">Dezi Number:</span>
+                      <span className="info-value">{user.dezi_nummer}</span>
+                    </div>
+                  )}
+                  {user.rol_naam && (
+                    <div className="info-item">
+                      <span className="info-label">Role:</span>
+                      <span className="info-value">{user.rol_naam}</span>
+                    </div>
+                  )}
+                  {user.abonnee_naam && (
+                    <div className="info-item">
+                      <span className="info-label">Organization:</span>
+                      <span className="info-value">{user.abonnee_naam}</span>
+                    </div>
+                  )}
+                  {user.verklaring_id && (
+                    <div className="info-item">
+                      <span className="info-label">Verklaring ID:</span>
+                      <span className="info-value" style={{ fontSize: '12px' }}>{user.verklaring_id}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
