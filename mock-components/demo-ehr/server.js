@@ -24,6 +24,7 @@ const FHIR_MCSD_QUERY_BASE_URL = process.env.FHIR_MCSD_QUERY_BASE_URL || process
 const APP_CONFIG = {
   baseUrl: BASE_URL,
   authority: process.env.REACT_APP_AUTHORITY || '',
+  authBaseUrl: process.env.REACT_APP_AUTH_BASE_URL || '',
   fhirBaseURL: process.env.REACT_APP_FHIR_BASE_URL || '',
   fhirStu3BaseURL: process.env.REACT_APP_FHIR_STU3_BASE_URL || '',
   mcsdQueryBaseURL: process.env.REACT_APP_FHIR_MCSD_QUERY_BASE_URL || '',

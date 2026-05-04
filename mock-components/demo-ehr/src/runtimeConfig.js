@@ -7,6 +7,7 @@
 const fromEnv = () => ({
   baseUrl: '',
   authority: process.env.REACT_APP_AUTHORITY || 'http://localhost:8081',
+  authBaseUrl: process.env.REACT_APP_AUTH_BASE_URL || 'http://localhost:8090',
   fhirBaseURL: process.env.REACT_APP_FHIR_BASE_URL || '',
   fhirStu3BaseURL: process.env.REACT_APP_FHIR_STU3_BASE_URL || '',
   mcsdQueryBaseURL: process.env.REACT_APP_FHIR_MCSD_QUERY_BASE_URL || '',
