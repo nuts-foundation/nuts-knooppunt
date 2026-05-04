@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../AuthProvider';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { patientApi } from '../api/patientApi';
 
 function PatientsPage() {
@@ -612,9 +612,9 @@ function PatientsPage() {
         )}
 
         <div style={{ marginTop: '30px' }}>
-          <a href="/mock-components/demo-ehr/public" className="button button-secondary">
+          <Link to="/" className="button button-secondary">
             ← Back to Dashboard
-          </a>
+          </Link>
         </div>
       </main>
     </div>

@@ -1,10 +1,10 @@
 import {headers, headersWithContentType} from "./fhir";
-import {config} from "../config";
+import {apiBase} from "../config";
 
 export const practitionerApi = {
     async searchByIdentifier(userId) {
         // Search for Practitioner by identifier (userId from OIDC token)
-        const url = `${config.fhirBaseURL}/Practitioner?identifier=urn:oid:2.16.840.1.113883.2.4.6.3|${userId}`;
+        const url = `${apiBase.fhir}/Practitioner?identifier=urn:oid:2.16.840.1.113883.2.4.6.3|${userId}`;
         const res = await fetch(url, {headers});
 
         if (!res.ok) {
@@ -47,7 +47,7 @@ export const practitionerApi = {
             ] : []
         };
 
-        const url = `${config.fhirBaseURL}/Practitioner`;
+        const url = `${apiBase.fhir}/Practitioner`;
         const res = await fetch(url, {
             method: 'POST',
             headers: headersWithContentType,

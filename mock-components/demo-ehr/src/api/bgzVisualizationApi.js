@@ -1,5 +1,5 @@
 import {headers} from "./fhir";
-import {config} from "../config";
+import {apiBase} from "../config";
 
 export const bgzVisualizationApi = {
     // Helper to build patient parameter for queries
@@ -19,7 +19,7 @@ export const bgzVisualizationApi = {
     },
 
     async getPatientSummary(patientId) {
-        const base = config.fhirStu3BaseURL;
+        const base = apiBase.fhirStu3;
         const patientParam = this.buildPatientParam(patientId);
 
         const summary = {

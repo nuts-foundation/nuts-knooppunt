@@ -1,10 +1,10 @@
 import {headers, headersWithContentType} from "./fhir";
-import {config} from "../config";
+import {apiBase, config} from "../config";
 
 export const consentApi = {
     async list(patientReference) {
         // Optionally filter by patient reference if provided
-        const url = new URL(config.fhirBaseURL + '/Consent');
+        const url = new URL(apiBase.fhir + '/Consent');
         if (patientReference) {
             url.searchParams.set('patient', patientReference);
         }
@@ -15,19 +15,19 @@ export const consentApi = {
     }, async create(form) {
         // Minimal FHIR R4 Consent structure
         const resource = this.toResource(form)
-        const res = await fetch(`${config.fhirBaseURL}/Consent`, {
+        const res = await fetch(`${apiBase.fhir}/Consent`, {
             method: 'POST', headers: headersWithContentType, body: JSON.stringify(resource)
         });
         if (!res.ok) throw new Error('Create consent failed: ' + res.status + ' ' + res.statusText);
         return await res.json();
     }, async update(id, updated) {
-        const res = await fetch(`${config.fhirBaseURL}/Consent/${id}`, {
+        const res = await fetch(`${apiBase.fhir}/Consent/${id}`, {
             method: 'PUT', headers: headersWithContentType, body: JSON.stringify(updated)
         });
         if (!res.ok) throw new Error('Update consent failed: ' + res.status + ' ' + res.statusText);
         return await res.json();
     }, async delete(id) {
-        const res = await fetch(`${config.fhirBaseURL}/Consent/${id}`, {method: 'DELETE', headers});
+        const res = await fetch(`${apiBase.fhir}/Consent/${id}`, {method: 'DELETE', headers});
         if (!res.ok && res.status !== 204) throw new Error('Delete consent failed: ' + res.status + ' ' + res.statusText);
         return true;
     }, toEditable(consent) {

@@ -1,74 +1,56 @@
+// Used by `react-scripts start` to provide the same /api/* proxies that
+// server.js provides in production. The allowlist is shared so dev and prod
+// enforce identical operations against each upstream.
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const allowlist = require('../proxy-allowlist');
 
-module.exports = function(app) {
-  // Dynamic proxy for arbitrary endpoint addresses
-  // Usage: /api/dynamic-proxy with X-Target-URL header
+const KNOOPPUNT_TARGET = process.env.REACT_APP_KNOOPPUNT_BASE_URL || 'http://knooppunt:8081';
+
+const upstreams = [
+  { prefix: '/api/fhir',      target: process.env.REACT_APP_FHIR_BASE_URL,            rules: allowlist.FHIR_R4,    label: 'fhir-r4' },
+  { prefix: '/api/fhir-stu3', target: process.env.REACT_APP_FHIR_STU3_BASE_URL,       rules: allowlist.FHIR_STU3,  label: 'fhir-stu3' },
+  { prefix: '/api/mcsd',      target: process.env.REACT_APP_FHIR_MCSD_QUERY_BASE_URL, rules: allowlist.MCSD,       label: 'mcsd' },
+  { prefix: '/api/knooppunt', target: KNOOPPUNT_TARGET,                               rules: allowlist.KNOOPPUNT,  label: 'knooppunt' },
+];
+
+module.exports = function (app) {
+  // Dynamic proxy: target supplied via X-Target-URL header.
   app.use(
     '/api/dynamic-proxy',
+    allowlist.makeGate('dynamic-proxy', allowlist.DYNAMIC),
     (req, res, next) => {
       const targetUrl = req.headers['x-target-url'];
-
       if (!targetUrl) {
         return res.status(400).json({ error: 'Missing X-Target-URL header' });
       }
-
-      console.log(`[Dynamic Proxy] Proxying to: ${targetUrl}`);
-
-      // Create a proxy middleware on the fly for this request
       const proxy = createProxyMiddleware({
         target: targetUrl,
         changeOrigin: true,
-        pathRewrite: {
-          '^/api/dynamic-proxy': '', // remove /api/dynamic-proxy prefix
-        },
-        onProxyReq: (proxyReq, req, res) => {
-          // Remove the X-Target-URL header before forwarding
-          proxyReq.removeHeader('x-target-url');
-          console.log(`[Dynamic Proxy] ${req.method} ${req.path} -> ${proxyReq.protocol}//${proxyReq.host}${proxyReq.path}`);
-        },
-        onError: (err, req, res) => {
-          console.error('[Dynamic Proxy Error]', err);
-        },
+        pathRewrite: { '^/api/dynamic-proxy': '' },
+        onProxyReq: (proxyReq) => proxyReq.removeHeader('x-target-url'),
+        onError: (err) => console.error('[dynamic-proxy]', err.message),
       });
-
       proxy(req, res, next);
     }
   );
 
-  // Proxy for Knooppunt API (NVI endpoints)
-  app.use(
-    '/api/knooppunt',
-    createProxyMiddleware({
-      target: 'http://knooppunt:8081',
-      changeOrigin: true,
-      pathRewrite: {
-        '^/api/knooppunt': '', // remove /api/knooppunt prefix when forwarding
-      },
-      onProxyReq: (proxyReq, req, res) => {
-        console.log(`[Proxy] ${req.method} ${req.path} -> ${proxyReq.protocol}//${proxyReq.host}${proxyReq.path}`);
-      },
-      onError: (err, req, res) => {
-        console.error('[Proxy Error]', err);
-      },
-    })
-  );
-
-  // Proxy for FHIR API if needed
-  if (process.env.REACT_APP_FHIR_BASE_URL) {
+  for (const { prefix, target, rules, label } of upstreams) {
+    if (!target) {
+      console.warn(`[setupProxy ${label}] disabled: no target configured`);
+      continue;
+    }
+    console.log(`[setupProxy ${label}] ${prefix} -> ${target}`);
     app.use(
-      '/api/fhir',
+      prefix,
+      allowlist.makeGate(label, rules),
       createProxyMiddleware({
-        target: process.env.REACT_APP_FHIR_BASE_URL,
+        target,
         changeOrigin: true,
-        pathRewrite: {
-          '^/api/fhir': '', // remove /api/fhir prefix when forwarding
+        pathRewrite: { [`^${prefix}`]: '' },
+        onProxyReq: (proxyReq, req) => {
+          console.log(`[setupProxy ${label}] ${req.method} ${req.path} -> ${proxyReq.protocol}//${proxyReq.host}${proxyReq.path}`);
         },
-        onProxyReq: (proxyReq, req, res) => {
-          console.log(`[Proxy] ${req.method} ${req.path} -> ${proxyReq.protocol}//${proxyReq.host}${proxyReq.path}`);
-        },
-        onError: (err, req, res) => {
-          console.error('[Proxy Error]', err);
-        },
+        onError: (err) => console.error(`[setupProxy ${label}]`, err.message),
       })
     );
   }

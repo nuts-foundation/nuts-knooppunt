@@ -1,5 +1,5 @@
 import {headers, headersWithContentType} from "./fhir";
-import {config} from "../config";
+import {apiBase, config} from "../config";
 import {organizationApi} from "./organizationApi";
 
 // Helper function to get BGZ FHIR query parameter inputs
@@ -153,7 +153,7 @@ const getBgzFhirQueryInputs = () => [
 export const bgzVerweijzingApi = {
     async getBgZWorkflowTasks(patientBsn) {
         // Fetch all BGZ workflow tasks for a patient by BSN
-        const url = `${config.fhirStu3BaseURL}/Task?for:identifier=http://fhir.nl/fhir/NamingSystem/bsn|${patientBsn}&code=http://snomed.info/sct|3457005`;
+        const url = `${apiBase.fhirStu3}/Task?for:identifier=http://fhir.nl/fhir/NamingSystem/bsn|${patientBsn}&code=http://snomed.info/sct|3457005`;
 
         const res = await fetch(url, {
             method: 'GET',
@@ -213,7 +213,7 @@ export const bgzVerweijzingApi = {
             input: getBgzFhirQueryInputs()
         };
 
-        const url = `${config.fhirStu3BaseURL}/Task`;
+        const url = `${apiBase.fhirStu3}/Task`;
         const res = await fetch(url, {
             method: 'POST',
             headers: headersWithContentType,
@@ -354,7 +354,7 @@ export const bgzVerweijzingApi = {
 
         console.log('Sending notification task to endpoint:', endpointAddress);
 
-        const url = '/api/dynamic-proxy/Task';
+        const url = `${apiBase.dynamicProxy}/Task`;
         const headers = {
             ...headersWithContentType,
             'X-Target-URL': endpointAddress

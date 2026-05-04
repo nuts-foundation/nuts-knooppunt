@@ -1,10 +1,10 @@
 import {headers} from "./fhir";
-import {config} from "../config";
+import {apiBase} from "../config";
 
 export const healthcareServiceApi = {
     async list() {
         // Query HealthcareServices from mCSD Query Directory
-        const url = config.mcsdQueryBaseURL + '/HealthcareService?_count=100';
+        const url = apiBase.mcsd + '/HealthcareService?_count=100';
         const res = await fetch(url, {headers});
         if (!res.ok) throw new Error('List healthcare services failed: ' + res.statusText);
         const bundle = await res.json();

@@ -93,7 +93,7 @@ function PatientPage() {
 
     try {
       // Fetch patient details
-      const response = await fetch(`${require('../config').config.fhirBaseURL}/Patient/${patientId}`, {
+      const response = await fetch(`${require('../config').apiBase.fhir}/Patient/${patientId}`, {
         method: 'GET',
         headers: {
           'Accept': 'application/fhir+json',
@@ -145,7 +145,7 @@ function PatientPage() {
     setBgzSummaryError(null);
     try {
       // Get the patient's BSN to look up the STU3 patient
-      const response = await fetch(`${require('../config').config.fhirBaseURL}/Patient/${patientId}`, {
+      const response = await fetch(`${require('../config').apiBase.fhir}/Patient/${patientId}`, {
         method: 'GET',
         headers: require('../api/fhir').headers,
       });
@@ -741,7 +741,7 @@ function PatientPage() {
 
       // Delete all resources
       const deletePromises = resourcesToDelete.map(async ({ id, type }) => {
-        const url = `${require('../config').config.fhirStu3BaseURL}/${type}/${id}`;
+        const url = `${require('../config').apiBase.fhirStu3}/${type}/${id}`;
         const response = await fetch(url, {
           method: 'DELETE',
           headers: {
@@ -761,7 +761,7 @@ function PatientPage() {
       // Delete the STU3 patient if it exists
       if (stu3PatientId) {
         console.log('Deleting STU3 patient:', stu3PatientId);
-        const patientDeleteUrl = `${require('../config').config.fhirStu3BaseURL}/Patient/${stu3PatientId}`;
+        const patientDeleteUrl = `${require('../config').apiBase.fhirStu3}/Patient/${stu3PatientId}`;
         const patientDeleteResponse = await fetch(patientDeleteUrl, {
           method: 'DELETE',
           headers: {

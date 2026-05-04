@@ -1,6 +1,6 @@
 // FHIR API client for fetching patient data
 import {headers} from "./fhir";
-import {config} from "../config";
+import {apiBase} from "../config";
 
 export const patientApi = {
     /**
@@ -9,7 +9,7 @@ export const patientApi = {
      */
     async list() {
         try {
-            const response = await fetch(`${config.fhirBaseURL}/Patient`, {
+            const response = await fetch(`${apiBase.fhir}/Patient`, {
                 method: 'GET',
                 headers,
             });
@@ -43,7 +43,7 @@ export const patientApi = {
         }
 
         try {
-            const searchUrl = `${config.fhirBaseURL}/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|${encodeURIComponent(bsn.trim())}`;
+            const searchUrl = `${apiBase.fhir}/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|${encodeURIComponent(bsn.trim())}`;
             const response = await fetch(searchUrl, {
                 method: 'GET',
                 headers,
@@ -140,7 +140,7 @@ export const patientApi = {
             gender,
             birthDate,
         };
-        const response = await fetch(`${config.fhirBaseURL}/Patient`, {
+        const response = await fetch(`${apiBase.fhir}/Patient`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/fhir+json',
@@ -176,7 +176,7 @@ export const patientApi = {
             gender,
             birthDate,
         };
-        const response = await fetch(`${config.fhirBaseURL}/Patient/${id}`, {
+        const response = await fetch(`${apiBase.fhir}/Patient/${id}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/fhir+json',
@@ -206,7 +206,7 @@ export const patientApi = {
     },
     async delete(id) {
         if (!id) throw new Error('Missing patient id');
-        const response = await fetch(`${config.fhirBaseURL}/Patient/${id}`, {
+        const response = await fetch(`${apiBase.fhir}/Patient/${id}`, {
             method: 'DELETE',
             headers: {
                 'Accept': 'application/fhir+json',
@@ -230,7 +230,7 @@ export const patientApi = {
         }
 
         try {
-            const searchUrl = `${config.fhirStu3BaseURL}/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|${encodeURIComponent(bsn.trim())}`;
+            const searchUrl = `${apiBase.fhirStu3}/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|${encodeURIComponent(bsn.trim())}`;
             const response = await fetch(searchUrl, {
                 method: 'GET',
                 headers,
@@ -272,7 +272,7 @@ export const patientApi = {
             gender,
             birthDate,
         };
-        const response = await fetch(`${config.fhirStu3BaseURL}/Patient`, {
+        const response = await fetch(`${apiBase.fhirStu3}/Patient`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/fhir+json',

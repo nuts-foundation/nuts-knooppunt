@@ -1,6 +1,6 @@
 // NVI API client for querying DocumentReferences
 import { headers } from "./fhir";
-import { config } from "../config";
+import { apiBase } from "../config";
 
 export const nviApi = {
     /**
@@ -23,7 +23,7 @@ export const nviApi = {
 
             console.log("adding header:","X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|"+abonneeNummer)
             const response = await fetch(
-                `/api/knooppunt/nvi/DocumentReference?${searchParams}`,
+                `${apiBase.knooppunt}/nvi/DocumentReference?${searchParams}`,
                 {
                     method: 'GET',
                     headers: {
