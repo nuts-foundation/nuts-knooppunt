@@ -1,0 +1,52 @@
+{
+  "resourceType": "CapabilityStatement",
+  "version": "0.0.1",
+  "name": "KnooppuntPIPServer",
+  "title": "Knooppunt Policy Information Point (PIP) Server",
+  "status": "active",
+  "date": "2026-04-18",
+  "publisher": "Stichting Nuts",
+  "description": "This CapabilityStatement describes the required FHIR R4 API capabilities for a FHIR server acting as Policy Information Point (PIP) for the Knooppunt PDP. The PDP calls this API to retrieve information needed to evaluate authorization policies: patient BSN lookup, implied consent lookup, and (optionally) resource content fetch.",
+  "copyright": "CC0",
+  "kind": "requirements",
+  "fhirVersion": "4.0.1",
+  "format": [
+    "json"
+  ],
+  "rest": [
+    {
+      "mode": "server",
+      "documentation": "The PIP server must be accessible from the Knooppunt. It must support JSON format. Pagination (Bundle.link with relation 'next') must be supported for search results, if results are paginated. When pdp.pip.resourcecontentenabled is true, the server must additionally support read on any resource type that can be targeted by incoming requests (e.g. Task, Composition). This capability is not listed per resource type below because it depends on which resource types the EHR exposes.",
+      "resource": [
+        {
+          "type": "Patient",
+          "documentation": "Required for patient BSN lookup. The PDP calls GET /Patient/{id}?_elements=identifier to resolve a FHIR patient resource ID to a BSN. The server must support the _elements parameter to return only the identifier field, minimizing patient data exposure.",
+          "interaction": [
+            {
+              "code": "read",
+              "documentation": "Required. Used to fetch Patient by ID with _elements=identifier."
+            }
+          ]
+        },
+        {
+          "type": "Consent",
+          "documentation": "Required for implied consent lookup. The PDP calls GET /Consent?data={ResourceType}/{resourceId} to find Consent resources whose provision.data.reference refers to the given resource. The server must support the 'data' search parameter and FHIR pagination.",
+          "interaction": [
+            {
+              "code": "search-type",
+              "documentation": "Required. Used to search for Consent resources by provision.data.reference."
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "data",
+              "definition": "http://hl7.org/fhir/SearchParameter/Consent-data",
+              "type": "reference",
+              "documentation": "Required. Matches Consent resources by provision.data.reference. Example: data=Task/12AF22F3-2DE5-47E1-B3CB-B053C8621F84"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
