@@ -599,8 +599,10 @@ To come to a policy decision the PDP might need additional information from a po
 
 Read our [configuration guide](/docs/CONFIGURATION.md) to see the options for configuring this endpoint.
 
-The PIP must be a FHIR R4 REST-compatible API. It is called exclusively by the Knooppunt and must not be
-accessible to external parties (see [Security Considerations](#security-considerations)).
+The PIP must be a FHIR R4 REST-compatible API. It is called exclusively by the Knooppunt and should not be
+directly accessible to external parties (see [Security Considerations](#security-considerations)). If the EHR
+exposes a single FHIR API that also serves as the PIP, other access control meeans on the EHR side should prevent
+unauthorized use of the PIP endpoints.
 
 The PIP must support the following capabilities:
 
@@ -780,7 +782,8 @@ GET /Task/12AF22F3-2DE5-47E1-B3CB-B053C8621F84
 }
 ```
 
-This capability is disabled by default and only needs to be supported when the feature flag is enabled.
+This capability is disabled by default and only needs to be supported when the feature flag is enabled and authorization
+policies that use resource content are deployed.
 
 ### Security Considerations
 

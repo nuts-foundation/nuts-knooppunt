@@ -16,7 +16,7 @@
   "rest": [
     {
       "mode": "server",
-      "documentation": "The PIP server must be accessible only from the Knooppunt. It must support JSON format. Pagination (Bundle.link with relation 'next') must be supported for search results. When pdp.pip.resourcecontentenabled is true, the server must additionally support read on any resource type that can be targeted by incoming requests (e.g. Task, Composition). This capability is not listed per resource type below because it depends on which resource types the EHR exposes.",
+      "documentation": "The PIP server must be accessible from the Knooppunt. It must support JSON format. Pagination (Bundle.link with relation 'next') must be supported for search results, if results are paginated. When pdp.pip.resourcecontentenabled is true, the server must additionally support read on any resource type that can be targeted by incoming requests (e.g. Task, Composition). This capability is not listed per resource type below because it depends on which resource types the EHR exposes.",
       "resource": [
         {
           "type": "Patient",
