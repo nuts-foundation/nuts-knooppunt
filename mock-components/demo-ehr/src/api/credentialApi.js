@@ -84,13 +84,9 @@ export const credentialApi = {
   },
 
   // Finds the first credential whose `type` array contains the given type
-  // identifier. Handles both JSON-LD (object with .type) and JWT (decoded vc
-  // claim) shapes commonly returned by the Nuts node.
+  // identifier. Handles both JSON-LD (object) and JWT-encoded (string) VCs.
   findByType(credentials, type) {
-    return (credentials || []).find((vc) => {
-      const types = extractTypes(vc);
-      return types.includes(type);
-    }) || null;
+    return (credentials || []).find((vc) => extractTypes(vc).includes(type)) || null;
   },
 
   // POST /internal/auth/v2/{subjectID}/request-credential. Returns
@@ -118,21 +114,59 @@ export const credentialApi = {
   },
 };
 
+// base64url decode for JWT segments. Browsers don't have a native
+// base64url decoder; convert to base64 then atob().
+const decodeBase64Url = (s) => {
+  const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + pad;
+  try {
+    return decodeURIComponent(escape(atob(b64)));
+  } catch {
+    return null;
+  }
+};
+
+const decodeJwtPayload = (jwt) => {
+  if (typeof jwt !== 'string') return null;
+  const parts = jwt.split('.');
+  if (parts.length < 2) return null;
+  const decoded = decodeBase64Url(parts[1]);
+  if (!decoded) return null;
+  try { return JSON.parse(decoded); } catch { return null; }
+};
+
+// Returns the JSON-LD VC view for a credential, regardless of wire form.
+// JWT VCs carry the VC under the `vc` claim per W3C VC-JWT.
+const asVcObject = (vc) => {
+  if (!vc) return null;
+  if (typeof vc === 'string') {
+    const payload = decodeJwtPayload(vc);
+    if (!payload) return null;
+    // Top-level claims (iss, sub, nbf) supplement what's in payload.vc.
+    return { ...(payload.vc || {}), __jwt: payload };
+  }
+  if (typeof vc === 'object') return vc;
+  return null;
+};
+
 const extractTypes = (vc) => {
-  if (!vc) return [];
-  if (Array.isArray(vc.type)) return vc.type;
-  if (typeof vc.type === 'string') return [vc.type];
-  if (vc.vc && Array.isArray(vc.vc.type)) return vc.vc.type;
+  const obj = asVcObject(vc);
+  if (!obj) return [];
+  if (Array.isArray(obj.type)) return obj.type;
+  if (typeof obj.type === 'string') return [obj.type];
   return [];
 };
 
-// Shorthand summary for display: returns issuer, issuance date, and any
-// credentialSubject claims that are simple scalars. JWT-encoded VCs are not
-// decoded here — the caller can pass already-parsed VC objects.
+// Shorthand summary for display: returns issuer and issuance date for either
+// JSON-LD or JWT-encoded VCs.
 export const summarizeCredential = (vc) => {
-  if (!vc || typeof vc !== 'object') return null;
-  const issuer = vc.issuer || (vc.vc && vc.vc.issuer) || null;
-  const issued = vc.issuanceDate || vc.validFrom || (vc.vc && (vc.vc.issuanceDate || vc.vc.validFrom)) || null;
+  const obj = asVcObject(vc);
+  if (!obj) return null;
+  const issuer = obj.issuer || (obj.__jwt && obj.__jwt.iss) || null;
+  let issued = obj.issuanceDate || obj.validFrom || null;
+  if (!issued && obj.__jwt && obj.__jwt.nbf) {
+    issued = new Date(obj.__jwt.nbf * 1000).toISOString().slice(0, 10);
+  }
   return {
     issuer: typeof issuer === 'object' ? issuer.id || issuer.name : issuer,
     issued,
