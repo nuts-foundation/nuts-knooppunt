@@ -196,25 +196,23 @@ export default function CredentialStatusCard({
                     )}
                   </div>
                 </div>
-                {!loading && !row.vc && (
-                  requestable ? (
-                    <button
-                      onClick={() => onRequest(row.type)}
-                      className="button"
-                      disabled={pendingType === row.type}
-                    >
-                      {pendingType === row.type ? 'Requesting…' : 'Request'}
-                    </button>
-                  ) : (
-                    <span style={{ fontSize: '11px', color: '#6b7280', maxWidth: '180px', textAlign: 'right' }}>
-                      {row.notRequestableHint || 'Not requestable here'}
-                    </span>
-                  )
+                {!loading && !row.vc && requestable && (
+                  <button
+                    onClick={() => onRequest(row.type)}
+                    className="button"
+                    disabled={pendingType === row.type}
+                  >
+                    {pendingType === row.type ? 'Requesting…' : 'Request'}
+                  </button>
                 )}
               </div>
-              {summary && summary.issuer && (
-                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
-                  Issuer: {summary.issuer}
+              {summary && summary.subject && Object.keys(summary.subject).length > 0 && (
+                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {Object.entries(summary.subject).map(([k, v]) => (
+                    <span key={k}>
+                      <span style={{ color: '#9ca3af' }}>{k}:</span> {String(v)}
+                    </span>
+                  ))}
                 </div>
               )}
               {msg && (

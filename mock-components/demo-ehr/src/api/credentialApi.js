@@ -157,18 +157,30 @@ const extractTypes = (vc) => {
   return [];
 };
 
-// Shorthand summary for display: returns issuer and issuance date for either
-// JSON-LD or JWT-encoded VCs.
+// Shorthand summary for display: returns issuance date and the scalar
+// credentialSubject claims (skipping `id` and any nested objects). Works for
+// both JSON-LD and JWT-encoded VCs.
 export const summarizeCredential = (vc) => {
   const obj = asVcObject(vc);
   if (!obj) return null;
-  const issuer = obj.issuer || (obj.__jwt && obj.__jwt.iss) || null;
+
   let issued = obj.issuanceDate || obj.validFrom || null;
   if (!issued && obj.__jwt && obj.__jwt.nbf) {
     issued = new Date(obj.__jwt.nbf * 1000).toISOString().slice(0, 10);
   }
-  return {
-    issuer: typeof issuer === 'object' ? issuer.id || issuer.name : issuer,
-    issued,
-  };
+
+  const subject = {};
+  const raw = obj.credentialSubject;
+  const subjects = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  for (const cs of subjects) {
+    if (!cs || typeof cs !== 'object') continue;
+    for (const [k, v] of Object.entries(cs)) {
+      if (k === 'id') continue;
+      if (v == null) continue;
+      if (typeof v === 'object') continue;
+      if (subject[k] == null) subject[k] = v;
+    }
+  }
+
+  return { issued, subject };
 };

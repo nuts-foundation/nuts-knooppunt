@@ -8,7 +8,6 @@ const ORG_CREDENTIAL_TYPES = [
     type: 'HealthcareOrganizationCredential',
     label: '🏥 Healthcare Organization Credential',
     requestable: false,
-    notRequestableHint: 'Issued via X.509 — out of scope here',
   },
   {
     type: 'HealthcareProfessionalDelegationCredential',
