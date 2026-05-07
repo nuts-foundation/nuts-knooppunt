@@ -17,6 +17,26 @@ const KNOOPPUNT_BASE_URL = process.env.KNOOPPUNT_BASE_URL || 'http://knooppunt:8
 const FHIR_BASE_URL = process.env.FHIR_BASE_URL || process.env.REACT_APP_FHIR_BASE_URL;
 const FHIR_STU3_BASE_URL = process.env.FHIR_STU3_BASE_URL || process.env.REACT_APP_FHIR_STU3_BASE_URL;
 const FHIR_MCSD_QUERY_BASE_URL = process.env.FHIR_MCSD_QUERY_BASE_URL || process.env.REACT_APP_FHIR_MCSD_QUERY_BASE_URL;
+// Nuts node internal API root. Path prefix /nuts is included; /api/nuts/* in
+// the SPA maps to /nuts/* at the upstream.
+const NUTS_BASE_URL = process.env.NUTS_BASE_URL || 'http://knooppunt:8081/nuts';
+
+const DEFAULT_CREDENTIAL_ISSUERS = {
+  HealthcareProfessionalDelegationCredential: 'https://nuts-services.nl/stable/aet-stub',
+  HealthcareProviderRoleTypeCredential: 'https://knooppunt-vektis.nuts-services.nl',
+  PatientEnrollmentCredential: 'https://nuts-services.nl/stable/aet-stub',
+  HealthcareOrganizationCredential: 'x509',
+};
+
+const parseCredentialIssuers = (raw) => {
+  if (!raw) return DEFAULT_CREDENTIAL_ISSUERS;
+  try {
+    return { ...DEFAULT_CREDENTIAL_ISSUERS, ...JSON.parse(raw) };
+  } catch (e) {
+    console.warn('Invalid CREDENTIAL_ISSUERS JSON, falling back to defaults:', e.message);
+    return DEFAULT_CREDENTIAL_ISSUERS;
+  }
+};
 
 // Runtime config exposed to the SPA via window.__APP_CONFIG__. Anything the
 // browser needs to know that depends on deployment (paths, OIDC issuer,
@@ -29,6 +49,9 @@ const APP_CONFIG = {
   fhirStu3BaseURL: process.env.REACT_APP_FHIR_STU3_BASE_URL || '',
   mcsdQueryBaseURL: process.env.REACT_APP_FHIR_MCSD_QUERY_BASE_URL || '',
   organizationURA: process.env.REACT_APP_ORGANIZATION_URA || '',
+  credentialIssuers: parseCredentialIssuers(
+    process.env.CREDENTIAL_ISSUERS || process.env.REACT_APP_CREDENTIAL_ISSUERS
+  ),
   devLoginEnabled:
     process.env.DEV_LOGIN === '1' ||
     process.env.DEV_LOGIN === 'true' ||
@@ -114,6 +137,7 @@ app.use(
 );
 
 mountProxy(app, at('/api/knooppunt'), KNOOPPUNT_BASE_URL, allowlist.KNOOPPUNT, 'knooppunt');
+mountProxy(app, at('/api/nuts'), NUTS_BASE_URL, allowlist.NUTS, 'nuts');
 mountProxy(app, at('/api/fhir'), FHIR_BASE_URL, allowlist.FHIR_R4, 'fhir-r4');
 mountProxy(app, at('/api/fhir-stu3'), FHIR_STU3_BASE_URL, allowlist.FHIR_STU3, 'fhir-stu3');
 mountProxy(app, at('/api/mcsd'), FHIR_MCSD_QUERY_BASE_URL, allowlist.MCSD, 'mcsd');

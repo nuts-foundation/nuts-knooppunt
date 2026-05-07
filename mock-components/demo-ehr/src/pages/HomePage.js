@@ -1,9 +1,58 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthProvider';
+import CredentialStatusCard from '../components/CredentialStatusCard';
+
+const ORG_CREDENTIAL_TYPES = [
+  {
+    type: 'HealthcareOrganizationCredential',
+    label: '🏥 Healthcare Organization Credential',
+    requestable: false,
+    notRequestableHint: 'Issued via X.509 — out of scope here',
+  },
+  {
+    type: 'HealthcareProfessionalDelegationCredential',
+    label: '🪪 Healthcare Professional Delegation Credential',
+  },
+  {
+    type: 'HealthcareProviderRoleTypeCredential',
+    label: '🩺 Healthcare Provider Role Type Credential',
+  },
+];
+
+const buildOrgCredentialDetails = ({ type, walletDid, ura }) => {
+  if (type === 'HealthcareProfessionalDelegationCredential') {
+    // BSN intentionally empty: practitioner has no BSN, but the AET stub
+    // expects the field to be present.
+    return { did: walletDid, bsn: '', ura };
+  }
+  return undefined;
+};
 
 function HomePage() {
-  const { user, isLoading, isAuthenticated, login, devLogin, devLoginEnabled, logout } = useAuth();
+  const {
+    user,
+    isLoading,
+    isAuthenticated,
+    isDevUser,
+    login,
+    devLogin,
+    switchDevUra,
+    devLoginEnabled,
+    logout,
+  } = useAuth();
+
+  const handleDevLogin = () => {
+    const ura = window.prompt('Care organization URA (leave empty for default 00000666):', '');
+    devLogin(ura == null ? '' : ura);
+  };
+
+  const handleSwitchUra = () => {
+    const current = user && (user.ura || user.sub) ? (user.ura || user.sub) : '';
+    const ura = window.prompt('Switch URA:', current);
+    if (ura == null) return;
+    switchDevUra(ura);
+  };
 
   if (isLoading) {
     return <div className="loading">Loading...</div>;
@@ -22,6 +71,15 @@ function HomePage() {
               <span className="user-name">
                 Logged in as: {user.name || user.sub}
               </span>
+              {isDevUser && (
+                <button
+                  onClick={handleSwitchUra}
+                  className="button button-secondary"
+                  title="Switch the URA of the dev session"
+                >
+                  Switch URA
+                </button>
+              )}
               <button onClick={logout} className="button button-secondary">
                 Logout
               </button>
@@ -47,7 +105,7 @@ function HomePage() {
             </button>
             {devLoginEnabled && (
               <button
-                onClick={devLogin}
+                onClick={handleDevLogin}
                 className="button button-secondary"
                 style={{ marginLeft: '10px' }}
                 title="Bypass OIDC for local development"
@@ -93,6 +151,14 @@ function HomePage() {
                   (Feature coming soon)
                 </p>
               </div>
+
+              <CredentialStatusCard
+                title="🛂 LDN Identity"
+                description="Verifiable Credentials that prove this care organization's role in the Landelijk Dekkend Netwerk."
+                ura={user.ura || user.abonnee_nummer || user.sub}
+                types={ORG_CREDENTIAL_TYPES}
+                buildCredentialDetails={buildOrgCredentialDetails}
+              />
 
               <div className="card">
                 <h3>🔐 Your Session</h3>

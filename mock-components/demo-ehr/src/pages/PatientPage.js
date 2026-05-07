@@ -11,6 +11,14 @@ import { eOverdrachtApi } from '../api/eOverdrachtApi';
 import { taskShared } from '../api/taskShared';
 import { bgzApi } from '../api/bgzApi';
 import { bgzVisualizationApi } from '../api/bgzVisualizationApi';
+import CredentialStatusCard from '../components/CredentialStatusCard';
+
+const PATIENT_CREDENTIAL_TYPES = [
+  {
+    type: 'PatientEnrollmentCredential',
+    label: '🧾 Patient Enrollment Credential',
+  },
+];
 
 function PatientPage() {
   const { patientId } = useParams();
@@ -1305,6 +1313,23 @@ function PatientPage() {
                 </>
               )}
             </div>
+
+            {/* LDN Patient Enrollment Card */}
+            {patientBSN && (user?.ura || user?.abonnee_nummer || user?.sub) && (
+              <div style={{ marginTop: '20px' }}>
+                <CredentialStatusCard
+                  title="🛂 Patient Enrollment"
+                  description="Verifiable Credential that proves this patient is enrolled with this care organization."
+                  ura={user.ura || user.abonnee_nummer || user.sub}
+                  types={PATIENT_CREDENTIAL_TYPES}
+                  buildCredentialDetails={({ walletDid, ura }) => ({
+                    did: walletDid,
+                    bsn: patientBSN,
+                    ura,
+                  })}
+                />
+              </div>
+            )}
 
             {/* Care Network Card */}
             <div className="card" style={{ marginTop: '20px' }}>
