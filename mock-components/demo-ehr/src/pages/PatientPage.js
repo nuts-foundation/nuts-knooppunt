@@ -1314,7 +1314,7 @@ function PatientPage() {
               )}
             </div>
 
-            {/* LDN Patient Enrollment Card */}
+            {/* Network Identity: Patient Enrollment Card */}
             {patientBSN && (user?.ura || user?.abonnee_nummer || user?.sub) && (
               <div style={{ marginTop: '20px' }}>
                 <CredentialStatusCard

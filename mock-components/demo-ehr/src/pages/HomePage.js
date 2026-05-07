@@ -152,8 +152,8 @@ function HomePage() {
               </div>
 
               <CredentialStatusCard
-                title="🛂 LDN Identity"
-                description="Verifiable Credentials that prove this care organization's role in the Landelijk Dekkend Netwerk."
+                title="🛂 Network Identity"
+                description="Verifiable Credentials that prove this care organization's role in the network."
                 ura={user.ura || user.abonnee_nummer || user.sub}
                 types={ORG_CREDENTIAL_TYPES}
                 buildCredentialDetails={buildOrgCredentialDetails}
