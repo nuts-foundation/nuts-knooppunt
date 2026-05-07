@@ -53,8 +53,8 @@ func TestHTTPClient(t *testing.T) {
 
 			// Validate form parameters
 			assert.Equal(t, "client_credentials", r.Form.Get("grant_type"))
-			assert.Equal(t, "urn:ietf:params:oauth:client-assertion-type:jwt-bearer", r.Form.Get("client_credentials_type"))
-			assert.NotEmpty(t, r.Form.Get("client_credentials"))
+			assert.Equal(t, "urn:ietf:params:oauth:client-assertion-type:jwt-bearer", r.Form.Get("client_assertion_type"))
+			assert.NotEmpty(t, r.Form.Get("client_assertion"))
 
 			// Return mock access token
 			token := oauth2.Token{
@@ -90,7 +90,7 @@ func TestHTTPClient(t *testing.T) {
 
 		// Verify JWT grant token
 		receivedFormData := <-receivedFormDataChan
-		clientCredentials := receivedFormData.Get("client_credentials")
+		clientCredentials := receivedFormData.Get("client_assertion")
 		require.NotEmpty(t, clientCredentials)
 
 		// Parse and validate the JWT
