@@ -54,20 +54,24 @@ export default function CredentialStatusCard({
   const [loadError, setLoadError] = useState(null);
   const [pendingType, setPendingType] = useState(null);
   const [rowMessages, setRowMessages] = useState({});
+  const [cardMessage, setCardMessage] = useState(null);
 
   const subjectId = ura ? subjectIdForUra(ura) : null;
 
   useEffect(() => {
     const flash = readFlash();
-    if (flash && flash.type) {
-      setRowMessages((prev) => ({
-        ...prev,
-        [flash.type]: flash.status === 'success'
-          ? { status: 'success', text: 'Credential requested successfully.' }
-          : { status: 'error', text: flash.msg || 'Credential request failed.' },
-      }));
-      stripFlashParams();
+    if (!flash) return;
+    const text = flash.status === 'success'
+      ? 'Credential requested successfully.'
+      : (flash.msg || 'Credential request failed.');
+    if (flash.type) {
+      setRowMessages((prev) => ({ ...prev, [flash.type]: { status: flash.status, text } }));
+    } else {
+      // No credential type came back — show a card-level banner so the user
+      // still sees the outcome even when the issuer didn't echo correlation.
+      setCardMessage({ status: flash.status, text });
     }
+    stripFlashParams();
   }, []);
 
   const refresh = useCallback(async () => {
@@ -134,10 +138,14 @@ export default function CredentialStatusCard({
       }
 
       const sessionId = result.session_id || '';
-      window.sessionStorage.setItem(
-        `${SESSION_RETURN_PREFIX}${sessionId}`,
-        JSON.stringify({ origin: window.location.href, type })
-      );
+      const stash = JSON.stringify({ origin: window.location.href, type });
+      // Stable fallback key in case the Nuts node doesn't echo session_id on
+      // the return redirect — last-started request wins, which is fine for
+      // the demo since concurrent requests are not expected.
+      window.sessionStorage.setItem(`${SESSION_RETURN_PREFIX}current`, stash);
+      if (sessionId) {
+        window.sessionStorage.setItem(`${SESSION_RETURN_PREFIX}${sessionId}`, stash);
+      }
       window.location.href = result.redirect_uri;
     } catch (err) {
       setRowMessages((prev) => ({
@@ -161,6 +169,23 @@ export default function CredentialStatusCard({
       {loadError && (
         <div className="error-message" style={{ marginBottom: '12px' }}>
           {loadError}
+        </div>
+      )}
+
+      {cardMessage && (
+        <div
+          style={{
+            fontSize: '13px',
+            marginBottom: '12px',
+            color: cardMessage.status === 'success' ? '#065f46' : '#b91c1c',
+            background: cardMessage.status === 'success' ? '#ecfdf5' : '#fef2f2',
+            border: '1px solid',
+            borderColor: cardMessage.status === 'success' ? '#a7f3d0' : '#fecaca',
+            borderRadius: '4px',
+            padding: '8px 10px',
+          }}
+        >
+          {cardMessage.text}
         </div>
       )}
 

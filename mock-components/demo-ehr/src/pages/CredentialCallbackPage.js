@@ -19,19 +19,27 @@ export default function CredentialCallbackPage() {
     let returnUrl = `${window.location.origin}${baseUrl || ''}/`;
     let credentialType = '';
 
-    if (sessionId) {
-      const raw = window.sessionStorage.getItem(`${SESSION_RETURN_PREFIX}${sessionId}`);
-      if (raw) {
-        try {
-          const stashed = JSON.parse(raw);
-          if (stashed.origin) returnUrl = stashed.origin;
-          if (stashed.type) credentialType = stashed.type;
-        } catch {
-          // fall through to default returnUrl
-        }
-        window.sessionStorage.removeItem(`${SESSION_RETURN_PREFIX}${sessionId}`);
+    // Try the per-session stash first; fall back to the "current" stash if the
+    // Nuts node didn't echo session_id on the return redirect.
+    const candidates = [];
+    if (sessionId) candidates.push(`${SESSION_RETURN_PREFIX}${sessionId}`);
+    candidates.push(`${SESSION_RETURN_PREFIX}current`);
+    for (const key of candidates) {
+      const raw = window.sessionStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const stashed = JSON.parse(raw);
+        if (stashed.origin) returnUrl = stashed.origin;
+        if (stashed.type) credentialType = stashed.type;
+      } catch {
+        // fall through to default returnUrl
       }
+      window.sessionStorage.removeItem(key);
+      break;
     }
+    // Always clear the fallback so a stale value doesn't bleed into a later
+    // unrelated visit to /credential-callback.
+    window.sessionStorage.removeItem(`${SESSION_RETURN_PREFIX}current`);
 
     const target = new URL(returnUrl, window.location.origin);
     if (errorParam) {
