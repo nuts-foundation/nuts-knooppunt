@@ -13,13 +13,12 @@ export const isDevLoginEnabled = () => !!runtimeConfig.devLoginEnabled;
 // /userinfo, so the rest of the app sees a consistent user object.
 // `sub` doubles as the requesting organization URA in
 // bgzVerweijzingApi.createBgZNotificatonTask, so use a URA-shaped value.
-// `abonnee_nummer` is the Dezi claim that AuthProvider maps to `ura`, so the
-// dev user populates it for parity with real Dezi sessions.
+// `ura` is the post-mapping alias AuthProvider produces from the Dezi
+// `abonnee_nummer` claim; set it directly here for parity.
 export const buildDevUser = (ura) => {
   const value = (ura || '').trim() || DEFAULT_DEV_URA;
   return {
     sub: value,
-    abonnee_nummer: value,
     ura: value,
     name: 'Dev User',
     email: 'dev@example.local',
