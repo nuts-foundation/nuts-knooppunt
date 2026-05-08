@@ -5,7 +5,7 @@
 // CRA's build-time REACT_APP_* env vars so local development keeps working.
 
 const DEFAULT_CREDENTIAL_ISSUERS = {
-  HealthcareProfessionalDelegationCredential: 'https://nuts-services.nl/stable/aet-stub',
+  HealthCareProfessionalDelegationCredential: 'https://nuts-services.nl/stable/aet-stub',
   HealthcareProviderRoleTypeCredential: 'https://knooppunt-vektis.nuts-services.nl',
   PatientEnrollmentCredential: 'https://nuts-services.nl/stable/aet-stub',
   HealthcareOrganizationCredential: 'x509',
