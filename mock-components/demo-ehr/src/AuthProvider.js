@@ -138,20 +138,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const switchDevUra = async (ura) => {
-    if (!isDevUser(user)) return;
-    const next = buildDevUser(ura);
-    saveDevUser(next);
-    setUser(next);
-    setPractitionerId(null);
-    setIsLoading(true);
-    try {
-      await ensurePractitioner(next);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const logout = () => {
     if (isDevUser(user)) {
       clearDevUser();
@@ -168,11 +154,9 @@ export const AuthProvider = ({ children }) => {
     user,
     isLoading,
     isAuthenticated: !!user,
-    isDevUser: isDevUser(user),
     practitionerId,
     login,
     devLogin,
-    switchDevUra,
     devLoginEnabled: isDevLoginEnabled(),
     logout,
   };

@@ -43,10 +43,8 @@ function HomePage() {
     user,
     isLoading,
     isAuthenticated,
-    isDevUser,
     login,
     devLogin,
-    switchDevUra,
     devLoginEnabled,
     logout,
   } = useAuth();
@@ -54,13 +52,6 @@ function HomePage() {
   const handleDevLogin = () => {
     const ura = window.prompt('Care organization URA (leave empty for default 00000666):', '');
     devLogin(ura == null ? '' : ura);
-  };
-
-  const handleSwitchUra = () => {
-    const current = user && (user.ura || user.sub) ? (user.ura || user.sub) : '';
-    const ura = window.prompt('Switch URA:', current);
-    if (ura == null) return;
-    switchDevUra(ura);
   };
 
   if (isLoading) {
@@ -80,15 +71,6 @@ function HomePage() {
               <span className="user-name">
                 Logged in as: {user.name || user.sub}
               </span>
-              {isDevUser && (
-                <button
-                  onClick={handleSwitchUra}
-                  className="button button-secondary"
-                  title="Switch the URA of the dev session"
-                >
-                  Switch URA
-                </button>
-              )}
               <button onClick={logout} className="button button-secondary">
                 Logout
               </button>
