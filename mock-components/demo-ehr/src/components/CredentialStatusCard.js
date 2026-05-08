@@ -224,9 +224,6 @@ export default function CredentialStatusCard({
                       : row.vc
                         ? <span style={{ color: '#059669' }}>✓ Present</span>
                         : <span style={{ color: '#b45309' }}>⚠ Missing</span>}
-                    {summary && summary.issued && (
-                      <span style={{ color: '#6b7280' }}> · {summary.issued}</span>
-                    )}
                   </div>
                 </div>
                 {!loading && !row.vc && requestable && (
