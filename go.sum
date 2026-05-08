@@ -587,6 +587,8 @@ github.com/nuts-foundation/nuts-node v1.0.1-0.20260417134758-22ceb753a1f5 h1:D8P
 github.com/nuts-foundation/nuts-node v1.0.1-0.20260417134758-22ceb753a1f5/go.mod h1:4gKVY7vPA+uzV71w3QlMpMkNwcA9dzuWGj7UGkUt2D8=
 github.com/nuts-foundation/nuts-node v1.0.1-0.20260508063914-0637eef02d79 h1:lp6RYOwYS67SNN6rdPDqsFFPIIxdI00BoNvMImVNirg=
 github.com/nuts-foundation/nuts-node v1.0.1-0.20260508063914-0637eef02d79/go.mod h1:dufM27q4IDIrinl9DoVceuNQuDOLEuB3joCliASA8Tg=
+github.com/nuts-foundation/nuts-node v1.0.1-0.20260508072814-b6881cb70c51 h1:qZB8BSR4gGYnEp3VHElZ4tGUsqoXVp2pIqzfP+K4JUs=
+github.com/nuts-foundation/nuts-node v1.0.1-0.20260508072814-b6881cb70c51/go.mod h1:dufM27q4IDIrinl9DoVceuNQuDOLEuB3joCliASA8Tg=
 github.com/nuts-foundation/sqlite v1.0.0 h1:gLKyVIHZqYfYpEy5Ji6vjNUH8rs0luiY3DWNcOSBBzM=
 github.com/nuts-foundation/sqlite v1.0.0/go.mod h1:2GHDXCw5Sul9L3h8T5k0+558scm4ol4iXG+wVyYqueI=
 github.com/nxadm/tail v1.4.8 h1:nPr65rt6Y5JFSKQO7qToXr7pePgD6Gwiw05lkbyAQTE=
