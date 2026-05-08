@@ -9,6 +9,13 @@ mcsd:
   query:
     fhirbaseurl: "http://localhost:8080/fhir"
 
+  # Administration directories to sync from.
+  # Set `trusted: true` to skip anti-spoofing validation on a directory's contents.
+  # admin:
+  #   example:
+  #     fhirbaseurl: "https://fhir.example.org/fhir"
+  #     trusted: true
+
   # Exclude administration directories from being registered
   # Use this to prevent your own FHIR server from being added as an admin directory
   # This avoids syncing your own resources back to yourself

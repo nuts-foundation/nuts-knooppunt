@@ -16,6 +16,8 @@ import (
 type ValidationRules struct {
 	// AllowedResourceTypes is a list of FHIR resource types that are allowed to be created/updated.
 	AllowedResourceTypes []string
+	// Trusted skips per-resource spoofing validation. AllowedResourceTypes is still enforced.
+	Trusted bool
 }
 
 // ValidateParentOrganizations validates all parent organizations in the map.
@@ -43,6 +45,11 @@ func ValidateUpdate(ctx context.Context, rules ValidationRules, resourceJSON []b
 	// Base validation
 	if !slices.Contains(rules.AllowedResourceTypes, resourceType) {
 		return fmt.Errorf("resource type %s not allowed", resourceType)
+	}
+
+	// Trusted directories bypass per-resource validation.
+	if rules.Trusted {
+		return nil
 	}
 
 	switch resourceType {
