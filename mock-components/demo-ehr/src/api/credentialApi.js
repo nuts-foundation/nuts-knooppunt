@@ -12,7 +12,7 @@ import { apiBase } from '../config';
 // Subject IDs in the Nuts node must match [a-zA-Z0-9._-]+ — no colons. We
 // prefix URAs with `ura_` to keep them recognizable as Dutch healthcare
 // provider identifiers while staying within the allowed character set.
-export const URA_SUBJECT_PREFIX = 'ura_';
+const URA_SUBJECT_PREFIX = 'ura_';
 
 export const subjectIdForUra = (ura) => `${URA_SUBJECT_PREFIX}${ura}`;
 
@@ -88,11 +88,16 @@ export const credentialApi = {
   // Case-insensitive: issuers occasionally use slightly different casing
   // (e.g. HealthCareProfessionalDelegationCredential as the request
   // identifier vs HealthcareProfessionalDelegationCredential on the issued VC).
-  findByType(credentials, type) {
+  // `predicate(vc)` is an optional secondary filter — useful e.g. to scope a
+  // PatientEnrollmentCredential match to a specific BSN.
+  findByType(credentials, type, predicate) {
     const target = String(type).toLowerCase();
-    return (credentials || []).find((vc) =>
-      extractTypes(vc).some((t) => String(t).toLowerCase() === target)
-    ) || null;
+    return (credentials || []).find((vc) => {
+      const matchesType = extractTypes(vc).some((t) => String(t).toLowerCase() === target);
+      if (!matchesType) return false;
+      if (predicate && !predicate(vc)) return false;
+      return true;
+    }) || null;
   },
 
   // POST /internal/auth/v2/{subjectID}/request-credential. Returns
@@ -120,13 +125,14 @@ export const credentialApi = {
   },
 };
 
-// base64url decode for JWT segments. Browsers don't have a native
-// base64url decoder; convert to base64 then atob().
+// base64url → UTF-8 string. Convert to standard base64, atob to a binary
+// string, then decode the bytes as UTF-8 via TextDecoder.
 const decodeBase64Url = (s) => {
   const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));
   const b64 = s.replace(/-/g, '+').replace(/_/g, '/') + pad;
   try {
-    return decodeURIComponent(escape(atob(b64)));
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    return new TextDecoder('utf-8').decode(bytes);
   } catch {
     return null;
   }
@@ -148,8 +154,7 @@ const asVcObject = (vc) => {
   if (typeof vc === 'string') {
     const payload = decodeJwtPayload(vc);
     if (!payload) return null;
-    // Top-level claims (iss, sub, nbf) supplement what's in payload.vc.
-    return { ...(payload.vc || {}), __jwt: payload };
+    return payload.vc || null;
   }
   if (typeof vc === 'object') return vc;
   return null;
@@ -210,18 +215,13 @@ export const extractClaimsByPaths = (vc, paths) => {
   return out;
 };
 
-// Shorthand summary for display: returns issuance date and the scalar
-// credentialSubject claims (skipping `id`, `@type`, and any nested objects).
-// Works for both JSON-LD and JWT-encoded VCs. Pages can override this on a
-// per-credential basis by passing `extractClaims` on the row config.
-export const summarizeCredential = (vc) => {
+// Default claim summary: returns the scalar credentialSubject claims
+// (skipping `id`, `@type`, and any nested objects). Works for both JSON-LD
+// and JWT-encoded VCs. Pages can override this per-credential by passing
+// `claims` (a `{ label: dotPath }` map) on the row config.
+export const summarizeSubjectClaims = (vc) => {
   const obj = asVcObject(vc);
   if (!obj) return null;
-
-  let issued = obj.issuanceDate || obj.validFrom || null;
-  if (!issued && obj.__jwt && obj.__jwt.nbf) {
-    issued = new Date(obj.__jwt.nbf * 1000).toISOString().slice(0, 10);
-  }
 
   const subject = {};
   const raw = obj.credentialSubject;
@@ -236,5 +236,5 @@ export const summarizeCredential = (vc) => {
     }
   }
 
-  return { issued, subject };
+  return subject;
 };

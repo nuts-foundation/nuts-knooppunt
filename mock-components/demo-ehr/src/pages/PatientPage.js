@@ -12,14 +12,24 @@ import { taskShared } from '../api/taskShared';
 import { bgzApi } from '../api/bgzApi';
 import { bgzVisualizationApi } from '../api/bgzVisualizationApi';
 import CredentialStatusCard from '../components/CredentialStatusCard';
+import { getCredentialSubject } from '../api/credentialApi';
 
-const PATIENT_CREDENTIAL_TYPES = [
+// Build a per-patient row spec so type-matching is scoped to this patient's
+// BSN — without this, the org's enrollment credential for any patient would
+// show as Present on every patient's view.
+const buildPatientCredentialTypes = (patientBSN) => [
   {
     type: 'PatientEnrollmentCredential',
     label: '🧾 Patient Enrollment Credential',
     actionLabel: 'Enroll',
     claims: {
       'Enrolled by (UZI)': 'hasEnrollment.enrolledBy.identifier.value',
+    },
+    match: (vc) => {
+      const cs = getCredentialSubject(vc);
+      const bsn = cs && cs.hasEnrollment && cs.hasEnrollment.patient
+        && cs.hasEnrollment.patient.identifier && cs.hasEnrollment.patient.identifier.value;
+      return bsn === patientBSN;
     },
   },
 ];
@@ -1325,7 +1335,7 @@ function PatientPage() {
                   title="🛂 Patient Enrollment"
                   description="Verifiable Credential that proves this patient is enrolled with this care organization."
                   ura={user.ura || user.abonnee_nummer || user.sub}
-                  types={PATIENT_CREDENTIAL_TYPES}
+                  types={buildPatientCredentialTypes(patientBSN)}
                   buildCredentialDetails={({ walletDid, ura }) => ({
                     did: walletDid,
                     bsn: patientBSN,

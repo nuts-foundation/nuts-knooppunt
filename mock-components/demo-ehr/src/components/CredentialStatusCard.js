@@ -1,6 +1,6 @@
 // Renders the status of a fixed list of credential types for one Nuts subject:
-//   - Present: shows issuer + issuance date.
-//   - Missing: shows a Request button that kicks off OpenID4VCI against the
+//   - Present: shows the configured `claims` (or a fallback scalar summary).
+//   - Missing: shows an action button that kicks off OpenID4VCI against the
 //     configured issuer for that type. The browser is redirected to the
 //     issuer; on return, /credential-callback bounces back here with flash
 //     query params (vci=success|error, vci_type=<type>, vci_msg=<text>).
@@ -9,7 +9,7 @@
 // enrollment), parameterized by `types` and `buildCredentialDetails`.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { credentialApi, extractClaimsByPaths, subjectIdForUra, summarizeCredential } from '../api/credentialApi';
+import { credentialApi, extractClaimsByPaths, subjectIdForUra, summarizeSubjectClaims } from '../api/credentialApi';
 import { config } from '../config';
 
 const VCI_FLASH_KEYS = ['vci', 'vci_type', 'vci_msg'];
@@ -46,7 +46,6 @@ export default function CredentialStatusCard({
   ura,
   types,
   buildCredentialDetails,
-  emptyHint,
 }) {
   const [credentials, setCredentials] = useState(null);
   const [dids, setDids] = useState(null);
@@ -158,7 +157,9 @@ export default function CredentialStatusCard({
   };
 
   const rows = useMemo(() => types.map((t) => {
-    const present = credentials ? credentialApi.findByType(credentials, t.type) : null;
+    const present = credentials
+      ? credentialApi.findByType(credentials, t.type, t.match)
+      : null;
     return { ...t, vc: present };
   }), [types, credentials]);
 
@@ -192,14 +193,12 @@ export default function CredentialStatusCard({
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
         {rows.map((row) => {
-          const summary = row.vc ? summarizeCredential(row.vc) : null;
           // Per-credential `claims` is a `{ label: dotPath }` map resolved
           // against the VC's first credentialSubject. Falls back to dumping
           // any top-level scalar credentialSubject fields.
           const pathClaims = (row.vc && row.claims) ? extractClaimsByPaths(row.vc, row.claims) : null;
-          const claims = (pathClaims && Object.keys(pathClaims).length)
-            ? pathClaims
-            : (summary && summary.subject) || null;
+          const fallback = row.vc ? summarizeSubjectClaims(row.vc) : null;
+          const claims = (pathClaims && Object.keys(pathClaims).length) ? pathClaims : fallback;
           const msg = rowMessages[row.type];
           const issuer = (config.credentialIssuers || {})[row.type];
           const requestable = row.requestable !== false && issuer && issuer !== 'x509';
@@ -266,10 +265,6 @@ export default function CredentialStatusCard({
           );
         })}
       </div>
-
-      {emptyHint && !loading && credentials && credentials.length === 0 && (
-        <p style={{ marginTop: '12px', fontSize: '12px' }}>{emptyHint}</p>
-      )}
     </div>
   );
 }
