@@ -85,8 +85,14 @@ export const credentialApi = {
 
   // Finds the first credential whose `type` array contains the given type
   // identifier. Handles both JSON-LD (object) and JWT-encoded (string) VCs.
+  // Case-insensitive: issuers occasionally use slightly different casing
+  // (e.g. HealthCareProfessionalDelegationCredential as the request
+  // identifier vs HealthcareProfessionalDelegationCredential on the issued VC).
   findByType(credentials, type) {
-    return (credentials || []).find((vc) => extractTypes(vc).includes(type)) || null;
+    const target = String(type).toLowerCase();
+    return (credentials || []).find((vc) =>
+      extractTypes(vc).some((t) => String(t).toLowerCase() === target)
+    ) || null;
   },
 
   // POST /internal/auth/v2/{subjectID}/request-credential. Returns

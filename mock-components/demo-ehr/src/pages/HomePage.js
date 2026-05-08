@@ -10,7 +10,7 @@ const ORG_CREDENTIAL_TYPES = [
     requestable: false,
   },
   {
-    type: 'HealthcareProfessionalDelegationCredential',
+    type: 'HealthCareProfessionalDelegationCredential',
     label: '🪪 Healthcare Professional Delegation Credential',
     actionLabel: 'Mandate',
   },
@@ -22,7 +22,7 @@ const ORG_CREDENTIAL_TYPES = [
 ];
 
 const buildOrgCredentialDetails = ({ type, walletDid, ura }) => {
-  if (type === 'HealthcareProfessionalDelegationCredential') {
+  if (type === 'HealthCareProfessionalDelegationCredential') {
     // BSN intentionally empty: practitioner has no BSN, but the AET stub
     // expects the field to be present.
     return { did: walletDid, bsn: '', ura };
