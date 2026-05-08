@@ -6,23 +6,26 @@ import CredentialStatusCard from '../components/CredentialStatusCard';
 const ORG_CREDENTIAL_TYPES = [
   {
     type: 'HealthcareOrganizationCredential',
-    label: '🏥 Healthcare Organization Credential',
+    label: '🏥 Healthcare Provider Identity',
     requestable: false,
   },
   {
     type: 'HealthCareProfessionalDelegationCredential',
-    label: '🪪 Healthcare Professional Delegation Credential',
+    label: '🪪 Healthcare Professional Delegation',
     actionLabel: 'Mandate',
     claims: {
-      UZI: 'hasDelegation.delegatedBy.identifier.value',
+      'Delegated by (UZI)': 'hasDelegation.delegatedBy.identifier.value',
       'Authorization rule': 'hasDelegation.scope.authorizationRule',
       'Authorized actions': 'hasDelegation.scope.authorizedActions',
     },
   },
   {
     type: 'HealthcareProviderRoleTypeCredential',
-    label: '🩺 Healthcare Provider Role Type Credential',
+    label: '🩺 Healthcare Provider Role Type',
     actionLabel: 'Load from Vektis',
+    claims: {
+      'Role code': 'roleCodeNL',
+    },
   },
 ];
 

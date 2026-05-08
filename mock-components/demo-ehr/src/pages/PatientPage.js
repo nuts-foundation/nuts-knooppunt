@@ -19,7 +19,7 @@ const PATIENT_CREDENTIAL_TYPES = [
     label: '🧾 Patient Enrollment Credential',
     actionLabel: 'Enroll',
     claims: {
-      UZI: 'hasEnrollment.enrolledBy.identifier.value',
+      'Enrolled by (UZI)': 'hasEnrollment.enrolledBy.identifier.value',
     },
   },
 ];
