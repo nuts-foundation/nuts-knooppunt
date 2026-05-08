@@ -202,7 +202,7 @@ export default function CredentialStatusCard({
                     className="button"
                     disabled={pendingType === row.type}
                   >
-                    {pendingType === row.type ? 'Enrolling…' : 'Enroll'}
+                    {pendingType === row.type ? `${row.actionLabel || 'Enroll'}…` : (row.actionLabel || 'Enroll')}
                   </button>
                 )}
               </div>

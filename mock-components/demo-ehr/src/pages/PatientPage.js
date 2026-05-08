@@ -17,6 +17,7 @@ const PATIENT_CREDENTIAL_TYPES = [
   {
     type: 'PatientEnrollmentCredential',
     label: '🧾 Patient Enrollment Credential',
+    actionLabel: 'Enroll',
   },
 ];
 

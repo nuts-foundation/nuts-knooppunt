@@ -101,9 +101,9 @@ export const credentialApi = {
       ],
       redirect_uri: redirectUri,
     };
-    if (credentialDetails && Object.keys(credentialDetails).length) {
-      body.credential_details = credentialDetails;
-    }
+    // credential_identifier in credential_details must match the requested
+    // credential type so the issuer knows which credential to issue.
+    body.credential_details = { ...(credentialDetails || {}), credential_identifier: credentialType };
     const res = await fetch(`${apiBase.nuts}/internal/auth/v2/${encodeURIComponent(subjectId)}/request-credential`, {
       method: 'POST',
       headers: jsonHeaders,

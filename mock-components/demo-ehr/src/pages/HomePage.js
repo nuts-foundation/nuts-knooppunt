@@ -12,10 +12,12 @@ const ORG_CREDENTIAL_TYPES = [
   {
     type: 'HealthcareProfessionalDelegationCredential',
     label: '🪪 Healthcare Professional Delegation Credential',
+    actionLabel: 'Mandate',
   },
   {
     type: 'HealthcareProviderRoleTypeCredential',
     label: '🩺 Healthcare Provider Role Type Credential',
+    actionLabel: 'Load from Vektis',
   },
 ];
 
