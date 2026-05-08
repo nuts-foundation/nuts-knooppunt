@@ -22,7 +22,7 @@ const FHIR_MCSD_QUERY_BASE_URL = process.env.FHIR_MCSD_QUERY_BASE_URL || process
 const NUTS_BASE_URL = process.env.NUTS_BASE_URL || 'http://knooppunt:8081/nuts';
 
 const DEFAULT_CREDENTIAL_ISSUERS = {
-  HealthCareProfessionalDelegationCredential: 'https://nuts-services.nl/stable/aet-stub',
+  HealthcareProfessionalDelegationCredential: 'https://nuts-services.nl/stable/aet-stub',
   HealthcareProviderRoleTypeCredential: 'https://knooppunt-vektis.nuts-services.nl',
   PatientEnrollmentCredential: 'https://nuts-services.nl/stable/aet-stub',
   HealthcareOrganizationCredential: 'x509',

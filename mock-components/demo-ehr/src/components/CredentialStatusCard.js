@@ -99,7 +99,8 @@ export default function CredentialStatusCard({
     refresh();
   }, [refresh]);
 
-  const onRequest = async (type) => {
+  const onRequest = async (row) => {
+    const type = row.type;
     setPendingType(type);
     setRowMessages((prev) => ({ ...prev, [type]: null }));
     try {
@@ -223,7 +224,7 @@ export default function CredentialStatusCard({
                 </div>
                 {!loading && !row.vc && requestable && (
                   <button
-                    onClick={() => onRequest(row.type)}
+                    onClick={() => onRequest(row)}
                     className="button"
                     disabled={pendingType === row.type}
                   >
