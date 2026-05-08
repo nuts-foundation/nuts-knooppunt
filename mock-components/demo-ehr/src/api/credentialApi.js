@@ -163,9 +163,57 @@ const extractTypes = (vc) => {
   return [];
 };
 
+// Returns the first credentialSubject as a plain object (handles both single
+// and array forms). Used by per-row claim extractors that want to dig into
+// nested credentialSubject structures (e.g. hasDelegation.scope.*).
+export const getCredentialSubject = (vc) => {
+  const obj = asVcObject(vc);
+  if (!obj) return null;
+  const raw = obj.credentialSubject;
+  if (Array.isArray(raw)) return raw[0] || null;
+  return raw || null;
+};
+
+// Walks a dotted path against the value, returning undefined if any segment
+// is missing. Numeric segments index into arrays.
+const getByPath = (root, path) => {
+  if (root == null) return undefined;
+  let cur = root;
+  for (const seg of String(path).split('.')) {
+    if (cur == null) return undefined;
+    if (Array.isArray(cur)) {
+      const idx = Number(seg);
+      cur = Number.isInteger(idx) ? cur[idx] : undefined;
+    } else if (typeof cur === 'object') {
+      cur = cur[seg];
+    } else {
+      return undefined;
+    }
+  }
+  return cur;
+};
+
+// Resolves a `{ label: dotPath }` map against the VC's first credentialSubject
+// and returns a `{ label: value }` map for paths that exist (skipping
+// undefined/null/empty results). Values can be scalars or arrays.
+export const extractClaimsByPaths = (vc, paths) => {
+  if (!paths) return {};
+  const cs = getCredentialSubject(vc);
+  if (!cs) return {};
+  const out = {};
+  for (const [label, path] of Object.entries(paths)) {
+    const v = getByPath(cs, path);
+    if (v == null) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    out[label] = v;
+  }
+  return out;
+};
+
 // Shorthand summary for display: returns issuance date and the scalar
-// credentialSubject claims (skipping `id` and any nested objects). Works for
-// both JSON-LD and JWT-encoded VCs.
+// credentialSubject claims (skipping `id`, `@type`, and any nested objects).
+// Works for both JSON-LD and JWT-encoded VCs. Pages can override this on a
+// per-credential basis by passing `extractClaims` on the row config.
 export const summarizeCredential = (vc) => {
   const obj = asVcObject(vc);
   if (!obj) return null;
@@ -181,7 +229,7 @@ export const summarizeCredential = (vc) => {
   for (const cs of subjects) {
     if (!cs || typeof cs !== 'object') continue;
     for (const [k, v] of Object.entries(cs)) {
-      if (k === 'id') continue;
+      if (k === 'id' || k === '@type') continue;
       if (v == null) continue;
       if (typeof v === 'object') continue;
       if (subject[k] == null) subject[k] = v;

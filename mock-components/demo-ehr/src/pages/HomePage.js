@@ -13,6 +13,11 @@ const ORG_CREDENTIAL_TYPES = [
     type: 'HealthCareProfessionalDelegationCredential',
     label: '🪪 Healthcare Professional Delegation Credential',
     actionLabel: 'Mandate',
+    claims: {
+      UZI: 'hasDelegation.delegatedBy.identifier.value',
+      'Authorization rule': 'hasDelegation.scope.authorizationRule',
+      'Authorized actions': 'hasDelegation.scope.authorizedActions',
+    },
   },
   {
     type: 'HealthcareProviderRoleTypeCredential',

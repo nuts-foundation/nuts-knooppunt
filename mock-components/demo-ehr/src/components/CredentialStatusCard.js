@@ -9,7 +9,7 @@
 // enrollment), parameterized by `types` and `buildCredentialDetails`.
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { credentialApi, subjectIdForUra, summarizeCredential } from '../api/credentialApi';
+import { credentialApi, extractClaimsByPaths, subjectIdForUra, summarizeCredential } from '../api/credentialApi';
 import { config } from '../config';
 
 const VCI_FLASH_KEYS = ['vci', 'vci_type', 'vci_msg'];
@@ -193,6 +193,13 @@ export default function CredentialStatusCard({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
         {rows.map((row) => {
           const summary = row.vc ? summarizeCredential(row.vc) : null;
+          // Per-credential `claims` is a `{ label: dotPath }` map resolved
+          // against the VC's first credentialSubject. Falls back to dumping
+          // any top-level scalar credentialSubject fields.
+          const pathClaims = (row.vc && row.claims) ? extractClaimsByPaths(row.vc, row.claims) : null;
+          const claims = (pathClaims && Object.keys(pathClaims).length)
+            ? pathClaims
+            : (summary && summary.subject) || null;
           const msg = rowMessages[row.type];
           const issuer = (config.credentialIssuers || {})[row.type];
           const requestable = row.requestable !== false && issuer && issuer !== 'x509';
@@ -232,11 +239,12 @@ export default function CredentialStatusCard({
                   </button>
                 )}
               </div>
-              {summary && summary.subject && Object.keys(summary.subject).length > 0 && (
+              {claims && Object.keys(claims).length > 0 && (
                 <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {Object.entries(summary.subject).map(([k, v]) => (
+                  {Object.entries(claims).map(([k, v]) => (
                     <span key={k}>
-                      <span style={{ color: '#9ca3af' }}>{k}:</span> {String(v)}
+                      <span style={{ color: '#9ca3af' }}>{k}:</span>{' '}
+                      {Array.isArray(v) ? v.join(', ') : String(v)}
                     </span>
                   ))}
                 </div>
