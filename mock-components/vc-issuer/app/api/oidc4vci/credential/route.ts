@@ -219,9 +219,14 @@ export async function POST(req: NextRequest) {
 
   console.log('[Credential] SUCCESS: Credential issued for organization type', authenticatedOrg.type, 'to subject', subjectDid);
 
+  // OpenID4VCI 1.0 final returns issued credentials in a `credentials` array
+  // (each entry an object with a `credential` field). Earlier drafts (the
+  // Nuts node previously implemented) used a top-level `credential` string.
+  // Include both so clients on either version can consume the response.
   const responseBody = {
     format: 'jwt_vc_json',
     credential: signedCredential,
+    credentials: [{ credential: signedCredential }],
     c_nonce: newCNonce,
     c_nonce_expires_in: cNonceExpiresIn,
   };
