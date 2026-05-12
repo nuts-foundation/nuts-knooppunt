@@ -503,6 +503,8 @@ github.com/nuts-foundation/go-stoabs v1.11.1 h1:ZQOeRKzC1+AfW6Ve5kBJMo+zYhHLBUI4
 github.com/nuts-foundation/go-stoabs v1.11.1/go.mod h1:LzD3RhINBVJUpVRV9IM86IXcZoBSRx43PpCWRZGbEfs=
 github.com/nuts-foundation/nuts-node v1.0.1-0.20260508083410-13c1bfe27ae6 h1:P09JUjiUlrIMIPhiLyy7pCeVKz+WKvn8difYANBI97c=
 github.com/nuts-foundation/nuts-node v1.0.1-0.20260508083410-13c1bfe27ae6/go.mod h1:dufM27q4IDIrinl9DoVceuNQuDOLEuB3joCliASA8Tg=
+github.com/nuts-foundation/nuts-node v1.0.1-0.20260512082852-2fb603fbb8d2 h1:GIG1QPvVIoXi9b4CFMUMjzQuZmpi+EdghhWTEq7K7PM=
+github.com/nuts-foundation/nuts-node v1.0.1-0.20260512082852-2fb603fbb8d2/go.mod h1:0Z29JTUZONR+B5MR9Hxnak/TAtqr73GOyg0gFSTB+88=
 github.com/nuts-foundation/sqlite v1.0.0 h1:gLKyVIHZqYfYpEy5Ji6vjNUH8rs0luiY3DWNcOSBBzM=
 github.com/nuts-foundation/sqlite v1.0.0/go.mod h1:2GHDXCw5Sul9L3h8T5k0+558scm4ol4iXG+wVyYqueI=
 github.com/nxadm/tail v1.4.8 h1:nPr65rt6Y5JFSKQO7qToXr7pePgD6Gwiw05lkbyAQTE=
@@ -793,6 +795,8 @@ golang.org/x/net v0.25.0/go.mod h1:JkAGAh7GEvH74S6FOH42FLoXpXbE/aqXSrIQjXgsiwM=
 golang.org/x/net v0.26.0/go.mod h1:5YKkiSynbBIh3p6iOc/vibscux0x38BZDkn8sCUPxHE=
 golang.org/x/net v0.52.0 h1:He/TN1l0e4mmR3QqHMT2Xab3Aj3L9qjbhRm78/6jrW0=
 golang.org/x/net v0.52.0/go.mod h1:R1MAz7uMZxVMualyPXb+VaqGSa3LIaUqk0eEt3w36Sw=
+golang.org/x/net v0.53.0 h1:d+qAbo5L0orcWAr0a9JweQpjXF19LMXJE8Ey7hwOdUA=
+golang.org/x/net v0.53.0/go.mod h1:JvMuJH7rrdiCfbeHoo3fCQU24Lf5JJwT9W3sJFulfgs=
 golang.org/x/oauth2 v0.35.0 h1:Mv2mzuHuZuY2+bkyWXIHMfhNdJAdwW3FuWeCPYN5GVQ=
 golang.org/x/oauth2 v0.35.0/go.mod h1:lzm5WQJQwKZ3nwavOZ3IS5Aulzxi68dUSgRHujetwEA=
 golang.org/x/sync v0.0.0-20190423024810-112230192c58/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
