@@ -5,12 +5,14 @@ const { createProxyMiddleware } = require('http-proxy-middleware');
 const allowlist = require('../proxy-allowlist');
 
 const KNOOPPUNT_TARGET = process.env.REACT_APP_KNOOPPUNT_BASE_URL || 'http://knooppunt:8081';
+const NUTS_TARGET = process.env.REACT_APP_NUTS_BASE_URL || 'http://knooppunt:8081/nuts';
 
 const upstreams = [
   { prefix: '/api/fhir',      target: process.env.REACT_APP_FHIR_BASE_URL,            rules: allowlist.FHIR_R4,    label: 'fhir-r4' },
   { prefix: '/api/fhir-stu3', target: process.env.REACT_APP_FHIR_STU3_BASE_URL,       rules: allowlist.FHIR_STU3,  label: 'fhir-stu3' },
   { prefix: '/api/mcsd',      target: process.env.REACT_APP_FHIR_MCSD_QUERY_BASE_URL, rules: allowlist.MCSD,       label: 'mcsd' },
   { prefix: '/api/knooppunt', target: KNOOPPUNT_TARGET,                               rules: allowlist.KNOOPPUNT,  label: 'knooppunt' },
+  { prefix: '/api/nuts',      target: NUTS_TARGET,                                    rules: allowlist.NUTS,       label: 'nuts' },
 ];
 
 module.exports = function (app) {

@@ -1,9 +1,58 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../AuthProvider';
+import CredentialStatusCard from '../components/CredentialStatusCard';
+
+const ORG_CREDENTIAL_TYPES = [
+  {
+    type: 'HealthcareOrganizationCredential',
+    label: '🏥 Healthcare Provider Identity',
+    requestable: false,
+  },
+  {
+    type: 'HealthCareProfessionalDelegationCredential',
+    label: '🪪 Healthcare Professional Delegation',
+    actionLabel: 'Mandate',
+    claims: {
+      'Delegated by (UZI)': 'hasDelegation.delegatedBy.identifier.value',
+      'Authorization rule': 'hasDelegation.scope.authorizationRule',
+      'Authorized actions': 'hasDelegation.scope.authorizedActions',
+    },
+  },
+  {
+    type: 'HealthcareProviderRoleTypeCredential',
+    label: '🩺 Healthcare Provider Role Type',
+    actionLabel: 'Load from Vektis',
+    claims: {
+      'Role code': 'roleCodeNL',
+    },
+  },
+];
+
+const buildOrgCredentialDetails = ({ type, walletDid, ura }) => {
+  if (type === 'HealthCareProfessionalDelegationCredential') {
+    // BSN intentionally empty: practitioner has no BSN, but the AET stub
+    // expects the field to be present.
+    return { did: walletDid, bsn: '', ura };
+  }
+  return undefined;
+};
 
 function HomePage() {
-  const { user, isLoading, isAuthenticated, login, devLogin, devLoginEnabled, logout } = useAuth();
+  const {
+    user,
+    isLoading,
+    isAuthenticated,
+    login,
+    devLogin,
+    devLoginEnabled,
+    logout,
+  } = useAuth();
+
+  const handleDevLogin = () => {
+    const ura = window.prompt('Care organization URA (leave empty for default 00000666):', '');
+    devLogin(ura == null ? '' : ura);
+  };
 
   if (isLoading) {
     return <div className="loading">Loading...</div>;
@@ -47,7 +96,7 @@ function HomePage() {
             </button>
             {devLoginEnabled && (
               <button
-                onClick={devLogin}
+                onClick={handleDevLogin}
                 className="button button-secondary"
                 style={{ marginLeft: '10px' }}
                 title="Bypass OIDC for local development"
@@ -93,6 +142,14 @@ function HomePage() {
                   (Feature coming soon)
                 </p>
               </div>
+
+              <CredentialStatusCard
+                title="🛂 Network Identity"
+                description="Verifiable Credentials that prove this care organization's role in the network."
+                ura={user.ura || user.abonnee_nummer || user.sub}
+                types={ORG_CREDENTIAL_TYPES}
+                buildCredentialDetails={buildOrgCredentialDetails}
+              />
 
               <div className="card">
                 <h3>🔐 Your Session</h3>

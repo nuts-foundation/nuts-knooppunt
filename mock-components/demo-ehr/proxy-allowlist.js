@@ -68,6 +68,15 @@ const KNOOPPUNT = [
   { method: 'GET', path: /^\/nvi\/DocumentReference(\?.*)?$/ },
 ];
 
+// Nuts node internal API. Narrowly scoped to subject lookup, holder VC list,
+// subject creation, and OpenID4VCI request-credential — nothing else.
+const NUTS = [
+  { method: 'GET',  path: /^\/internal\/vdr\/v2\/subject\/[^/]+$/ },
+  { method: 'POST', path: /^\/internal\/vdr\/v2\/subject$/ },
+  { method: 'GET',  path: /^\/internal\/vcr\/v2\/holder\/[^/]+\/vc(\?.*)?$/ },
+  { method: 'POST', path: /^\/internal\/auth\/v2\/[^/]+\/request-credential$/ },
+];
+
 // Dynamic proxy is only used to POST a Task to a peer's notification endpoint.
 const DYNAMIC = [
   { method: 'POST', path: /^\/Task$/ },
@@ -91,6 +100,7 @@ module.exports = {
   FHIR_STU3,
   MCSD,
   KNOOPPUNT,
+  NUTS,
   DYNAMIC,
   makeGate,
 };
