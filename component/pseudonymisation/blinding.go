@@ -3,7 +3,6 @@ package pseudonymisation
 import (
 	"crypto/hkdf"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 
 	"github.com/cloudflare/circl/oprf"
@@ -16,10 +15,9 @@ import (
 func deriveKey(identifier prsIdentifier, recipientOrganizationURA string, recipientScope string) ([]byte, error) {
 	info := fmt.Sprintf("ura:%s|%s|v1", recipientOrganizationURA, recipientScope)
 
-	identifierJSON, err := json.Marshal(identifier)
+	identifierJSON, err := marshalPRS(identifier)
 	if err != nil {
-		// can't happen
-		return nil, err
+		return nil, fmt.Errorf("marshaling identifier: %w", err)
 	}
 
 	key, err := hkdf.Key(sha256.New, identifierJSON, nil, info, sha256.Size)
