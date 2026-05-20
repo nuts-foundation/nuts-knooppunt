@@ -1,0 +1,91 @@
+@startuml
+
+title NVI Integration
+
+box "Healthcare Provider"
+    actor User as "Clinician"
+    participant emr as "EMR\n[FHIR]"
+    participant kp as "Knooppunt"
+end box
+
+participant prs as "PRS\n(Pseudonymization\nService)"
+participant nvi as "NVI\n(Nationale\nVerwijsIndex)"
+
+== Flow 1: Register List (Making Data Available) ==
+
+User -> emr : Register patient data\n(e.g. care episode started)
+
+emr -> kp : [FHIR R4] POST /nvi/List\n(List with subject.identifier=BSN)\nX-Tenant-ID: {URA}
+
+activate kp
+
+note over kp, prs
+  OPRF Protocol (RFC 9497) — Pseudonymization of BSN
+end note
+
+kp -> kp : Derive key using HKDF (RFC 5869)\nBlind BSN input (OPRF client blind)
+
+kp -> prs : POST /evaluate\n(blinded BSN input, URA, audience="nvi", scope="nationale-verwijsindex")
+activate prs
+    prs -> prs : Evaluate blinded input\nwith PRS secret key
+    prs --> kp : Evaluated blinded output (JWE)
+deactivate prs
+
+kp -> kp : Extract blind factor\nCompose transport token\n(system: BSN-pseudonym NamingSystem\nvalue: blindFactor + JWE)
+
+kp -> kp : Replace List.subject.identifier\nwith pseudonymous transport token\nAdd custodian extension (URA)
+
+kp -> nvi : [FHIR R4] POST /List\nAuthorization: Bearer {access_token}\n(List with pseudonymous subject identifier)
+activate nvi
+    nvi -> nvi : Deblind transport token → pseudonym\nStore {pseudonym, URA, careContext}
+    nvi --> kp : 200 OK (List)
+deactivate nvi
+
+kp --> emr : 200 OK (List)
+deactivate kp
+
+== Flow 2: Query (Find Patients with Data Elsewhere) ==
+
+User -> emr : Query NVI for patient\n(e.g. patient check-in)
+
+note over emr, kp
+  Required (at least one):
+  - patient:identifier={BSNNamingSystem}|{BSN}  ← mapped to subject:identifier, BSN is tokenized
+  - subject:identifier={BSNNamingSystem}|{BSN}  ← BSN is tokenized
+  - source:identifier={system}|{deviceId}       ← passed through as-is (not tokenized)
+
+  Optional:
+  - code={system}|{code}   ← filter by data category (e.g. MedicationRequest)
+  - _count={n}             ← max results per page
+end note
+
+emr -> kp : [FHIR R4] GET /nvi/List?patient:identifier={BSNNamingSystem}|{BSN}\n                        [&source:identifier={system}|{deviceId}]\n                        [&code={system}|{code}]\n                        [&_count={n}]\nX-Tenant-ID: {URA}
+
+activate kp
+
+note over kp, prs
+  OPRF pseudonymization applied only to patient:identifier / subject:identifier (BSN)
+  source:identifier and other params are forwarded unchanged
+end note
+
+kp -> kp : Blind BSN search token (OPRF client blind)
+
+kp -> prs : POST /evaluate\n(blinded BSN input, URA, audience="nvi", scope="nationale-verwijsindex")
+activate prs
+    prs --> kp : Evaluated blinded output (JWE)
+deactivate prs
+
+kp -> kp : Compose pseudonymous search token\nMap patient:identifier → subject:identifier\nPass through source:identifier, code, _count unchanged
+
+kp -> nvi : [FHIR R4] GET /List?subject:identifier={pseudonymous-token}\n                        [&source:identifier={system}|{deviceId}]\n                        [&code={system}|{code}]\n                        [&_count={n}]\nAuthorization: Bearer {access_token}
+activate nvi
+    nvi -> nvi : Deblind → pseudonym\nLookup matching List entries
+    nvi --> kp : 200 OK (Bundle of List resources\nwith URA + careContext per match)
+deactivate nvi
+
+kp --> emr : 200 OK (Bundle)
+deactivate kp
+
+emr --> User : Show list of providers\nwho have data for this patient
+
+@enduml
