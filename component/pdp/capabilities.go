@@ -13,16 +13,47 @@ import (
 //go:embed policies/*/fhir_capabilitystatement.json
 var FS embed.FS
 
-func readCapability(ctx context.Context, name string) (fhir.CapabilityStatement, error) {
+// capabilityStatement is a version-agnostic subset of a FHIR CapabilityStatement (works for both STU3 and R4).
+// Only the fields needed for PDP evaluation are included.
+type capabilityStatement struct {
+	Rest []capabilityStatementRest `json:"rest"`
+}
+
+type capabilityStatementRest struct {
+	Resource  []capabilityStatementResource  `json:"resource"`
+	Operation []capabilityStatementOperation `json:"operation"`
+}
+
+type capabilityStatementResource struct {
+	Type             string                           `json:"type"`
+	Interaction      []capabilityStatementInteraction `json:"interaction"`
+	SearchParam      []capabilityStatementSearchParam `json:"searchParam"`
+	SearchInclude    []string                         `json:"searchInclude"`
+	SearchRevInclude []string                         `json:"searchRevInclude"`
+}
+
+type capabilityStatementInteraction struct {
+	Code string `json:"code"`
+}
+
+type capabilityStatementSearchParam struct {
+	Name string `json:"name"`
+}
+
+type capabilityStatementOperation struct {
+	Name string `json:"name"`
+}
+
+func readCapability(ctx context.Context, name string) (capabilityStatement, error) {
 	fileName := fmt.Sprintf("policies/%s/fhir_capabilitystatement.json", name)
 	data, err := FS.ReadFile(fileName)
 	if err != nil {
-		return fhir.CapabilityStatement{}, fmt.Errorf("file read: %w", err)
+		return capabilityStatement{}, fmt.Errorf("file read: %w", err)
 	}
 
-	var capability fhir.CapabilityStatement
+	var capability capabilityStatement
 	if err := json.Unmarshal(data, &capability); err != nil {
-		return fhir.CapabilityStatement{}, fmt.Errorf("JSON unmarshal: %w", err)
+		return capabilityStatement{}, fmt.Errorf("JSON unmarshal: %w", err)
 	}
 
 	return capability, nil
@@ -53,7 +84,7 @@ func enrichPolicyInputWithCapabilityStatement(ctx context.Context, input PolicyI
 // evalInteraction checks whether the requested interaction is allowed by the capability statement.
 // If not, it returns a list of reasons why not.
 func evalInteraction(
-	statement fhir.CapabilityStatement,
+	statement capabilityStatement,
 	input PolicyInput,
 ) []ResultReason {
 	// FUTURE: This is a pretty naive implementation - we can make it more efficient at a later point.
@@ -71,6 +102,7 @@ func evalInteraction(
 	}
 
 	props := input.Action.FHIRRest
+	interactionCode := props.InteractionType.String()
 
 	if !slices.Contains(supported, props.InteractionType) {
 		return []ResultReason{
@@ -103,10 +135,10 @@ func evalInteraction(
 		return nil
 	}
 
-	var resourceDescriptions []fhir.CapabilityStatementRestResource
+	var resourceDescriptions []capabilityStatementResource
 	for _, rest := range statement.Rest {
 		for _, res := range rest.Resource {
-			if res.Type == *input.Resource.Type {
+			if res.Type == input.Resource.Type.String() {
 				resourceDescriptions = append(resourceDescriptions, res)
 			}
 		}
@@ -115,7 +147,7 @@ func evalInteraction(
 	allowInteraction := false
 	for _, des := range resourceDescriptions {
 		for _, inter := range des.Interaction {
-			if inter.Code == props.InteractionType {
+			if inter.Code == interactionCode {
 				allowInteraction = true
 			}
 		}

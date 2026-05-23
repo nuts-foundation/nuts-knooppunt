@@ -1,0 +1,26 @@
+{
+  "resourceType": "CapabilityStatement",
+  "status": "active",
+  "date": "2026-01-01",
+  "kind": "requirements",
+  "fhirVersion": "3.0.2",
+  "acceptUnknown": "both",
+  "format": ["application/fhir+json"],
+  "rest": [
+    {
+      "mode": "server",
+      "resource": [
+        {
+          "type": "Composition",
+          "interaction": [
+            {"code": "read"},
+            {"code": "search-type"}
+          ],
+          "searchParam": [
+            {"name": "patient", "type": "reference"}
+          ]
+        }
+      ]
+    }
+  ]
+}
