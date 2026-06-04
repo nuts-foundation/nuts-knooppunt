@@ -64,9 +64,9 @@ func makeDirectoryKey(fhirBaseURL, authoritativeUra string) string {
 //   - The organization's mcsd-directory-endpoint must be discoverable through the root mCSD Directory.'
 //
 // A root directory may be marked as 'trusted' (DirectoryConfig.Trusted), which skips the per-resource
-// validation described above. This is intended for directories the operator controls or
-// otherwise trusts (e.g. the LRZA). Trust does not affect sync cadence — incremental sync via _since
-// still applies. Directories discovered from a trusted root are always registered as untrusted.
+// validation described above. This is intended for directories that are government-controlled or otherwise trusted
+// (e.g. the LRZA). Trust does not affect sync cadence — incremental sync via _since still applies.
+// Directories discovered from a trusted root are always registered as untrusted.
 type Component struct {
 	config            Config
 	fhirAdminClientFn func(baseURL *url.URL) fhirclient.Client
