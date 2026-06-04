@@ -20,12 +20,14 @@ import (
 // buildUpdateTransaction constructs a FHIR Bundle transaction for updating resources.
 // It filters entries based on allowed resource types and sets the source in the resource meta.
 // The function takes a context, a Bundle to populate, a Bundle entry,
-// a slice of allowed resource types, and a flag indicating if this is from a discoverable directory,
-// and the source base URL for conditional references.
+// a slice of allowed resource types, and a flag indicating whether to import only mCSD directory
+// Endpoints, and the source base URL for conditional references.
 //
-// Resources are only synced to the query directory if they come from non-discoverable directories.
-// Discoverable directories are for discovery only and their resources should not be synced.
-func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, validationRules ValidationRules, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, allHealthcareServices []fhir.HealthcareService, isDiscoverableDirectory bool, sourceBaseURL string) (string, error) {
+// When onlyDirectoryEndpoints is true (an untrusted discoverable root directory), only mCSD
+// directory Endpoints are synced to the query directory; all other resources are skipped. Such a
+// directory is crawled for discovery, and its actual resource data is taken from the validated leaf
+// directories instead. Trusted directories pass false here and are synced in full.
+func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.BundleEntry, validationRules ValidationRules, parentOrganizationMap map[*fhir.Organization][]*fhir.Organization, allHealthcareServices []fhir.HealthcareService, onlyDirectoryEndpoints bool, sourceBaseURL string) (string, error) {
 	if entry.FullUrl == nil {
 		return "", errors.New("missing 'fullUrl' field")
 	}
@@ -88,10 +90,11 @@ func buildUpdateTransaction(ctx context.Context, tx *fhir.Bundle, entry fhir.Bun
 		return "", err
 	}
 
-	// Only sync resources from non-discoverable directories to the query directory
-	// Exception: mCSD directory endpoints are synced even from discoverable directories for resilience (e.g. if the root directory is down)
+	// For an untrusted discoverable root we only import mCSD directory Endpoints to the query
+	// directory; the directory's other resources are taken from the validated leaf directories.
+	// (Trusted directories pass onlyDirectoryEndpoints=false and are synced in full.)
 	var doSync = true
-	if isDiscoverableDirectory {
+	if onlyDirectoryEndpoints {
 		doSync = false
 		if resourceType == "Endpoint" {
 			// Check if this is an mCSD directory endpoint

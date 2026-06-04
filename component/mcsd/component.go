@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,7 +19,6 @@ import (
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/httpauth"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
-	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -120,6 +118,53 @@ type DirectoryUpdateReport struct {
 	Errors       []string `json:"errors"`
 }
 
+// syncRun holds everything needed to sync a single administration directory into the query
+// directory. The config fields (top) describe *what* to sync and are set when the run is
+// constructed; the working-state fields (bottom) are filled while the run executes. Bundling them
+// in one value lets the sync steps read as named intent instead of branching on positional bools.
+type syncRun struct {
+	// config
+	fhirBaseURL      string
+	allowedTypes     []string
+	authoritativeUra string
+	trusted          bool
+	discoverable     bool // only used to compute the import filter; discovery itself is a separate phase
+
+	// working state
+	remoteClient   fhirclient.Client
+	queryStart     time.Time
+	searchParams   url.Values
+	entries        []fhir.BundleEntry
+	firstSearchSet fhir.Bundle
+	parentOrgs     parentOrganizationMap
+	healthcareSvcs []fhir.HealthcareService
+}
+
+func (d administrationDirectory) newSyncRun() *syncRun {
+	return &syncRun{
+		fhirBaseURL:      d.fhirBaseURL,
+		allowedTypes:     d.resourceTypes,
+		authoritativeUra: d.authoritativeUra,
+		trusted:          d.trusted,
+		discoverable:     d.discover,
+	}
+}
+
+func (r *syncRun) key() string { return makeDirectoryKey(r.fhirBaseURL, r.authoritativeUra) }
+
+// validates reports whether this directory's contents must pass anti-spoofing validation.
+// Trusted directories are imported as-is, so they skip validation entirely.
+func (r *syncRun) validates() bool { return !r.trusted }
+
+// onlyDirectoryEndpoints reports whether the sync should import only mCSD directory Endpoints.
+// This is true for an untrusted discoverable root: it is crawled for discovery, but its resource
+// data is taken from the validated leaf directories rather than imported wholesale.
+func (r *syncRun) onlyDirectoryEndpoints() bool { return r.discoverable && !r.trusted }
+
+func (r *syncRun) validationRules() ValidationRules {
+	return ValidationRules{AllowedResourceTypes: r.allowedTypes, Trusted: r.trusted}
+}
+
 func New(config Config) (*Component, error) {
 	// Create HTTP client with optional OAuth2 authentication
 	var httpClient *http.Client
@@ -187,83 +232,38 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 	})
 }
 
-func (c *Component) registerAdministrationDirectory(ctx context.Context, fhirBaseURL string, resourceTypes []string, discover bool, sourceURL string, authoritativeUra string, trusted bool) error {
-	// Must be a valid http or https URL
-	parsedFHIRBaseURL, err := url.Parse(fhirBaseURL)
-	if err != nil {
-		return fmt.Errorf("invalid FHIR base URL (url=%s): %w", fhirBaseURL, err)
-	}
-	parsedFHIRBaseURL.Scheme = strings.ToLower(parsedFHIRBaseURL.Scheme)
-	if (parsedFHIRBaseURL.Scheme != "https" && parsedFHIRBaseURL.Scheme != "http") || parsedFHIRBaseURL.Host == "" {
-		return fmt.Errorf("invalid FHIR base URL (url=%s)", fhirBaseURL)
-	}
-
-	// Check if the URL is in the exclusion list (also trim exclusion list entries for consistent matching)
-	trimmedFHIRBaseURL := strings.TrimRight(fhirBaseURL, "/")
-	for _, excludedURL := range c.config.ExcludeAdminDirectories {
-		if strings.TrimRight(excludedURL, "/") == trimmedFHIRBaseURL {
-			slog.InfoContext(ctx, "Skipping administration directory registration: excluded by configuration", logging.FHIRServer(fhirBaseURL))
-			return nil
-		}
-	}
-
-	exists := slices.ContainsFunc(c.administrationDirectories, func(directory administrationDirectory) bool {
-		return directory.fhirBaseURL == fhirBaseURL && directory.authoritativeUra == authoritativeUra
-	})
-	if exists {
-		return nil
-	}
-	c.administrationDirectories = append(c.administrationDirectories, administrationDirectory{
-		resourceTypes:    resourceTypes,
-		fhirBaseURL:      fhirBaseURL,
-		discover:         discover,
-		trusted:          trusted,
-		sourceURL:        sourceURL,
-		authoritativeUra: authoritativeUra,
-	})
-	slog.InfoContext(ctx, "Registered mCSD Directory", logging.FHIRServer(fhirBaseURL), slog.Bool("discover", discover), slog.Bool("trusted", trusted))
-	return nil
-}
-
-// unregisterAdministrationDirectory removes an administration directory from the list by its fullUrl.
-// This is called when an Endpoint is deleted to prevent it from being fetched in future updates.
-// The fullUrl parameter is the Bundle entry fullUrl that was used when the Endpoint was registered.
-func (c *Component) unregisterAdministrationDirectory(ctx context.Context, fullUrl string) {
-	initialCount := len(c.administrationDirectories)
-	c.administrationDirectories = slices.DeleteFunc(c.administrationDirectories, func(dir administrationDirectory) bool {
-		return dir.sourceURL == fullUrl
-	})
-	if len(c.administrationDirectories) < initialCount {
-		slog.InfoContext(ctx, "Unregistered mCSD Directory after Endpoint deletion", slog.String("full_url", fullUrl))
-	}
-}
-
-// processEndpointDeletes processes DELETE operations for Endpoints and unregisters them from administrationDirectories.
-// This prevents deleted Endpoints from being fetched in future updates, fixing issue #241.
-func (c *Component) processEndpointDeletes(ctx context.Context, entries []fhir.BundleEntry) {
-	for _, entry := range entries {
-		if entry.Request != nil && entry.Request.Method == fhir.HTTPVerbDELETE && entry.FullUrl != nil {
-			parts := strings.Split(entry.Request.Url, "/")
-			if len(parts) >= 2 && parts[0] == "Endpoint" {
-				// Unregister the administration directory using the fullUrl
-				// The fullUrl uniquely identifies the resource that was deleted
-				c.unregisterAdministrationDirectory(ctx, *entry.FullUrl)
-			}
-		}
-	}
-}
-
+// update runs a full refresh cycle in two phases: first discovery, then sync.
+//
+// Phase 1 (discovery) crawls discoverable (root) directories and registers/unregisters the
+// administration directories they point at; it only mutates c.administrationDirectories.
+// Phase 2 (sync) imports resources from every administration directory — roots and the ones just
+// discovered — into the query directory. Running discovery to completion first means a directory
+// discovered this cycle is synced in the same cycle. Warnings/errors from discovery are merged into
+// the sync report for the same directory.
+//
+// As a result a discoverable root is queried twice per cycle (a full scan in phase 1, then an
+// incremental query in phase 2). This is intentional: the phases do different work — discovery only
+// updates the in-memory registry, while sync imports the root's own mCSD directory Endpoints into
+// the query directory. The separation is kept deliberately even though it costs the extra query.
 func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
 
-	result := make(UpdateReport)
-	for i := 0; i < len(c.administrationDirectories); i++ {
-		adminDirectory := c.administrationDirectories[i]
-		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover, adminDirectory.authoritativeUra, adminDirectory.trusted)
+	// Phase 1: discovery.
+	result := c.discover(ctx)
+
+	// Phase 2: sync.
+	for _, adminDirectory := range c.administrationDirectories {
+		run := adminDirectory.newSyncRun()
+		report, err := c.runSyncJob(ctx, run)
 		if err != nil {
-			slog.ErrorContext(ctx, "mCSD Directory update failed", logging.FHIRServer(adminDirectory.fhirBaseURL), logging.Error(err))
+			slog.ErrorContext(ctx, "mCSD Directory update failed", logging.FHIRServer(run.fhirBaseURL), logging.Error(err))
 			report.Errors = append(report.Errors, err.Error())
+		}
+		// Merge discovery-phase warnings/errors for the same directory (roots only).
+		if discoveryReport, ok := result[run.key()]; ok {
+			report.Warnings = append(discoveryReport.Warnings, report.Warnings...)
+			report.Errors = append(discoveryReport.Errors, report.Errors...)
 		}
 		// Return empty slices instead of null ones, makes a nicer REST API
 		if report.Warnings == nil {
@@ -272,170 +272,133 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		if report.Errors == nil {
 			report.Errors = []string{}
 		}
-		directoryKey := makeDirectoryKey(adminDirectory.fhirBaseURL, adminDirectory.authoritativeUra)
-		result[directoryKey] = report
+		result[run.key()] = report
 	}
 	return result, nil
 }
 
-// discoverAndRegisterEndpoints processes endpoint discovery and registration for the given parent organizations.
-// It finds endpoints from the entries that match parent organization endpoint references and registers them.
-func (c *Component) discoverAndRegisterEndpoints(ctx context.Context, entries []fhir.BundleEntry, parentOrganizationsMap parentOrganizationMap, report DirectoryUpdateReport) DirectoryUpdateReport {
-	if parentOrganizationsMap == nil {
-		return report
+// runSyncJob imports resources from a single administration directory into the query directory.
+// Discovery of new directories is a separate phase (see discover); this only syncs resources, so
+// every directory — root or discovered — is treated the same here. It reads as the sequence of
+// steps documented on each helper.
+func (c *Component) runSyncJob(ctx context.Context, run *syncRun) (DirectoryUpdateReport, error) {
+	slog.InfoContext(ctx, "Updating from mCSD Directory", logging.FHIRServer(run.fhirBaseURL), slog.Bool("trusted", run.trusted), slog.Any("resourceTypes", run.allowedTypes))
+
+	if err := c.startSyncRun(ctx, run); err != nil {
+		return DirectoryUpdateReport{}, err
+	}
+	if err := c.fetchEntries(ctx, run); err != nil {
+		return DirectoryUpdateReport{}, err
+	}
+	if err := c.loadParentOrgs(ctx, run); err != nil {
+		return DirectoryUpdateReport{}, err
 	}
 
-	for parentOrg := range parentOrganizationsMap {
-		uraIdentifiers := libfhir.FilterIdentifiersBySystem(parentOrg.Identifier, coding.URANamingSystem)
-		if len(uraIdentifiers) == 0 || uraIdentifiers[0].Value == nil {
-			continue
-		}
-		authoritativeUra := *uraIdentifiers[0].Value
+	// _history can return multiple versions of the same resource, but a transaction bundle must
+	// contain each resource at most once, so keep only the most recent version of each.
+	deduplicatedEntries := deduplicateHistoryEntries(run.entries)
+	report, tx := c.buildTransaction(ctx, run, deduplicatedEntries)
 
-		if parentOrg.Endpoint == nil || len(parentOrg.Endpoint) == 0 {
-			continue
-		}
-
-		// find endpoint in entries
-		endpoints := make(map[string]*fhir.Endpoint)
-		for _, entry := range entries {
-			if entry.Resource == nil {
-				continue
-			}
-			var endpoint fhir.Endpoint
-			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
-				continue
-			}
-			// find all Endpoint resources from entries that reference the parent organization's Endpoint resources'
-			if endpoint.Id != nil {
-				endpointID := *endpoint.Id
-				for _, parentEndpoint := range parentOrg.Endpoint {
-					if parentEndpoint.Reference != nil {
-						refID := extractReferenceID(parentEndpoint.Reference)
-						if endpointID == refID {
-							if entry.FullUrl != nil {
-								endpoints[*entry.FullUrl] = &endpoint
-							}
-							break // Found a match, move to next entry
-						}
-					}
-				}
-			}
-		}
-
-		payloadCoding := fhir.Coding{
-			System: to.Ptr(coding.MCSDPayloadTypeSystem),
-			Code:   to.Ptr(coding.MCSDPayloadTypeDirectoryCode),
-		}
-
-		for fullUrl, endpoint := range endpoints {
-			if coding.CodablesIncludesCode(endpoint.PayloadType, payloadCoding) {
-				slog.DebugContext(ctx, "Discovered mCSD Directory", slog.String("address", endpoint.Address))
-
-				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, fullUrl, authoritativeUra, false)
-				if err != nil {
-					report.Warnings = append(report.Warnings, fmt.Sprintf("failed to register discovered mCSD Directory at %s: %s", endpoint.Address, err.Error()))
-				}
-			}
-		}
+	slog.DebugContext(ctx, "Got mCSD entries", logging.FHIRServer(run.fhirBaseURL), slog.Int("count", len(tx.Entry)))
+	if len(tx.Entry) == 0 {
+		return report, nil
 	}
 
-	return report
+	report, err := c.applyTransaction(ctx, tx, report)
+	if err != nil {
+		return DirectoryUpdateReport{}, err
+	}
+	c.recordSyncTimestamp(ctx, run)
+	return report, nil
 }
 
-func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw string, allowedResourceTypes []string, allowDiscovery bool, authoritativeUra string, trusted bool) (DirectoryUpdateReport, error) {
-	slog.InfoContext(ctx, "Updating from mCSD Directory", logging.FHIRServer(fhirBaseURLRaw), slog.Bool("discover", allowDiscovery), slog.Bool("trusted", trusted), slog.Any("resourceTypes", allowedResourceTypes))
-	remoteAdminDirectoryFHIRBaseURL, err := url.Parse(fhirBaseURLRaw)
+// startSyncRun resolves the remote FHIR client and sets up the search parameters, applying the
+// _since parameter for incremental sync when a previous sync timestamp is known for this directory.
+func (c *Component) startSyncRun(ctx context.Context, run *syncRun) error {
+	remoteBaseURL, err := url.Parse(run.fhirBaseURL)
 	if err != nil {
-		return DirectoryUpdateReport{}, err
+		return err
 	}
-	remoteAdminDirectoryFHIRClient := c.fhirAdminClientFn(remoteAdminDirectoryFHIRBaseURL)
-
-	queryDirectoryFHIRClient := c.fhirQueryClient
-
-	// Get last update time for incremental sync
-	directoryKey := makeDirectoryKey(fhirBaseURLRaw, authoritativeUra)
-	lastUpdate, hasLastUpdate := c.lastUpdateTimes[directoryKey]
-
+	run.remoteClient = c.fhirAdminClientFn(remoteBaseURL)
 	// Capture query start time as fallback for servers that don't provide Bundle meta.lastUpdated.
-	queryStartTime := time.Now()
+	run.queryStart = time.Now()
 
-	searchParams := url.Values{
+	run.searchParams = url.Values{
 		"_count": []string{strconv.Itoa(searchPageSize)},
 	}
-	if hasLastUpdate {
-		searchParams.Set("_since", lastUpdate)
-		slog.DebugContext(ctx, "Using _since parameter for incremental sync from FHIR server", logging.FHIRServer(fhirBaseURLRaw), slog.String("_since", lastUpdate))
+	if lastUpdate, ok := c.lastUpdateTimes[run.key()]; ok {
+		run.searchParams.Set("_since", lastUpdate)
+		slog.DebugContext(ctx, "Using _since parameter for incremental sync from FHIR server", logging.FHIRServer(run.fhirBaseURL), slog.String("_since", lastUpdate))
 	} else {
-		slog.InfoContext(ctx, "No last update time, doing full sync from FHIR server", logging.FHIRServer(fhirBaseURLRaw))
+		slog.InfoContext(ctx, "No last update time, doing full sync from FHIR server", logging.FHIRServer(run.fhirBaseURL))
 	}
+	return nil
+}
 
-	// Initial query
-	entries, firstSearchSet, err := c.queryAllResourceTypes(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
+// fetchEntries queries all allowed resource types and stores the results on the run. A URA
+// identifier change can't be expressed incrementally (the _since query would mask it), so when one
+// is detected the query is rerun in full. That check is skipped for trusted directories, which
+// don't validate against URA identifiers.
+func (c *Component) fetchEntries(ctx context.Context, run *syncRun) error {
+	entries, firstSearchSet, err := c.queryAllResourceTypes(ctx, run.remoteClient, run.allowedTypes, run.searchParams)
 	if err != nil {
-		return DirectoryUpdateReport{}, err
+		return err
 	}
 
-	// Check if any Organization's URA identifier has changed between history versions.
-	// Skipped for trusted directories: a URA change is synced like any other change,
-	// since we don't validate against URA identifiers in trusted mode.
-	if !trusted {
-		uraIdentifierChanged := checkForURAIdentifierChanges(entries)
-		if uraIdentifierChanged {
-			slog.WarnContext(ctx, "Detected URA identifier change in organization history. Rerunning history query without _since parameter.", logging.FHIRServer(fhirBaseURLRaw))
-
-			// Remove _since parameter and rerun the query
-			searchParams.Del("_since")
-			entries, firstSearchSet, err = c.queryAllResourceTypes(ctx, remoteAdminDirectoryFHIRClient, allowedResourceTypes, searchParams)
-			if err != nil {
-				return DirectoryUpdateReport{}, err
-			}
+	if run.validates() && checkForURAIdentifierChanges(entries) {
+		slog.WarnContext(ctx, "Detected URA identifier change in organization history. Rerunning history query without _since parameter.", logging.FHIRServer(run.fhirBaseURL))
+		run.searchParams.Del("_since")
+		entries, firstSearchSet, err = c.queryAllResourceTypes(ctx, run.remoteClient, run.allowedTypes, run.searchParams)
+		if err != nil {
+			return err
 		}
 	}
 
-	// Deduplicate resources from _history query - keep only the most recent version
-	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
-	deduplicatedEntries := deduplicateHistoryEntries(entries)
+	run.entries = entries
+	run.firstSearchSet = firstSearchSet
+	run.healthcareSvcs = extractHealthcareServices(entries)
+	return nil
+}
 
-	// Filter to only include HealthcareService resources
-	var allHealthcareServices []fhir.HealthcareService
+// extractHealthcareServices returns all HealthcareService resources among the entries. They are
+// collected up front because validating other resources may need to look them up.
+func extractHealthcareServices(entries []fhir.BundleEntry) []fhir.HealthcareService {
+	var result []fhir.HealthcareService
 	for _, entry := range entries {
 		if entry.Resource == nil {
 			continue
 		}
 		var healthcareService fhir.HealthcareService
 		if err := json.Unmarshal(entry.Resource, &healthcareService); err == nil {
-			// Successfully unmarshaled as HealthcareService
-			allHealthcareServices = append(allHealthcareServices, healthcareService)
+			result = append(result, healthcareService)
 		}
 	}
+	return result
+}
 
-	// Pre-process Endpoint DELETEs to unregister administration directories
-	if allowDiscovery {
-		c.processEndpointDeletes(ctx, deduplicatedEntries)
+// loadParentOrgs builds the map of parent organizations (those with a URA identifier) to their
+// linked children and validates it. Both are anti-spoofing measures used to validate organizations
+// that don't carry their own URA identifier, so for trusted directories the map stays nil and
+// nothing is validated.
+func (c *Component) loadParentOrgs(ctx context.Context, run *syncRun) error {
+	if !run.validates() {
+		return nil
 	}
-
-	// Find parent organizations with URA identifier and all organizations linked to them.
-	// Used both for validating organizations that don't have their own URA identifier and
-	// for endpoint discovery. For trusted directories without discovery, neither applies
-	// so the map stays nil.
-	var parentOrganizationsMap parentOrganizationMap
-	if !trusted || allowDiscovery {
-		parentOrganizationsMap, err = c.ensureParentOrganizationsMap(ctx, fhirBaseURLRaw, remoteAdminDirectoryFHIRClient, authoritativeUra)
-		if err != nil {
-			return DirectoryUpdateReport{}, fmt.Errorf("failed to build parent organization map: %w", err)
-		}
+	parentOrgs, err := c.ensureParentOrganizationsMap(ctx, run.fhirBaseURL, run.remoteClient, run.authoritativeUra)
+	if err != nil {
+		return fmt.Errorf("failed to build parent organization map: %w", err)
 	}
-
-	// Validate all parent organizations once before processing resources.
-	// Skipped for trusted directories.
-	if !trusted {
-		if err := ValidateParentOrganizations(parentOrganizationsMap); err != nil {
-			return DirectoryUpdateReport{}, fmt.Errorf("parent organization (one that supposedly has ura identifier - and only only) validation failed: %w", err)
-		}
+	if err := ValidateParentOrganizations(parentOrgs); err != nil {
+		return fmt.Errorf("parent organization (one that supposedly has ura identifier - and only only) validation failed: %w", err)
 	}
+	run.parentOrgs = parentOrgs
+	return nil
+}
 
-	// Build transaction with deterministic conditional references
+// buildTransaction converts the deduplicated entries into a FHIR transaction bundle with
+// deterministic conditional references. Entries that can't be processed are recorded as warnings
+// rather than failing the whole sync.
+func (c *Component) buildTransaction(ctx context.Context, run *syncRun, deduplicatedEntries []fhir.BundleEntry) (DirectoryUpdateReport, fhir.Bundle) {
 	tx := fhir.Bundle{
 		Type:  fhir.BundleTypeTransaction,
 		Entry: make([]fhir.BundleEntry, 0, len(deduplicatedEntries)),
@@ -444,38 +407,30 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 	var report DirectoryUpdateReport
 	for i, entry := range deduplicatedEntries {
 		if entry.Request == nil {
-			msg := fmt.Sprintf("Skipping entry with no request: #%d", i)
-			report.Warnings = append(report.Warnings, msg)
+			report.Warnings = append(report.Warnings, fmt.Sprintf("Skipping entry with no request: #%d", i))
 			continue
 		}
-		slog.DebugContext(ctx, "Processing entry", logging.FHIRServer(fhirBaseURLRaw), slog.String("url", entry.Request.Url))
-		_, err := buildUpdateTransaction(ctx, &tx, entry, ValidationRules{AllowedResourceTypes: allowedResourceTypes, Trusted: trusted}, parentOrganizationsMap, allHealthcareServices, allowDiscovery, fhirBaseURLRaw)
+		slog.DebugContext(ctx, "Processing entry", logging.FHIRServer(run.fhirBaseURL), slog.String("url", entry.Request.Url))
+		_, err := buildUpdateTransaction(ctx, &tx, entry, run.validationRules(), run.parentOrgs, run.healthcareSvcs, run.onlyDirectoryEndpoints(), run.fhirBaseURL)
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("entry #%d: %s", i, err.Error()))
 			continue
 		}
 	}
+	return report, tx
+}
 
-	// Handle Endpoint discovery and registration
-	if allowDiscovery {
-		report = c.discoverAndRegisterEndpoints(ctx, entries, parentOrganizationsMap, report)
-	}
-
-	slog.DebugContext(ctx, "Got mCSD entries", logging.FHIRServer(fhirBaseURLRaw), slog.Int("count", len(tx.Entry)))
-	if len(tx.Entry) == 0 {
-		return report, nil
-	}
-
+// applyTransaction sends the transaction bundle to the query directory and tallies the per-entry
+// outcomes (created/updated/deleted) into the report.
+func (c *Component) applyTransaction(ctx context.Context, tx fhir.Bundle, report DirectoryUpdateReport) (DirectoryUpdateReport, error) {
 	var txResult fhir.Bundle
-	if err := queryDirectoryFHIRClient.CreateWithContext(ctx, tx, &txResult, fhirclient.AtPath("/")); err != nil {
+	if err := c.fhirQueryClient.CreateWithContext(ctx, tx, &txResult, fhirclient.AtPath("/")); err != nil {
 		return DirectoryUpdateReport{}, fmt.Errorf("failed to apply mCSD update to query directory: %w", err)
 	}
 
-	// Process result
 	for i, entry := range txResult.Entry {
 		if entry.Response == nil {
-			msg := fmt.Sprintf("Skipping entry with no response: #%d", i)
-			report.Warnings = append(report.Warnings, msg)
+			report.Warnings = append(report.Warnings, fmt.Sprintf("Skipping entry with no response: #%d", i))
 			continue
 		}
 		switch {
@@ -486,25 +441,24 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 		case strings.HasPrefix(entry.Response.Status, "204"):
 			report.CountDeleted++
 		default:
-			msg := fmt.Sprintf("Unknown HTTP response status %v (url=%v)", entry.Response.Status, entry.FullUrl)
-			report.Warnings = append(report.Warnings, msg)
+			report.Warnings = append(report.Warnings, fmt.Sprintf("Unknown HTTP response status %v (url=%v)", entry.Response.Status, entry.FullUrl))
 		}
 	}
-
-	// Update last sync timestamp on successful completion.
-	// Use the search result Bundle's meta.lastUpdated if available, otherwise fall back to query start time.
-	// This uses the FHIR server's own timestamp string, eliminating clock skew issues.
-	var nextSyncTime string
-	if firstSearchSet.Meta != nil && firstSearchSet.Meta.LastUpdated != nil {
-		nextSyncTime = *firstSearchSet.Meta.LastUpdated
-	} else {
-		// Fallback to local time with buffer to account for potential clock skew
-		nextSyncTime = queryStartTime.Add(-clockSkewBuffer).Format(time.RFC3339Nano)
-		slog.WarnContext(ctx, "Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues", logging.FHIRServer(fhirBaseURLRaw))
-	}
-	c.lastUpdateTimes[directoryKey] = nextSyncTime
-
 	return report, nil
+}
+
+// recordSyncTimestamp stores the timestamp used as the _since value for the next incremental sync.
+// It prefers the search result Bundle's meta.lastUpdated (the FHIR server's own clock, avoiding
+// skew) and falls back to the local query start time minus a buffer.
+func (c *Component) recordSyncTimestamp(ctx context.Context, run *syncRun) {
+	var nextSyncTime string
+	if run.firstSearchSet.Meta != nil && run.firstSearchSet.Meta.LastUpdated != nil {
+		nextSyncTime = *run.firstSearchSet.Meta.LastUpdated
+	} else {
+		nextSyncTime = run.queryStart.Add(-clockSkewBuffer).Format(time.RFC3339Nano)
+		slog.WarnContext(ctx, "Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues", logging.FHIRServer(run.fhirBaseURL))
+	}
+	c.lastUpdateTimes[run.key()] = nextSyncTime
 }
 
 // queryFHIR performs a FHIR search query with pagination and returns all matching entries.
@@ -663,58 +617,60 @@ func (c *Component) queryAllResourceTypes(ctx context.Context, fhirClient fhircl
 	return entries, firstSearchSet, nil
 }
 
-// checkForURAIdentifierChanges detects if any Organization's URA identifier has changed between history versions
+// noURASentinel marks "this Organization version had no URA identifier" in the set of URA values
+// tracked per organization, so that gaining or losing a URA counts as a change.
+const noURASentinel = ""
+
+// checkForURAIdentifierChanges detects if any Organization's URA identifier has changed between
+// history versions. An organization whose history shows more than one distinct URA value — counting
+// "no URA" (noURASentinel) as a distinct value — has a changed URA identifier.
 func checkForURAIdentifierChanges(entries []fhir.BundleEntry) bool {
-	// Map to track URA identifiers per Organization ID
-	// We use empty string "" as a marker for "no URA identifier present"
-	orgURAMap := make(map[string]map[string]bool) // orgID -> set of URA values (or "" for no URA)
+	uraValuesByOrg := make(map[string]map[string]bool) // orgID -> set of URA values seen across versions
 
 	for _, entry := range entries {
 		if entry.Resource == nil {
 			continue
 		}
-
-		// Try to unmarshal as Organization
 		var org fhir.Organization
 		if err := json.Unmarshal(entry.Resource, &org); err != nil {
 			continue // Not an Organization, skip
 		}
-
 		if org.Id == nil {
 			continue
 		}
 
-		orgID := *org.Id
-
-		// Extract URA identifiers
-		uraIdentifiers := libfhir.FilterIdentifiersBySystem(org.Identifier, coding.URANamingSystem)
-
-		// Initialize map for this org if needed
-		if orgURAMap[orgID] == nil {
-			orgURAMap[orgID] = make(map[string]bool)
+		seen := uraValuesByOrg[*org.Id]
+		if seen == nil {
+			seen = make(map[string]bool)
+			uraValuesByOrg[*org.Id] = seen
 		}
-
-		// Track all URA values seen for this organization
-		if len(uraIdentifiers) == 0 {
-			// No URA identifier - mark with empty string
-			orgURAMap[orgID][""] = true
-		} else {
-			for _, ura := range uraIdentifiers {
-				if ura.Value != nil {
-					orgURAMap[orgID][*ura.Value] = true
-				}
-			}
+		for _, value := range organizationURAValues(org) {
+			seen[value] = true
 		}
 	}
 
-	// Check if any organization has multiple different URA values (including presence/absence changes)
-	for _, uraSet := range orgURAMap {
-		if len(uraSet) > 1 {
-			return true // Found an organization with changed URA identifier
+	for _, values := range uraValuesByOrg {
+		if len(values) > 1 {
+			return true
 		}
 	}
-
 	return false
+}
+
+// organizationURAValues returns the organization's URA identifier values, or a single
+// noURASentinel entry when it has no URA identifier at all.
+func organizationURAValues(org fhir.Organization) []string {
+	uraIdentifiers := libfhir.FilterIdentifiersBySystem(org.Identifier, coding.URANamingSystem)
+	if len(uraIdentifiers) == 0 {
+		return []string{noURASentinel}
+	}
+	var values []string
+	for _, ura := range uraIdentifiers {
+		if ura.Value != nil {
+			values = append(values, *ura.Value)
+		}
+	}
+	return values
 }
 
 func (c *Component) ensureParentOrganizationsMap(ctx context.Context, fhirBaseURLRaw string, remoteAdminDirectoryFHIRClient fhirclient.Client, authoritativeUra string) (parentOrganizationMap, error) {

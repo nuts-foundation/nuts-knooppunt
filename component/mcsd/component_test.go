@@ -333,31 +333,39 @@ func TestComponent_incrementalUpdates(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	// First update - should have no _since parameter
+	// Each update queries the root's Endpoint history twice on purpose: the discovery phase
+	// full-scans it (no _since) to register/unregister directories, and the sync phase queries it
+	// again (incremental, with _since once a timestamp is known) to import its mCSD directory
+	// Endpoints into the query directory.
+
+	// First update - neither query has a _since parameter.
 	_, err = component.update(ctx)
 	require.NoError(t, err)
-	require.Len(t, sinceParams, 1, "Should have 1 request")
-	require.Empty(t, sinceParams[0], "First update should not have _since parameter")
+	require.Len(t, sinceParams, 2, "discovery and sync each query the root once")
+	require.Empty(t, sinceParams[0], "discovery does a full scan")
+	require.Empty(t, sinceParams[1], "first sync should not have _since parameter")
 
 	// Verify timestamp was stored
 	lastUpdate, exists := component.lastUpdateTimes[rootDirServer.URL]
 	require.True(t, exists, "Last update time should be stored")
 	require.NotEmpty(t, lastUpdate, "Last update time should not be empty")
 
-	// Second update - should include _since parameter
+	// Second update - discovery still full-scans; sync now includes _since.
 	_, err = component.update(ctx)
 	require.NoError(t, err)
-	require.Len(t, sinceParams, 2, "Should have 2 requests total")
-	require.NotEmpty(t, sinceParams[1], "Second update should include _since parameter")
+	require.Len(t, sinceParams, 4, "two more queries (discovery + sync)")
+	require.Empty(t, sinceParams[2], "discovery always does a full scan")
+	syncSince := sinceParams[3]
+	require.NotEmpty(t, syncSince, "second sync should include _since parameter")
 
 	// Verify _since parameter is a valid RFC3339 timestamp
-	_, err = time.Parse(time.RFC3339, sinceParams[1])
+	_, err = time.Parse(time.RFC3339, syncSince)
 	require.NoError(t, err, "_since parameter should be valid RFC3339 timestamp")
-	_, err = time.Parse(time.RFC3339Nano, sinceParams[1])
+	_, err = time.Parse(time.RFC3339Nano, syncSince)
 	require.NoError(t, err, "_since parameter should be valid RFC3339Nano timestamp")
 
 	// Verify _since parameter matches the stored timestamp
-	require.Equal(t, lastUpdate, sinceParams[1], "_since parameter should match the stored lastUpdate timestamp")
+	require.Equal(t, lastUpdate, syncSince, "_since parameter should match the stored lastUpdate timestamp")
 }
 
 func TestComponent_multipleDirsSameFHIRBaseURL(t *testing.T) {
@@ -785,7 +793,7 @@ func TestGetLastUpdated(t *testing.T) {
 	}
 }
 
-func TestComponent_updateFromDirectory(t *testing.T) {
+func TestComponent_runSyncJob(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("#233: no entry.Request in _history results", func(t *testing.T) {
@@ -795,7 +803,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		})
 		component, err := New(DefaultConfig())
 		require.NoError(t, err)
-		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false, "", false)
+		report, err := component.runSyncJob(ctx, &syncRun{fhirBaseURL: server.URL + "/fhir", allowedTypes: []string{"Organization"}})
 		require.NoError(t, err)
 		require.NotNil(t, report)
 		require.Len(t, report.Warnings, 1)
@@ -834,7 +842,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
 		}
 
-		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization", "Endpoint"}, false, "", false)
+		report, err := component.runSyncJob(ctx, &syncRun{fhirBaseURL: server.URL + "/fhir", allowedTypes: []string{"Organization", "Endpoint"}})
 
 		require.NoError(t, err)
 		require.Empty(t, report.Errors, "Should not have errors after deduplication")
@@ -927,20 +935,21 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			}]
 		}`
 
-		// Create a mock server that returns the initial bundle first, then the delete bundle
-		callCount := 0
+		// Mock server returns the initial bundle until the Endpoint is "deleted" upstream, then the
+		// delete bundle. The two-phase update queries this endpoint more than once per cycle
+		// (discovery + sync), so toggle state between cycles with a flag rather than per HTTP call.
+		endpointDeleted := false
 		mux := http.NewServeMux()
 		server := httptest.NewServer(mux)
 		defer server.Close()
 
 		mux.HandleFunc("/fhir/Endpoint/_history", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			if callCount == 0 {
-				w.Write([]byte(initialBundle))
-			} else {
+			if endpointDeleted {
 				w.Write([]byte(deleteBundle))
+			} else {
+				w.Write([]byte(initialBundle))
 			}
-			callCount++
 		})
 		mux.HandleFunc("/fhir/Organization/_history", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -992,8 +1001,14 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 			return &test.StubFHIRClient{Error: errors.New("unknown URL")}
 		}
 
-		// First update - should discover and register the Endpoint
-		report1, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint", "Organization"}, true, "", false)
+		rootRun := func() *syncRun {
+			return &syncRun{fhirBaseURL: server.URL + "/fhir", allowedTypes: []string{"Endpoint", "Organization"}, discoverable: true}
+		}
+
+		// First update - discovery registers the Endpoint as an administration directory; sync
+		// imports it (an untrusted discoverable root only imports its mCSD directory Endpoints).
+		_ = component.discover(ctx)
+		report1, err := component.runSyncJob(ctx, rootRun())
 		require.NoError(t, err)
 		require.Empty(t, report1.Errors)
 		require.Equal(t, 1, report1.CountCreated, "Should have created 1 Endpoint")
@@ -1016,8 +1031,11 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 		assert.True(t, foundEndpoint, "Endpoint should be registered as administration directory")
 		assert.Equal(t, "http://test.example.org/fhir/Endpoint/test-endpoint", registeredFullUrl, "Registered Endpoint should have fullUrl from Bundle entry")
 
-		// Second update - should process DELETE and unregister the Endpoint
-		report2, err := component.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint", "Organization"}, true, "", false)
+		// Second update - delete the Endpoint upstream, then discovery unregisters it and sync
+		// processes the DELETE against the query directory.
+		endpointDeleted = true
+		_ = component.discover(ctx)
+		report2, err := component.runSyncJob(ctx, rootRun())
 		require.NoError(t, err)
 		require.Empty(t, report2.Errors)
 
@@ -1101,7 +1119,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 
 		// Call updateFromDirectory with only Organization and Endpoint
 		allowedTypes := []string{"Organization", "Endpoint"}
-		report, err := component.updateFromDirectory(ctx, server.URL+"/fhir", allowedTypes, false, "", false)
+		report, err := component.runSyncJob(ctx, &syncRun{fhirBaseURL: server.URL + "/fhir", allowedTypes: allowedTypes})
 
 		require.NoError(t, err)
 		require.Empty(t, report.Errors)
@@ -1312,7 +1330,7 @@ func TestComponent_updateFromDirectory(t *testing.T) {
 	})
 }
 
-func TestComponent_updateFromDirectory_trusted(t *testing.T) {
+func TestComponent_runSyncJob_trusted(t *testing.T) {
 	ctx := context.Background()
 
 	emptyHistoryBundle := `{"resourceType": "Bundle", "type": "history", "entry": []}`
@@ -1364,7 +1382,7 @@ func TestComponent_updateFromDirectory_trusted(t *testing.T) {
 
 		// Untrusted: spoofed Organization rejected, no resources synced.
 		c1, client1 := makeComponent(t, server)
-		report, err := c1.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false, "", false)
+		report, err := c1.runSyncJob(ctx, &syncRun{fhirBaseURL: server.URL + "/fhir", allowedTypes: []string{"Organization"}})
 		require.NoError(t, err)
 		assert.Empty(t, report.Errors)
 		require.Len(t, report.Warnings, 1, "untrusted should reject spoofed Organization")
@@ -1373,7 +1391,7 @@ func TestComponent_updateFromDirectory_trusted(t *testing.T) {
 
 		// Trusted: spoofed Organization accepted and synced.
 		c2, client2 := makeComponent(t, server)
-		report, err = c2.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false, "", true)
+		report, err = c2.runSyncJob(ctx, &syncRun{fhirBaseURL: server.URL + "/fhir", allowedTypes: []string{"Organization"}, trusted: true})
 		require.NoError(t, err)
 		assert.Empty(t, report.Errors)
 		assert.Empty(t, report.Warnings, "trusted should accept spoofed Organization")
@@ -1398,7 +1416,7 @@ func TestComponent_updateFromDirectory_trusted(t *testing.T) {
 		defer server.Close()
 
 		c, _ := makeComponent(t, server)
-		_, err := c.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Organization"}, false, "", true)
+		_, err := c.runSyncJob(ctx, &syncRun{fhirBaseURL: server.URL + "/fhir", allowedTypes: []string{"Organization"}, trusted: true})
 		require.NoError(t, err)
 
 		mu.Lock()
@@ -1445,9 +1463,9 @@ func TestComponent_updateFromDirectory_trusted(t *testing.T) {
 		defer server.Close()
 
 		c, _ := makeComponent(t, server)
-		_, err := c.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint"}, false, "", true)
+		_, err := c.runSyncJob(ctx, &syncRun{fhirBaseURL: server.URL + "/fhir", allowedTypes: []string{"Endpoint"}, trusted: true})
 		require.NoError(t, err)
-		_, err = c.updateFromDirectory(ctx, server.URL+"/fhir", []string{"Endpoint"}, false, "", true)
+		_, err = c.runSyncJob(ctx, &syncRun{fhirBaseURL: server.URL + "/fhir", allowedTypes: []string{"Endpoint"}, trusted: true})
 		require.NoError(t, err)
 
 		mu.Lock()
