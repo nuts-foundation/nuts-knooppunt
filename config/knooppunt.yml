@@ -31,7 +31,7 @@ mcsd:
 # The sync client is only enabled when lrzabaseurl is set.
 lrza:
   # Base URL of the trusted LRZA source directory to synchronize from
-  lrzabaseurl: "https://knooppunt-test.nuts-services.nl/lrza/mcsd"
+  lrzabaseurl: "https://adressering.proeftuin.gf.irealisatie.nl/poc/FHIR/fhir"
   # FHIR base URL of the local mCSD Query Directory to synchronize into
   querybaseurl: "http://localhost:7050/fhir/knpt-mcsd-query"
 
