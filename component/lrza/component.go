@@ -28,6 +28,7 @@ import (
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/httpauth"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -64,6 +65,10 @@ type Config struct {
 	ResourceTypes []string `koanf:"resourcetypes"`
 	// Auth optionally configures OAuth2 client-credentials authentication against the source.
 	Auth httpauth.OAuth2Config `koanf:"auth"`
+	// Config carries the optional mTLS client-certificate settings for the source connection
+	// (tlscertfile/tlskeyfile/tlskeypassword/tlscafile). The national LRZA environment requires a
+	// client certificate; the local query directory connection does not use these.
+	tlsutil.Config `koanf:",squash"`
 }
 
 // UpdateReport summarizes the outcome of a single sync cycle.
@@ -108,15 +113,9 @@ func New(config Config) (*Component, error) {
 		return nil, fmt.Errorf("invalid LRZA source FHIR base URL (url=%s): %w", config.LRZABaseUrl, err)
 	}
 
-	// HTTP client for the source directory, with optional OAuth2 authentication.
-	// TODO: Implement and test end-to-end flow against iRealisatie proeftuin
-	sourceHTTPClient := tracing.NewHTTPClient()
-	if config.Auth.IsConfigured() {
-		slog.Info("LRZA: OAuth2 authentication configured", slog.String("token_endpoint", config.Auth.TokenEndpoint))
-		sourceHTTPClient, err = httpauth.NewOAuth2HTTPClient(config.Auth, tracing.WrapTransport(nil))
-		if err != nil {
-			return nil, fmt.Errorf("failed to create OAuth2 HTTP client for LRZA: %w", err)
-		}
+	sourceHTTPClient, err := newSourceHTTPClient(config)
+	if err != nil {
+		return nil, err
 	}
 
 	queryBaseURL, err := url.Parse(config.QueryBaseUrl)
@@ -136,6 +135,30 @@ func New(config Config) (*Component, error) {
 		resourceTypes:   resourceTypes,
 		updateMux:       &sync.Mutex{},
 	}, nil
+}
+
+// newSourceHTTPClient builds the HTTP client used to talk to the trusted source directory. It layers,
+// from the bottom up: an optional mTLS transport when a client certificate is configured (required by
+// the national LRZA environment), then OpenTelemetry tracing, then optional OAuth2 client-credentials.
+// The same base transport - including mTLS - is reused for OAuth2 token requests.
+func newSourceHTTPClient(config Config) (*http.Client, error) {
+	var baseTransport http.RoundTripper = http.DefaultTransport
+	if config.TLSCertFile != "" {
+		tlsConfig, err := tlsutil.CreateTLSConfig(config.Config)
+		if err != nil {
+			return nil, fmt.Errorf("LRZA mTLS is configured but failed to load: %w", err)
+		}
+		baseTransport = &http.Transport{TLSClientConfig: tlsConfig}
+		slog.Info("LRZA: mTLS configured for source connection", slog.String("certFile", config.TLSCertFile))
+	}
+
+	tracedTransport := tracing.WrapTransport(baseTransport)
+
+	if config.Auth.IsConfigured() {
+		slog.Info("LRZA: OAuth2 authentication configured", slog.String("token_endpoint", config.Auth.TokenEndpoint))
+		return httpauth.NewOAuth2HTTPClient(config.Auth, tracedTransport)
+	}
+	return &http.Client{Transport: tracedTransport}, nil
 }
 
 func (c *Component) Start() error { return nil }
