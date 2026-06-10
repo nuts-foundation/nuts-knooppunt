@@ -40,7 +40,7 @@ var defaultResourceTypes = []string{"Organization", "Endpoint", "Location", "Hea
 
 // maxUpdateEntries limits the number of entries processed in a single FHIR transaction to prevent
 // excessive load on the FHIR server.
-const maxUpdateEntries = 1000
+const maxUpdateEntries = 10000
 
 // searchPageSize is a fixed FHIR search result page size, so behavior is deterministic across FHIR
 // servers rather than relying on (widely varying) server defaults.
