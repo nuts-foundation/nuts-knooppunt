@@ -21,7 +21,7 @@ func sourceQuery(t *testing.T, parts ...string) string {
 }
 
 func TestBuildTransaction(t *testing.T) {
-	c := &Component{config: Config{FHIRBaseURL: testSourceBaseURL}}
+	c := &Component{config: Config{LRZABaseUrl: testSourceBaseURL}}
 
 	t.Run("CREATE/UPDATE becomes a conditional PUT keyed by _source", func(t *testing.T) {
 		resource, err := json.Marshal(map[string]any{

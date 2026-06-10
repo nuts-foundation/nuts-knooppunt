@@ -55,18 +55,15 @@ func DefaultConfig() Config {
 }
 
 type Config struct {
-	// FHIRBaseURL is the base URL of the trusted source directory (the LRZA) to sync from.
-	FHIRBaseURL string `koanf:"fhirbaseurl"`
-	// QueryDirectory is the local mCSD query directory that synced resources are written into.
-	QueryDirectory DirectoryConfig `koanf:"query"`
+	// LRZABaseUrl is the base URL of the trusted source directory (the LRZA) to sync from.
+	LRZABaseUrl string `koanf:"lrzabaseurl"`
+	// QueryBaseUrl is the base URL of the local mCSD query directory that synced resources are
+	// written into.
+	QueryBaseUrl string `koanf:"querybaseurl"`
 	// ResourceTypes are the FHIR resource types to sync. Defaults to defaultResourceTypes.
 	ResourceTypes []string `koanf:"resourcetypes"`
 	// Auth optionally configures OAuth2 client-credentials authentication against the source.
 	Auth httpauth.OAuth2Config `koanf:"auth"`
-}
-
-type DirectoryConfig struct {
-	FHIRBaseURL string `koanf:"fhirbaseurl"`
 }
 
 // UpdateReport summarizes the outcome of a single sync cycle.
@@ -106,12 +103,13 @@ type syncRun struct {
 }
 
 func New(config Config) (*Component, error) {
-	sourceBaseURL, err := url.Parse(config.FHIRBaseURL)
+	sourceBaseURL, err := url.Parse(config.LRZABaseUrl)
 	if err != nil {
-		return nil, fmt.Errorf("invalid LRZA source FHIR base URL (url=%s): %w", config.FHIRBaseURL, err)
+		return nil, fmt.Errorf("invalid LRZA source FHIR base URL (url=%s): %w", config.LRZABaseUrl, err)
 	}
 
 	// HTTP client for the source directory, with optional OAuth2 authentication.
+	// TODO: Implement and test end-to-end flow against iRealisatie proeftuin
 	sourceHTTPClient := tracing.NewHTTPClient()
 	if config.Auth.IsConfigured() {
 		slog.Info("LRZA: OAuth2 authentication configured", slog.String("token_endpoint", config.Auth.TokenEndpoint))
@@ -121,9 +119,9 @@ func New(config Config) (*Component, error) {
 		}
 	}
 
-	queryBaseURL, err := url.Parse(config.QueryDirectory.FHIRBaseURL)
+	queryBaseURL, err := url.Parse(config.QueryBaseUrl)
 	if err != nil {
-		return nil, fmt.Errorf("invalid LRZA query directory FHIR base URL (url=%s): %w", config.QueryDirectory.FHIRBaseURL, err)
+		return nil, fmt.Errorf("invalid LRZA query directory FHIR base URL (url=%s): %w", config.QueryBaseUrl, err)
 	}
 
 	resourceTypes := config.ResourceTypes
@@ -166,7 +164,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	defer c.updateMux.Unlock()
 
 	run := c.newSyncRun()
-	slog.InfoContext(ctx, "Updating from trusted LRZA directory", logging.FHIRServer(c.config.FHIRBaseURL), slog.Any("resourceTypes", c.resourceTypes))
+	slog.InfoContext(ctx, "Updating from trusted LRZA directory", logging.FHIRServer(c.config.LRZABaseUrl), slog.Any("resourceTypes", c.resourceTypes))
 	if c.lastUpdateTime == "" {
 		slog.InfoContext(ctx, "No last update time, doing full LRZA sync")
 	}
@@ -276,7 +274,7 @@ func (c *Component) appendTransactionEntry(ctx context.Context, run *syncRun, en
 		if !ok {
 			return fmt.Errorf("invalid DELETE URL format: %s", entry.Request.Url)
 		}
-		sourceURL, err := libfhir.BuildSourceURL(c.config.FHIRBaseURL, resourceType, resourceID)
+		sourceURL, err := libfhir.BuildSourceURL(c.config.LRZABaseUrl, resourceType, resourceID)
 		if err != nil {
 			return fmt.Errorf("failed to build source URL for DELETE: %w", err)
 		}
@@ -306,7 +304,7 @@ func (c *Component) appendTransactionEntry(ctx context.Context, run *syncRun, en
 	if !ok {
 		return errors.New("resource has no id")
 	}
-	sourceURL, err := libfhir.BuildSourceURL(c.config.FHIRBaseURL, resourceType, resourceID)
+	sourceURL, err := libfhir.BuildSourceURL(c.config.LRZABaseUrl, resourceType, resourceID)
 	if err != nil {
 		return fmt.Errorf("failed to build source URL: %w", err)
 	}
@@ -314,7 +312,7 @@ func (c *Component) appendTransactionEntry(ctx context.Context, run *syncRun, en
 	setResourceSource(resource, sourceURL)
 	// Drop the source's id so the query directory resolves the resource by _source instead.
 	delete(resource, "id")
-	if err := convertReferencesToConditional(resource, c.config.FHIRBaseURL); err != nil {
+	if err := convertReferencesToConditional(resource, c.config.LRZABaseUrl); err != nil {
 		return fmt.Errorf("failed to convert references: %w", err)
 	}
 
@@ -369,7 +367,7 @@ func (c *Component) recordSyncTimestamp(ctx context.Context, run *syncRun) {
 		return
 	}
 	c.lastUpdateTime = run.queryStart.Add(-clockSkewBuffer).Format(time.RFC3339Nano)
-	slog.WarnContext(ctx, "Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues", logging.FHIRServer(c.config.FHIRBaseURL))
+	slog.WarnContext(ctx, "Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues", logging.FHIRServer(c.config.LRZABaseUrl))
 }
 
 // finalizedReport returns the run's report with nil slices replaced by empty ones, for a nicer JSON

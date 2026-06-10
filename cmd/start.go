@@ -54,7 +54,7 @@ func Start(ctx context.Context, config Config) error {
 	}
 
 	// The LRZA sync client is only registered when a trusted source directory is configured.
-	if config.LRZA.FHIRBaseURL != "" {
+	if config.LRZA.LRZABaseUrl != "" {
 		lrzaClient, err := lrza.New(config.LRZA)
 		if err != nil {
 			return errors.Wrap(err, "failed to create LRZA sync client")

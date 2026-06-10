@@ -26,6 +26,11 @@ mcsd:
   #   - "PractitionerRole"
   #   - "Practitioner"
 
+# lrza configuration
+lrza:
+  lrzabaseurl: "https://knooppunt-test.nuts-services.nl/lrza/mcsd"
+  querybaseurl: "http://localhost:7050/fhir/knpt-mcsd-query"
+
 # mCSD Admin configuration
 mcsdadmin:
   # Base URL for FHIR server used by admin interface
