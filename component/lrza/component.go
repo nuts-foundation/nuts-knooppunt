@@ -272,7 +272,7 @@ func (c *Component) appendTransactionEntry(ctx context.Context, run *syncRun, en
 
 	// DELETE entries carry no resource body; translate to a conditional delete keyed by _source.
 	if entry.Request.Method == fhir.HTTPVerbDELETE {
-		resourceType, resourceID, ok := typeAndIDFromURL(entry.Request.Url)
+		resourceType, resourceID, ok := libfhir.TypeAndIDFromReference(entry.Request.Url)
 		if !ok {
 			return fmt.Errorf("invalid DELETE URL format: %s", entry.Request.Url)
 		}
@@ -383,16 +383,6 @@ func (r *syncRun) finalizedReport() UpdateReport {
 		report.Errors = []string{}
 	}
 	return report
-}
-
-// typeAndIDFromURL extracts the resource type and id from a FHIR history URL, which may be a bare
-// "ResourceType/id" or a versioned "ResourceType/id/_history/version".
-func typeAndIDFromURL(rawURL string) (resourceType, resourceID string, ok bool) {
-	parts := strings.Split(rawURL, "/")
-	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-		return "", "", false
-	}
-	return parts[0], parts[1], true
 }
 
 // setResourceSource sets meta.source on a resource and drops the source server's versionId and

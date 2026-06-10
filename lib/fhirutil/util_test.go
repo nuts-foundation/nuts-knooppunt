@@ -291,3 +291,29 @@ func TestIDFromReference(t *testing.T) {
 		})
 	}
 }
+
+func TestTypeAndIDFromReference(t *testing.T) {
+	tests := []struct {
+		name             string
+		ref              string
+		wantType, wantID string
+		wantOK           bool
+	}{
+		{name: "relative reference", ref: "Organization/123", wantType: "Organization", wantID: "123", wantOK: true},
+		{name: "absolute reference", ref: "http://host/fhir/Organization/abc123", wantType: "Organization", wantID: "abc123", wantOK: true},
+		{name: "versioned relative history url", ref: "Endpoint/123/_history/2", wantType: "Endpoint", wantID: "123", wantOK: true},
+		{name: "versioned absolute history url", ref: "http://host/fhir/Endpoint/123/_history/2", wantType: "Endpoint", wantID: "123", wantOK: true},
+		{name: "uuid id", ref: "Organization/fd3524f9-705e-453c-8130-71cdf51cfcb9", wantType: "Organization", wantID: "fd3524f9-705e-453c-8130-71cdf51cfcb9", wantOK: true},
+		{name: "trailing slash trimmed", ref: "Organization/123/", wantType: "Organization", wantID: "123", wantOK: true},
+		{name: "single segment", ref: "Organization", wantOK: false},
+		{name: "empty", ref: "", wantOK: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotType, gotID, gotOK := TypeAndIDFromReference(tt.ref)
+			require.Equal(t, tt.wantOK, gotOK)
+			require.Equal(t, tt.wantType, gotType)
+			require.Equal(t, tt.wantID, gotID)
+		})
+	}
+}

@@ -83,25 +83,3 @@ func TestBuildTransaction(t *testing.T) {
 		require.Len(t, run.report.Warnings, 2)
 	})
 }
-
-func TestTypeAndIDFromURL(t *testing.T) {
-	tests := []struct {
-		name             string
-		url              string
-		wantType, wantID string
-		wantOK           bool
-	}{
-		{name: "bare type/id", url: "Organization/123", wantType: "Organization", wantID: "123", wantOK: true},
-		{name: "versioned history url", url: "Organization/123/_history/2", wantType: "Organization", wantID: "123", wantOK: true},
-		{name: "single segment", url: "Organization", wantOK: false},
-		{name: "empty", url: "", wantOK: false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotType, gotID, gotOK := typeAndIDFromURL(tt.url)
-			require.Equal(t, tt.wantOK, gotOK)
-			require.Equal(t, tt.wantType, gotType)
-			require.Equal(t, tt.wantID, gotID)
-		})
-	}
-}

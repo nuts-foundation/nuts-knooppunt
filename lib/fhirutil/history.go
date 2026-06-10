@@ -1,8 +1,6 @@
 package fhirutil
 
 import (
-	"strings"
-
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -80,19 +78,12 @@ func deleteEntryKey(entry fhir.BundleEntry) string {
 	return ""
 }
 
-// typeIDFromReference returns the trailing "ResourceType/id" of a FHIR reference, whether relative
-// ("Organization/123") or absolute ("http://example.org/fhir/Organization/123"). A version suffix
-// ("Organization/123/_history/2", as found in history request URLs) resolves to the resource
-// identity "Organization/123". Returns "" when the reference has fewer than two path segments.
+// typeIDFromReference returns the "ResourceType/id" key for a FHIR reference or URL, or "" when one
+// can't be determined. See TypeAndIDFromReference for the forms handled.
 func typeIDFromReference(ref string) string {
-	// Drop any "/_history/{version}" suffix so a versioned history URL resolves to the resource
-	// identity rather than to the "_history/{version}" segments.
-	if i := strings.Index(ref, "/_history/"); i != -1 {
-		ref = ref[:i]
-	}
-	parts := strings.Split(strings.Trim(ref, "/"), "/")
-	if len(parts) < 2 {
+	resourceType, id, ok := TypeAndIDFromReference(ref)
+	if !ok {
 		return ""
 	}
-	return parts[len(parts)-2] + "/" + parts[len(parts)-1]
+	return resourceType + "/" + id
 }
