@@ -356,29 +356,68 @@ func (c *Component) appendTransactionEntry(ctx context.Context, run *syncRun, en
 
 // applyTransaction sends the transaction bundle to the query directory and tallies the per-entry
 // outcomes (created/updated/deleted) into the report.
+//
+// Outcomes are classified by the request method we sent, not by the response status code alone. The
+// status is ambiguous on its own: per the FHIR spec a DELETE returns 200 (with a payload) or 204 (no
+// payload) for the same result, so mapping 200->updated / 204->deleted would miscount deletes that
+// carry an OperationOutcome body as updates. A transaction response keeps one entry per request entry
+// in the same order, so the request at the same index tells us which operation each outcome belongs
+// to; the status then only distinguishes created (201) from updated (200) within a PUT.
 func (c *Component) applyTransaction(ctx context.Context, run *syncRun) error {
 	var txResult fhir.Bundle
 	if err := c.fhirQueryClient.CreateWithContext(ctx, run.tx, &txResult, fhirclient.AtPath("/")); err != nil {
 		return fmt.Errorf("failed to apply LRZA update to query directory: %w", err)
 	}
+	run.tallyTransactionResult(txResult)
+	return nil
+}
 
+// tallyTransactionResult classifies each response entry against the request that produced it (same
+// index, since transaction responses preserve request order) and accumulates the counts and warnings
+// onto the run's report. See applyTransaction for why classification is by request method.
+func (run *syncRun) tallyTransactionResult(txResult fhir.Bundle) {
 	for i, entry := range txResult.Entry {
 		if entry.Response == nil {
 			run.report.Warnings = append(run.report.Warnings, fmt.Sprintf("Skipping entry with no response: #%d", i))
 			continue
 		}
-		switch {
-		case strings.HasPrefix(entry.Response.Status, "201"):
-			run.report.CountCreated++
-		case strings.HasPrefix(entry.Response.Status, "200"):
-			run.report.CountUpdated++
-		case strings.HasPrefix(entry.Response.Status, "204"):
-			run.report.CountDeleted++
+		status := entry.Response.Status
+		method, ok := requestMethodAt(run.tx, i)
+		if !ok {
+			run.report.Warnings = append(run.report.Warnings, fmt.Sprintf("Response #%d has no matching request to classify (status=%q, url=%v)", i, status, entry.FullUrl))
+			continue
+		}
+		switch method {
+		case fhir.HTTPVerbDELETE:
+			if strings.HasPrefix(status, "2") {
+				run.report.CountDeleted++
+			} else {
+				run.report.Warnings = append(run.report.Warnings, fmt.Sprintf("Unexpected status %q for DELETE (url=%v)", status, entry.FullUrl))
+			}
+		case fhir.HTTPVerbPUT:
+			switch {
+			case strings.HasPrefix(status, "201"):
+				run.report.CountCreated++
+			case strings.HasPrefix(status, "2"):
+				// Any other 2xx (200, or 204 with no body) is a successful upsert of an existing resource.
+				run.report.CountUpdated++
+			default:
+				run.report.Warnings = append(run.report.Warnings, fmt.Sprintf("Unexpected status %q for PUT (url=%v)", status, entry.FullUrl))
+			}
 		default:
-			run.report.Warnings = append(run.report.Warnings, fmt.Sprintf("Unknown HTTP response status %v (url=%v)", entry.Response.Status, entry.FullUrl))
+			run.report.Warnings = append(run.report.Warnings, fmt.Sprintf("Unexpected request method for response #%d (status=%q, url=%v)", i, status, entry.FullUrl))
 		}
 	}
-	return nil
+}
+
+// requestMethodAt returns the HTTP method of the request entry at index i in the transaction bundle.
+// Transaction responses preserve request order, so this correlates a response outcome with the
+// operation that produced it. ok is false when there is no request entry at that index.
+func requestMethodAt(tx fhir.Bundle, i int) (method fhir.HTTPVerb, ok bool) {
+	if i < len(tx.Entry) && tx.Entry[i].Request != nil {
+		return tx.Entry[i].Request.Method, true
+	}
+	return method, false
 }
 
 // recordSyncTimestamp stores the timestamp used as the _since value for the next incremental sync.
@@ -395,8 +434,8 @@ func (c *Component) recordSyncTimestamp(ctx context.Context, run *syncRun) {
 
 // finalizedReport returns the run's report with nil slices replaced by empty ones, for a nicer JSON
 // REST response.
-func (r *syncRun) finalizedReport() UpdateReport {
-	report := r.report
+func (run *syncRun) finalizedReport() UpdateReport {
+	report := run.report
 	if report.Warnings == nil {
 		report.Warnings = []string{}
 	}
