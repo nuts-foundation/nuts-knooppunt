@@ -13,6 +13,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/cmd/core"
 	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
 	"github.com/nuts-foundation/nuts-knooppunt/component/http"
+	"github.com/nuts-foundation/nuts-knooppunt/component/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
@@ -26,6 +27,7 @@ import (
 type Config struct {
 	core.Config      `koanf:",squash"`
 	MCSD             mcsd.Config             `koanf:"mcsd"`
+	LRZA             lrza.Config             `koanf:"lrza"`
 	MCSDAdmin        mcsdadmin.Config        `koanf:"mcsdadmin"`
 	Nuts             nutsnode.Config         `koanf:"nuts"`
 	NVI              nvi.Config              `koanf:"nvi"`
@@ -41,6 +43,7 @@ func DefaultConfig() Config {
 	return Config{
 		Config: core.DefaultConfig(),
 		MCSD:   mcsd.DefaultConfig(),
+		LRZA:   lrza.DefaultConfig(),
 		Nuts: nutsnode.Config{
 			Enabled: false,
 		},
