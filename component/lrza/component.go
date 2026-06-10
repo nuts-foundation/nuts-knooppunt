@@ -401,6 +401,8 @@ func setResourceSource(resource map[string]any, source string) {
 // convertReferencesToConditional rewrites every relative "ResourceType/id" reference in the resource
 // into a deterministic conditional reference keyed by _source, so references resolve against the
 // query directory's copies of the same source resources.
+// conditional references are explained in more detail in the FHR documentation here:
+// http://hl7.org/fhir/R4/http.html#trules
 func convertReferencesToConditional(obj any, sourceBaseURL string) error {
 	switch v := obj.(type) {
 	case map[string]any:
