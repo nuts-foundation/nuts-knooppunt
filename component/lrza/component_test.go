@@ -8,6 +8,7 @@ import (
 
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/stretchr/testify/require"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -70,6 +71,25 @@ func TestBuildTransaction(t *testing.T) {
 		require.Equal(t, fhir.HTTPVerbDELETE, txEntry.Request.Method)
 		require.Equal(t, "Organization?"+sourceQuery(t, "Organization", "789"), txEntry.Request.Url)
 		require.Nil(t, txEntry.Resource)
+	})
+
+	t.Run("a full-search entry (no request) becomes a conditional PUT", func(t *testing.T) {
+		// Initial full-sync results are plain searchset entries: a resource body with no request.
+		resource, err := json.Marshal(map[string]any{"resourceType": "Organization", "id": "123"})
+		require.NoError(t, err)
+
+		run := &syncRun{entries: []fhir.BundleEntry{{
+			FullUrl:  to.Ptr("http://source.example/fhir/Organization/123"),
+			Resource: resource,
+		}}}
+		c.buildTransaction(context.Background(), run)
+
+		require.Len(t, run.tx.Entry, 1)
+		require.Empty(t, run.report.Warnings)
+		txEntry := run.tx.Entry[0]
+		require.Equal(t, fhir.HTTPVerbPUT, txEntry.Request.Method)
+		require.Equal(t, "Organization?"+sourceQuery(t, "Organization", "123"), txEntry.Request.Url)
+		require.NotNil(t, txEntry.Resource)
 	})
 
 	t.Run("unprocessable entries become warnings, not transaction entries", func(t *testing.T) {

@@ -4,9 +4,10 @@
 // Unlike the mcsd component - which discovers peer directories and applies anti-spoofing validation
 // to their contents - lrza syncs from one directory that is trusted wholesale. There is therefore no
 // discovery phase and no per-resource validation: every resource the source returns is imported into
-// the local query directory as-is. The read pattern is the same incremental one mcsd uses: query each
-// resource type's _history endpoint with _since, deduplicate to the most recent version per resource,
-// and replay the result as a FHIR transaction against the query directory.
+// the local query directory as-is. The first sync reads the current resources via a full search; once
+// a timestamp has been recorded, later syncs read changes incrementally via _history with _since
+// (which also propagates deletions). Each cycle deduplicates to one entry per resource and replays the
+// result as a FHIR transaction against the query directory.
 package lrza
 
 import (
@@ -99,6 +100,9 @@ type syncRun struct {
 	// configuration, set at construction
 	queryStart   time.Time
 	searchParams url.Values
+	// incremental selects the read mode: false does a full search of current resources (the initial
+	// sync, when no timestamp is known yet); true does an incremental _history query with _since.
+	incremental bool
 
 	// working state, filled as the run progresses
 	entries        []fhir.BundleEntry // deduplicated history entries to sync
@@ -187,10 +191,10 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	defer c.updateMux.Unlock()
 
 	run := c.newSyncRun()
-	slog.InfoContext(ctx, "Updating from trusted LRZA directory", logging.FHIRServer(c.config.LRZABaseUrl), slog.Any("resourceTypes", c.resourceTypes))
-	if c.lastUpdateTime == "" {
-		slog.InfoContext(ctx, "No last update time, doing full LRZA sync")
-	}
+	slog.InfoContext(ctx, "Updating from trusted LRZA directory",
+		logging.FHIRServer(c.config.LRZABaseUrl),
+		slog.Any("resourceTypes", c.resourceTypes),
+		slog.Bool("incremental", run.incremental))
 
 	if err := c.fetchEntries(ctx, run); err != nil {
 		return UpdateReport{}, err
@@ -206,8 +210,9 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	return run.finalizedReport(), nil
 }
 
-// newSyncRun creates a run with the search parameters for this cycle: a fixed page size, newest-first
-// ordering (deduplication relies on it), and the _since value for incremental sync when known.
+// newSyncRun creates a run with the search parameters for this cycle. The first sync (no timestamp
+// known) is a full search of current resources; later syncs are incremental _history queries with
+// _since. Both pin newest-first ordering so deduplication can keep the first entry per resource.
 func (c *Component) newSyncRun() *syncRun {
 	params := url.Values{
 		"_count": []string{strconv.Itoa(searchPageSize)},
@@ -215,23 +220,26 @@ func (c *Component) newSyncRun() *syncRun {
 		// oldest versions last). Don't trust the server default.
 		"_sort": []string{"-_lastUpdated"},
 	}
-	if c.lastUpdateTime != "" {
+	incremental := c.lastUpdateTime != ""
+	if incremental {
 		params.Set("_since", c.lastUpdateTime)
 	}
 	return &syncRun{
 		queryStart:   time.Now(),
 		searchParams: params,
+		incremental:  incremental,
 	}
 }
 
-// fetchEntries queries the _history endpoint of every configured resource type, combines the
-// results, and deduplicates them to the most recent version per resource.
+// fetchEntries queries every configured resource type, combines the results, and deduplicates them
+// to one entry per resource. The first sync reads current resources via a full search (so it imports
+// only what currently exists, with no deletions to replay); later syncs read changes via _history.
 func (c *Component) fetchEntries(ctx context.Context, run *syncRun) error {
 	var entries []fhir.BundleEntry
 	for i, resourceType := range c.resourceTypes {
-		curr, searchSet, err := c.queryHistory(ctx, resourceType, cloneValues(run.searchParams))
+		curr, searchSet, err := c.queryResourceType(ctx, run, resourceType, cloneValues(run.searchParams))
 		if err != nil {
-			return fmt.Errorf("failed to query %s history: %w", resourceType, err)
+			return fmt.Errorf("failed to query %s: %w", resourceType, err)
 		}
 		entries = append(entries, curr...)
 		if i == 0 {
@@ -242,12 +250,18 @@ func (c *Component) fetchEntries(ctx context.Context, run *syncRun) error {
 	return nil
 }
 
-// queryHistory queries a single resource type's _history endpoint, following pagination up to
-// maxUpdateEntries.
-func (c *Component) queryHistory(ctx context.Context, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
+// queryResourceType queries a single resource type, following pagination up to maxUpdateEntries. It
+// reads the _history endpoint for an incremental sync, or searches the resource type directly for the
+// initial full sync.
+func (c *Component) queryResourceType(ctx context.Context, run *syncRun, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
+	path := resourceType
+	if run.incremental {
+		path = resourceType + "/_history"
+	}
+
 	var searchSet fhir.Bundle
-	if err := c.sourceClient.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath(resourceType+"/_history")); err != nil {
-		return nil, fhir.Bundle{}, fmt.Errorf("_history search failed: %w", err)
+	if err := c.sourceClient.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath(path)); err != nil {
+		return nil, fhir.Bundle{}, fmt.Errorf("search of %s failed: %w", path, err)
 	}
 
 	var entries []fhir.BundleEntry
@@ -259,14 +273,14 @@ func (c *Component) queryHistory(ctx context.Context, resourceType string, searc
 		return true, nil
 	})
 	if err != nil {
-		return nil, fhir.Bundle{}, fmt.Errorf("pagination of _history search failed: %w", err)
+		return nil, fhir.Bundle{}, fmt.Errorf("pagination of %s search failed: %w", path, err)
 	}
 	return entries, searchSet, nil
 }
 
-// buildTransaction converts the deduplicated history entries into a FHIR transaction bundle for the
-// query directory. Entries that can't be processed are recorded as warnings rather than failing the
-// whole sync.
+// buildTransaction converts the deduplicated entries into a FHIR transaction bundle for the query
+// directory. Entries that can't be processed are recorded as warnings rather than failing the whole
+// sync.
 func (c *Component) buildTransaction(ctx context.Context, run *syncRun) {
 	run.tx = fhir.Bundle{
 		Type:  fhir.BundleTypeTransaction,
@@ -279,20 +293,21 @@ func (c *Component) buildTransaction(ctx context.Context, run *syncRun) {
 	}
 }
 
-// appendTransactionEntry translates one deduplicated history entry into a conditional upsert or
-// delete against the query directory and appends it to run.tx. Resources are tagged with a
-// deterministic _source so updates are idempotent and deletes target the right resource.
+// appendTransactionEntry translates one fetched entry into a conditional upsert or delete against the
+// query directory and appends it to run.tx. Resources are tagged with a deterministic _source so
+// updates are idempotent and deletes target the right resource.
+//
+// Entries come from two shapes: _history entries (incremental sync) carry a request whose method is
+// POST/PUT (upsert) or DELETE; full-search entries (initial sync) carry only a resource body and no
+// request, and are always upserts. Only a DELETE request produces a delete.
 //
 // This is lrza's trimmed counterpart to mcsd's buildUpdateTransaction: because the source is trusted,
 // there is no anti-spoofing validation and no discoverable-directory filtering - every entry is
 // imported as-is.
 func (c *Component) appendTransactionEntry(ctx context.Context, run *syncRun, entry fhir.BundleEntry) error {
-	if entry.Request == nil {
-		return errors.New("missing 'request' field")
-	}
-
-	// DELETE entries carry no resource body; translate to a conditional delete keyed by _source.
-	if entry.Request.Method == fhir.HTTPVerbDELETE {
+	// A DELETE history entry carries no resource body; translate to a conditional delete keyed by
+	// _source. Everything else (a history upsert, or a full-search result with no request) is an upsert.
+	if entry.Request != nil && entry.Request.Method == fhir.HTTPVerbDELETE {
 		resourceType, resourceID, ok := libfhir.TypeAndIDFromReference(entry.Request.Url)
 		if !ok {
 			return fmt.Errorf("invalid DELETE URL format: %s", entry.Request.Url)
@@ -311,9 +326,9 @@ func (c *Component) appendTransactionEntry(ctx context.Context, run *syncRun, en
 		return nil
 	}
 
-	// CREATE/UPDATE entries carry a resource body; rewrite to a conditional update keyed by _source.
+	// Upsert: rewrite the resource body to a conditional update keyed by _source.
 	if entry.Resource == nil {
-		return errors.New("missing 'resource' field for non-DELETE operation")
+		return errors.New("entry has neither a resource body nor a DELETE request")
 	}
 	resource := make(map[string]any)
 	if err := json.Unmarshal(entry.Resource, &resource); err != nil {
