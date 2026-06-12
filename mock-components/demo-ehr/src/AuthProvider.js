@@ -86,6 +86,12 @@ export const AuthProvider = ({ children }) => {
 
       if (response.ok) {
         const userInfo = await response.json();
+        // URA is sourced from the Dezi `abonnee_nummer` claim and exposed as
+        // `ura` on the user object so callers don't need to know the upstream
+        // claim name. `abonnee_naam` remains the human-readable org name.
+        if (userInfo && userInfo.abonnee_nummer && !userInfo.ura) {
+          userInfo.ura = userInfo.abonnee_nummer;
+        }
         setUser(userInfo);
         await ensurePractitioner(userInfo);
         return userInfo;
@@ -120,8 +126,8 @@ export const AuthProvider = ({ children }) => {
     window.location.href = `${authConfig.baseUrl}/login?return_url=${encodeURIComponent(returnUrl)}`;
   };
 
-  const devLogin = async () => {
-    const u = buildDevUser();
+  const devLogin = async (ura) => {
+    const u = buildDevUser(ura);
     saveDevUser(u);
     setUser(u);
     setIsLoading(true);
