@@ -381,7 +381,7 @@ func (c *Component) updateFromDirectory(ctx context.Context, fhirBaseURLRaw stri
 
 	// Deduplicate resources from _history query - keep only the most recent version
 	// _history can return multiple versions of the same resource, but transaction bundles must have unique resources
-	deduplicatedEntries := deduplicateHistoryEntries(entries)
+	deduplicatedEntries := libfhir.DeduplicateHistoryEntries(entries)
 
 	// Filter to only include HealthcareService resources. Use deduplicated
 	// history so older versions don't linger in the slice used by downstream
@@ -538,86 +538,6 @@ func (c *Component) queryHistory(ctx context.Context, remoteAdminDirectoryFHIRCl
 
 func (c *Component) query(ctx context.Context, remoteAdminDirectoryFHIRClient fhirclient.Client, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
 	return c.queryFHIR(ctx, remoteAdminDirectoryFHIRClient, resourceType, searchParams, false)
-}
-
-// deduplicateHistoryEntries keeps only the most recent version of each resource
-func deduplicateHistoryEntries(entries []fhir.BundleEntry) []fhir.BundleEntry {
-	resourceMap := make(map[string]fhir.BundleEntry)
-	var entriesWithoutID []fhir.BundleEntry
-
-	for _, entry := range entries {
-		var resourceID string
-
-		if entry.Resource == nil {
-			if entry.Request != nil && entry.Request.Method == fhir.HTTPVerbDELETE {
-				resourceID = extractResourceIDFromURL(entry)
-			}
-		} else {
-			if info, err := libfhir.ExtractResourceInfo(entry.Resource); err == nil {
-				resourceID = info.ID
-			}
-		}
-
-		if resourceID != "" {
-			existing, exists := resourceMap[resourceID]
-			if !exists || isMoreRecent(entry, existing) {
-				resourceMap[resourceID] = entry
-			}
-		} else {
-			entriesWithoutID = append(entriesWithoutID, entry)
-		}
-	}
-
-	var result []fhir.BundleEntry
-	for _, entry := range resourceMap {
-		result = append(result, entry)
-	}
-	result = append(result, entriesWithoutID...)
-	return result
-}
-
-// isMoreRecent compares two entries, returns true if first is more recent
-func isMoreRecent(entry1, entry2 fhir.BundleEntry) bool {
-	time1 := getLastUpdated(entry1)
-	time2 := getLastUpdated(entry2)
-	if !time1.IsZero() && !time2.IsZero() {
-		return time1.After(time2)
-	}
-	// Fallback: cannot determine which is more recent, do not overwrite
-	return false
-}
-
-// getLastUpdated extracts lastUpdated timestamp from an entry
-func getLastUpdated(entry fhir.BundleEntry) time.Time {
-	if entry.Resource == nil {
-		return time.Time{}
-	}
-	info, err := libfhir.ExtractResourceInfo(entry.Resource)
-	if err != nil || info.LastUpdated == nil {
-		return time.Time{}
-	}
-	return *info.LastUpdated
-}
-
-// extractResourceIDFromURL extracts the resource ID from a DELETE operation's URL
-func extractResourceIDFromURL(entry fhir.BundleEntry) string {
-	// First try to extract from Request.Url (e.g., "Organization/123")
-	if entry.Request != nil && entry.Request.Url != "" {
-		parts := strings.Split(entry.Request.Url, "/")
-		if len(parts) >= 2 {
-			return parts[1] // Return the ID part
-		}
-	}
-
-	// Fallback: extract from fullUrl (e.g., "http://example.org/fhir/Organization/123")
-	if entry.FullUrl != nil {
-		parts := strings.Split(*entry.FullUrl, "/")
-		if len(parts) >= 1 {
-			return parts[len(parts)-1] // Return the last part (ID)
-		}
-	}
-
-	return ""
 }
 
 // queryAllResourceTypes queries all specified resource types from the FHIR server and returns combined entries.
