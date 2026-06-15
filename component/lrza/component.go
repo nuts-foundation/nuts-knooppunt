@@ -102,10 +102,13 @@ type syncRun struct {
 	searchParams url.Values
 
 	// working state, filled as the run progresses
-	entries        []fhir.BundleEntry // deduplicated history entries to sync
-	firstSearchSet fhir.Bundle        // first resource type's search set, for the next _since timestamp
-	tx             fhir.Bundle        // transaction bundle applied to the query directory
-	report         UpdateReport
+	entries []fhir.BundleEntry // deduplicated history entries to sync
+	// sourceLastUpdated is the source server's meta.lastUpdated from the first resource type's search
+	// set (the server's own clock), recorded as the next _since timestamp. Nil if the server didn't
+	// report one, in which case recordSyncTimestamp falls back to the local query start time.
+	sourceLastUpdated *string
+	tx                fhir.Bundle // transaction bundle applied to the query directory
+	report            UpdateReport
 }
 
 func New(config Config) (*Component, error) {
@@ -247,8 +250,8 @@ func (c *Component) fetchEntries(ctx context.Context, run *syncRun) error {
 			return fmt.Errorf("failed to query %s: %w", resourceType, err)
 		}
 		entries = append(entries, curr...)
-		if i == 0 {
-			run.firstSearchSet = searchSet
+		if i == 0 && searchSet.Meta != nil {
+			run.sourceLastUpdated = searchSet.Meta.LastUpdated
 		}
 	}
 	run.entries = libfhir.DeduplicateHistoryEntries(entries)
@@ -443,8 +446,8 @@ func requestMethodAt(tx fhir.Bundle, i int) (method fhir.HTTPVerb, ok bool) {
 // It prefers the search result Bundle's meta.lastUpdated (the FHIR server's own clock, avoiding
 // skew) and falls back to the local query start time minus a buffer.
 func (c *Component) recordSyncTimestamp(ctx context.Context, run *syncRun) {
-	if run.firstSearchSet.Meta != nil && run.firstSearchSet.Meta.LastUpdated != nil {
-		c.lastUpdateTime = *run.firstSearchSet.Meta.LastUpdated
+	if run.sourceLastUpdated != nil {
+		c.lastUpdateTime = *run.sourceLastUpdated
 		return
 	}
 	c.lastUpdateTime = run.queryStart.Add(-clockSkewBuffer).Format(time.RFC3339Nano)
