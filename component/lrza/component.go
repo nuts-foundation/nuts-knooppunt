@@ -190,7 +190,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	defer c.updateMux.Unlock()
 
 	run := c.newSyncRun()
-	slog.InfoContext(ctx, "Updating from trusted LRZA directory",
+	slog.InfoContext(ctx, "Updating from central LRZA directory",
 		logging.FHIRServer(c.config.LRZABaseUrl),
 		slog.Any("resourceTypes", c.resourceTypes),
 		slog.Bool("incremental", run.incremental))
