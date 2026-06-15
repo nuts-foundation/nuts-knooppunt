@@ -153,7 +153,6 @@ func newSourceHTTPClient(config Config) (*http.Client, error) {
 			return nil, fmt.Errorf("LRZA mTLS is configured but failed to load: %w", err)
 		}
 		baseTransport = &http.Transport{TLSClientConfig: tlsConfig}
-		slog.Info("LRZA: mTLS configured for source connection", slog.String("certFile", config.TLSCertFile))
 	}
 
 	tracedTransport := tracing.WrapTransport(baseTransport)
