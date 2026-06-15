@@ -84,7 +84,7 @@ type UpdateReport struct {
 // Component syncs a single trusted mCSD Directory into the local query directory.
 type Component struct {
 	config          Config
-	sourceClient    fhirclient.Client
+	fhirLRZAClient  fhirclient.Client
 	fhirQueryClient fhirclient.Client
 
 	resourceTypes  []string
@@ -134,7 +134,7 @@ func New(config Config) (*Component, error) {
 
 	return &Component{
 		config:          config,
-		sourceClient:    fhirclient.New(sourceBaseURL, sourceHTTPClient, &fhirclient.Config{UsePostSearch: false}),
+		fhirLRZAClient:  fhirclient.New(sourceBaseURL, sourceHTTPClient, &fhirclient.Config{UsePostSearch: false}),
 		fhirQueryClient: fhirclient.New(queryBaseURL, tracing.NewHTTPClient(), &fhirclient.Config{UsePostSearch: false}),
 		resourceTypes:   resourceTypes,
 		updateMux:       &sync.Mutex{},
@@ -260,12 +260,12 @@ func (c *Component) queryResourceType(ctx context.Context, run *syncRun, resourc
 	}
 
 	var searchSet fhir.Bundle
-	if err := c.sourceClient.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath(path)); err != nil {
+	if err := c.fhirLRZAClient.SearchWithContext(ctx, "", searchParams, &searchSet, fhirclient.AtPath(path)); err != nil {
 		return nil, fhir.Bundle{}, fmt.Errorf("search of %s failed: %w", path, err)
 	}
 
 	var entries []fhir.BundleEntry
-	err := fhirclient.Paginate(ctx, c.sourceClient, searchSet, func(set *fhir.Bundle) (bool, error) {
+	err := fhirclient.Paginate(ctx, c.fhirLRZAClient, searchSet, func(set *fhir.Bundle) (bool, error) {
 		entries = append(entries, set.Entry...)
 		if len(entries) >= maxUpdateEntries {
 			return false, fmt.Errorf("too many entries (%d), aborting update to prevent excessive memory usage", len(entries))
