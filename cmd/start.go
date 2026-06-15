@@ -61,7 +61,7 @@ func Start(ctx context.Context, config Config) error {
 		}
 		components = append(components, lrzaClient)
 	} else {
-		slog.InfoContext(ctx, "LRZA sync client is disabled (no source directory configured)")
+		slog.InfoContext(ctx, "LRZA sync client is disabled (LRZA base URL not configured)")
 	}
 
 	if config.Nuts.Enabled {
