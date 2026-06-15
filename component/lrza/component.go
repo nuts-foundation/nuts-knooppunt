@@ -164,7 +164,13 @@ func newSourceHTTPClient(config Config) (*http.Client, error) {
 	return &http.Client{Transport: tracedTransport}, nil
 }
 
-func (c *Component) Start() error { return nil }
+func (c *Component) Start() error {
+	slog.Info("Starting LRZA sync component",
+		logging.FHIRServer(c.config.LRZABaseUrl),
+		slog.Any("resourceTypes", c.resourceTypes))
+
+	return nil
+}
 
 func (c *Component) Stop(ctx context.Context) error { return nil }
 
@@ -191,8 +197,6 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 
 	run := c.newSyncRun()
 	slog.InfoContext(ctx, "Updating from central LRZA directory",
-		logging.FHIRServer(c.config.LRZABaseUrl),
-		slog.Any("resourceTypes", c.resourceTypes),
 		slog.Bool("incremental", run.incremental))
 
 	if err := c.fetchEntries(ctx, run); err != nil {
