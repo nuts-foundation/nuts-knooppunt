@@ -100,9 +100,6 @@ type syncRun struct {
 	// configuration, set at construction
 	queryStart   time.Time
 	searchParams url.Values
-	// incremental selects the read mode: false does a full search of current resources (the initial
-	// sync, when no timestamp is known yet); true does an incremental _history query with _since.
-	incremental bool
 
 	// working state, filled as the run progresses
 	entries        []fhir.BundleEntry // deduplicated history entries to sync
@@ -197,7 +194,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 
 	run := c.newSyncRun()
 	slog.InfoContext(ctx, "Updating from central LRZA directory",
-		slog.Bool("incremental", run.incremental))
+		slog.Bool("incremental", run.incremental()))
 
 	if err := c.fetchEntries(ctx, run); err != nil {
 		return UpdateReport{}, err
@@ -223,15 +220,20 @@ func (c *Component) newSyncRun() *syncRun {
 		// oldest versions last). Don't trust the server default.
 		"_sort": []string{"-_lastUpdated"},
 	}
-	incremental := c.lastUpdateTime != ""
-	if incremental {
+	if c.lastUpdateTime != "" {
 		params.Set("_since", c.lastUpdateTime)
 	}
 	return &syncRun{
 		queryStart:   time.Now(),
 		searchParams: params,
-		incremental:  incremental,
 	}
+}
+
+// incremental selects the read mode, derived from the search parameters: with a _since value set it
+// does an incremental _history query; without one it does a full search of current resources (the
+// initial sync, when no timestamp is known yet).
+func (run *syncRun) incremental() bool {
+	return run.searchParams.Has("_since")
 }
 
 // fetchEntries queries every configured resource type, combines the results, and deduplicates them
@@ -258,7 +260,7 @@ func (c *Component) fetchEntries(ctx context.Context, run *syncRun) error {
 // initial full sync.
 func (c *Component) queryResourceType(ctx context.Context, run *syncRun, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
 	path := resourceType
-	if run.incremental {
+	if run.incremental() {
 		path = resourceType + "/_history"
 	}
 
