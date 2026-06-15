@@ -27,6 +27,7 @@ type ResourceInfo struct {
 	ID           string
 	ResourceType string
 	LastUpdated  *time.Time
+	Resource     map[string]any
 }
 
 // ExtractResourceInfo extracts common FHIR resource fields from JSON bytes.
@@ -58,6 +59,9 @@ func ExtractResourceInfo(resourceJSON []byte) (*ResourceInfo, error) {
 			}
 		}
 	}
+
+	// Add the complete resource unmarsheld for later use
+	info.Resource = resource
 
 	return info, nil
 }

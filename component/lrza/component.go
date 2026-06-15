@@ -335,18 +335,17 @@ func (c *Component) appendTransactionEntry(ctx context.Context, run *syncRun, en
 	if entry.Resource == nil {
 		return errors.New("entry has neither a resource body nor a DELETE request")
 	}
-	resource := make(map[string]any)
-	if err := json.Unmarshal(entry.Resource, &resource); err != nil {
-		return fmt.Errorf("failed to unmarshal resource: %w", err)
+	info, err := libfhir.ExtractResourceInfo(entry.Resource)
+	if err != nil {
+		return err
 	}
-	resourceType, ok := resource["resourceType"].(string)
-	if !ok {
+	if info.ResourceType == "" {
 		return errors.New("resource has no resourceType")
 	}
-	resourceID, ok := resource["id"].(string)
-	if !ok {
+	if info.ID == "" {
 		return errors.New("resource has no id")
 	}
+	resourceType, resourceID, resource := info.ResourceType, info.ID, info.Resource
 	sourceURL, err := libfhir.BuildSourceURL(c.config.LRZABaseUrl, resourceType, resourceID)
 	if err != nil {
 		return fmt.Errorf("failed to build source URL: %w", err)
