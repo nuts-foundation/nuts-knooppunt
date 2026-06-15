@@ -514,12 +514,14 @@ func convertReferencesToConditional(obj any, sourceBaseURL string) error {
 	return nil
 }
 
-// cloneValues returns a shallow copy of the given url.Values, so per-request mutations don't affect
-// the shared run search parameters.
+// cloneValues returns a deep copy of the given url.Values, so per-request mutations don't affect the
+// shared run search parameters. Each value slice's backing array is copied too: a shallow copy would
+// leave the clones sharing arrays with the original, so an in-place edit or a capacity-spare Add on a
+// clone could leak back into the shared params.
 func cloneValues(values url.Values) url.Values {
 	out := make(url.Values, len(values))
 	for k, v := range values {
-		out[k] = v
+		out[k] = append([]string(nil), v...)
 	}
 	return out
 }
