@@ -158,8 +158,8 @@ func newSourceHTTPClient(config Config) (*http.Client, error) {
 
 	tracedTransport := tracing.WrapTransport(baseTransport)
 
+	// The current implementation in the iRealisatie proeftuin does not use oAuth delegation, this is therefore untested
 	if config.Auth.IsConfigured() {
-		slog.Info("LRZA: OAuth2 authentication configured", slog.String("token_endpoint", config.Auth.TokenEndpoint))
 		return httpauth.NewOAuth2HTTPClient(config.Auth, tracedTransport)
 	}
 	return &http.Client{Transport: tracedTransport}, nil
