@@ -250,7 +250,7 @@ func (c *Component) fetchEntries(ctx context.Context, run *syncRun) error {
 			return fmt.Errorf("failed to query %s: %w", resourceType, err)
 		}
 		entries = append(entries, curr...)
-		if i == 0 && searchSet.Meta != nil {
+		if i == 0 && searchSet.Meta != nil && *searchSet.Meta.LastUpdated != "" {
 			run.sourceLastUpdated = searchSet.Meta.LastUpdated
 		}
 	}
