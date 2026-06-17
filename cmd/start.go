@@ -9,6 +9,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
 	libHTTPComponent "github.com/nuts-foundation/nuts-knooppunt/component/http"
+	"github.com/nuts-foundation/nuts-knooppunt/component/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsdadmin"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
@@ -50,6 +51,17 @@ func Start(ctx context.Context, config Config) error {
 		mcsdadmin.New(config.MCSDAdmin),
 		statusComponent,
 		httpComponent,
+	}
+
+	// The LRZA sync client is only registered when a trusted source directory is configured.
+	if config.LRZA.LRZABaseUrl != "" {
+		lrzaClient, err := lrza.New(config.LRZA)
+		if err != nil {
+			return errors.Wrap(err, "failed to create LRZA sync client")
+		}
+		components = append(components, lrzaClient)
+	} else {
+		slog.InfoContext(ctx, "LRZA sync client is disabled (LRZA base URL not configured)")
 	}
 
 	if config.Nuts.Enabled {

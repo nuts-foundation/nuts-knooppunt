@@ -27,6 +27,7 @@ type ResourceInfo struct {
 	ID           string
 	ResourceType string
 	LastUpdated  *time.Time
+	Resource     map[string]any
 }
 
 // ExtractResourceInfo extracts common FHIR resource fields from JSON bytes.
@@ -58,6 +59,9 @@ func ExtractResourceInfo(resourceJSON []byte) (*ResourceInfo, error) {
 			}
 		}
 	}
+
+	// Add the complete resource unmarsheld for later use
+	info.Resource = resource
 
 	return info, nil
 }
@@ -107,6 +111,31 @@ func IDFromReference(ref string, resourceType string) string {
 		return ""
 	}
 	return strings.TrimPrefix(ref, resourceType+"/")
+}
+
+// TypeAndIDFromReference extracts the resource type and logical id from a FHIR reference or URL,
+// whether relative ("Organization/123"), absolute ("http://host/fhir/Organization/123"), or a
+// versioned history URL ("Organization/123/_history/2"). ok is false when no type/id can be
+// determined.
+//
+// Unlike IDFromReference/ReferencesType - which strictly validate a local literal reference to a
+// known type - this is a lenient extractor for references whose form is not known up front.
+func TypeAndIDFromReference(ref string) (resourceType, id string, ok bool) {
+	// Drop any "/_history/{version}" suffix so a versioned URL resolves to the resource identity
+	// rather than to the "_history/{version}" segments.
+	if i := strings.Index(ref, "/_history/"); i != -1 {
+		ref = ref[:i]
+	}
+	parts := strings.Split(strings.Trim(ref, "/"), "/")
+	if len(parts) < 2 {
+		return "", "", false
+	}
+	resourceType = parts[len(parts)-2]
+	id = parts[len(parts)-1]
+	if resourceType == "" || id == "" {
+		return "", "", false
+	}
+	return resourceType, id, true
 }
 
 var localLiteralReferencePattern = regexp.MustCompile(`^[a-zA-Z]+/[A-Za-z0-9\-.]{1,64}$`)
