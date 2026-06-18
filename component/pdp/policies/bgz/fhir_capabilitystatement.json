@@ -178,11 +178,8 @@
     {
       "operation": [
         {
-          "definition": {
-            "reference": "http://hl7.org/fhir/OperationDefinition/Observation-lastn",
-            "display": "Observation-lastn"
-          },
-          "name": "Last N Observations Query"
+          "name": "lastn",
+          "definition": "http://hl7.org/fhir/OperationDefinition/Observation-lastn"
         }
       ],
       "resource": [
@@ -194,6 +191,16 @@
           "interaction": [
             {
               "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "type": "reference",
+              "name": "patient"
+            },
+            {
+              "type": "token",
+              "name": "_id"
             }
           ]
         },
@@ -207,6 +214,12 @@
             {
               "code": "search-type"
             }
+          ],
+          "searchParam": [
+            {
+              "type": "reference",
+              "name": "patient"
+            }
           ]
         },
         {
@@ -214,6 +227,10 @@
             {
               "type": "token",
               "name": "category"
+            },
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ],
           "type": "Consent",
@@ -236,6 +253,10 @@
             {
               "type": "token",
               "name": "code"
+            },
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ],
           "type": "Observation",
@@ -251,6 +272,12 @@
             {
               "code": "search-type"
             }
+          ],
+          "searchParam": [
+            {
+              "type": "reference",
+              "name": "patient"
+            }
           ]
         },
         {
@@ -258,6 +285,12 @@
           "interaction": [
             {
               "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ]
         },
@@ -267,6 +300,12 @@
             {
               "code": "search-type"
             }
+          ],
+          "searchParam": [
+            {
+              "type": "reference",
+              "name": "patient"
+            }
           ]
         },
         {
@@ -274,6 +313,12 @@
           "interaction": [
             {
               "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ]
         },
@@ -285,6 +330,10 @@
             {
               "type": "token",
               "name": "category"
+            },
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ],
           "type": "MedicationStatement",
@@ -302,6 +351,10 @@
             {
               "type": "token",
               "name": "category"
+            },
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ],
           "type": "MedicationRequest",
@@ -320,6 +373,10 @@
               "name": "category",
               "type": "token",
               "definition": "http://nictiz.nl/fhir/SearchParameter/Medications-category"
+            },
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ],
           "type": "MedicationDispense",
@@ -338,6 +395,12 @@
             {
               "code": "search-type"
             }
+          ],
+          "searchParam": [
+            {
+              "type": "reference",
+              "name": "patient"
+            }
           ]
         },
         {
@@ -345,6 +408,10 @@
             {
               "type": "token",
               "name": "status"
+            },
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ],
           "type": "Immunization",
@@ -359,6 +426,10 @@
             {
               "type": "token",
               "name": "category"
+            },
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ],
           "type": "Procedure",
@@ -373,6 +444,10 @@
             {
               "type": "token",
               "name": "class"
+            },
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ],
           "type": "Encounter",
@@ -387,6 +462,10 @@
             {
               "type": "token",
               "name": "status"
+            },
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ],
           "type": "ProcedureRequest",
@@ -402,6 +481,12 @@
             {
               "code": "search-type"
             }
+          ],
+          "searchParam": [
+            {
+              "type": "reference",
+              "name": "patient"
+            }
           ]
         },
         {
@@ -412,6 +497,10 @@
             {
               "type": "token",
               "name": "status"
+            },
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ],
           "type": "DeviceRequest",
@@ -426,6 +515,10 @@
             {
               "type": "token",
               "name": "status"
+            },
+            {
+              "type": "reference",
+              "name": "patient"
             }
           ],
           "type": "Appointment",
