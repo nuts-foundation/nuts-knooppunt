@@ -251,7 +251,77 @@ func TestComponent_reject_revinclude(t *testing.T) {
 	assert.False(t, inp.Action.FHIRRest.CapabilityChecked)
 }
 
-func TestComponent_allow_revinclude(t *testing.T) {
+func TestCapabilityStatement_STU3_allow_interaction(t *testing.T) {
+	input := PolicyInput{
+		Resource: PolicyResource{
+			Type: to.Ptr(fhir.ResourceTypeComposition),
+		},
+		Action: PolicyAction{
+			FHIRRest: FHIRRestData{
+				InteractionType: fhir.TypeRestfulInteractionRead,
+			},
+		},
+	}
+
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "test_stu3")
+	assert.Empty(t, resp)
+	assert.True(t, inp.Action.FHIRRest.CapabilityChecked)
+}
+
+func TestCapabilityStatement_STU3_reject_interaction(t *testing.T) {
+	input := PolicyInput{
+		Resource: PolicyResource{
+			Type: to.Ptr(fhir.ResourceTypeComposition),
+		},
+		Action: PolicyAction{
+			FHIRRest: FHIRRestData{
+				InteractionType: fhir.TypeRestfulInteractionUpdate,
+			},
+		},
+	}
+
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "test_stu3")
+	assert.NotEmpty(t, resp)
+	assert.False(t, inp.Action.FHIRRest.CapabilityChecked)
+}
+
+func TestCapabilityStatement_STU3_allow_search_param(t *testing.T) {
+	input := PolicyInput{
+		Resource: PolicyResource{
+			Type: to.Ptr(fhir.ResourceTypeComposition),
+		},
+		Action: PolicyAction{
+			FHIRRest: FHIRRestData{
+				InteractionType: fhir.TypeRestfulInteractionSearchType,
+				SearchParams:    map[string][][]string{"patient": {{"123"}}},
+			},
+		},
+	}
+
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "test_stu3")
+	assert.Empty(t, resp)
+	assert.True(t, inp.Action.FHIRRest.CapabilityChecked)
+}
+
+func TestCapabilityStatement_STU3_reject_search_param(t *testing.T) {
+	input := PolicyInput{
+		Resource: PolicyResource{
+			Type: to.Ptr(fhir.ResourceTypeComposition),
+		},
+		Action: PolicyAction{
+			FHIRRest: FHIRRestData{
+				InteractionType: fhir.TypeRestfulInteractionSearchType,
+				SearchParams:    map[string][][]string{"subject": {{"123"}}},
+			},
+		},
+	}
+
+	inp, resp := enrichPolicyInputWithCapabilityStatement(context.Background(), input, "test_stu3")
+	assert.NotEmpty(t, resp)
+	assert.False(t, inp.Action.FHIRRest.CapabilityChecked)
+}
+
+func TestCapabilityStatement_allow_revinclude(t *testing.T) {
 	input := PolicyInput{
 		Subject: PolicySubject{
 			Client: PolicySubjectClient{
