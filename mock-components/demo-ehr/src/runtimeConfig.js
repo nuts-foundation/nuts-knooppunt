@@ -4,6 +4,22 @@
 // deployment. In dev (`npm start`), there's no injection; we fall back to
 // CRA's build-time REACT_APP_* env vars so local development keeps working.
 
+const DEFAULT_CREDENTIAL_ISSUERS = {
+  HealthCareProfessionalDelegationCredential: 'https://nuts-services.nl/stable/aet-stub',
+  HealthcareProviderRoleTypeCredential: 'https://knooppunt-vektis.nuts-services.nl',
+  PatientEnrollmentCredential: 'https://nuts-services.nl/stable/aet-stub',
+  HealthcareOrganizationCredential: 'x509',
+};
+
+const parseCredentialIssuers = (raw) => {
+  if (!raw) return DEFAULT_CREDENTIAL_ISSUERS;
+  try {
+    return { ...DEFAULT_CREDENTIAL_ISSUERS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_CREDENTIAL_ISSUERS;
+  }
+};
+
 const fromEnv = () => ({
   baseUrl: '',
   authority: process.env.REACT_APP_AUTHORITY || 'http://localhost:8081',
@@ -12,6 +28,7 @@ const fromEnv = () => ({
   fhirStu3BaseURL: process.env.REACT_APP_FHIR_STU3_BASE_URL || '',
   mcsdQueryBaseURL: process.env.REACT_APP_FHIR_MCSD_QUERY_BASE_URL || '',
   organizationURA: process.env.REACT_APP_ORGANIZATION_URA || '',
+  credentialIssuers: parseCredentialIssuers(process.env.REACT_APP_CREDENTIAL_ISSUERS),
   devLoginEnabled:
     process.env.REACT_APP_DEV_LOGIN === '1' ||
     process.env.REACT_APP_DEV_LOGIN === 'true',

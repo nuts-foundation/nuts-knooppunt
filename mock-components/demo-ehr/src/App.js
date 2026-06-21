@@ -7,6 +7,7 @@ import PatientsPage from './pages/PatientsPage';
 import PatientPage from './pages/PatientPage';
 import PatientContextLaunchPage from './pages/PatientContextLaunchPage';
 import ConsentsPage from './pages/ConsentsPage';
+import CredentialCallbackPage from './pages/CredentialCallbackPage';
 import './App.css';
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
           <Route path="/patients/:patientId" element={<PatientPage />} />
           <Route path="/patients/:patientId/context-launch" element={<PatientContextLaunchPage />} />
           <Route path="/consents" element={<ConsentsPage />} />
+          <Route path="/credential-callback" element={<CredentialCallbackPage />} />
         </Routes>
       </Router>
     </AuthProvider>
