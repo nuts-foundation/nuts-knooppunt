@@ -32,6 +32,10 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for how to deploy the Knooppunt in 
 
 See [docs/INTEGRATION.md](docs/INTEGRATION.md) for how to integrate the Knooppunt in your local XIS/healthcare system.
 
+## API Reference
+
+See [openapi.yaml](openapi.yaml) for the OpenAPI specification of the status, PDP, NVI and MITZ subscription APIs. Open `docs/api/index.html` in a browser for a Swagger UI view of the spec.
+
 ## Architecture
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for an overview of the architecture and design of the Knooppunt (for Knooppunt developers).
