@@ -1,0 +1,625 @@
+openapi: 3.0.3
+info:
+  title: Nuts Knooppunt API
+  description: >
+    API served on the Knooppunt's internal interface (default `:8081`), plus the
+    single public-facing endpoint used by MITZ notifications (default `:8080`).
+    Generated from the actual route registrations and request/response handling
+    in this repository; see `docs/INTEGRATION.md` for narrative documentation.
+    FHIR resource bodies (Bundle, List, Subscription, OperationOutcome) are not
+    redefined here — see https://hl7.org/fhir/R4/ for their schemas.
+  version: "1.0"
+security: []
+# No application-level authentication: the internal interface is protected by
+# network isolation (not exposed to the internet), and /mitz/notify is the
+# only route on the public interface, which MITZ calls directly.
+servers:
+  - url: http://localhost:8081
+    description: Internal interface (status, PDP, NVI, MITZ subscription)
+  - url: http://localhost:8080
+    description: Public interface (MITZ notify)
+tags:
+  - name: status
+    description: Health/readiness and build info
+  - name: pdp
+    description: Policy Decision Point — authorization
+  - name: nvi
+    description: NVI FHIR List gateway
+  - name: mitz
+    description: MITZ consent subscriptions
+paths:
+  /status:
+    get:
+      tags: [status]
+      summary: Readiness check
+      description: >
+        Returns `200 OK` once all components have started. Returns `503` with
+        body `starting` while the Knooppunt is still starting up. Used as the
+        de facto health check for this service (there is no separate `/health`
+        endpoint on the Knooppunt itself).
+      responses:
+        "200":
+          description: Ready
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "OK"
+        "503":
+          description: Not yet ready
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "starting"
+  /version:
+    get:
+      tags: [status]
+      summary: Build version info
+      responses:
+        "200":
+          description: Build info
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /pdp/v1/data/knooppunt/authz:
+    post:
+      tags: [pdp]
+      summary: Evaluate an authorization request
+      description: >
+        Evaluates whether a data-holder request should be allowed, based on
+        subject/organization, the FHIR request being proxied, and its context
+        (e.g. patient BSN, connection type). Also usable via `POST /pdp`
+        directly (equivalent, undocumented alias route).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PDPAuthzRequest"
+            examples:
+              mcsdUpdate:
+                summary: mCSD update request
+                value:
+                  input:
+                    subject:
+                      organization_ura: "00000666"
+                      scope: mcsd_update
+                    request:
+                      method: GET
+                      protocol: "HTTP/1.0"
+                      path: /Organization/_history
+                    context:
+                      data_holder_organization_id: "00000659"
+                      connection_type_code: hl7-fhir-rest
+              bgzPatientRead:
+                summary: bgz scope reading a specific patient
+                value:
+                  input:
+                    subject:
+                      user_id: "000095254"
+                      user_role: "01.015"
+                      organization_ura: "00000666"
+                      organization_facility_type: Z3
+                      scope: bgz
+                    request:
+                      method: GET
+                      protocol: "HTTP/1.0"
+                      path: /Patient/3E439979-017F-40AA-594D-EBCF880FFD97
+                    context:
+                      data_holder_organization_id: "00000659"
+                      data_holder_facility_type: Z3
+                      connection_type_code: hl7-fhir-rest
+              formEncodedSearch:
+                summary: Search with form-encoded body (pzp_gf scope)
+                value:
+                  input:
+                    subject:
+                      user_id: "000095254"
+                      user_role: "01.015"
+                      organization_ura: "00000666"
+                      organization_facility_type: Z3
+                      scope: pzp_gf
+                    request:
+                      method: POST
+                      protocol: "HTTP/1.0"
+                      path: /Patient/_search
+                      header:
+                        Content-Type: ["application/x-www-form-urlencoded"]
+                      body: "identifier=http://fhir.nl/fhir/NamingSystem/bsn|900214181"
+                    context:
+                      data_holder_organization_id: "90000697"
+                      data_holder_facility_type: Z3
+                      connection_type_code: hl7-fhir-rest
+      responses:
+        "200":
+          description: >
+            Authorization decision. Returned even when the request itself was
+            malformed (`error` is set and `allow` is `false` in that case) or
+            when a referenced policy bundle/rule doesn't exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PDPAuthzResponse"
+              examples:
+                allowed:
+                  value:
+                    allow: true
+                    policies:
+                      bgz:
+                        allow: true
+                        reasons:
+                          - code: info
+                            description: MITZ consent granted
+                denied:
+                  value:
+                    allow: false
+                    policies:
+                      bgz:
+                        allow: false
+                        reasons:
+                          - code: not_allowed
+                            description: No MITZ consent found for this patient
+        "400":
+          description: Request body could not be decoded, or path package/rule is invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PDPAuthzResponse"
+
+  /pdp/bundles:
+    get:
+      tags: [pdp]
+      summary: List loaded policy bundles
+      responses:
+        "200":
+          description: Bundle names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /pdp/bundles/{policyName}:
+    get:
+      tags: [pdp]
+      summary: Get a loaded policy bundle by name
+      parameters:
+        - name: policyName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Bundle contents
+        "404":
+          description: No bundle with this name is loaded
+
+  /nvi:
+    # Also reachable as `POST /nvi/{anything}` (catch-all), which behaves identically.
+    post:
+      tags: [nvi]
+      summary: Register a List via a transaction Bundle
+      description: >
+        Submits a FHIR transaction Bundle containing one or more `List`
+        resources. BSN values in `List.subject.identifier` are pseudonymized
+        (tokenized) before the Bundle is forwarded to the upstream NVI FHIR
+        server.
+      parameters:
+        - $ref: "#/components/parameters/TenantID"
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: "#/components/schemas/FHIRResource"
+      responses:
+        "200":
+          description: Resulting transaction-response Bundle from NVI
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
+
+  /nvi/List:
+    post:
+      tags: [nvi]
+      summary: Register a List directly
+      parameters:
+        - $ref: "#/components/parameters/TenantID"
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: "#/components/schemas/FHIRResource"
+      responses:
+        "200":
+          description: Created List, as returned by NVI
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
+    get:
+      tags: [nvi]
+      summary: Search for Lists
+      description: >
+        Requires at least one of `patient:identifier`, `subject:identifier` or
+        `source:identifier`. `patient:identifier` is mapped to
+        `subject:identifier` before forwarding, since NVI only supports the
+        latter. BSN identifier values are tokenized before being sent upstream.
+        An optional `code` parameter is also supported. If the upstream NVI
+        response is paginated, this returns `422` since pagination isn't
+        supported.
+      parameters:
+        - $ref: "#/components/parameters/TenantID"
+        - name: patient:identifier
+          in: query
+          required: false
+          schema:
+            type: string
+          example: "http://fhir.nl/fhir/NamingSystem/bsn|999911136"
+        - name: subject:identifier
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: source:identifier
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search result Bundle
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "422":
+          description: Upstream NVI response was paginated, which isn't supported
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
+    delete:
+      tags: [nvi]
+      summary: Delete Lists matching search parameters
+      description: >
+        Same parameter rules as the search endpoint above (at least one of
+        `patient:identifier`, `subject:identifier`, `source:identifier` is
+        required).
+      parameters:
+        - $ref: "#/components/parameters/TenantID"
+        - name: patient:identifier
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: subject:identifier
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: source:identifier
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
+
+  /nvi/List/_search:
+    post:
+      tags: [nvi]
+      summary: Search for Lists (form-encoded body)
+      description: Same behavior as `GET /nvi/List`, with parameters in the request body.
+      parameters:
+        - $ref: "#/components/parameters/TenantID"
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                patient:identifier:
+                  type: string
+                subject:identifier:
+                  type: string
+                source:identifier:
+                  type: string
+                code:
+                  type: string
+      responses:
+        "200":
+          description: Search result Bundle
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "422":
+          description: Upstream NVI response was paginated, which isn't supported
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
+
+  /nvi/List/{id}:
+    get:
+      tags: [nvi]
+      summary: Read a List by ID
+      parameters:
+        - $ref: "#/components/parameters/TenantID"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The List resource
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
+    delete:
+      tags: [nvi]
+      summary: Delete a List by ID
+      parameters:
+        - $ref: "#/components/parameters/TenantID"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
+
+  /mitz/Subscription:
+    post:
+      tags: [mitz]
+      summary: Create a MITZ consent subscription
+      description: >
+        Creates a `rest-hook` Subscription on MITZ for consent notifications
+        about a patient/provider pair. Beyond the standard Subscription
+        schema, the Knooppunt requires: `status="requested"`, `reason="OTV"`,
+        `criteria` starting with `Consent?` and containing `_query=otv`,
+        `patientid` (BSN), `providerid` (URA) and `providertype`, and
+        `channel.type="rest-hook"`. `channel.endpoint` defaults to the
+        configured notify endpoint if omitted; `channel.payload` defaults to
+        `application/fhir+json`. Only `Patient.birthDate`, `GatewaySystem`
+        and `SourceSystem` extensions (under
+        `http://fhir.nl/StructureDefinition/`) are allowed.
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: "#/components/schemas/FHIRResource"
+            example:
+              resourceType: Subscription
+              status: requested
+              reason: OTV
+              criteria: "Consent?_query=otv&patientid=123456789&providerid=00000001&providertype=Z3"
+              channel:
+                type: rest-hook
+                payload: application/fhir+json
+      responses:
+        "201":
+          description: Subscription created
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+              example:
+                resourceType: Subscription
+                id: "8904A5ED-713A-4A63-9B24-954AC7B7052D"
+                status: requested
+                reason: OTV
+                criteria: "Consent?_query=otv&patientid=123456789&providerid=00000001&providertype=Z3"
+                channel:
+                  type: rest-hook
+                  endpoint: "https://platform.example.com/mitz/notify"
+                  payload: application/fhir+json
+        "400":
+          description: >
+            Malformed Subscription, or one that doesn't meet the MITZ
+            requirements described above.
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
+
+  /mitz/notify:
+    post:
+      tags: [mitz]
+      summary: Receive a MITZ consent notification
+      description: >
+        Public endpoint MITZ calls to notify about consent changes for an
+        active subscription. Currently acknowledges any payload without
+        parsing it.
+      servers:
+        - url: http://localhost:8080
+      requestBody:
+        required: false
+        content:
+          application/fhir+json:
+            schema:
+              $ref: "#/components/schemas/FHIRResource"
+      responses:
+        "204":
+          description: Acknowledged
+
+components:
+  parameters:
+    TenantID:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      description: >
+        Requesting organization, as a FHIR token: `<system>|<value>` where
+        `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
+      schema:
+        type: string
+      example: "http://fhir.nl/fhir/NamingSystem/ura|00000020"
+
+  responses:
+    OperationOutcomeError:
+      description: Request rejected; body is a FHIR OperationOutcome.
+      content:
+        application/fhir+json:
+          schema:
+            $ref: "#/components/schemas/FHIRResource"
+
+  schemas:
+    FHIRResource:
+      type: object
+      description: >
+        A FHIR R4 resource (Bundle, List, Subscription, or OperationOutcome
+        depending on context). See https://hl7.org/fhir/R4/ for its schema;
+        not redefined here.
+      additionalProperties: true
+
+    PDPAuthzRequest:
+      type: object
+      required: [input]
+      properties:
+        input:
+          type: object
+          required: [subject, request, context]
+          properties:
+            subject:
+              type: object
+              description: Additional unrecognized properties are passed through as-is.
+              properties:
+                active:
+                  type: boolean
+                client_id:
+                  type: string
+                scope:
+                  type: string
+                  description: Space-separated list of OAuth scopes.
+                user_id:
+                  type: string
+                user_role:
+                  type: string
+                organization_ura:
+                  type: string
+                organization_name:
+                  type: string
+                organization_facility_type:
+                  type: string
+              additionalProperties: true
+            request:
+              type: object
+              required: [method, protocol, path]
+              properties:
+                method:
+                  type: string
+                  example: GET
+                protocol:
+                  type: string
+                  example: "HTTP/1.0"
+                path:
+                  type: string
+                  description: Request path, without query string.
+                query:
+                  type: string
+                  description: Raw query string (e.g. `_since=2024-01-01`), without the leading `?`.
+                header:
+                  type: object
+                  description: HTTP headers, each value an array of strings.
+                  additionalProperties:
+                    type: array
+                    items:
+                      type: string
+                body:
+                  type: string
+                  description: Raw request body, used for form-encoded search/operation requests.
+            context:
+              type: object
+              required: [connection_type_code, data_holder_organization_id]
+              properties:
+                connection_type_code:
+                  type: string
+                  example: hl7-fhir-rest
+                data_holder_organization_id:
+                  type: string
+                data_holder_facility_type:
+                  type: string
+                patient_bsn:
+                  type: string
+
+    PDPAuthzResponse:
+      type: object
+      properties:
+        allow:
+          type: boolean
+        error:
+          type: string
+          description: Set when the request could not be evaluated (e.g. malformed input).
+        policies:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              allow:
+                type: boolean
+              reasons:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    code:
+                      type: string
+                      enum:
+                        - unexpected_input
+                        - not_allowed
+                        - not_implemented
+                        - internal_error
+                        - pip_error
+                        - info
+                    description:
+                      type: string

@@ -17,3 +17,6 @@ pep/logs/
 
 # Helm chart dependencies
 helm/**/charts/*.tgz
+
+# Scratch files
+.scratch/
