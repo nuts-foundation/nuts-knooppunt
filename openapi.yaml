@@ -23,8 +23,10 @@ tags:
     description: Policy Decision Point for making authorization decisions
   - name: nvi
     description: >
-      Gateway to Nationale VerwijsIndex (NVI). Endpoints take plain BSN
-      identifiers, send pseudonymized BSNs to NVI, and return plain BSNs.
+      Gateway to Nationale VerwijsIndex (NVI), the Generic Function for
+      [Localization](https://minvws.github.io/generiekefuncties-docs/en/localization.html).
+      Endpoints take plain BSN identifiers, send pseudonymized BSNs to NVI,
+      and return plain BSNs.
   - name: mitz
     description: Gateway for managing Mitz subscriptions
 paths:
