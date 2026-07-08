@@ -4,7 +4,7 @@ info:
   description: >
     API served on the Knooppunt's internal interface (default `:8081`).
 
-    See `docs/INTEGRATION.md` for narrative documentation.
+    See [docs/INTEGRATION.md](https://github.com/nuts-foundation/nuts-knooppunt/blob/main/docs/INTEGRATION.md) for narrative documentation.
 
     FHIR resource bodies are typed by resource (Bundle, List, Subscription,
     OperationOutcome) but not redefined in full — each schema links to its
@@ -213,6 +213,7 @@ paths:
         - name: policyName
           in: path
           required: true
+          description: Name of the loaded policy bundle, as returned by `GET /pdp/bundles`.
           schema:
             type: string
       responses:
@@ -290,22 +291,36 @@ paths:
         - name: patient:identifier
           in: query
           required: false
+          description: >
+            BSN of the patient referenced by `List.subject`, as a FHIR
+            token (`system|value`). Mapped to `subject:identifier` before
+            forwarding to NVI.
           schema:
             type: string
           example: "http://fhir.nl/fhir/NamingSystem/bsn|999911136"
         - name: subject:identifier
           in: query
           required: false
+          description: >
+            BSN of the patient referenced by `List.subject`, as a FHIR
+            token (`system|value`). NVI's native parameter name; equivalent
+            to `patient:identifier`.
           schema:
             type: string
         - name: source:identifier
           in: query
           required: false
+          description: >
+            Identifier of `List.source` (the system that registered the
+            List), as a FHIR token (`system|value`).
           schema:
             type: string
         - name: code
           in: query
           required: false
+          description: >
+            `List.code` search parameter, to filter by list/data category
+            (e.g. `MedicationRequest`).
           schema:
             type: string
       responses:
@@ -337,16 +352,27 @@ paths:
         - name: patient:identifier
           in: query
           required: false
+          description: >
+            BSN of the patient referenced by `List.subject`, as a FHIR
+            token (`system|value`). Mapped to `subject:identifier` before
+            forwarding to NVI.
           schema:
             type: string
         - name: subject:identifier
           in: query
           required: false
+          description: >
+            BSN of the patient referenced by `List.subject`, as a FHIR
+            token (`system|value`). NVI's native parameter name; equivalent
+            to `patient:identifier`.
           schema:
             type: string
         - name: source:identifier
           in: query
           required: false
+          description: >
+            Identifier of `List.source` (the system that registered the
+            List), as a FHIR token (`system|value`).
           schema:
             type: string
       responses:
@@ -406,6 +432,7 @@ paths:
         - name: id
           in: path
           required: true
+          description: The List resource's `id` at NVI.
           schema:
             type: string
       responses:
@@ -427,6 +454,7 @@ paths:
         - name: id
           in: path
           required: true
+          description: The List resource's `id` at NVI.
           schema:
             type: string
       responses:
