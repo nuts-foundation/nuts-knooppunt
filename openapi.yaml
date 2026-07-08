@@ -2,31 +2,33 @@ openapi: 3.0.3
 info:
   title: Nuts Knooppunt API
   description: >
-    API served on the Knooppunt's internal interface (default `:8081`), plus the
-    single public-facing endpoint used by MITZ notifications (default `:8080`).
+    API served on the Knooppunt's internal interface (default `:8081`).
     Generated from the actual route registrations and request/response handling
     in this repository; see `docs/INTEGRATION.md` for narrative documentation.
-    FHIR resource bodies (Bundle, List, Subscription, OperationOutcome) are not
-    redefined here — see https://hl7.org/fhir/R4/ for their schemas.
+    FHIR resource bodies are typed by resource (Bundle, List, Subscription,
+    OperationOutcome) but not redefined in full — each schema links to its
+    definition in the FHIR R4 spec.
+    See `mitz-public.openapi.yaml` for the one endpoint on the public
+    interface (`/mitz/notify`), documented separately since it's not
+    integrated against by Knooppunt users.
   version: "1.0"
 security: []
 # No application-level authentication: the internal interface is protected by
-# network isolation (not exposed to the internet), and /mitz/notify is the
-# only route on the public interface, which MITZ calls directly.
+# network isolation, not exposed to the internet.
 servers:
   - url: http://localhost:8081
     description: Internal interface (status, PDP, NVI, MITZ subscription)
-  - url: http://localhost:8080
-    description: Public interface (MITZ notify)
 tags:
   - name: status
     description: Health/readiness and build info
   - name: pdp
-    description: Policy Decision Point — authorization
+    description: Policy Decision Point for making authorization decisions
   - name: nvi
-    description: NVI FHIR List gateway
+    description: >
+      Gateway to Nationale VerwijsIndex (NVI). Endpoints take plain BSN
+      identifiers, send pseudonymized BSNs to NVI, and return plain BSNs.
   - name: mitz
-    description: MITZ consent subscriptions
+    description: Gateway for managing Mitz subscriptions
 paths:
   /status:
     get:
@@ -91,6 +93,21 @@ paths:
                       method: GET
                       protocol: "HTTP/1.0"
                       path: /Organization/_history
+                    context:
+                      data_holder_organization_id: "00000659"
+                      connection_type_code: hl7-fhir-rest
+              searchWithQueryParams:
+                summary: Search request with a query parameter
+                value:
+                  input:
+                    subject:
+                      organization_ura: "00000666"
+                      scope: mcsd_update
+                    request:
+                      method: GET
+                      protocol: "HTTP/1.0"
+                      path: /Organization
+                      query: "_since=2024-01-01"
                     context:
                       data_holder_organization_id: "00000659"
                       connection_type_code: hl7-fhir-rest
@@ -173,6 +190,9 @@ paths:
     get:
       tags: [pdp]
       summary: List loaded policy bundles
+      description: >
+        Primarily used by the Knooppunt itself; may change or be removed
+        without prior notice.
       responses:
         "200":
           description: Bundle names
@@ -187,6 +207,9 @@ paths:
     get:
       tags: [pdp]
       summary: Get a loaded policy bundle by name
+      description: >
+        Primarily used by the Knooppunt itself; may change or be removed
+        without prior notice.
       parameters:
         - name: policyName
           in: path
@@ -216,14 +239,14 @@ paths:
         content:
           application/fhir+json:
             schema:
-              $ref: "#/components/schemas/FHIRResource"
+              $ref: "#/components/schemas/FHIRBundle"
       responses:
         "200":
           description: Resulting transaction-response Bundle from NVI
           content:
             application/fhir+json:
               schema:
-                $ref: "#/components/schemas/FHIRResource"
+                $ref: "#/components/schemas/FHIRBundle"
         "400":
           $ref: "#/components/responses/OperationOutcomeError"
         "503":
@@ -240,14 +263,14 @@ paths:
         content:
           application/fhir+json:
             schema:
-              $ref: "#/components/schemas/FHIRResource"
+              $ref: "#/components/schemas/FHIRList"
       responses:
         "200":
           description: Created List, as returned by NVI
           content:
             application/fhir+json:
               schema:
-                $ref: "#/components/schemas/FHIRResource"
+                $ref: "#/components/schemas/FHIRList"
         "400":
           $ref: "#/components/responses/OperationOutcomeError"
         "503":
@@ -292,7 +315,7 @@ paths:
           content:
             application/fhir+json:
               schema:
-                $ref: "#/components/schemas/FHIRResource"
+                $ref: "#/components/schemas/FHIRBundle"
         "400":
           $ref: "#/components/responses/OperationOutcomeError"
         "422":
@@ -300,7 +323,7 @@ paths:
           content:
             application/fhir+json:
               schema:
-                $ref: "#/components/schemas/FHIRResource"
+                $ref: "#/components/schemas/FHIROperationOutcome"
         "503":
           $ref: "#/components/responses/OperationOutcomeError"
     delete:
@@ -363,7 +386,7 @@ paths:
           content:
             application/fhir+json:
               schema:
-                $ref: "#/components/schemas/FHIRResource"
+                $ref: "#/components/schemas/FHIRBundle"
         "400":
           $ref: "#/components/responses/OperationOutcomeError"
         "422":
@@ -371,7 +394,7 @@ paths:
           content:
             application/fhir+json:
               schema:
-                $ref: "#/components/schemas/FHIRResource"
+                $ref: "#/components/schemas/FHIROperationOutcome"
         "503":
           $ref: "#/components/responses/OperationOutcomeError"
 
@@ -392,7 +415,7 @@ paths:
           content:
             application/fhir+json:
               schema:
-                $ref: "#/components/schemas/FHIRResource"
+                $ref: "#/components/schemas/FHIRList"
         "400":
           $ref: "#/components/responses/OperationOutcomeError"
         "503":
@@ -435,7 +458,7 @@ paths:
         content:
           application/fhir+json:
             schema:
-              $ref: "#/components/schemas/FHIRResource"
+              $ref: "#/components/schemas/FHIRSubscription"
             example:
               resourceType: Subscription
               status: requested
@@ -450,7 +473,7 @@ paths:
           content:
             application/fhir+json:
               schema:
-                $ref: "#/components/schemas/FHIRResource"
+                $ref: "#/components/schemas/FHIRSubscription"
               example:
                 resourceType: Subscription
                 id: "8904A5ED-713A-4A63-9B24-954AC7B7052D"
@@ -468,29 +491,9 @@ paths:
           content:
             application/fhir+json:
               schema:
-                $ref: "#/components/schemas/FHIRResource"
+                $ref: "#/components/schemas/FHIROperationOutcome"
         "503":
           $ref: "#/components/responses/OperationOutcomeError"
-
-  /mitz/notify:
-    post:
-      tags: [mitz]
-      summary: Receive a MITZ consent notification
-      description: >
-        Public endpoint MITZ calls to notify about consent changes for an
-        active subscription. Currently acknowledges any payload without
-        parsing it.
-      servers:
-        - url: http://localhost:8080
-      requestBody:
-        required: false
-        content:
-          application/fhir+json:
-            schema:
-              $ref: "#/components/schemas/FHIRResource"
-      responses:
-        "204":
-          description: Acknowledged
 
 components:
   parameters:
@@ -499,7 +502,8 @@ components:
       in: header
       required: true
       description: >
-        Requesting organization, as a FHIR token: `<system>|<value>` where
+        The local care organization, who is performing (or on whose behalf)
+        the request is being made, as a FHIR token: `<system>|<value>` where
         `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
       schema:
         type: string
@@ -511,14 +515,36 @@ components:
       content:
         application/fhir+json:
           schema:
-            $ref: "#/components/schemas/FHIRResource"
+            $ref: "#/components/schemas/FHIROperationOutcome"
 
   schemas:
-    FHIRResource:
+    FHIRBundle:
       type: object
       description: >
-        A FHIR R4 resource (Bundle, List, Subscription, or OperationOutcome
-        depending on context). See https://hl7.org/fhir/R4/ for its schema;
+        A FHIR R4 Bundle resource. See https://hl7.org/fhir/R4/bundle.html
+        for its schema; not redefined here.
+      additionalProperties: true
+
+    FHIRList:
+      type: object
+      description: >
+        A FHIR R4 List resource. See https://hl7.org/fhir/R4/list.html for
+        its schema; not redefined here.
+      additionalProperties: true
+
+    FHIRSubscription:
+      type: object
+      description: >
+        A FHIR R4 Subscription resource. See
+        https://hl7.org/fhir/R4/subscription.html for its schema; not
+        redefined here.
+      additionalProperties: true
+
+    FHIROperationOutcome:
+      type: object
+      description: >
+        A FHIR R4 OperationOutcome resource, returned for error responses.
+        See https://hl7.org/fhir/R4/operationoutcome.html for its schema;
         not redefined here.
       additionalProperties: true
 
@@ -532,88 +558,173 @@ components:
           properties:
             subject:
               type: object
-              description: Additional unrecognized properties are passed through as-is.
+              description: >
+                The user and organization on whose behalf the request is
+                being made. Additional unrecognized properties are passed
+                through as-is.
               properties:
                 active:
                   type: boolean
+                  description: Whether the access token backing this request is currently active.
+                  example: true
                 client_id:
                   type: string
+                  description: >
+                    Identifier of the requesting application, e.g. the
+                    OAuth2 `client_id` of the client that obtained the
+                    access token.
+                  example: "gp-portal-client"
                 scope:
                   type: string
-                  description: Space-separated list of OAuth scopes.
+                  description: >
+                    Space-separated list of OAuth2 scopes, each naming a
+                    policy to evaluate (e.g. `bgz`, `mcsd_update`,
+                    `pzp_gf`).
+                  example: bgz
                 user_id:
                   type: string
+                  description: >
+                    Identifier of the practitioner performing the request
+                    (CIBG Dezi-nummer or UZI number).
+                  example: "000095254"
                 user_role:
                   type: string
+                  description: >
+                    Role of the practitioner, from the CIBG Dezi /
+                    BIG-register.
+                  example: "01.015"
                 organization_ura:
                   type: string
+                  description: URA number identifying the requester's organization.
+                  example: "00000666"
                 organization_name:
                   type: string
+                  description: Display name of the requester's organization.
+                  example: "Huisartsenpraktijk Voorbeeld"
                 organization_facility_type:
                   type: string
+                  description: >
+                    Facility type of the requester's organization, from the
+                    Vektis facility type code system.
+                  example: Z3
               additionalProperties: true
             request:
               type: object
               required: [method, protocol, path]
+              description: The FHIR request being proxied, on which the authorization decision is based.
               properties:
                 method:
                   type: string
+                  description: HTTP method of the proxied request.
                   example: GET
                 protocol:
                   type: string
+                  description: HTTP protocol version of the proxied request.
                   example: "HTTP/1.0"
                 path:
                   type: string
-                  description: Request path, without query string.
+                  description: >
+                    Path of the proxied FHIR request, relative to the FHIR
+                    RESTful root (e.g. `/Patient/123`) — it does not include
+                    any additional application path prefix such as `/fhir`.
+                    Does not include the query string.
+                  example: /Patient/3E439979-017F-40AA-594D-EBCF880FFD97
                 query:
                   type: string
-                  description: Raw query string (e.g. `_since=2024-01-01`), without the leading `?`.
+                  description: >
+                    Raw query string of the proxied request (e.g.
+                    `_since=2024-01-01`), without the leading `?`.
+                  example: "_since=2024-01-01"
                 header:
                   type: object
-                  description: HTTP headers, each value an array of strings.
+                  description: >
+                    HTTP headers of the proxied request, each value an
+                    array of strings. Only `Content-Type` is currently
+                    inspected, to detect form-encoded search/operation
+                    bodies.
                   additionalProperties:
                     type: array
                     items:
                       type: string
+                  example:
+                    Content-Type: ["application/x-www-form-urlencoded"]
                 body:
                   type: string
-                  description: Raw request body, used for form-encoded search/operation requests.
+                  description: >
+                    Raw request body. Only read when `Content-Type` is
+                    `application/x-www-form-urlencoded`, to extract search
+                    or operation parameters; ignored otherwise.
+                  example: "identifier=http://fhir.nl/fhir/NamingSystem/bsn|900214181"
             context:
               type: object
               required: [connection_type_code, data_holder_organization_id]
+              description: Context of the request that isn't part of the FHIR request itself.
               properties:
                 connection_type_code:
                   type: string
+                  description: >
+                    Type of connection used for the request. Should be a
+                    code from the HL7 EndpointConnectionType code system
+                    (http://terminology.hl7.org/CodeSystem/endpoint-connection-type)
+                    where applicable.
                   example: hl7-fhir-rest
                 data_holder_organization_id:
                   type: string
+                  description: URA number identifying the data holder's organization.
+                  example: "00000659"
                 data_holder_facility_type:
                   type: string
+                  description: >
+                    Facility type of the data holder's organization, from
+                    the Vektis facility type code system.
+                  example: Z3
                 patient_bsn:
                   type: string
+                  description: >
+                    BSN of the patient the request concerns, if already
+                    known by the caller. Uses the naming system
+                    `http://fhir.nl/fhir/NamingSystem/bsn`.
+                  example: "999911136"
 
     PDPAuthzResponse:
       type: object
       properties:
         allow:
           type: boolean
+          description: >
+            Overall decision: whether the proxied request is allowed. This
+            is the only field the PEP is required to honor.
+          example: true
         error:
           type: string
           description: Set when the request could not be evaluated (e.g. malformed input).
+          example: "unable to parse FHIR request"
         policies:
           type: object
+          description: >
+            Per-policy evaluation results, keyed by policy (scope) name.
+            Non-normative: informational, not required to be honored by the
+            PEP.
           additionalProperties:
             type: object
             properties:
               allow:
                 type: boolean
+                description: Whether this specific policy allows the request.
+                example: true
               reasons:
                 type: array
+                description: Explanations for the policy's decision.
                 items:
                   type: object
                   properties:
                     code:
                       type: string
+                      description: >
+                        Machine-readable reason code. `info` accompanies an
+                        allow; the others accompany a denial or evaluation
+                        failure. Implementations may extend this list with
+                        additional codes.
                       enum:
                         - unexpected_input
                         - not_allowed
@@ -621,5 +732,8 @@ components:
                         - internal_error
                         - pip_error
                         - info
+                      example: info
                     description:
                       type: string
+                      description: Human-readable explanation of the reason code.
+                      example: MITZ consent granted
