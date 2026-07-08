@@ -2,6 +2,8 @@
 
 Implementation of the Nuts Knooppunt specifications.
 
+[Documentation](https://nuts-foundation.github.io/nuts-knooppunt/)
+
 ## Demo EHR
 
 A demonstration Electronic Health Record (EHR) application showcasing Dutch healthcare data exchange use cases including BGZ exchange and eOverdracht workflows.
@@ -34,7 +36,7 @@ See [docs/INTEGRATION.md](docs/INTEGRATION.md) for how to integrate the Knooppun
 
 ## API Reference
 
-See [openapi.yaml](openapi.yaml) for the OpenAPI specification of the status, PDP, NVI and MITZ subscription APIs. Open `docs/api/index.html` in a browser for a Swagger UI view of the spec.
+See [openapi.yaml](openapi.yaml) for the OpenAPI specification of the status, PDP, NVI and MITZ subscription APIs, or browse it as [Swagger UI](https://nuts-foundation.github.io/nuts-knooppunt/docs/api/).
 
 ## Architecture
 
