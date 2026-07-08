@@ -3,14 +3,12 @@ info:
   title: Nuts Knooppunt API
   description: >
     API served on the Knooppunt's internal interface (default `:8081`).
-    Generated from the actual route registrations and request/response handling
-    in this repository; see `docs/INTEGRATION.md` for narrative documentation.
+
+    See `docs/INTEGRATION.md` for narrative documentation.
+
     FHIR resource bodies are typed by resource (Bundle, List, Subscription,
     OperationOutcome) but not redefined in full — each schema links to its
     definition in the FHIR R4 spec.
-    See `mitz-public.openapi.yaml` for the one endpoint on the public
-    interface (`/mitz/notify`), documented separately since it's not
-    integrated against by Knooppunt users.
   version: "1.0"
 security: []
 # No application-level authentication: the internal interface is protected by
@@ -72,9 +70,10 @@ paths:
       summary: Evaluate an authorization request
       description: >
         Evaluates whether a data-holder request should be allowed, based on
-        subject/organization, the FHIR request being proxied, and its context
-        (e.g. patient BSN, connection type). Also usable via `POST /pdp`
-        directly (equivalent, undocumented alias route).
+        subject/organization, the HTTP request that is being authorized
+        (e.g. FHIR request), and its context (e.g. patient BSN, connection
+        type). Also usable via `POST /pdp` directly (equivalent,
+        undocumented alias route).
       requestBody:
         required: true
         content:
@@ -611,37 +610,38 @@ components:
             request:
               type: object
               required: [method, protocol, path]
-              description: The FHIR request being proxied, on which the authorization decision is based.
+              description: The HTTP request that is being authorized (e.g. FHIR request).
               properties:
                 method:
                   type: string
-                  description: HTTP method of the proxied request.
+                  description: HTTP method of the request being authorized.
                   example: GET
                 protocol:
                   type: string
-                  description: HTTP protocol version of the proxied request.
+                  description: HTTP protocol version of the request being authorized.
                   example: "HTTP/1.0"
                 path:
                   type: string
                   description: >
-                    Path of the proxied FHIR request, relative to the FHIR
-                    RESTful root (e.g. `/Patient/123`) — it does not include
-                    any additional application path prefix such as `/fhir`.
-                    Does not include the query string.
+                    Path of the request. For a FHIR request, this is
+                    relative to the FHIR RESTful root (e.g. `/Patient/123`)
+                    — it does not include any additional application path
+                    prefix such as `/fhir`. Does not include the query
+                    string.
                   example: /Patient/3E439979-017F-40AA-594D-EBCF880FFD97
                 query:
                   type: string
                   description: >
-                    Raw query string of the proxied request (e.g.
+                    Raw query string of the request being authorized (e.g.
                     `_since=2024-01-01`), without the leading `?`.
                   example: "_since=2024-01-01"
                 header:
                   type: object
                   description: >
-                    HTTP headers of the proxied request, each value an
-                    array of strings. Only `Content-Type` is currently
-                    inspected, to detect form-encoded search/operation
-                    bodies.
+                    HTTP headers of the request being authorized, each
+                    value an array of strings. Only `Content-Type` is
+                    currently inspected, to detect form-encoded
+                    search/operation bodies.
                   additionalProperties:
                     type: array
                     items:
@@ -658,7 +658,7 @@ components:
             context:
               type: object
               required: [connection_type_code, data_holder_organization_id]
-              description: Context of the request that isn't part of the FHIR request itself.
+              description: Additional context for the authorization decision, not captured by the `request` object itself.
               properties:
                 connection_type_code:
                   type: string
@@ -692,8 +692,8 @@ components:
         allow:
           type: boolean
           description: >
-            Overall decision: whether the proxied request is allowed. This
-            is the only field the PEP is required to honor.
+            Overall decision: whether the request being authorized is
+            allowed. This is the only field the PEP is required to honor.
           example: true
         error:
           type: string
