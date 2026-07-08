@@ -546,6 +546,12 @@ components:
         See https://hl7.org/fhir/R4/operationoutcome.html for its schema;
         not redefined here.
       additionalProperties: true
+      example:
+        resourceType: OperationOutcome
+        issue:
+          - severity: error
+            code: value
+            diagnostics: "missing tenant request header: X-Tenant-ID"
 
     PDPAuthzRequest:
       type: object
