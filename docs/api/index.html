@@ -1,30 +1,23 @@
 <!--
-  Vendored from the npm package `swagger-ui-dist` (https://www.npmjs.com/package/swagger-ui-dist),
-  version 5.32.8. Trimmed to only the files this page references; favicons dropped.
+  Vendored from the npm package `redoc` (https://www.npmjs.com/package/redoc),
+  version 2.5.3, bundles/redoc.standalone.js only (the rest of the package is
+  build tooling / source maps, not needed to serve this page).
 
-  To upgrade to a newer swagger-ui-dist version:
-    1. npm install --no-save swagger-ui-dist@<new-version>
-    2. Copy swagger-ui-bundle.js, swagger-ui-standalone-preset.js and swagger-ui.css from
-       node_modules/swagger-ui-dist/ into this directory, renaming each to include the version,
-       e.g. swagger-ui-bundle-<new-version>.js.
-    3. Delete the old versioned files.
-    4. Update the <link>/<script> src/href attributes below to the new filenames.
-    5. Leave swagger-initializer.js as-is (it's hand-edited, not copied from the package) — it
-       points at ../../openapi.yaml so the spec is picked up straight from the repo.
+  To upgrade to a newer redoc version:
+    1. npm install --no-save redoc@<new-version>
+    2. Copy node_modules/redoc/bundles/redoc.standalone.js into this directory,
+       renaming it to include the version, e.g. redoc.standalone-<new-version>.js.
+    3. Delete the old versioned file.
+    4. Update the <script> src attribute below to the new filename.
 -->
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8">
     <title>Nuts Knooppunt API</title>
-    <link rel="stylesheet" type="text/css" href="./swagger-ui-5.32.8.css" />
-    <link rel="stylesheet" type="text/css" href="index.css" />
   </head>
-
   <body>
-    <div id="swagger-ui"></div>
-    <script src="./swagger-ui-bundle-5.32.8.js" charset="UTF-8"> </script>
-    <script src="./swagger-ui-standalone-preset-5.32.8.js" charset="UTF-8"> </script>
-    <script src="./swagger-initializer.js" charset="UTF-8"> </script>
+    <redoc spec-url="../../openapi.yaml"></redoc>
+    <script src="./redoc.standalone-2.5.3.js"></script>
   </body>
 </html>

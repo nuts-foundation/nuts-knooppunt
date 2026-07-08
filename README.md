@@ -36,7 +36,7 @@ See [docs/INTEGRATION.md](docs/INTEGRATION.md) for how to integrate the Knooppun
 
 ## API Reference
 
-See [openapi.yaml](openapi.yaml) for the OpenAPI specification of the status, PDP, NVI and MITZ subscription APIs (internal interface), or browse it as [Swagger UI](https://nuts-foundation.github.io/nuts-knooppunt/docs/api/). [mitz-public.openapi.yaml](mitz-public.openapi.yaml) covers the single public-interface endpoint (`/mitz/notify`), called by MITZ directly.
+See [openapi.yaml](openapi.yaml) for the OpenAPI specification of the status, PDP, NVI and MITZ subscription APIs (internal interface), or browse it rendered at [https://nuts-foundation.github.io/nuts-knooppunt/docs/api/](https://nuts-foundation.github.io/nuts-knooppunt/docs/api/). [mitz-public.openapi.yaml](mitz-public.openapi.yaml) covers the single public-interface endpoint (`/mitz/notify`), called by MITZ directly.
 
 ## Architecture
 
