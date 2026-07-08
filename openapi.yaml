@@ -595,6 +595,11 @@ components:
                 The user and organization on whose behalf the request is
                 being made. Additional unrecognized properties are passed
                 through as-is.
+
+                In the reference PEP setup, this is sourced directly from
+                the Nuts node's token introspection response
+                (`POST /nuts/auth/v2/accesstoken/introspect`) — no
+                transformation needed.
               properties:
                 active:
                   type: boolean
