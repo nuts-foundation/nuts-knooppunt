@@ -14,5 +14,6 @@ func NewMux() *http.ServeMux {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	})
+	mux.Handle("GET /static/", http.FileServerFS(staticFS))
 	return mux
 }

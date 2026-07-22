@@ -1,0 +1,4 @@
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); font-size: 13px; line-height: 1.58; -webkit-font-smoothing: antialiased; letter-spacing: -0.004em; }
+
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }

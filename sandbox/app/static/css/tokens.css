@@ -1,0 +1,16 @@
+  :root {
+    --rv-blauw: #154273;
+    --bg: #f7f5f1; --card: #fffdf9; --line: #e8e2d8; --line2: #ddd5c8;
+    --text: #1c1917; --text2: #78716c; --text3: #a8a29e;
+    --ink: #1c1917; --ink-2: #2d2823;
+    --teal: #0f766e; --teal-deep: #115e59; --teal-soft: #e3efec; --teal-line: #c6e0da;
+    --blue: #1e40af; --blue-soft: #e8edf8; --blue-line: #d3ddf1;
+    --sage: #3f6212; --sage-soft: #eef2e0; --sage-line: #dbe5c3;
+    --sand-soft: #f6ead9; --sand-line: #ecd9bc; --sand-ink: #7c5a2e;
+    --plum: #9d174d; --plum-soft: #fbe7f0;
+    --red: #b91c1c; --red-soft: #fbeaea; --red-line: #f3cfcf;
+    --zb: #047857;
+    --shadow: 0 1px 2px rgba(60,47,26,0.05), 0 3px 10px rgba(60,47,26,0.05);
+    --shadow-lg: 0 16px 44px rgba(60,47,26,0.13);
+    --f-serif: 'Fraunces', Georgia, serif;
+  }
