@@ -15,5 +15,11 @@ func NewMux() *http.ServeMux {
 		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	})
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := renderPage(w, "landing.html", page{Title: "GF Sandbox", Guise: "shell"}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
 	return mux
 }

@@ -1,0 +1,13 @@
+{{define "base"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+{{range .Stylesheets}}<link rel="stylesheet" href="/static/css/{{.}}.css">
+{{end}}<script type="module" src="/static/vendor/datastar.js"></script>
+</head>
+<body{{with .BodyClass}} class="{{.}}"{{end}} {{.BodyAttrs}}>
+{{template "content" .}}
+</body>
+</html>{{end}}
