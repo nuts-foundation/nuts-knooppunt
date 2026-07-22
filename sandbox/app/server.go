@@ -5,6 +5,10 @@ import (
 	"net/http"
 )
 
+var notices = map[string]string{
+	"reset-pending": "Reset arrives with the seeded dataset (E5)",
+}
+
 // NewMux returns the GF Sandbox HTTP handler. The sandbox is a standalone
 // application on its own port; it is not a knooppunt component (DESIGN.md
 // standing decision 5).
@@ -20,6 +24,17 @@ func NewMux() *http.ServeMux {
 		if err := renderPage(w, "landing.html", page{Title: "GF Sandbox", Guise: "shell"}); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+	})
+	mux.HandleFunc("GET /demo", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		p := page{Title: "Demo · GF Sandbox", Guise: "shell", Scenario: scenario, ShowReset: true, Notice: notices[r.URL.Query().Get("notice")]}
+		if err := renderPage(w, "demo-start.html", p); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+	mux.HandleFunc("POST /demo/reset", func(w http.ResponseWriter, r *http.Request) {
+		// Stub until E5 lands the seeded dataset and real reset semantics.
+		http.Redirect(w, r, "/demo?notice=reset-pending", http.StatusSeeOther)
 	})
 	return mux
 }
