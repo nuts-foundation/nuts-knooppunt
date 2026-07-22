@@ -30,7 +30,7 @@ v1 definition of done for /demo, aligned with the acceptance criteria of #532:
 
 These were settled during the planning, mockup and user-story rounds and are inputs to this design, not open questions:
 
-1. **No orchestrator tier.** The client-visible chain is four calls (NVI query, mCSD lookup, access token, data retrieval); whoever makes the calls knows when each step starts and ends, and the interior steps (Mitz check, pseudonymization, PIP, introspection) are invisible to any external caller regardless. What remains is a **capture middleware** on the sandbox backend that emits step events over SSE, following the step-event schema (GF label, request/response, outcome, timing, correlation ID). Externally initiated calls (/connect) never pass an orchestrator anyway; they are covered by OTel and PEP logging.
+1. **No orchestrator tier.** The client-visible chain is four calls (NVI query, mCSD lookup, access token, data retrieval); whoever makes the calls knows when each step starts and ends, and the interior steps (Mitz check, pseudonymization, PIP, introspection) are invisible to any external caller regardless. What remains is a **capture middleware** on the sandbox backend that emits step events over SSE, following the step-event schema (GF label, sanitized allowlisted request/response fields, outcome, timing, correlation ID). Externally initiated calls (/connect) never pass an orchestrator anyway; they are covered by OTel and PEP logging.
 2. **Explicit result screens, not notifications. Decision by the author of #532: the flow uses full result screens and modals (registration confirmation, localization results, authorization outcome) instead of snack bars or stacked notifications, so it is visually clear what happens at every step.** The earlier "look under the hood" toggle has since grown into the GF viewer: a collapsible side panel that follows the demo step by step (section 4, cross-cutting), the transparency feature of /demo and the component the later /connect inspector reuses.
 3. **The source is a genuinely separate application in a separate browser tab.** Team decision: entering data inside the demo surface would suggest everything lives in one system and the GF adds nothing. The source institution's record system is its own app with its own branding and URL; the only road between the two systems is the GF chain. In the #532 flow this carries the optional marker-proof path (section 4, step 0b).
 4. **Single multi-tenant Knooppunt instance** hosting both the consumer and the source organization (NVI pseudonymization is keyed per tenant via `X-Tenant-ID`).
@@ -48,12 +48,18 @@ Two user-facing applications on top of the existing mocked stack:
 | PRS (pseudonymization) | **not mocked**: the hosted sandbox uses the real PRS acceptance environment. The Knooppunt's pseudonymisation component already speaks the real protocol and needs only `prsurl` plus working auth (`prs:read` scope per organization URA). Offline compose leaves `prsurl` unset and falls back to the component's built-in fake pseudonymizer | n/a | external (acc) |
 | Mocked national services | fake-NVI backing store (HAPI), fake LRZa, mock Mitz (user-controllable answer, subscriptions and notifications), mock VC issuer (Dezi VC, URA VC, RoletypeVC) | n/a | existing compose ports |
 
+Mitz is mocked deliberately for `/demo`; none of the sandbox organizations or URAs need registration in the real Mitz for v1. Consent is the national-state answer the presenter changes live and reset restores per pool patient. Using test-Mitz would add onboarding, availability and shared-state dependencies, and changing the answer from the demo would require a consent-registration interface that the Knooppunt does not implement. The Knooppunt-side path remains real: `component/mitz` sends XACML closed authorization questions and creates FHIR subscriptions against the mock. Real test-Mitz connectivity remains a separate component-testing track, while national onboarding belongs to the post-v1 `/connect` mode 2. The asymmetry with PRS is intentional: pseudonymization is stateless from the demo's perspective, so its real acceptance environment adds realism without sacrificing deterministic reset.
+
 Interaction rules:
 
 - The browser never calls the Knooppunt; each app's backend proxies its own calls.
 - ZorgDossier and the sandbox share **no state, no session, no API**. ZorgDossier writes to its own FHIR store and registers in the NVI; the sandbox finds that data only through the GF chain (NVI, mCSD, token, retrieval).
-- The sandbox backend records every proxied call as a step event (correlation ID per scenario run, bounded in-memory retention, SSE to the browser). BSN visibility in events is deployment-conditional: plaintext test BSNs locally, masked on shared deployments.
+- The sandbox backend records every proxied call as a step event (correlation ID per scenario run, bounded in-memory retention, SSE to the browser). Capture is allowlist-based and removes authorization headers, cookies, access tokens, credentials and other secrets before an event exists. BSN visibility in events is deployment-conditional: plaintext test BSNs locally, masked on shared deployments.
 - Opening ZorgDossier from the sandbox is a plain `target="_blank"` link: genuinely a second browser tab, matching decision 3.
+
+Application tech stack: the sandbox and ZorgDossier UIs start as server-rendered hypermedia applications on the demo-ehr Node backend (its proxy and FHIR plumbing reused), with **Datastar as the v1 frontend implementation**. Pages are server templates ported from the wireframe, live updates arrive over the E6 SSE stream, the journey strip stays vanilla JS, and Datastar is vendored as one static file: no npm dependency tree and no build step.
+
+The choice is deliberately reversible, with exactly one frontend implementation active: Datastar initially, or Preact + htm after a cutover. Backend routes, the step-event JSON schema, design tokens and CSS, and the framework-free journey-map driver stay independent of Datastar. Review the choice after the first complete vertical slice and again when the consent-revocation flow lands. If Datastar requires growing bespoke client JavaScript or duplicated client state, makes SSE reconnect/resume behavior fragile, or materially slows implementation and testing of the stateful viewer and forms, stop adding workarounds and use AI-assisted refactoring immediately to replace it with the existing buildless **Preact + htm** shape in one migration.
 
 ## 4. The /demo experience
 
@@ -70,7 +76,7 @@ The flow of #532, framed by a slim sandbox demo bar (scenario label, reset). Con
   3. The practitioner explicitly confirms retrieval from that source before anything is pulled.
 5. **Authorization result page**: the GF Autorisatie outcome, top-level result plus all sub-checks performed under the use-case policy: authentication check passed (Dezi VC, URA VC, RoletypeVC), practitioner role check passed (Dezi info), consent check passed (verified via Mitz), data request scope check passed (within what the use case permits). **Demo disclaimer at the top**: in production these checks run on the source side and only a yes/no comes back; the breakdown is shown for demo purposes only.
 6. **Enriched home screen**: the overview now shows data from two sources, De Plataan and Zonnebloem, with source attribution visually explicit on every element. On the marker path the user's own ZorgDossier entry appears with the marker word highlighted and a "just entered by you in ZorgDossier" chip.
-7. **Consent revocation (GF Toestemming, optional ending)**: the patient revokes consent in Mitz (in the demo: the "withdraw consent" control on the enriched record's optional-ending card, framed as the patient acting in Mitz). The practitioner receives a notification via the Mitz subscription from step 3, Zonnebloem's data is removed from the overview, and a new retrieval attempt fails at the consent sub-check on the authorization result page (fail-closed: no consent, no data).
+7. **Consent revocation (GF Toestemming, optional ending)**: the patient revokes consent in Mitz. In the demo, the "withdraw consent" control on the enriched record's optional-ending card flips the mock Mitz answer and presents that as the patient having acted in the Mitz portal. The subscription notification is a UX event only: demo plumbing shows it to the practitioner and removes previously retrieved Zonnebloem data from the overview; it does not grant or deny access. On the next retrieval attempt the PEP asks the PDP for a new authorization decision, the PDP performs a fresh Mitz closed question, and the BGZ policy denies the request fail-closed when consent is absent. Access enforcement therefore remains correct even if notification delivery is delayed or fails.
 
 Cross-cutting:
 
@@ -180,8 +186,8 @@ The sandbox backend emits one step event per proxied call:
   "seq": 3,
   "gf": "localization",     // GF label: pseudonym|localization|addressing|authentication|consent|authorization|exchange
   "actor": "sandbox-backend",
-  "request": { "method": "GET", "path": "/nvi/List?…", "body": null },
-  "response": { "status": 200, "body": { } },
+  "request": { "method": "GET", "path": "/nvi/List?…", "body": null }, // sanitized, allowlisted fields only
+  "response": { "status": 200, "body": { } },                            // sanitized, allowlisted fields only
   "outcome": "ok",          // ok|deny|error
   "durationMs": 180,
   "ts": "…"
@@ -190,7 +196,8 @@ The sandbox backend emits one step event per proxied call:
 
 - The patiëntaanmelding (NVI publish, Mitz subscribe) and the inbound Mitz consent notification are events in the same stream, with `gf: "localization"` and `gf: "consent"` respectively.
 - Transport: SSE to the browser for the run's own events; bounded in-memory retention (survives a page refresh within the window).
-- Redaction: BSNs plaintext locally, masked on shared deployments (deployment flag, not always-on).
+- Secret redaction: capture only allowlisted headers and payload fields. Authorization headers, cookies, access tokens, credentials and other secrets are removed before the event object is constructed, so they are neither retained nor streamed.
+- Identifier redaction: synthetic test BSNs are plaintext locally and masked on shared deployments (deployment flag, not always-on).
 - Demo consumes `gf`, `outcome`, `durationMs` plus selected response fields (the result screens render real chain output); the full records are retained for the deeper inspector level (section 8).
 - Pseudonymization is interior to the Knooppunt (the sandbox backend never calls PRS itself), so `gf: "pseudonym"` entries derive from the Knooppunt's OTel span rather than the capture middleware. On the hosted environment that span is a real call to the PRS acceptance environment; offline it is the built-in fake fallback.
 - Request strings shown in the wireframe's Technical mode are illustrative, not API contracts: the NVI List API requires `patient:identifier=...` (not `patient=`), and BGZ retrieval is a set of resource-level FHIR queries rather than one `/bgz/Bundle` call.
@@ -219,14 +226,14 @@ The sandbox plays a counterpart role; external parties bring their own stack and
 
 ## 9. Build plan: epics
 
-Epics for the /demo release. The clickable wireframe (`sandbox/wireframe.html`, a design artifact, not production code) is the screen-by-screen reference for layout and copy. Each epic names the existing components it extends, so nothing is green-field by accident. The two redesigns live inside E1 (Plataan EHR) and E7 (ZorgDossier), not as separate epics, so no screen ever ships unstyled.
+Epics for the /demo release. The clickable wireframe (`sandbox/wireframe.html`, a design artifact, not production code) is the screen-by-screen reference for layout and copy. Each epic names the existing components it extends, so nothing is green-field by accident. The two redesigns live inside E1 (Plataan EHR) and E7 (ZorgDossier), not as separate epics, so no screen ever ships unstyled. Every UI-bearing epic (E1-E4, E7 and E8) follows the section 3 Datastar-first decision and its AI-assisted Preact + htm fallback; E6 keeps the shared event contract framework-neutral so that migration does not require backend rework.
 
 ### E1 Sandbox shell and Plataan EHR design system
 
-Landing/path chooser (/, /demo; /connect as a visible-but-disabled stub), the slim demo bar (scenario label, reset), the Plataan EHR app skeleton implementing the section 6.2 design system (tokens, sidebar, top bar, cards, buttons) as reusable components, and the GF viewer shell: the collapsible right-hand side panel with its edge tab, Functional/Technical switch and journey strip (live states arrive with E6's step events; the full-journey page can land with E6).
+Landing/path chooser (/, /demo; /connect as a visible-but-disabled stub), the slim demo bar (scenario label, reset), the Plataan EHR app skeleton implementing the section 6.2 design system (tokens, sidebar, top bar, cards, buttons) as reusable components, and the GF viewer shell: the collapsible right-hand side panel with its edge tab, Functional/Technical switch and journey strip (live states arrive with E6's step events; the full-journey page can land with E6). Implement the v1 UI with vendored Datastar while keeping backend routes, the step-event contract, CSS/design tokens and the journey-map driver independent enough for a direct AI-assisted migration to buildless Preact + htm if the section 3 fallback triggers occur.
 
 - Extends: demo-ehr's consumer guise is the code starting point; its current pages are reference material only.
-- Acceptance: a user lands on /, picks Demo, sees the Plataan EHR login; chrome matches the wireframe; all UI copy is English.
+- Acceptance: a user lands on /, picks Demo, sees the Plataan EHR login; chrome matches the wireframe; all UI copy is English; Datastar drives the server-rendered interactions without coupling the backend event contract or shared visual assets to Datastar.
 
 ### E2 Dezi login and session (GF Authentication)
 
@@ -259,23 +266,23 @@ Everything in section 5: the plataan vector (URA 00000010), the idempotent boots
 
 ### E6 Step events (capture middleware)
 
-Capture middleware on the sandbox backend proxy: correlation ID per scenario run, one step-event record per forwarded call following the section 7 schema, SSE to the browser, bounded in-memory retention, deployment-conditional BSN redaction. The run correlation also drives the per-patient demo lock (section 5.7). Feeds the demo's live states now and the /connect inspector later.
+Capture middleware on the sandbox backend proxy: correlation ID per scenario run, one step-event record per forwarded call following the section 7 schema, allowlist-based capture with secret redaction before event construction, SSE to the browser, bounded in-memory retention, and deployment-conditional BSN redaction. The run correlation also drives the per-patient demo lock (section 5.7). Feeds the demo's live states now and the /connect inspector later. The event schema and resume semantics are framework-neutral: Datastar consumes them first, but a Preact + htm fallback consumes the same contract without backend changes.
 
-- Acceptance: events arrive in order, carry the run's correlation ID, and survive a page refresh within the retention window.
+- Acceptance: events arrive in order, carry the run's correlation ID, survive a page refresh within the retention window, contain no authorization headers, cookies, access tokens, credentials or other secrets, and can be consumed without Datastar-specific fields or transport behavior.
 
 ### E7 ZorgDossier source app and path B marker entry
 
-The source-side extension of demo-ehr: split the source guise into the standalone ZorgDossier application (own port, opened via `target="_blank"` from the sandbox card), restyle it per section 6.3 into a credible product from another vendor, and build the path B flow: the allergy entry form with a free-text note for the marker word (`DEMO-` prefix convention), the explicit NVI checkbox that (re)registers the record via `/nvi/List` on save, and tagging of user-created resources for reset.
+The source-side extension of demo-ehr: split the source guise into the standalone ZorgDossier application (own port, opened via `target="_blank"` from the sandbox card), restyle it per section 6.3 into a credible product from another vendor, and build the path B flow: the allergy entry form with a free-text note for the marker word (`DEMO-` prefix convention), the explicit NVI checkbox that (re)registers the record via `/nvi/List` on save, and tagging of user-created resources for reset. It uses the same Datastar-first, buildless stack and the same Preact + htm fallback rule as the sandbox, without sharing visual components or branding.
 
 - Extends: demo-ehr (FHIR write plumbing and proxy reused); the NVI registration path is shared with the E5 seed.
 - Acceptance: a record entered in ZorgDossier is retrievable in the sandbox purely through the chain; the marker word appears highlighted in the enriched record with the "just entered by you in ZorgDossier" chip; reset removes it from both the FHIR store and the NVI.
 
 ### E8 Consent revocation (GF Consent)
 
-Promote `test/mitzmock` from an e2e-test helper to a standalone compose service with a consent toggle and the subscription/notification flow: flipping consent notifies subscribers (the E3 subscription), the EHR shows the Mitz notification and removes De Zonnebloem's data from the overview, and a new retrieval fails on the consent sub-check (fail-closed) with the deny breakdown.
+Promote `test/mitzmock` from an e2e-test helper to a standalone compose service with a consent toggle and the subscription/notification flow: flipping consent notifies subscribers (the E3 subscription), the EHR shows the Mitz notification and removes De Zonnebloem's data from the overview, and a new retrieval independently triggers a fresh closed question and fails on the consent sub-check (fail-closed) with the deny breakdown. Notification processing is demo UX plumbing, not an authorization dependency.
 
 - Extends: `test/mitzmock`, the Knooppunt's `/mitz/notify` handler (which today logs the notification and discards the body), sandbox backend (notification intake and correlation to the patient), the bell/notification UI.
-- Acceptance: the #532 revocation criteria hold: notification received, source data removed, re-retrieval blocked at the consent check; restoring consent restores the happy path.
+- Acceptance: the #532 revocation criteria hold: notification received, source data removed from the overview, re-retrieval blocked by a fresh consent check even if the notification is delayed or lost; restoring consent restores the happy path.
 
 ### Sequencing
 
@@ -287,7 +294,7 @@ E1, E5, E6 and E7 can start in parallel. E2 and E3 build on E1; E4 needs E5 and 
 - No BGZ test dataset exists yet; ask in COT (per the issue author) and swap the synthetic set of 5.3 for it when available.
 - The authorization sub-check breakdown (step 5) needs a source: in production the PDP returns yes/no. Decide at the start of E4 whether the demo derives the breakdown from PDP debug output or scripts it alongside the real top-level decision, and keep the disclaimer either way.
 - Scope of the mock Dezi login: which claims the stub issues (name, role, UZI, URA) and how they flow into the token/PDP input.
-- Mitz subscription and notification shape in the mock: no national spec is implemented in `mitzmock` yet; keep the mock's interface minimal and swappable.
+- Mitz subscription and notification shape in the mock: no national spec is implemented in `mitzmock` yet, and the current `/mitz/notify` handler logs and discards notifications. Keep the mock's interface minimal and swappable, and make E8's run-scoped notification delivery explicitly independent from authorization enforcement.
 - Naming: "GF Sandbox", "Plataan EHR" and "ZorgDossier" are working titles. Issue #532 called the hospital "Ziekenhuis ZMC", but ZMC is the abbreviation of a real hospital and demo organizations must be fictional; hence "Ziekenhuis De Plataan", following the botanical naming of the demo organizations (the existing `sunflower` vector maps to De Zonnebloem). Check any future name against real organizations before it lands in code.
 - Hosting: the sandbox is demoed from a hosted environment (extending the existing Helm charts); docker compose is the offline dev path only. Charts for the sandbox and ZorgDossier apps, plus the seed job, are needed for the first hosted deploy.
 - PRS acceptance environment: confirm access (connection details, auth and allowlisting of the demo URAs 00000010/00000020) and that RvIG test-BSNs are accepted there. Note the failure mode: with `prsurl` set, an unreachable PRS fails the lookup (no silent fake fallback), so a demo depends on acc availability; decide whether that is acceptable or needs a visible degradation.
