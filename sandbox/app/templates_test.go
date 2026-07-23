@@ -65,3 +65,14 @@ func TestLoginScreenMatchesWireframeCopy(t *testing.T) {
 	}
 	require.Contains(t, body, `href="/demo/ehr"`)
 }
+
+func TestEhrHomeShowsFullChrome(t *testing.T) {
+	status, body := getPage(t, "/demo/ehr")
+	require.Equal(t, http.StatusOK, status)
+	for _, s := range []string{"sb-bar", `class="app"`, `class="side"`, `class="top"`, "hood-dock", "gf-tab", `id="gf-viewer-steps"`, "/static/js/journey-strip.js"} {
+		require.Contains(t, body, s)
+	}
+	require.Contains(t, body, "Not signed in", "E1 has no session yet")
+	require.Contains(t, body, `class="hood-dock on"`, "viewer opens by default past login")
+	require.Contains(t, body, "hood-open", "body binds the hood-open class")
+}

@@ -249,3 +249,5 @@
   .btn.dark-ghost { background: transparent; color: #b3a89a; border: 1px solid rgba(247,245,241,0.22); width: 100%; justify-content: center; cursor: not-allowed; }
   .ls-note { font-size: 10.5px; color: #8f8578; margin-top: 20px; line-height: 1.6; }
 
+  .next-list { margin: 10px 0 2px 18px; font-size: 12.5px; line-height: 1.7; color: var(--text2); }
+  .next-list b { color: var(--text); font-weight: 600; }

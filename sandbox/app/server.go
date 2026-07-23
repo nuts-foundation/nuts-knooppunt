@@ -43,5 +43,17 @@ func NewMux() *http.ServeMux {
 		// Stub until E5 lands the seeded dataset and real reset semantics.
 		http.Redirect(w, r, "/demo?notice=reset-pending", http.StatusSeeOther)
 	})
+	mux.HandleFunc("GET /demo/ehr", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		p := page{
+			Title: "Home · Plataan EHR", Guise: "ehr",
+			Scenario: scenario, ShowReset: true,
+			BodyClass: "hood-open", BodyAttrs: viewerBodyAttrs(true),
+			Active: "dossier", TopTitle: "Home", ViewerOpen: true,
+		}
+		if err := renderPage(w, "ehr-home.html", p); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
 	return mux
 }

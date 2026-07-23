@@ -1,0 +1,23 @@
+{{define "content"}}
+{{template "demobar" .}}
+<div class="app">
+  {{template "sidebar" .}}
+  <div class="main-col">
+    {{template "topbar" .}}
+    <main class="content">
+      <div class="card">
+        <h3>Plataan EHR shell</h3>
+        <div class="h-sub">Application chrome for the GF Sandbox demo</div>
+        <p>You are looking at the Plataan EHR application shell: sidebar, top bar and the
+        GF viewer on the right edge. The next epics fill it in:</p>
+        <ul class="next-list">
+          <li><b>Dezi sign-in</b> (GF Authentication) puts the practitioner session in the top bar.</li>
+          <li><b>The patient list</b> brings the records and their shared/local-only status.</li>
+          <li><b>Live step events</b> make the GF viewer follow every call as it happens.</li>
+        </ul>
+      </div>
+    </main>
+  </div>
+  {{template "viewer" .}}
+</div>
+{{end}}
