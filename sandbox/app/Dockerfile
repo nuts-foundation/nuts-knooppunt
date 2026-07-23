@@ -7,7 +7,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 COPY ./test/testdata/go.mod test/testdata/
 COPY ./test/testdata/go.sum test/testdata/
-RUN go mod download
+RUN go mod download && go mod verify
 COPY . .
 RUN CGO_ENABLED=0 go build -o /gf-sandbox ./sandbox/app
 

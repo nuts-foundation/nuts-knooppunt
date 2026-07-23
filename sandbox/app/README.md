@@ -49,8 +49,8 @@ the migration replaces the `data-*` interactivity with small Preact + htm island
 duplicated client state, fragile SSE reconnect/resume behavior, or the stateful viewer/forms work slowing down
 materially).
 
-Datastar's event-attribute grammar is `data-on:click` (colon-separated), not `data-on-click` — verified against the
-vendored v1.0.2 bundle. Keep this form when adding interactivity.
+Datastar's event-attribute grammar is `data-on:click` (colon-separated), not `data-on-click`, as verified against
+the vendored v1.0.2 bundle. Keep this form when adding interactivity.
 
 ## Integration points
 
@@ -58,17 +58,22 @@ vendored v1.0.2 bundle. Keep this form when adding interactivity.
 - The reset stub, `POST /demo/reset` (E5).
 - The `#gf-viewer-steps` container and `window.GFJourney.apply(stepEvent)` / `.reset()`, consuming the DESIGN.md §7
   step-event schema (E6).
-- The `GF_STEP` mapping in `static/js/journey-model.js` is provisional and owned by E6 from here.
 
 **E6 carry-forward**, so the gap between what is wired today and what animates is explicit:
 
-1. The `GF_STEP` mapping in `static/js/journey-model.js` is provisional — E6 owns live journey semantics from here.
+1. The `GF_STEP` mapping in `static/js/journey-model.js` is provisional: E6 owns live journey semantics from here.
 2. The `.js-lock.unlocked` rules (`viewer.css`) and the `body[data-s="4"]` lock stagger delays are intentionally
    inert until E6 lands lock-unlock semantics: no JS shipped today toggles the `unlocked` class.
 3. All `body[data-s="6"]` withdrawal-scene rules (key-hand dimming, retrieved-record removal, the Mitz shield
    flipping to deny) are unreachable today because `GF_STEP` in `static/js/journey-model.js` tops out at 5
    (`exchange`), so `document.body.dataset.s` never reaches `"6"`. The consent-withdrawal scene mapping is E6/E8
    work.
+4. The wireframe's dock stagger rules (`wireframe.html` lines 679-683: `body[data-s="1"] #js-prs`/`#js-nvi`/`#js-mitz`,
+   `body[data-s="3"] #js-pin`, and the `.js-gdelay` transition delays) were not ported with the 354-556 CSS range
+   that became `viewer.css`, so step lighting has no choreographed delays until E6 ports them.
+5. The driver renders the DESIGN.md §7 `error` outcome the same as `ok` (`journey-strip.js`'s `apply` only
+   special-cases `outcome === 'deny'`); the wireframe has no error presentation to port, so E6 must choose a
+   deliberate treatment for it.
 
 ## Provenance
 
