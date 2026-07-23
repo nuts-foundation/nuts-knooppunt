@@ -111,7 +111,7 @@
   .kv .v.mono { font-family: 'Fira Mono', monospace; font-size: 10.5px; }
 
   /* modal */
-  .modal-veil { position: fixed; inset: 36px 0 0 0; background: rgba(28,25,23,0.45); backdrop-filter: blur(4px); z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding: 52px 20px; overflow: auto; }
+  .modal-veil { position: fixed; inset: 0; background: rgba(28,25,23,0.45); backdrop-filter: blur(4px); z-index: 100; display: flex; align-items: flex-start; justify-content: center; padding: 52px 20px; overflow: auto; }
   body.hood-open .modal-veil { right: min(560px, 92vw); }
   .modal { background: var(--card); border-radius: 18px; width: 640px; max-width: 100%; box-shadow: 0 32px 80px rgba(28,25,23,0.35); overflow: hidden; }
   .modal-head { padding: 22px 26px 0; }
@@ -222,7 +222,7 @@
   .mitz-note span { font-size: 11.5px; color: var(--text2); }
 
   /* ===== Login (split screen) ===== */
-  .login-split { display: flex; min-height: calc(100vh - 67px); }
+  .login-split { display: flex; min-height: calc(100vh - 31px); }
   .ls-left { flex: 1.15; background: radial-gradient(700px 420px at 60% 40%, #f3efe7 0%, var(--bg) 70%); display: flex; flex-direction: column; padding: 30px 38px; }
   .ls-brand { display: flex; align-items: center; gap: 11px; }
   .ls-brand .logo { width: 40px; height: 40px; border-radius: 50%; background: var(--ink); color: var(--bg); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 19px; font-family: var(--f-serif); }
