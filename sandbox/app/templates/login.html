@@ -1,0 +1,59 @@
+{{define "content"}}
+{{template "demobar" .}}
+    <div class="login-split">
+      <div class="ls-left">
+        <div class="ls-brand">
+          <span class="logo">P</span>
+          <div><h1>Plataan<span>.</span>ehr</h1><div class="bsub">De Plataan Hospital · test environment</div></div>
+        </div>
+        <div class="ls-mid">
+          <svg width="340" height="270" viewBox="0 0 340 270" fill="none">
+            <ellipse cx="170" cy="250" rx="128" ry="9" fill="#e8e2d8"/>
+            <path d="M163,250 C165,205 162,185 152,158 M163,250 C164,210 170,182 186,160 M158,168 C146,150 132,142 118,138 M180,172 C196,152 210,146 224,144" stroke="#3a332c" stroke-width="9" stroke-linecap="round" fill="none"/>
+            <circle cx="112" cy="105" r="46" fill="#cfe0d8"/>
+            <circle cx="176" cy="76" r="56" fill="#9fc4b8"/>
+            <circle cx="232" cy="112" r="42" fill="#77a89a"/>
+            <circle cx="158" cy="128" r="38" fill="#e3efec"/>
+            <circle cx="205" cy="146" r="26" fill="#cfe0d8"/>
+            <circle cx="97" cy="143" r="21" fill="#9fc4b8"/>
+            <g transform="translate(52,158) rotate(-7)">
+              <rect x="0" y="0" width="104" height="66" rx="9" fill="#fffdf9" stroke="#e8e2d8"/>
+              <circle cx="19" cy="19" r="9" fill="#f6ead9" stroke="#ecd9bc"/>
+              <rect x="34" y="13" width="52" height="5" rx="2.5" fill="#e0d9cc"/>
+              <rect x="34" y="23" width="38" height="5" rx="2.5" fill="#ece6da"/>
+              <rect x="10" y="40" width="84" height="5" rx="2.5" fill="#ece6da"/>
+              <rect x="10" y="50" width="62" height="5" rx="2.5" fill="#ece6da"/>
+            </g>
+            <g transform="translate(236,168)">
+              <circle cx="22" cy="22" r="22" fill="#fffdf9" stroke="#c6e0da"/>
+              <path d="M22,10 L31,13.5 L31,21 C31,27 27.5,30.8 22,33.5 C16.5,30.8 13,27 13,21 L13,13.5 Z" fill="#e3efec" stroke="#0f766e" stroke-width="1.4" stroke-linejoin="round"/>
+              <path d="M17.5,21.5 L20.8,24.8 L27,17.6" stroke="#0f766e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </g>
+          </svg>
+          <div class="ls-cap">
+            <b>One overview, wherever the data lives.</b>
+            <span>Plataan EHR retrieves data from other care providers securely through the generic functions: locatable, addressed, with consent.</span>
+          </div>
+        </div>
+        <div class="ls-foot">All people and data are synthetic.</div>
+      </div>
+      <div class="ls-right">
+        <div class="ls-form">
+          <h2>Welcome to the<br>Plataan EHR portal</h2>
+          <div class="fsub">Sign in with your Dezi wallet to continue.</div>
+          <div class="dz-card">
+            <div class="dz-row"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.8"/><path d="M2.8,13.5 C3.4,10.6 5.4,9.3 8,9.3 C10.6,9.3 12.6,10.6 13.2,13.5"/></svg>Your name and role travel with you from your Dezi wallet</div>
+            <div class="dz-row"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="11" height="7" rx="1.5"/><path d="M5.5,6.5 L5.5,4.8 a2.5,2.5 0 0 1 5,0 L10.5,6.5"/></svg>UZI number and organisation cryptographically proven</div>
+            <div class="dz-row"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8,1.8 L13.5,4 L13.5,8 C13.5,11.4 11.3,13.6 8,14.8 C4.7,13.6 2.5,11.4 2.5,8 L2.5,4 Z"/><path d="M5.6,8 L7.3,9.7 L10.6,6.4"/></svg>Issues Dezi VC, URA VC and Roletype VC</div>
+          </div>
+          <a class="btn cream big" href="/demo/ehr">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3.5" width="13" height="9.5" rx="2"/><path d="M10.5,8.25 L14.5,8.25 M12,6.5 L12,10"/></svg>
+            Sign in with Dezi
+          </a>
+          <div class="ls-or">or</div>
+          <button class="btn dark-ghost" disabled>Sign in with UZI card · not available in this demo</button>
+          <div class="ls-note">Simulated login (GF Authentication) · test environment with synthetic data only</div>
+        </div>
+      </div>
+    </div>
+{{end}}

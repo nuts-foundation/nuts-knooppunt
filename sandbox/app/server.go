@@ -25,6 +25,13 @@ func NewMux() *http.ServeMux {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
+	mux.HandleFunc("GET /demo/login", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		p := page{Title: "Sign in · Plataan EHR", Guise: "ehr", Scenario: scenario, ShowReset: true}
+		if err := renderPage(w, "login.html", p); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
 	mux.HandleFunc("GET /demo", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		p := page{Title: "Demo · GF Sandbox", Guise: "shell", Scenario: scenario, ShowReset: true, Notice: notices[r.URL.Query().Get("notice")]}

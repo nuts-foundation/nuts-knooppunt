@@ -48,3 +48,20 @@ func TestResetStubRedirectsWithNotice(t *testing.T) {
 	_, body := getPage(t, "/demo?notice=reset-pending")
 	require.Contains(t, body, "Reset arrives with the seeded dataset (E5)")
 }
+
+func TestLoginScreenMatchesWireframeCopy(t *testing.T) {
+	status, body := getPage(t, "/demo/login")
+	require.Equal(t, http.StatusOK, status)
+	for _, s := range []string{
+		"Welcome to the", "Plataan EHR portal",
+		"Sign in with your Dezi wallet to continue.",
+		"Sign in with Dezi",
+		"Sign in with UZI card · not available in this demo",
+		"Simulated login (GF Authentication) · test environment with synthetic data only",
+		"One overview, wherever the data lives.",
+		"All people and data are synthetic.",
+	} {
+		require.Contains(t, body, s)
+	}
+	require.Contains(t, body, `href="/demo/ehr"`)
+}
