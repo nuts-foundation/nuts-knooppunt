@@ -249,6 +249,15 @@ services:
     stdin_open: true
     tty: true
 
+  gf-sandbox:
+    build:
+      context: .
+      dockerfile: sandbox/app/Dockerfile
+    ports:
+      - "8091:8091"  # same host port as demo-ehr maps; don't combine --profile demoehr with --profile sandbox (split lands with E7)
+    profiles:
+      - sandbox
+
   # Aspire Dashboard - unified observability for traces, logs, and metrics
   # UI available at http://localhost:18888
   aspire-dashboard:
