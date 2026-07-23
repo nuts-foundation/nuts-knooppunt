@@ -57,7 +57,7 @@ Interaction rules:
 - The sandbox backend records every proxied call as a step event (correlation ID per scenario run, bounded in-memory retention, SSE to the browser). Capture is allowlist-based and removes authorization headers, cookies, access tokens, credentials and other secrets before an event exists. BSN visibility in events is deployment-conditional: plaintext test BSNs locally, masked on shared deployments.
 - Opening ZorgDossier from the sandbox is a plain `target="_blank"` link: genuinely a second browser tab, matching decision 3.
 
-Application tech stack: the sandbox and ZorgDossier UIs start as server-rendered hypermedia applications on the demo-ehr Node backend (its proxy and FHIR plumbing reused), with **Datastar as the v1 frontend implementation**. Pages are server templates ported from the wireframe, live updates arrive over the E6 SSE stream, the journey strip stays vanilla JS, and Datastar is vendored as one static file: no npm dependency tree and no build step.
+Application tech stack: the sandbox UI is a server-rendered hypermedia application on a small standalone Go backend in `sandbox/app` (stdlib `net/http` + `html/template` + `go:embed`, following the `mcsdadmin` pattern in this repo), with **Datastar as the v1 frontend implementation**. demo-ehr's pages remain reference material; its proxy role is superseded by Go equivalents (the knooppunt client plumbing in `lib/` is reused directly from E2/E4 on). Whether ZorgDossier (E7) reuses demo-ehr's Node plumbing or follows the same Go shape is decided in E7. Pages are server templates ported from the wireframe, live updates arrive over the E6 SSE stream, the journey strip stays vanilla JS, and Datastar is vendored as one static file: no npm dependency tree and no build step.
 
 The choice is deliberately reversible, with exactly one frontend implementation active: Datastar initially, or Preact + htm after a cutover. Backend routes, the step-event JSON schema, design tokens and CSS, and the framework-free journey-map driver stay independent of Datastar. Review the choice after the first complete vertical slice and again when the consent-revocation flow lands. If Datastar requires growing bespoke client JavaScript or duplicated client state, makes SSE reconnect/resume behavior fragile, or materially slows implementation and testing of the stateful viewer and forms, stop adding workarounds and use AI-assisted refactoring immediately to replace it with the existing buildless **Preact + htm** shape in one migration.
 
@@ -174,7 +174,7 @@ The elderly care institution's record system, opened in its own tab for the mark
 
 The GF viewer and the full-journey view use the wireframe's dark "under the hood" styling, so the journey map's glow and color coding stay readable against the warm EMR.
 
-demo-ehr is the codebase starting point for both EMR guises (its proxy and FHIR plumbing are reused); the restyles replace its CSS/layout per guise.
+demo-ehr is reference material for the EMR guises; the sandbox backend is Go (section 3), and E7 decides ZorgDossier's stack.
 
 ## 7. Step events (the shared substrate)
 
@@ -232,7 +232,7 @@ Epics for the /demo release. The clickable wireframe (`sandbox/wireframe.html`, 
 
 Landing/path chooser (/, /demo; /connect as a visible-but-disabled stub), the slim demo bar (scenario label, reset), the Plataan EHR app skeleton implementing the section 6.2 design system (tokens, sidebar, top bar, cards, buttons) as reusable components, and the GF viewer shell: the collapsible right-hand side panel with its edge tab, Functional/Technical switch and journey strip (live states arrive with E6's step events; the full-journey page can land with E6). Implement the v1 UI with vendored Datastar while keeping backend routes, the step-event contract, CSS/design tokens and the journey-map driver independent enough for a direct AI-assisted migration to buildless Preact + htm if the section 3 fallback triggers occur.
 
-- Extends: demo-ehr's consumer guise is the code starting point; its current pages are reference material only.
+- Extends: the `mcsdadmin` template/embed pattern is the code precedent; demo-ehr's pages are reference material only.
 - Acceptance: a user lands on /, picks Demo, sees the Plataan EHR login; chrome matches the wireframe; all UI copy is English; Datastar drives the server-rendered interactions without coupling the backend event contract or shared visual assets to Datastar.
 
 ### E2 Dezi login and session (GF Authentication)
