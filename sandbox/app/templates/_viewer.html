@@ -1,0 +1,31 @@
+{{define "viewer"}}<aside class="hood-dock {{if .ViewerOpen}}on{{else}}peek{{end}}" id="hood-dock" data-class='{"on":$hood.open,"peek":!$hood.open}'>
+  <button class="gf-tab" id="gf-tab" title="GF viewer" data-on:click="$hood.open = true">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.8,1.5 L3.5,9 L7.4,9 L7.2,14.5 L12.5,7 L8.6,7 Z"/></svg>
+    <span class="lblv">GF Viewer</span>
+    <span class="chev">❯</span>
+  </button>
+  <div class="dock-map">{{template "journeysvg" .}}</div>
+  <div class="dock-info">
+    <div class="hd-head">
+      <div>
+        <div class="hd-eyebrow">Under the hood · live</div>
+        <h3 id="hd-title">This step</h3>
+      </div>
+      <button class="hd-close" data-on:click="$hood.open = false">✕</button>
+    </div>
+    <div class="hd-mode">
+      <button id="hm-f" class="on" data-class='{"on":!$hood.tech}' data-on:click="$hood.tech = false">Functional</button>
+      <button id="hm-t" data-class='{"on":$hood.tech}' data-on:click="$hood.tech = true">Technical</button>
+    </div>
+    <div class="hd-body" id="gf-viewer-steps">
+      <div class="hd-sec on">
+        <div class="lane-lbl">What happens here</div>
+        <p class="hd-idle">The viewer follows the demo step by step. Live step events arrive with
+        the step-event stream (E6); until then this panel shows the journey map in its resting state.</p>
+        <p class="hd-idle" data-show="$hood.tech">Technical mode will add the captured request per
+        step (method, path, status) and the interior OTel spans.</p>
+      </div>
+    </div>
+  </div>
+</aside>
+<script type="module" src="/static/js/journey-strip.js"></script>{{end}}

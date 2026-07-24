@@ -1,0 +1,19 @@
+{{define "content"}}
+{{template "demobar" .}}
+<main class="shell-page">
+  <h1>The indexed pull, end to end</h1>
+  <p class="lede">Dr. S. el Amrani, internist at Ziekenhuis De Plataan, needs the patient summary
+  (BGZ) of a patient who lives at elderly care institution De Zonnebloem. The demo walks the full
+  GF chain: sign in with Dezi, share the patient so she becomes locatable in the NVI, localize and
+  retrieve her data from the source, with every authorization check made visible.</p>
+  <div class="path-grid">
+    <section class="path-card">
+      <h2>Plataan EHR</h2>
+      <p>The hospital's own record system, and the surface of this demo. The GF viewer rides along
+      on the right edge of every screen and narrates what happens under the hood at each step.</p>
+      <a class="cta" href="/demo/login">Open the Plataan EHR</a>
+    </section>
+  </div>
+  <p class="shell-foot">All people, organizations and data in this environment are synthetic.</p>
+</main>
+{{end}}

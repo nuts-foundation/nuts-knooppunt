@@ -1,0 +1,8 @@
+{{define "demobar"}}<div class="sb-bar"><div class="sb-inner">
+  <span class="sb-mark">GF</span><span class="sb-name">GF Sandbox</span><span class="sb-badge">DEMO</span>
+  {{with .Scenario}}<span class="sb-scenario">{{.}}</span>{{end}}
+  {{with .Notice}}<span class="sb-notice">{{.}}</span>{{end}}
+  {{if .ShowReset}}<div class="sb-right">
+    <form method="post" action="/demo/reset"><button class="sb-link" type="submit">Reset</button></form>
+  </div>{{end}}
+</div></div>{{end}}
