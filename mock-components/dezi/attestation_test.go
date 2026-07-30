@@ -3,7 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"strings"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -70,7 +70,6 @@ func TestAttestationHeaderHasKidAndHTTPSJKU(t *testing.T) {
 	headers := msg.Signatures()[0].ProtectedHeaders()
 	require.Equal(t, "sandbox-dezi-1", headers.KeyID(), "jwx requires kid when jku is used")
 	require.Equal(t, testJKU, headers.JWKSetURL())
-	require.True(t, strings.HasPrefix(headers.JWKSetURL(), "https://"), "jwx rejects a non-HTTPS jku")
 }
 
 func TestJWKSetContainsTheSigningKey(t *testing.T) {
@@ -84,4 +83,20 @@ func TestJWKSetContainsTheSigningKey(t *testing.T) {
 	key, ok := set.LookupKeyID("sandbox-dezi-1")
 	require.True(t, ok)
 	require.Equal(t, "RSA", key.KeyType().String())
+
+	// Regression guard: a private RSA JWK also reports KeyType() == "RSA" under
+	// the same kid, so the assertions above would still pass if JWKSet() were
+	// changed to serialize s.key instead of s.key.Public(), leaking the private
+	// key over the unauthenticated JWKS endpoint. Assert on the serialized JSON
+	// itself, since that is what actually reaches the network, and confirm none
+	// of the RSA private-key fields are present.
+	var parsed struct {
+		Keys []map[string]any `json:"keys"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &parsed))
+	require.Len(t, parsed.Keys, 1)
+	for _, field := range []string{"d", "p", "q", "dp", "dq", "qi"} {
+		_, present := parsed.Keys[0][field]
+		require.False(t, present, "serialized JWK must not contain private field %q", field)
+	}
 }

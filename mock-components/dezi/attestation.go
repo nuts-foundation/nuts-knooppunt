@@ -77,14 +77,14 @@ func (s *Signer) JWKSet() ([]byte, error) {
 		return nil, fmt.Errorf("build JWK: %w", err)
 	}
 	if err := key.Set(jwk.KeyIDKey, s.keyID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("set JWK kid: %w", err)
 	}
 	if err := key.Set(jwk.AlgorithmKey, jwa.RS256); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("set JWK alg: %w", err)
 	}
 	set := jwk.NewSet()
 	if err := set.AddKey(key); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("add JWK to set: %w", err)
 	}
 	return json.Marshal(set)
 }
