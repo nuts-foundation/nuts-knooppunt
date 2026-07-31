@@ -67,12 +67,22 @@ func TestLoginScreenMatchesWireframeCopy(t *testing.T) {
 }
 
 func TestEhrHomeShowsFullChrome(t *testing.T) {
-	status, body := getPage(t, "/demo/ehr")
+	// E2 protects /demo/ehr (sandbox/DESIGN.md section 4), so reaching it now
+	// requires a real sign-in first; anonymous access is covered separately by
+	// TestEhrRedirectsWhenNotSignedIn.
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+
+	status, body := getPageWithClient(t, client, srv.URL+"/demo/ehr")
 	require.Equal(t, http.StatusOK, status)
 	for _, s := range []string{"sb-bar", `class="app"`, `class="side"`, `class="top"`, "hood-dock", "gf-tab", `id="gf-viewer-steps"`, "/static/js/journey-strip.js"} {
 		require.Contains(t, body, s)
 	}
-	require.Contains(t, body, "Not signed in", "E1 has no session yet")
+	require.Contains(t, body, "Dr. S. el Amrani", "the signed-in practitioner's name renders in the top bar")
+	require.Contains(t, body, "Dezi ✓", "the top bar shows the signed-in badge")
 	require.Contains(t, body, `class="hood-dock on"`, "viewer opens by default past login")
 	require.Contains(t, body, "hood-open", "body binds the hood-open class")
 }
