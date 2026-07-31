@@ -12,6 +12,10 @@
 
 set -euo pipefail
 
+# Belt and braces with the chmod 600 below: files land without group/world
+# permissions from the moment openssl creates them, not just afterward.
+umask 077
+
 OUT="$(cd "$(dirname "$0")" && pwd)/.certs"
 mkdir -p "$OUT"
 chmod 700 "$OUT"

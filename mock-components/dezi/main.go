@@ -38,7 +38,7 @@ func main() {
 
 	if certFile != "" && keyFile != "" {
 		go func() {
-			log.Printf("mock-dezi TLS listening on :%s (jku %s)", tlsPort, jku)
+			log.Printf("mock-dezi starting TLS listener on :%s (jku %s)", tlsPort, jku)
 			if err := http.ListenAndServeTLS(":"+tlsPort, certFile, keyFile, mux); err != nil {
 				log.Fatalf("tls listener: %v", err)
 			}
