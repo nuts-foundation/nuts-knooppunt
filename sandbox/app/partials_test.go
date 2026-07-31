@@ -40,8 +40,19 @@ func TestTopbarSessionSlot(t *testing.T) {
 	require.NotContains(t, anon, "Dezi ✓")
 
 	signed := renderPartialForTest(t, "topbar", page{TopTitle: "Home", Session: &Session{
-		Initials: "SA", Name: "Dr. S. el Amrani", Description: "Geriatric internist · UZI 900001234 · De Plataan Hospital",
+		Initials: "SA", Name: "Dr. S. el Amrani", Description: "Clinical geriatrician · UZI 900001234 · De Plataan Hospital",
 	}}, "_topbar.html")
 	require.Contains(t, signed, "Dr. S. el Amrani")
 	require.Contains(t, signed, "Dezi ✓")
+}
+
+func TestTopbarSignOutControlOnlyWhenSignedIn(t *testing.T) {
+	anon := renderPartialForTest(t, "topbar", page{TopTitle: "Home"}, "_topbar.html")
+	require.NotContains(t, anon, `action="/demo/logout"`, "no sign-out control when not signed in")
+
+	signed := renderPartialForTest(t, "topbar", page{TopTitle: "Home", Session: &Session{
+		Initials: "SA", Name: "Dr. S. el Amrani", Description: "Clinical geriatrician · UZI 900001234 · De Plataan Hospital",
+	}}, "_topbar.html")
+	require.Contains(t, signed, `action="/demo/logout"`, "a sign-out control must be reachable when signed in")
+	require.Contains(t, signed, "Sign out")
 }

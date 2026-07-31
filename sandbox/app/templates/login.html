@@ -44,12 +44,14 @@
           <div class="dz-card">
             <div class="dz-row"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.8"/><path d="M2.8,13.5 C3.4,10.6 5.4,9.3 8,9.3 C10.6,9.3 12.6,10.6 13.2,13.5"/></svg>Your name and role travel with you from your Dezi wallet</div>
             <div class="dz-row"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6.5" width="11" height="7" rx="1.5"/><path d="M5.5,6.5 L5.5,4.8 a2.5,2.5 0 0 1 5,0 L10.5,6.5"/></svg>UZI number and organisation cryptographically proven</div>
-            <div class="dz-row"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8,1.8 L13.5,4 L13.5,8 C13.5,11.4 11.3,13.6 8,14.8 C4.7,13.6 2.5,11.4 2.5,8 L2.5,4 Z"/><path d="M5.6,8 L7.3,9.7 L10.6,6.4"/></svg>Issues Dezi VC, URA VC and Roletype VC</div>
+            <div class="dz-row"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8,1.8 L13.5,4 L13.5,8 C13.5,11.4 11.3,13.6 8,14.8 C4.7,13.6 2.5,11.4 2.5,8 L2.5,4 Z"/><path d="M5.6,8 L7.3,9.7 L10.6,6.4"/></svg>Signs a Dezi attestation your organization can verify</div>
           </div>
-          <a class="btn cream big" href="/demo/ehr">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3.5" width="13" height="9.5" rx="2"/><path d="M10.5,8.25 L14.5,8.25 M12,6.5 L12,10"/></svg>
-            Sign in with Dezi
-          </a>
+          <form method="post" action="/demo/login">
+            <button class="btn cream big" type="submit">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="3.5" width="13" height="9.5" rx="2"/><path d="M10.5,8.25 L14.5,8.25 M12,6.5 L12,10"/></svg>
+              Sign in with Dezi
+            </button>
+          </form>
           <div class="ls-or">or</div>
           <button class="btn dark-ghost" disabled>Sign in with UZI card · not available in this demo</button>
           <div class="ls-note">Simulated login (GF Authentication) · test environment with synthetic data only</div>

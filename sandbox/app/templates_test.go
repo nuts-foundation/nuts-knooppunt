@@ -63,7 +63,6 @@ func TestLoginScreenMatchesWireframeCopy(t *testing.T) {
 	} {
 		require.Contains(t, body, s)
 	}
-	require.Contains(t, body, `href="/demo/ehr"`)
 }
 
 func TestEhrHomeShowsFullChrome(t *testing.T) {
@@ -85,4 +84,13 @@ func TestEhrHomeShowsFullChrome(t *testing.T) {
 	require.Contains(t, body, "Dezi ✓", "the top bar shows the signed-in badge")
 	require.Contains(t, body, `class="hood-dock on"`, "viewer opens by default past login")
 	require.Contains(t, body, "hood-open", "body binds the hood-open class")
+}
+
+func TestLoginPostsRatherThanLinks(t *testing.T) {
+	status, body := getPage(t, "/demo/login")
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, `action="/demo/login"`)
+	require.Contains(t, body, `method="post"`)
+	require.NotContains(t, body, `href="/demo/ehr"`,
+		"signing in must create a session, not link past it")
 }

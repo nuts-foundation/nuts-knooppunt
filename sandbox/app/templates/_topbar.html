@@ -3,7 +3,7 @@
   <div class="search"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5,10.5 L14,14"/></svg>Search patient, order or message…<span class="kbd">⌘K</span></div>
   <div class="top-right">
     <span class="bell"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8,2 C5.8,2 4.2,3.7 4.2,5.9 L4.2,8.6 L3,11 L13,11 L11.8,8.6 L11.8,5.9 C11.8,3.7 10.2,2 8,2 Z"/><path d="M6.6,13 C6.9,13.8 7.4,14.2 8,14.2 C8.6,14.2 9.1,13.8 9.4,13"/></svg>{{if .Alert}}<span class="bdot"></span>{{end}}</span>
-    {{if .Session}}<div class="dezi-pill"><span class="av">{{.Session.Initials}}</span><div><b>{{.Session.Name}}</b><span>{{.Session.Description}}</span></div><span class="dezi-tag">Dezi ✓</span></div>
+    {{if .Session}}<div class="dezi-pill"><span class="av">{{.Session.Initials}}</span><div><b>{{.Session.Name}}</b><span>{{.Session.Description}}</span></div><span class="dezi-tag">Dezi ✓</span></div><form method="post" action="/demo/logout"><button class="btn ghost" type="submit">Sign out</button></form>
     {{else}}<div class="dezi-pill"><span class="av">–</span><div><b>Not signed in</b><span>Dezi session · GF Authentication</span></div></div>{{end}}
   </div>
 </header>{{end}}

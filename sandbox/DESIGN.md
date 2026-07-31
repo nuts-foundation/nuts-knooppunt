@@ -102,10 +102,12 @@ Each organization gets, via the idempotent bootstrap: a did:web plus URA credent
 
 | Item | Value | System of record |
 | --- | --- | --- |
-| Requesting user | Dr. S. el Amrani, internist ouderengeneeskunde, Ziekenhuis De Plataan, UZI 900001234 (synthetic) | mock Dezi session (claims: name, role, UZI, URA; used in PDP input and shown in the top bar) |
+| Requesting user | Dr. S. el Amrani, klinisch geriater (RoleCodeNL 01.022), Ziekenhuis De Plataan, UZI 900001234 (synthetic) | mock Dezi session (claims: name, role, UZI, URA; used in PDP input and shown in the top bar) |
 | Source user | B. Willems, verpleegkundig specialist, De Zonnebloem | ZorgDossier display only |
 | Patient | Anna Jansen, born 1944, resident of De Zonnebloem, known at De Plataan; canonical member of the demo pool (section 5.7) | Patient resource in both FHIR stores (same BSN, own local identifiers) |
 | BSN | each pool patient gets its own test BSN; 999911120 is Anna's placeholder (passes the elfproef, but **all pool BSNs must be checked against the published RvIG test-BSN set during implementation and replaced if absent**) | Patient.identifier |
+
+The role code is a RoleCodeNL value from the Nictiz value set for OID 2.16.840.1.113883.2.4.15.111. "Internist ouderengeneeskunde" was not a valid entry: 01.016 Internist, 01.022 Klinisch geriater and 01.047 Specialist ouderengeneeskunde are distinct codes. 01.022 is used because De Plataan is the consuming hospital; 01.047 is the care-home physician role and belongs to De Zonnebloem's side.
 
 ### 5.3 Clinical content (the fixed dataset)
 

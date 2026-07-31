@@ -24,6 +24,18 @@ For the containerized variant:
 docker compose --profile sandbox up
 ```
 
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `8091` | listen port |
+| `DEZI_PUBLIC_AUTHORIZE_URL` | `http://localhost:8092/authorize` | where the **browser** is sent |
+| `DEZI_INTERNAL_BASE_URL` | `http://localhost:8092` | where the **backend** calls token and userinfo |
+| `SANDBOX_PUBLIC_URL` | `http://localhost:8091` | used to build the redirect URI |
+
+The public and internal URLs are separate on purpose. Under compose the browser cannot resolve the
+`mock-dezi` service name, and the sandbox container resolving `localhost` would reach itself.
+
 ## Architecture
 
 A standalone Go binary, not a knooppunt component (DESIGN.md standing decision 5: this backend will be the only
@@ -54,7 +66,10 @@ the vendored v1.0.2 bundle. Keep this form when adding interactivity.
 
 ## Integration points
 
-- `page.Session` and the `topbar` partial (E2).
+- Dezi sign-in (E2): `POST /demo/login` starts the flow against `mock-components/dezi`,
+  `GET /demo/auth/callback` creates the session, `POST /demo/logout` ends it. `authSession` in
+  `session.go` holds the raw attestation that E4 sends to the Nuts node as `id_token`; templates
+  only ever see the derived `Session` view model.
 - The reset stub, `POST /demo/reset` (E5).
 - The `#gf-viewer-steps` container and `window.GFJourney.apply(stepEvent)` / `.reset()`, consuming the DESIGN.md §7
   step-event schema (E6).
