@@ -17,3 +17,9 @@ pep/logs/
 
 # Helm chart dependencies
 helm/**/charts/*.tgz
+
+# AI review artifacts (local only)
+.codex-*
+
+# GF Sandbox demo PKI and signing key (generated, never committed)
+sandbox/.certs/

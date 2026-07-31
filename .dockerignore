@@ -1,1 +1,5 @@
 mock-components/**
+# mock-dezi is part of the root Go module and is built from the repo root
+# context, like sandbox/app; the other mock-components are separate stacks
+# with their own build context and stay excluded from this one.
+!mock-components/dezi/**
