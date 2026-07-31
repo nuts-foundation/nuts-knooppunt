@@ -56,6 +56,19 @@ func NewMux(signer *Signer, persona Practitioner) *http.ServeMux {
 			http.Error(w, "missing redirect_uri or code_challenge", http.StatusBadRequest)
 			return
 		}
+		// This mock binds one hardcoded persona and has no login screen, so
+		// anyone who can reach /authorize can already self-serve a code for
+		// that persona; this check is not an access control boundary and does
+		// not validate that redirect_uri belongs to any particular client.
+		// It only rejects non-http(s) schemes (e.g. "javascript:") so a
+		// browser is never redirected to an executable target, and so this
+		// permissive pattern does not get copied verbatim into a component
+		// that has real authentication to protect.
+		redirectURI, err := url.Parse(q.Get("redirect_uri"))
+		if err != nil || (redirectURI.Scheme != "http" && redirectURI.Scheme != "https") {
+			http.Error(w, "redirect_uri must use http or https", http.StatusBadRequest)
+			return
+		}
 		handle := st.putRequest(authRequest{
 			clientID:    q.Get("client_id"),
 			redirectURI: q.Get("redirect_uri"),

@@ -5,7 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dezi (simulated)</title>
 <style>
-  :root { --ink: #1a1a1a; --line: #d4d4d4; --accent: #154273; --bg: #f3f3f3; }
+  /* This screen intentionally has its own CSS and shares no design tokens with
+     sandbox/app/static/css/tokens.css (the EHR chrome the user arrives from).
+     --accent is a plain slate, not the EHR's --rv-blauw, so consent reads as
+     a separate identity service rather than a themed part of the EHR. */
+  :root { --ink: #1a1a1a; --line: #d4d4d4; --accent: #2c3e50; --bg: #f3f3f3; }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
          background: var(--bg); color: var(--ink); display: flex; min-height: 100vh;
