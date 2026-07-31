@@ -77,6 +77,13 @@ func TestViewModelRendersEnglishRole(t *testing.T) {
 	view := testSession().view()
 	require.Equal(t, "SA", view.Initials, "the top bar avatar uses the persona's initials")
 	require.Equal(t, "Dr. S. el Amrani", view.Name)
+	require.Contains(t, view.Description, "Clinical geriatrician",
+		"englishRoleNames must translate role code 01.022 rather than showing the Dutch name")
 	require.Contains(t, view.Description, "UZI 900001234")
 	require.Contains(t, view.Description, "De Plataan Hospital")
+}
+
+func TestFirstLetterHandlesMultibyteRunes(t *testing.T) {
+	require.Equal(t, "Ö", firstLetter("özdemir"),
+		"a multi-byte leading rune must decode whole, not truncate to an invalid byte")
 }

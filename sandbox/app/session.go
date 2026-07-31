@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 const sessionCookie = "gf_sandbox_session"
@@ -50,14 +51,17 @@ func displayOr(m map[string]string, key, fallback string) string {
 	return fallback
 }
 
-// firstLetter returns the uppercased first character of s, or "" if s is
-// blank once trimmed.
+// firstLetter returns the uppercased first rune of s, or "" if s is blank
+// once trimmed. It decodes a full rune rather than slicing the first byte,
+// so a surname starting with a multi-byte character (e.g. "Özdemir") yields
+// its actual initial instead of an invalid, truncated byte.
 func firstLetter(s string) string {
 	trimmed := strings.TrimSpace(s)
 	if trimmed == "" {
 		return ""
 	}
-	return strings.ToUpper(trimmed[:1])
+	r, _ := utf8.DecodeRuneInString(trimmed)
+	return strings.ToUpper(string(r))
 }
 
 // view derives the small, render-safe projection the top bar consumes.

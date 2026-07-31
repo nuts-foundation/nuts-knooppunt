@@ -67,6 +67,53 @@ func signInViaDezi(t *testing.T, srv *httptest.Server) *http.Client {
 	return client
 }
 
+// startLogin drives POST /demo/login and returns the state it issued, so a
+// caller can complete or replay the callback under precise control.
+func startLogin(t *testing.T, client *http.Client, srv string) string {
+	t.Helper()
+	res, err := client.PostForm(srv+"/demo/login", nil)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	location, err := url.Parse(res.Header.Get("Location"))
+	require.NoError(t, err)
+	state := location.Query().Get("state")
+	require.NotEmpty(t, state)
+	return state
+}
+
+// sessionCookieValue returns the raw session cookie value client is holding
+// for target. A test can then replay it directly on a fresh request, which
+// is the only way to prove the server itself, not just the client-side
+// cookie jar, has forgotten a session.
+func sessionCookieValue(t *testing.T, client *http.Client, target string) string {
+	t.Helper()
+	u, err := url.Parse(target)
+	require.NoError(t, err)
+	for _, c := range client.Jar.Cookies(u) {
+		if c.Name == sessionCookie {
+			return c.Value
+		}
+	}
+	t.Fatalf("no %s cookie held for %s", sessionCookie, target)
+	return ""
+}
+
+// replaySessionCookie sends value as the session cookie on a fresh,
+// jar-less request to /demo/ehr, bypassing whatever the client-side cookie
+// jar believes, and reports where the server sends it.
+func replaySessionCookie(t *testing.T, srv *httptest.Server, value string) (int, string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/demo/ehr", nil)
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: value})
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	return res.StatusCode, res.Header.Get("Location")
+}
+
 func TestHealthz(t *testing.T) {
 	status, body := getPage(t, "/healthz")
 	require.Equal(t, http.StatusOK, status)
@@ -133,4 +180,145 @@ func TestCallbackSurfacesOAuthError(t *testing.T) {
 	body, err := io.ReadAll(res.Body)
 	require.NoError(t, err)
 	require.Contains(t, string(body), "access_denied")
+}
+
+func TestLogoutEndsSessionServerSide(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+	raw := sessionCookieValue(t, client, srv.URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/logout", nil)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo?notice=signed-out", res.Header.Get("Location"))
+
+	// Replay the cookie value the browser held before logout. If the server
+	// still honours it, clearing the cookie client-side was cosmetic and the
+	// old session is still live.
+	status, location := replaySessionCookie(t, srv, raw)
+	require.Equal(t, http.StatusSeeOther, status, "a logged-out session must not still resolve server-side")
+	require.Equal(t, "/demo/login", location)
+}
+
+func TestResetEndsSessionServerSide(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+	raw := sessionCookieValue(t, client, srv.URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/reset", nil)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo?notice=reset-pending", res.Header.Get("Location"))
+
+	status, location := replaySessionCookie(t, srv, raw)
+	require.Equal(t, http.StatusSeeOther, status, "reset must drop every session, not just clear the caller's cookie")
+	require.Equal(t, "/demo/login", location)
+}
+
+func TestResetRejectsCrossSiteRequest(t *testing.T) {
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	res, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusForbidden, res.StatusCode, "a cross-site Sec-Fetch-Site must be rejected")
+}
+
+func TestResetAcceptsSameOriginRequest(t *testing.T) {
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode, "a same-origin Sec-Fetch-Site must be allowed")
+}
+
+func TestCallbackSetsSecureCookieAttributes(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	state := startLogin(t, client, srv.URL)
+
+	res, err := client.Get(srv.URL + "/demo/auth/callback?code=the-code&state=" + state)
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	var sessionCk *http.Cookie
+	for _, c := range res.Cookies() {
+		if c.Name == sessionCookie {
+			sessionCk = c
+		}
+	}
+	require.NotNil(t, sessionCk, "the callback must set the session cookie")
+	require.True(t, sessionCk.HttpOnly, "the session cookie must be HttpOnly so client script cannot read it")
+	require.Equal(t, http.SameSiteLaxMode, sessionCk.SameSite, "the session cookie must be SameSite=Lax")
+}
+
+func TestCallbackRejectsReplayedState(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	state := startLogin(t, client, srv.URL)
+	callback := srv.URL + "/demo/auth/callback?code=the-code&state=" + state
+
+	res, err := client.Get(callback)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode, "the first use of a genuinely issued state must succeed")
+
+	// Unlike TestCallbackRejectsUnknownState, this state really was issued by
+	// POST /demo/login above; it must still be rejected the second time,
+	// because a state is single-use.
+	res, err = client.Get(callback)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusBadRequest, res.StatusCode, "a state must not be usable a second time")
+}
+
+// TestRequireSessionGuardsAnySubpath proves the extracted guard, not just the
+// one route wired to it today, protects a subpath. No subpath under
+// /demo/ehr is registered in NewMux yet, so this builds a minimal mux of its
+// own rather than adding an unused route to production code: the next
+// epic's screens under /demo/ehr wrap with requireSession the same way.
+func TestRequireSessionGuardsAnySubpath(t *testing.T) {
+	resolve := func(*http.Request) *authSession { return nil }
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /demo/ehr/notes", requireSession(resolve, func(w http.ResponseWriter, _ *http.Request, _ *authSession) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	res, err := client.Get(srv.URL + "/demo/ehr/notes")
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo/login", res.Header.Get("Location"))
 }

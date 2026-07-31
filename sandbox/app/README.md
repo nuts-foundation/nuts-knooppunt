@@ -18,9 +18,12 @@ From the repo root, serves on `http://localhost:8091` (the `PORT` environment va
 go test ./sandbox/...
 ```
 
-For the containerized variant:
+For the containerized variant, generate the demo certificates first. Without this step, Docker
+creates empty directories at the bind-mount paths and mock-dezi fails to start
+(`mock-components/dezi/README.md` documents why the TLS listener exists).
 
 ```shell
+./sandbox/generate-demo-certs.sh     # once, writes to the gitignored sandbox/.certs/
 docker compose --profile sandbox up
 ```
 

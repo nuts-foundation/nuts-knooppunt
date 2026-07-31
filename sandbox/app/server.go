@@ -3,19 +3,11 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"sync"
-	"time"
 )
 
 var notices = map[string]string{
 	"reset-pending": "Reset arrives with the seeded dataset (E5)",
 	"signed-out":    "Signed out. The Dezi session has been cleared.",
-}
-
-// pendingAuth is a login attempt awaiting its callback, keyed by state.
-type pendingAuth struct {
-	verifier  string
-	expiresAt time.Time
 }
 
 // NewMux returns the GF Sandbox HTTP handler. The sandbox is a standalone
@@ -24,9 +16,7 @@ type pendingAuth struct {
 func NewMux() *http.ServeMux {
 	sessions := newSessionStore()
 	client := newDeziClient(deziConfigFromEnv())
-
-	var pendingMu sync.Mutex
-	pending := map[string]pendingAuth{}
+	pending := newPendingStore()
 
 	// signedIn resolves the session cookie, returning nil when absent or expired.
 	signedIn := func(r *http.Request) *authSession {
@@ -72,9 +62,7 @@ func NewMux() *http.ServeMux {
 
 	mux.HandleFunc("POST /demo/login", func(w http.ResponseWriter, r *http.Request) {
 		state, verifier := randomURLSafe(), randomURLSafe()
-		pendingMu.Lock()
-		pending[state] = pendingAuth{verifier: verifier, expiresAt: time.Now().Add(10 * time.Minute)}
-		pendingMu.Unlock()
+		pending.put(state, verifier)
 		http.Redirect(w, r, client.authorizeURL(state, verifier), http.StatusSeeOther)
 	})
 
@@ -86,11 +74,8 @@ func NewMux() *http.ServeMux {
 		}
 
 		// State is consumed exactly once, so a replayed callback fails.
-		pendingMu.Lock()
-		attempt, ok := pending[q.Get("state")]
-		delete(pending, q.Get("state"))
-		pendingMu.Unlock()
-		if !ok || time.Now().After(attempt.expiresAt) {
+		attempt, ok := pending.take(q.Get("state"))
+		if !ok {
 			http.Error(w, "Unknown or expired sign-in attempt", http.StatusBadRequest)
 			return
 		}
@@ -121,6 +106,10 @@ func NewMux() *http.ServeMux {
 	})
 
 	mux.HandleFunc("POST /demo/reset", func(w http.ResponseWriter, r *http.Request) {
+		if crossSiteRequest(r) {
+			http.Error(w, "cross-site reset is not allowed", http.StatusForbidden)
+			return
+		}
 		// Stub until E5 lands the seeded dataset and real reset semantics, but
 		// the session half of reset is real from here on.
 		sessions.dropAll()
@@ -130,12 +119,7 @@ func NewMux() *http.ServeMux {
 		http.Redirect(w, r, "/demo?notice=reset-pending", http.StatusSeeOther)
 	})
 
-	mux.HandleFunc("GET /demo/ehr", func(w http.ResponseWriter, r *http.Request) {
-		session := signedIn(r)
-		if session == nil {
-			http.Redirect(w, r, "/demo/login", http.StatusSeeOther)
-			return
-		}
+	mux.HandleFunc("GET /demo/ehr", requireSession(signedIn, func(w http.ResponseWriter, r *http.Request, session *authSession) {
 		view := session.view()
 		render(w, "ehr-home.html", page{
 			Title: "Home · Plataan EHR", Guise: "ehr",
@@ -144,9 +128,42 @@ func NewMux() *http.ServeMux {
 			Active: "dossier", TopTitle: "Home", ViewerOpen: true,
 			Session: &view,
 		})
-	})
+	}))
 
 	return mux
+}
+
+// requireSession wraps a handler that needs a signed-in practitioner. It
+// resolves the session via resolve and redirects to /demo/login when absent,
+// so every route under /demo/ehr can share one guard instead of each new
+// screen having to remember to check.
+func requireSession(resolve func(*http.Request) *authSession, next func(http.ResponseWriter, *http.Request, *authSession)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		session := resolve(r)
+		if session == nil {
+			http.Redirect(w, r, "/demo/login", http.StatusSeeOther)
+			return
+		}
+		next(w, r, session)
+	}
+}
+
+// crossSiteRequest reports whether r shows browser evidence of originating
+// from another site. The server listens on all interfaces and /demo/reset
+// carries no CSRF token, so this header is the only guard between an
+// arbitrary web page and signing out every practitioner in the demo.
+//
+// Every modern browser sets Sec-Fetch-Site on navigations and form
+// submissions, and a page cannot override it, so a value other than
+// same-origin/same-site is a reliable positive signal. The header's absence
+// is not a reliable negative signal, though: non-browser clients (curl,
+// this repo's tests, the demo's own tooling) never send it, so an absent
+// header must stay allowed. That limits this guard to stopping
+// browser-driven cross-site requests; it is not a substitute for a real
+// CSRF token if this endpoint ever needs one.
+func crossSiteRequest(r *http.Request) bool {
+	site := r.Header.Get("Sec-Fetch-Site")
+	return site != "" && site != "same-origin" && site != "same-site"
 }
 
 func render(w http.ResponseWriter, template string, data page) {
