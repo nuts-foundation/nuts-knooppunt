@@ -176,15 +176,21 @@ func requireSession(resolve func(*http.Request) *authSession, next func(http.Res
 //
 // Every modern browser sets Sec-Fetch-Site on navigations and form
 // submissions, and a page cannot override it, so a value other than
-// same-origin/same-site is a reliable positive signal. The header's absence
-// is not a reliable negative signal, though: non-browser clients (curl,
-// this repo's tests, the demo's own tooling) never send it, so an absent
-// header must stay allowed. That limits this guard to stopping
-// browser-driven cross-site requests; it is not a substitute for a real
-// CSRF token if this endpoint ever needs one.
+// same-origin is a reliable positive signal. The header's absence is not a
+// reliable negative signal, though: non-browser clients (curl, this repo's
+// tests, the demo's own tooling) never send it, so an absent header must stay
+// allowed. That limits this guard to stopping browser-driven cross-site
+// requests; it is not a substitute for a real CSRF token if this endpoint
+// ever needs one.
+//
+// same-site is deliberately not allowed. It covers sibling origins under the
+// same registrable domain, so on a hosted deployment any other subdomain
+// would qualify, and /demo/reset needs no session or cookie before clearing
+// every practitioner's. Nothing here needs the wider allowance: the templates
+// post to their own origin.
 func crossSiteRequest(r *http.Request) bool {
 	site := r.Header.Get("Sec-Fetch-Site")
-	return site != "" && site != "same-origin" && site != "same-site"
+	return site != "" && site != "same-origin"
 }
 
 func render(w http.ResponseWriter, template string, data page) {

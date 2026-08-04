@@ -23,3 +23,19 @@ func TestPendingTakeRejectsExpiredState(t *testing.T) {
 	_, ok := p.take("state-1")
 	require.False(t, ok, "a pending sign-in attempt must not survive past pendingAuthTTL")
 }
+
+func TestPutSweepsExpiredAttempts(t *testing.T) {
+	store := newPendingStore()
+	base := time.Now()
+	store.now = func() time.Time { return base }
+	store.put("abandoned-state", "verifier-one")
+	require.Len(t, store.pending, 1)
+
+	// take only removes the state it is handed, so an attempt nobody ever
+	// calls back would otherwise stay for the lifetime of the process.
+	store.now = func() time.Time { return base.Add(pendingAuthTTL + time.Second) }
+	store.put("fresh-state", "verifier-two")
+	require.Len(t, store.pending, 1, "starting a login must sweep the expired attempts")
+	_, ok := store.pending["abandoned-state"]
+	require.False(t, ok)
+}

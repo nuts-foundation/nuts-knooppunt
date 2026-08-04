@@ -40,7 +40,7 @@ defaults instead of extending them.
 | `PORT` | `8091` | listen port |
 | `DEZI_PUBLIC_AUTHORIZE_URL` | `http://localhost:8092/authorize` | where the **browser** is sent |
 | `DEZI_INTERNAL_BASE_URL` | `http://localhost:8092` | where the **backend** calls token and userinfo |
-| `SANDBOX_PUBLIC_URL` | `http://localhost:8091` | used to build the redirect URI |
+| `SANDBOX_PUBLIC_URL` | `http://localhost:8091` | the URL the browser reaches the sandbox on. Builds the redirect URI, and its scheme decides whether the session cookie carries `Secure`. A hosted deployment behind a TLS-terminating proxy must set this to its `https://` URL: the request arriving at this process is plain http, so nothing else here can tell that the browser used TLS |
 
 The public and internal URLs are separate on purpose. Under compose the browser cannot resolve the
 `mock-dezi` service name, and the sandbox container resolving `localhost` would reach itself.

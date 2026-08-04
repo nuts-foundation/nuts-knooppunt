@@ -101,3 +101,28 @@ func TestFirstLetterHandlesMultibyteRunes(t *testing.T) {
 	require.Equal(t, "Ö", firstLetter("özdemir"),
 		"a multi-byte leading rune must decode whole, not truncate to an invalid byte")
 }
+
+func TestCreateSweepsExpiredSessions(t *testing.T) {
+	store := newSessionStore()
+	expired := testSession()
+	expired.ExpiresAt = time.Now().Add(-time.Minute)
+	abandoned := store.create(expired)
+	require.Len(t, store.sessions, 1)
+
+	// Reaping on read never reaches a session whose cookie was thrown away, so
+	// the sweep on insert is what actually bounds this map.
+	store.create(testSession())
+	require.Len(t, store.sessions, 1, "creating a session must sweep the expired ones")
+	_, ok := store.sessions[abandoned]
+	require.False(t, ok, "the abandoned session must be the one dropped")
+}
+
+func TestSecureCookiesAcceptsAnUppercaseScheme(t *testing.T) {
+	// RFC 3986 section 3.1 makes the scheme case-insensitive, so this is a
+	// valid https URL and must not silently yield a cookie without Secure.
+	t.Setenv("SANDBOX_PUBLIC_URL", "HTTPS://sandbox.example.com")
+	require.True(t, secureCookies())
+
+	t.Setenv("SANDBOX_PUBLIC_URL", "http://localhost:8091")
+	require.False(t, secureCookies())
+}

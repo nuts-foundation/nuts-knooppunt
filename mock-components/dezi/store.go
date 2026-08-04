@@ -55,10 +55,38 @@ func opaque() string {
 	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
+// sweep drops everything that has expired. Callers must hold s.mu.
+//
+// The take* methods only remove the one entry they are handed, and validToken
+// removes nothing at all, so without this the three maps grow for the lifetime
+// of the process: an abandoned consent screen leaves a request behind, an
+// unredeemed code leaves a code, and every completed login leaves its access
+// token permanently. GET /authorize is a single unauthenticated request, so
+// the cheapest of those needs no login at all.
+func (s *store) sweep() {
+	now := s.now()
+	for handle, r := range s.requests {
+		if now.After(r.expiresAt) {
+			delete(s.requests, handle)
+		}
+	}
+	for code, c := range s.codes {
+		if now.After(c.expiresAt) {
+			delete(s.codes, code)
+		}
+	}
+	for token, expiry := range s.tokens {
+		if now.After(expiry) {
+			delete(s.tokens, token)
+		}
+	}
+}
+
 func (s *store) putRequest(r authRequest) string {
 	handle := opaque()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.sweep()
 	r.expiresAt = s.now().Add(requestTTL)
 	s.requests[handle] = r
 	return handle
@@ -80,6 +108,7 @@ func (s *store) putCode(c authCode) string {
 	code := opaque()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.sweep()
 	c.expiresAt = s.now().Add(codeTTL)
 	s.codes[code] = c
 	return code
@@ -100,6 +129,7 @@ func (s *store) putToken() string {
 	token := opaque()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.sweep()
 	s.tokens[token] = s.now().Add(tokenTTL)
 	return token
 }

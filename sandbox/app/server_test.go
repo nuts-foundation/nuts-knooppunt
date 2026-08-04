@@ -236,6 +236,30 @@ func TestResetRejectsCrossSiteRequest(t *testing.T) {
 	require.Equal(t, http.StatusForbidden, res.StatusCode, "a cross-site Sec-Fetch-Site must be rejected")
 }
 
+func TestResetRejectsSameSiteRequestAndKeepsSessions(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	first := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
+	second := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
+
+	// Reset needs no session and clears everyone's, so a sibling origin being
+	// able to reach it is the damaging case.
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	res, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusForbidden, res.StatusCode, "a sibling origin must not be able to reset")
+
+	for _, raw := range []string{first, second} {
+		status, _ := replaySessionCookie(t, srv, raw)
+		require.Equal(t, http.StatusOK, status, "a rejected reset must leave every session intact")
+	}
+}
+
 func TestResetAcceptsSameOriginRequest(t *testing.T) {
 	srv := httptest.NewServer(NewMux())
 	t.Cleanup(srv.Close)
@@ -375,8 +399,12 @@ func TestCallbackWithoutCodeIsARequestError(t *testing.T) {
 }
 
 func TestLogoutRejectsCrossSiteRequest(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
 	srv := httptest.NewServer(NewMux())
 	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+	raw := sessionCookieValue(t, client, srv.URL)
 
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/logout", nil)
 	require.NoError(t, err)
@@ -386,6 +414,29 @@ func TestLogoutRejectsCrossSiteRequest(t *testing.T) {
 	defer res.Body.Close()
 	require.Equal(t, http.StatusForbidden, res.StatusCode,
 		"logout mutates session state and must be guarded like reset")
+
+	// Status alone is too weak: a handler that clears the cookie and then
+	// returns 403 would pass that check while still signing the victim out.
+	for _, c := range res.Cookies() {
+		require.NotEqual(t, sessionCookie, c.Name, "a rejected logout must not touch the session cookie")
+	}
+	status, _ := replaySessionCookie(t, srv, raw)
+	require.Equal(t, http.StatusOK, status, "the live session must survive a rejected cross-site logout")
+}
+
+func TestLogoutRejectsSameSiteRequest(t *testing.T) {
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+
+	// same-site covers sibling origins under one registrable domain, so on a
+	// hosted deployment any other subdomain would qualify.
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/logout", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	res, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusForbidden, res.StatusCode, "a sibling origin must not be trusted")
 }
 
 func TestLogoutAcceptsSameOriginRequest(t *testing.T) {

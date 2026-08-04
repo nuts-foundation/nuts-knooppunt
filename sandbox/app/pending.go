@@ -29,11 +29,25 @@ func newPendingStore() *pendingStore {
 	return &pendingStore{pending: map[string]pendingAuth{}, now: time.Now}
 }
 
-// put records a new sign-in attempt, valid until pendingAuthTTL elapses.
+// put records a new sign-in attempt, valid until pendingAuthTTL elapses, and
+// sweeps whatever has expired in the meantime.
+//
+// The sweep is what bounds this map. take only ever removes the one state it
+// is handed, so an attempt that is abandoned, denied by Dezi, or lost to a
+// truncated callback is never consumed and would sit here for the lifetime of
+// the process. POST /demo/login is an unauthenticated single request, which
+// makes this the cheapest way to grow the sandbox's memory. Sweeping on
+// insert costs a walk of a map that this very sweep keeps small.
 func (p *pendingStore) put(state, verifier string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.pending[state] = pendingAuth{verifier: verifier, expiresAt: p.now().Add(pendingAuthTTL)}
+	now := p.now()
+	for key, attempt := range p.pending {
+		if now.After(attempt.expiresAt) {
+			delete(p.pending, key)
+		}
+	}
+	p.pending[state] = pendingAuth{verifier: verifier, expiresAt: now.Add(pendingAuthTTL)}
 }
 
 // take consumes state exactly once: a replayed or expired state is rejected.

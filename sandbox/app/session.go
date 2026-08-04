@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -21,8 +22,16 @@ const sessionCookie = "gf_sandbox_session"
 // Setting it unconditionally is not an option: over plain http a Secure cookie
 // is dropped by every browser except on localhost, which would silently break
 // the local demo.
+//
+// The scheme is compared case-insensitively because RFC 3986 section 3.1
+// makes it so; "HTTPS://host" is a valid https URL and must not quietly
+// produce a cookie without Secure.
 func secureCookies() bool {
-	return strings.HasPrefix(envOr("SANDBOX_PUBLIC_URL", "http://localhost:8091"), "https://")
+	parsed, err := url.Parse(envOr("SANDBOX_PUBLIC_URL", "http://localhost:8091"))
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(parsed.Scheme, "https")
 }
 
 // authSession is the internal record of a signed-in practitioner. It holds the
@@ -118,10 +127,20 @@ func newSessionID() string {
 	return base64.RawURLEncoding.EncodeToString(buf)
 }
 
+// create stores a signed-in practitioner and sweeps expired sessions, which is
+// what actually bounds this map. Reaping in get only reaches sessions that are
+// presented again; one whose cookie is discarded after expiry is never looked
+// up and would otherwise stay for the lifetime of the process.
 func (s *sessionStore) create(a authSession) string {
 	id := newSessionID()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := s.now()
+	for key, session := range s.sessions {
+		if now.After(session.ExpiresAt) {
+			delete(s.sessions, key)
+		}
+	}
 	s.sessions[id] = a
 	return id
 }
@@ -135,10 +154,8 @@ func (s *sessionStore) get(id string) (authSession, bool) {
 	}
 	if s.now().After(a.ExpiresAt) {
 		// Reap on read, the same way pendingStore.take drops what it hands
-		// back. This bounds the map for sessions that are looked up again; one
-		// whose cookie is never presented after expiry still lingers, which a
-		// demo-sized store carries fine. A sweep is only worth its complexity
-		// once that stops being true.
+		// back. create sweeps the rest, so this only saves the map from
+		// holding an entry until the next sign-in.
 		delete(s.sessions, id)
 		return authSession{}, false
 	}

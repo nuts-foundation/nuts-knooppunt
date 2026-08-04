@@ -56,3 +56,25 @@ func TestValidTokenRejectsExpiredToken(t *testing.T) {
 
 	require.False(t, s.validToken(token), "an access token must not validate past tokenTTL")
 }
+
+func TestSweepBoundsEveryMap(t *testing.T) {
+	s := newStore()
+	base := time.Now()
+	s.now = func() time.Time { return base }
+
+	s.putRequest(authRequest{clientID: "gf-sandbox"})
+	s.putCode(authCode{clientID: "gf-sandbox"})
+	s.putToken()
+	require.Len(t, s.requests, 1)
+	require.Len(t, s.codes, 1)
+	require.Len(t, s.tokens, 1)
+
+	// takeRequest and takeCode only drop what they are handed, and validToken
+	// drops nothing at all, so a successful login used to leave its token here
+	// permanently. Inserting anything must clear what has expired.
+	s.now = func() time.Time { return base.Add(24 * time.Hour) }
+	s.putRequest(authRequest{clientID: "gf-sandbox"})
+	require.Len(t, s.requests, 1, "only the fresh request may remain")
+	require.Empty(t, s.codes, "the expired code must be swept")
+	require.Empty(t, s.tokens, "the expired token must be swept")
+}
