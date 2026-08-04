@@ -74,6 +74,16 @@ func NewMux() *http.ServeMux {
 			return
 		}
 
+		// Checked before the state is consumed, so a truncated callback URL
+		// does not burn the sign-in attempt and force a restart. Without this,
+		// a missing code reaches /token and comes back as a 502, reporting a
+		// client mistake as a Dezi failure.
+		code := q.Get("code")
+		if code == "" {
+			http.Error(w, "Callback is missing the authorization code", http.StatusBadRequest)
+			return
+		}
+
 		// State is consumed exactly once, so a replayed callback fails.
 		attempt, ok := pending.take(q.Get("state"))
 		if !ok {
@@ -81,7 +91,7 @@ func NewMux() *http.ServeMux {
 			return
 		}
 
-		session, err := client.exchange(r.Context(), q.Get("code"), attempt.verifier)
+		session, err := client.exchange(r.Context(), code, attempt.verifier)
 		if err != nil {
 			http.Error(w, "Sign-in failed", http.StatusBadGateway)
 			return
@@ -98,6 +108,15 @@ func NewMux() *http.ServeMux {
 	})
 
 	mux.HandleFunc("POST /demo/logout", func(w http.ResponseWriter, r *http.Request) {
+		// Same guard as /demo/reset. Both mutate session state, so both get
+		// it; the asymmetry was an oversight when reset gained the check.
+		// SameSite=Lax already withholds the cookie from a cross-site POST,
+		// which leaves the server-side session intact, but the response still
+		// carries the deletion cookie and the browser may apply it.
+		if crossSiteRequest(r) {
+			http.Error(w, "cross-site logout is not allowed", http.StatusForbidden)
+			return
+		}
 		if cookie, err := r.Cookie(sessionCookie); err == nil {
 			sessions.drop(cookie.Value)
 		}

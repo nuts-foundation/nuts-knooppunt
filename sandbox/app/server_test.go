@@ -350,3 +350,55 @@ func TestRequireSessionGuardsAnySubpath(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
 	require.Equal(t, "/demo/login", res.Header.Get("Location"))
 }
+
+func TestCallbackWithoutCodeIsARequestError(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	state := startLogin(t, client, srv.URL)
+
+	res, err := client.Get(srv.URL + "/demo/auth/callback?state=" + state)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusBadRequest, res.StatusCode,
+		"a callback without a code is a client error, not a Dezi failure")
+
+	// The attempt must survive, so the practitioner can follow a correct
+	// callback instead of having to restart the sign-in.
+	good, err := client.Get(srv.URL + "/demo/auth/callback?code=the-code&state=" + state)
+	require.NoError(t, err)
+	defer good.Body.Close()
+	require.Equal(t, http.StatusSeeOther, good.StatusCode, "the sign-in attempt must not have been consumed")
+}
+
+func TestLogoutRejectsCrossSiteRequest(t *testing.T) {
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/logout", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	res, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusForbidden, res.StatusCode,
+		"logout mutates session state and must be guarded like reset")
+}
+
+func TestLogoutAcceptsSameOriginRequest(t *testing.T) {
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/logout", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode, "a same-origin sign-out must be allowed")
+}

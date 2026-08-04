@@ -93,3 +93,14 @@ func TestExchangeFailsOnBadCode(t *testing.T) {
 	// too, for an unrelated reason.
 	require.ErrorContains(t, err, "status 400")
 }
+
+func TestRedirectURITrimsTrailingSlash(t *testing.T) {
+	// The redirect_uri is compared for exact equality at /token and, with a
+	// real provider, against a registered value. A configured public URL with
+	// a trailing slash must not produce a double slash in the path.
+	t.Setenv("SANDBOX_PUBLIC_URL", "https://sandbox.example.com/")
+	require.Equal(t, "https://sandbox.example.com/demo/auth/callback", deziConfigFromEnv().RedirectURI)
+
+	t.Setenv("SANDBOX_PUBLIC_URL", "https://sandbox.example.com")
+	require.Equal(t, "https://sandbox.example.com/demo/auth/callback", deziConfigFromEnv().RedirectURI)
+}

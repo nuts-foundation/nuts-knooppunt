@@ -35,8 +35,13 @@ func deziConfigFromEnv() deziConfig {
 	return deziConfig{
 		PublicAuthorizeURL: envOr("DEZI_PUBLIC_AUTHORIZE_URL", "http://localhost:8092/authorize"),
 		InternalBaseURL:    envOr("DEZI_INTERNAL_BASE_URL", "http://localhost:8092"),
-		RedirectURI:        envOr("SANDBOX_PUBLIC_URL", "http://localhost:8091") + "/demo/auth/callback",
-		ClientID:           "gf-sandbox",
+		// Trailing slashes are trimmed because the result is compared for
+		// exact equality: this mock binds redirect_uri at /authorize and
+		// checks it again at /token, and a real provider matches it against a
+		// registered value. A configured "https://host/" would otherwise
+		// produce "https://host//demo/auth/callback".
+		RedirectURI: strings.TrimRight(envOr("SANDBOX_PUBLIC_URL", "http://localhost:8091"), "/") + "/demo/auth/callback",
+		ClientID:    "gf-sandbox",
 	}
 }
 
