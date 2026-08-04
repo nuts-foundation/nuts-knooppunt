@@ -78,3 +78,29 @@ func TestSweepBoundsEveryMap(t *testing.T) {
 	require.Empty(t, s.codes, "the expired code must be swept")
 	require.Empty(t, s.tokens, "the expired token must be swept")
 }
+
+// TestEveryInsertSweeps covers each insertion separately. Driving the sweep
+// through one method only proves that sweep visits every map, not that every
+// method calls it, so a missing call in the other two would go unnoticed.
+func TestEveryInsertSweeps(t *testing.T) {
+	for name, insert := range map[string]func(*store){
+		"putRequest": func(s *store) { s.putRequest(authRequest{clientID: "gf-sandbox"}) },
+		"putCode":    func(s *store) { s.putCode(authCode{clientID: "gf-sandbox"}) },
+		"putToken":   func(s *store) { s.putToken() },
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := newStore()
+			base := time.Now()
+			s.now = func() time.Time { return base }
+			s.putRequest(authRequest{clientID: "stale"})
+			s.putCode(authCode{clientID: "stale"})
+			s.putToken()
+
+			s.now = func() time.Time { return base.Add(24 * time.Hour) }
+			insert(s)
+
+			total := len(s.requests) + len(s.codes) + len(s.tokens)
+			require.Equal(t, 1, total, "%s must sweep the three expired entries, leaving only its own", name)
+		})
+	}
+}
