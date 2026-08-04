@@ -3,6 +3,8 @@
 
 # Binaries (use / prefix to match only in root directory)
 /nuts-knooppunt
+/app
+/dezi
 
 # Runtime files
 data
