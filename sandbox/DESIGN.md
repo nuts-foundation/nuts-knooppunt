@@ -46,7 +46,7 @@ Two user-facing applications on top of the existing mocked stack:
 | **ZorgDossier** | The elderly care institution's own record system: resident record, data entry, NVI registration on save. Stack decided in E7 (demo-ehr reuse or the sandbox's Go shape), restyled and reduced | Own brand, deliberately different (6.3) | own port, e.g. :3001 |
 | Nuts Knooppunt | Real GF components: NVI, mCSD, PDP, Mitz client, Nuts node proxy | n/a | :8080 public, :8081 internal |
 | PRS (pseudonymization) | **not mocked**: the hosted sandbox uses the real PRS acceptance environment. The Knooppunt's pseudonymisation component already speaks the real protocol and needs only `prsurl` plus working auth (`prs:read` scope per organization URA). Offline compose leaves `prsurl` unset and falls back to the component's built-in fake pseudonymizer | n/a | external (acc) |
-| Mocked national services | fake-NVI backing store (HAPI), fake LRZa, mock Mitz (user-controllable answer, subscriptions and notifications), mock VC issuer (Dezi VC, URA VC, RoletypeVC) | n/a | existing compose ports |
+| Mocked national services | fake-NVI backing store (HAPI), fake LRZa, mock Mitz (user-controllable answer, subscriptions and notifications), mock Dezi (signed v0.7 attestation over an authorization code flow) | n/a | existing compose ports |
 
 Mitz is mocked deliberately for `/demo`; none of the sandbox organizations or URAs need registration in the real Mitz for v1. Consent is the national-state answer the presenter changes live and reset restores per pool patient. Using test-Mitz would add onboarding, availability and shared-state dependencies, and changing the answer from the demo would require a consent-registration interface that the Knooppunt does not implement. The Knooppunt-side path remains real: `component/mitz` sends XACML closed authorization questions and creates FHIR subscriptions against the mock. Real test-Mitz connectivity remains a separate component-testing track, while national onboarding belongs to the post-v1 `/connect` mode 2. The asymmetry with PRS is intentional: pseudonymization is stateless from the demo's perspective, so its real acceptance environment adds realism without sacrificing deterministic reset.
 
@@ -96,7 +96,7 @@ One dataset, consistent across every system it touches. Extends the existing tes
 | Zorgcentrum De Zonnebloem | source (data holder, elderly care institution) | 00000020 | existing `sunflower` vector | the vector already models a care home; sunflower ↔ zonnebloem, deliberate match |
 | Care2Cure Hospital | second source (future scenarios, /connect counterpart) | 00000030 | existing `care2cure` | unchanged |
 
-Each organization gets, via the idempotent bootstrap: a did:web plus URA credential from the mock VC issuer (resolving the `NUTS_ISSUER_DID: TODO` in compose), an mCSD Organization plus Endpoint entry in the LRZa admin directory (plus the Location/HealthcareService entries that back the "sublocation" line in the retrieve modal, e.g. ward De Vlinder at De Zonnebloem: a FHIR R4 Endpoint alone cannot express a ward), and a tenant registration for pseudonymization.
+Each organization gets, via the idempotent bootstrap: a did:web plus a wallet-held `X509Credential` carrying the URA in its certificate SAN (issued from the demo UZI-style certificate with the didx509 toolkit and stored through the holder endpoint, as `test/e2e/pep/authorization_test.go` does; not from the mock VC issuer, which is not on this path), an mCSD Organization plus Endpoint entry in the LRZa admin directory (plus the Location/HealthcareService entries that back the "sublocation" line in the retrieve modal, e.g. ward De Vlinder at De Zonnebloem: a FHIR R4 Endpoint alone cannot express a ward), and a tenant registration for pseudonymization.
 
 ### 5.2 Personas and patient
 
@@ -136,7 +136,7 @@ The enriched home screen renders exactly this union, every element tagged with i
 | Anna's consent (share with treating physicians: yes) | mock Mitz, answer flippable via the withdraw-consent control on the enriched record | PDP during the authorization step |
 | De Plataan's Mitz subscription for Anna | mock Mitz, created during the patiëntaanmelding; emits a notification on consent change | sandbox backend (renders the step 7 notification) |
 | Access policy (BGZ scope requires Mitz consent) | OPA bundles in the PDP | PEP and PDP on inbound retrieval |
-| Dezi session claims of Dr. el Amrani | mock Dezi login / mock VC issuer (Dezi VC, URA VC, RoletypeVC) | top bar display, PDP authentication and role sub-checks |
+| Dezi session claims of Dr. el Amrani | mock Dezi login; the attestation becomes a `DeziUserCredential` inside the Nuts node | top bar display, PDP authentication and role sub-checks |
 
 ### 5.5 The marker record (path 0b)
 
@@ -239,10 +239,12 @@ Landing/path chooser (/, /demo; /connect as a visible-but-disabled stub), the sl
 
 ### E2 Dezi login and session (GF Authentication)
 
-The split-screen mock Dezi login and a backend session carrying the practitioner claims (name, role, UZI number, URA), displayed permanently in the top bar. The mock VC issuer learns to issue the Dezi VC, URA VC and Roletype VC for the session (resolving the `NUTS_ISSUER_DID: TODO` in compose); the claims feed the access-token request and PDP input downstream.
+The split-screen mock Dezi login and a backend session carrying the practitioner claims (name, role, UZI number, URA), displayed permanently in the top bar. The session holds the signed Dezi attestation, which the access-token request submits as `id_token`; the resulting claims feed the PDP input downstream.
 
-- Extends: mock VC issuer (today it only issues `HealthcareProviderRoleTypeCredential`; the Dezi VC and URA VC are new types, and the current integration contract passes the decrypted Dezi ID token separately, see docs/INTEGRATION.md), sandbox backend (session handling).
-- Acceptance: after "Sign in with Dezi" every screen shows name, role, UZI number and "Logged in to: De Plataan Hospital"; the issued VCs are the same ones the authorization checks later validate.
+The mock VC issuer is not involved. The Nuts node builds the Dezi credential itself from the submitted attestation (`credential.CreateDeziUserCredential`, `vcr/credential/dezi.go`), request-scoped credentials are passed as unsigned self-asserted JSON and rejected if they carry an issuer, and the organization identity is a wallet-held `X509Credential` derived from a UZI certificate, which cannot be self-asserted because the validator requires a `did:x509` issuer. `NUTS_ISSUER_DID` belongs to the vektis-issuer's own Nuts-delegated signing mode and nothing on this path reads it. Should a BGZ presentation definition later require the issuer's `HealthcareProviderRoleTypeCredential`, that is a choice made when authoring the definition, not a standing dependency.
+
+- Extends: sandbox backend (session handling), `config/policy/policy.json` (a BGZ scope must exist or the token request fails with `invalid_scope`).
+- Acceptance: after "Sign in with Dezi" every screen shows name, role, UZI number and "Logged in to: De Plataan Hospital"; the session produces a service access token whose introspected claims populate everything the Mitz check requires.
 
 ### E3 Patient registration (patiëntaanmelding)
 
@@ -261,7 +263,7 @@ The scripted chain in the sandbox backend plus the screens that render it: recor
 
 ### E5 Canonical dataset, seed and reset
 
-Everything in section 5: the plataan vector (URA 00000010), the idempotent bootstrap (did:web, URA credential, mCSD Organization plus Endpoint, tenant registration), Anna's two-source clinical data, the seeded NVI registration for De Zonnebloem, BSN verification against the RvIG test set, and the reset endpoint (expunge mutable stores including Mitz subscriptions, re-run the loader). The seed must run both as the compose init service and as a job in the hosted deployment; reset reuses it. Seeding covers the whole demo pool (section 5.7), and the reset endpoint gains a per-patient recycle variant; both respect demo locks. The hosted deployment also configures the pseudonymisation component against the PRS acceptance environment (`prsurl`); offline compose intentionally leaves it unset (fake fallback).
+Everything in section 5: the plataan vector (URA 00000010), the idempotent bootstrap (did:web, wallet-held `X509Credential` for the URA, mCSD Organization plus Endpoint, tenant registration), Anna's two-source clinical data, the seeded NVI registration for De Zonnebloem, BSN verification against the RvIG test set, and the reset endpoint (expunge mutable stores including Mitz subscriptions, re-run the loader). The seed must run both as the compose init service and as a job in the hosted deployment; reset reuses it. Seeding covers the whole demo pool (section 5.7), and the reset endpoint gains a per-patient recycle variant; both respect demo locks. The hosted deployment also configures the pseudonymisation component against the PRS acceptance environment (`prsurl`); offline compose intentionally leaves it unset (fake fallback).
 
 - Extends: `test/testdata` vectors, the `init` compose service and its hosted seed-job counterpart, HAPI `$expunge`.
 - Acceptance: a fresh deployment (compose locally, Helm hosted) yields a findable, addressable, retrievable Anna without manual steps; reset returns every store to the published fixture and removes user-created records, without redeploying.
