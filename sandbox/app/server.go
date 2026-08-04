@@ -17,6 +17,7 @@ func NewMux() *http.ServeMux {
 	sessions := newSessionStore()
 	client := newDeziClient(deziConfigFromEnv())
 	pending := newPendingStore()
+	secure := secureCookies()
 
 	// signedIn resolves the session cookie, returning nil when absent or expired.
 	signedIn := func(r *http.Request) *authSession {
@@ -90,6 +91,7 @@ func NewMux() *http.ServeMux {
 			Value:    sessions.create(session),
 			Path:     "/",
 			HttpOnly: true,
+			Secure:   secure,
 			SameSite: http.SameSiteLaxMode,
 		})
 		http.Redirect(w, r, "/demo/ehr", http.StatusSeeOther)
@@ -100,7 +102,7 @@ func NewMux() *http.ServeMux {
 			sessions.drop(cookie.Value)
 		}
 		http.SetCookie(w, &http.Cookie{
-			Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, MaxAge: -1,
+			Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, Secure: secure, MaxAge: -1,
 		})
 		http.Redirect(w, r, "/demo?notice=signed-out", http.StatusSeeOther)
 	})
@@ -114,7 +116,7 @@ func NewMux() *http.ServeMux {
 		// the session half of reset is real from here on.
 		sessions.dropAll()
 		http.SetCookie(w, &http.Cookie{
-			Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, MaxAge: -1,
+			Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, Secure: secure, MaxAge: -1,
 		})
 		http.Redirect(w, r, "/demo?notice=reset-pending", http.StatusSeeOther)
 	})

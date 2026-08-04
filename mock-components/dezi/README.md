@@ -30,7 +30,7 @@ must be served over TLS even locally. The certificate comes from a demo CA gener
 Or, containerized alongside the rest of the demo:
 
     ./sandbox/generate-demo-certs.sh     # once, writes to the gitignored sandbox/.certs/
-    docker compose --profile sandbox up
+    docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up
 
 ## Endpoints
 

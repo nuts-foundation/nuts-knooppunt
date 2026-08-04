@@ -2,7 +2,8 @@
 # Generates the GF Sandbox demo PKI and the mock Dezi signing key.
 #
 # Nothing this produces is committed: the output directory is gitignored. Run
-# this once before `docker compose --profile sandbox up`.
+# this once before
+# `docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up`.
 #
 # A dedicated CA is generated rather than reusing test/e2e/pep/certs, which
 # exists for PEP mTLS tests and issues UZI otherName certificates rather than

@@ -47,6 +47,20 @@ func TestExpiredSessionIsNotReturned(t *testing.T) {
 	require.False(t, ok, "an expired session must not be usable")
 }
 
+func TestExpiredSessionIsReapedOnRead(t *testing.T) {
+	store := newSessionStore()
+	expired := testSession()
+	expired.ExpiresAt = time.Now().Add(-time.Minute)
+	id := store.create(expired)
+	require.Len(t, store.sessions, 1)
+
+	// Rejecting the read is not enough on its own: without dropping the entry
+	// a long-running sandbox keeps every expired session in memory.
+	_, ok := store.get(id)
+	require.False(t, ok)
+	require.Empty(t, store.sessions, "reading an expired session must also remove it")
+}
+
 func TestDropRemovesOneSession(t *testing.T) {
 	store := newSessionStore()
 	keep := store.create(testSession())

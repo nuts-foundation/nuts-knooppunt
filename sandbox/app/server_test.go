@@ -273,6 +273,34 @@ func TestCallbackSetsSecureCookieAttributes(t *testing.T) {
 	require.NotNil(t, sessionCk, "the callback must set the session cookie")
 	require.True(t, sessionCk.HttpOnly, "the session cookie must be HttpOnly so client script cannot read it")
 	require.Equal(t, http.SameSiteLaxMode, sessionCk.SameSite, "the session cookie must be SameSite=Lax")
+	require.False(t, sessionCk.Secure, "over a plain-http public URL Secure would make the browser drop the cookie")
+}
+
+func TestCallbackMarksCookieSecureForAnHTTPSDeployment(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	// The hosted sandbox terminates TLS at a proxy, so the request reaching
+	// this process is plain http regardless. Only the public URL says what the
+	// browser used, which is why the cookie flag is derived from it.
+	t.Setenv("SANDBOX_PUBLIC_URL", "https://sandbox.example.com")
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	state := startLogin(t, client, srv.URL)
+
+	res, err := client.Get(srv.URL + "/demo/auth/callback?code=the-code&state=" + state)
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	var sessionCk *http.Cookie
+	for _, c := range res.Cookies() {
+		if c.Name == sessionCookie {
+			sessionCk = c
+		}
+	}
+	require.NotNil(t, sessionCk, "the callback must set the session cookie")
+	require.True(t, sessionCk.Secure, "an https public URL must restrict the session cookie to https")
 }
 
 func TestCallbackRejectsReplayedState(t *testing.T) {

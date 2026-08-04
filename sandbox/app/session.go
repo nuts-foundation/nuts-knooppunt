@@ -12,6 +12,19 @@ import (
 
 const sessionCookie = "gf_sandbox_session"
 
+// secureCookies reports whether the session cookie carries Secure. It reads
+// SANDBOX_PUBLIC_URL rather than the scheme of the incoming request, because
+// the hosted sandbox sits behind a TLS-terminating proxy: the browser speaks
+// https while the request reaching this process is plain http. The public URL
+// is the only value here that describes what the browser actually uses.
+//
+// Setting it unconditionally is not an option: over plain http a Secure cookie
+// is dropped by every browser except on localhost, which would silently break
+// the local demo.
+func secureCookies() bool {
+	return strings.HasPrefix(envOr("SANDBOX_PUBLIC_URL", "http://localhost:8091"), "https://")
+}
+
 // authSession is the internal record of a signed-in practitioner. It holds the
 // raw attestation, which E4 sends to the Nuts node as id_token. It is never
 // rendered and never logged; templates receive the Session view model instead.
@@ -117,7 +130,16 @@ func (s *sessionStore) get(id string) (authSession, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	a, ok := s.sessions[id]
-	if !ok || s.now().After(a.ExpiresAt) {
+	if !ok {
+		return authSession{}, false
+	}
+	if s.now().After(a.ExpiresAt) {
+		// Reap on read, the same way pendingStore.take drops what it hands
+		// back. This bounds the map for sessions that are looked up again; one
+		// whose cookie is never presented after expiry still lingers, which a
+		// demo-sized store carries fine. A sweep is only worth its complexity
+		// once that stops being true.
+		delete(s.sessions, id)
 		return authSession{}, false
 	}
 	return a, true

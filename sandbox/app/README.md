@@ -24,8 +24,14 @@ creates empty directories at the bind-mount paths and mock-dezi fails to start
 
 ```shell
 ./sandbox/generate-demo-certs.sh     # once, writes to the gitignored sandbox/.certs/
-docker compose --profile sandbox up
+docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up
 ```
+
+The overlay carries the knooppunt settings the sandbox needs: the demo CA and the Dezi JWK Set
+allowlist. They live there rather than in `docker-compose.yml` because the knooppunt service is
+not profile-gated, so anything set on it would also apply to a plain `docker compose up`. The
+allowlist matters in particular: configuring it replaces the built-in production and acceptance
+defaults instead of extending them.
 
 ## Configuration
 

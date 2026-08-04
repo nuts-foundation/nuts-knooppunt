@@ -8,11 +8,3 @@ auth:
 
 policy:
   directory: "./config/policy"
-
-# GF Sandbox: trust the mock Dezi's JWK Set so the node can verify attestations
-# minted by mock-components/dezi. Setting this REPLACES the production and
-# acceptance defaults rather than adding to them (nuts-node vcr/vcr.go).
-vcr:
-  dezi:
-    allowedjku:
-      - https://mock-dezi:8443/dezi/jwks.json
