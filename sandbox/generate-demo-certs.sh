@@ -55,7 +55,8 @@ apply_modes() {
   fi
 
   local name
-  for name in ca.pem mock-dezi.pem mock-dezi.key dezi-signing.key; do
+  for name in ca.pem mock-dezi.pem mock-dezi.key dezi-signing.key \
+    plataan-uzi.pem plataan-uzi-chain.pem plataan-uzi.key; do
     if [[ -f $OUT/$name ]]; then
       chmod 644 "$OUT/$name"
     fi
@@ -73,8 +74,16 @@ apply_modes() {
 # generation path, which then fails on the files that are already there.
 apply_modes
 
+# A root generated before this material became did:x509 anchored is not a CA,
+# and no amount of re-running fixes that by chmod alone. Treat it as absent.
+root_is_ca() {
+  [[ -f $OUT/ca.pem ]] && openssl x509 -in "$OUT/ca.pem" -noout -text 2>/dev/null \
+    | grep -q "CA:TRUE"
+}
+
 if [[ -f $OUT/ca.pem && -f $OUT/ca.key && -f $OUT/mock-dezi.pem && -f $OUT/mock-dezi.key \
-      && -f $OUT/dezi-signing.key && -f $OUT/ca-only/gf-sandbox-demo-ca.pem ]]; then
+      && -f $OUT/dezi-signing.key && -f $OUT/ca-only/gf-sandbox-demo-ca.pem \
+      && -f $OUT/plataan-uzi-chain.pem && -f $OUT/plataan-uzi.key ]] && root_is_ca; then
   echo "Demo material already present in $OUT; permissions normalized, nothing else to do."
   echo "Delete the directory and re-run to rotate it."
   exit 0
@@ -82,8 +91,15 @@ fi
 
 echo "Generating demo CA..."
 openssl genrsa -out "$OUT/ca.key" 4096
+# CA:TRUE is not decorative: the did:x509 resolver fingerprints this
+# certificate and rejects the chain unless it is a CA
+# (nuts-node vdr/didx509/resolver.go). A root without Basic Constraints
+# produces a chain the node will not resolve.
 openssl req -x509 -new -nodes -key "$OUT/ca.key" -sha256 -days 3650 \
-  -subj "/CN=GF Sandbox Demo CA/O=GF Sandbox" -out "$OUT/ca.pem"
+  -extensions ext -config <(printf '%s\n' \
+    '[req]' 'distinguished_name=dn' '[ dn ]' \
+    '[ ext ]' 'basicConstraints=critical,CA:TRUE,pathlen:1' 'keyUsage=critical,keyCertSign,cRLSign') \
+  -out "$OUT/ca.pem" -subj "/CN=GF Sandbox Demo CA"
 
 echo "Generating mock-dezi server certificate..."
 openssl genrsa -out "$OUT/mock-dezi.key" 2048
@@ -134,6 +150,26 @@ rm -f "$OUT/mock-dezi.csr" "$OUT/mock-dezi.ext"
 mkdir -p "$OUT/ca-only"
 cp "$OUT/ca.pem" "$OUT/ca-only/gf-sandbox-demo-ca.pem"
 
+echo "Generating De Plataan UZI-style certificate..."
+# The URA travels in the SAN otherName, which is where the bgz presentation
+# definition's descriptor looks for it. The shape follows
+# test/e2e/pep/certs/issue-cert.sh, whose format the existing descriptor
+# pattern already matches; the single capture group yields the bare URA.
+PLATAAN_URA=00000010
+openssl genrsa -out "$OUT/plataan-uzi.key" 2048
+openssl req -new -key "$OUT/plataan-uzi.key" -out "$OUT/plataan-uzi.csr" \
+  -subj "/CN=plataan/O=Ziekenhuis De Plataan/L=Utrecht/serialNumber=0"
+printf '%s\n' \
+  'extendedKeyUsage = clientAuth' \
+  "subjectAltName = otherName:2.5.5.5;UTF8:2.16.528.1.1007.99.2110-1-0-S-${PLATAAN_URA}-00.000-0" \
+  > "$OUT/plataan-uzi.ext"
+openssl x509 -req -in "$OUT/plataan-uzi.csr" -CA "$OUT/ca.pem" -CAkey "$OUT/ca.key" \
+  -CAcreateserial -CAserial "$OUT/ca.srl" -out "$OUT/plataan-uzi.pem" -days 3650 -sha256 \
+  -extfile "$OUT/plataan-uzi.ext"
+# End-entity first, then the CA, per RFC 5246.
+cat "$OUT/plataan-uzi.pem" "$OUT/ca.pem" > "$OUT/plataan-uzi-chain.pem"
+rm -f "$OUT/plataan-uzi.csr" "$OUT/plataan-uzi.ext"
+
 apply_modes
 
 echo
@@ -142,3 +178,5 @@ echo "  ca.pem, ca.key             demo certificate authority"
 echo "  mock-dezi.pem, .key        TLS server certificate, SAN mock-dezi + localhost"
 echo "  dezi-signing.key           attestation signing key"
 echo "  ca-only/                   CA alone, mounted into the knooppunt trust path"
+echo "  plataan-uzi.pem, .key      UZI-style leaf, SAN otherName carries the URA"
+echo "  plataan-uzi-chain.pem      leaf + ca.pem, sorted leaf to root"
