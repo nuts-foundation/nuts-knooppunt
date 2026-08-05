@@ -14,10 +14,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testRedirectURI is the sandbox callback the mock allowlists. Tests use the
+// constant rather than a literal so a change to the allowlist cannot leave
+// them asserting against a URI the server no longer binds.
+const testRedirectURI = "http://localhost:8091/demo/auth/callback"
+
 func testServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	s := NewSigner(testKey, "sandbox-dezi-1", "https://abonnee.dezi.nl", testJKU)
-	srv := httptest.NewServer(NewMux(s, DrElAmrani))
+	srv := httptest.NewServer(NewMux(s, DrElAmrani, []string{testRedirectURI}))
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -42,7 +47,7 @@ func requestHandle(t *testing.T, srv *httptest.Server, verifier string) string {
 	query := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {"gf-sandbox"},
-		"redirect_uri":          {"http://localhost:8091/demo/auth/callback"},
+		"redirect_uri":          {testRedirectURI},
 		"state":                 {"state-abc"},
 		"code_challenge":        {challengeFor(verifier)},
 		"code_challenge_method": {"S256"},
@@ -93,7 +98,7 @@ func exchange(t *testing.T, srv *httptest.Server, code, verifier string) *http.R
 		"code":          {code},
 		"code_verifier": {verifier},
 		"client_id":     {"gf-sandbox"},
-		"redirect_uri":  {"http://localhost:8091/demo/auth/callback"},
+		"redirect_uri":  {testRedirectURI},
 	})
 	require.NoError(t, err)
 	return res
@@ -134,19 +139,34 @@ func TestFullFlowReturnsAnAttestation(t *testing.T) {
 	require.Equal(t, 3, strings.Count(envelope.Verklaring, ".")+1, "verklaring is a compact JWS")
 }
 
-func TestAuthorizeRejectsNonHTTPRedirectScheme(t *testing.T) {
-	srv := testServer(t)
-	query := url.Values{
-		"response_type":         {"code"},
-		"client_id":             {"gf-sandbox"},
-		"redirect_uri":          {"javascript:alert(1)"},
-		"code_challenge":        {challengeFor("a-sufficiently-long-code-verifier-value-1234567890")},
-		"code_challenge_method": {"S256"},
+func TestAuthorizeBindsOnlyAllowlistedRedirectURIs(t *testing.T) {
+	// A plain http(s) URL is the one that matters: accepting it turned this
+	// mock into an open redirector, handing a browser to any target a link
+	// asked for and lending out the host's domain. The javascript: case is the
+	// same check catching an executable target.
+	for name, redirectURI := range map[string]string{
+		"another site":     "https://evil.example/grab",
+		"same host":        "http://localhost:8091/somewhere-else",
+		"trailing slash":   testRedirectURI + "/",
+		"executable":       "javascript:alert(1)",
+		"empty after trim": " ",
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := testServer(t)
+			query := url.Values{
+				"response_type":         {"code"},
+				"client_id":             {"gf-sandbox"},
+				"redirect_uri":          {redirectURI},
+				"code_challenge":        {challengeFor("a-sufficiently-long-code-verifier-value-1234567890")},
+				"code_challenge_method": {"S256"},
+			}
+			res, err := noRedirect(srv).Get(srv.URL + "/authorize?" + query.Encode())
+			require.NoError(t, err)
+			defer res.Body.Close()
+			require.Equal(t, http.StatusBadRequest, res.StatusCode,
+				"%q is not the allowlisted callback and must not be bound", redirectURI)
+		})
 	}
-	res, err := srv.Client().Get(srv.URL + "/authorize?" + query.Encode())
-	require.NoError(t, err)
-	defer res.Body.Close()
-	require.Equal(t, http.StatusBadRequest, res.StatusCode, "a non-http(s) redirect_uri scheme must be rejected")
 }
 
 func TestTokenRejectsWrongVerifier(t *testing.T) {
@@ -186,7 +206,7 @@ func TestTokenRejectsMismatchedClientID(t *testing.T) {
 		"code":          {code},
 		"code_verifier": {verifier},
 		"client_id":     {"someone-elses-client"},
-		"redirect_uri":  {"http://localhost:8091/demo/auth/callback"},
+		"redirect_uri":  {testRedirectURI},
 	})
 	require.NoError(t, err)
 	defer res.Body.Close()

@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 func env(key, fallback string) string {
@@ -25,7 +26,14 @@ func main() {
 		jku = env("DEZI_JKU", "https://mock-dezi:8443/dezi/jwks.json")
 		// Empty means "generate in memory", which is what `go run` uses.
 		keyFileForSigning = env("DEZI_SIGNING_KEY_FILE", "")
+		// The callbacks /authorize will bind, comma separated. Matched exactly:
+		// without it this mock redirects a browser wherever a link asks, which
+		// on a hosted sandbox lends out the deployment's own domain.
+		allowedRedirectURIs = strings.Split(env("DEZI_ALLOWED_REDIRECT_URIS", "http://localhost:8091/demo/auth/callback"), ",")
 	)
+	for i := range allowedRedirectURIs {
+		allowedRedirectURIs[i] = strings.TrimSpace(allowedRedirectURIs[i])
+	}
 
 	key, err := loadOrGenerateKey(keyFileForSigning)
 	if err != nil {
@@ -34,7 +42,7 @@ func main() {
 	if keyFileForSigning == "" {
 		log.Print("mock-dezi: signing key generated in memory, it changes on every restart")
 	}
-	mux := NewMux(NewSigner(key, env("DEZI_KEY_ID", "sandbox-dezi-1"), issuer, jku), DrElAmrani)
+	mux := NewMux(NewSigner(key, env("DEZI_KEY_ID", "sandbox-dezi-1"), issuer, jku), DrElAmrani, allowedRedirectURIs)
 
 	if certFile != "" && keyFile != "" {
 		go func() {

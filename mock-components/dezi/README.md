@@ -10,6 +10,12 @@ the v0.7 flow to sign a synthetic practitioner in and hand out an attestation th
   is an encrypted JWE; the acceptance environment was observed returning a signed JWS. This third
   shape is owned by the GF Sandbox client and consumed by nothing else.
 - There is one fixed practitioner (`persona.go`) and no real authentication. Consent is a button.
+- `redirect_uri` is matched exactly against `DEZI_ALLOWED_REDIRECT_URIS` (default
+  `http://localhost:8091/demo/auth/callback`), not merely checked for an http(s) scheme. The codes
+  this mock issues are worthless, since anyone who can reach `/authorize` can mint one for the same
+  persona, but an unrestricted redirect is not: it would hand a browser to any target a link asked
+  for, on whatever domain the sandbox is hosted at. Keep the value in step with the sandbox's
+  `SANDBOX_PUBLIC_URL`.
 - Nothing cryptographic is committed. Run `./sandbox/generate-demo-certs.sh` once; it writes the
   demo CA, the TLS certificate and the attestation signing key to the gitignored `sandbox/.certs/`.
   Without `DEZI_SIGNING_KEY_FILE` the signing key is generated in memory and changes on every

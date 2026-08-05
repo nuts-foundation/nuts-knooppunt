@@ -9,6 +9,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"slices"
 	"time"
 )
 
@@ -28,7 +29,7 @@ type consentView struct {
 // NewMux returns the mock Dezi handler. This is a sandbox flow double, not a
 // conformant Dezi provider: userinfo returns a plain JSON envelope rather than
 // the encrypted JWE the v0.7 specification defines.
-func NewMux(signer *Signer, persona Practitioner) *http.ServeMux {
+func NewMux(signer *Signer, persona Practitioner, allowedRedirectURIs []string) *http.ServeMux {
 	st := newStore()
 	mux := http.NewServeMux()
 
@@ -56,17 +57,16 @@ func NewMux(signer *Signer, persona Practitioner) *http.ServeMux {
 			http.Error(w, "missing redirect_uri or code_challenge", http.StatusBadRequest)
 			return
 		}
-		// This mock binds one hardcoded persona and has no login screen, so
-		// anyone who can reach /authorize can already self-serve a code for
-		// that persona; this check is not an access control boundary and does
-		// not validate that redirect_uri belongs to any particular client.
-		// It only rejects non-http(s) schemes (e.g. "javascript:") so a
-		// browser is never redirected to an executable target, and so this
-		// permissive pattern does not get copied verbatim into a component
-		// that has real authentication to protect.
-		redirectURI, err := url.Parse(q.Get("redirect_uri"))
-		if err != nil || (redirectURI.Scheme != "http" && redirectURI.Scheme != "https") {
-			http.Error(w, "redirect_uri must use http or https", http.StatusBadRequest)
+		// Matched exactly against the allowlist, the same way /token compares
+		// it later. Accepting any http(s) URL made this an open redirector:
+		// the codes are worthless, since one hardcoded persona and no login
+		// screen mean anyone reachable here can already mint one, but the
+		// redirect is not. On a hosted sandbox it lends the deployment's own
+		// domain to whatever target a link asks for, and it is exactly the
+		// kind of pattern that gets copied into a component that does have
+		// something to protect.
+		if !slices.Contains(allowedRedirectURIs, q.Get("redirect_uri")) {
+			http.Error(w, "redirect_uri is not allowlisted", http.StatusBadRequest)
 			return
 		}
 		handle := st.putRequest(authRequest{
