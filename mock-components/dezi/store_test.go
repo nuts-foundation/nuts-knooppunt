@@ -104,3 +104,31 @@ func TestEveryInsertSweeps(t *testing.T) {
 		})
 	}
 }
+
+func TestTakeConsumesOnlyTheEntryItIsGiven(t *testing.T) {
+	t.Run("takeRequest", func(t *testing.T) {
+		s := newStore()
+		first := s.putRequest(authRequest{clientID: "first"})
+		second := s.putRequest(authRequest{clientID: "second"})
+
+		_, ok := s.takeRequest(first)
+		require.True(t, ok)
+
+		r, ok := s.takeRequest(second)
+		require.True(t, ok, "one consent submit must not cancel another in flight")
+		require.Equal(t, "second", r.clientID)
+	})
+
+	t.Run("takeCode", func(t *testing.T) {
+		s := newStore()
+		first := s.putCode(authCode{clientID: "first"})
+		second := s.putCode(authCode{clientID: "second"})
+
+		_, ok := s.takeCode(first)
+		require.True(t, ok)
+
+		c, ok := s.takeCode(second)
+		require.True(t, ok, "redeeming one code must not invalidate another")
+		require.Equal(t, "second", c.clientID)
+	})
+}

@@ -39,3 +39,19 @@ func TestPutSweepsExpiredAttempts(t *testing.T) {
 	_, ok := store.pending["abandoned-state"]
 	require.False(t, ok)
 }
+
+func TestTakeConsumesOnlyTheStateItIsGiven(t *testing.T) {
+	store := newPendingStore()
+	store.put("first-state", "verifier-one")
+	store.put("second-state", "verifier-two")
+
+	// take's comment calls the state consumed "exactly once", which is a claim
+	// about that one entry. Clearing the whole map satisfies every other
+	// assertion here while cancelling a concurrent sign-in.
+	_, ok := store.take("first-state")
+	require.True(t, ok)
+
+	attempt, ok := store.take("second-state")
+	require.True(t, ok, "a concurrent sign-in must survive someone else's callback")
+	require.Equal(t, "verifier-two", attempt.verifier)
+}
