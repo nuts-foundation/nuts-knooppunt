@@ -38,19 +38,43 @@ mkdir -p "$OUT"
 # of this script left everything at 0600; someone who generated with it is
 # exactly the person whose stack is broken, and re-running would otherwise
 # tell them there is nothing to do while changing nothing.
+#
+# Every file is named rather than globbed. A glob over "$OUT" would sweep in
+# whatever else happens to sit there: an unrelated private key called
+# something.pem would be widened to 0644, and a dangling symlink would make
+# chmod fail mid-command, which under `set -e` would abandon the rest of this
+# function and leave the very outage it exists to repair.
+#
+# Directories are made searchable first, before anything tests for or changes a
+# file inside them. An older run could leave $OUT or ca-only at 0700, and a
+# directory that cannot be traversed makes every probe below it fail.
 apply_modes() {
-  chmod 644 "$OUT"/*.pem "$OUT/mock-dezi.key" "$OUT/dezi-signing.key"
-  chmod 600 "$OUT/ca.key"
   chmod 755 "$OUT"
-  if [[ -f $OUT/ca-only/gf-sandbox-demo-ca.pem ]]; then
+  if [[ -d $OUT/ca-only ]]; then
     chmod 755 "$OUT/ca-only"
+  fi
+
+  local name
+  for name in ca.pem mock-dezi.pem mock-dezi.key dezi-signing.key; do
+    if [[ -f $OUT/$name ]]; then
+      chmod 644 "$OUT/$name"
+    fi
+  done
+  if [[ -f $OUT/ca-only/gf-sandbox-demo-ca.pem ]]; then
     chmod 644 "$OUT/ca-only/gf-sandbox-demo-ca.pem"
+  fi
+  if [[ -f $OUT/ca.key ]]; then
+    chmod 600 "$OUT/ca.key"
   fi
 }
 
+# Repair modes before probing for the material: a 0700 directory left by an
+# older run would otherwise fail every -f test below and silently take the
+# generation path, which then fails on the files that are already there.
+apply_modes
+
 if [[ -f $OUT/ca.pem && -f $OUT/ca.key && -f $OUT/mock-dezi.pem && -f $OUT/mock-dezi.key \
       && -f $OUT/dezi-signing.key && -f $OUT/ca-only/gf-sandbox-demo-ca.pem ]]; then
-  apply_modes
   echo "Demo material already present in $OUT; permissions normalized, nothing else to do."
   echo "Delete the directory and re-run to rotate it."
   exit 0

@@ -189,6 +189,10 @@ func TestLogoutEndsSessionServerSide(t *testing.T) {
 	t.Cleanup(srv.Close)
 	client := signInViaDezi(t, srv)
 	raw := sessionCookieValue(t, client, srv.URL)
+	// A second practitioner, so this pins which sessions logout ends. With one
+	// session a handler that cleared the whole store would pass identically,
+	// and signing one person out would sign out everybody.
+	bystander := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
 
 	res, err := client.PostForm(srv.URL+"/demo/logout", nil)
 	require.NoError(t, err)
@@ -202,6 +206,9 @@ func TestLogoutEndsSessionServerSide(t *testing.T) {
 	status, location := replaySessionCookie(t, srv, raw)
 	require.Equal(t, http.StatusSeeOther, status, "a logged-out session must not still resolve server-side")
 	require.Equal(t, "/demo/login", location)
+
+	status, _ = replaySessionCookie(t, srv, bystander)
+	require.Equal(t, http.StatusOK, status, "logout must end only the caller's session")
 }
 
 func TestResetEndsSessionServerSide(t *testing.T) {
@@ -211,6 +218,9 @@ func TestResetEndsSessionServerSide(t *testing.T) {
 	t.Cleanup(srv.Close)
 	client := signInViaDezi(t, srv)
 	raw := sessionCookieValue(t, client, srv.URL)
+	// The claim below is about every session, so the fixture needs more than
+	// the caller's: dropping only the caller would otherwise satisfy it.
+	other := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
 
 	res, err := client.PostForm(srv.URL+"/demo/reset", nil)
 	require.NoError(t, err)
@@ -221,6 +231,9 @@ func TestResetEndsSessionServerSide(t *testing.T) {
 	status, location := replaySessionCookie(t, srv, raw)
 	require.Equal(t, http.StatusSeeOther, status, "reset must drop every session, not just clear the caller's cookie")
 	require.Equal(t, "/demo/login", location)
+
+	status, _ = replaySessionCookie(t, srv, other)
+	require.Equal(t, http.StatusSeeOther, status, "reset must also drop a session that never made the request")
 }
 
 func TestResetRejectsCrossSiteRequest(t *testing.T) {
