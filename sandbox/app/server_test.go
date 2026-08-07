@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -532,8 +533,47 @@ func nodeIntrospecting(t *testing.T, status int, response string) *httptest.Serv
 	return srv
 }
 
+// vouchedClaims is the claim set the bgz presentation definition emits and
+// component/pdp reads into PolicySubject, as the node returns it for a token it
+// vouched for. It is a fragment rather than a whole response so that the tests
+// below can vary the active member alone, which is the one difference between a
+// token the node stands behind and one it refuses.
+const vouchedClaims = `"user_id":"900001234","user_role":"01.022",` +
+	`"organization_ura":"00000010","organization_name":"Ziekenhuis De Plataan",` +
+	`"organization_facility_type":"Z3"`
+
+// nodeVouchingForTheToken answers both steps the way the node does for a token
+// it vouched for under the bgz policy. nuts_test.go's fakeNode answers
+// introspection without organization_name, so it no longer reaches the page
+// this route renders; once that fake carries the PDP's full set, this helper
+// collapses back into it. The id_token assertion comes along with the success
+// path, because it is the only check that the route hands the node the
+// attestation the signed-in session carries rather than an empty one.
+func nodeVouchingForTheToken(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /nuts/internal/auth/v2/plataan/request-service-access-token",
+		func(w http.ResponseWriter, r *http.Request) {
+			var body struct {
+				IdToken string `json:"id_token"`
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			require.Equal(t, fixtureAttestation, body.IdToken, "the route must send the session's attestation")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"the-token"}`))
+		})
+	mux.HandleFunc("POST /nuts/internal/auth/v2/accesstoken/introspect",
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"active":true,` + vouchedClaims + `}`))
+		})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
 func TestAuthorizeRendersTheClaims(t *testing.T) {
-	srv, client := authorizeSandbox(t, fakeNode(t).URL)
+	srv, client := authorizeSandbox(t, nodeVouchingForTheToken(t).URL)
 
 	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
 	require.NoError(t, err)
@@ -549,10 +589,15 @@ func TestAuthorizeRendersTheClaims(t *testing.T) {
 	// it is rendered under the wrong claim name, and because 900001234 is the
 	// practitioner's Dezi number, which any page carrying the session view
 	// would print regardless of what the node returned.
+	//
+	// Every claim the PDP reads, not the subset the route used to carry: the
+	// page says it shows what the token carries, so a claim the policy emits and
+	// the route drops is one the reader is told does not exist.
 	for _, row := range []string{
 		"<th>user_id</th><td>900001234</td>",
 		"<th>user_role</th><td>01.022</td>",
 		"<th>organization_ura</th><td>00000010</td>",
+		"<th>organization_name</th><td>Ziekenhuis De Plataan</td>",
 		"<th>organization_facility_type</th><td>Z3</td>",
 	} {
 		require.Contains(t, body, row)
@@ -574,7 +619,7 @@ func TestAuthorizeRendersTheClaims(t *testing.T) {
 // It is also what makes page.Session load-bearing here: with no top bar the
 // field was set and never read, so dropping it changed no byte of the response.
 func TestAuthorizeShowsThePractitionerChrome(t *testing.T) {
-	srv, client := authorizeSandbox(t, fakeNode(t).URL)
+	srv, client := authorizeSandbox(t, nodeVouchingForTheToken(t).URL)
 
 	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
 	require.NoError(t, err)
@@ -654,20 +699,34 @@ func TestAuthorizeNamesTheIntrospectionStep(t *testing.T) {
 	require.NotContains(t, body, "user_id", "a failed introspection must not also render the claims table")
 }
 
-// A JSON null, or an object without claims, decodes without error and leaves
-// the map empty, so nothing in the client reports it. Rendering that as a page
-// of empty rows would call a flow successful that produced no claims at all.
+// RFC 7662 section 2.2 makes active a required boolean and the indication of
+// whether the token is currently active, and the node's own contract marks it
+// required. The section only recommends against an inactive response carrying
+// anything else, so the claims a response happens to hold say nothing about
+// whether the node stands behind the token: four of the cases below carry every
+// claim the page renders and are refusals all the same.
 //
-// {"active": false} is the node's canonical answer to a token it will not
-// vouch for: auth/api/iam/api.go returns it for an empty token, for one absent
-// from its store and for an expired one, each under the comment "Return 200 +
-// 'Active = false' when token is invalid or malformed". It decodes to a map of
-// length 1, so a length check waves it through; only looking for the claims
-// the page renders catches it.
-func TestAuthorizeRejectsAClaimlessIntrospection(t *testing.T) {
-	for _, response := range []string{`null`, `{}`, `{"active":false}`} {
-		t.Run(response, func(t *testing.T) {
-			srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusOK, response).URL)
+// {"active": false} on its own is the node's canonical answer to a token it
+// will not vouch for: auth/api/iam/api.go returns it for an empty token, for
+// one absent from its store and for an expired one, each under the comment
+// "Return 200 + 'Active = false' when token is invalid or malformed".
+//
+// A response missing active, or carrying it as something other than a boolean,
+// is a different fault and says so: nothing that answers that way is a
+// conforming introspection endpoint, where active=false is a conforming
+// endpoint doing its job.
+func TestAuthorizeRequiresAnActiveToken(t *testing.T) {
+	for name, tc := range map[string]struct{ response, failure string }{
+		"inactive with every claim":  {`{"active":false,` + vouchedClaims + `}`, "not active"},
+		"the node's canonical shape": {`{"active":false}`, "not active"},
+		"absent":                     {`{` + vouchedClaims + `}`, "no boolean active"},
+		"a string":                   {`{"active":"true",` + vouchedClaims + `}`, "no boolean active"},
+		"a number":                   {`{"active":1,` + vouchedClaims + `}`, "no boolean active"},
+		"null response":              {`null`, "no boolean active"},
+		"empty object":               {`{}`, "no boolean active"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusOK, tc.response).URL)
 
 			res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
 			require.NoError(t, err)
@@ -677,25 +736,57 @@ func TestAuthorizeRejectsAClaimlessIntrospection(t *testing.T) {
 			require.NoError(t, err)
 			body := string(raw)
 			require.Contains(t, body, "introspect access token")
-			require.Contains(t, body, "no claims")
-			require.NotContains(t, body, "user_id", "an empty introspection must not render a table of blanks")
+			require.Contains(t, body, tc.failure)
+			// The page's own heading, because the claims are present in most of
+			// these responses: a page rendered from them would carry rows that
+			// look entirely correct while the node has said the token is not live.
+			require.NotContains(t, body, "Service access token", "an inactive token must not render the page")
+			require.NotContains(t, body, "<th>user_id</th>", "nor a table of the claims it carried anyway")
 		})
 	}
 }
 
-// A response carrying some of the four claims is the same failure one row at a
+// An active token whose introspection carries no claims at all. The node has
+// vouched for the token, so the guard above passes it, and rendering the result
+// would be a page of empty rows calling a flow successful that produced nothing
+// the PDP could decide on.
+func TestAuthorizeRejectsAClaimlessIntrospection(t *testing.T) {
+	srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusOK, `{"active":true}`).URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusBadGateway, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	body := string(raw)
+	require.Contains(t, body, "introspect access token")
+	require.Contains(t, body, "no claims")
+	require.NotContains(t, body, "user_id", "an empty introspection must not render a table of blanks")
+}
+
+// A response carrying some of the claims is the same failure one row at a
 // time: fmt.Sprint of an absent or null value is "<nil>", so the page would
 // print a blank the reader has no way to tell from a claim the node genuinely
 // returned as the string "<nil>". The step is named with the claims it did not
 // carry, because that is the difference between a misconfigured credential and
 // a token the node refused outright.
+//
+// organization_name gets a case of its own because it is the claim the route
+// used to leave out of this list: the bgz presentation definition emits it and
+// component/pdp reads it into PolicySubject.Organization.Name, so a response
+// without it is a response the PDP could not decide on.
 func TestAuthorizeRejectsAPartialIntrospection(t *testing.T) {
-	for name, response := range map[string]string{
-		"absent": `{"active":true,"user_id":"900001234","user_role":"01.022","organization_ura":"00000010"}`,
-		"null":   `{"active":true,"user_id":"900001234","user_role":"01.022","organization_ura":"00000010","organization_facility_type":null}`,
+	for name, tc := range map[string]struct{ response, missing string }{
+		"absent": {`{"active":true,"user_id":"900001234","user_role":"01.022","organization_ura":"00000010",` +
+			`"organization_name":"Ziekenhuis De Plataan"}`, "organization_facility_type"},
+		"null": {`{"active":true,"user_id":"900001234","user_role":"01.022","organization_ura":"00000010",` +
+			`"organization_name":"Ziekenhuis De Plataan","organization_facility_type":null}`, "organization_facility_type"},
+		"the claim the PDP reads as the organisation's name": {`{"active":true,"user_id":"900001234","user_role":"01.022",` +
+			`"organization_ura":"00000010","organization_facility_type":"Z3"}`, "organization_name"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusOK, response).URL)
+			srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusOK, tc.response).URL)
 
 			res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
 			require.NoError(t, err)
@@ -705,9 +796,9 @@ func TestAuthorizeRejectsAPartialIntrospection(t *testing.T) {
 			require.NoError(t, err)
 			body := string(raw)
 			require.Contains(t, body, "introspect access token")
-			require.Contains(t, body, "organization_facility_type", "the failure must name the claim that is missing")
+			require.Contains(t, body, tc.missing, "the failure must name the claim that is missing")
 			require.NotContains(t, body, "no claims",
-				"three of four claims is not the same failure as none, and must not report as it")
+				"a shortfall is not the same failure as none, and must not report as it")
 			// The page's own heading, not a claim name: the message above names
 			// one, so absence of a claim name no longer proves absence of a page.
 			require.NotContains(t, body, "Service access token", "a partial introspection must not render the page")
@@ -742,7 +833,7 @@ func TestAuthorizeRejectsCrossSiteRequest(t *testing.T) {
 // being present, and only a request that carries same-origin proves it: the
 // tests above send no Sec-Fetch-Site at all, as non-browser clients do.
 func TestAuthorizeAcceptsSameOriginRequest(t *testing.T) {
-	srv, client := authorizeSandbox(t, fakeNode(t).URL)
+	srv, client := authorizeSandbox(t, nodeVouchingForTheToken(t).URL)
 
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/authorize", nil)
 	require.NoError(t, err)
@@ -790,7 +881,7 @@ func TestEhrHomeOffersTheAuthorizeControl(t *testing.T) {
 // redirect after it, so the browser offers to resubmit the form instead. This
 // link is the only way off the screen that leaves the session standing.
 func TestAuthorizeLinksBackToTheEhr(t *testing.T) {
-	srv, client := authorizeSandbox(t, fakeNode(t).URL)
+	srv, client := authorizeSandbox(t, nodeVouchingForTheToken(t).URL)
 
 	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
 	require.NoError(t, err)

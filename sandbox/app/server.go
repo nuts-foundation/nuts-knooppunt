@@ -166,15 +166,39 @@ func NewMux() *http.ServeMux {
 		// produced nothing as a success, which is the failure this page exists
 		// to make visible.
 		//
-		// So the guard asks for the claims the loop below renders, not for the
-		// map's size: {"active": false} has length 1 and sails through a size
-		// check. That shape is the node's canonical refusal, returned by
-		// auth/api/iam/api.go for an empty token, for one absent from its
-		// store and for an expired one, and RFC 7662 section 2.2 makes active
-		// the only member a response must carry. Indexing also covers a JSON
-		// null, which fmt.Sprint would otherwise render as the "<nil>" no
-		// reader can tell from a claim the node really returned.
-		claimNames := []string{"user_id", "user_role", "organization_ura", "organization_facility_type"}
+		// Two guards follow, in the order the node answers them. active is its
+		// verdict on the token: RFC 7662 section 2.2 makes it a required boolean
+		// and the indication of whether the token is currently active, and the
+		// node's own contract marks it required for the same reason. The section
+		// only recommends against an inactive response carrying anything else,
+		// so a consumer has to honour active rather than read liveness off the
+		// rest of the response: {"active": false} alongside a full set of claims
+		// is still a refusal. That shape is the node's canonical one, returned by
+		// auth/api/iam/api.go for an empty token, for one absent from its store
+		// and for an expired one.
+		active, isBool := claims["active"].(bool)
+		switch {
+		case !isBool:
+			// Absent, null, or some other type. This also covers a JSON null
+			// response, which decodes to a nil map. Whatever answers this way is
+			// not a conforming introspection endpoint, which is a different fault
+			// from a token the node declines to vouch for, so it is worth its own
+			// wording.
+			http.Error(w, "introspect access token: response carried no boolean active", http.StatusBadGateway)
+			return
+		case !active:
+			http.Error(w, "introspect access token: the node reported the token as not active", http.StatusBadGateway)
+			return
+		}
+
+		// The claims are the node's answer about the credential behind the token,
+		// so they are asked for only once it has vouched for the token itself.
+		// The set is the one the bgz presentation definition emits and
+		// component/pdp reads into PolicySubject, so a name absent here is one
+		// the PDP would never receive. Indexing rather than sizing also keeps a
+		// JSON null off the page, where fmt.Sprint would render it as the "<nil>"
+		// no reader can tell from a claim the node really returned.
+		claimNames := []string{"user_id", "user_role", "organization_ura", "organization_name", "organization_facility_type"}
 		var missing []string
 		for _, name := range claimNames {
 			if claims[name] == nil {
@@ -183,9 +207,9 @@ func NewMux() *http.ServeMux {
 		}
 		switch {
 		case len(missing) == len(claimNames):
-			// Worth its own wording: none at all means the node declined the
-			// token, where a shortfall means it vouched for one carrying the
-			// wrong credential.
+			// Worth its own wording: an active token with no claims at all points
+			// at the scope or the policy behind it, where a shortfall means the
+			// node vouched for a token carrying the wrong credential.
 			http.Error(w, "introspect access token: response carried no claims", http.StatusBadGateway)
 			return
 		case len(missing) > 0:
