@@ -6,6 +6,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -750,4 +751,53 @@ func TestAuthorizeAcceptsSameOriginRequest(t *testing.T) {
 	require.NoError(t, err)
 	defer res.Body.Close()
 	require.Equal(t, http.StatusOK, res.StatusCode)
+}
+
+// Every other test on this route reaches it with PostForm, which passes
+// whether or not a person can. The route is POST-only behind crossSiteRequest,
+// so no URL a visitor can type reaches it and no link can either: a form on
+// the signed-in home page is the only way in, and its absence is invisible to
+// a suite that drives the route directly. That is how the route came to be
+// wired, documented and covered while no click could reach it.
+func TestEhrHomeOffersTheAuthorizeControl(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+
+	status, body := getPageWithClient(t, client, srv.URL+"/demo/ehr")
+	require.Equal(t, http.StatusOK, status)
+
+	// The opening tag whole, not the two attributes apart. The top bar already
+	// renders method="post" for sign-out, so a separate check for that
+	// attribute passes on today's page, which carries no authorize form at all.
+	const openTag = `<form method="post" action="/demo/authorize">`
+	require.Contains(t, body, openTag, "the home page must post to the authorization route")
+
+	// A form with no submit control is as unreachable as no form, and a button
+	// elsewhere on the page submits nothing, so the control is looked for
+	// between this form's tags rather than anywhere in the body.
+	form, _, closed := strings.Cut(body[strings.Index(body, openTag)+len(openTag):], "</form>")
+	require.True(t, closed, "the authorize form must be closed")
+	require.Contains(t, form, `type="submit"`, "the form needs a submit control to be clickable")
+	require.Contains(t, form, "Show what is in my access token", "the control must say what clicking it does")
+}
+
+// The claims page renders inside the EHR chrome, whose sidebar items are
+// static divs, so its only other controls are sign-out and reset, and both end
+// the demo. Reload is not an exit either: the page is a POST response with no
+// redirect after it, so the browser offers to resubmit the form instead. This
+// link is the only way off the screen that leaves the session standing.
+func TestAuthorizeLinksBackToTheEhr(t *testing.T) {
+	srv, client := authorizeSandbox(t, fakeNode(t).URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+
+	require.Contains(t, string(raw), `href="/demo/ehr"`, "the claims page must offer a way back into the EHR")
 }
