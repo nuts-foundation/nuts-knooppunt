@@ -1,0 +1,21 @@
+{{define "content"}}
+{{template "demobar" .}}
+<div class="app">
+  {{template "sidebar" .}}
+  <div class="main-col">
+    {{template "topbar" .}}
+    <main class="content">
+      <div class="card">
+        <h3>Service access token</h3>
+        <div class="h-sub">These are the claims the authorization flow reads from this session.
+        The decision itself is not made here; that arrives with the retrieval chain.</div>
+        <table class="claims">
+          <tbody>
+            {{range .Claims}}<tr><th>{{.Name}}</th><td>{{.Value}}</td></tr>{{end}}
+          </tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+</div>
+{{end}}

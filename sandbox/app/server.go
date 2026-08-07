@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 )
 
 var notices = map[string]string{
@@ -16,6 +18,7 @@ var notices = map[string]string{
 func NewMux() *http.ServeMux {
 	sessions := newSessionStore()
 	client := newDeziClient(deziConfigFromEnv())
+	nuts := newNutsClient(nutsConfigFromEnv())
 	pending := newPendingStore()
 	secure := secureCookies()
 
@@ -139,6 +142,68 @@ func NewMux() *http.ServeMux {
 		})
 		http.Redirect(w, r, "/demo?notice=reset-pending", http.StatusSeeOther)
 	})
+
+	mux.HandleFunc("POST /demo/authorize", requireSession(signedIn, func(w http.ResponseWriter, r *http.Request, session *authSession) {
+		if crossSiteRequest(r) {
+			http.Error(w, "cross-site authorization is not allowed", http.StatusForbidden)
+			return
+		}
+		token, err := nuts.requestToken(r.Context(), *session)
+		if err != nil {
+			// The error already names its step; surfacing it verbatim is the
+			// point of this route.
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		claims, err := nuts.introspect(r.Context(), token)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		// A response of null, one without claims, and the node's own
+		// {"active": false} all decode without error, so nothing before this
+		// point reports them. Rendering any of them would report a flow that
+		// produced nothing as a success, which is the failure this page exists
+		// to make visible.
+		//
+		// So the guard asks for the claims the loop below renders, not for the
+		// map's size: {"active": false} has length 1 and sails through a size
+		// check. That shape is the node's canonical refusal, returned by
+		// auth/api/iam/api.go for an empty token, for one absent from its
+		// store and for an expired one, and RFC 7662 section 2.2 makes active
+		// the only member a response must carry. Indexing also covers a JSON
+		// null, which fmt.Sprint would otherwise render as the "<nil>" no
+		// reader can tell from a claim the node really returned.
+		claimNames := []string{"user_id", "user_role", "organization_ura", "organization_facility_type"}
+		var missing []string
+		for _, name := range claimNames {
+			if claims[name] == nil {
+				missing = append(missing, name)
+			}
+		}
+		switch {
+		case len(missing) == len(claimNames):
+			// Worth its own wording: none at all means the node declined the
+			// token, where a shortfall means it vouched for one carrying the
+			// wrong credential.
+			http.Error(w, "introspect access token: response carried no claims", http.StatusBadGateway)
+			return
+		case len(missing) > 0:
+			http.Error(w, "introspect access token: response carried no "+strings.Join(missing, ", "), http.StatusBadGateway)
+			return
+		}
+		view := session.view()
+		rendered := page{
+			Title: "Authorization · Plataan EHR", Guise: "ehr",
+			Scenario: scenario, ShowReset: true,
+			Active: "dossier", TopTitle: "Authorization",
+			Session: &view,
+		}
+		for _, name := range claimNames {
+			rendered.Claims = append(rendered.Claims, claim{Name: name, Value: fmt.Sprint(claims[name])})
+		}
+		render(w, "authorize.html", rendered)
+	}))
 
 	mux.HandleFunc("GET /demo/ehr", requireSession(signedIn, func(w http.ResponseWriter, r *http.Request, session *authSession) {
 		view := session.view()

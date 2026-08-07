@@ -34,6 +34,13 @@ type page struct {
 	TopTitle   string
 	Alert      bool
 	ViewerOpen bool
+	Claims     []claim
+}
+
+// claim is one introspected value, rendered on the authorization page.
+type claim struct {
+	Name  string
+	Value string
 }
 
 func (p page) Stylesheets() []string {

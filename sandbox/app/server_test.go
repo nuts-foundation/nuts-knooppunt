@@ -483,3 +483,271 @@ func TestLogoutAcceptsSameOriginRequest(t *testing.T) {
 	defer res.Body.Close()
 	require.Equal(t, http.StatusSeeOther, res.StatusCode, "a same-origin sign-out must be allowed")
 }
+
+// authorizeSandbox starts a sandbox wired to a fake Dezi and to nodeBaseURL,
+// and returns it together with a client holding a live session. The SANDBOX_
+// variables are cleared for the same reason testNutsClient clears them: the
+// node fakes pin their routes and assertions to nutsConfigFromEnv's defaults,
+// so a developer with any of them exported would otherwise get a sandbox those
+// fakes reject.
+func authorizeSandbox(t *testing.T, nodeBaseURL string) (*httptest.Server, *http.Client) {
+	t.Helper()
+	for _, key := range []string{
+		"SANDBOX_NUTS_SUBJECT",
+		"SANDBOX_BGZ_SCOPE",
+		"SANDBOX_AUTH_SERVER",
+		"SANDBOX_FACILITY_TYPE",
+	} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("DEZI_INTERNAL_BASE_URL", fakeDezi(t).URL)
+	t.Setenv("NUTS_INTERNAL_BASE_URL", nodeBaseURL)
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	return srv, signInViaDezi(t, srv)
+}
+
+// nodeIntrospecting issues a usable token and answers introspection with the
+// given status and body, which is the one shape neither existing fake can
+// produce: fakeNode always succeeds at both steps, and recordingNode answers
+// every path alike, so a failing introspection there is preceded by a failing
+// token request.
+func nodeIntrospecting(t *testing.T, status int, response string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /nuts/internal/auth/v2/plataan/request-service-access-token",
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"the-token"}`))
+		})
+	mux.HandleFunc("POST /nuts/internal/auth/v2/accesstoken/introspect",
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(response))
+		})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestAuthorizeRendersTheClaims(t *testing.T) {
+	srv, client := authorizeSandbox(t, fakeNode(t).URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	body := string(raw)
+
+	// Exact values, not merely present: a wrong persona or a mismatched
+	// certificate would satisfy a non-empty check. Name and value are asserted
+	// as the row the template renders, because a value alone also passes when
+	// it is rendered under the wrong claim name, and because 900001234 is the
+	// practitioner's Dezi number, which any page carrying the session view
+	// would print regardless of what the node returned.
+	for _, row := range []string{
+		"<th>user_id</th><td>900001234</td>",
+		"<th>user_role</th><td>01.022</td>",
+		"<th>organization_ura</th><td>00000010</td>",
+		"<th>organization_facility_type</th><td>Z3</td>",
+	} {
+		require.Contains(t, body, row)
+	}
+	require.Contains(t, body, "<title>Authorization · Plataan EHR</title>")
+	require.Contains(t, body, "Service access token")
+	require.Contains(t, body, "The decision itself is not made here",
+		"the page must say the authorization decision is not what it shows")
+	require.Contains(t, body, scenario, "the demo bar carries the scenario")
+	require.Contains(t, body, "Reset", "the demo bar carries the reset control")
+}
+
+// Issue #540's second acceptance criterion is that every authenticated screen
+// shows the practitioner's name, role, UZI number and organisation. This route
+// sits behind requireSession and renders a full page, so the criterion covers
+// it, and Session.Description is where the last three come from. This is the
+// same assertion TestEhrHomeShowsFullChrome makes for /demo/ehr.
+//
+// It is also what makes page.Session load-bearing here: with no top bar the
+// field was set and never read, so dropping it changed no byte of the response.
+func TestAuthorizeShowsThePractitionerChrome(t *testing.T) {
+	srv, client := authorizeSandbox(t, fakeNode(t).URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	body := string(raw)
+
+	require.Contains(t, body, `class="side"`, "the EHR sidebar")
+	require.Contains(t, body, `class="top"`, "the EHR top bar")
+	// .app, .side, .top and .card have rules in ehr.css and nowhere else, so
+	// the guise stopped being cosmetic the moment this page grew the chrome:
+	// under "shell" the markup below still renders and the layout collapses.
+	require.Contains(t, body, "/static/css/ehr.css", "the chrome is styled only there")
+	require.Contains(t, body, "Dr. S. el Amrani", "the practitioner's name")
+	require.Contains(t, body, "Clinical geriatrician · UZI 900001234 · De Plataan Hospital",
+		"role, UZI number and organisation, the rest of criterion 2")
+	require.Contains(t, body, "Dezi ✓", "the top bar shows the signed-in badge")
+	require.Contains(t, body, "<h2>Authorization</h2>", "the top bar names the screen")
+	// Which item is highlighted is the sidebar's business; that one is at all
+	// is this page's, and it is the whole of page.Active's effect here.
+	require.Contains(t, body, `class="nav-item active"`, "the page marks its section in the sidebar")
+}
+
+func TestAuthorizeRequiresASession(t *testing.T) {
+	srv := httptest.NewServer(NewMux())
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo/login", res.Header.Get("Location"))
+}
+
+// The local go run path has no node at all. The route must say so rather than
+// the app failing to start or the page rendering an empty table.
+func TestAuthorizeNamesTheFailingStepWhenTheNodeIsAbsent(t *testing.T) {
+	srv, client := authorizeSandbox(t, "http://127.0.0.1:1")
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusBadGateway, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	body := string(raw)
+	require.Contains(t, body, "request service access token")
+	// The handler must stop here. Without the return the empty token is
+	// introspected anyway, and the response carries the second step's failure
+	// on top of the first, naming the wrong step to whoever reads it.
+	require.NotContains(t, body, "introspect access token")
+}
+
+// The token step succeeding and introspection failing is unreachable from the
+// absent-node case above, which never gets past the first call, so the second
+// error branch would otherwise be untested.
+func TestAuthorizeNamesTheIntrospectionStep(t *testing.T) {
+	srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusUnauthorized, `{"error":"unauthorized"}`).URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusBadGateway, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	body := string(raw)
+	require.Contains(t, body, "introspect access token")
+	// The status the node gave, not just the step: the claimless guard below
+	// reports the same step, so without this an ignored introspection error
+	// reads identically to an introspection that returned nothing.
+	require.Contains(t, body, "status 401")
+	require.NotContains(t, body, "no claims", "the response must carry one failure, not the next check's as well")
+	require.NotContains(t, body, "user_id", "a failed introspection must not also render the claims table")
+}
+
+// A JSON null, or an object without claims, decodes without error and leaves
+// the map empty, so nothing in the client reports it. Rendering that as a page
+// of empty rows would call a flow successful that produced no claims at all.
+//
+// {"active": false} is the node's canonical answer to a token it will not
+// vouch for: auth/api/iam/api.go returns it for an empty token, for one absent
+// from its store and for an expired one, each under the comment "Return 200 +
+// 'Active = false' when token is invalid or malformed". It decodes to a map of
+// length 1, so a length check waves it through; only looking for the claims
+// the page renders catches it.
+func TestAuthorizeRejectsAClaimlessIntrospection(t *testing.T) {
+	for _, response := range []string{`null`, `{}`, `{"active":false}`} {
+		t.Run(response, func(t *testing.T) {
+			srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusOK, response).URL)
+
+			res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+			require.NoError(t, err)
+			defer res.Body.Close()
+			require.Equal(t, http.StatusBadGateway, res.StatusCode)
+			raw, err := io.ReadAll(res.Body)
+			require.NoError(t, err)
+			body := string(raw)
+			require.Contains(t, body, "introspect access token")
+			require.Contains(t, body, "no claims")
+			require.NotContains(t, body, "user_id", "an empty introspection must not render a table of blanks")
+		})
+	}
+}
+
+// A response carrying some of the four claims is the same failure one row at a
+// time: fmt.Sprint of an absent or null value is "<nil>", so the page would
+// print a blank the reader has no way to tell from a claim the node genuinely
+// returned as the string "<nil>". The step is named with the claims it did not
+// carry, because that is the difference between a misconfigured credential and
+// a token the node refused outright.
+func TestAuthorizeRejectsAPartialIntrospection(t *testing.T) {
+	for name, response := range map[string]string{
+		"absent": `{"active":true,"user_id":"900001234","user_role":"01.022","organization_ura":"00000010"}`,
+		"null":   `{"active":true,"user_id":"900001234","user_role":"01.022","organization_ura":"00000010","organization_facility_type":null}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusOK, response).URL)
+
+			res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+			require.NoError(t, err)
+			defer res.Body.Close()
+			require.Equal(t, http.StatusBadGateway, res.StatusCode)
+			raw, err := io.ReadAll(res.Body)
+			require.NoError(t, err)
+			body := string(raw)
+			require.Contains(t, body, "introspect access token")
+			require.Contains(t, body, "organization_facility_type", "the failure must name the claim that is missing")
+			require.NotContains(t, body, "no claims",
+				"three of four claims is not the same failure as none, and must not report as it")
+			// The page's own heading, not a claim name: the message above names
+			// one, so absence of a claim name no longer proves absence of a page.
+			require.NotContains(t, body, "Service access token", "a partial introspection must not render the page")
+			require.NotContains(t, body, "<nil>", "the blank this guard exists to keep off the screen")
+		})
+	}
+}
+
+func TestAuthorizeRejectsCrossSiteRequest(t *testing.T) {
+	srv, client := authorizeSandbox(t, fakeNode(t).URL)
+
+	// The session is deliberately live. requireSession is the outer guard, so
+	// without one this request is turned away at the login redirect and the
+	// check below is never reached, leaving the assertion vacuous.
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusForbidden, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	body := string(raw)
+	require.Contains(t, body, "cross-site")
+	// Status alone is too weak: without the return the handler goes on to ask
+	// the node for a token and appends the page to the rejection.
+	require.NotContains(t, body, "user_id", "a rejected request must not reach the node at all")
+}
+
+// The guard rejects on evidence of another site rather than on the header
+// being present, and only a request that carries same-origin proves it: the
+// tests above send no Sec-Fetch-Site at all, as non-browser clients do.
+func TestAuthorizeAcceptsSameOriginRequest(t *testing.T) {
+	srv, client := authorizeSandbox(t, fakeNode(t).URL)
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+}
