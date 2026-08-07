@@ -24,8 +24,22 @@ creates empty directories at the bind-mount paths and mock-dezi fails to start
 
 ```shell
 ./sandbox/generate-demo-certs.sh     # once, writes to the gitignored sandbox/.certs/
+
+# The node has to be listening before the bootstrap can reach it, and the bootstrap
+# has to have run before the sandbox starts, so the node comes up on its own first.
+docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up -d knooppunt
+./sandbox/bootstrap-nuts.sh
 docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up
 ```
+
+`sandbox/bootstrap-nuts.sh` runs on the host, not in a container: it needs bash, python3 and the
+didx509 toolkit through Docker, with the certificate paths resolved on the host. The overlay's
+`nuts-bootstrap-healthcheck` service enforces the ordering rather than trusting it. It waits for the
+knooppunt, then for the `plataan` wallet to hold a credential, and `gf-sandbox` starts only once it
+has exited successfully. Skip the bootstrap and that service fails after a minute with the command
+to run, which `docker compose logs nuts-bootstrap-healthcheck` shows. Without the gate the sandbox
+would start and the authorization route would fail on an empty wallet, which reads as a policy or
+certificate problem rather than a missing step.
 
 The overlay carries the knooppunt settings the sandbox needs: the demo CA and the Dezi JWK Set
 allowlist. They live there rather than in `docker-compose.yml` because the knooppunt service is
@@ -41,9 +55,23 @@ defaults instead of extending them.
 | `DEZI_PUBLIC_AUTHORIZE_URL` | `http://localhost:8092/authorize` | where the **browser** is sent |
 | `DEZI_INTERNAL_BASE_URL` | `http://localhost:8092` | where the **backend** calls token and userinfo |
 | `SANDBOX_PUBLIC_URL` | `http://localhost:8091` | the URL the browser reaches the sandbox on. Builds the redirect URI, and its scheme decides whether the session cookie carries `Secure`. A hosted deployment behind a TLS-terminating proxy must set this to its `https://` URL: the request arriving at this process is plain http, so nothing else here can tell that the browser used TLS |
+| `NUTS_INTERNAL_BASE_URL` | `http://localhost:8081` | where the **backend** calls the Nuts node's internal API, which the knooppunt proxies under `/nuts` |
+| `SANDBOX_NUTS_SUBJECT` | `plataan` | the Nuts subject the token is requested for. Must name the subject `sandbox/bootstrap-nuts.sh` creates, whose wallet holds the `X509Credential` |
+| `SANDBOX_BGZ_SCOPE` | `bgz` | the scope requested. Must be a key in `config/policy/bgz.json`, or the node answers `invalid_scope` |
+| `SANDBOX_AUTH_SERVER` | `http://localhost:8080/nuts/oauth2/plataan` | the authorization server the token is requested from. Compared byte for byte against the issuer the node advertises and never dialled, so it stays on `localhost` inside the container too |
+| `SANDBOX_FACILITY_TYPE` | `Z3` | the facility type asserted in the organization context credential, the only thing on this path that carries one |
 
 The public and internal URLs are separate on purpose. Under compose the browser cannot resolve the
 `mock-dezi` service name, and the sandbox container resolving `localhost` would reach itself.
+
+Of the five Nuts settings, `docker-compose.yml` overrides only `NUTS_INTERNAL_BASE_URL`, to
+`http://knooppunt:8081`. It is the only one this topology changes; the other four already default to
+the values that are correct there. This table describes what the application reads, which is not the
+same question as what compose sets.
+
+`POST /demo/authorize` needs the compose stack. It asks the Nuts node for a service access token and
+introspects it, and the `go run` path has no node to reach, so there it answers 502 naming the step
+that failed. Sign-in, session and every other route keep working locally.
 
 ## Architecture
 
@@ -79,6 +107,10 @@ the vendored v1.0.2 bundle. Keep this form when adding interactivity.
   `GET /demo/auth/callback` creates the session, `POST /demo/logout` ends it. `authSession` in
   `session.go` holds the raw attestation that E4 sends to the Nuts node as `id_token`; templates
   only ever see the derived `Session` view model.
+- The service access token (E4): `POST /demo/authorize` sends the session's attestation to the Nuts
+  node as `id_token` with one self-asserted organization context credential, introspects the token
+  it gets back, and renders `user_id`, `user_role`, `organization_ura` and
+  `organization_facility_type`. Compose only; see the note under Configuration.
 - The reset stub, `POST /demo/reset` (E5).
 - The `#gf-viewer-steps` container and `window.GFJourney.apply(stepEvent)` / `.reset()`, consuming the DESIGN.md §7
   step-event schema (E6).

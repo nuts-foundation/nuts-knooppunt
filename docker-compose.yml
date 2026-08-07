@@ -259,8 +259,27 @@ services:
       DEZI_PUBLIC_AUTHORIZE_URL: http://localhost:8092/authorize
       DEZI_INTERNAL_BASE_URL: http://mock-dezi:8092
       SANDBOX_PUBLIC_URL: http://localhost:8091
+      # The only Nuts setting this topology changes: localhost inside this
+      # container is the sandbox itself, so the node is reached by service name.
+      #
+      # sandbox/app/nuts.go already defaults SANDBOX_NUTS_SUBJECT, SANDBOX_BGZ_SCOPE,
+      # SANDBOX_AUTH_SERVER and SANDBOX_FACILITY_TYPE to the values that are correct
+      # here, and restating them would override the code rather than document it.
+      # sandbox/app/README.md carries the table of all five.
+      #
+      # SANDBOX_AUTH_SERVER in particular keeps its localhost:8080 default inside
+      # the container. That is not the bug it resembles: the string is never
+      # dialled, only compared byte for byte against the issuer the node
+      # advertises, so a service name here would fail the audience check.
+      NUTS_INTERNAL_BASE_URL: http://knooppunt:8081
+    # The ordering that makes the authorization route work lives in
+    # docker-compose.sandbox.yml: it depends on a service only that file defines.
+    # Spelled in mapping form to match the override there. Compose 5.3.0 merges
+    # list and mapping notation additively either way, but matching notation
+    # means this dependency's survival does not rest on that.
     depends_on:
-      - mock-dezi
+      mock-dezi:
+        condition: service_started
     profiles:
       - sandbox
 

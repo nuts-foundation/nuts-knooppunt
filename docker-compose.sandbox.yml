@@ -29,3 +29,73 @@ services:
       # path does not exist and Docker would create a directory here, which is
       # why the mount is not on the base service.
       - ./sandbox/.certs/ca-only/gf-sandbox-demo-ca.pem:/etc/ssl/certs/gf-sandbox-demo-ca.pem:ro
+
+  # The service itself is in docker-compose.yml; only this ordering is here.
+  # It cannot live in the base file: it names a service that only this overlay
+  # defines, and `docker compose --profile sandbox config` against the base file
+  # alone then fails with "depends on undefined service".
+  #
+  # Waiting for the knooppunt would not be enough. A node that is up says nothing
+  # about the plataan wallet holding a credential, and without one the
+  # authorization route returns a token error the operator has no way to read as
+  # "the bootstrap never ran".
+  gf-sandbox:
+    depends_on:
+      nuts-bootstrap-healthcheck:
+        condition: service_completed_successfully
+
+  # Follows hapi-fhir-healthcheck in docker-compose.yml: wait in a loop, then
+  # exit, so a dependant can order itself behind a condition rather than behind
+  # a container merely being up.
+  #
+  # It waits for the bootstrap; it does not run it. sandbox/bootstrap-nuts.sh
+  # needs bash, python3 and a Docker daemon to run the didx509 toolkit, and it
+  # passes the toolkit certificate paths that only resolve on the host. This
+  # image has none of that, so the operator runs the script from the repo root
+  # and this service holds the sandbox back until they have.
+  # sandbox/app/README.md gives the sequence.
+  #
+  # The condition is "the wallet is not empty", not "the wallet holds an
+  # X509Credential": the toolkit issues a JWT credential and a wallet returns one
+  # as an opaque compact JWT (go-did vc.VerifiableCredential.MarshalJSON), so the
+  # type is unreadable without a base64 and JSON decoder this image does not
+  # ship. The bootstrap puts nothing else in that wallet.
+  #
+  # The subject is spelled out here because there is nothing to read it from; it
+  # must stay in step with SANDBOX_NUTS_SUBJECT, which sandbox/app/nuts.go and
+  # sandbox/bootstrap-nuts.sh both default to plataan.
+  nuts-bootstrap-healthcheck:
+    image: curlimages/curl:7.87.0
+    profiles:
+      - sandbox
+    depends_on:
+      - knooppunt
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -eu
+        echo 'Starting Nuts bootstrap healthcheck...'
+        until curl -sf http://knooppunt:8081/status > /dev/null; do
+          echo 'Waiting for knooppunt to be ready...'
+          sleep 5
+        done
+        # Twelve tries, five seconds apart. Bounded, unlike the wait above:
+        # nothing in the stack ever satisfies this on its own, so blocking
+        # forever would stall `docker compose up -d` with nothing on screen to
+        # explain it. The script deliberately spells no dollar sign, so nothing
+        # here depends on how compose escapes one.
+        for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+          # curl -f first: a node not yet serving the wallet must not reach grep
+          # as an empty body and read as success.
+          if curl -sf -o /tmp/wallet.json http://knooppunt:8081/nuts/internal/vcr/v2/holder/plataan/vc && grep -qv '^\[\]' /tmp/wallet.json; then
+            echo 'The plataan wallet is provisioned.'
+            exit 0
+          fi
+          echo 'Waiting for the plataan wallet to be bootstrapped...'
+          sleep 5
+        done
+        echo 'The plataan wallet is empty. Run ./sandbox/bootstrap-nuts.sh from the repo root, then bring the stack up again.'
+        exit 1
+    # Ensure the container exits successfully after the check
+    restart: "no"
