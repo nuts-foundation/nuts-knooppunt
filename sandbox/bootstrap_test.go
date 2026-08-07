@@ -36,10 +36,12 @@ type fakeNode struct {
 	// rejectStores makes the node refuse credentials, as it does for one it
 	// cannot verify.
 	rejectStores bool
-	// failSubjectList and failWallet make a read fail the way the node does:
-	// an error status carrying a problem document, which is itself valid JSON.
-	failSubjectList bool
-	failWallet      bool
+	// failSubjectList, failSubjectCreate and failWallet make a call fail the
+	// way the node does: an error status carrying a problem document, which is
+	// itself valid JSON.
+	failSubjectList   bool
+	failSubjectCreate bool
+	failWallet        bool
 }
 
 func newFakeNode(t *testing.T) (*fakeNode, string) {
@@ -87,6 +89,10 @@ func (n *fakeNode) createSubject(w http.ResponseWriter, r *http.Request) {
 	n.creates++
 
 	if !jsonBody(w, r) {
+		return
+	}
+	if n.failSubjectCreate {
+		problem(w, "could not create the subject")
 		return
 	}
 	var request struct {
@@ -261,6 +267,12 @@ func (n *fakeNode) breakSubjectList() {
 	n.failSubjectList = true
 }
 
+func (n *fakeNode) breakSubjectCreate() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.failSubjectCreate = true
+}
+
 func (n *fakeNode) breakWallet() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -288,18 +300,107 @@ func skipDidx509(t *testing.T) []string {
 	}
 }
 
+// bootstrapWithoutBaseURL leaves NUTS_INTERNAL_BASE_URL out of the
+// environment, which bootstrap always sets, so that the default an operator
+// actually runs with can be exercised at all.
+func bootstrapWithoutBaseURL(env ...string) *exec.Cmd {
+	cmd := exec.Command("bash", "bootstrap-nuts.sh")
+	for _, entry := range cmd.Environ() {
+		if !strings.HasPrefix(entry, "NUTS_INTERNAL_BASE_URL=") {
+			cmd.Env = append(cmd.Env, entry)
+		}
+	}
+	cmd.Env = append(cmd.Env, env...)
+	return cmd
+}
+
+// runBootstrapIn runs the script from a working directory of the test's
+// choosing. $CERTS is derived from the script's own location, so a test that
+// needs to control what sits beside the certificates runs a copy from
+// scriptCopy rather than the checkout. The script is invoked by a relative
+// path either way, which keeps the absolute path it builds under test.
+func runBootstrapIn(t *testing.T, dir, nodeURL string, env ...string) (string, error) {
+	t.Helper()
+	cmd := bootstrap(nodeURL, env...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
 func runBootstrap(t *testing.T, nodeURL string, env ...string) string {
 	t.Helper()
-	out, err := bootstrap(nodeURL, env...).CombinedOutput()
+	out, err := runBootstrapIn(t, ".", nodeURL, env...)
 	require.NoError(t, err, "bootstrap failed: %s", out)
-	return string(out)
+	return out
 }
 
 func runBootstrapExpectingFailure(t *testing.T, nodeURL string, env ...string) string {
 	t.Helper()
-	out, err := bootstrap(nodeURL, env...).CombinedOutput()
+	out, err := runBootstrapIn(t, ".", nodeURL, env...)
 	require.Error(t, err, "bootstrap reported success: %s", out)
-	return string(out)
+	return out
+}
+
+// scriptCopy puts the script alone in a temporary directory, so a test decides
+// whether the certificates it looks for are there. The real .certs is
+// gitignored, so a test reading it would pass or fail on whether the operator
+// had generated the demo material.
+func scriptCopy(t *testing.T) string {
+	t.Helper()
+	// Resolved, because the script reports its own location with pwd, and on
+	// macOS the temporary directory is reached through a symlink.
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	script, err := os.ReadFile("bootstrap-nuts.sh")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "bootstrap-nuts.sh"), script, 0o755))
+	return dir
+}
+
+// seedCertificates puts the two files generate-demo-certs.sh produces beside a
+// script copy. Only a stubbed toolkit ever opens them, so their contents are
+// irrelevant and their presence is the whole point.
+func seedCertificates(t *testing.T, dir string) {
+	t.Helper()
+	certs := filepath.Join(dir, ".certs")
+	require.NoError(t, os.MkdirAll(certs, 0o755))
+	for _, name := range []string{"plataan-uzi-chain.pem", "plataan-uzi.key"} {
+		require.NoError(t, os.WriteFile(filepath.Join(certs, name), []byte("demo material\n"), 0o600))
+	}
+}
+
+// didx509Stub is a docker on PATH that records how the toolkit was called and
+// answers with a credential, so the real path can be driven without a
+// container.
+type didx509Stub struct {
+	env           []string
+	argumentsFile string
+}
+
+func stubDidx509(t *testing.T, credential string) didx509Stub {
+	t.Helper()
+	stubDir := t.TempDir()
+	argumentsFile := filepath.Join(stubDir, "arguments")
+	stub := fmt.Sprintf("#!/usr/bin/env bash\nprintf '%%s\\n' \"$@\" > %q\nprintf '%%s\\n' %q\n",
+		argumentsFile, credential)
+	require.NoError(t, os.WriteFile(filepath.Join(stubDir, "docker"), []byte(stub), 0o755))
+	return didx509Stub{
+		env:           []string{"PATH=" + stubDir + string(os.PathListSeparator) + os.Getenv("PATH")},
+		argumentsFile: argumentsFile,
+	}
+}
+
+func (s didx509Stub) arguments(t *testing.T) []string {
+	t.Helper()
+	recorded, err := os.ReadFile(s.argumentsFile)
+	require.NoError(t, err, "the script must invoke the toolkit")
+	return strings.Split(strings.TrimSuffix(string(recorded), "\n"), "\n")
+}
+
+func (s didx509Stub) requireNotCalled(t *testing.T) {
+	t.Helper()
+	_, err := os.Stat(s.argumentsFile)
+	require.ErrorIs(t, err, os.ErrNotExist, "the toolkit must not run before its inputs are checked")
 }
 
 func TestBootstrapIsIdempotent(t *testing.T) {
@@ -338,6 +439,13 @@ func TestBootstrapReadsEveryCredentialFormatTheWalletReturns(t *testing.T) {
 		`"not-a-jwt"`,
 		`"not.a.jwt"`,
 		`"not.aGVsbG8.jwt"`,
+		// Decodable and valid JSON, but not an object: a payload of 1 and a
+		// payload of ["x"]. A wallet entry that is not a credential at all is
+		// the same case one level up.
+		`"a.MQ.b"`,
+		`"a.WyJ4Il0.b"`,
+		`null`,
+		`42`,
 		// A bare-string type has to be compared whole, not by substring.
 		`{"type":"X509CredentialArchive"}`,
 	)
@@ -376,6 +484,17 @@ func TestBootstrapFailsWhenTheNodeReturnsAnError(t *testing.T) {
 		require.Zero(t, stores)
 	})
 
+	t.Run("creating the subject", func(t *testing.T) {
+		node, nodeURL := newFakeNode(t)
+		node.breakSubjectCreate()
+
+		out := runBootstrapExpectingFailure(t, nodeURL, skipDidx509(t)...)
+		require.NotContains(t, out, "Stored the X509Credential")
+		creates, stores := node.counts()
+		require.Equal(t, 1, creates, "the create was attempted and refused")
+		require.Zero(t, stores, "a subject that does not exist must not be given a credential")
+	})
+
 	t.Run("reading the wallet", func(t *testing.T) {
 		node, nodeURL := newFakeNode(t)
 		node.seedSubject("plataan")
@@ -401,6 +520,27 @@ func TestBootstrapHonoursTheConfiguredSubject(t *testing.T) {
 	require.Equal(t, 1, stores)
 }
 
+func TestBootstrapDefaultsToTheNodesPublishedInternalAPI(t *testing.T) {
+	// A curl that records how it was called and then fails makes the default
+	// observable without opening a socket. Letting the script reach 8081 for
+	// real would mean creating subjects in whatever node the operator has
+	// running, which is exactly the node this default points at.
+	stubDir := t.TempDir()
+	argumentsFile := filepath.Join(stubDir, "arguments")
+	stub := fmt.Sprintf("#!/usr/bin/env bash\nprintf '%%s\\n' \"$@\" > %q\nexit 1\n", argumentsFile)
+	require.NoError(t, os.WriteFile(filepath.Join(stubDir, "curl"), []byte(stub), 0o755))
+
+	cmd := bootstrapWithoutBaseURL("PATH=" + stubDir + string(os.PathListSeparator) + os.Getenv("PATH"))
+	out, err := cmd.CombinedOutput()
+	require.Error(t, err, "a curl that fails must fail the run: %s", out)
+
+	recorded, err := os.ReadFile(argumentsFile)
+	require.NoError(t, err, "the script must have called curl")
+	arguments := strings.Split(strings.TrimSuffix(string(recorded), "\n"), "\n")
+	require.Equal(t, "http://localhost:8081/nuts/internal/vdr/v2/subject", arguments[len(arguments)-1],
+		"the default has to reach the port docker-compose.yml publishes for the node")
+}
+
 func TestBootstrapFailsWhenTheNodeIsUnreachable(t *testing.T) {
 	// Nothing listens on port 1. A compose init step that exits 0 here would
 	// leave the demo running against an empty wallet.
@@ -421,35 +561,88 @@ func TestBootstrapFailsWhenTheNodeRejectsTheCredential(t *testing.T) {
 
 func TestBootstrapIssuesTheCredentialFromTheDemoCertificates(t *testing.T) {
 	node, nodeURL := newFakeNode(t)
+	dir := scriptCopy(t)
+	seedCertificates(t, dir)
 
-	// The real path shells out to the didx509 toolkit. A stub on PATH records
-	// how it was called and answers with a credential, so the arguments that
-	// have to match the demo certificates are checked without Docker.
-	stubDir := t.TempDir()
-	argumentsFile := filepath.Join(stubDir, "arguments")
+	// The real path shells out to the didx509 toolkit, so the arguments that
+	// have to match the demo certificates are checked against a stub.
 	credential := jwtCredential("VerifiableCredential", "X509Credential")
-	stub := fmt.Sprintf("#!/usr/bin/env bash\nprintf '%%s\\n' \"$@\" > %q\nprintf '%%s\\n' %q\n",
-		argumentsFile, credential)
-	require.NoError(t, os.WriteFile(filepath.Join(stubDir, "docker"), []byte(stub), 0o755))
+	toolkit := stubDidx509(t, credential)
 
-	runBootstrap(t, nodeURL, "PATH="+stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := runBootstrapIn(t, dir, nodeURL, toolkit.env...)
+	require.NoError(t, err, "bootstrap failed: %s", out)
 
-	recorded, err := os.ReadFile(argumentsFile)
-	require.NoError(t, err, "the script must invoke the toolkit")
-	workingDir, err := os.Getwd()
-	require.NoError(t, err)
-	certs := filepath.Join(workingDir, ".certs")
+	certs := filepath.Join(dir, ".certs")
 	require.Equal(t, []string{
 		"run", "--rm",
+		// Absolute, because a bind mount is resolved against the daemon's
+		// notion of the path, not the shell's.
 		"-v", certs + "/plataan-uzi-chain.pem:/cert-chain.pem:ro",
 		"-v", certs + "/plataan-uzi.key:/cert-key.key:ro",
-		"nutsfoundation/go-didx509-toolkit:main",
+		"nutsfoundation/go-didx509-toolkit:1.2.0",
 		"vc", "/cert-chain.pem", "/cert-key.key",
 		// The issuer of the demo chain, from generate-demo-certs.sh.
 		"CN=GF Sandbox Demo CA",
 		"did:web:example.com:iam:plataan",
-	}, strings.Split(strings.TrimSuffix(string(recorded), "\n"), "\n"))
+	}, toolkit.arguments(t))
 
 	require.Equal(t, []string{`"` + credential + `"`}, node.walletRaw("plataan"),
 		"the credential must be stored as a JSON string, as the node parses the body as JSON")
+}
+
+// Handing a missing path to docker run -v has the daemon create a directory
+// there, and these two paths sit inside generate-demo-certs.sh's own output
+// directory: that script would then read the material as absent, rewrite the
+// CA and die on the directory, leaving half a rotated PKI and no documented
+// way back.
+func TestBootstrapRefusesToIssueWithoutTheDemoCertificates(t *testing.T) {
+	for _, scenario := range []struct {
+		name    string
+		setUp   func(t *testing.T, dir string)
+		missing string
+	}{
+		{
+			name:    "a checkout where the generator has not been run",
+			setUp:   func(*testing.T, string) {},
+			missing: "plataan-uzi-chain.pem",
+		},
+		{
+			// Both are mounted, so checking only the first still leaves one
+			// path for the daemon to create.
+			name: "half the material",
+			setUp: func(t *testing.T, dir string) {
+				seedCertificates(t, dir)
+				require.NoError(t, os.Remove(filepath.Join(dir, ".certs", "plataan-uzi.key")))
+			},
+			missing: "plataan-uzi.key",
+		},
+		{
+			// What a run without this guard leaves behind, and the reason the
+			// check is -f: a directory is perfectly readable.
+			name: "a directory where an earlier run wedged the bind mount",
+			setUp: func(t *testing.T, dir string) {
+				seedCertificates(t, dir)
+				chain := filepath.Join(dir, ".certs", "plataan-uzi-chain.pem")
+				require.NoError(t, os.Remove(chain))
+				require.NoError(t, os.Mkdir(chain, 0o755))
+			},
+			missing: "plataan-uzi-chain.pem",
+		},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			node, nodeURL := newFakeNode(t)
+			dir := scriptCopy(t)
+			scenario.setUp(t, dir)
+			toolkit := stubDidx509(t, jwtCredential("VerifiableCredential", "X509Credential"))
+
+			out, err := runBootstrapIn(t, dir, nodeURL, toolkit.env...)
+			require.Error(t, err, "bootstrap reported success: %s", out)
+			require.Contains(t, out, scenario.missing, "the message must name the file it needs")
+			require.Contains(t, out, "generate-demo-certs.sh", "and the script that produces it")
+			toolkit.requireNotCalled(t)
+
+			_, stores := node.counts()
+			require.Zero(t, stores, "nothing was issued, so nothing can be stored")
+		})
+	}
 }

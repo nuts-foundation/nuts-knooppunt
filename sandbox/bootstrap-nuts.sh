@@ -7,10 +7,22 @@
 # equivalent helpers in test/e2e/pep/authorization_test.go are unconditional
 # and deliberately not copied.
 #
+# That buys no repeated writes, not convergence on the intended state, and the
+# two are the same thing only while the inputs do not change. The wallet check
+# matches on credential type alone, so after a certificate rotation the wallet
+# still holds one issued from the old chain, this reports nothing to do, and
+# the demo fails later at token request time with an error that names the node
+# rather than the bootstrap. Rotating the certificates therefore means
+# clearing the Nuts volume along with them.
+#
 # The durable, resettable version of this belongs to #542; this exists so the
 # demo runs and the tests have something to drive.
 #
-# Usage: ./sandbox/bootstrap-nuts.sh
+# Runs on the host, not in a container: it needs bash, python3 and a docker
+# CLI with a reachable daemon, and the certificate paths it hands the toolkit
+# resolve only where the repository is checked out.
+#
+# Usage: ./sandbox/bootstrap-nuts.sh, after ./sandbox/generate-demo-certs.sh
 
 set -euo pipefail
 
@@ -53,7 +65,12 @@ def types(credential):
             claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
         except ValueError:
             return []
-        credential = claims.get("vc", {})
+        credential = claims.get("vc") if isinstance(claims, dict) else None
+    # Decoding to valid JSON that is not an object is not a decoding failure,
+    # so the guard above does not see it; without this, such an entry aborts
+    # the run instead of being skipped like every other non-credential.
+    if not isinstance(credential, dict):
+        return []
     declared = credential.get("type", [])
     return [declared] if isinstance(declared, str) else declared
 
@@ -72,11 +89,26 @@ if [[ ${SANDBOX_SKIP_DIDX509:-0} == 1 ]]; then
   # the check above reads the placeholder back exactly as it reads a real one.
   credential="eyJhbGciOiJub25lIn0.eyJ2YyI6eyJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiWDUwOUNyZWRlbnRpYWwiXX19.placeholder"
 else
+  # Docker creates a directory wherever a bind-mount source is missing, and
+  # these two paths sit inside generate-demo-certs.sh's own output directory.
+  # That script's own presence guard is -f, which a directory fails, so it
+  # would read the material as absent, rewrite the CA, and then die on the
+  # directory it cannot overwrite, leaving half a rotated PKI behind. -f here
+  # rather than -r for the same reason: a directory is perfectly readable, and
+  # a directory is the state this exists to keep out.
+  for certificate in plataan-uzi-chain.pem plataan-uzi.key; do
+    [[ -f $CERTS/$certificate ]] ||
+      { echo "missing $CERTS/$certificate; run ./sandbox/generate-demo-certs.sh first" >&2; exit 1; }
+  done
+
   echo "Issuing the X509Credential..."
+  # The tag is pinned because a demo whose point is to work on a fresh stack
+  # cannot depend on a tag that moves. 1.2.0 is the newest release and issues
+  # the same credential from these certificates as main does.
   credential=$(docker run --rm \
     -v "$CERTS/plataan-uzi-chain.pem:/cert-chain.pem:ro" \
     -v "$CERTS/plataan-uzi.key:/cert-key.key:ro" \
-    nutsfoundation/go-didx509-toolkit:main \
+    nutsfoundation/go-didx509-toolkit:1.2.0 \
     vc /cert-chain.pem /cert-key.key "CN=GF Sandbox Demo CA" "$did")
 fi
 
