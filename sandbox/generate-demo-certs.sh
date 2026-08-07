@@ -21,6 +21,63 @@ umask 077
 OUT="$(cd "$(dirname "$0")" && pwd)/.certs"
 mkdir -p "$OUT"
 
+# Docker creates a directory wherever a bind-mount source is missing, and
+# compose mounts four paths out of this directory: mock-dezi.pem,
+# mock-dezi.key and dezi-signing.key from docker-compose.yml, and
+# ca-only/gf-sandbox-demo-ca.pem from docker-compose.sandbox.yml. A stack
+# brought up before this script has ever run therefore leaves a directory at
+# each of them.
+#
+# The presence probe below is -f, which a directory fails, so without this the
+# script reads the material as absent and takes the generation path: it
+# rewrites ca.key and ca.pem first and only then dies on the first directory it
+# cannot overwrite, leaving half a rotated PKI and a directory the operator has
+# to know to delete. The ca-only case is worse still, because cp writes *into*
+# a directory rather than failing, so that one exits 0 with the knooppunt's
+# trust path mounted from a directory. -f rather than -r for the reason
+# bootstrap-nuts.sh gives for its own copy of this guard: a directory is
+# perfectly readable, and a directory is the state this exists to keep out.
+#
+# It refuses rather than repairs. Nothing here can tell a directory Docker
+# created from one the operator cares about, and rm -rf of a path this script
+# did not create is not its call to make.
+#
+# ca-only is the asymmetry: it is legitimately a directory while everything
+# else this script writes is a file, so the two kinds are checked separately. A
+# blanket -d test over the output would reject a healthy tree.
+#
+# Every path this script writes is listed, not just the four compose mounts and
+# not just the material apply_modes carries modes for. A directory at one of
+# the intermediates wedges the run exactly the same way, and those are the ones
+# nobody would think to look at. Unlisted paths are left alone: the directory
+# also holds whatever the operator put there, which this script does not touch.
+refuse_wrong_kind() {
+  echo "$1 exists but is not $2." >&2
+  echo "Bringing the compose stack up before this script runs leaves a Docker-created directory at every path it mounts." >&2
+  echo "Delete $OUT and re-run this script." >&2
+  exit 1
+}
+
+require_expected_kinds() {
+  if [[ -e $OUT/ca-only && ! -d $OUT/ca-only ]]; then
+    refuse_wrong_kind "$OUT/ca-only" "a directory"
+  fi
+
+  local name
+  for name in ca.pem ca.key ca.srl mock-dezi.pem mock-dezi.key mock-dezi.csr \
+    mock-dezi.ext dezi-signing.key ca-only/gf-sandbox-demo-ca.pem \
+    plataan-uzi.pem plataan-uzi-chain.pem plataan-uzi.key plataan-uzi.csr \
+    plataan-uzi.ext; do
+    if [[ -e $OUT/$name && ! -f $OUT/$name ]]; then
+      refuse_wrong_kind "$OUT/$name" "a regular file"
+    fi
+  done
+}
+
+# Ahead of apply_modes and of the presence probe, so a wedged tree costs
+# neither a chmod nor a key.
+require_expected_kinds
+
 # The containers read these files as fixed non-root UIDs (18092 for mock-dezi,
 # 18081 for the knooppunt), while a bind mount on Linux passes the host file's
 # owner and mode straight through. Anything left at 0600 owned by the host user

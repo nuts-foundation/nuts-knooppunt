@@ -89,6 +89,16 @@ func runScript(t *testing.T, script string) string {
 	return string(output)
 }
 
+// runScriptExpectingRefusal is runScript's counterpart for the case where a
+// non-zero exit is the behaviour under test rather than a failure.
+func runScriptExpectingRefusal(t *testing.T, script string) string {
+	t.Helper()
+	cmd := exec.Command("bash", script)
+	output, err := cmd.CombinedOutput()
+	require.Error(t, err, "the generator was expected to refuse, but it succeeded: %s", output)
+	return string(output)
+}
+
 // stageRoot overwrites ca.pem with a real, self-signed root certificate,
 // setting Basic Constraints to CA:TRUE only when isCA is true. The CA/non-CA
 // distinction is the one axis the paired tests using this exist to exercise;
@@ -243,6 +253,57 @@ func TestGeneratorReplacesANonCARoot(t *testing.T) {
 
 	root := parseCert(t, filepath.Join(out, "ca.pem"))
 	require.True(t, root.IsCA, "a root that is not a usable CA must be regenerated, not accepted")
+}
+
+// Docker creates a directory wherever a bind-mount source is missing, so a
+// compose stack brought up before this script has ever run leaves one at each
+// of the four paths compose mounts out of .certs. A directory staged with
+// MkdirAll is indistinguishable from one Docker created, which is why this
+// needs no daemon.
+//
+// The generator's presence probe is -f, which a directory fails, so before the
+// guard it read the material as absent and took the generation path: it
+// rewrote ca.key and ca.pem and only then died on the first directory it could
+// not overwrite. Asserting a non-zero exit alone would not catch that, because
+// three of these four cases exited non-zero already; what was wrong was that
+// the CA had been rotated by the time they did. Hence the ca.key assertion,
+// which is the regression that actually costs the operator something.
+func TestGeneratorRefusesADirectoryWhereAFileBelongs(t *testing.T) {
+	// docker-compose.yml mounts the first three, docker-compose.sandbox.yml
+	// the fourth.
+	for _, mounted := range []string{
+		"mock-dezi.pem",
+		"mock-dezi.key",
+		"dezi-signing.key",
+		"ca-only/gf-sandbox-demo-ca.pem",
+	} {
+		t.Run(mounted, func(t *testing.T) {
+			script := stageScript(t)
+			out := stageStaleMaterial(t, script)
+			wedged := filepath.Join(out, mounted)
+			require.NoError(t, os.Remove(wedged))
+			require.NoError(t, os.Mkdir(wedged, 0o755))
+			caKeyBefore, err := os.ReadFile(filepath.Join(out, "ca.key"))
+			require.NoError(t, err)
+
+			output := runScriptExpectingRefusal(t, script)
+
+			require.Contains(t, output, wedged,
+				"the refusal must name the path that is the wrong kind, or the operator cannot act on it")
+			require.Contains(t, output, "Delete "+out,
+				"the refusal must give the recovery, which is documented nowhere else")
+
+			caKeyAfter, err := os.ReadFile(filepath.Join(out, "ca.key"))
+			require.NoError(t, err)
+			require.Equal(t, caKeyBefore, caKeyAfter,
+				"the CA must not be rotated before the refusal: a half-rotated PKI is the expensive half of this failure")
+			// stageStaleMaterial leaves .certs at 0700 and apply_modes is what
+			// widens it to 0755, so this is what proves the guard runs ahead of
+			// apply_modes rather than merely ahead of key generation.
+			require.Equal(t, os.FileMode(0o700), mode(t, out),
+				"the guard must refuse before apply_modes touches a wedged tree")
+		})
+	}
 }
 
 func parseCert(t *testing.T, path string) *x509.Certificate {
