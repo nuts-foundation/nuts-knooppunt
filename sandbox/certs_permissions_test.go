@@ -1,6 +1,7 @@
 package sandbox
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -8,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
+	"io/fs"
 	"math/big"
 	"os"
 	"os/exec"
@@ -26,14 +28,21 @@ import (
 // existing material there was nothing to do. Both passed every test that
 // existed at the time, because nothing covered the script.
 //
-// The material is faked rather than generated so this stays a permissions test
-// and does not spend seconds on a 4096-bit key. The generator's early exit
-// checks that eight files exist and that ca.pem is a CA certificate.
+// Material is faked wherever a test is only about modes or about the
+// wrong-kind guard, and generated for real wherever the early exit is in play.
+// That exit no longer merely counts files: it checks that the material hangs
+// together, so no placeholder can reach it. The tests that need a healthy set
+// share one real run, because a 4096-bit CA key costs a second or more.
 const (
 	wantPublic = 0o644
 	wantKey    = 0o600
 	wantDir    = 0o755
 )
+
+// The URA the generator puts in the leaf's SAN otherName, which is where
+// config/policy/bgz.json's descriptor looks for it. Named once here because
+// two tests assert on it and the generator has to keep producing exactly this.
+const plataanOtherName = "2.16.528.1.1007.99.2110-1-0-S-00000010-00.000-0"
 
 func stageScript(t *testing.T) string {
 	t.Helper()
@@ -47,10 +56,12 @@ func stageScript(t *testing.T) string {
 	return script
 }
 
-// stageStaleMaterial writes six of the eight files the generator's early
-// exit looks for, in the owner-only modes an older version of the script
-// produced. Callers that need the exit to fire supply the remaining two
-// plataan files themselves.
+// stageStaleMaterial writes placeholders at six of the paths the generator
+// writes, in the owner-only modes an older version of the script produced.
+// None of it is certificate material, so the generator regenerates the set
+// rather than accepting it: these tests are about what apply_modes and the
+// wrong-kind guard do to an already populated directory, not about the early
+// exit, which needs material that validates and gets it from healthyMaterial.
 func stageStaleMaterial(t *testing.T, script string) string {
 	t.Helper()
 	out := filepath.Join(filepath.Dir(script), ".certs")
@@ -79,6 +90,14 @@ func requireContainerReadable(t *testing.T, out string) {
 	}
 	require.Equal(t, os.FileMode(wantPublic), mode(t, filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem")))
 	require.Equal(t, os.FileMode(wantKey), mode(t, filepath.Join(out, "ca.key")), "the CA key is mounted nowhere and must stay owner-only")
+	// No compose service mounts this key: its only consumer is the one-shot
+	// toolkit container in bootstrap-nuts.sh, whose image runs as root and can
+	// therefore read an owner-only bind mount. The fixed-UID argument that
+	// forces the two mock keys open does not reach it, and a ten-year signing
+	// key readable by every account on the host is the cost of widening it
+	// anyway.
+	require.Equal(t, os.FileMode(wantKey), mode(t, filepath.Join(out, "plataan-uzi.key")),
+		"the UZI key is read by a root container and must stay owner-only")
 }
 
 func runScript(t *testing.T, script string) string {
@@ -99,15 +118,25 @@ func runScriptExpectingRefusal(t *testing.T, script string) string {
 	return string(output)
 }
 
-// stageRoot overwrites ca.pem with a real, self-signed root certificate,
-// setting Basic Constraints to CA:TRUE only when isCA is true. The CA/non-CA
-// distinction is the one axis the paired tests using this exist to exercise;
-// building both fixtures from one function keeps that distinction visible at
-// the call site instead of buried in duplicated certificate boilerplate.
-func stageRoot(t *testing.T, out string, isCA bool) {
+// stageForeignRoot swaps in a real, self-signed root that did not issue any of
+// the material around it, setting Basic Constraints to CA:TRUE only when isCA
+// is true. The CA/non-CA distinction is the one axis the paired tests using
+// this exist to exercise; building both fixtures from one function keeps that
+// distinction visible at the call site instead of buried in duplicated
+// certificate boilerplate.
+//
+// The root's own key, the trust store copy and the chain are rewritten along
+// with it, so the result is broken in one way rather than four: with isCA true
+// the only relationship left false is that this root issued nothing around it,
+// and with isCA false the missing CA:TRUE joins it. A fixture that trips every
+// check at once cannot show that the particular check it aims at is still
+// there, because any of the others would catch it.
+//
+// The root and its key come back so a caller can re-issue material underneath
+// it, which is how the leaf's issuance gets isolated from mock-dezi's.
+func stageForeignRoot(t *testing.T, out string, isCA bool) (*x509.Certificate, crypto.Signer) {
 	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
+	key := newECKey(t)
 	cn := "test non-CA root"
 	if isCA {
 		cn = "test CA"
@@ -125,45 +154,216 @@ func stageRoot(t *testing.T, out string, isCA bool) {
 	}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(out, "ca.pem"),
-		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
+	root := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+
+	require.NoError(t, os.WriteFile(filepath.Join(out, "ca.pem"), root, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"), root, 0o600))
+	writeECKey(t, filepath.Join(out, "ca.key"), key)
+
+	leaf, err := os.ReadFile(filepath.Join(out, "plataan-uzi.pem"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi-chain.pem"),
+		append(leaf, root...), 0o600))
+
+	parsed, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	return parsed, key
 }
 
-// stageValidCARoot overwrites ca.pem with a real, minimal self-signed CA
-// certificate. stageStaleMaterial's placeholder content ("stale\n") is not a
-// certificate at all, which this task's root_is_ca check correctly treats as
-// not a CA; a test that means to exercise the early exit itself, rather than
-// the regeneration it now falls back to, needs a root openssl also accepts.
-func stageValidCARoot(t *testing.T, out string) {
+// stageMockDezi replaces the mock-dezi pair with a fresh certificate and its
+// matching key, issued by parent when there is one and self-signed when there
+// is not. The generator asks only two things of this certificate, that the key
+// beside it matches and that the root issued it, so a fixture that changes
+// exactly one of those isolates the check that has to catch it.
+func stageMockDezi(t *testing.T, out string, parent *x509.Certificate, parentKey crypto.Signer) {
 	t.Helper()
-	stageRoot(t, out, true)
-}
-
-// stageValidNonCARoot overwrites ca.pem with a real, self-signed certificate
-// that is not a CA: openssl parses it without error, so only root_is_ca's
-// CA:TRUE check, not mere parseability, can tell it apart from a usable root.
-// This is also what material generated before this task leaves behind: a
-// parseable, self-signed root with no Basic Constraints.
-func stageValidNonCARoot(t *testing.T, out string) {
-	t.Helper()
-	stageRoot(t, out, false)
-}
-
-func TestGeneratorRepairsStaleMaterialInPlace(t *testing.T) {
-	script := stageScript(t)
-	out := stageStaleMaterial(t, script)
-	// root_is_ca now guards the early exit, and the exit also now checks for
-	// this task's two new files, so the fixture needs both or it falls
-	// through to a full regeneration instead of the repair this test covers.
-	stageValidCARoot(t, out)
-	for _, name := range []string{"plataan-uzi-chain.pem", "plataan-uzi.key"} {
-		require.NoError(t, os.WriteFile(filepath.Join(out, name), []byte("stale\n"), 0o600))
+	key := newECKey(t)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "mock-dezi"},
+		DNSNames:     []string{"mock-dezi", "localhost"},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(time.Hour),
 	}
+	issuer, issuerKey := template, crypto.Signer(key)
+	if parent != nil {
+		issuer, issuerKey = parent, parentKey
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, issuer, &key.PublicKey, issuerKey)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(out, "mock-dezi.pem"),
+		pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600))
+	writeECKey(t, filepath.Join(out, "mock-dezi.key"), key)
+}
+
+// P-256 because it costs nothing and the generator compares public keys, so
+// what the algorithm is never comes into it.
+func newECKey(t *testing.T) *ecdsa.PrivateKey {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	return key
+}
+
+func writeECKey(t *testing.T, path string, key *ecdsa.PrivateKey) {
+	t.Helper()
+	der, err := x509.MarshalECPrivateKey(key)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path,
+		pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der}), 0o600))
+}
+
+// The regression this covers cost two shipped-broken attempts: material that
+// was fine apart from its modes, and a script that answered "nothing to do"
+// while changing nothing. What the earlier version of this test never checked
+// is the other half of the promise in its name. Repairing in place means the
+// material survives the repair, and rotation is not a harmless extra here:
+// bootstrap-nuts.sh matches the wallet on credential type alone, so a rotated
+// leaf leaves the node holding a credential issued from the chain that no
+// longer exists, and the demo fails at token request time pointing at the node.
+func TestGeneratorRepairsPermissionsWithoutRotatingMaterial(t *testing.T) {
+	healthy := healthyMaterial(t)
+	script := stageScript(t)
+	// stageMaterial writes the set owner-only, which is what the older script
+	// left behind and the state this has to converge.
+	out := stageMaterial(t, script, healthy)
 
 	output := runScript(t, script)
 
-	require.Contains(t, output, "already present", "the eight files exist and ca.pem is a CA, so this must take the early exit")
+	require.Contains(t, output, "already present",
+		"material that works must be accepted as it stands rather than regenerated")
 	requireContainerReadable(t, out)
+	requireMaterialMatches(t, healthy, out)
+}
+
+// Every case starts from one healthy run and breaks exactly one relationship,
+// so a case that stops failing names the check that went missing rather than
+// leaving a fixture that trips six of them at once. Before this, all of these
+// took the early exit: the files were all present and ca.pem was still a CA,
+// so the generator reported material it had never looked inside as usable, and
+// no later run ever repaired it.
+func TestGeneratorRegeneratesMaterialThatDoesNotHangTogether(t *testing.T) {
+	healthy := healthyMaterial(t)
+
+	broken := []struct {
+		name   string
+		mutate func(t *testing.T, out string)
+	}{
+		{
+			// The reproduction from the review: the state an interrupt leaves
+			// between writing plataan-uzi.key and re-issuing the certificate
+			// beside it. The toolkit then signs with this key while embedding
+			// the old leaf, and the credential fails against its own chain.
+			name: "the UZI key is not the leaf's key",
+			mutate: func(t *testing.T, out string) {
+				writeECKey(t, filepath.Join(out, "plataan-uzi.key"), newECKey(t))
+			},
+		},
+		{
+			name: "the CA key is not the root's key",
+			mutate: func(t *testing.T, out string) {
+				writeECKey(t, filepath.Join(out, "ca.key"), newECKey(t))
+			},
+		},
+		{
+			name: "the mock-dezi key is not its certificate's key",
+			mutate: func(t *testing.T, out string) {
+				writeECKey(t, filepath.Join(out, "mock-dezi.key"), newECKey(t))
+			},
+		},
+		{
+			// mock-dezi's certificate is the one piece of this set nothing
+			// else refers to, so nothing else notices when it stops
+			// descending from the root: the knooppunt trusts the root and
+			// then rejects the TLS handshake.
+			name:   "the root did not issue the mock-dezi certificate",
+			mutate: func(t *testing.T, out string) { stageMockDezi(t, out, nil, nil) },
+		},
+		{
+			// A real certificate, not a placeholder: the knooppunt trusts
+			// whatever sits here, so "it parses" is not the property that
+			// matters. Anchoring the demo on a certificate that signs nothing
+			// rejects every chain the node is given.
+			name: "the trust store copy is not the root",
+			mutate: func(t *testing.T, out string) {
+				leaf, err := os.ReadFile(filepath.Join(out, "plataan-uzi.pem"))
+				require.NoError(t, err)
+				require.NoError(t, os.WriteFile(
+					filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"), leaf, 0o600))
+			},
+		},
+		{
+			// The CA is written first, so every interrupt after it leaves
+			// this: a root the material around it does not descend from.
+			// mock-dezi is re-issued underneath the new root so that the leaf
+			// is the only thing left unissued by it, which is what makes this
+			// case name the leaf's own check rather than mock-dezi's.
+			name: "the root did not issue the leaf",
+			mutate: func(t *testing.T, out string) {
+				root, key := stageForeignRoot(t, out, true)
+				stageMockDezi(t, out, root, key)
+			},
+		},
+		{
+			// bootstrap-nuts.sh feeds this file to the toolkit, and the
+			// did:x509 resolver needs the root in it to anchor the chain.
+			name: "the chain is not the leaf followed by the root",
+			mutate: func(t *testing.T, out string) {
+				leaf, err := os.ReadFile(filepath.Join(out, "plataan-uzi.pem"))
+				require.NoError(t, err)
+				require.NoError(t, os.WriteFile(
+					filepath.Join(out, "plataan-uzi-chain.pem"), leaf, 0o600))
+			},
+		},
+		{
+			// The mock-dezi certificate stands in as the leaf: same key pair,
+			// same issuer, same chain shape, no URA. It is the shape of what
+			// a leaf from an older version of this script leaves behind, and
+			// the presentation definition is the only thing that would ever
+			// notice, three services downstream.
+			name: "the leaf does not carry the URA",
+			mutate: func(t *testing.T, out string) {
+				dezi, err := os.ReadFile(filepath.Join(out, "mock-dezi.pem"))
+				require.NoError(t, err)
+				deziKey, err := os.ReadFile(filepath.Join(out, "mock-dezi.key"))
+				require.NoError(t, err)
+				root, err := os.ReadFile(filepath.Join(out, "ca.pem"))
+				require.NoError(t, err)
+				require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi.pem"), dezi, 0o600))
+				require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi.key"), deziKey, 0o600))
+				require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi-chain.pem"),
+					append(dezi, root...), 0o600))
+			},
+		},
+		{
+			// mock-dezi reads this key at startup and exits fatally on a key
+			// it cannot parse, which a partially written file is.
+			name: "the signing key does not parse",
+			mutate: func(t *testing.T, out string) {
+				require.NoError(t, os.WriteFile(
+					filepath.Join(out, "dezi-signing.key"), []byte("-----BEGIN RSA PRIVATE KEY-----\n"), 0o600))
+			},
+		},
+	}
+
+	for _, broken := range broken {
+		t.Run(broken.name, func(t *testing.T) {
+			// Each case is an independent temp directory and an independent
+			// bash run, and every one of them pays for a 4096-bit CA key.
+			// Sequentially that is most of this package's runtime.
+			t.Parallel()
+			script := stageScript(t)
+			out := stageMaterial(t, script, healthy)
+			broken.mutate(t, out)
+
+			output := runScript(t, script)
+
+			require.NotContains(t, output, "already present",
+				"material that does not hang together must never be reported as usable")
+			requireMaterialHangsTogether(t, out)
+			requireContainerReadable(t, out)
+		})
+	}
 }
 
 func TestGeneratorLeavesUnrelatedPEMsAlone(t *testing.T) {
@@ -216,7 +416,7 @@ func TestGeneratorProducesACARootAndUZILeaf(t *testing.T) {
 	// config/policy/policy.json's "^[0-9.]+-\d+-\d+-S-(\d+)-00\.000-\d+$"
 	// pattern rejects both, so the otherName must equal the expected value
 	// exactly.
-	require.Equal(t, "2.16.528.1.1007.99.2110-1-0-S-00000010-00.000-0", sanOtherName(t, leaf),
+	require.Equal(t, plataanOtherName, sanOtherName(t, leaf),
 		"the URA must sit in the SAN otherName where the presentation definition looks for it")
 
 	// Task 6 feeds this chain to the did:x509 resolver, which requires a
@@ -228,31 +428,29 @@ func TestGeneratorProducesACARootAndUZILeaf(t *testing.T) {
 	require.True(t, chain[1].Equal(root), "the chain's second certificate must be the root")
 
 	requireContainerReadable(t, out)
-	for _, name := range []string{"plataan-uzi.pem", "plataan-uzi-chain.pem", "plataan-uzi.key"} {
+	for _, name := range []string{"plataan-uzi.pem", "plataan-uzi-chain.pem"} {
 		require.Equal(t, os.FileMode(wantPublic), mode(t, filepath.Join(out, name)),
 			"%s is mounted into the bootstrap and must be readable", name)
 	}
 }
 
+// A root generated before this material became did:x509 anchored is a real,
+// parseable, self-signed certificate with no Basic Constraints, and the
+// resolver rejects every chain it anchors. The fixture is otherwise healthy
+// material with such a root swapped in, rather than placeholders that fail on
+// parseability alone, so only the missing CA:TRUE distinguishes it from a
+// usable root.
 func TestGeneratorReplacesANonCARoot(t *testing.T) {
+	healthy := healthyMaterial(t)
 	script := stageScript(t)
-	out := stageStaleMaterial(t, script)
-	// All eight files the early exit now looks for must be present, or a
-	// missing plataan file forces the fallthrough to regeneration on its own
-	// and the assertion below no longer isolates the root_is_ca guard.
-	// ca.pem is replaced with a real, self-signed, non-CA certificate:
-	// stageStaleMaterial's "stale\n" placeholder is not a certificate at all,
-	// so it cannot distinguish root_is_ca's CA:TRUE check from a check that
-	// merely confirms ca.pem parses.
-	stageValidNonCARoot(t, out)
-	for _, name := range []string{"plataan-uzi-chain.pem", "plataan-uzi.key"} {
-		require.NoError(t, os.WriteFile(filepath.Join(out, name), []byte("stale\n"), 0o600))
-	}
+	out := stageMaterial(t, script, healthy)
+	stageForeignRoot(t, out, false)
 
 	runScript(t, script)
 
 	root := parseCert(t, filepath.Join(out, "ca.pem"))
 	require.True(t, root.IsCA, "a root that is not a usable CA must be regenerated, not accepted")
+	requireMaterialHangsTogether(t, out)
 }
 
 // Docker creates a directory wherever a bind-mount source is missing, so a
@@ -304,6 +502,145 @@ func TestGeneratorRefusesADirectoryWhereAFileBelongs(t *testing.T) {
 				"the guard must refuse before apply_modes touches a wedged tree")
 		})
 	}
+}
+
+// healthyMaterialCache holds one complete generator run, produced on first use
+// and shared by every test that needs a valid set to start from: they need the
+// same healthy material rather than different material, and a 4096-bit CA key
+// costs a second or more per run. Top-level tests run one at a time and the
+// parallel subtests above take their copy from the parent before they fan out,
+// so this is only ever written sequentially.
+var healthyMaterialCache map[string][]byte
+
+func healthyMaterial(t *testing.T) map[string][]byte {
+	t.Helper()
+	if healthyMaterialCache == nil {
+		script := stageScript(t)
+		runScript(t, script)
+		healthyMaterialCache = snapshotMaterial(t, filepath.Join(filepath.Dir(script), ".certs"))
+	}
+	return healthyMaterialCache
+}
+
+// snapshotMaterial reads every file under dir into memory, keyed by its path
+// relative to dir. Modes are deliberately not captured: the point of a
+// snapshot is the material, and every test that uses one wants it staged in
+// the owner-only modes that are the starting state under test.
+func snapshotMaterial(t *testing.T, dir string) map[string][]byte {
+	t.Helper()
+	material := map[string][]byte{}
+	require.NoError(t, filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		name, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		material[name] = content
+		return nil
+	}))
+	require.NotEmpty(t, material, "a generator run that wrote nothing is not a fixture")
+	return material
+}
+
+// stageMaterial writes a snapshot into the .certs directory beside script, in
+// the owner-only modes an older version of the generator left behind.
+func stageMaterial(t *testing.T, script string, material map[string][]byte) string {
+	t.Helper()
+	out := filepath.Join(filepath.Dir(script), ".certs")
+	for name, content := range material {
+		path := filepath.Join(out, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, content, 0o600))
+	}
+	require.NoError(t, os.Chmod(out, 0o700))
+	return out
+}
+
+// requireMaterialMatches fails unless every file in the snapshot is still on
+// disk with the same content, which is what distinguishes repairing material
+// from replacing it.
+func requireMaterialMatches(t *testing.T, material map[string][]byte, out string) {
+	t.Helper()
+	for name, want := range material {
+		got, err := os.ReadFile(filepath.Join(out, name))
+		require.NoError(t, err)
+		require.Equal(t, want, got, "%s was rewritten, so the material was rotated rather than repaired", name)
+	}
+}
+
+// requireMaterialHangsTogether asserts the relationships the generator's own
+// validation exists to guarantee, and does it with crypto/x509 rather than by
+// shelling out to openssl the way the generator does. Asserting with the same
+// tool and the same reasoning as the code under test would pass on anything
+// that code happens to accept, including the mismatches it was accepting
+// before this existed.
+func requireMaterialHangsTogether(t *testing.T, out string) {
+	t.Helper()
+	root := parseCert(t, filepath.Join(out, "ca.pem"))
+	require.True(t, root.IsCA, "the root must be a CA certificate")
+	requireKeyBelongsTo(t, filepath.Join(out, "ca.key"), root)
+
+	dezi := parseCert(t, filepath.Join(out, "mock-dezi.pem"))
+	requireKeyBelongsTo(t, filepath.Join(out, "mock-dezi.key"), dezi)
+	require.NoError(t, dezi.CheckSignatureFrom(root), "mock-dezi.pem must be issued by the root")
+
+	leaf := parseCert(t, filepath.Join(out, "plataan-uzi.pem"))
+	requireKeyBelongsTo(t, filepath.Join(out, "plataan-uzi.key"), leaf)
+	require.NoError(t, leaf.CheckSignatureFrom(root), "plataan-uzi.pem must be issued by the root")
+	require.Equal(t, plataanOtherName, sanOtherName(t, leaf),
+		"the leaf must carry the URA the presentation definition looks for")
+
+	root0, err := os.ReadFile(filepath.Join(out, "ca.pem"))
+	require.NoError(t, err)
+	trusted, err := os.ReadFile(filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"))
+	require.NoError(t, err)
+	require.Equal(t, root0, trusted, "the knooppunt's trust store copy must be the root itself")
+
+	chain := parseCertChain(t, filepath.Join(out, "plataan-uzi-chain.pem"))
+	require.Len(t, chain, 2, "the chain must contain exactly the leaf and the root")
+	require.True(t, chain[0].Equal(leaf), "the chain must start with the leaf on disk")
+	require.True(t, chain[1].Equal(root), "the chain must end with the root on disk")
+
+	parsePrivateKey(t, filepath.Join(out, "dezi-signing.key"))
+}
+
+// requireKeyBelongsTo fails unless the private key at path is the one the
+// certificate was issued for.
+func requireKeyBelongsTo(t *testing.T, path string, cert *x509.Certificate) {
+	t.Helper()
+	public, ok := cert.PublicKey.(interface{ Equal(crypto.PublicKey) bool })
+	require.True(t, ok, "%T cannot be compared", cert.PublicKey)
+	signer, ok := parsePrivateKey(t, path).(crypto.Signer)
+	require.True(t, ok, "%s is not a signing key", path)
+	require.True(t, public.Equal(signer.Public()),
+		"%s is not the key %s was issued for", path, cert.Subject.CommonName)
+}
+
+// parsePrivateKey accepts the three encodings this material can be in: PKCS#1
+// for the keys openssl writes with -traditional, PKCS#8 for the ones it writes
+// without, and SEC 1 for the fixtures above.
+func parsePrivateKey(t *testing.T, path string) crypto.PrivateKey {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	block, _ := pem.Decode(raw)
+	require.NotNil(t, block, "%s is not PEM encoded", path)
+
+	if key, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
+		return key
+	}
+	if key, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
+		return key
+	}
+	key, err := x509.ParseECPrivateKey(block.Bytes)
+	require.NoError(t, err, "%s is not a private key in any encoding this material uses", path)
+	return key
 }
 
 func parseCert(t *testing.T, path string) *x509.Certificate {
