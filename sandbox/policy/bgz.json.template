@@ -1,0 +1,54 @@
+{
+  "bgz": {
+    "organization": {
+      "format": {
+        "ldp_vc": { "proof_type": ["JsonWebSignature2020", "DeziIDJWT07"] },
+        "jwt_vc": { "alg": ["PS256"] },
+        "jwt_vp": { "alg": ["ES256"] }
+      },
+      "id": "pd_bgz_care_organization",
+      "name": "BGZ care organization and practitioner",
+      "purpose": "Authorizing a BGZ retrieval on behalf of a practitioner",
+      "input_descriptors": [
+        {
+          "id": "id_uzicert_uracredential",
+          "name": "Care organization identity from fake UZI-server certificate",
+          "purpose": "Establishing the requesting organization.",
+          "constraints": {
+            "fields": [
+              { "path": ["$.type"], "filter": { "type": "string", "const": "X509Credential" } },
+              { "path": ["$.issuer"], "purpose": "The credential must descend from this sandbox's own demo CA. A did:x509 proof establishes only that the chain inside the credential is self-consistent: the resolver takes chain[0] as the certificate to validate and builds its trust store out of chain[1:], both from the credential's own x5c header (nuts-node vdr/didx509/resolver.go), and its comment there says presentation definitions are where accepted CAs get limited. Without this field a requester generates its own CA, issues itself a leaf with any organization name and any URA, and satisfies every other field below. The CA is identified by fingerprint and by nothing else: subject: and san: assertions in a did:x509 policy string are evaluated against the leaf, which is entirely the requester's to choose. No id on this field, so it emits no claim, and no capture group, so nothing here resolves to a value; see sandbox/policy_test.go, TestBGZPolicyIssuerFieldIsUnnamedAndGroupFree, for why organization_id below is the opposite call under the same rule. The fingerprint is substituted by sandbox/generate-demo-certs.sh; a placeholder cannot be 43 base64url characters, so this file as committed denies everything.", "filter": { "type": "string", "pattern": "^did:x509:0:sha256:__GF_SANDBOX_DEMO_CA_FINGERPRINT__::.*$" } },
+              { "id": "organization_id", "path": ["$.credentialSubject[0].id", "$.credentialSubject.id"], "purpose": "Exactly one capture group, spanning the whole DID. The node resolves a field to its capture group when the pattern has one and to the whole match otherwise (nuts-node vcr/pe/presentation_definition.go, matchField's pattern branch), and this field has an id, so whatever it resolves to is emitted as the organization_id introspection claim. The earlier pattern ^did:web: had no group and matched only the prefix, so every organization was handed the constant \"did:web:\". Compare the $.issuer field above, which is group-free on purpose: same rule, opposite conclusion, because that field has no id and no value to emit.", "filter": { "type": "string", "pattern": "^(did:web:.+)$" } },
+              { "id": "organization_name", "path": ["$.credentialSubject[0].subject.O", "$.credentialSubject.subject.O"], "filter": { "type": "string" } },
+              { "id": "organization_ura", "path": ["$.credentialSubject[0].san.otherName", "$.credentialSubject.san.otherName"], "filter": { "type": "string", "pattern": "^[0-9.]+-\\d+-\\d+-S-(\\d+)-00\\.000-\\d+$" } }
+            ]
+          }
+        },
+        {
+          "id": "id_dezicredential",
+          "name": "Practitioner identity from the Dezi attestation",
+          "purpose": "Establishing who is acting.",
+          "constraints": {
+            "fields": [
+              { "path": ["$.type"], "filter": { "type": "string", "const": "DeziUserCredential" } },
+              { "id": "organization_ura_dezi", "path": ["$.credentialSubject.identifier"], "purpose": "The organization the practitioner was actually authenticated for. The Dezi attestation's required abonnee_nummer lands here (nuts-node vcr/credential/dezi.go), so this is an independently authenticated organization identity, separate from organization_ura, which comes from the X509 credential and is asserted by the requester's own wallet. LIMITATION: this definition carries both and compares neither. A field filter is a JSON Schema fragment evaluated against one JSON path in one credential, so 'these two must be equal' is not expressible here. A practitioner attestation for another organization, combined with this wallet's X509 credential, still yields a token; the mismatch is visible in it, not rejected. Rejecting is the policy decision point's job and is not implemented yet, so nothing between here and the PDP has checked that the practitioner acts for the organization the token names. sandbox/policy_test.go's TestBGZPolicyCannotRejectAnOrganizationMismatch holds that statement to its word.", "filter": { "type": "string" } },
+              { "id": "user_id", "path": ["$.credentialSubject.employee.identifier"], "filter": { "type": "string" } },
+              { "id": "user_role", "path": ["$.credentialSubject.employee.role"], "filter": { "type": "string" } }
+            ]
+          }
+        },
+        {
+          "id": "id_sandbox_organization_context",
+          "name": "Sandbox organization context",
+          "purpose": "Carrying the facility type, which no other credential on this path supplies.",
+          "constraints": {
+            "fields": [
+              { "path": ["$.type"], "filter": { "type": "string", "const": "SandboxOrganizationContextCredential" } },
+              { "id": "organization_facility_type", "path": ["$.credentialSubject.facilityType"], "filter": { "type": "string" } }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -84,15 +84,15 @@ func TestNutsConfigFromEnvReadsEachVariable(t *testing.T) {
 	require.Equal(t, "sentinel-facility-type", cfg.FacilityType)
 }
 
-// config/policy/bgz_test.go checks the id_sandbox_organization_context
+// sandbox/policy_test.go checks the id_sandbox_organization_context
 // descriptor against its own hand-written credential fixture, not this
-// function's output. Editing bgz.json and that fixture together — the
+// function's output. Editing the definition and that fixture together — the
 // obvious way to change what the descriptor selects — leaves both packages
 // green while the credential this code actually produces no longer matches
 // it. This test runs the real matcher (vcr/pe) over the real output of
 // organizationContextCredential instead of a fixture.
 func TestOrganizationContextCredentialMatchesBGZPolicy(t *testing.T) {
-	policyRaw, err := os.ReadFile("../../config/policy/bgz.json")
+	policyRaw, err := os.ReadFile("../policy/bgz.json.template")
 	require.NoError(t, err)
 
 	var mapping map[string]pe.WalletOwnerMapping
@@ -170,6 +170,7 @@ func fakeNode(t *testing.T) *httptest.Server {
 				"user_id":                    "900001234",
 				"user_role":                  "01.022",
 				"organization_ura":           "00000010",
+				"organization_name":          "Ziekenhuis De Plataan",
 				"organization_facility_type": "Z3",
 			})
 		})

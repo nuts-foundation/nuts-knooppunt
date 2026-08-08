@@ -18,7 +18,8 @@ set -euo pipefail
 # files a container has to read.
 umask 077
 
-OUT="$(cd "$(dirname "$0")" && pwd)/.certs"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+OUT="$HERE/.certs"
 mkdir -p "$OUT"
 
 # Generation happens here and the live material is touched only once the whole
@@ -32,11 +33,13 @@ STAGE="$OUT/.staging"
 trap 'rm -rf "$STAGE"' EXIT
 
 # Docker creates a directory wherever a bind-mount source is missing, and
-# compose mounts four paths out of this directory: mock-dezi.pem,
+# compose mounts five paths out of this directory: mock-dezi.pem,
 # mock-dezi.key and dezi-signing.key from docker-compose.yml, and
-# ca-only/gf-sandbox-demo-ca.pem from docker-compose.sandbox.yml. A stack
-# brought up before this script has ever run therefore leaves a directory at
-# each of them.
+# ca-only/gf-sandbox-demo-ca.pem plus policy/ from docker-compose.sandbox.yml.
+# A stack brought up before this script has ever run therefore leaves a
+# directory at each of them. policy/ is the one where that costs nothing, since
+# it is mounted as a directory and this script writes one: the node finds no
+# .json in it, serves no bgz scope, and the token request fails closed.
 #
 # The presence probe below is -f, which a directory fails, so without this the
 # script reads the material as absent and generates a replacement set. Staging
@@ -53,9 +56,9 @@ trap 'rm -rf "$STAGE"' EXIT
 # created from one the operator cares about, and rm -rf of a path this script
 # did not create is not its call to make.
 #
-# ca-only is the asymmetry: it is legitimately a directory while everything
-# else this script writes is a file, so the two kinds are checked separately. A
-# blanket -d test over the output would reject a healthy tree.
+# ca-only and policy are the asymmetry: they are legitimately directories while
+# everything else this script writes is a file, so the two kinds are checked
+# separately. A blanket -d test over the output would reject a healthy tree.
 #
 # Every path this script installs is listed, not just the four compose mounts
 # and not just the material apply_modes carries modes for: ca.srl is here too,
@@ -76,10 +79,13 @@ require_expected_kinds() {
   if [[ -e $OUT/ca-only && ! -d $OUT/ca-only ]]; then
     refuse_wrong_kind "$OUT/ca-only" "a directory"
   fi
+  if [[ -e $OUT/policy && ! -d $OUT/policy ]]; then
+    refuse_wrong_kind "$OUT/policy" "a directory"
+  fi
 
   local name
   for name in ca.pem ca.key ca.srl mock-dezi.pem mock-dezi.key \
-    dezi-signing.key ca-only/gf-sandbox-demo-ca.pem \
+    dezi-signing.key ca-only/gf-sandbox-demo-ca.pem policy/bgz.json \
     plataan-uzi.pem plataan-uzi-chain.pem plataan-uzi.key; do
     if [[ -e $OUT/$name && ! -f $OUT/$name ]]; then
       refuse_wrong_kind "$OUT/$name" "a regular file"
@@ -134,6 +140,9 @@ apply_modes() {
   if [[ -d $OUT/ca-only ]]; then
     chmod 755 "$OUT/ca-only"
   fi
+  if [[ -d $OUT/policy ]]; then
+    chmod 755 "$OUT/policy"
+  fi
 
   local name
   for name in ca.pem mock-dezi.pem mock-dezi.key dezi-signing.key \
@@ -145,6 +154,11 @@ apply_modes() {
   if [[ -f $OUT/ca-only/gf-sandbox-demo-ca.pem ]]; then
     chmod 644 "$OUT/ca-only/gf-sandbox-demo-ca.pem"
   fi
+  # The knooppunt reads its policy directory as UID 18081, and render_policy
+  # writes under umask 077.
+  if [[ -f $OUT/policy/bgz.json ]]; then
+    chmod 644 "$OUT/policy/bgz.json"
+  fi
   for name in ca.key plataan-uzi.key; do
     if [[ -f $OUT/$name ]]; then
       chmod 600 "$OUT/$name"
@@ -152,9 +166,90 @@ apply_modes() {
   done
 }
 
+TEMPLATE="$HERE/policy/bgz.json.template"
+FINGERPRINT_PLACEHOLDER=__GF_SANDBOX_DEMO_CA_FINGERPRINT__
+
+# Renders the bgz presentation definition with this CA's fingerprint pinned into
+# its issuer constraint, which is the only thing that makes the demo CA a trust
+# anchor for authorization. A did:x509 proof establishes only that the chain
+# inside the credential is self-consistent, because the resolver builds its
+# trust store out of that same chain (nuts-node vdr/didx509/resolver.go), so a
+# definition that does not constrain $.issuer accepts a chain the requester
+# minted for itself, carrying any organization name and any URA it likes.
+#
+# The definition is rendered rather than committed because the value it has to
+# pin changes on every rotation, and a committed definition without the pin is
+# not a lesser version of this: it is the bypass, mounted into a knooppunt that
+# is not profile-gated.
+#
+# The recipe is the one did:x509 uses: unpadded base64url of the SHA-256 of the
+# certificate's DER (nuts-node vdr/didx509/x509_utils.go, findCertificateByHash
+# against hash(c.Raw, alg)). openssl base64 -A rather than base64(1): GNU
+# coreutils wraps at 76 columns and BSD does not, and a wrapped digest would put
+# a newline in the middle of the fingerprint.
+#
+# Bash substitution rather than sed: the fingerprint alphabet is base64url,
+# which has no sed delimiter in it and no &, but keeping the substitution out of
+# a second language is what keeps that true.
+#
+# This runs on both paths, including the early exit below, for the same reason
+# apply_modes does: an operator whose material predates this step re-runs the
+# script, and would otherwise be told there is nothing to do while the policy
+# stays absent, or pinned to a CA that no longer exists.
+render_policy() {
+  # There is nothing to pin on a first run, and nothing worth pinning when what
+  # sits there is not a certificate. This runs ahead of the presence probe, so
+  # it sees whatever an interrupted run or a Docker-created placeholder left
+  # behind, and that material is about to be regenerated: the call after
+  # install_material renders from the set validate_material has just accepted.
+  # Returning rather than refusing is what keeps that true. Under `set -e` an
+  # unparseable ca.pem would otherwise abort the run through the pipeline below,
+  # before the regeneration that fixes it.
+  #
+  # Silently, deliberately: the run that follows reports what it is
+  # regenerating and why, and a second message here would only compete with it.
+  openssl x509 -in "$OUT/ca.pem" -noout >/dev/null 2>&1 || return 0
+
+  if [[ ! -f $TEMPLATE ]]; then
+    echo "$TEMPLATE is missing, so the bgz presentation definition cannot be rendered." >&2
+    echo "Without it the node loads no definition and the demo fails at the token request with invalid_scope." >&2
+    exit 1
+  fi
+
+  local fingerprint template
+  fingerprint=$(openssl x509 -in "$OUT/ca.pem" -outform DER \
+    | openssl dgst -sha256 -binary | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+
+  # A post-condition on the shape, and worth being exact about what it does and
+  # does not buy. It does not catch a broken first stage: every stage here
+  # writes to a pipe, so an openssl that cannot read the certificate feeds an
+  # empty stream to the digest, and the digest of no input is
+  # 47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU, which is a perfectly
+  # well-formed 43-character fingerprint pinning nothing. The parse above is
+  # what rules that out, together with pipefail. What is left for this to catch
+  # is a digest that arrived wrapped or truncated, which is the failure that
+  # would otherwise render a pattern no credential can ever satisfy and report
+  # it two services away as a token request the node refuses.
+  if [[ ${#fingerprint} -ne 43 ]]; then
+    echo "Computed a malformed did:x509 fingerprint for $OUT/ca.pem: '$fingerprint'." >&2
+    echo "An unpadded base64url SHA-256 is 43 characters." >&2
+    exit 1
+  fi
+
+  template=$(cat "$TEMPLATE")
+  mkdir -p "$OUT/policy"
+  # > rather than a temp file and mv: the container bind-mounts this directory,
+  # and a replaced inode leaves a running container reading the old file.
+  printf '%s\n' "${template//$FINGERPRINT_PLACEHOLDER/$fingerprint}" > "$OUT/policy/bgz.json"
+}
+
 # Repair modes before probing for the material: a 0700 directory left by an
 # older run would otherwise fail every -f test below and silently take the
 # generation path, which then fails on the files that are already there.
+#
+# render_policy first, so apply_modes widens what it wrote: umask 077 makes the
+# rendered file 0600 and the knooppunt reads it as UID 18081.
+render_policy
 apply_modes
 
 # The URA travels in the leaf's SAN otherName, which is where the bgz
@@ -393,6 +488,7 @@ if ! validate_material "$STAGE"; then
 fi
 
 install_material
+render_policy
 apply_modes
 
 echo
@@ -403,3 +499,4 @@ echo "  dezi-signing.key           attestation signing key"
 echo "  ca-only/                   CA alone, mounted into the knooppunt trust path"
 echo "  plataan-uzi.pem, .key      UZI-style leaf, SAN otherName carries the URA"
 echo "  plataan-uzi-chain.pem      leaf + ca.pem, sorted leaf to root"
+echo "  policy/bgz.json            bgz definition, pinned to this CA's fingerprint"

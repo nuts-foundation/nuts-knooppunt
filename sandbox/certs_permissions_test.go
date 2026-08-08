@@ -8,15 +8,18 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/json"
 	"encoding/pem"
 	"io/fs"
 	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/nuts-foundation/nuts-node/vcr/pe"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,20 +42,28 @@ const (
 	wantDir    = 0o755
 )
 
-// The URA the generator puts in the leaf's SAN otherName, which is where
-// config/policy/bgz.json's descriptor looks for it. Named once here because
-// two tests assert on it and the generator has to keep producing exactly this.
+// The URA the generator puts in the leaf's SAN otherName, which is where the
+// bgz descriptor looks for it. Named once here because several tests assert on
+// it and the generator has to keep producing exactly this.
 const plataanOtherName = "2.16.528.1.1007.99.2110-1-0-S-00000010-00.000-0"
 
+// The template is staged alongside the script because the script reads it: it
+// renders the presentation definition with this run's CA fingerprint pinned in.
+// A run without it is a run that cannot produce a working sandbox, so every
+// test here gets the real one rather than a stand-in.
 func stageScript(t *testing.T) string {
 	t.Helper()
 	source, err := os.ReadFile("generate-demo-certs.sh")
 	require.NoError(t, err)
+	template, err := os.ReadFile(bgzPolicyTemplate)
+	require.NoError(t, err)
 
 	dir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sandbox"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sandbox", "policy"), 0o755))
 	script := filepath.Join(dir, "sandbox", "generate-demo-certs.sh")
 	require.NoError(t, os.WriteFile(script, source, 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "sandbox", bgzPolicyTemplate), template, 0o644))
 	return script
 }
 
@@ -455,9 +466,13 @@ func TestGeneratorReplacesANonCARoot(t *testing.T) {
 
 // Docker creates a directory wherever a bind-mount source is missing, so a
 // compose stack brought up before this script has ever run leaves one at each
-// of the four paths compose mounts out of .certs. A directory staged with
-// MkdirAll is indistinguishable from one Docker created, which is why this
-// needs no daemon.
+// of the paths compose mounts out of .certs. A directory staged with MkdirAll
+// is indistinguishable from one Docker created, which is why this needs no
+// daemon.
+//
+// The overlay's policy mount is absent from the cases below because it is the
+// one mount whose source is a directory: Docker creating it is the state the
+// generator writes into, not a wedged one.
 //
 // The generator's presence probe is -f, which a directory fails, so before the
 // guard it read the material as absent and took the generation path: it
@@ -502,6 +517,124 @@ func TestGeneratorRefusesADirectoryWhereAFileBelongs(t *testing.T) {
 				"the guard must refuse before apply_modes touches a wedged tree")
 		})
 	}
+}
+
+// The seam between a shell pipeline and a Go constant, and the one place a
+// silent mismatch could hide. Everything else that touches the fingerprint
+// works from whichever side of it the reader happens to be on: the script
+// computes it with openssl and never parses the policy back, and the policy
+// tests substitute a fingerprint they minted themselves and never run the
+// script. A digest computed one way and pinned the other is invisible to both,
+// and shows up two services away as a token request that fails to match a
+// credential the node holds and considers valid.
+//
+// So this asserts the whole pattern, not just the digest: what the shell wrote
+// has to be exactly what Go computes from the same ca.pem, wrapped in the
+// pattern the template carries.
+func TestGeneratorRendersThePolicyForTheCAItGenerated(t *testing.T) {
+	script := stageScript(t)
+	out := filepath.Join(filepath.Dir(script), ".certs")
+
+	runScript(t, script)
+
+	require.Equal(t, issuerPattern(caFingerprintOnDisk(t, out)), renderedIssuerPattern(t, out),
+		"the rendered policy must pin the CA this run produced")
+	require.Equal(t, os.FileMode(wantDir), mode(t, filepath.Join(out, "policy")),
+		"the knooppunt reads the policy directory as UID 18081 and must be able to traverse it")
+	require.Equal(t, os.FileMode(wantPublic), mode(t, filepath.Join(out, "policy", "bgz.json")),
+		"the policy is bind-mounted into the knooppunt and must be readable")
+}
+
+// The early exit is the path an operator whose material predates the policy
+// step takes, and it is the path that costs nothing to get wrong: the material
+// validates, the script says there is nothing to do, and the sandbox comes up
+// with no bgz scope at all. apply_modes runs on both paths for the same reason
+// and gives the same argument; this is that argument applied to the render.
+func TestGeneratorRendersThePolicyOnTheEarlyExitPath(t *testing.T) {
+	healthy := healthyMaterial(t)
+	script := stageScript(t)
+	out := stageMaterial(t, script, healthy)
+	require.NoError(t, os.RemoveAll(filepath.Join(out, "policy")))
+
+	output := runScript(t, script)
+
+	require.Contains(t, output, "already present", "the material must still be accepted as it stands")
+	require.Equal(t, issuerPattern(caFingerprintOnDisk(t, out)), renderedIssuerPattern(t, out),
+		"a run that repairs nothing else must still render the policy")
+}
+
+// A policy left pinned to a CA that no longer exists is worse than an absent
+// one: absent fails closed at startup with invalid_scope, while stale fails at
+// the token request, against a credential the node holds and considers valid,
+// naming nothing that points back here. The fingerprint is 43 base64url
+// characters of an unpadded 32-byte digest, so the stale value is a real one
+// rather than a placeholder; a shorter string would be rejected by length alone
+// and would not show that the script re-derives rather than merely repairs.
+func TestGeneratorRepinsAPolicyLeftOnAnotherCA(t *testing.T) {
+	healthy := healthyMaterial(t)
+	script := stageScript(t)
+	out := stageMaterial(t, script, healthy)
+
+	stale := caFingerprintOf([]byte("a certificate this material never descended from"))
+	require.Len(t, stale, 43)
+	rendered := filepath.Join(out, "policy", "bgz.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(rendered), 0o700))
+	template, err := os.ReadFile(bgzPolicyTemplate)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(rendered,
+		[]byte(strings.ReplaceAll(string(template), caFingerprintPlaceholder, stale)), 0o600))
+
+	output := runScript(t, script)
+
+	require.Contains(t, output, "already present")
+	require.Equal(t, issuerPattern(caFingerprintOnDisk(t, out)), renderedIssuerPattern(t, out),
+		"the policy must follow the CA on disk, not whatever a previous run pinned")
+}
+
+// issuerPattern is the whole of what the descriptor's $.issuer filter contains
+// for a given CA. Written once, so a test cannot agree with the template about
+// the fingerprint while disagreeing about the shape around it.
+func issuerPattern(fingerprint string) string {
+	return "^did:x509:0:sha256:" + fingerprint + "::.*$"
+}
+
+// caFingerprintOnDisk computes what a did:x509 issued under out/ca.pem would
+// carry, with crypto/x509 and encoding/base64 rather than by shelling out to
+// the openssl pipeline the generator uses. Asserting with the same tool and the
+// same reasoning as the code under test would pass on whatever that pipeline
+// happens to emit, including the empty string two failed openssl calls produce.
+func caFingerprintOnDisk(t *testing.T, out string) string {
+	t.Helper()
+	fingerprint := caFingerprintOf(parseCert(t, filepath.Join(out, "ca.pem")).Raw)
+	require.Len(t, fingerprint, 43, "an unpadded base64url SHA-256 is 43 characters; anything else is not a digest")
+	return fingerprint
+}
+
+// renderedIssuerPattern reads the generated policy back through the node's own
+// types, so a render that is no longer a loadable presentation definition fails
+// here rather than at node startup.
+func renderedIssuerPattern(t *testing.T, out string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(out, "policy", "bgz.json"))
+	require.NoError(t, err)
+
+	var mapping map[string]pe.WalletOwnerMapping
+	require.NoError(t, json.Unmarshal(raw, &mapping))
+	for _, descriptor := range mapping["bgz"]["organization"].InputDescriptors {
+		if descriptor.Id != "id_uzicert_uracredential" {
+			continue
+		}
+		for _, field := range descriptor.Constraints.Fields {
+			if len(field.Path) != 1 || field.Path[0] != "$.issuer" {
+				continue
+			}
+			require.NotNil(t, field.Filter)
+			require.NotNil(t, field.Filter.Pattern)
+			return *field.Filter.Pattern
+		}
+	}
+	t.Fatal("the rendered policy does not constrain $.issuer, so it pins no CA at all")
+	return ""
 }
 
 // healthyMaterialCache holds one complete generator run, produced on first use
