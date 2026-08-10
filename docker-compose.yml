@@ -268,9 +268,16 @@ services:
       # sandbox/app/README.md carries the table of all five.
       #
       # SANDBOX_AUTH_SERVER in particular keeps its localhost:8080 default inside
-      # the container. That is not the bug it resembles: the string is never
-      # dialled, only compared byte for byte against the issuer the node
-      # advertises, so a service name here would fail the audience check.
+      # the container, and the reason is not the one it looks like. The node does
+      # dial this URL: before requesting a token it fetches the authorization
+      # server metadata from it (nuts-node auth/client/iam/openid4vp.go,
+      # RequestRFC021AccessToken -> AuthorizationServerMetadata -> an HTTP GET on
+      # /.well-known/oauth-authorization-server). It must also equal the issuer
+      # the node advertises. Both hold here because the node dials it from inside
+      # its own container, where localhost:8080 is its own public listener
+      # (config/knooppunt.yml). A service name would be reachable and would then
+      # fail the match, which is why this is not the bug it resembles; a split
+      # deployment has to satisfy reachability and equality at the same time.
       NUTS_INTERNAL_BASE_URL: http://knooppunt:8081
     # The ordering that makes the authorization route work lives in
     # docker-compose.sandbox.yml: it depends on a service only that file defines.

@@ -1,5 +1,24 @@
 # GF Sandbox
 
+> [!WARNING]
+> **Use at your own risk. This sandbox is not held to the standard of the rest of this repository.**
+>
+> Most of the code, tests and documentation under `sandbox/`, together with the mock components this
+> demo runs against, was written by AI models and has had only light human review. It exists to show
+> the flow end to end, not to be depended on.
+>
+> Concretely: the demo PKI is throwaway, generated on your machine and never committed, and two of its
+> private keys are left readable by every user account on that machine, because the containers that
+> need them run as fixed non-root UIDs and cannot read them otherwise. Several trust decisions are
+> weaker than production would allow, including an organization context credential that is self
+> asserted and bound to nothing, and a practitioner authenticated for one organization that is not
+> rejected when the token names another. And the documentation may be wrong in places nobody has
+> checked yet.
+>
+> The primary knooppunt code, meaning everything outside `sandbox/` and `mock-components/`, is reviewed
+> to the project's normal standard. Do not read the quality of one as evidence about the other, and do
+> not copy anything from here into a real deployment.
+
 ## What this is
 
 The GF Sandbox application (shell + Plataan EHR) for the `/demo` release: it demonstrates the Generieke Functies
@@ -57,8 +76,8 @@ defaults instead of extending them.
 | `SANDBOX_PUBLIC_URL` | `http://localhost:8091` | the URL the browser reaches the sandbox on. Builds the redirect URI, and its scheme decides whether the session cookie carries `Secure`. A hosted deployment behind a TLS-terminating proxy must set this to its `https://` URL: the request arriving at this process is plain http, so nothing else here can tell that the browser used TLS |
 | `NUTS_INTERNAL_BASE_URL` | `http://localhost:8081` | where the **backend** calls the Nuts node's internal API, which the knooppunt proxies under `/nuts` |
 | `SANDBOX_NUTS_SUBJECT` | `plataan` | the Nuts subject the token is requested for. Must name the subject `sandbox/bootstrap-nuts.sh` creates, whose wallet holds the `X509Credential` |
-| `SANDBOX_BGZ_SCOPE` | `bgz` | the scope requested. Must be a key in `config/policy/bgz.json`, or the node answers `invalid_scope` |
-| `SANDBOX_AUTH_SERVER` | `http://localhost:8080/nuts/oauth2/plataan` | the authorization server the token is requested from. Compared byte for byte against the issuer the node advertises and never dialled, so it stays on `localhost` inside the container too |
+| `SANDBOX_BGZ_SCOPE` | `bgz` | the scope requested. Must be a key in the definition the node loads, which the sandbox renders to `sandbox/.certs/policy/bgz.json` from `sandbox/policy/bgz.json.template`, or the node answers `invalid_scope` |
+| `SANDBOX_AUTH_SERVER` | `http://localhost:8080/nuts/oauth2/plataan` | the authorization server the token is requested from. It has to satisfy two requirements at once: equal the issuer the node advertises, and be reachable **by the node**, which fetches `/.well-known/oauth-authorization-server` from it before requesting a token (nuts-node `auth/client/iam/openid4vp.go`, `RequestRFC021AccessToken` to `AuthorizationServerMetadata`). Both hold here because the node dials it from inside its own container, where port 8080 is its own public listener. A split deployment has to find one address that satisfies both |
 | `SANDBOX_FACILITY_TYPE` | `Z3` | the facility type asserted in the organization context credential, the only thing on this path that carries one |
 
 The public and internal URLs are separate on purpose. Under compose the browser cannot resolve the
