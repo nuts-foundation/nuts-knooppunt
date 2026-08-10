@@ -471,14 +471,22 @@ func TestBootstrapDoesNothingWhenTheWalletAlreadyHoldsTheCredential(t *testing.T
 	require.Zero(t, stores, "a credential issued by an earlier run must be recognised")
 }
 
+// A problem document parses as JSON, so nothing but the status says that the
+// answer is not an answer.
+//
+// What each case additionally requires is that the operator can act on the
+// failure. The node explains itself in an RFC 7807 body, and that body is the
+// only account of why it refused; the exit status alone leaves the operator
+// with a half-created subject and nothing that says which step made it or what
+// went wrong. So every case asserts the step, the status and the node's own
+// detail reach the output, not merely that the run failed.
 func TestBootstrapFailsWhenTheNodeReturnsAnError(t *testing.T) {
-	// A problem document parses as JSON, so nothing but the status says that
-	// the answer is not an answer.
 	t.Run("listing subjects", func(t *testing.T) {
 		node, nodeURL := newFakeNode(t)
 		node.breakSubjectList()
 
-		runBootstrapExpectingFailure(t, nodeURL, skipDidx509(t)...)
+		out := runBootstrapExpectingFailure(t, nodeURL, skipDidx509(t)...)
+		requireDiagnosis(t, out, "Listing subjects", "500", "could not list subjects")
 		creates, stores := node.counts()
 		require.Zero(t, creates, "an unreadable subject list must not be read as an absent subject")
 		require.Zero(t, stores)
@@ -490,6 +498,7 @@ func TestBootstrapFailsWhenTheNodeReturnsAnError(t *testing.T) {
 
 		out := runBootstrapExpectingFailure(t, nodeURL, skipDidx509(t)...)
 		require.NotContains(t, out, "Stored the X509Credential")
+		requireDiagnosis(t, out, "Creating the subject", "500", "could not create the subject")
 		creates, stores := node.counts()
 		require.Equal(t, 1, creates, "the create was attempted and refused")
 		require.Zero(t, stores, "a subject that does not exist must not be given a credential")
@@ -500,10 +509,20 @@ func TestBootstrapFailsWhenTheNodeReturnsAnError(t *testing.T) {
 		node.seedSubject("plataan")
 		node.breakWallet()
 
-		runBootstrapExpectingFailure(t, nodeURL, skipDidx509(t)...)
+		out := runBootstrapExpectingFailure(t, nodeURL, skipDidx509(t)...)
+		requireDiagnosis(t, out, "Reading the wallet", "500", "could not read the wallet")
 		_, stores := node.counts()
 		require.Zero(t, stores, "an unreadable wallet must not be read as an empty one")
 	})
+}
+
+// requireDiagnosis is the shape every node failure has to arrive in: which step
+// was being attempted, what the node answered, and what it said about why.
+func requireDiagnosis(t *testing.T, out, step, status, detail string) {
+	t.Helper()
+	require.Contains(t, out, step, "the failure must name the step, or the operator cannot tell which call failed")
+	require.Contains(t, out, status, "the HTTP status is what distinguishes a refusal from a problem document that parses")
+	require.Contains(t, out, detail, "the node's own problem detail is the only account of why it refused")
 }
 
 func TestBootstrapHonoursTheConfiguredSubject(t *testing.T) {
@@ -546,6 +565,14 @@ func TestBootstrapFailsWhenTheNodeIsUnreachable(t *testing.T) {
 	// leave the demo running against an empty wallet.
 	out := runBootstrapExpectingFailure(t, "http://127.0.0.1:1", skipDidx509(t)...)
 	require.NotContains(t, out, "Stored the X509Credential")
+
+	// A transport failure has no problem document to report, so the address is
+	// the whole of the diagnosis: "the node refused" and "there is no node
+	// there" are the same exit status and want different actions from the
+	// operator.
+	require.Contains(t, out, "Listing subjects", "the failure must name the step")
+	require.Contains(t, out, "http://127.0.0.1:1",
+		"an unreachable node must be reported with the address that was tried")
 }
 
 func TestBootstrapFailsWhenTheNodeRejectsTheCredential(t *testing.T) {
@@ -554,6 +581,11 @@ func TestBootstrapFailsWhenTheNodeRejectsTheCredential(t *testing.T) {
 
 	out := runBootstrapExpectingFailure(t, nodeURL, skipDidx509(t)...)
 	require.NotContains(t, out, "Stored the X509Credential")
+
+	// The most expensive failure to diagnose without this: the subject exists
+	// by now, so a rerun reports nothing to do while the wallet stays empty.
+	requireDiagnosis(t, out, "Storing the X509Credential", "400", "invalid credential")
+
 	_, stores := node.counts()
 	require.Equal(t, 1, stores, "the credential was offered and refused")
 	require.Empty(t, node.walletRaw("plataan"))
