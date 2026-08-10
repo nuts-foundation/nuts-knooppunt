@@ -193,12 +193,24 @@ func NewMux() *http.ServeMux {
 
 		// The claims are the node's answer about the credential behind the token,
 		// so they are asked for only once it has vouched for the token itself.
-		// The set is the one the bgz presentation definition emits and
-		// component/pdp reads into PolicySubject, so a name absent here is one
-		// the PDP would never receive. Indexing rather than sizing also keeps a
-		// JSON null off the page, where fmt.Sprint would render it as the "<nil>"
-		// no reader can tell from a claim the node really returned.
-		claimNames := []string{"user_id", "user_role", "organization_ura", "organization_name", "organization_facility_type"}
+		// The set is the one the bgz presentation definition emits, and all but
+		// one of them is a name component/pdp reads into PolicySubject, so a name
+		// absent here is one the PDP would never receive. Indexing rather than
+		// sizing also keeps a JSON null off the page, where fmt.Sprint would
+		// render it as the "<nil>" no reader can tell from a claim the node
+		// really returned.
+		//
+		// organization_ura_dezi is the exception, and is required anyway. The PDP
+		// keeps it only among the properties it does not name and decides on
+		// organization_ura (component/pdp/shared.go), because nothing compares the
+		// two yet: the presentation definition carries both and cannot reject a
+		// mismatch, a field filter seeing one path in one credential. Until that
+		// comparison exists somewhere, this claim is the only evidence on this
+		// page that the practitioner was authenticated for the organisation the
+		// token names. A response without it is one in which that reading became
+		// impossible, so rendering it would present an unverifiable page as a
+		// complete one.
+		claimNames := []string{"user_id", "user_role", "organization_ura", "organization_ura_dezi", "organization_name", "organization_facility_type"}
 		var missing []string
 		for _, name := range claimNames {
 			if claims[name] == nil {

@@ -539,7 +539,8 @@ func nodeIntrospecting(t *testing.T, status int, response string) *httptest.Serv
 // below can vary the active member alone, which is the one difference between a
 // token the node stands behind and one it refuses.
 const vouchedClaims = `"user_id":"900001234","user_role":"01.022",` +
-	`"organization_ura":"00000010","organization_name":"Ziekenhuis De Plataan",` +
+	`"organization_ura":"00000010","organization_ura_dezi":"00000010",` +
+	`"organization_name":"Ziekenhuis De Plataan",` +
 	`"organization_facility_type":"Z3"`
 
 // nodeVouchingForTheToken answers both steps the way the node does for a token
@@ -597,6 +598,7 @@ func TestAuthorizeRendersTheClaims(t *testing.T) {
 		"<th>user_id</th><td>900001234</td>",
 		"<th>user_role</th><td>01.022</td>",
 		"<th>organization_ura</th><td>00000010</td>",
+		"<th>organization_ura_dezi</th><td>00000010</td>",
 		"<th>organization_name</th><td>Ziekenhuis De Plataan</td>",
 		"<th>organization_facility_type</th><td>Z3</td>",
 	} {
@@ -783,7 +785,16 @@ func TestAuthorizeRejectsAPartialIntrospection(t *testing.T) {
 		"null": {`{"active":true,"user_id":"900001234","user_role":"01.022","organization_ura":"00000010",` +
 			`"organization_name":"Ziekenhuis De Plataan","organization_facility_type":null}`, "organization_facility_type"},
 		"the claim the PDP reads as the organisation's name": {`{"active":true,"user_id":"900001234","user_role":"01.022",` +
-			`"organization_ura":"00000010","organization_facility_type":"Z3"}`, "organization_name"},
+			`"organization_ura":"00000010","organization_ura_dezi":"00000010","organization_facility_type":"Z3"}`, "organization_name"},
+		// The Dezi credential's own organisation. Nothing compares it against
+		// organization_ura yet, which is exactly why it has to reach the page:
+		// it is the only evidence a reader has that the practitioner was
+		// authenticated for the organisation the token names. A response
+		// without it is a response in which that check became impossible, so
+		// the route must refuse rather than render a page that looks complete.
+		"the organisation the Dezi credential authenticated": {`{"active":true,"user_id":"900001234","user_role":"01.022",` +
+			`"organization_ura":"00000010","organization_name":"Ziekenhuis De Plataan",` +
+			`"organization_facility_type":"Z3"}`, "organization_ura_dezi"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusOK, tc.response).URL)

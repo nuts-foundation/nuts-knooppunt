@@ -289,8 +289,17 @@ certificate_issued_by() {
   openssl verify -CAfile "$2" "$1" >/dev/null 2>&1
 }
 
-is_private_key() {
-  openssl pkey -in "$1" -noout >/dev/null 2>&1
+# The type, not merely that it parses. mock-components/dezi/keys.go
+# type-asserts *rsa.PrivateKey and exits with "is a %T, not an RSA private key"
+# on anything else, so a perfectly valid EC key here is a stack that does not
+# start. openssl pkey, which this used to use, accepts every key type openssl
+# knows and so accepted exactly that.
+#
+# openssl rsa accepts both encodings this script can produce, PKCS#1 from
+# genrsa -traditional and PKCS#8 from genrsa without it, which is the same pair
+# mock-dezi accepts, and rejects everything else.
+is_rsa_private_key() {
+  openssl rsa -in "$1" -noout >/dev/null 2>&1
 }
 
 # The chain is a concatenation, so comparing it against one is both the
@@ -301,12 +310,50 @@ chain_is_leaf_then_root() {
   cmp -s <(cat "$1/plataan-uzi.pem" "$1/ca.pem") "$1/plataan-uzi-chain.pem"
 }
 
-# openssl's own rendering cannot be grepped portably: LibreSSL, which is what
-# /usr/bin/openssl is on macOS, prints "othername:<unsupported>" where
-# OpenSSL 3 prints the value. The DER can be, because the URA travels as a
-# UTF8String and is therefore its own bytes on the wire.
+# Where the URA sits, not merely whether the bytes appear somewhere.
+#
+# Searching the whole certificate DER, which this used to do, cannot tell the
+# SAN from the subject: a leaf carrying the URA in its Common Name and no
+# subjectAltName extension at all passed this check, and validate_material then
+# reported that the value sat in the SAN otherName. The fast path accepted such
+# material forever, and the presentation definition reads
+# $.credentialSubject.san.otherName and nowhere else, so the failure surfaced at
+# the token request in a service that has never heard of this directory.
+#
+# openssl's own rendering still cannot be grepped portably: LibreSSL, which is
+# what /usr/bin/openssl is on macOS, prints "othername:<unsupported>" where
+# OpenSSL 3 prints the value. asn1parse can be, on both. The first call finds
+# the offset of the OCTET STRING holding the SAN extension, the second reparses
+# just that octet string, and only the UTF8STRING values inside it are compared.
+#
+# The offset is found structurally, by scanning forward from the extension's OID
+# for the first OCTET STRING, rather than by taking the line after the OID. An
+# Extension is "OID, optional critical BOOLEAN, extnValue OCTET STRING", so a
+# SAN marked critical, which RFC 5280 requires when the subject is empty, puts a
+# BOOLEAN on that next line. Reading it cost more than a wrong answer: passing a
+# BOOLEAN's offset to -strparse segfaults LibreSSL 3.3.6, and with stderr
+# discarded that surfaced only as "the leaf does not carry the URA", which sends
+# the script down the generation path. A false negative here rotates the
+# operator's entire PKI on every run, which is worse than the misplaced-URA
+# acceptance this function exists to stop.
+#
+# Compared in bash rather than matched with a pattern, because the URA is full
+# of dots and a regex would read every one of them as "any character".
 leaf_carries_the_ura() {
-  openssl x509 -in "$1" -outform DER 2>/dev/null | grep -qa "$PLATAAN_OTHERNAME"
+  local offset value
+  offset=$(openssl asn1parse -in "$1" 2>/dev/null | awk '
+    /X509v3 Subject Alternative Name/ { seen = 1; next }
+    seen && /OCTET STRING/ { split($0, field, ":"); gsub(/ /, "", field[1]); print field[1]; exit }
+  ')
+  [[ -n $offset ]] || return 1
+
+  while IFS= read -r value; do
+    if [[ $value == "$PLATAAN_OTHERNAME" ]]; then
+      return 0
+    fi
+  done < <(openssl asn1parse -in "$1" -strparse "$offset" 2>/dev/null \
+    | sed -n 's/.*prim: UTF8STRING *://p')
+  return 1
 }
 
 check() {
@@ -369,8 +416,8 @@ validate_material() {
     chain_is_leaf_then_root "$dir" || return 1
   check "plataan-uzi.pem does not carry $PLATAAN_OTHERNAME in its SAN otherName" \
     leaf_carries_the_ura "$dir/plataan-uzi.pem" || return 1
-  check "dezi-signing.key is not a private key" \
-    is_private_key "$dir/dezi-signing.key" || return 1
+  check "dezi-signing.key is not an RSA private key" \
+    is_rsa_private_key "$dir/dezi-signing.key" || return 1
 }
 
 # Moves the validated set into place. One rename at a time, so an interruption

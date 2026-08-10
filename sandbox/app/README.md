@@ -60,6 +60,25 @@ to run, which `docker compose logs nuts-bootstrap-healthcheck` shows. Without th
 would start and the authorization route would fail on an empty wallet, which reads as a policy or
 certificate problem rather than a missing step.
 
+### Rotating the demo PKI
+
+Regenerating the certificates means clearing the Nuts volume as well, and neither the bootstrap nor
+the healthcheck will tell you so. Both check only that the wallet holds *an* `X509Credential`, not
+that it holds one issued by the CA on disk now. So a rerun after a rotation reports that there is
+nothing to do while the wallet still presents a credential from the chain that no longer exists, and
+the presentation definition has meanwhile been re-rendered to pin the new CA. The demo then fails at
+the token request, naming the node rather than this.
+
+```shell
+docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox down -v
+rm -rf sandbox/.certs
+```
+
+Then run the four commands above again. `down -v` is what removes the credential; without it the
+stale one survives and nothing between here and the token request notices. Making the bootstrap
+compare the wallet credential's own CA fingerprint against `sandbox/.certs/ca.pem`, so that it
+re-issues instead of reporting success, is the durable fix and is not implemented.
+
 The overlay carries the knooppunt settings the sandbox needs: the demo CA and the Dezi JWK Set
 allowlist. They live there rather than in `docker-compose.yml` because the knooppunt service is
 not profile-gated, so anything set on it would also apply to a plain `docker compose up`. The
@@ -128,8 +147,15 @@ the vendored v1.0.2 bundle. Keep this form when adding interactivity.
   only ever see the derived `Session` view model.
 - The service access token (E4): `POST /demo/authorize` sends the session's attestation to the Nuts
   node as `id_token` with one self-asserted organization context credential, introspects the token
-  it gets back, and renders `user_id`, `user_role`, `organization_ura` and
-  `organization_facility_type`. Compose only; see the note under Configuration.
+  it gets back, and requires and renders `user_id`, `user_role`, `organization_ura`,
+  `organization_ura_dezi`, `organization_name` and `organization_facility_type`. Compose only; see
+  the note under Configuration.
+
+  `organization_ura` comes from the X509 credential in the wallet and `organization_ura_dezi` from
+  the Dezi attestation, so the two are independently established and can disagree. Nothing rejects a
+  disagreement: a presentation definition filters one path in one credential and cannot compare two,
+  and the policy decision point does not make the comparison yet. Both are rendered so the reader can
+  make it by eye, which is the only place it currently happens.
 - The reset stub, `POST /demo/reset` (E5).
 - The `#gf-viewer-steps` container and `window.GFJourney.apply(stepEvent)` / `.reset()`, consuming the DESIGN.md §7
   step-event schema (E6).

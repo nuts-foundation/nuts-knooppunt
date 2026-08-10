@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -181,6 +182,152 @@ func stageForeignRoot(t *testing.T, out string, isCA bool) (*x509.Certificate, c
 	return parsed, key
 }
 
+// stageLeafWithTheURAOutsideTheSAN replaces the leaf with one the root really
+// did issue, whose key really is beside it, and whose chain really is the leaf
+// followed by the root, but which carries the URA in its subject Common Name
+// and has no subjectAltName extension at all.
+//
+// Every relationship except the one under test therefore still holds, so only
+// the SAN check can catch it. That is the point: the check this fixture exists
+// for used to search the whole certificate DER for the URA bytes, found them in
+// the subject, and reported that the value sat in the SAN otherName. A
+// validation that reports a relationship it did not check is worse than one
+// that checks nothing, because the fast path then accepts the material forever
+// and the failure surfaces at the token request, in a service that has never
+// heard of this directory.
+func stageLeafWithTheURAOutsideTheSAN(t *testing.T, out string) {
+	t.Helper()
+	root := parseCert(t, filepath.Join(out, "ca.pem"))
+	rootKey, ok := parsePrivateKey(t, filepath.Join(out, "ca.key")).(crypto.Signer)
+	require.True(t, ok, "the CA key must be a signing key")
+
+	key := newECKey(t)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(7),
+		Subject: pkix.Name{
+			CommonName:   plataanOtherName,
+			Organization: []string{"Ziekenhuis De Plataan"},
+		},
+		NotBefore: time.Now().Add(-time.Minute),
+		NotAfter:  time.Now().Add(time.Hour),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, root, &key.PublicKey, rootKey)
+	require.NoError(t, err)
+	leaf := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+
+	require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi.pem"), leaf, 0o600))
+	writeECKey(t, filepath.Join(out, "plataan-uzi.key"), key)
+
+	rootPEM, err := os.ReadFile(filepath.Join(out, "ca.pem"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi-chain.pem"),
+		append(leaf, rootPEM...), 0o600))
+}
+
+// A leaf whose subjectAltName is marked critical is a perfectly valid leaf, and
+// RFC 5280 section 4.2.1.6 requires the extension to be critical when the
+// subject is empty. The generator does not issue one, so nothing else here
+// would notice a check that cannot read one.
+//
+// It matters anyway, and in the expensive direction. Rejecting a valid leaf
+// sends the script down the generation path, so a false negative costs the
+// operator their whole PKI on every single run, which is worse than the
+// misplaced-URA acceptance the check exists to stop. The first version of that
+// check read the line immediately after the extension's OID, and a critical
+// extension puts a BOOLEAN there before the OCTET STRING, so it silently found
+// nothing.
+func TestGeneratorAcceptsALeafWhoseSANIsCritical(t *testing.T) {
+	healthy := healthyMaterial(t)
+	script := stageScript(t)
+	out := stageMaterial(t, script, healthy)
+	staged := stageLeafWithACriticalSAN(t, out)
+
+	output := runScript(t, script)
+
+	require.Contains(t, output, "already present",
+		"a critical subjectAltName is valid and must not send the generator down the rotation path")
+	onDisk, err := os.ReadFile(filepath.Join(out, "plataan-uzi.pem"))
+	require.NoError(t, err)
+	require.Equal(t, staged, onDisk,
+		"the leaf was rotated, so the SAN check rejected a certificate it should have accepted")
+}
+
+// stageLeafWithACriticalSAN reissues the leaf with the URA in a critical
+// subjectAltName otherName, keeping every other relationship true: the root
+// really issued it, the key beside it really is its key, and the chain really
+// is the leaf followed by the root. It returns what it wrote so the caller can
+// tell "accepted" from "regenerated".
+func stageLeafWithACriticalSAN(t *testing.T, out string) []byte {
+	t.Helper()
+	root := parseCert(t, filepath.Join(out, "ca.pem"))
+	rootKey, ok := parsePrivateKey(t, filepath.Join(out, "ca.key")).(crypto.Signer)
+	require.True(t, ok, "the CA key must be a signing key")
+
+	key := newECKey(t)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(8),
+		Subject: pkix.Name{
+			CommonName:   "plataan",
+			Organization: []string{"Ziekenhuis De Plataan"},
+		},
+		NotBefore:       time.Now().Add(-time.Minute),
+		NotAfter:        time.Now().Add(time.Hour),
+		ExtraExtensions: []pkix.Extension{criticalURASAN(t)},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, root, &key.PublicKey, rootKey)
+	require.NoError(t, err)
+
+	// A malformed fixture would fail the generator for the wrong reason and
+	// prove nothing, so it is read back through the same decoder the rest of
+	// this file asserts SANs with.
+	issued, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	require.Equal(t, plataanOtherName, sanOtherName(t, issued), "the fixture itself must carry the URA in its SAN")
+
+	leaf := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi.pem"), leaf, 0o600))
+	writeECKey(t, filepath.Join(out, "plataan-uzi.key"), key)
+
+	rootPEM, err := os.ReadFile(filepath.Join(out, "ca.pem"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi-chain.pem"),
+		append(leaf, rootPEM...), 0o600))
+	return leaf
+}
+
+// criticalURASAN builds the extension Go's x509 package will not: an otherName
+// carrying the URA as a UTF8String. Go drops otherName entries it does not
+// recognise rather than emitting them, so this is assembled with encoding/asn1,
+// mirroring how sanOtherName takes one apart.
+func criticalURASAN(t *testing.T) pkix.Extension {
+	t.Helper()
+	value, err := asn1.MarshalWithParams(plataanOtherName, "utf8")
+	require.NoError(t, err)
+
+	otherName, err := asn1.Marshal(struct {
+		TypeID asn1.ObjectIdentifier
+		Value  asn1.RawValue `asn1:"tag:0"`
+	}{
+		TypeID: asn1.ObjectIdentifier{2, 5, 5, 5},
+		Value:  asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: value},
+	})
+	require.NoError(t, err)
+
+	// GeneralName's otherName is "[0] IMPLICIT OtherName", so the context tag
+	// replaces the SEQUENCE tag rather than wrapping it, which is why the
+	// content bytes are lifted out and re-tagged.
+	var sequence asn1.RawValue
+	_, err = asn1.Unmarshal(otherName, &sequence)
+	require.NoError(t, err)
+
+	names, err := asn1.Marshal([]asn1.RawValue{{
+		Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: sequence.Bytes,
+	}})
+	require.NoError(t, err)
+
+	return pkix.Extension{Id: asn1.ObjectIdentifier{2, 5, 29, 17}, Critical: true, Value: names}
+}
+
 // stageMockDezi replaces the mock-dezi pair with a fresh certificate and its
 // matching key, issued by parent when there is one and self-signed when there
 // is not. The generator asks only two things of this certificate, that the key
@@ -354,6 +501,25 @@ func TestGeneratorRegeneratesMaterialThatDoesNotHangTogether(t *testing.T) {
 				require.NoError(t, os.WriteFile(
 					filepath.Join(out, "dezi-signing.key"), []byte("-----BEGIN RSA PRIVATE KEY-----\n"), 0o600))
 			},
+		},
+		{
+			// A real, parseable private key of the wrong type. mock-dezi
+			// type-asserts *rsa.PrivateKey and exits with "is a %T, not an RSA
+			// private key" (mock-components/dezi/keys.go), so "it parses" is
+			// not the property that decides whether the stack starts.
+			name: "the signing key is not RSA",
+			mutate: func(t *testing.T, out string) {
+				writeECKey(t, filepath.Join(out, "dezi-signing.key"), newECKey(t))
+			},
+		},
+		{
+			// The URA is present in the certificate, and in the wrong place.
+			// This is the case a check that searches the whole DER cannot
+			// distinguish from a correct leaf, and the presentation definition
+			// reads $.credentialSubject.san.otherName, so the wrong place is
+			// no place at all.
+			name:   "the URA is in the subject rather than the SAN",
+			mutate: stageLeafWithTheURAOutsideTheSAN,
 		},
 	}
 
@@ -740,7 +906,11 @@ func requireMaterialHangsTogether(t *testing.T, out string) {
 	require.True(t, chain[0].Equal(leaf), "the chain must start with the leaf on disk")
 	require.True(t, chain[1].Equal(root), "the chain must end with the root on disk")
 
-	parsePrivateKey(t, filepath.Join(out, "dezi-signing.key"))
+	// The type, not merely that it parses: mock-components/dezi/keys.go
+	// type-asserts *rsa.PrivateKey and exits fatally on anything else, so an
+	// EC key here is a stack that does not start.
+	require.IsType(t, &rsa.PrivateKey{}, parsePrivateKey(t, filepath.Join(out, "dezi-signing.key")),
+		"mock-dezi accepts only an RSA signing key")
 }
 
 // requireKeyBelongsTo fails unless the private key at path is the one the
