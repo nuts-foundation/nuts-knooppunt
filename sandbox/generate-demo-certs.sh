@@ -263,12 +263,50 @@ PLATAAN_OTHERNAME="2.16.528.1.1007.99.2110-1-0-S-${PLATAAN_URA}-00.000-0"
 # whichever caller acts on the failure can say what it was.
 MATERIAL_PROBLEM=""
 
+# Prints the offset of the OCTET STRING holding the named extension's value, so
+# the rest of a check can reparse that extension alone.
+#
+# The name is matched as the *value of an OBJECT record*, not as text anywhere
+# in the output. openssl renders a known extension OID by its friendly name, and
+# a certificate is free to carry that same string elsewhere: put it in the
+# subject and it appears as a UTF8STRING well before the extensions, so an
+# unanchored match selects an earlier extension's OCTET STRING and answers about
+# the wrong extension entirely.
+#
+# Scanning forward to the OCTET STRING rather than reading the next line: an
+# Extension is "OID, optional critical BOOLEAN, extnValue OCTET STRING", so a
+# critical extension puts a BOOLEAN in between, and passing a BOOLEAN's offset
+# to -strparse segfaults LibreSSL 3.3.6.
+extension_value_offset() {
+  openssl asn1parse -in "$1" 2>/dev/null | awk -v name="$2" '
+    /prim: *OBJECT/ { seen = ($0 ~ (":" name "$")); next }
+    seen && /prim: *OCTET STRING/ {
+      split($0, field, ":")
+      gsub(/ /, "", field[1])
+      print field[1]
+      exit
+    }
+  '
+}
+
 # A root generated before this material became did:x509 anchored is not a CA,
-# and the resolver rejects every chain it anchors
-# (nuts-node vdr/didx509/resolver.go). No amount of re-running fixes that by
-# chmod alone.
+# and the resolver rejects every chain it anchors: it checks IsCA on the
+# certificate the fingerprint names (nuts-node vdr/didx509/resolver.go). No
+# amount of re-running fixes that by chmod alone.
+#
+# Basic Constraints is decoded rather than grepped for. Searching the rendered
+# certificate for "CA:TRUE" finds the text wherever it sits, and a self-signed
+# certificate with no extensions at all and the subject "CN=CA:TRUE" satisfied
+# it. Nothing else in the set contradicted that, because LibreSSL 3.3.6 accepts
+# a non-CA certificate as an explicit -CAfile anchor, so certificate_issued_by
+# passed too and the whole set validated while the node rejected it.
 root_is_ca() {
-  openssl x509 -in "$1" -noout -text 2>/dev/null | grep -q "CA:TRUE"
+  local offset
+  offset=$(extension_value_offset "$1" 'X509v3 Basic Constraints')
+  [[ -n $offset ]] || return 1
+  # cA defaults to FALSE and is omitted when false, so a present BOOLEAN TRUE is
+  # the whole of the assertion.
+  openssl asn1parse -in "$1" -strparse "$offset" 2>/dev/null | grep -qE 'BOOLEAN +:(255|TRUE)'
 }
 
 # Public keys rather than moduli, because that covers every key type openssl
@@ -326,33 +364,54 @@ chain_is_leaf_then_root() {
 # the offset of the OCTET STRING holding the SAN extension, the second reparses
 # just that octet string, and only the UTF8STRING values inside it are compared.
 #
-# The offset is found structurally, by scanning forward from the extension's OID
-# for the first OCTET STRING, rather than by taking the line after the OID. An
-# Extension is "OID, optional critical BOOLEAN, extnValue OCTET STRING", so a
-# SAN marked critical, which RFC 5280 requires when the subject is empty, puts a
-# BOOLEAN on that next line. Reading it cost more than a wrong answer: passing a
-# BOOLEAN's offset to -strparse segfaults LibreSSL 3.3.6, and with stderr
-# discarded that surfaced only as "the leaf does not carry the URA", which sends
-# the script down the generation path. A false negative here rotates the
-# operator's entire PKI on every run, which is worse than the misplaced-URA
-# acceptance this function exists to stop.
+# The type-id is checked, not just the value. A GeneralName otherName is
+# "type-id OID, value", and the resolver appends a SAN value only when that OID
+# is exactly 2.5.5.5 (nuts-node vdr/didx509/x509_utils.go). The same URA under
+# any other OID renders identically in openssl's output and is invisible to the
+# node, so accepting it preserves a leaf whose credential cannot resolve.
+#
+# UTF8String specifically, which is narrower than the resolver and deliberately
+# so. The resolver unmarshals into a Go string and encoding/asn1 also takes
+# IA5String, GeneralString, T61String, NumericString and BMPString, but this
+# function is not a conformance check on arbitrary certificates. It answers the
+# same question as every other check in validate_material: is this the set this
+# script produced? This script issues UTF8String, so a leaf encoded any other
+# way is not its leaf, and regenerating is the intended answer.
+#
+# Widening it to match the resolver is a trap rather than an improvement:
+# openssl asn1parse prints the value for UTF8String, IA5String,
+# PrintableString, T61String and NumericString, and prints nothing at all for
+# GeneralString and BMPString, so a check that claimed to take any string type
+# would silently fail to read two of them and rotate the PKI on every run.
+# Reading those would mean parsing hex dumps and converting UTF-16 in bash.
+# certs_permissions_test.go pins the narrow contract with an IA5String leaf.
 #
 # Compared in bash rather than matched with a pattern, because the URA is full
 # of dots and a regex would read every one of them as "any character".
 leaf_carries_the_ura() {
   local offset value
-  offset=$(openssl asn1parse -in "$1" 2>/dev/null | awk '
-    /X509v3 Subject Alternative Name/ { seen = 1; next }
-    seen && /OCTET STRING/ { split($0, field, ":"); gsub(/ /, "", field[1]); print field[1]; exit }
-  ')
+  offset=$(extension_value_offset "$1" 'X509v3 Subject Alternative Name')
   [[ -n $offset ]] || return 1
 
   while IFS= read -r value; do
     if [[ $value == "$PLATAAN_OTHERNAME" ]]; then
       return 0
     fi
-  done < <(openssl asn1parse -in "$1" -strparse "$offset" 2>/dev/null \
-    | sed -n 's/.*prim: UTF8STRING *://p')
+  done < <(openssl asn1parse -in "$1" -strparse "$offset" 2>/dev/null | awk '
+    # GeneralName is a CHOICE, and only "[0] otherName" is the one the resolver
+    # reads. The depths pin the shape rather than just the sequence of tokens:
+    # d=1 is the GeneralName, d=2 its type-id, d=3 the value inside its
+    # explicit [0]. Without that, any OID 2.5.5.5 followed by a string anywhere
+    # in the extension would do, including inside a directoryName built from an
+    # RDN whose attribute type happens to be that OID.
+    /^ *[0-9]+:d=1 / { other = ($0 ~ /cons: *cont \[ *0 *\]/); wanted = 0; next }
+    other && /^ *[0-9]+:d=2 / && /prim: *OBJECT/ { wanted = ($0 ~ /:2\.5\.5\.5$/); next }
+    other && wanted && /^ *[0-9]+:d=3 / && /prim: *UTF8STRING/ {
+      sub(/.*prim: *UTF8STRING *:/, "")
+      print
+      wanted = 0
+    }
+  ')
   return 1
 }
 

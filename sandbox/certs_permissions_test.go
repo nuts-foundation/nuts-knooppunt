@@ -197,31 +197,10 @@ func stageForeignRoot(t *testing.T, out string, isCA bool) (*x509.Certificate, c
 // heard of this directory.
 func stageLeafWithTheURAOutsideTheSAN(t *testing.T, out string) {
 	t.Helper()
-	root := parseCert(t, filepath.Join(out, "ca.pem"))
-	rootKey, ok := parsePrivateKey(t, filepath.Join(out, "ca.key")).(crypto.Signer)
-	require.True(t, ok, "the CA key must be a signing key")
-
-	key := newECKey(t)
-	template := &x509.Certificate{
-		SerialNumber: big.NewInt(7),
-		Subject: pkix.Name{
-			CommonName:   plataanOtherName,
-			Organization: []string{"Ziekenhuis De Plataan"},
-		},
-		NotBefore: time.Now().Add(-time.Minute),
-		NotAfter:  time.Now().Add(time.Hour),
-	}
-	der, err := x509.CreateCertificate(rand.Reader, template, root, &key.PublicKey, rootKey)
-	require.NoError(t, err)
-	leaf := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
-
-	require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi.pem"), leaf, 0o600))
-	writeECKey(t, filepath.Join(out, "plataan-uzi.key"), key)
-
-	rootPEM, err := os.ReadFile(filepath.Join(out, "ca.pem"))
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi-chain.pem"),
-		append(leaf, rootPEM...), 0o600))
+	issueLeaf(t, out, pkix.Name{
+		CommonName:   plataanOtherName,
+		Organization: []string{"Ziekenhuis De Plataan"},
+	}, nil)
 }
 
 // A leaf whose subjectAltName is marked critical is a perfectly valid leaf, and
@@ -236,53 +215,70 @@ func stageLeafWithTheURAOutsideTheSAN(t *testing.T, out string) {
 // check read the line immediately after the extension's OID, and a critical
 // extension puts a BOOLEAN there before the OCTET STRING, so it silently found
 // nothing.
-func TestGeneratorAcceptsALeafWhoseSANIsCritical(t *testing.T) {
-	healthy := healthyMaterial(t)
-	script := stageScript(t)
-	out := stageMaterial(t, script, healthy)
-	staged := stageLeafWithACriticalSAN(t, out)
+// Valid leaves the generator must not touch. Every case here is a false
+// negative if it fails, and a false negative is the expensive direction: it
+// sends the script down the generation path, so it rotates the operator's
+// entire PKI on every run rather than once.
+func TestGeneratorAcceptsValidLeavesItDidNotIssueItself(t *testing.T) {
+	for name, stage := range map[string]func(*testing.T, string) []byte{
+		// RFC 5280 section 4.2.1.6 requires a critical subjectAltName when the
+		// subject is empty, so this shape is not exotic. The first version of
+		// the SAN check read the line straight after the extension OID, where
+		// a critical extension puts its BOOLEAN, and passing that offset to
+		// -strparse segfaults LibreSSL 3.3.6.
+		"the SAN is marked critical": stageLeafWithACriticalSAN,
 
-	output := runScript(t, script)
+		// The extension is found by matching the friendly name openssl renders
+		// for the SAN OID. A certificate may carry that same string anywhere,
+		// including its subject, where it renders as a UTF8STRING well before
+		// the extensions. Matching it there selects an earlier extension's
+		// OCTET STRING and answers about the wrong extension entirely.
+		"the subject names the SAN extension": stageLeafWhoseSubjectNamesTheSANExtension,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			healthy := healthyMaterial(t)
+			script := stageScript(t)
+			out := stageMaterial(t, script, healthy)
+			staged := stage(t, out)
 
-	require.Contains(t, output, "already present",
-		"a critical subjectAltName is valid and must not send the generator down the rotation path")
-	onDisk, err := os.ReadFile(filepath.Join(out, "plataan-uzi.pem"))
-	require.NoError(t, err)
-	require.Equal(t, staged, onDisk,
-		"the leaf was rotated, so the SAN check rejected a certificate it should have accepted")
+			output := runScript(t, script)
+
+			require.Contains(t, output, "already present",
+				"a valid leaf must not send the generator down the rotation path")
+			onDisk, err := os.ReadFile(filepath.Join(out, "plataan-uzi.pem"))
+			require.NoError(t, err)
+			require.Equal(t, staged, onDisk,
+				"the leaf was rotated, so the check rejected a certificate it should have accepted")
+		})
+	}
 }
 
-// stageLeafWithACriticalSAN reissues the leaf with the URA in a critical
-// subjectAltName otherName, keeping every other relationship true: the root
-// really issued it, the key beside it really is its key, and the chain really
-// is the leaf followed by the root. It returns what it wrote so the caller can
-// tell "accepted" from "regenerated".
-func stageLeafWithACriticalSAN(t *testing.T, out string) []byte {
+// uraOtherNameType is the otherName type-id the did:x509 resolver looks for.
+// It appends a SAN value only when the otherName carries exactly this OID
+// (nuts-node vdr/didx509/x509_utils.go), so the same string under any other one
+// is a value the node cannot see.
+var uraOtherNameType = asn1.ObjectIdentifier{2, 5, 5, 5}
+
+// issueLeaf reissues the leaf under root, keeping the certificate, the key
+// beside it and the chain file consistent, and returns the PEM it wrote so a
+// caller can tell "accepted unchanged" from "regenerated".
+func issueLeaf(t *testing.T, out string, subject pkix.Name, extensions []pkix.Extension) []byte {
 	t.Helper()
 	root := parseCert(t, filepath.Join(out, "ca.pem"))
 	rootKey, ok := parsePrivateKey(t, filepath.Join(out, "ca.key")).(crypto.Signer)
 	require.True(t, ok, "the CA key must be a signing key")
 
 	key := newECKey(t)
-	template := &x509.Certificate{
-		SerialNumber: big.NewInt(8),
-		Subject: pkix.Name{
-			CommonName:   "plataan",
-			Organization: []string{"Ziekenhuis De Plataan"},
-		},
-		NotBefore:       time.Now().Add(-time.Minute),
-		NotAfter:        time.Now().Add(time.Hour),
-		ExtraExtensions: []pkix.Extension{criticalURASAN(t)},
-	}
-	der, err := x509.CreateCertificate(rand.Reader, template, root, &key.PublicKey, rootKey)
+	der, err := x509.CreateCertificate(rand.Reader, &x509.Certificate{
+		SerialNumber:          big.NewInt(9),
+		Subject:               subject,
+		NotBefore:             time.Now().Add(-time.Minute),
+		NotAfter:              time.Now().Add(time.Hour),
+		BasicConstraintsValid: true,
+		ExtraExtensions:       extensions,
+	}, root, &key.PublicKey, rootKey)
 	require.NoError(t, err)
-
-	// A malformed fixture would fail the generator for the wrong reason and
-	// prove nothing, so it is read back through the same decoder the rest of
-	// this file asserts SANs with.
-	issued, err := x509.ParseCertificate(der)
-	require.NoError(t, err)
-	require.Equal(t, plataanOtherName, sanOtherName(t, issued), "the fixture itself must carry the URA in its SAN")
 
 	leaf := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi.pem"), leaf, 0o600))
@@ -295,20 +291,97 @@ func stageLeafWithACriticalSAN(t *testing.T, out string) []byte {
 	return leaf
 }
 
-// criticalURASAN builds the extension Go's x509 package will not: an otherName
-// carrying the URA as a UTF8String. Go drops otherName entries it does not
-// recognise rather than emitting them, so this is assembled with encoding/asn1,
-// mirroring how sanOtherName takes one apart.
-func criticalURASAN(t *testing.T) pkix.Extension {
+// stageLeafWithACriticalSAN reissues the leaf with the URA in a critical
+// subjectAltName otherName. Everything else about the material stays true.
+func stageLeafWithACriticalSAN(t *testing.T, out string) []byte {
 	t.Helper()
-	value, err := asn1.MarshalWithParams(plataanOtherName, "utf8")
+	return issueLeaf(t, out,
+		pkix.Name{CommonName: "plataan", Organization: []string{"Ziekenhuis De Plataan"}},
+		[]pkix.Extension{uraSANExtension(t, uraOtherNameType, true)})
+}
+
+// stageLeafWhoseSubjectNamesTheSANExtension gives the leaf a subject Common
+// Name equal to the friendly text openssl prints for the SAN OID, while its
+// actual SAN is correct. BasicConstraintsValid puts a second extension ahead of
+// the SAN, so a scanner that starts on the subject and takes the next OCTET
+// STRING lands on Basic Constraints and answers about that instead.
+func stageLeafWhoseSubjectNamesTheSANExtension(t *testing.T, out string) []byte {
+	t.Helper()
+	return issueLeaf(t, out,
+		pkix.Name{CommonName: "X509v3 Subject Alternative Name", Organization: []string{"Ziekenhuis De Plataan"}},
+		[]pkix.Extension{uraSANExtension(t, uraOtherNameType, false)})
+}
+
+// stageLeafWithTheURAUnderAnotherTypeID puts the URA in a real SAN otherName
+// under an OID the resolver does not look at.
+func stageLeafWithTheURAUnderAnotherTypeID(t *testing.T, out string) {
+	t.Helper()
+	issueLeaf(t, out,
+		pkix.Name{CommonName: "plataan", Organization: []string{"Ziekenhuis De Plataan"}},
+		[]pkix.Extension{uraSANExtension(t, asn1.ObjectIdentifier{1, 2, 3, 4}, false)})
+}
+
+// stageRootClaimingCAInItsSubject swaps in a root that is not a CA and carries
+// the text CA:TRUE in its subject instead of in Basic Constraints, then
+// reissues everything beneath it so that this is the only relationship left
+// false. LibreSSL 3.3.6 accepts a non-CA certificate as an explicit -CAfile
+// anchor, so the issuance checks do not contradict it either.
+func stageRootClaimingCAInItsSubject(t *testing.T, out string) {
+	t.Helper()
+	key := newECKey(t)
+	der, err := x509.CreateCertificate(rand.Reader, &x509.Certificate{
+		SerialNumber: big.NewInt(10),
+		Subject:      pkix.Name{CommonName: "CA:TRUE"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+	}, &x509.Certificate{
+		SerialNumber: big.NewInt(10),
+		Subject:      pkix.Name{CommonName: "CA:TRUE"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+	}, &key.PublicKey, key)
+	require.NoError(t, err)
+	root := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+
+	require.NoError(t, os.WriteFile(filepath.Join(out, "ca.pem"), root, 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"), root, 0o600))
+	writeECKey(t, filepath.Join(out, "ca.key"), key)
+
+	parsed, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	require.False(t, parsed.IsCA, "the fixture must not be a CA, or it proves nothing")
+	stageMockDezi(t, out, parsed, key)
+	issueLeaf(t, out,
+		pkix.Name{CommonName: "plataan", Organization: []string{"Ziekenhuis De Plataan"}},
+		[]pkix.Extension{uraSANExtension(t, uraOtherNameType, false)})
+}
+
+// uraSANExtension builds the extension Go's x509 package will not: an otherName
+// carrying the URA as a UTF8String under the given type-id. Go drops otherName
+// entries it does not recognise rather than emitting them, so this is assembled
+// with encoding/asn1, mirroring how sanOtherName takes one apart.
+//
+// The type-id is a parameter because it is load-bearing and invisible in the
+// rendered value: the same string under the wrong OID looks identical in
+// openssl's output and is unreadable to the node.
+func uraSANExtension(t *testing.T, typeID asn1.ObjectIdentifier, critical bool) pkix.Extension {
+	t.Helper()
+	return uraSANExtensionAs(t, typeID, critical, "utf8")
+}
+
+// uraSANExtensionAs is uraSANExtension with the ASN.1 string encoding as a
+// parameter, for the case that asserts the generator issues UTF8String and
+// treats anything else as material it did not produce.
+func uraSANExtensionAs(t *testing.T, typeID asn1.ObjectIdentifier, critical bool, encoding string) pkix.Extension {
+	t.Helper()
+	value, err := asn1.MarshalWithParams(plataanOtherName, encoding)
 	require.NoError(t, err)
 
 	otherName, err := asn1.Marshal(struct {
 		TypeID asn1.ObjectIdentifier
 		Value  asn1.RawValue `asn1:"tag:0"`
 	}{
-		TypeID: asn1.ObjectIdentifier{2, 5, 5, 5},
+		TypeID: typeID,
 		Value:  asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: value},
 	})
 	require.NoError(t, err)
@@ -325,7 +398,7 @@ func criticalURASAN(t *testing.T) pkix.Extension {
 	}})
 	require.NoError(t, err)
 
-	return pkix.Extension{Id: asn1.ObjectIdentifier{2, 5, 29, 17}, Critical: true, Value: names}
+	return pkix.Extension{Id: asn1.ObjectIdentifier{2, 5, 29, 17}, Critical: critical, Value: names}
 }
 
 // stageMockDezi replaces the mock-dezi pair with a fresh certificate and its
@@ -520,6 +593,45 @@ func TestGeneratorRegeneratesMaterialThatDoesNotHangTogether(t *testing.T) {
 			// no place at all.
 			name:   "the URA is in the subject rather than the SAN",
 			mutate: stageLeafWithTheURAOutsideTheSAN,
+		},
+		{
+			// In the SAN, in an otherName, and still invisible to the node.
+			// The did:x509 resolver appends a SAN value only when the
+			// otherName's type-id is exactly 2.5.5.5
+			// (nuts-node vdr/didx509/x509_utils.go), so the same string under
+			// any other OID resolves to no san:otherName at all and the
+			// credential fails against its own policy.
+			name:   "the URA is under another otherName type-id",
+			mutate: stageLeafWithTheURAUnderAnotherTypeID,
+		},
+		{
+			// The URA, under the right type-id, in a string type this script
+			// does not issue. Regenerating is the intended answer and not a
+			// near miss: every other check in validate_material asks "is this
+			// the set I produced", and a leaf encoded some other way is not.
+			//
+			// It is worth pinning because the resolver is more permissive than
+			// this: it unmarshals into a Go string, and encoding/asn1 takes
+			// IA5String, GeneralString, T61String, NumericString and BMPString
+			// too. Someone reading only that could widen this check to match,
+			// which would make it depend on openssl printing the value, and
+			// openssl prints nothing at all for GeneralString and BMPString.
+			name: "the URA is not a UTF8String",
+			mutate: func(t *testing.T, out string) {
+				issueLeaf(t, out,
+					pkix.Name{CommonName: "plataan", Organization: []string{"Ziekenhuis De Plataan"}},
+					[]pkix.Extension{uraSANExtensionAs(t, uraOtherNameType, false, "ia5")})
+			},
+		},
+		{
+			// A root that says CA:TRUE without being a CA. The text appears in
+			// the subject, nowhere near Basic Constraints, and LibreSSL 3.3.6
+			// then accepts the certificate as an explicit -CAfile anchor too,
+			// so nothing else in the set contradicts it. The did:x509 resolver
+			// checks IsCA on the certificate the fingerprint names
+			// (nuts-node vdr/didx509/resolver.go) and rejects the chain.
+			name:   "the root only claims CA:TRUE in its subject",
+			mutate: stageRootClaimingCAInItsSubject,
 		},
 	}
 
