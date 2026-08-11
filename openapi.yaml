@@ -9,6 +9,14 @@ info:
     FHIR resource bodies are typed by resource (Bundle, List, Subscription,
     OperationOutcome) but not redefined in full — each schema links to its
     definition in the FHIR R4 spec.
+
+    Out of scope here: `/mitz/notify`, the public-interface endpoint MITZ
+    calls directly (not integrated against by Knooppunt users) — see
+    [mitz-public.openapi.yaml](https://github.com/nuts-foundation/nuts-knooppunt/blob/main/mitz-public.openapi.yaml).
+    Everything under `/nuts` is proxied straight through to the embedded
+    Nuts node; see the
+    [Nuts node API reference](https://nuts-node.readthedocs.io/en/project-gf/pages/integrating/api.html)
+    for those endpoints.
   version: "1.0"
 security: []
 # No application-level authentication: the internal interface is protected by
@@ -19,16 +27,36 @@ servers:
 tags:
   - name: status
     description: Health/readiness and build info
+  - name: lrza
+    description: >
+      Addressing Generic Function: refreshes the local Query Directory (the
+      FHIR server the Knooppunt uses to look up care organizations, their
+      endpoints and locations) from the LRZA — Landelijk Register
+      Zorgaanbieders, the Dutch government's central registry of care
+      providers. Resources follow the mCSD (Mobile Care Services Discovery)
+      profile.
   - name: pdp
-    description: Policy Decision Point for making authorization decisions
+    description: >
+      Authorization Function. The Policy Decision Point (PDP)
+      evaluates whether a request to a data holder's FHIR endpoint is
+      allowed — e.g. based on the requester's role/scope, or Mitz consent —
+      and is called by a Policy Enforcement Point (PEP): a proxy placed in
+      front of that FHIR endpoint, which allows or blocks the underlying
+      request based on the PDP's answer.
   - name: nvi
     description: >
       Gateway to Nationale VerwijsIndex (NVI), the Generic Function for
       [Localization](https://minvws.github.io/generiekefuncties-docs/en/localization.html).
-      Endpoints take plain BSN identifiers, send pseudonymized BSNs to NVI,
-      and return plain BSNs.
+      A `List` here is a pointer, not patient data: it declares that data of
+      a given category exists for a patient at the organization named in its
+      `nl-gf-localization-custodian` extension. Endpoints take plain BSN
+      identifiers, send pseudonymized BSNs to NVI, and return plain BSNs.
   - name: mitz
-    description: Gateway for managing Mitz subscriptions
+    description: >
+      Gateway to Mitz, the national consent registry the Authorization
+      Function (PDP) queries to check patient consent. Subscribe here to
+      be notified when a patient's consent for a given care provider
+      changes.
 paths:
   /status:
     get:
@@ -65,6 +93,34 @@ paths:
             text/plain:
               schema:
                 type: string
+                example: |
+                  Git version: 0.1.2
+                  Git commit: a1b2c3d
+                  OS/Arch: linux/amd64
+
+  /lrza/update:
+    post:
+      tags: [lrza]
+      summary: Trigger LRZA synchronization
+      description: >
+        Synchronizes mCSD resources from the centralised LRZA directory into
+        the local Query Directory. Runs synchronously and returns once the
+        cycle completes; the Knooppunt does not sync on a schedule of its
+        own, so this is meant to be triggered manually or via cron.
+      responses:
+        "200":
+          description: Synchronization report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DirectoryUpdateReport"
+        "500":
+          description: Synchronization failed
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Failed to update LRZA: connection refused"
 
   /pdp/v1/data/knooppunt/authz:
     post:
@@ -74,8 +130,7 @@ paths:
         Evaluates whether a data-holder request should be allowed, based on
         subject/organization, the HTTP request that is being authorized
         (e.g. FHIR request), and its context (e.g. patient BSN, connection
-        type). Also usable via `POST /pdp` directly (equivalent,
-        undocumented alias route).
+        type).
       requestBody:
         required: true
         content:
@@ -92,7 +147,7 @@ paths:
                       scope: mcsd_update
                     request:
                       method: GET
-                      protocol: "HTTP/1.0"
+                      protocol: "HTTP/1.1"
                       path: /Organization/_history
                     context:
                       data_holder_organization_id: "00000659"
@@ -106,7 +161,7 @@ paths:
                       scope: mcsd_update
                     request:
                       method: GET
-                      protocol: "HTTP/1.0"
+                      protocol: "HTTP/1.1"
                       path: /Organization
                       query: "_since=2024-01-01"
                     context:
@@ -124,7 +179,7 @@ paths:
                       scope: bgz
                     request:
                       method: GET
-                      protocol: "HTTP/1.0"
+                      protocol: "HTTP/1.1"
                       path: /Patient/3E439979-017F-40AA-594D-EBCF880FFD97
                     context:
                       data_holder_organization_id: "00000659"
@@ -142,7 +197,7 @@ paths:
                       scope: pzp_gf
                     request:
                       method: POST
-                      protocol: "HTTP/1.0"
+                      protocol: "HTTP/1.1"
                       path: /Patient/_search
                       header:
                         Content-Type: ["application/x-www-form-urlencoded"]
@@ -154,9 +209,12 @@ paths:
       responses:
         "200":
           description: >
-            Authorization decision. Returned even when the request itself was
-            malformed (`error` is set and `allow` is `false` in that case) or
-            when a referenced policy bundle/rule doesn't exist.
+            Authorization decision. Also returned, with `error` set and
+            `allow` `false`, when the request body was valid JSON but
+            semantically invalid (e.g. an unparseable FHIR request, or no
+            scope given) or names a policy bundle that doesn't exist. Only
+            an unparseable JSON body, or a scope naming a disallowed policy,
+            gets a `400` instead.
           content:
             application/json:
               schema:
@@ -181,19 +239,26 @@ paths:
                           - code: not_allowed
                             description: No MITZ consent found for this patient
         "400":
-          description: Request body could not be decoded, or path package/rule is invalid
+          description: >
+            Request body isn't valid JSON, or the scope names a disallowed
+            policy (`test_*` or `system`).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/PDPAuthzResponse"
+              example:
+                allow: false
+                error: "unable to parse request body: unexpected end of JSON input"
+                policies: {}
 
   /pdp/bundles:
     get:
       tags: [pdp]
       summary: List loaded policy bundles
       description: >
-        Primarily used by the Knooppunt itself; may change or be removed
-        without prior notice.
+        Lists the names of the loaded Open Policy Agent (OPA) bundles that
+        back PDP evaluation. Primarily used by the Knooppunt itself; may
+        change or be removed without prior notice.
       responses:
         "200":
           description: Bundle names
@@ -203,14 +268,16 @@ paths:
                 type: array
                 items:
                   type: string
+              example: [bgz, mcsd_query, mcsd_update, medicatieoverdracht_gf, pzp_gf, system, eoverdracht_sender, eoverdracht_receiver]
 
   /pdp/bundles/{policyName}:
     get:
       tags: [pdp]
       summary: Get a loaded policy bundle by name
       description: >
-        Primarily used by the Knooppunt itself; may change or be removed
-        without prior notice.
+        Serves the raw Open Policy Agent (OPA) bundle (gzipped tar) for a
+        given policy. Primarily used by the Knooppunt itself; may change
+        or be removed without prior notice.
       parameters:
         - name: policyName
           in: path
@@ -242,6 +309,35 @@ paths:
           application/fhir+json:
             schema:
               $ref: "#/components/schemas/FHIRBundle"
+            example:
+              resourceType: Bundle
+              type: transaction
+              entry:
+                - resource:
+                    resourceType: List
+                    status: current
+                    mode: working
+                    subject:
+                      identifier:
+                        system: "http://fhir.nl/fhir/NamingSystem/bsn"
+                        value: "999911136"
+                    source:
+                      identifier:
+                        system: "http://fhir.nl/fhir/NamingSystem/ura"
+                        value: "00000020"
+                    code:
+                      coding:
+                        - system: "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs"
+                          code: MedicationRequest
+                    extension:
+                      - url: "http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian"
+                        valueReference:
+                          identifier:
+                            system: "http://fhir.nl/fhir/NamingSystem/ura"
+                            value: "00000020"
+                  request:
+                    method: POST
+                    url: List
       responses:
         "200":
           description: Resulting transaction-response Bundle from NVI
@@ -249,6 +345,22 @@ paths:
             application/fhir+json:
               schema:
                 $ref: "#/components/schemas/FHIRBundle"
+              example:
+                resourceType: Bundle
+                type: transaction-response
+                entry:
+                  - resource:
+                      resourceType: List
+                      id: "1"
+                      status: current
+                      mode: working
+                      subject:
+                        identifier:
+                          system: "http://fhir.nl/fhir/NamingSystem/bsn"
+                          value: "999911136"
+                    response:
+                      status: "201 Created"
+                      location: "List/1"
         "400":
           $ref: "#/components/responses/OperationOutcomeError"
         "503":
@@ -332,6 +444,28 @@ paths:
             application/fhir+json:
               schema:
                 $ref: "#/components/schemas/FHIRBundle"
+              example:
+                resourceType: Bundle
+                type: searchset
+                total: 1
+                entry:
+                  - resource:
+                      resourceType: List
+                      id: "1"
+                      status: current
+                      mode: working
+                      subject:
+                        identifier:
+                          system: "http://fhir.nl/fhir/NamingSystem/bsn"
+                          value: "999911136"
+                      source:
+                        identifier:
+                          system: "http://fhir.nl/fhir/NamingSystem/ura"
+                          value: "00000020"
+                      code:
+                        coding:
+                          - system: "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs"
+                            code: MedicationRequest
         "400":
           $ref: "#/components/responses/OperationOutcomeError"
         "422":
@@ -360,6 +494,7 @@ paths:
             forwarding to NVI.
           schema:
             type: string
+          example: "http://fhir.nl/fhir/NamingSystem/bsn|999911136"
         - name: subject:identifier
           in: query
           required: false
@@ -407,6 +542,8 @@ paths:
                   type: string
                 code:
                   type: string
+            example:
+              patient:identifier: "http://fhir.nl/fhir/NamingSystem/bsn|999911136"
       responses:
         "200":
           description: Search result Bundle
@@ -414,6 +551,28 @@ paths:
             application/fhir+json:
               schema:
                 $ref: "#/components/schemas/FHIRBundle"
+              example:
+                resourceType: Bundle
+                type: searchset
+                total: 1
+                entry:
+                  - resource:
+                      resourceType: List
+                      id: "1"
+                      status: current
+                      mode: working
+                      subject:
+                        identifier:
+                          system: "http://fhir.nl/fhir/NamingSystem/bsn"
+                          value: "999911136"
+                      source:
+                        identifier:
+                          system: "http://fhir.nl/fhir/NamingSystem/ura"
+                          value: "00000020"
+                      code:
+                        coding:
+                          - system: "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs"
+                            code: MedicationRequest
         "400":
           $ref: "#/components/responses/OperationOutcomeError"
         "422":
@@ -474,14 +633,16 @@ paths:
       description: >
         Creates a `rest-hook` Subscription on MITZ for consent notifications
         about a patient/provider pair. Beyond the standard Subscription
-        schema, the Knooppunt requires: `status="requested"`, `reason="OTV"`,
-        `criteria` starting with `Consent?` and containing `_query=otv`,
+        schema, the Knooppunt requires: `status="requested"`,
+        `reason="OTV"` (`Ontvangen Toestemmingen Vraag`, MITZ's consent-check
+        reason code), `criteria` starting with `Consent?` and containing `_query=otv`,
         `patientid` (BSN), `providerid` (URA) and `providertype`, and
         `channel.type="rest-hook"`. `channel.endpoint` defaults to the
         configured notify endpoint if omitted; `channel.payload` defaults to
-        `application/fhir+json`. Only `Patient.birthDate`, `GatewaySystem`
-        and `SourceSystem` extensions (under
-        `http://fhir.nl/StructureDefinition/`) are allowed.
+        `application/fhir+json`. The only extension you set yourself is
+        `Patient.birthDate` (under `http://fhir.nl/StructureDefinition/`);
+        `GatewaySystem` and `SourceSystem` are added automatically from
+        Knooppunt configuration, not something the caller provides.
       requestBody:
         required: true
         content:
@@ -557,9 +718,33 @@ components:
     FHIRList:
       type: object
       description: >
-        A FHIR R4 List resource. See https://hl7.org/fhir/R4/list.html for
-        its schema; not redefined here.
+        A FHIR R4 List resource (see https://hl7.org/fhir/R4/list.html for
+        its schema; not redefined here). Used here as a pointer: it declares
+        that data of a given category exists for a patient at the custodian
+        organization, without carrying the patient data itself.
       additionalProperties: true
+      example:
+        resourceType: List
+        status: current
+        mode: working
+        subject:
+          identifier:
+            system: "http://fhir.nl/fhir/NamingSystem/bsn"
+            value: "999911136"
+        source:
+          identifier:
+            system: "http://fhir.nl/fhir/NamingSystem/ura"
+            value: "00000020"
+        code:
+          coding:
+            - system: "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs"
+              code: MedicationRequest
+        extension:
+          - url: "http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian"
+            valueReference:
+              identifier:
+                system: "http://fhir.nl/fhir/NamingSystem/ura"
+                value: "00000020"
 
     FHIRSubscription:
       type: object
@@ -582,6 +767,41 @@ components:
           - severity: error
             code: value
             diagnostics: "missing tenant request header: X-Tenant-ID"
+
+    DirectoryUpdateReport:
+      type: object
+      description: Result of one LRZA sync cycle.
+      properties:
+        created:
+          type: integer
+          description: Number of resources created in the Query Directory.
+          example: 1
+        updated:
+          type: integer
+          description: Number of resources updated in the Query Directory.
+          example: 5
+        deleted:
+          type: integer
+          description: Number of resources deleted from the Query Directory.
+          example: 0
+        warnings:
+          type: array
+          description: Non-fatal issues encountered during the sync.
+          items:
+            type: string
+          example: ["Some-warning-message"]
+        errors:
+          type: array
+          description: Fatal issues encountered during the sync.
+          items:
+            type: string
+          example: []
+      example:
+        created: 1
+        updated: 5
+        deleted: 0
+        warnings: ["Some-warning-message"]
+        errors: []
 
     PDPAuthzRequest:
       type: object
@@ -660,7 +880,7 @@ components:
                 protocol:
                   type: string
                   description: HTTP protocol version of the request being authorized.
-                  example: "HTTP/1.0"
+                  example: "HTTP/1.1"
                 path:
                   type: string
                   description: >
