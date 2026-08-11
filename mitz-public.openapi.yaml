@@ -1,0 +1,47 @@
+openapi: 3.0.3
+info:
+  title: Nuts Knooppunt MITZ Public API
+  description: >
+    The single endpoint served on the Knooppunt's public interface (default
+    `:8080`), called directly by MITZ. Kept separate from `openapi.yaml`
+    (which covers the internal interface) since this endpoint isn't
+    integrated against by Knooppunt users — it's not linked from the
+    Swagger UI under `docs/api/`.
+    FHIR resource bodies are not redefined here — see
+    https://hl7.org/fhir/R4/ for their schemas.
+  version: "1.0"
+security: []
+# No application-level authentication: MITZ calls this endpoint directly.
+servers:
+  - url: http://localhost:8080
+    description: Public interface
+tags:
+  - name: mitz
+    description: MITZ consent notifications
+paths:
+  /mitz/notify:
+    post:
+      tags: [mitz]
+      summary: Receive a MITZ consent notification
+      description: >
+        Public endpoint MITZ calls to notify about consent changes for an
+        active subscription. Currently acknowledges any payload without
+        parsing it.
+      requestBody:
+        required: false
+        content:
+          application/fhir+json:
+            schema:
+              $ref: "#/components/schemas/FHIRResource"
+      responses:
+        "204":
+          description: Acknowledged
+
+components:
+  schemas:
+    FHIRResource:
+      type: object
+      description: >
+        A FHIR R4 resource. See https://hl7.org/fhir/R4/ for its schema;
+        not redefined here.
+      additionalProperties: true
