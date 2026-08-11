@@ -104,3 +104,17 @@ func TestRedirectURITrimsTrailingSlash(t *testing.T) {
 	t.Setenv("SANDBOX_PUBLIC_URL", "https://sandbox.example.com")
 	require.Equal(t, "https://sandbox.example.com/demo/auth/callback", deziConfigFromEnv().RedirectURI)
 }
+
+// The default is load-bearing and was previously only implied. Two consumers
+// read it, the redirect URI and the Secure-cookie decision (session.go), and
+// they have to land on the same host and scheme or the local demo breaks in a
+// way that looks like a Dezi problem. Every other test here builds a
+// deziConfig literal or sets the variable, so none of them would notice the
+// fallback changing.
+func TestPublicURLFallsBackToTheLocalDemoPort(t *testing.T) {
+	t.Setenv("SANDBOX_PUBLIC_URL", "")
+
+	require.Equal(t, "http://localhost:8091", sandboxPublicURL())
+	require.Equal(t, "http://localhost:8091/demo/auth/callback", deziConfigFromEnv().RedirectURI)
+	require.False(t, secureCookies(), "the local default is plain http, where a Secure cookie would be dropped")
+}

@@ -16,7 +16,7 @@ var notices = map[string]string{
 func NewMux() *http.ServeMux {
 	sessions := newSessionStore()
 	client := newDeziClient(deziConfigFromEnv())
-	pending := newPendingStore()
+	clientStates := newClientStateStore()
 	secure := secureCookies()
 
 	// signedIn resolves the session cookie, returning nil when absent or expired.
@@ -63,7 +63,7 @@ func NewMux() *http.ServeMux {
 
 	mux.HandleFunc("POST /demo/login", func(w http.ResponseWriter, r *http.Request) {
 		state, verifier := randomURLSafe(), randomURLSafe()
-		pending.put(state, verifier)
+		clientStates.put(state, verifier)
 		http.Redirect(w, r, client.authorizeURL(state, verifier), http.StatusSeeOther)
 	})
 
@@ -85,7 +85,7 @@ func NewMux() *http.ServeMux {
 		}
 
 		// State is consumed exactly once, so a replayed callback fails.
-		attempt, ok := pending.take(q.Get("state"))
+		attempt, ok := clientStates.take(q.Get("state"))
 		if !ok {
 			http.Error(w, "Unknown or expired sign-in attempt", http.StatusBadRequest)
 			return
@@ -120,9 +120,7 @@ func NewMux() *http.ServeMux {
 		if cookie, err := r.Cookie(sessionCookie); err == nil {
 			sessions.drop(cookie.Value)
 		}
-		http.SetCookie(w, &http.Cookie{
-			Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, Secure: secure, MaxAge: -1,
-		})
+		clearSessionCookie(w, secure)
 		http.Redirect(w, r, "/demo?notice=signed-out", http.StatusSeeOther)
 	})
 
@@ -134,9 +132,7 @@ func NewMux() *http.ServeMux {
 		// Stub until E5 lands the seeded dataset and real reset semantics, but
 		// the session half of reset is real from here on.
 		sessions.dropAll()
-		http.SetCookie(w, &http.Cookie{
-			Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, Secure: secure, MaxAge: -1,
-		})
+		clearSessionCookie(w, secure)
 		http.Redirect(w, r, "/demo?notice=reset-pending", http.StatusSeeOther)
 	})
 

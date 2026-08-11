@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -27,11 +28,21 @@ const sessionCookie = "gf_sandbox_session"
 // makes it so; "HTTPS://host" is a valid https URL and must not quietly
 // produce a cookie without Secure.
 func secureCookies() bool {
-	parsed, err := url.Parse(envOr("SANDBOX_PUBLIC_URL", "http://localhost:8091"))
+	parsed, err := url.Parse(sandboxPublicURL())
 	if err != nil {
 		return false
 	}
 	return strings.EqualFold(parsed.Scheme, "https")
+}
+
+// clearSessionCookie writes the deletion cookie. Both /demo/logout and
+// /demo/reset end a session and each carried its own copy of these attributes.
+// A cookie is only deleted when the Name and Path match the one that was set,
+// so two copies were two chances to drift out of that agreement.
+func clearSessionCookie(w http.ResponseWriter, secure bool) {
+	http.SetCookie(w, &http.Cookie{
+		Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, Secure: secure, MaxAge: -1,
+	})
 }
 
 // authSession is the internal record of a signed-in practitioner. It holds the
@@ -153,7 +164,7 @@ func (s *sessionStore) get(id string) (authSession, bool) {
 		return authSession{}, false
 	}
 	if s.now().After(a.ExpiresAt) {
-		// Reap on read, the same way pendingStore.take drops what it hands
+		// Reap on read, the same way clientStateStore.take drops what it hands
 		// back. create sweeps the rest, so this only saves the map from
 		// holding an entry until the next sign-in.
 		delete(s.sessions, id)

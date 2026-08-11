@@ -199,6 +199,7 @@ func TestLogoutEndsSessionServerSide(t *testing.T) {
 	res.Body.Close()
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
 	require.Equal(t, "/demo?notice=signed-out", res.Header.Get("Location"))
+	requireDeletionCookie(t, res)
 
 	// Replay the cookie value the browser held before logout. If the server
 	// still honours it, clearing the cookie client-side was cosmetic and the
@@ -209,6 +210,37 @@ func TestLogoutEndsSessionServerSide(t *testing.T) {
 
 	status, _ = replaySessionCookie(t, srv, bystander)
 	require.Equal(t, http.StatusOK, status, "logout must end only the caller's session")
+}
+
+// requireDeletionCookie asserts the response carries a cookie that actually
+// deletes the session cookie, rather than merely mentioning its name.
+//
+// This is the property the two routes share and the one nothing else here
+// covers: a browser removes a cookie only when the replacement matches the
+// original's Name and Path, so a wrong Path leaves the old cookie in place
+// beside a new empty one and the session survives in the browser. Both routes
+// go through clearSessionCookie (session.go); before that helper existed each
+// route carried its own copy of these attributes, and every test still passed
+// while they drifted.
+//
+// Secure is compared against secureCookies() rather than hardcoded: the set
+// cookie's Secure flag is already pinned for http and https by
+// TestCallbackSetsSecureCookieAttributes and its https counterpart, and the
+// deletion cookie has to agree with whatever those produce.
+func requireDeletionCookie(t *testing.T, res *http.Response) {
+	t.Helper()
+	for _, cookie := range res.Cookies() {
+		if cookie.Name != sessionCookie {
+			continue
+		}
+		require.Empty(t, cookie.Value, "the deletion cookie must not carry a session value")
+		require.Equal(t, "/", cookie.Path, "a cookie is deleted only when the Path matches the one it was set with")
+		require.True(t, cookie.HttpOnly, "the replacement must not be readable from script when the original was not")
+		require.Equal(t, secureCookies(), cookie.Secure, "the deletion cookie must match the set cookie's Secure flag")
+		require.Equal(t, -1, cookie.MaxAge, "MaxAge -1 is what expires the cookie immediately")
+		return
+	}
+	t.Fatalf("no %s cookie in the response, so the browser keeps the one it has", sessionCookie)
 }
 
 func TestResetEndsSessionServerSide(t *testing.T) {
@@ -227,6 +259,7 @@ func TestResetEndsSessionServerSide(t *testing.T) {
 	res.Body.Close()
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
 	require.Equal(t, "/demo?notice=reset-pending", res.Header.Get("Location"))
+	requireDeletionCookie(t, res)
 
 	status, location := replaySessionCookie(t, srv, raw)
 	require.Equal(t, http.StatusSeeOther, status, "reset must drop every session, not just clear the caller's cookie")
