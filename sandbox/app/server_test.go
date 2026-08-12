@@ -269,64 +269,6 @@ func TestResetEndsSessionServerSide(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, status, "reset must also drop a session that never made the request")
 }
 
-func TestResetRejectsCrossSiteRequest(t *testing.T) {
-	srv := httptest.NewServer(NewMux())
-	t.Cleanup(srv.Close)
-
-	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
-	require.NoError(t, err)
-	req.Header.Set("Sec-Fetch-Site", "cross-site")
-	res, err := srv.Client().Do(req)
-	require.NoError(t, err)
-	defer res.Body.Close()
-	require.Equal(t, http.StatusForbidden, res.StatusCode, "a cross-site Sec-Fetch-Site must be rejected")
-	for _, c := range res.Cookies() {
-		require.NotEqual(t, sessionCookie, c.Name, "a rejected reset must not touch the session cookie")
-	}
-}
-
-func TestResetRejectsSameSiteRequestAndKeepsSessions(t *testing.T) {
-	dezi := fakeDezi(t)
-	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
-	srv := httptest.NewServer(NewMux())
-	t.Cleanup(srv.Close)
-	first := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
-	second := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
-
-	// Reset needs no session and clears everyone's, so a sibling origin being
-	// able to reach it is the damaging case.
-	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
-	require.NoError(t, err)
-	req.Header.Set("Sec-Fetch-Site", "same-site")
-	res, err := srv.Client().Do(req)
-	require.NoError(t, err)
-	defer res.Body.Close()
-	require.Equal(t, http.StatusForbidden, res.StatusCode, "a sibling origin must not be able to reset")
-	for _, c := range res.Cookies() {
-		require.NotEqual(t, sessionCookie, c.Name, "a rejected reset must not sign the browser out either")
-	}
-
-	for _, raw := range []string{first, second} {
-		status, _ := replaySessionCookie(t, srv, raw)
-		require.Equal(t, http.StatusOK, status, "a rejected reset must leave every session intact")
-	}
-}
-
-func TestResetAcceptsSameOriginRequest(t *testing.T) {
-	srv := httptest.NewServer(NewMux())
-	t.Cleanup(srv.Close)
-	client := srv.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-
-	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
-	require.NoError(t, err)
-	req.Header.Set("Sec-Fetch-Site", "same-origin")
-	res, err := client.Do(req)
-	require.NoError(t, err)
-	defer res.Body.Close()
-	require.Equal(t, http.StatusSeeOther, res.StatusCode, "a same-origin Sec-Fetch-Site must be allowed")
-}
-
 func TestCallbackSetsSecureCookieAttributes(t *testing.T) {
 	dezi := fakeDezi(t)
 	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)

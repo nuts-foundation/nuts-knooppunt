@@ -108,11 +108,12 @@ func NewMux() *http.ServeMux {
 	})
 
 	mux.HandleFunc("POST /demo/logout", func(w http.ResponseWriter, r *http.Request) {
-		// Same guard as /demo/reset. Both mutate session state, so both get
-		// it; the asymmetry was an oversight when reset gained the check.
 		// SameSite=Lax already withholds the cookie from a cross-site POST,
 		// which leaves the server-side session intact, but the response still
-		// carries the deletion cookie and the browser may apply it.
+		// carries the deletion cookie and the browser may apply it, so a
+		// cross-site form post can sign a practitioner out of the demo.
+		//
+		// /demo/reset carries no such guard on purpose: see the note there.
 		if crossSiteRequest(r) {
 			http.Error(w, "cross-site logout is not allowed", http.StatusForbidden)
 			return
@@ -125,12 +126,15 @@ func NewMux() *http.ServeMux {
 	})
 
 	mux.HandleFunc("POST /demo/reset", func(w http.ResponseWriter, r *http.Request) {
-		if crossSiteRequest(r) {
-			http.Error(w, "cross-site reset is not allowed", http.StatusForbidden)
-			return
-		}
-		// Stub until E5 lands the seeded dataset and real reset semantics, but
-		// the session half of reset is real from here on.
+		// Stub until E5 lands the seeded dataset and real reset semantics.
+		//
+		// Deliberately unguarded, unlike /demo/logout. Reset drops every
+		// session rather than the caller's, which is already wrong: DESIGN.md
+		// has reset restoring per pool patient, with concurrent runs marked
+		// "demo in progress". Guarding the current behaviour would only make a
+		// placeholder look considered. E5 owns the real semantics, and whatever
+		// it scopes a reset to is what decides whether this needs a guard, or a
+		// real CSRF token rather than a header heuristic.
 		sessions.dropAll()
 		clearSessionCookie(w, secure)
 		http.Redirect(w, r, "/demo?notice=reset-pending", http.StatusSeeOther)
@@ -166,9 +170,9 @@ func requireSession(resolve func(*http.Request) *authSession, next func(http.Res
 }
 
 // crossSiteRequest reports whether r shows browser evidence of originating
-// from another site. The server listens on all interfaces and /demo/reset
-// carries no CSRF token, so this header is the only guard between an
-// arbitrary web page and signing out every practitioner in the demo.
+// from another site. The server listens on all interfaces and /demo/logout
+// carries no CSRF token, so this header is the only thing between an arbitrary
+// web page and signing a practitioner out of the demo.
 //
 // Every modern browser sets Sec-Fetch-Site on navigations and form
 // submissions, and a page cannot override it, so a value other than
@@ -180,10 +184,9 @@ func requireSession(resolve func(*http.Request) *authSession, next func(http.Res
 // ever needs one.
 //
 // same-site is deliberately not allowed. It covers sibling origins under the
-// same registrable domain, so on a hosted deployment any other subdomain
-// would qualify, and /demo/reset needs no session or cookie before clearing
-// every practitioner's. Nothing here needs the wider allowance: the templates
-// post to their own origin.
+// same registrable domain, so on a hosted deployment any other subdomain would
+// qualify. Nothing here needs the wider allowance: the templates post to their
+// own origin.
 func crossSiteRequest(r *http.Request) bool {
 	site := r.Header.Get("Sec-Fetch-Site")
 	return site != "" && site != "same-origin"
