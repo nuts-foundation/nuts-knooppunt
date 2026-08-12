@@ -407,7 +407,7 @@ func TestLogoutRejectsCrossSiteRequest(t *testing.T) {
 	require.NoError(t, err)
 	defer res.Body.Close()
 	require.Equal(t, http.StatusForbidden, res.StatusCode,
-		"logout mutates session state and must be guarded like reset")
+		"a cross-site form post must not be able to sign a practitioner out")
 
 	// Status alone is too weak: a handler that clears the cookie and then
 	// returns 403 would pass that check while still signing the victim out.
