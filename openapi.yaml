@@ -62,6 +62,7 @@ paths:
     get:
       tags: [status]
       summary: Readiness check
+      operationId: getStatus
       description: >
         Returns `200 OK` once all components have started. Returns `503` with
         body `starting` while the Knooppunt is still starting up. Used as the
@@ -86,6 +87,7 @@ paths:
     get:
       tags: [status]
       summary: Build version info
+      operationId: getVersion
       responses:
         "200":
           description: Build info
@@ -102,6 +104,7 @@ paths:
     post:
       tags: [lrza]
       summary: Trigger LRZA synchronization
+      operationId: triggerLrzaSync
       description: >
         Synchronizes mCSD resources from the centralised LRZA directory into
         the local Query Directory. Runs synchronously and returns once the
@@ -126,6 +129,7 @@ paths:
     post:
       tags: [pdp]
       summary: Evaluate an authorization request
+      operationId: evaluateAuthorization
       description: >
         Evaluates whether a data-holder request should be allowed, based on
         subject/organization, the HTTP request that is being authorized
@@ -255,6 +259,7 @@ paths:
     get:
       tags: [pdp]
       summary: List loaded policy bundles
+      operationId: listPolicyBundles
       description: >
         Lists the names of the loaded Open Policy Agent (OPA) bundles that
         back PDP evaluation. Primarily used by the Knooppunt itself; may
@@ -274,6 +279,7 @@ paths:
     get:
       tags: [pdp]
       summary: Get a loaded policy bundle by name
+      operationId: getPolicyBundle
       description: >
         Serves the raw Open Policy Agent (OPA) bundle (gzipped tar) for a
         given policy. Primarily used by the Knooppunt itself; may change
@@ -292,10 +298,10 @@ paths:
           description: No bundle with this name is loaded
 
   /nvi:
-    # Also reachable as `POST /nvi/{anything}` (catch-all), which behaves identically.
     post:
       tags: [nvi]
       summary: Register a List via a transaction Bundle
+      operationId: registerListBundle
       description: >
         Submits a FHIR transaction Bundle containing one or more `List`
         resources. BSN values in `List.subject.identifier` are pseudonymized
@@ -365,11 +371,14 @@ paths:
           $ref: "#/components/responses/OperationOutcomeError"
         "503":
           $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
 
   /nvi/List:
     post:
       tags: [nvi]
       summary: Register a List directly
+      operationId: registerList
       parameters:
         - $ref: "#/components/parameters/TenantID"
       requestBody:
@@ -389,9 +398,12 @@ paths:
           $ref: "#/components/responses/OperationOutcomeError"
         "503":
           $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
     get:
       tags: [nvi]
       summary: Search for Lists
+      operationId: searchLists
       description: >
         Requires at least one of `patient:identifier`, `subject:identifier` or
         `source:identifier`. `patient:identifier` is mapped to
@@ -437,6 +449,7 @@ paths:
             (e.g. `MedicationRequest`).
           schema:
             type: string
+        - $ref: "#/components/parameters/Count"
       responses:
         "200":
           description: Search result Bundle
@@ -476,9 +489,12 @@ paths:
                 $ref: "#/components/schemas/FHIROperationOutcome"
         "503":
           $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
     delete:
       tags: [nvi]
       summary: Delete Lists matching search parameters
+      operationId: deleteListsByParams
       description: >
         Same parameter rules as the search endpoint above (at least one of
         `patient:identifier`, `subject:identifier`, `source:identifier` is
@@ -519,11 +535,14 @@ paths:
           $ref: "#/components/responses/OperationOutcomeError"
         "503":
           $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
 
   /nvi/List/_search:
     post:
       tags: [nvi]
       summary: Search for Lists (form-encoded body)
+      operationId: searchListsForm
       description: Same behavior as `GET /nvi/List`, with parameters in the request body.
       parameters:
         - $ref: "#/components/parameters/TenantID"
@@ -542,6 +561,12 @@ paths:
                   type: string
                 code:
                   type: string
+                _count:
+                  type: integer
+                  description: >
+                    FHIR `_count` search parameter: maximum number of results
+                    per page. Forwarded to NVI as-is.
+                  example: 20
             example:
               patient:identifier: "http://fhir.nl/fhir/NamingSystem/bsn|999911136"
       responses:
@@ -583,11 +608,14 @@ paths:
                 $ref: "#/components/schemas/FHIROperationOutcome"
         "503":
           $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
 
   /nvi/List/{id}:
     get:
       tags: [nvi]
       summary: Read a List by ID
+      operationId: getList
       parameters:
         - $ref: "#/components/parameters/TenantID"
         - name: id
@@ -607,9 +635,12 @@ paths:
           $ref: "#/components/responses/OperationOutcomeError"
         "503":
           $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
     delete:
       tags: [nvi]
       summary: Delete a List by ID
+      operationId: deleteList
       parameters:
         - $ref: "#/components/parameters/TenantID"
         - name: id
@@ -625,11 +656,14 @@ paths:
           $ref: "#/components/responses/OperationOutcomeError"
         "503":
           $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
 
   /mitz/Subscription:
     post:
       tags: [mitz]
       summary: Create a MITZ consent subscription
+      operationId: createMitzSubscription
       description: >
         Creates a `rest-hook` Subscription on MITZ for consent notifications
         about a patient/provider pair. Beyond the standard Subscription
@@ -684,6 +718,8 @@ paths:
                 $ref: "#/components/schemas/FHIROperationOutcome"
         "503":
           $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
 
 components:
   parameters:
@@ -698,6 +734,17 @@ components:
       schema:
         type: string
       example: "http://fhir.nl/fhir/NamingSystem/ura|00000020"
+
+    Count:
+      name: _count
+      in: query
+      required: false
+      description: >
+        FHIR `_count` search parameter: maximum number of results per page.
+        Forwarded to NVI as-is.
+      schema:
+        type: integer
+      example: 20
 
   responses:
     OperationOutcomeError:
@@ -714,6 +761,9 @@ components:
         A FHIR R4 Bundle resource. See https://hl7.org/fhir/R4/bundle.html
         for its schema; not redefined here.
       additionalProperties: true
+      x-go-type: fhir.Bundle
+      x-go-type-import:
+        path: github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir
 
     FHIRList:
       type: object
@@ -723,6 +773,9 @@ components:
         that data of a given category exists for a patient at the custodian
         organization, without carrying the patient data itself.
       additionalProperties: true
+      x-go-type: fhir.List
+      x-go-type-import:
+        path: github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir
       example:
         resourceType: List
         status: current
@@ -753,6 +806,9 @@ components:
         https://hl7.org/fhir/R4/subscription.html for its schema; not
         redefined here.
       additionalProperties: true
+      x-go-type: fhir.Subscription
+      x-go-type-import:
+        path: github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir
 
     FHIROperationOutcome:
       type: object
@@ -761,6 +817,9 @@ components:
         See https://hl7.org/fhir/R4/operationoutcome.html for its schema;
         not redefined here.
       additionalProperties: true
+      x-go-type: fhir.OperationOutcome
+      x-go-type-import:
+        path: github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir
       example:
         resourceType: OperationOutcome
         issue:

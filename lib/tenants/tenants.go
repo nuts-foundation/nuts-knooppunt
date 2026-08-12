@@ -1,8 +1,6 @@
 package tenants
 
 import (
-	"net/http"
-
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
@@ -11,8 +9,9 @@ import (
 
 const tenantIDHeader = "X-Tenant-ID"
 
-func IDFromRequest(httpRequest *http.Request) (*fhir.Identifier, error) {
-	tenantID := httpRequest.Header.Get(tenantIDHeader)
+// IDFromHeaderValue validates and parses the X-Tenant-ID header value, as bound by the
+// generated OpenAPI request-parameter code.
+func IDFromHeaderValue(tenantID string) (*fhir.Identifier, error) {
 	if tenantID == "" {
 		return nil, &fhirapi.Error{
 			Message:   "missing tenant request header: " + tenantIDHeader,

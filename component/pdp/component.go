@@ -11,11 +11,13 @@ import (
 	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/nuts-foundation/nuts-knooppunt/api"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/policies"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"golang.org/x/exp/maps"
 )
 
@@ -75,12 +77,8 @@ func (c *Component) Stop(ctx context.Context) error {
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	internalMux.HandleFunc("POST /pdp", c.HandleMainPolicy)
 	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", c.HandlePolicy)
-	// The following endpoint lists the available OPA policy bundles.
-	// It's not used by Open Policy Agent, but can be useful for debugging and operational purposes.
-	internalMux.HandleFunc("GET /pdp/bundles", c.HandleListBundles)
-	// The following endpoint serves the OPA policy bundle for a specific scope.
-	// It's used by Open Policy Agent on startup to load the policy bundles.
-	internalMux.HandleFunc("GET /pdp/bundles/{policyName}", c.HandleGetBundle)
+	// /pdp/bundles and /pdp/bundles/{policyName} are served through the generated OpenAPI
+	// strict server, wired up in cmd.RegisterAPIRoutes.
 }
 
 func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
@@ -93,6 +91,15 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		}, http.StatusBadRequest)
 		return
 	}
+	response, statusCode := c.Evaluate(r.Context(), reqBody)
+	writeResponseWithCode(r.Context(), w, response, statusCode)
+}
+
+// Evaluate runs the core PDP evaluation: given an already-decoded request, it returns the
+// authorization decision and the HTTP status code it should be served with. Split out from
+// HandleMainPolicy so it can be called directly (e.g. by the generated strict API server)
+// without going through the HTTP layer.
+func (c *Component) Evaluate(ctx context.Context, reqBody APIRequest) (APIResponse, int) {
 	input := reqBody.Input
 
 	scopes := strings.Fields(input.Subject.Scope)
@@ -110,19 +117,17 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	// The `system` bundle hosts OPA infrastructure rules (e.g. decision-log masking) and is not directly invokable.
 	for _, policyName := range policyNames {
 		if strings.HasPrefix(policyName, "test_") || policyName == "system" {
-			writeResponseWithCode(r.Context(), w, APIResponse{
+			return APIResponse{
 				Error:    fmt.Sprintf("policy not allowed: %s", policyName),
 				Policies: map[string]PolicyResult{},
-			}, http.StatusBadRequest)
-			return
+			}, http.StatusBadRequest
 		}
 	}
 	if len(policyNames) == 0 {
-		writeResponse(r.Context(), w, APIResponse{
+		return APIResponse{
 			Error:    "missing required value, no policy defined",
 			Policies: map[string]PolicyResult{},
-		})
-		return
+		}, http.StatusOK
 	}
 
 	response := APIResponse{
@@ -133,16 +138,15 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 	policyInputTemplate, err := NewPolicyInput(reqBody)
 	if err != nil {
 		// Invalid request
-		writeResponse(r.Context(), w, APIResponse{
+		return APIResponse{
 			Error: "invalid request: " + err.Error(),
-		})
-		return
+		}, http.StatusOK
 	}
 
 	// Step 3: Enrich the policy input with data gathered from the policy information point (if available)
-	policyInputTemplate, resultReasonsPIP := c.enrichPolicyInputWithPIP(r.Context(), policyInputTemplate)
+	policyInputTemplate, resultReasonsPIP := c.enrichPolicyInputWithPIP(ctx, policyInputTemplate)
 	// Step 4: Check consent at Mitz
-	policyInputTemplate, resultReasonsMitz := c.enrichPolicyInputWithMitz(r.Context(), policyInputTemplate)
+	policyInputTemplate, resultReasonsMitz := c.enrichPolicyInputWithMitz(ctx, policyInputTemplate)
 	resultReasons := slices.Concat(resultReasonsPIP, resultReasonsMitz)
 
 	// Evaluate all policies
@@ -156,9 +160,9 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 
 		// Check if the policy exists
 		{
-			policyExists, err := c.policyExists(r.Context(), policyName)
+			policyExists, err := c.policyExists(ctx, policyName)
 			if err != nil {
-				slog.ErrorContext(r.Context(), "failed to check if policy exists", logging.Error(err), slog.String("policy", policyName))
+				slog.ErrorContext(ctx, "failed to check if policy exists", logging.Error(err), slog.String("policy", policyName))
 				policyResult.Reasons = append(policyResult.Reasons, ResultReason{
 					Code:        TypeResultCodeInternalError,
 					Description: fmt.Sprintf("failed to check if policy exists: %v", err),
@@ -179,15 +183,15 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		// Step 5: Check FHIR Capability Statement
 		{
 			var fhirCapStatCheckResultReasons []ResultReason
-			policyInput, fhirCapStatCheckResultReasons = enrichPolicyInputWithCapabilityStatement(r.Context(), policyInput, policyName)
+			policyInput, fhirCapStatCheckResultReasons = enrichPolicyInputWithCapabilityStatement(ctx, policyInput, policyName)
 			policyResult.Reasons = append(policyResult.Reasons, fhirCapStatCheckResultReasons...)
 		}
 
 		// Step 6: Evaluate using Open Policy Agent
 		{
-			regoPolicyResult, err := c.evalRegoPolicy(r.Context(), policyName, policyInput)
+			regoPolicyResult, err := c.evalRegoPolicy(ctx, policyName, policyInput)
 			if err != nil {
-				slog.ErrorContext(r.Context(), "failed to evaluate rego policy", logging.Error(err), slog.String("policy", policyName))
+				slog.ErrorContext(ctx, "failed to evaluate rego policy", logging.Error(err), slog.String("policy", policyName))
 				policyResult.Reasons = append(policyResult.Reasons, ResultReason{
 					Code:        TypeResultCodeInternalError,
 					Description: "failed to evaluate rego policy: " + err.Error(),
@@ -205,7 +209,23 @@ func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeResponse(r.Context(), w, response)
+	return response, http.StatusOK
+}
+
+func (c *Component) EvaluateAuthorization(ctx context.Context, request api.EvaluateAuthorizationRequestObject) (api.EvaluateAuthorizationResponseObject, error) {
+	apiRequest, err := to.JSONConvert[APIRequest](request.Body)
+	if err != nil {
+		return nil, err
+	}
+	result, statusCode := c.Evaluate(ctx, apiRequest)
+	apiResponse, err := to.JSONConvert[api.PDPAuthzResponse](result)
+	if err != nil {
+		return nil, err
+	}
+	if statusCode == http.StatusBadRequest {
+		return api.EvaluateAuthorization400JSONResponse(apiResponse), nil
+	}
+	return api.EvaluateAuthorization200JSONResponse(apiResponse), nil
 }
 
 func writeResponseWithCode(ctx context.Context, w http.ResponseWriter, response any, statusCode int) {
@@ -221,10 +241,6 @@ func writeResponseWithCode(ctx context.Context, w http.ResponseWriter, response 
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to write response to ResponseWriter", logging.Error(err))
 	}
-}
-
-func writeResponse(ctx context.Context, w http.ResponseWriter, result APIResponse) {
-	writeResponseWithCode(ctx, w, result, http.StatusOK)
 }
 
 func (c *Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
@@ -243,53 +259,69 @@ func (c *Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// HandleListBundles returns a list of available OPA policy bundles
-func (c *Component) HandleListBundles(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	bundles, err := policies.Bundles(r.Context())
+// BundleNames returns the names of the loaded Open Policy Agent bundles.
+func (c *Component) BundleNames(ctx context.Context) ([]string, error) {
+	bundles, err := policies.Bundles(ctx)
 	if err != nil {
-		http.Error(w, "failed to retrieve bundles", http.StatusInternalServerError)
-		slog.ErrorContext(r.Context(), "Failed to retrieve bundles", logging.Error(err))
-		return
+		return nil, fmt.Errorf("failed to retrieve bundles: %w", err)
 	}
-	if err := json.NewEncoder(w).Encode(maps.Keys(bundles)); err != nil {
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		slog.ErrorContext(r.Context(), "Failed to encode bundles list", logging.Error(err))
-	}
+	return maps.Keys(bundles), nil
 }
 
-// HandleGetBundle serves an OPA policy bundle for a specific scope
-func (c *Component) HandleGetBundle(w http.ResponseWriter, r *http.Request) {
-	policyName := r.PathValue("policyName")
-	if policyName == "" {
-		// Shouldn't happen, but still...
-		http.Error(w, "policyName parameter is required", http.StatusBadRequest)
-		return
-	}
+// Bundle returns the raw OPA bundle (gzipped tar) for the given policy, trimming a trailing
+// ".tar.gz" suffix if present. found reports whether a bundle with that name is loaded.
+func (c *Component) Bundle(ctx context.Context, policyName string) (data []byte, found bool, err error) {
 	policyName = strings.TrimSuffix(policyName, ".tar.gz")
-
-	bundles, err := policies.Bundles(r.Context())
+	bundles, err := policies.Bundles(ctx)
 	if err != nil {
-		http.Error(w, "failed to retrieve bundles", http.StatusInternalServerError)
-		slog.ErrorContext(r.Context(), "Failed to retrieve bundles", logging.Error(err))
-		return
+		return nil, false, fmt.Errorf("failed to retrieve bundles: %w", err)
 	}
-	bundleData, found := bundles[policyName]
+	data, found = bundles[policyName]
+	return data, found, nil
+}
+
+func (c *Component) ListPolicyBundles(ctx context.Context, _ api.ListPolicyBundlesRequestObject) (api.ListPolicyBundlesResponseObject, error) {
+	names, err := c.BundleNames(ctx)
+	if err != nil {
+		// No error response is declared for this internal-use endpoint; falls through to the
+		// framework's generic 500 plain-text handler, same as the original http.Error call.
+		return nil, err
+	}
+	return api.ListPolicyBundles200JSONResponse(names), nil
+}
+
+func (c *Component) GetPolicyBundle(ctx context.Context, request api.GetPolicyBundleRequestObject) (api.GetPolicyBundleResponseObject, error) {
+	data, found, err := c.Bundle(ctx, request.PolicyName)
+	if err != nil {
+		return nil, err
+	}
 	if !found {
-		http.Error(w, fmt.Sprintf("bundle not found: %s", policyName), http.StatusNotFound)
-		slog.WarnContext(r.Context(), "Bundle not found", slog.String("policyName", policyName))
-		return
+		return api.GetPolicyBundle404Response{}, nil
 	}
+	return rawBundleResponse{
+		contentType:        "application/gzip",
+		contentDisposition: fmt.Sprintf("attachment; filename=%s.tar.gz", request.PolicyName),
+		body:               data,
+	}, nil
+}
 
-	w.Header().Set("Content-Type", "application/gzip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s.tar.gz", policyName))
+// rawBundleResponse implements api.GetPolicyBundleResponseObject by hand: the OpenAPI
+// spec doesn't declare a content schema for this response (it's an internal-use, binary
+// download), so oapi-codegen has nothing to generate a typed body from. The response object is
+// just an interface (VisitGetPolicyBundleResponse(w) error), so a hand-written
+// implementation slots in the same way a generated one would.
+type rawBundleResponse struct {
+	contentType        string
+	contentDisposition string
+	body               []byte
+}
+
+func (r rawBundleResponse) VisitGetPolicyBundleResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", r.contentType)
+	w.Header().Set("Content-Disposition", r.contentDisposition)
 	w.WriteHeader(http.StatusOK)
-
-	if _, err := w.Write(bundleData); err != nil {
-		slog.ErrorContext(r.Context(), "Failed to write bundle",
-			slog.String("policyName", policyName),
-			logging.Error(err))
-	}
+	_, err := w.Write(r.body)
+	return err
 }
 
 func (c *Component) policyExists(ctx context.Context, policy string) (bool, error) {

@@ -1,23 +1,15 @@
 package fhirapi
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
-	"strconv"
 
-	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-// SendErrorResponse will send the given error as OperationOutcome to the FHIR client.
-// If the error isn't an Error instance, it will send a generic error back to the FHIR client, to avoid leaking sensitive internals.
-func SendErrorResponse(ctx context.Context, httpResponse http.ResponseWriter, err error) {
-	slog.ErrorContext(ctx, "FHIR API error", logging.Error(err))
-	statusCode := http.StatusInternalServerError
-	var responseResource any
+// StatusCodeForError maps err to the HTTP status code its OperationOutcome should be sent with:
+// http.StatusInternalServerError unless err is an *Error with an IssueType mapped below.
+func StatusCodeForError(err error) int {
 	var fhirError *Error
 	if ok := errors.As(err, &fhirError); ok {
 		// Might want to support more later, not required now
@@ -27,45 +19,37 @@ func SendErrorResponse(ctx context.Context, httpResponse http.ResponseWriter, er
 			fhir.IssueTypeRequired,
 			fhir.IssueTypeValue,
 			fhir.IssueTypeInvariant:
-			statusCode = http.StatusBadRequest
+			return http.StatusBadRequest
 		case fhir.IssueTypeTransient,
 			fhir.IssueTypeLockError,
 			fhir.IssueTypeNoStore,
 			fhir.IssueTypeException,
 			fhir.IssueTypeTimeout,
 			fhir.IssueTypeThrottled:
-			statusCode = http.StatusServiceUnavailable
+			return http.StatusServiceUnavailable
 		case fhir.IssueTypeTooCostly:
-			statusCode = http.StatusUnprocessableEntity
-		}
-		responseResource = fhirError.OperationOutcome()
-	} else {
-		diagnostics := "An internal server error occurred"
-		responseResource = fhir.OperationOutcome{
-			Issue: []fhir.OperationOutcomeIssue{
-				{
-					Severity:    fhir.IssueSeverityError,
-					Code:        fhir.IssueTypeProcessing,
-					Diagnostics: &diagnostics,
-				},
-			},
+			return http.StatusUnprocessableEntity
 		}
 	}
-	SendResponse(ctx, httpResponse, statusCode, responseResource)
+	return http.StatusInternalServerError
 }
 
-func SendResponse(ctx context.Context, httpResponse http.ResponseWriter, httpStatus int, resource interface{}) {
-	data, err := json.MarshalIndent(resource, "", "  ")
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to marshal response", logging.Error(err))
-		httpStatus = http.StatusInternalServerError
-		data = []byte(`{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"processing","diagnostics":"Failed to marshal response"}]}`)
+// OperationOutcomeForError builds the FHIR OperationOutcome body to send for err: err's own
+// OperationOutcome() if it's an *Error, otherwise a generic one that avoids leaking internal
+// details.
+func OperationOutcomeForError(err error) fhir.OperationOutcome {
+	var fhirError *Error
+	if ok := errors.As(err, &fhirError); ok {
+		return fhirError.OperationOutcome()
 	}
-	httpResponse.Header().Set("Content-Type", JSONMimeType)
-	httpResponse.Header().Set("Content-Length", strconv.Itoa(len(data)))
-	httpResponse.WriteHeader(httpStatus)
-	_, err = httpResponse.Write(data)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to write response", logging.Error(err), slog.String("data", string(data)))
+	diagnostics := "An internal server error occurred"
+	return fhir.OperationOutcome{
+		Issue: []fhir.OperationOutcomeIssue{
+			{
+				Severity:    fhir.IssueSeverityError,
+				Code:        fhir.IssueTypeProcessing,
+				Diagnostics: &diagnostics,
+			},
+		},
 	}
 }

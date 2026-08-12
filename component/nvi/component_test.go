@@ -1,16 +1,17 @@
 package nvi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"testing"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/nuts-foundation/nuts-knooppunt/api"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi/testdata"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonymisation"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
@@ -24,6 +25,27 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+// searchParamFields splits a raw "key=value&key2=value2" query string (as used by the old
+// searchParams test fields) into the individual pointer fields the generated Params structs
+// bind query/form parameters into.
+func searchParamFields(t *testing.T, raw string) (patient, subject, source, code *string, count *int) {
+	t.Helper()
+	values, err := url.ParseQuery(raw)
+	require.NoError(t, err)
+	get := func(key string) *string {
+		if v := values.Get(key); v != "" {
+			return to.Ptr(v)
+		}
+		return nil
+	}
+	if v := values.Get("_count"); v != "" {
+		n, err := strconv.Atoi(v)
+		require.NoError(t, err)
+		count = &n
+	}
+	return get("patient:identifier"), get("subject:identifier"), get("source:identifier"), get("code"), count
+}
+
 var bsnIdentifier = fhir.Identifier{
 	System: to.Ptr(coding.BSNNamingSystem),
 	Value:  to.Ptr("123456789"),
@@ -33,24 +55,21 @@ var bsnTokenIdentifier = fhir.Identifier{
 	Value:  to.Ptr("abcdefghi"),
 }
 
-func TestComponent_handleRegister(t *testing.T) {
+func TestComponent_RegisterListBundle(t *testing.T) {
 	testCases := []struct {
 		name                     string
 		nviTransportError        error
-		requestBody              []byte
 		tenantID                 *string
 		expectedStatus           int
 		expectedOperationOutcome *fhir.OperationOutcome
 	}{
 		{
 			name:           "registered at NVI",
-			requestBody:    testUtil.ReadJSON(t, testdata.FS, "bundle-transaction.json"),
 			expectedStatus: http.StatusOK,
 		},
 		{
 			name:              "NVI is down",
 			nviTransportError: assert.AnError,
-			requestBody:       testUtil.ReadJSON(t, testdata.FS, "bundle-transaction.json"),
 			expectedStatus:    http.StatusServiceUnavailable,
 			expectedOperationOutcome: &fhir.OperationOutcome{
 				Issue: []fhir.OperationOutcomeIssue{
@@ -64,7 +83,6 @@ func TestComponent_handleRegister(t *testing.T) {
 		},
 		{
 			name:           "invalid tenant ID",
-			requestBody:    testUtil.ReadJSON(t, testdata.FS, "bundle-transaction.json"),
 			expectedStatus: http.StatusBadRequest,
 			tenantID:       to.Ptr("invalid"),
 			expectedOperationOutcome: &fhir.OperationOutcome{
@@ -79,7 +97,6 @@ func TestComponent_handleRegister(t *testing.T) {
 		},
 		{
 			name:           "custodian URA mismatch",
-			requestBody:    testUtil.ReadJSON(t, testdata.FS, "bundle-transaction.json"),
 			expectedStatus: http.StatusBadRequest,
 			tenantID:       to.Ptr(coding.URANamingSystem + "|99999999"),
 			expectedOperationOutcome: &fhir.OperationOutcome{
@@ -120,12 +137,15 @@ func TestComponent_handleRegister(t *testing.T) {
 				pseudonymizer: pseudonymizer,
 				audience:      "nvi",
 			}
-			httpRequest := httptest.NewRequest("POST", "/nvi/Bundle", bytes.NewReader(testCase.requestBody))
-			httpRequest.Header.Add("Content-Type", "application/fhir+json")
-			httpRequest.Header.Add("X-Tenant-ID", tenantID)
-			httpResponse := httptest.NewRecorder()
+			bundle := testUtil.ParseJSON[fhir.Bundle](t, testdata.FS, "bundle-transaction.json")
 
-			component.handleRegister(httpResponse, httpRequest)
+			result, err := component.RegisterListBundle(t.Context(), api.RegisterListBundleRequestObject{
+				Params: api.RegisterListBundleParams{XTenantID: tenantID},
+				Body:   &bundle,
+			})
+			require.NoError(t, err)
+			httpResponse := httptest.NewRecorder()
+			require.NoError(t, result.VisitRegisterListBundleResponse(httpResponse))
 
 			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
 			responseData, _ := io.ReadAll(httpResponse.Body)
@@ -151,75 +171,78 @@ func TestComponent_handleRegister(t *testing.T) {
 			}
 		})
 	}
-
 }
 
-func TestComponent_handleRegisterList(t *testing.T) {
-	listResource := fhir.List{
-		Subject: &fhir.Reference{
-			Identifier: &bsnIdentifier,
-		},
+func TestComponent_RegisterList(t *testing.T) {
+	// Each returns a fresh fhir.List (not a shared value/pointers): RegisterList mutates its
+	// input's nested Subject/Extension in place, so reusing one value across sub-tests would let
+	// an earlier sub-test's mutation leak into a later one.
+	newListResource := func() fhir.List {
+		return fhir.List{
+			Subject: &fhir.Reference{
+				Identifier: &fhir.Identifier{System: bsnIdentifier.System, Value: bsnIdentifier.Value},
+			},
+		}
 	}
-	listJSON, _ := json.Marshal(listResource)
-
-	listWithMatchingCustodian := fhir.List{
-		Extension: []fhir.Extension{
-			{
-				Url: coding.NVICustodianExtensionURL,
-				ValueReference: &fhir.Reference{
-					Identifier: &fhir.Identifier{
-						System: to.Ptr(coding.URANamingSystem),
-						Value:  to.Ptr("1"),
+	newListWithMatchingCustodian := func() fhir.List {
+		return fhir.List{
+			Extension: []fhir.Extension{
+				{
+					Url: coding.NVICustodianExtensionURL,
+					ValueReference: &fhir.Reference{
+						Identifier: &fhir.Identifier{
+							System: to.Ptr(coding.URANamingSystem),
+							Value:  to.Ptr("1"),
+						},
 					},
 				},
 			},
-		},
-		Subject: &fhir.Reference{Identifier: &bsnIdentifier},
+			Subject: &fhir.Reference{Identifier: &fhir.Identifier{System: bsnIdentifier.System, Value: bsnIdentifier.Value}},
+		}
 	}
-	listWithMatchingCustodianJSON, _ := json.Marshal(listWithMatchingCustodian)
-
-	listWithMismatchedCustodian := fhir.List{
-		Extension: []fhir.Extension{
-			{
-				Url: coding.NVICustodianExtensionURL,
-				ValueReference: &fhir.Reference{
-					Identifier: &fhir.Identifier{
-						System: to.Ptr(coding.URANamingSystem),
-						Value:  to.Ptr("99999999"),
+	newListWithMismatchedCustodian := func() fhir.List {
+		return fhir.List{
+			Extension: []fhir.Extension{
+				{
+					Url: coding.NVICustodianExtensionURL,
+					ValueReference: &fhir.Reference{
+						Identifier: &fhir.Identifier{
+							System: to.Ptr(coding.URANamingSystem),
+							Value:  to.Ptr("99999999"),
+						},
 					},
 				},
 			},
-		},
-		Subject: &fhir.Reference{Identifier: &bsnIdentifier},
+			Subject: &fhir.Reference{Identifier: &fhir.Identifier{System: bsnIdentifier.System, Value: bsnIdentifier.Value}},
+		}
 	}
-	listWithMismatchedCustodianJSON, _ := json.Marshal(listWithMismatchedCustodian)
 
 	testCases := []struct {
 		name                     string
 		nviTransportError        error
-		requestBody              []byte
+		requestBody              func() fhir.List
 		tenantID                 *string
 		expectedStatus           int
 		expectedOperationOutcome *fhir.OperationOutcome
 	}{
 		{
 			name:           "registered List at NVI",
-			requestBody:    listJSON,
+			requestBody:    newListResource,
 			expectedStatus: http.StatusOK,
 		},
 		{
 			name:           "custodian extension absent: gets populated from tenant header",
-			requestBody:    listJSON,
+			requestBody:    newListResource,
 			expectedStatus: http.StatusOK,
 		},
 		{
 			name:           "custodian extension matches tenant header",
-			requestBody:    listWithMatchingCustodianJSON,
+			requestBody:    newListWithMatchingCustodian,
 			expectedStatus: http.StatusOK,
 		},
 		{
 			name:           "custodian extension does not match tenant header",
-			requestBody:    listWithMismatchedCustodianJSON,
+			requestBody:    newListWithMismatchedCustodian,
 			expectedStatus: http.StatusBadRequest,
 			expectedOperationOutcome: &fhir.OperationOutcome{
 				Issue: []fhir.OperationOutcomeIssue{
@@ -234,7 +257,7 @@ func TestComponent_handleRegisterList(t *testing.T) {
 		{
 			name:              "NVI is down",
 			nviTransportError: assert.AnError,
-			requestBody:       listJSON,
+			requestBody:       newListResource,
 			expectedStatus:    http.StatusServiceUnavailable,
 			expectedOperationOutcome: &fhir.OperationOutcome{
 				Issue: []fhir.OperationOutcomeIssue{
@@ -248,7 +271,7 @@ func TestComponent_handleRegisterList(t *testing.T) {
 		},
 		{
 			name:           "invalid tenant ID",
-			requestBody:    listJSON,
+			requestBody:    newListResource,
 			expectedStatus: http.StatusBadRequest,
 			tenantID:       to.Ptr("invalid"),
 			expectedOperationOutcome: &fhir.OperationOutcome{
@@ -288,12 +311,15 @@ func TestComponent_handleRegisterList(t *testing.T) {
 				pseudonymizer: pseudonymizer,
 				audience:      "nvi",
 			}
-			httpRequest := httptest.NewRequest("POST", "/nvi/List", bytes.NewReader(testCase.requestBody))
-			httpRequest.Header.Add("Content-Type", "application/fhir+json")
-			httpRequest.Header.Add("X-Tenant-ID", tenantID)
-			httpResponse := httptest.NewRecorder()
 
-			component.handleRegisterList(httpResponse, httpRequest)
+			body := testCase.requestBody()
+			result, err := component.RegisterList(t.Context(), api.RegisterListRequestObject{
+				Params: api.RegisterListParams{XTenantID: tenantID},
+				Body:   &body,
+			})
+			require.NoError(t, err)
+			httpResponse := httptest.NewRecorder()
+			require.NoError(t, result.VisitRegisterListResponse(httpResponse))
 
 			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
 			responseData, _ := io.ReadAll(httpResponse.Body)
@@ -339,7 +365,7 @@ func TestComponent_handleRegisterList(t *testing.T) {
 	}
 }
 
-func TestComponent_handleReadList(t *testing.T) {
+func TestComponent_GetList(t *testing.T) {
 	listResource := testUtil.ParseJSON[fhir.List](t, testdata.FS, "list-resource-tokenized.json")
 
 	testCases := []struct {
@@ -389,12 +415,13 @@ func TestComponent_handleReadList(t *testing.T) {
 				pseudonymizer: pseudonymizer,
 				audience:      "nvi",
 			}
-			httpRequest := httptest.NewRequest("GET", "/nvi/List/"+testCase.id, nil)
-			httpRequest.SetPathValue("id", testCase.id)
-			httpRequest.Header.Add("X-Tenant-ID", coding.URANamingSystem+"|"+localURA)
+			result, err := component.GetList(t.Context(), api.GetListRequestObject{
+				Id:     testCase.id,
+				Params: api.GetListParams{XTenantID: coding.URANamingSystem + "|" + localURA},
+			})
+			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
-
-			component.handleReadList(httpResponse, httpRequest)
+			require.NoError(t, result.VisitGetListResponse(httpResponse))
 
 			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
 			responseData, _ := io.ReadAll(httpResponse.Body)
@@ -415,7 +442,7 @@ func TestComponent_handleReadList(t *testing.T) {
 	}
 }
 
-func TestComponent_handleDeleteListByID(t *testing.T) {
+func TestComponent_DeleteList(t *testing.T) {
 	testCases := []struct {
 		name                     string
 		id                       string
@@ -460,12 +487,13 @@ func TestComponent_handleDeleteListByID(t *testing.T) {
 				pseudonymizer: pseudonymizer,
 				audience:      "nvi",
 			}
-			httpRequest := httptest.NewRequest("DELETE", "/nvi/List/"+testCase.id, nil)
-			httpRequest.SetPathValue("id", testCase.id)
-			httpRequest.Header.Add("X-Tenant-ID", coding.URANamingSystem+"|"+localURA)
+			result, err := component.DeleteList(t.Context(), api.DeleteListRequestObject{
+				Id:     testCase.id,
+				Params: api.DeleteListParams{XTenantID: coding.URANamingSystem + "|" + localURA},
+			})
+			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
-
-			component.handleDeleteListByID(httpResponse, httpRequest)
+			require.NoError(t, result.VisitDeleteListResponse(httpResponse))
 
 			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
 			if testCase.expectedOperationOutcome != nil {
@@ -482,7 +510,7 @@ func TestComponent_handleDeleteListByID(t *testing.T) {
 	}
 }
 
-func TestComponent_handleDeleteListByParams(t *testing.T) {
+func TestComponent_DeleteListsByParams(t *testing.T) {
 	testCases := []struct {
 		name                     string
 		nviTransportError        error
@@ -556,11 +584,18 @@ func TestComponent_handleDeleteListByParams(t *testing.T) {
 				pseudonymizer: pseudonymizer,
 				audience:      "nvi",
 			}
-			httpRequest := httptest.NewRequest("DELETE", "/nvi/List?"+testCase.searchParams, nil)
-			httpRequest.Header.Add("X-Tenant-ID", coding.URANamingSystem+"|"+localURA)
+			patient, subject, source, _, _ := searchParamFields(t, testCase.searchParams)
+			result, err := component.DeleteListsByParams(t.Context(), api.DeleteListsByParamsRequestObject{
+				Params: api.DeleteListsByParamsParams{
+					XTenantID:         coding.URANamingSystem + "|" + localURA,
+					PatientIdentifier: patient,
+					SubjectIdentifier: subject,
+					SourceIdentifier:  source,
+				},
+			})
+			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
-
-			component.handleDeleteListByParams(httpResponse, httpRequest)
+			require.NoError(t, result.VisitDeleteListsByParamsResponse(httpResponse))
 
 			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
 			responseData, _ := io.ReadAll(httpResponse.Body)
@@ -578,70 +613,33 @@ func TestComponent_handleDeleteListByParams(t *testing.T) {
 	}
 }
 
-func TestComponent_handleSearch(t *testing.T) {
-	// NVI stores List resources with tokenized (transport token) identifiers.
-	listResource := testUtil.ParseJSON[fhir.List](t, testdata.FS, "list-resource-tokenized.json")
+type searchListsTestCase struct {
+	name                     string
+	nviResources             []any
+	nviTransportError        error
+	searchParams             string
+	expectedStatus           int
+	expectedEntries          int
+	expectedOperationOutcome *fhir.OperationOutcome
+	expectedSearch           string
+}
 
-	testCases := []struct {
-		name                     string
-		nviResources             []any
-		nviTransportError        error
-		searchParams             string
-		expectedStatus           int
-		expectedEntries          int
-		expectedOperationOutcome *fhir.OperationOutcome
-		httpMethod               string
-		expectedSearch           string
-	}{
+// searchListsTestCases is shared between TestComponent_SearchLists (GET, query parameters) and
+// TestComponent_SearchListsForm (POST, form-encoded body): both operations apply the exact same
+// parameter rules and tokenization logic via SearchList.
+func searchListsTestCases(listResource fhir.List) []searchListsTestCase {
+	return []searchListsTestCase{
 		{
-			name:            "searches at NVI with POST",
+			name:            "searches at NVI",
 			nviResources:    []any{listResource},
 			expectedStatus:  http.StatusOK,
 			expectedEntries: 1,
-		},
-		{
-			name:            "searches at NVI with GET",
-			nviResources:    []any{listResource},
-			expectedStatus:  http.StatusOK,
-			expectedEntries: 1,
-			httpMethod:      "GET",
-		},
-		{
-			name:           "invalid search request",
-			nviResources:   nil,
-			searchParams:   ";",
-			expectedStatus: http.StatusBadRequest,
-			expectedOperationOutcome: &fhir.OperationOutcome{
-				Issue: []fhir.OperationOutcomeIssue{
-					{
-						Severity:    fhir.IssueSeverityError,
-						Code:        fhir.IssueTypeInvalid,
-						Diagnostics: to.Ptr("request body is not valid application/x-www-form-urlencoded"),
-					},
-				},
-			},
 		},
 		{
 			name:           "missing identifier parameter",
 			nviResources:   nil,
 			searchParams:   "_count=10",
 			expectedStatus: http.StatusBadRequest,
-			expectedOperationOutcome: &fhir.OperationOutcome{
-				Issue: []fhir.OperationOutcomeIssue{
-					{
-						Severity:    fhir.IssueSeverityError,
-						Code:        fhir.IssueTypeInvalid,
-						Diagnostics: to.Ptr("at least one of patient:identifier, subject:identifier or source:identifier is required"),
-					},
-				},
-			},
-		},
-		{
-			name:           "missing identifier parameter with GET",
-			nviResources:   nil,
-			searchParams:   "_count=10",
-			expectedStatus: http.StatusBadRequest,
-			httpMethod:     "GET",
 			expectedOperationOutcome: &fhir.OperationOutcome{
 				Issue: []fhir.OperationOutcomeIssue{
 					{
@@ -698,8 +696,40 @@ func TestComponent_handleSearch(t *testing.T) {
 			},
 		},
 	}
+}
 
-	for _, testCase := range testCases {
+func assertSearchListsResult(t *testing.T, nvi *test.StubFHIRClient, testCase searchListsTestCase, httpResponse *httptest.ResponseRecorder) {
+	require.Equal(t, testCase.expectedStatus, httpResponse.Code)
+	responseData, _ := io.ReadAll(httpResponse.Body)
+
+	if testCase.expectedOperationOutcome != nil {
+		var operationOutcome fhir.OperationOutcome
+		err := json.Unmarshal(responseData, &operationOutcome)
+		require.NoError(t, err)
+		require.Equal(t, testCase.expectedOperationOutcome, &operationOutcome)
+	} else {
+		t.Run("assert BSNs are translated to transport tokens, as search input to NVI", func(t *testing.T) {
+			require.Len(t, nvi.Searches, 1)
+			expectedSearch := testCase.expectedSearch
+			if expectedSearch == "" {
+				expectedSearch = "List?subject%3Aidentifier=http%3A%2F%2Fminvws.github.io%2Fgeneriekefuncties-docs%2FNamingSystem%2Fnvi-identifier%7Cabcdefghi"
+			}
+			assert.Equal(t, expectedSearch, nvi.Searches[0])
+		})
+	}
+	if testCase.expectedEntries > 0 {
+		var bundle fhir.Bundle
+		err := json.Unmarshal(responseData, &bundle)
+		require.NoError(t, err)
+		require.Len(t, bundle.Entry, testCase.expectedEntries)
+	}
+}
+
+func TestComponent_SearchLists(t *testing.T) {
+	// NVI stores List resources with tokenized (transport token) identifiers.
+	listResource := testUtil.ParseJSON[fhir.List](t, testdata.FS, "list-resource-tokenized.json")
+
+	for _, testCase := range searchListsTestCases(listResource) {
 		t.Run(testCase.name, func(t *testing.T) {
 			const localURA = "1"
 			ctrl := gomock.NewController(t)
@@ -721,42 +751,76 @@ func TestComponent_handleSearch(t *testing.T) {
 			if searchParams == "" {
 				searchParams = "patient:identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value)
 			}
+			patient, subject, source, code, count := searchParamFields(t, searchParams)
 
-			var httpRequest *http.Request
-			if testCase.httpMethod == "GET" {
-				httpRequest = httptest.NewRequest("GET", "/nvi/List?"+searchParams, nil)
-			} else {
-				httpRequest = httptest.NewRequest("POST", "/nvi/List/_search", bytes.NewReader([]byte(searchParams)))
-				httpRequest.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-			}
-			httpRequest.Header.Add("X-Tenant-ID", coding.URANamingSystem+"|"+localURA)
+			result, err := component.SearchLists(t.Context(), api.SearchListsRequestObject{
+				Params: api.SearchListsParams{
+					XTenantID:         coding.URANamingSystem + "|" + localURA,
+					PatientIdentifier: patient,
+					SubjectIdentifier: subject,
+					SourceIdentifier:  source,
+					Code:              code,
+					UnderscoreCount:   count,
+				},
+			})
+			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
-			component.handleSearch(httpResponse, httpRequest)
+			require.NoError(t, result.VisitSearchListsResponse(httpResponse))
 
-			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
-			responseData, _ := io.ReadAll(httpResponse.Body)
+			assertSearchListsResult(t, nvi, testCase, httpResponse)
+		})
+	}
+}
 
-			if testCase.expectedOperationOutcome != nil {
-				var operationOutcome fhir.OperationOutcome
-				err := json.Unmarshal(responseData, &operationOutcome)
-				require.NoError(t, err)
-				require.Equal(t, testCase.expectedOperationOutcome, &operationOutcome)
-			} else {
-				t.Run("assert BSNs are translated to transport tokens, as search input to NVI", func(t *testing.T) {
-					require.Len(t, nvi.Searches, 1)
-					expectedSearch := testCase.expectedSearch
-					if expectedSearch == "" {
-						expectedSearch = "List?subject%3Aidentifier=http%3A%2F%2Fminvws.github.io%2Fgeneriekefuncties-docs%2FNamingSystem%2Fnvi-identifier%7Cabcdefghi"
-					}
-					assert.Equal(t, expectedSearch, nvi.Searches[0])
-				})
+// TestComponent_SearchListsForm covers the same cases as TestComponent_SearchLists, via the
+// form-encoded POST /nvi/List/_search operation instead of GET /nvi/List's query parameters.
+// It does not cover a malformed form body (e.g. an unparseable ";"): the generated strict server
+// wrapper parses the form body with r.ParseForm() before SearchListsForm is ever called, so that
+// failure is now caught by the framework, not by component logic — there's nothing left at this
+// level to unit-test for that case.
+func TestComponent_SearchListsForm(t *testing.T) {
+	listResource := testUtil.ParseJSON[fhir.List](t, testdata.FS, "list-resource-tokenized.json")
+
+	for _, testCase := range searchListsTestCases(listResource) {
+		t.Run(testCase.name, func(t *testing.T) {
+			const localURA = "1"
+			ctrl := gomock.NewController(t)
+			pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
+			pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, localURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
+			nvi := &test.StubFHIRClient{
+				Resources: testCase.nviResources,
+				Error:     testCase.nviTransportError,
 			}
-			if testCase.expectedEntries > 0 {
-				var bundle fhir.Bundle
-				err := json.Unmarshal(responseData, &bundle)
-				require.NoError(t, err)
-				require.Len(t, bundle.Entry, testCase.expectedEntries)
+			component := Component{
+				fhirClientFn: func(_ context.Context, _ string) (fhirclient.Client, error) {
+					return nvi, nil
+				},
+				pseudonymizer: pseudonymizer,
+				audience:      "nvi",
 			}
+
+			searchParams := testCase.searchParams
+			if searchParams == "" {
+				searchParams = "patient:identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value)
+			}
+			patient, subject, source, code, count := searchParamFields(t, searchParams)
+			body := api.SearchListsFormFormdataRequestBody{
+				PatientIdentifier: patient,
+				SubjectIdentifier: subject,
+				SourceIdentifier:  source,
+				Code:              code,
+				UnderscoreCount:   count,
+			}
+
+			result, err := component.SearchListsForm(t.Context(), api.SearchListsFormRequestObject{
+				Params: api.SearchListsFormParams{XTenantID: coding.URANamingSystem + "|" + localURA},
+				Body:   &body,
+			})
+			require.NoError(t, err)
+			httpResponse := httptest.NewRecorder()
+			require.NoError(t, result.VisitSearchListsFormResponse(httpResponse))
+
+			assertSearchListsResult(t, nvi, testCase, httpResponse)
 		})
 	}
 }
