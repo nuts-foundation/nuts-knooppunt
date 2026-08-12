@@ -62,28 +62,6 @@ type authSession struct {
 	ExpiresAt     time.Time
 }
 
-// englishRoleNames maps RoleCodeNL codes to the English labels the demo shows.
-// The attestation keeps the official Dutch name; the interface is English
-// (sandbox/DESIGN.md section 4).
-var englishRoleNames = map[string]string{
-	"01.022": "Clinical geriatrician",
-	"01.016": "Internist",
-	"01.047": "Elderly care physician",
-}
-
-// englishOrgNames maps the legal organization name in the attestation to the
-// display name used in the interface and the wireframe.
-var englishOrgNames = map[string]string{
-	"Ziekenhuis De Plataan": "De Plataan Hospital",
-}
-
-func displayOr(m map[string]string, key, fallback string) string {
-	if value, ok := m[key]; ok {
-		return value
-	}
-	return fallback
-}
-
 // firstLetter returns the uppercased first rune of s, or "" if s is blank
 // once trimmed. It decodes a full rune rather than slicing the first byte,
 // so a surname starting with a multi-byte character (e.g. "Özdemir") yields
@@ -107,16 +85,22 @@ func (a authSession) view() Session {
 		// of the whole field.
 		initials += firstLetter(fields[len(fields)-1])
 	}
-	name := strings.TrimSpace(strings.Join([]string{"Dr.", a.Initials, a.SurnamePrefix, a.Surname}, " "))
+	// No title. The v0.7 attestation carries initials, a surname prefix and a
+	// surname, and nothing that says "Dr."; inventing one presents a courtesy
+	// title as though Dezi had asserted it. A real EHR may well know a title
+	// from its own personnel records, but it would not be learning it here.
+	// What this view shows is what the attestation carries, and no more.
+	name := strings.TrimSpace(strings.Join([]string{a.Initials, a.SurnamePrefix, a.Surname}, " "))
 	name = strings.Join(strings.Fields(name), " ")
+
+	// The role and organization are shown as the attestation spells them,
+	// in Dutch. Translating them meant a hardcoded table of role codes and
+	// legal names that only ever covered the demo persona and silently fell
+	// through to the Dutch value for anyone else.
 	return Session{
-		Initials: initials,
-		Name:     name,
-		Description: fmt.Sprintf("%s · UZI %s · %s",
-			displayOr(englishRoleNames, a.RoleCode, a.RoleName),
-			a.DeziNumber,
-			displayOr(englishOrgNames, a.OrgName, a.OrgName),
-		),
+		Initials:    initials,
+		Name:        name,
+		Description: fmt.Sprintf("%s · UZI %s · %s", a.RoleName, a.DeziNumber, a.OrgName),
 	}
 }
 

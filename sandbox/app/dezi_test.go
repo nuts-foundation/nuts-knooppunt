@@ -78,6 +78,10 @@ func TestExchangeBuildsASessionFromTheAttestation(t *testing.T) {
 	require.Equal(t, "00000010", session.OrgURA)
 	require.Equal(t, "Ziekenhuis De Plataan", session.OrgName)
 	require.Equal(t, "01.022", session.RoleCode)
+	// The role name is rendered directly now that nothing translates it, so
+	// this couples rol_naam ingestion to what the top bar shows. Without it the
+	// two halves are tested separately and a dropped claim renders as a blank.
+	require.Equal(t, "Klinisch geriater", session.RoleName)
 	require.Equal(t, fixtureAttestation, session.Attestation, "the raw attestation is kept for E4")
 	require.False(t, session.ExpiresAt.IsZero())
 }

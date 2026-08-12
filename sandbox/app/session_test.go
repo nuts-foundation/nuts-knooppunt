@@ -87,14 +87,19 @@ func TestDropAllClearsEverySession(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestViewModelRendersEnglishRole(t *testing.T) {
+// The view shows what the attestation carries, and nothing it does not. A v0.7
+// verklaring has initials, a surname prefix and a surname, and no title; it
+// names the role and the organization in Dutch. Both of those used to be
+// dressed up here, with a hardcoded "Dr." and a lookup table of English labels
+// that only ever covered the demo persona.
+func TestViewModelShowsOnlyWhatTheAttestationCarries(t *testing.T) {
 	view := testSession().view()
 	require.Equal(t, "SA", view.Initials, "the top bar avatar uses the persona's initials")
-	require.Equal(t, "Dr. S. el Amrani", view.Name)
-	require.Contains(t, view.Description, "Clinical geriatrician",
-		"englishRoleNames must translate role code 01.022 rather than showing the Dutch name")
-	require.Contains(t, view.Description, "UZI 900001234")
-	require.Contains(t, view.Description, "De Plataan Hospital")
+	require.Equal(t, "S. el Amrani", view.Name)
+	require.NotContains(t, view.Name, "Dr.",
+		"the attestation carries no title, and an EHR has no way to know one either")
+	require.Equal(t, "Klinisch geriater · UZI 900001234 · Ziekenhuis De Plataan", view.Description,
+		"the role and organization are shown as Dezi spells them")
 }
 
 func TestFirstLetterHandlesMultibyteRunes(t *testing.T) {
