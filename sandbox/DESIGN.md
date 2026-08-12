@@ -102,7 +102,7 @@ Each organization gets, via the idempotent bootstrap: a did:web plus a wallet-he
 
 | Item | Value | System of record |
 | --- | --- | --- |
-| Requesting user | Dr. S. el Amrani, klinisch geriater (RoleCodeNL 01.022), Ziekenhuis De Plataan, UZI 900001234 (synthetic) | mock Dezi session (claims: name, role, UZI, URA; used in PDP input and shown in the top bar) |
+| Requesting user | S. el Amrani, klinisch geriater (RoleCodeNL 01.022), Ziekenhuis De Plataan, UZI 900001234 (synthetic) | mock Dezi session (claims: name, role, UZI, URA; used in PDP input and shown in the top bar) |
 | Source user | B. Willems, verpleegkundig specialist, De Zonnebloem | ZorgDossier display only |
 | Patient | Anna Jansen, born 1944, resident of De Zonnebloem, known at De Plataan; canonical member of the demo pool (section 5.7) | Patient resource in both FHIR stores (same BSN, own local identifiers) |
 | BSN | each pool patient gets its own test BSN; 999911120 is Anna's placeholder (passes the elfproef, but **all pool BSNs must be checked against the published RvIG test-BSN set during implementation and replaced if absent**) | Patient.identifier |
@@ -136,7 +136,7 @@ The enriched home screen renders exactly this union, every element tagged with i
 | Anna's consent (share with treating physicians: yes) | mock Mitz, answer flippable via the withdraw-consent control on the enriched record | PDP during the authorization step |
 | De Plataan's Mitz subscription for Anna | mock Mitz, created during the patiëntaanmelding; emits a notification on consent change | sandbox backend (renders the step 7 notification) |
 | Access policy (BGZ scope requires Mitz consent) | OPA bundles in the PDP | PEP and PDP on inbound retrieval |
-| Dezi session claims of Dr. el Amrani | mock Dezi login; the attestation becomes a `DeziUserCredential` inside the Nuts node | top bar display, PDP authentication and role sub-checks |
+| Dezi session claims of S. el Amrani | mock Dezi login; the attestation becomes a `DeziUserCredential` inside the Nuts node | top bar display, PDP authentication and role sub-checks |
 
 ### 5.5 The marker record (path 0b)
 

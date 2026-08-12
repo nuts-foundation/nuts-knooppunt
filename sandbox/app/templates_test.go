@@ -60,6 +60,10 @@ func TestLoginScreenMatchesWireframeCopy(t *testing.T) {
 		"Simulated login (GF Authentication) · test environment with synthetic data only",
 		"One overview, wherever the data lives.",
 		"All people and data are synthetic.",
+		// The organization is named as the attestation spells it. Without this
+		// the login brand could drift back to an English translation and the
+		// copy test would still pass.
+		"Ziekenhuis De Plataan",
 	} {
 		require.Contains(t, body, s)
 	}

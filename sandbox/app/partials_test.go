@@ -25,7 +25,7 @@ func renderPartialForTest(t *testing.T, define string, data page, files ...strin
 func TestSidebarRendersBrandSectionsAndActiveItem(t *testing.T) {
 	s := renderPartialForTest(t, "sidebar", page{Active: "dossier"}, "_sidebar.html")
 	require.Contains(t, s, "Plataan<span>.</span>ehr")
-	require.Contains(t, s, "De Plataan Hospital")
+	require.Contains(t, s, "Ziekenhuis De Plataan")
 	for _, label := range []string{"Care", "Administration", "Schedule", "Patient record", "Patient registration", "Orders", "Correspondence"} {
 		require.Contains(t, s, label)
 	}
