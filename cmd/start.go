@@ -126,7 +126,14 @@ func Start(ctx context.Context, config Config) error {
 	for _, cmp := range components {
 		cmp.RegisterHttpHandlers(publicMux, internalMux)
 	}
-	RegisterAPIRoutes(internalMux, statusComponent, lrzaClient, pdpComponent, nviComponent, mitzComponent)
+	apiServer := &strictAPIServer{
+		status: statusComponent,
+		lrza:   lrzaClient,
+		pdp:    pdpComponent,
+		nvi:    nviComponent,
+		mitz:   mitzComponent,
+	}
+	apiServer.RegisterAPIRoutes(internalMux)
 
 	// Components: Start()
 	for _, cmp := range components {

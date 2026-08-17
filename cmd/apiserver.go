@@ -31,6 +31,9 @@ import (
 // interface: add an operation to the spec, run `go generate ./api/...`, and the next `go build`
 // fails at that assertion, naming the exact missing method, until you add its forwarding method
 // here (and register its route in RegisterAPIRoutes). If the build passes, wiring is complete.
+// Any field may be left nil when that component is disabled: RegisterAPIRoutes skips
+// registering its routes in that case, matching the previous behavior of each component's own
+// RegisterHttpHandlers method.
 type strictAPIServer struct {
 	status *status.Component
 	lrza   *lrza.Component
@@ -98,23 +101,16 @@ func (s *strictAPIServer) CreateMitzSubscription(ctx context.Context, r api.Crea
 var _ api.StrictServerInterface = (*strictAPIServer)(nil)
 
 // RegisterAPIRoutes mounts the generated OpenAPI strict server's routes onto internalMux.
-// Any component argument may be nil when that component is disabled, in which case its
-// routes are not registered, matching the previous behavior of each component's own
-// RegisterHttpHandlers method.
+// Components s was built with as nil (disabled) don't get their routes registered, matching the
+// previous behavior of each component's own RegisterHttpHandlers method.
 //
 // Unlike strictAPIServer's forwarding methods above, the internalMux.HandleFunc calls below are
 // NOT compiler-enforced: wrapper.SomeOperation exists for every operation regardless of whether
 // it's actually registered on a route here, so forgetting one compiles fine and just 404s at
 // runtime. When adding an operation, register its route here as well as adding its forwarding
 // method above.
-func RegisterAPIRoutes(internalMux *http.ServeMux, statusComponent *status.Component, lrzaComponent *lrza.Component, pdpComponent *pdp.Component, nviComponent *nvi.Component, mitzComponent *mitz.Component) {
-	handler := api.NewStrictHandler(&strictAPIServer{
-		status: statusComponent,
-		lrza:   lrzaComponent,
-		pdp:    pdpComponent,
-		nvi:    nviComponent,
-		mitz:   mitzComponent,
-	}, nil)
+func (s *strictAPIServer) RegisterAPIRoutes(internalMux *http.ServeMux) {
+	handler := api.NewStrictHandler(s, nil)
 	wrapper := api.ServerInterfaceWrapper{
 		Handler: handler,
 		// NVI/MITZ params (the X-Tenant-ID header, search query params) are the only ones
@@ -133,15 +129,15 @@ func RegisterAPIRoutes(internalMux *http.ServeMux, statusComponent *status.Compo
 
 	internalMux.HandleFunc("GET /status", wrapper.GetStatus)
 	internalMux.HandleFunc("GET /version", wrapper.GetVersion)
-	if lrzaComponent != nil {
+	if s.lrza != nil {
 		internalMux.HandleFunc("POST /lrza/update", wrapper.TriggerLrzaSync)
 	}
-	if pdpComponent != nil {
+	if s.pdp != nil {
 		internalMux.HandleFunc("GET /pdp/bundles", wrapper.ListPolicyBundles)
 		internalMux.HandleFunc("GET /pdp/bundles/{policyName}", wrapper.GetPolicyBundle)
 		internalMux.HandleFunc("POST /pdp/v1/data/knooppunt/authz", wrapper.EvaluateAuthorization)
 	}
-	if nviComponent != nil {
+	if s.nvi != nil {
 		internalMux.HandleFunc("POST /nvi", wrapper.RegisterListBundle)
 		internalMux.HandleFunc("POST /nvi/List", wrapper.RegisterList)
 		internalMux.HandleFunc("GET /nvi/List", wrapper.SearchLists)
@@ -150,7 +146,7 @@ func RegisterAPIRoutes(internalMux *http.ServeMux, statusComponent *status.Compo
 		internalMux.HandleFunc("GET /nvi/List/{id}", wrapper.GetList)
 		internalMux.HandleFunc("DELETE /nvi/List/{id}", wrapper.DeleteList)
 	}
-	if mitzComponent != nil {
+	if s.mitz != nil {
 		internalMux.HandleFunc("POST /mitz/Subscription", wrapper.CreateMitzSubscription)
 	}
 }
