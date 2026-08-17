@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nuts-foundation/nuts-knooppunt/api"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/policies"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
@@ -20,6 +21,21 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
+
+// registerBundleRoute wires GET /pdp/bundles/{policyName} onto mux via the component's
+// GetPolicyBundle method, mirroring what cmd.RegisterAPIRoutes does in the real app.
+// RegisterHttpHandlers no longer serves this route itself (it moved to the generated strict
+// server, wired up outside the component), but OPA's bundle loader - configured via
+// opaBundleBaseURL - still fetches bundles over HTTP at service.Start(), so tests that point it
+// at a local httptest.Server need to wire this route themselves.
+func registerBundleRoute(t *testing.T, service *Component, mux *http.ServeMux) {
+	t.Helper()
+	mux.HandleFunc("GET /pdp/bundles/{policyName}", func(w http.ResponseWriter, r *http.Request) {
+		resp, err := service.GetPolicyBundle(r.Context(), api.GetPolicyBundleRequestObject{PolicyName: r.PathValue("policyName")})
+		require.NoError(t, err)
+		require.NoError(t, resp.VisitGetPolicyBundleResponse(w))
+	})
+}
 
 // executePDPRequest is a helper function that sends a PDP request and returns the response
 func executePDPRequest(t *testing.T, service *Component, pdpRequest APIRequest) APIResponse {
@@ -88,6 +104,7 @@ func TestHandleMainPolicy_WithoutMitz(t *testing.T) {
 	service.pipClient = pipClient
 
 	service.RegisterHttpHandlers(nil, mux)
+	registerBundleRoute(t, service, mux)
 
 	require.NoError(t, service.Start())
 	defer func() {
@@ -137,6 +154,7 @@ func TestHandleMainPolicy_CaseInsensitivePolicyNames(t *testing.T) {
 	service.pipClient = &test.StubFHIRClient{}
 
 	service.RegisterHttpHandlers(nil, mux)
+	registerBundleRoute(t, service, mux)
 
 	require.NoError(t, service.Start())
 	defer func() {

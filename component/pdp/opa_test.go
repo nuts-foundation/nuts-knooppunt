@@ -84,6 +84,7 @@ func TestOPALogsGoThroughSlog(t *testing.T) {
 	require.NoError(t, err)
 	service.opaBundleBaseURL = httpServer.URL + "/pdp/bundles/"
 	service.RegisterHttpHandlers(nil, mux)
+	registerBundleRoute(t, service, mux)
 
 	// Start OPA - this triggers bundle loading which produces log messages
 	require.NoError(t, service.Start())
