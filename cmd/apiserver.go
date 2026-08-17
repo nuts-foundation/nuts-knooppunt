@@ -19,6 +19,18 @@ import (
 // forwarding each operation to the component that owns it. The component-specific logic
 // (translating between generated api.* types and the component's own domain types) lives on
 // the component itself, not here — this is wiring only.
+//
+// The forwarding methods below are hand-written, one per operation, rather than generated:
+// they're a single line each, and a generator would need its own way to enumerate operations and
+// map each to the component that owns it — information that doesn't live in openapi.yaml, so it
+// would still need to be maintained by hand somewhere, just in a generator's input instead of
+// here directly.
+//
+// This does not fail silently when openapi.yaml changes. The var _ api.StrictServerInterface
+// assertion below requires strictAPIServer to implement every operation in the generated
+// interface: add an operation to the spec, run `go generate ./api/...`, and the next `go build`
+// fails at that assertion, naming the exact missing method, until you add its forwarding method
+// here (and register its route in RegisterAPIRoutes). If the build passes, wiring is complete.
 type strictAPIServer struct {
 	status *status.Component
 	lrza   *lrza.Component
@@ -89,6 +101,12 @@ var _ api.StrictServerInterface = (*strictAPIServer)(nil)
 // Any component argument may be nil when that component is disabled, in which case its
 // routes are not registered, matching the previous behavior of each component's own
 // RegisterHttpHandlers method.
+//
+// Unlike strictAPIServer's forwarding methods above, the internalMux.HandleFunc calls below are
+// NOT compiler-enforced: wrapper.SomeOperation exists for every operation regardless of whether
+// it's actually registered on a route here, so forgetting one compiles fine and just 404s at
+// runtime. When adding an operation, register its route here as well as adding its forwarding
+// method above.
 func RegisterAPIRoutes(internalMux *http.ServeMux, statusComponent *status.Component, lrzaComponent *lrza.Component, pdpComponent *pdp.Component, nviComponent *nvi.Component, mitzComponent *mitz.Component) {
 	handler := api.NewStrictHandler(&strictAPIServer{
 		status: statusComponent,
