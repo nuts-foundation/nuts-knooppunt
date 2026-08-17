@@ -87,12 +87,12 @@ func Test_Registration(t *testing.T) {
 
 	// Register first List via Bundle transaction
 	var result1 fhir.Bundle
-	err := nviGatewayClient.CreateWithContext(t.Context(), newRegistrationBundle(t), &result1, fhirclient.AtPath("/"), requestHeaders)
+	err := nviGatewayClient.CreateWithContext(t.Context(), newRegistrationBundle(t), &result1, fhirclient.AtPath(""), requestHeaders)
 	require.NoError(t, err)
 
 	// Register a second one to ensure multiple registrations work
 	var result2 fhir.Bundle
-	err = nviGatewayClient.CreateWithContext(t.Context(), newRegistrationBundle(t), &result2, fhirclient.AtPath("/"), requestHeaders)
+	err = nviGatewayClient.CreateWithContext(t.Context(), newRegistrationBundle(t), &result2, fhirclient.AtPath(""), requestHeaders)
 	require.NoError(t, err)
 
 	t.Run("search by patient:identifier", func(t *testing.T) {

@@ -3,5 +3,6 @@ generate:
   std-http-server: true
   strict-server: true
   models: true
-  embedded-spec: true
+  # embedded-spec would bundle the whole spec as a base64 blob for a GetSwagger()
+  # reflection API; nothing in this codebase calls it, so it's left off.
 output: server.gen.go
