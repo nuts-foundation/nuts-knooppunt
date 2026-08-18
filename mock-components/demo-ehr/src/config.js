@@ -8,6 +8,7 @@ export const config = {
     fhirBaseURL: runtimeConfig.fhirBaseURL,
     fhirStu3BaseURL: runtimeConfig.fhirStu3BaseURL,
     organizationURA: runtimeConfig.organizationURA,
+    credentialIssuers: runtimeConfig.credentialIssuers || {},
 };
 
 // Relative paths the SPA uses for its own fetch() calls. The backend (server.js
@@ -18,5 +19,6 @@ export const apiBase = {
     fhirStu3: `${baseUrl}/api/fhir-stu3`,
     mcsd: `${baseUrl}/api/mcsd`,
     knooppunt: `${baseUrl}/api/knooppunt`,
+    nuts: `${baseUrl}/api/nuts`,
     dynamicProxy: `${baseUrl}/api/dynamic-proxy`,
 };

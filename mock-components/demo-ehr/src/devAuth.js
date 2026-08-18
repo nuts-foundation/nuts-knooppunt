@@ -5,6 +5,7 @@
 import { runtimeConfig } from './runtimeConfig';
 
 const DEV_USER_KEY = 'demo-ehr-dev-user';
+const DEFAULT_DEV_URA = '00000666';
 
 export const isDevLoginEnabled = () => !!runtimeConfig.devLoginEnabled;
 
@@ -12,12 +13,18 @@ export const isDevLoginEnabled = () => !!runtimeConfig.devLoginEnabled;
 // /userinfo, so the rest of the app sees a consistent user object.
 // `sub` doubles as the requesting organization URA in
 // bgzVerweijzingApi.createBgZNotificatonTask, so use a URA-shaped value.
-export const buildDevUser = () => ({
-  sub: '00000666',
-  name: 'Dev User',
-  email: 'dev@example.local',
-  __devUser: true,
-});
+// `ura` is the post-mapping alias AuthProvider produces from the Dezi
+// `abonnee_nummer` claim; set it directly here for parity.
+export const buildDevUser = (ura) => {
+  const value = (ura || '').trim() || DEFAULT_DEV_URA;
+  return {
+    sub: value,
+    ura: value,
+    name: 'Dev User',
+    email: 'dev@example.local',
+    __devUser: true,
+  };
+};
 
 export const loadDevUser = () => {
   try {
