@@ -131,6 +131,16 @@ services:
       hapi.fhir.tester.sunflowerpatients.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.sunflowerpatients.fhir_version: R4
 
+      hapi.fhir.tester.plataan.name: Plataan Admin Directory
+      hapi.fhir.tester.plataan.server_address: http://localhost:7050/fhir/plataan-admin
+      hapi.fhir.tester.plataan.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.plataan.fhir_version: R4
+
+      hapi.fhir.tester.plataanpatients.name: Plataan Patients Directory
+      hapi.fhir.tester.plataanpatients.server_address: http://localhost:7050/fhir/plataan-patients
+      hapi.fhir.tester.plataanpatients.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.plataanpatients.fhir_version: R4
+
       hapi.fhir.tester.nvi.name: NVI
       hapi.fhir.tester.nvi.server_address: http://localhost:7050/fhir/nvi
       hapi.fhir.tester.nvi.refuse_to_fetch_third_party_urls: false
@@ -255,6 +265,14 @@ services:
       dockerfile: sandbox/app/Dockerfile
     ports:
       - "8091:8091"  # same host port as demo-ehr maps; don't combine --profile demoehr with --profile sandbox (split lands with E7)
+    environment:
+      # Enable the reset/recycle actions: the sandbox backend calls the
+      # Knooppunt internal /nvi endpoint and HAPI to restore the seeded dataset.
+      KNOOPPUNT_INTERNAL_URL: http://knooppunt:8081
+      HAPI_BASE_URL: http://hapi-fhir:7050/fhir
+    depends_on:
+      - knooppunt
+      - hapi-fhir
     profiles:
       - sandbox
 

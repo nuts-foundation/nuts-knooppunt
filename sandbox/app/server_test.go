@@ -9,9 +9,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testConfig returns a Config for handler tests: a fresh lock registry and no
+// wired reset functions (so reset/recycle report "disabled" unless the test
+// injects fakes).
+func testConfig() Config {
+	return Config{Locks: NewRegistry()}
+}
+
 func getPage(t *testing.T, path string) (int, string) {
 	t.Helper()
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	res, err := http.Get(srv.URL + path)
 	require.NoError(t, err)

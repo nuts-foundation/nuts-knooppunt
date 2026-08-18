@@ -23,6 +23,7 @@ import (
 type Details struct {
 	Vectors                  vectors.Details
 	KnooppuntInternalBaseURL *url.URL
+	HAPIBaseURL              *url.URL
 	MCSDQueryFHIRBaseURL     *url.URL
 	LRZaFHIRBaseURL          *url.URL
 	Care2CureFHIRBaseURL     *url.URL
@@ -43,13 +44,12 @@ type PEPTestConfig struct {
 }
 
 type PEPDetails struct {
-	KnooppuntURL  *url.URL                          // Internal interface URL (for PDP, etc.)
-	NutsPublicURL *url.URL                          // Public interface URL for Nuts APIs (for OAuth authServer)
-	HAPIBaseURL   *url.URL                          // HAPI FHIR base URL
-	NutsAPI       func(path string) string          // Helper to build internal Nuts API URLs
+	KnooppuntURL  *url.URL                 // Internal interface URL (for PDP, etc.)
+	NutsPublicURL *url.URL                 // Public interface URL for Nuts APIs (for OAuth authServer)
+	HAPIBaseURL   *url.URL                 // HAPI FHIR base URL
+	NutsAPI       func(path string) string // Helper to build internal Nuts API URLs
 	MockMitz      *mitzmock.ClosedQuestionService
 }
-
 
 // Start starts the full test harness with all components (MCSD, NVI, MITZ).
 func Start(t *testing.T) Details {
@@ -62,6 +62,11 @@ func Start(t *testing.T) Details {
 	dockerNetwork, err := createDockerNetwork(t)
 	require.NoError(t, err)
 	hapiBaseURL := startHAPI(t, dockerNetwork.Name)
+
+	// HAPI containers are reused across tests (see startHAPI). vectors.Load is
+	// intentionally non-destructive (idempotent boot/reset), so expunge here to
+	// give each harness a clean store and keep tests isolated.
+	require.NoError(t, vectors.ExpungeAll(hapiBaseURL), "failed to expunge HAPI FHIR server")
 
 	testData, err := vectors.Load(hapiBaseURL)
 	require.NoError(t, err, "failed to load test data into HAPI FHIR server")
@@ -98,6 +103,7 @@ func Start(t *testing.T) Details {
 
 	return Details{
 		KnooppuntInternalBaseURL: knooppuntInternalURL,
+		HAPIBaseURL:              hapiBaseURL,
 		MCSDQueryFHIRBaseURL:     testData.Knooppunt.MCSD.QueryFHIRBaseURL,
 		LRZaFHIRBaseURL:          testData.LRZa.FHIRBaseURL,
 		SunflowerFHIRBaseURL:     sunflower.AdminHAPITenant().BaseURL(hapiBaseURL),
@@ -211,4 +217,3 @@ func setupNutsEnvironment(t *testing.T, testdataDir, caPath string) {
 	os.Setenv("NUTS_NETWORK_ENABLEDISCOVERY", "false")
 	os.Setenv("SSL_CERT_FILE", caPath)
 }
-

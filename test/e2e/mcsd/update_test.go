@@ -27,8 +27,9 @@ func Test_mCSDUpdateClient(t *testing.T) {
 		response := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		t.Run("assert resource sync'd from LRZa Admin Directory", func(t *testing.T) {
-			// This is the root/discovery directory, so only mCSD Directory endpoints should be present
-			assert.Equalf(t, 2, mapEntryContains(response, "lrza-mcsd-admin").CountCreated, "created=2 in %v", response)
+			// This is the root/discovery directory, so only mCSD Directory endpoints should be present.
+			// One per organization in LRZa: Sunflower, Care2Cure and Plataan.
+			assert.Equalf(t, 3, mapEntryContains(response, "lrza-mcsd-admin").CountCreated, "created=3 in %v", response)
 		})
 
 		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
@@ -139,10 +140,11 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		// First sync to establish baseline timestamps
 		response1 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-		// First sync should behave like Test_mCSDUpdateClient - LRZa should create 2 resources
+		// First sync should behave like Test_mCSDUpdateClient - LRZa should create 3 resources
+		// (one mCSD-directory endpoint per org: Sunflower, Care2Cure, Plataan).
 		lrzaReport1 := mapEntryContains(response1, "lrza-mcsd-admin")
 		require.NotNil(t, lrzaReport1, "LRZa report should exist in first sync")
-		assert.Equal(t, 2, lrzaReport1.CountCreated, "LRZa should create 2 resources in first sync")
+		assert.Equal(t, 3, lrzaReport1.CountCreated, "LRZa should create 3 resources in first sync")
 
 		// Create new child organization after first sync - should be found by next incremental sync
 		// Use discovered directory (care2cure-admin) since they sync all resource types including Organizations

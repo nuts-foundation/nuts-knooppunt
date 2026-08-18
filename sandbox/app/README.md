@@ -55,7 +55,12 @@ the vendored v1.0.2 bundle. Keep this form when adding interactivity.
 ## Integration points
 
 - `page.Session` and the `topbar` partial (E2).
-- The reset stub, `POST /demo/reset` (E5).
+- Reset/recycle (E5, landed): `POST /demo/reset` (global, `override=true` past active locks),
+  `POST /demo/patients/{key}/recycle` (per-patient, 409 if locked), `POST /demo/patients/{key}/lock` and
+  `/release` (manual lock control), and `GET /demo/patients` (pool + lock status JSON). These call
+  `vectors.ResetGlobal` / `vectors.RecyclePatient`; they are enabled only when `KNOOPPUNT_INTERNAL_URL` and
+  `HAPI_BASE_URL` are set (see `docker-compose.yml`), otherwise reset reports "disabled". The lock trigger on
+  scenario-run start is E4/E6; E5 ships the registry, reset-side enforcement and the manual controls.
 - The `#gf-viewer-steps` container and `window.GFJourney.apply(stepEvent)` / `.reset()`, consuming the DESIGN.md §7
   step-event schema (E6).
 
