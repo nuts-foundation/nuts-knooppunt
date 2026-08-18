@@ -70,7 +70,7 @@ A docker compose config is provided to run a set of services that are useful for
 - **HAPI FHIR Server** - Multi-tenant FHIR R4 server with NVI support, running on port 7050
 - **Aspire Dashboard** - Observability dashboard for traces, logs, and metrics on port 18888
 - **Demo EHR** - Demo application (optional, use `--profile demoehr`)
-- **PEP (Policy Enforcement Point)** - NGINX-based reference implementation (optional, use `--profile pep`)
+- **PEP (Policy Enforcement Point)** - NGINX-based reference implementation, one per demo organization: Zonnebloem on port 9080 and De Plataan on port 9081
 
 Start the base stack with:
 

@@ -69,6 +69,23 @@ func TestReset_RefusesWhenLockedWithoutOverride(t *testing.T) {
 	require.Empty(t, *resets, "reset must not run while a patient is locked")
 }
 
+// A malformed form body must be rejected rather than silently read as "override
+// not passed": for a reset that difference decides whether the dataset is wiped,
+// so the caller has to be told the request was not understood.
+func TestReset_MalformedFormIsRejected(t *testing.T) {
+	cfg, resets, _ := fakeConfig()
+	srv := httptest.NewServer(NewMux(cfg))
+	t.Cleanup(srv.Close)
+
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res, err := client.Post(srv.URL+"/demo/reset", "application/x-www-form-urlencoded", strings.NewReader("override=%zz"))
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusBadRequest, res.StatusCode)
+	require.Empty(t, *resets, "a request we could not parse must not trigger a reset")
+}
+
 func TestReset_ProceedsWithOverride(t *testing.T) {
 	cfg, resets, _ := fakeConfig()
 	require.True(t, cfg.Locks.Lock("pool-02", "session-x"))

@@ -11,6 +11,7 @@ package pool
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/plataan"
@@ -65,7 +66,12 @@ type variant struct {
 // Patients returns the demo pool: Anna (the canonical persona) plus five
 // clones. All BSNs pass the elfproef and none is 999911120 (Nictiz-fixture
 // collision); they are marked "pending RvIG verification" (DESIGN §10).
-func Patients() []PoolPatient {
+//
+// The pool is static data built once; callers must not mutate the returned
+// slice. patientsByKey indexes it for PatientByKey.
+func Patients() []PoolPatient { return patients() }
+
+var patients = sync.OnceValue(func() []PoolPatient {
 	return []PoolPatient{
 		newPatient("anna", "999900006", "Anna", "Jansen", "1944-03-12", variant{
 			apixabanDose:   "5 mg 2dd",
@@ -128,7 +134,7 @@ func Patients() []PoolPatient {
 			htnOnsetYear:   "2014",
 		}),
 	}
-}
+})
 
 func newPatient(key, bsn, given, family, birthDate string, v variant) PoolPatient {
 	return PoolPatient{
@@ -145,14 +151,20 @@ func newPatient(key, bsn, given, family, birthDate string, v variant) PoolPatien
 	}
 }
 
+// patientsByKey indexes the pool for constant-time lookup; it is built once
+// alongside the pool itself.
+var patientsByKey = sync.OnceValue(func() map[string]PoolPatient {
+	index := make(map[string]PoolPatient, len(patients()))
+	for _, p := range patients() {
+		index[p.Key] = p
+	}
+	return index
+})
+
 // PatientByKey returns the pool patient with the given key, or false.
 func PatientByKey(key string) (PoolPatient, bool) {
-	for _, p := range Patients() {
-		if p.Key == key {
-			return p, true
-		}
-	}
-	return PoolPatient{}, false
+	p, ok := patientsByKey()[key]
+	return p, ok
 }
 
 // resourceID builds a fixed, human-readable FHIR id derived from the patient

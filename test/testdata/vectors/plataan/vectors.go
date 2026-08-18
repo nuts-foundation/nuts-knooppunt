@@ -5,6 +5,8 @@
 package plataan
 
 import (
+	"os"
+
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -12,6 +14,20 @@ import (
 
 // URA is Ziekenhuis De Plataan's URA number. Previously unused in testdata.
 const URA = "00000010"
+
+// EndpointAddressEnvVar overrides the address published in De Plataan's mCSD
+// Endpoint. See sunflower.EndpointAddressEnvVar for why the seeded address has
+// to be deployment-dependent.
+const EndpointAddressEnvVar = "SEED_PLATAAN_ENDPOINT_ADDRESS"
+
+// EndpointAddress returns the address to publish in the mCSD Endpoint, and to
+// advertise as the organization's FHIR base URL on discovery.
+func EndpointAddress() string {
+	if v := os.Getenv(EndpointAddressEnvVar); v != "" {
+		return v
+	}
+	return "http://localhost:7050/fhir/plataan-patients"
+}
 
 // AdminHAPITenant is De Plataan's own mCSD admin directory tenant.
 func AdminHAPITenant() hapi.Tenant {
@@ -55,16 +71,13 @@ func Organization() fhir.Organization {
 }
 
 // Endpoints are the endpoints published in De Plataan's own admin directory.
-// The FHIR endpoint points at De Plataan's patients tenant.
-//
-// TODO(E4): like the sunflower endpoint, this points straight at HAPI. When E4
-// wires retrieval through the PEP and hosted addressing lands, make this
-// deployment-aware and point it at De Plataan's PEP.
+// The FHIR endpoint points at De Plataan's patients tenant, fronted by De
+// Plataan's PEP where one is deployed (see EndpointAddressEnvVar).
 func Endpoints() []fhir.Endpoint {
 	return []fhir.Endpoint{
 		{
 			Id:      to.Ptr("cb75e784-b658-5a2f-acd7-6d513f9b0b43"),
-			Address: "http://localhost:7050/fhir/plataan-patients",
+			Address: EndpointAddress(),
 			Meta: &fhir.Meta{
 				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
 			},

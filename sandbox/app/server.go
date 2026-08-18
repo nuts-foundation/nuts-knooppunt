@@ -155,7 +155,12 @@ func (c Config) handleReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	override := formOrQuery(r, "override") == "true"
+	overrideValue, err := formOrQuery(r, "override")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	override := overrideValue == "true"
 	if active := c.Locks.Active(); len(active) > 0 && !override {
 		q := url.Values{"notice": {"reset-locked"}, "locked": {strings.Join(active, ", ")}}
 		http.Redirect(w, r, "/demo?"+q.Encode(), http.StatusSeeOther)
@@ -170,14 +175,16 @@ func (c Config) handleReset(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleRecycle restores a single patient. It refuses (409) a locked patient.
+// Like handleReset, the "is reset even available here?" check comes first, so
+// both endpoints report a disabled backend the same way regardless of the key.
 func (c Config) handleRecycle(w http.ResponseWriter, r *http.Request) {
+	if !c.configured() {
+		http.Redirect(w, r, "/demo?notice=reset-disabled", http.StatusSeeOther)
+		return
+	}
 	key := r.PathValue("key")
 	if _, ok := pool.PatientByKey(key); !ok {
 		http.Error(w, "unknown patient: "+key, http.StatusNotFound)
-		return
-	}
-	if !c.configured() {
-		http.Redirect(w, r, "/demo?notice=reset-disabled", http.StatusSeeOther)
 		return
 	}
 	if c.Locks.IsLocked(key) {
@@ -200,7 +207,11 @@ func (c Config) handleLock(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown patient: "+key, http.StatusNotFound)
 		return
 	}
-	owner := formOrQueryDefault(r, "owner", "manual")
+	owner, err := formOrQueryDefault(r, "owner", "manual")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if !c.Locks.Lock(key, owner) {
 		http.Error(w, "patient "+key+" is already locked by another session", http.StatusConflict)
 		return
@@ -215,7 +226,11 @@ func (c Config) handleRelease(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown patient: "+key, http.StatusNotFound)
 		return
 	}
-	owner := formOrQueryDefault(r, "owner", "manual")
+	owner, err := formOrQueryDefault(r, "owner", "manual")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	released := c.Locks.Release(key, owner)
 	writeJSON(w, http.StatusOK, map[string]any{"key": key, "locked": c.Locks.IsLocked(key), "released": released})
 }
@@ -247,17 +262,25 @@ func derefName(s *string) string {
 }
 
 // formOrQuery returns the first value for key from the POST form or the URL
-// query.
-func formOrQuery(r *http.Request, key string) string {
-	_ = r.ParseForm()
-	return r.Form.Get(key)
+// query. A malformed form body is reported rather than silently read as an
+// absent value: for "override" that difference decides whether a global reset
+// proceeds, so the caller must be able to tell "not passed" from "unparseable".
+func formOrQuery(r *http.Request, key string) (string, error) {
+	if err := r.ParseForm(); err != nil {
+		return "", fmt.Errorf("parse request form: %w", err)
+	}
+	return r.Form.Get(key), nil
 }
 
-func formOrQueryDefault(r *http.Request, key, def string) string {
-	if v := formOrQuery(r, key); v != "" {
-		return v
+func formOrQueryDefault(r *http.Request, key, def string) (string, error) {
+	v, err := formOrQuery(r, key)
+	if err != nil {
+		return "", err
 	}
-	return def
+	if v == "" {
+		return def, nil
+	}
+	return v, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

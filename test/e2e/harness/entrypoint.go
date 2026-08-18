@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd"
@@ -39,8 +40,7 @@ type MITZDetails struct {
 }
 
 type PEPTestConfig struct {
-	CertsDir    string // Path to directory containing CA cert
-	TestDataDir string // Path to directory containing accesspolicy.json and discovery.json
+	CertsDir string // Path to directory containing CA cert
 }
 
 type PEPDetails struct {
@@ -144,7 +144,7 @@ func StartPEP(t *testing.T, config PEPTestConfig) PEPDetails {
 	t.Helper()
 
 	// Set up Nuts node environment variables
-	setupNutsEnvironment(t, config.TestDataDir, filepath.Join(config.CertsDir, "ca.pem"))
+	setupNutsEnvironment(t, filepath.Join(config.CertsDir, "ca.pem"))
 
 	// Create mock XACML Mitz server
 	mockMitz := mitzmock.NewClosedQuestionService(t)
@@ -185,9 +185,28 @@ func StartPEP(t *testing.T, config PEPTestConfig) PEPDetails {
 	}
 }
 
-// setupNutsEnvironment configures environment variables for the embedded Nuts node.
-func setupNutsEnvironment(t *testing.T, testdataDir, caPath string) {
+// repoRoot returns the absolute path of the repository root, derived from this
+// source file's location rather than the working directory, so helpers can read
+// repository config regardless of which package's directory the test runs in.
+func repoRoot(t *testing.T) string {
 	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	require.True(t, ok, "unable to determine harness source location")
+	// this file lives at <root>/test/e2e/harness/entrypoint.go
+	return filepath.Join(filepath.Dir(thisFile), "..", "..", "..")
+}
+
+// setupNutsEnvironment configures environment variables for the embedded Nuts node.
+//
+// The access policy and discovery definition are read from the repository's
+// config/ directory — the same files docker compose serves — rather than from a
+// testdata copy. Keeping a single source matters because the discovery definition
+// pins the test CA's public key hash: two copies would drift, and the resulting
+// authorization failures are opaque.
+func setupNutsEnvironment(t *testing.T, caPath string) {
+	t.Helper()
+
+	repoConfigDir := filepath.Join(repoRoot(t), "config")
 
 	// Create temp directories for Nuts node configuration
 	tempDir := t.TempDir()
@@ -197,12 +216,12 @@ func setupNutsEnvironment(t *testing.T, testdataDir, caPath string) {
 	require.NoError(t, os.MkdirAll(discoveryDir, 0755))
 
 	// Copy policy file
-	policyData, err := os.ReadFile(filepath.Join(testdataDir, "accesspolicy.json"))
+	policyData, err := os.ReadFile(filepath.Join(repoConfigDir, "policy", "accesspolicy.json"))
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(policyDir, "accesspolicy.json"), policyData, 0644))
 
 	// Copy discovery definition (must be named <service-id>.json)
-	discoveryData, err := os.ReadFile(filepath.Join(testdataDir, "discovery.json"))
+	discoveryData, err := os.ReadFile(filepath.Join(repoConfigDir, "discovery", "bgz-test.json"))
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(discoveryDir, "bgz-test.json"), discoveryData, 0644))
 

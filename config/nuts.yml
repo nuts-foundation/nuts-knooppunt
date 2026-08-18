@@ -8,3 +8,17 @@ auth:
 
 policy:
   directory: "./config/policy"
+
+# Discovery service definitions. Each definition file must be named
+# "<service-id>.json" and the service must be listed under server.ids for this
+# node to act as the discovery server for it.
+#
+# bgz-test is the service the demo organizations register on during seed, and is
+# what makes an access token request resolve a counterparty. Without it there is
+# no discovery service at all and the authorization chain cannot complete.
+discovery:
+  definitions:
+    directory: "./config/discovery"
+  server:
+    ids:
+      - bgz-test

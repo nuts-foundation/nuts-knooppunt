@@ -144,10 +144,14 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	}, nil
 }
 
-// ExpungeAll removes ALL data from the HAPI server (system-level $expunge). It
-// is destructive and is NOT part of the normal seed path (Load is non-destructive
-// and idempotent). Use it only to get a clean store, e.g. the e2e test harness
-// before seeding, so reused HAPI containers do not leak state between tests.
+// ExpungeAll removes ALL data from the HAPI server (system-level $expunge),
+// every tenant, not just the ones this package seeds.
+//
+// DANGER: this is unconditionally destructive and is NOT part of the normal seed
+// path (Load is non-destructive and idempotent). It exists for the e2e test
+// harness, which reuses HAPI containers and needs a clean store between tests.
+// Never point it at a HAPI instance whose contents you care about; for restoring
+// the demo dataset use ResetGlobal, which expunges only the mutable tenants.
 func ExpungeAll(hapiBaseURL *url.URL) error {
 	client := fhirclient.New(hapiBaseURL, http.DefaultClient, nil)
 	return client.CreateWithContext(context.Background(), fhir.Parameters{
@@ -191,18 +195,23 @@ func SeedNVI(ctx context.Context, knooppuntInternalBaseURL *url.URL) error {
 }
 
 // ResetGlobal restores the entire seeded dataset to its fixtures ("restore
-// fixtures" path). It expunges the mutable patient FHIR stores — removing any
-// user-created records, which have random ids a plain re-seed cannot overwrite —
-// then re-runs Load (re-PUTs the mCSD/PIP directories and pool resources) and
-// SeedNVI.
+// fixtures" path). It expunges the mutable stores — removing any user-created
+// records, which have random ids a plain re-seed cannot overwrite — then re-runs
+// Load (re-PUTs the mCSD/PIP directories and pool resources) and SeedNVI.
+//
+// The NVI tenant is expunged alongside the two patient stores. SeedNVI's
+// delete-then-create only touches the pool's own BSNs, so a List registered
+// during a demo under any other subject would otherwise survive a global reset
+// (DESIGN §5.6 requires user-created NVI registrations to be gone afterwards).
 //
 // It does not reset Mitz subscriptions (no standalone mitz service yet; see
 // README) or the mCSD query directory cache (rebuilt by the mCSD update process).
 func ResetGlobal(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL *url.URL) error {
-	// Expunge the mutable patient stores so user-created (random-id) records go.
+	// Expunge the mutable stores so user-created (random-id) records go.
 	for _, tenant := range []hapi.Tenant{
 		sunflower.PatientsHAPITenant(),
 		plataan.PatientsHAPITenant(),
+		nvi.HAPITenant(),
 	} {
 		if err := expungeTenant(ctx, tenant.FHIRClient(hapiBaseURL)); err != nil {
 			return fmt.Errorf("expunge tenant %s: %w", tenant.Name, err)
