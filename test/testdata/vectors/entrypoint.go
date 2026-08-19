@@ -2,6 +2,7 @@ package vectors
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -195,26 +196,36 @@ func SeedNVI(ctx context.Context, knooppuntInternalBaseURL *url.URL) error {
 }
 
 // ResetGlobal restores the entire seeded dataset to its fixtures ("restore
-// fixtures" path). It expunges the mutable stores — removing any user-created
+// fixtures" path). It clears the mutable stores — removing any user-created
 // records, which have random ids a plain re-seed cannot overwrite — then re-runs
 // Load (re-PUTs the mCSD/PIP directories and pool resources) and SeedNVI.
 //
-// The NVI tenant is expunged alongside the two patient stores. SeedNVI's
-// delete-then-create only touches the pool's own BSNs, so a List registered
-// during a demo under any other subject would otherwise survive a global reset
-// (DESIGN §5.6 requires user-created NVI registrations to be gone afterwards).
+// Clearing is per-resource deletion within the tenant, not $expunge; see
+// clearTenant for why the expunge form cannot be used here.
+//
+// Known gap: NVI Lists registered during a demo under a BSN outside the pool
+// survive a global reset. The NVI tenant's pseudonymization interceptor rejects
+// any List search not scoped to a patient/subject/source, so they cannot be
+// enumerated to be deleted, and SeedNVI's delete-then-create only covers the
+// pool's own BSNs. DESIGN §5.6 wants those gone; doing so needs the Knooppunt to
+// expose a custodian-scoped listing (or the seed to track what it registered).
 //
 // It does not reset Mitz subscriptions (no standalone mitz service yet; see
 // README) or the mCSD query directory cache (rebuilt by the mCSD update process).
 func ResetGlobal(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL *url.URL) error {
-	// Expunge the mutable stores so user-created (random-id) records go.
+	// Clear the mutable patient stores so user-created (random-id) records go.
+	//
+	// The NVI tenant is NOT cleared this way: its pseudonymization interceptor
+	// rejects a List search that is not scoped to a patient/subject/source, so
+	// there is no way to enumerate "every List" in it. SeedNVI below is
+	// delete-then-create per pool BSN, which restores the pool's own Lists to
+	// exactly one each; see the known limitation in test/testdata/README.md.
 	for _, tenant := range []hapi.Tenant{
 		sunflower.PatientsHAPITenant(),
 		plataan.PatientsHAPITenant(),
-		nvi.HAPITenant(),
 	} {
-		if err := expungeTenant(ctx, tenant.FHIRClient(hapiBaseURL)); err != nil {
-			return fmt.Errorf("expunge tenant %s: %w", tenant.Name, err)
+		if err := clearTenant(ctx, tenant.FHIRClient(hapiBaseURL)); err != nil {
+			return fmt.Errorf("clear tenant %s: %w", tenant.Name, err)
 		}
 	}
 
@@ -260,14 +271,98 @@ func RecyclePatient(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL *
 	return nil
 }
 
-// expungeTenant removes all data in a single HAPI partition.
-func expungeTenant(ctx context.Context, client fhirclient.Client) error {
-	return client.CreateWithContext(ctx, fhir.Parameters{
-		Parameter: []fhir.ParametersParameter{
-			{
-				Name:         "expungeEverything",
-				ValueBoolean: to.Ptr(true),
-			},
-		},
-	}, nil, fhirclient.AtPath("/$expunge"))
+// mutableResourceTypes are the resource types the reset paths clear from the
+// mutable tenants. It covers the types the pool seeds on both sides, the NVI
+// List, plus the types a demo can create (Observation, DocumentReference), so
+// user-created records are removed and not just the seeded fixtures.
+var mutableResourceTypes = []string{
+	"AllergyIntolerance",
+	"Condition",
+	"DocumentReference",
+	"List",
+	"MedicationRequest",
+	"Observation",
+	"Patient",
+}
+
+// clearTenant removes all data in a single HAPI partition, leaving the partition
+// itself intact.
+//
+// It deliberately does NOT use $expunge with expungeEverything: HAPI treats that
+// parameter as server-wide regardless of the tenant in the request path, so it
+// deletes every partition's data AND the PartitionEntity rows defining the
+// partitions — leaving every tenant unresolvable ("Partition name ... is not
+// valid") until the server is rebuilt. See TestResetGlobal_PreservesPartitions.
+//
+// The conditional-delete form (`?_lastUpdated=gt...&_expunge=true`) is correctly
+// partition-scoped but asynchronous: it enqueues a Batch2 DELETE_EXPUNGE job that
+// only runs on HAPI's job-maintenance schedule (60s by default), which is far too
+// slow for a reset behind a UI button. So this searches each resource type and
+// deletes by id, which is synchronous and partition-scoped.
+func clearTenant(ctx context.Context, client fhirclient.Client) error {
+	for _, resourceType := range mutableResourceTypes {
+		ids, err := searchResourceIDs(ctx, client, resourceType)
+		if err != nil {
+			return fmt.Errorf("search %s: %w", resourceType, err)
+		}
+		for _, id := range ids {
+			// _cascade=delete because HAPI refuses to delete a resource that is
+			// still referenced: a demo can create records of types this list does
+			// not know about (Observation.subject -> Patient being the common
+			// one), and those would otherwise block the Patient delete and fail
+			// the whole reset.
+			if err := client.DeleteWithContext(ctx, resourceType+"/"+id,
+				fhirclient.QueryParam("_cascade", "delete")); err != nil {
+				return fmt.Errorf("delete %s/%s: %w", resourceType, id, err)
+			}
+		}
+	}
+	return nil
+}
+
+// searchResourceIDs returns the ids of every resource of the given type in the
+// client's tenant, following pagination via the bundle's "next" link.
+func searchResourceIDs(ctx context.Context, client fhirclient.Client, resourceType string) ([]string, error) {
+	var ids []string
+	var bundle fhir.Bundle
+	if err := client.SearchWithContext(ctx, resourceType, url.Values{"_count": {"500"}}, &bundle); err != nil {
+		return nil, err
+	}
+	for {
+		for _, entry := range bundle.Entry {
+			var resource struct {
+				ID string `json:"id"`
+			}
+			if err := json.Unmarshal(entry.Resource, &resource); err != nil {
+				return nil, fmt.Errorf("parse search entry: %w", err)
+			}
+			if resource.ID != "" {
+				ids = append(ids, resource.ID)
+			}
+		}
+
+		next := bundleNextLink(bundle)
+		if next == nil {
+			return ids, nil
+		}
+		bundle = fhir.Bundle{}
+		if err := client.ReadWithContext(ctx, "", &bundle, fhirclient.AtUrl(next)); err != nil {
+			return nil, fmt.Errorf("follow next page: %w", err)
+		}
+	}
+}
+
+// bundleNextLink returns the bundle's "next" pagination link, or nil.
+func bundleNextLink(bundle fhir.Bundle) *url.URL {
+	for _, link := range bundle.Link {
+		if link.Relation != "next" {
+			continue
+		}
+		next, err := url.Parse(link.Url)
+		if err != nil {
+			return nil
+		}
+		return next
+	}
+	return nil
 }

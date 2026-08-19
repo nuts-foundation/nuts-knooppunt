@@ -114,13 +114,19 @@ subject's wallet, which is empty until the credential is stored.
 
 ### Reset variants (used by the GF Sandbox backend)
 
-- `vectors.ResetGlobal(ctx, hapiBaseURL, knooppuntInternalBaseURL)` — expunges the
-  mutable stores (both patient tenants and the NVI tenant, removing user-created
-  records, which have random ids a plain re-seed cannot overwrite), then re-runs
-  `Load` + `SeedNVI`. This is the "restore fixtures" path. The NVI tenant is
-  included because `SeedNVI`'s delete-then-create only covers the pool's own
-  BSNs — a List registered during a demo under any other subject would otherwise
-  survive the reset.
+- `vectors.ResetGlobal(ctx, hapiBaseURL, knooppuntInternalBaseURL)` — clears the
+  mutable patient stores (removing user-created records, which have random ids a
+  plain re-seed cannot overwrite), then re-runs `Load` + `SeedNVI`. This is the
+  "restore fixtures" path.
+
+  Clearing is a search-and-delete per resource type with `_cascade=delete`, **not**
+  `$expunge`. HAPI applies `expungeEverything=true` server-wide regardless of the
+  tenant in the request path: it deletes every partition's data *and* the
+  `PartitionEntity` rows, so one reset used to leave every tenant unresolvable
+  (`Partition name "..." is not valid`) until the stack was rebuilt with
+  `docker compose down -v`. The partition-scoped `?_expunge=true` form is correct
+  but asynchronous (a Batch2 job on a 60s maintenance schedule), which is too slow
+  for a reset behind a UI button. `TestResetGlobal_PreservesPartitions` guards this.
 - `vectors.RecyclePatient(ctx, hapiBaseURL, knooppuntInternalBaseURL, patientKey)`
   — restores one patient to its seeded, unshared state (re-registers its NVI Lists
   and re-PUTs its FHIR resources) without touching any other patient.
@@ -128,8 +134,14 @@ subject's wallet, which is empty until the credential is stored.
 ### Known limitations
 
 - **Per-patient recycle cannot remove that patient's user-created marker records**
-  (they have random ids). A global reset (expunge) is the escape hatch until a
-  later epic tags user-created resources for targeted deletion.
+  (they have random ids). A global reset is the escape hatch until a later epic
+  tags user-created resources for targeted deletion.
+- **NVI Lists registered under a BSN outside the pool survive a global reset.**
+  The NVI tenant's pseudonymization interceptor rejects any `List` search not
+  scoped to a patient/subject/source, so they cannot be enumerated to be deleted,
+  and `SeedNVI`'s delete-then-create only covers the pool's own BSNs. DESIGN §5.6
+  wants those gone; that needs a custodian-scoped listing on the Knooppunt (or the
+  seed tracking what it registered).
 - **Mitz subscriptions are not reset** by these paths. The compose `mitzmock`
   service is a stateless consent responder (closed questions only); a running
   demo's subscription survives a reset. This is expected, not a bug.

@@ -364,8 +364,11 @@ services:
       knooppunt-healthcheck:
         condition: service_completed_successfully
     healthcheck:
+      # Must be 127.0.0.1, not localhost: nginx.conf uses `listen 8080` (IPv4
+      # only), while wget resolves "localhost" to ::1 first via /etc/hosts and
+      # gets connection refused, leaving the container permanently unhealthy.
       test:
-        ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080/health"]
+        ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -403,7 +406,7 @@ services:
         condition: service_completed_successfully
     healthcheck:
       test:
-        ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080/health"]
+        ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 3

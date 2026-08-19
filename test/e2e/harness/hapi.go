@@ -26,7 +26,11 @@ func startHAPI(t *testing.T, dockerNetworkName string) *url.URL {
 			// Enable system-wide $expunge operation for test data cleanup
 			"hapi.fhir.delete_expunge_enabled": "true",
 			"hapi.fhir.allow_multiple_delete":  "true",
-			"NVI_AUDIENCE":                     "nvi",
+			// Match docker-compose.yml: the reset path deletes referenced
+			// resources with _cascade=delete, which HAPI rejects unless this is
+			// on. Without it the harness cannot reproduce compose's behaviour.
+			"hapi.fhir.allow_cascading_deletes": "true",
+			"NVI_AUDIENCE":                      "nvi",
 		},
 		WaitingFor: wait.ForHTTP("/fhir/DEFAULT/Account"),
 		LogConsumerCfg: &testcontainers.LogConsumerConfig{

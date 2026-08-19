@@ -14,12 +14,15 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/plataan"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -85,6 +88,89 @@ func TestSeed_NVIIsIdempotent(t *testing.T) {
 			require.Equalf(t, 1, count, "patient %s custodian %s should have exactly one List after double-seed", p.Key, custodian)
 		}
 	}
+}
+
+// TestResetGlobal_PreservesPartitions is the regression guard for the reset path
+// destroying HAPI's partition table.
+//
+// ResetGlobal used to clear each mutable tenant with $expunge and
+// expungeEverything=true. HAPI applies that parameter server-wide regardless of
+// the tenant in the request path: it deleted every partition's data plus the
+// PartitionEntity rows themselves, so afterwards every tenant — including the
+// read-only ones the reset must not touch — failed with `Partition name "..." is
+// not valid` until the server was rebuilt from scratch.
+//
+// A single reset was enough to break a freshly seeded stack, and nothing caught
+// it because the harness re-runs Load (which recreates the partitions) after
+// every expunge.
+func TestResetGlobal_PreservesPartitions(t *testing.T) {
+	h := harness.Start(t)
+	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
+
+	require.NoError(t, vectors.ResetGlobal(t.Context(), h.HAPIBaseURL, h.KnooppuntInternalBaseURL))
+
+	// Every tenant must still resolve — both the mutable ones the reset clears
+	// and the read-only ones it must leave alone.
+	for _, tenant := range []hapi.Tenant{
+		sunflower.PatientsHAPITenant(),
+		plataan.PatientsHAPITenant(),
+		nvi.HAPITenant(),
+		sunflower.AdminHAPITenant(),
+		plataan.AdminHAPITenant(),
+		lrza.HAPITenant(),
+	} {
+		var bundle fhir.Bundle
+		err := tenant.FHIRClient(h.HAPIBaseURL).SearchWithContext(t.Context(), "Patient", url.Values{"_count": {"1"}}, &bundle)
+		require.NoErrorf(t, err, "tenant %s should still resolve after ResetGlobal", tenant.Name)
+	}
+}
+
+// TestResetGlobal_RemovesUserCreatedRecordsAndRestoresFixtures covers the other
+// half of the reset contract: records created during a demo have random ids that
+// a fixed-id re-seed cannot overwrite, so the reset must delete them, while the
+// seeded fixtures come back.
+func TestResetGlobal_RemovesUserCreatedRecordsAndRestoresFixtures(t *testing.T) {
+	h := harness.Start(t)
+	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
+
+	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL)
+	anna := pool.Patients()[0]
+
+	// Simulate demo drift: a user-created record (random id) plus a deleted fixture.
+	// The marker references the pool Patient, as a record created during a real
+	// demo would, and is deliberately of a type the reset does not enumerate
+	// (Procedure). HAPI refuses to delete a still-referenced resource, so without
+	// a cascading delete this blocks the Patient and fails the whole reset — the
+	// exact 500 seen in docker compose.
+	var created fhir.Procedure
+	require.NoError(t, zonnebloem.CreateWithContext(t.Context(), fhir.Procedure{
+		Status:  fhir.EventStatusCompleted,
+		Code:    &fhir.CodeableConcept{Text: to.Ptr("user-created marker")},
+		Subject: fhir.Reference{Reference: to.Ptr("Patient/" + anna.ZonnebloemPatientID)},
+	}, &created))
+	require.NotNil(t, created.Id, "precondition: the marker got a server-assigned id")
+
+	// Delete a seeded leaf resource (HAPI refuses to delete the Patient itself
+	// while its children still reference it).
+	// Pool resource ids are deterministic: pool-<key>-<side>-<suffix>.
+	allergyID := "pool-" + anna.Key + "-zonnebloem-allergy"
+	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+allergyID))
+
+	require.NoError(t, vectors.ResetGlobal(t.Context(), h.HAPIBaseURL, h.KnooppuntInternalBaseURL))
+
+	// The user-created record is gone (cascaded away with the Patient it hung off)...
+	var gone fhir.Procedure
+	err := zonnebloem.ReadWithContext(t.Context(), "Procedure/"+*created.Id, &gone)
+	require.Error(t, err, "user-created marker %s should be removed by ResetGlobal", *created.Id)
+
+	// ...and the deleted fixture is restored.
+	var allergy fhir.AllergyIntolerance
+	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "AllergyIntolerance/"+allergyID, &allergy))
+
+	// ...along with the pool patient itself.
+	var patient fhir.Patient
+	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "Patient/"+anna.ZonnebloemPatientID, &patient))
+	require.Equal(t, anna.BSN, *patient.Identifier[0].Value)
 }
 
 func TestRecyclePatient_RestoresTargetLeavesOthersIntact(t *testing.T) {
