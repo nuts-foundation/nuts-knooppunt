@@ -455,7 +455,21 @@ func (s *StubFHIRClient) DeleteWithContext(_ context.Context, path string, opts 
 	if s.Error != nil {
 		return s.Error
 	}
-	s.Deletions = append(s.Deletions, path)
+	// Apply opts to a synthetic request so the captured Deletion mirrors the URL
+	// the real client would build (exercising AtPath + QueryParam encoding).
+	request, _ := http.NewRequest("DELETE", "https://example.com/fhir", nil)
+	allOpts := append([]fhirclient.Option{fhirclient.AtPath(path)}, opts...)
+	for _, opt := range allOpts {
+		if pre, ok := opt.(fhirclient.PreRequestOption); ok {
+			pre(s, request)
+		}
+	}
+	relPath := strings.TrimPrefix(request.URL.Path, "/fhir/")
+	relPath = strings.TrimPrefix(relPath, "/fhir")
+	if request.URL.RawQuery != "" {
+		relPath += "?" + request.URL.RawQuery
+	}
+	s.Deletions = append(s.Deletions, relPath)
 	return nil
 }
 
