@@ -28,20 +28,20 @@ func (id *ID) UnmarshalText(text []byte) error {
 	identifier, err := fhirutil.TokenToIdentifier(string(text))
 	if err != nil {
 		return &fhirapi.Error{
-			Message:   "invalid tenant ID in request header",
+			Message:   "invalid tenant ID",
 			Cause:     err,
 			IssueType: fhir.IssueTypeValue,
 		}
 	}
 	if identifier.System == nil || *identifier.System != coding.URANamingSystem {
 		return &fhirapi.Error{
-			Message:   "invalid tenant ID in request header, expected system: " + coding.URANamingSystem,
+			Message:   "invalid tenant ID, expected system: " + coding.URANamingSystem,
 			IssueType: fhir.IssueTypeValue,
 		}
 	}
 	if identifier.Value == nil || *identifier.Value == "" {
 		return &fhirapi.Error{
-			Message:   "invalid tenant ID in request header, missing value",
+			Message:   "invalid tenant ID, missing value",
 			IssueType: fhir.IssueTypeValue,
 		}
 	}

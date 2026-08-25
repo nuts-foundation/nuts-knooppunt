@@ -15,7 +15,7 @@ func TestID_UnmarshalText(t *testing.T) {
 		err := id.UnmarshalText([]byte(""))
 		fhirError := &fhirapi.Error{}
 		require.ErrorAs(t, err, &fhirError)
-		require.Equal(t, "invalid tenant ID in request header", fhirError.Message)
+		require.Equal(t, "invalid tenant ID", fhirError.Message)
 		require.Equal(t, fhir.IssueTypeValue, fhirError.IssueType)
 	})
 	t.Run("invalid token", func(t *testing.T) {
@@ -23,7 +23,7 @@ func TestID_UnmarshalText(t *testing.T) {
 		err := id.UnmarshalText([]byte("something"))
 		fhirError := &fhirapi.Error{}
 		require.ErrorAs(t, err, &fhirError)
-		require.Equal(t, "invalid tenant ID in request header", fhirError.Message)
+		require.Equal(t, "invalid tenant ID", fhirError.Message)
 		require.Equal(t, fhir.IssueTypeValue, fhirError.IssueType)
 	})
 	t.Run("invalid system", func(t *testing.T) {
@@ -31,7 +31,7 @@ func TestID_UnmarshalText(t *testing.T) {
 		err := id.UnmarshalText([]byte("something|1"))
 		fhirError := &fhirapi.Error{}
 		require.ErrorAs(t, err, &fhirError)
-		require.Equal(t, "invalid tenant ID in request header, expected system: "+coding.URANamingSystem, fhirError.Message)
+		require.Equal(t, "invalid tenant ID, expected system: "+coding.URANamingSystem, fhirError.Message)
 		require.Equal(t, fhir.IssueTypeValue, fhirError.IssueType)
 	})
 	t.Run("no value", func(t *testing.T) {
@@ -39,7 +39,7 @@ func TestID_UnmarshalText(t *testing.T) {
 		err := id.UnmarshalText([]byte(coding.URANamingSystem + "|"))
 		fhirError := &fhirapi.Error{}
 		require.ErrorAs(t, err, &fhirError)
-		require.Equal(t, "invalid tenant ID in request header, missing value", fhirError.Message)
+		require.Equal(t, "invalid tenant ID, missing value", fhirError.Message)
 		require.Equal(t, fhir.IssueTypeValue, fhirError.IssueType)
 	})
 	t.Run("valid", func(t *testing.T) {
