@@ -37,18 +37,13 @@ func (c *Component) SetReady() {
 	c.ready.Store(true)
 }
 
-// Ready reports whether the system has been marked ready via SetReady.
-func (c *Component) Ready() bool {
-	return c.ready.Load()
-}
-
 // RegisterHttpHandlers registers no routes: /status and /version are served through the
 // generated OpenAPI strict server, wired up in strictAPIServer.RegisterHttpHandlers in package cmd.
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 }
 
 func (c *Component) GetStatus(_ context.Context, _ api.GetStatusRequestObject) (api.GetStatusResponseObject, error) {
-	if !c.Ready() {
+	if !c.ready.Load() {
 		return api.GetStatus503TextResponse("starting"), nil
 	}
 	return api.GetStatus200TextResponse("OK"), nil
