@@ -1,9 +1,7 @@
 package pdp
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,7 +12,6 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp/policies"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/from"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/stretchr/testify/assert"
@@ -37,49 +34,14 @@ func registerBundleRoute(t *testing.T, service *Component, mux *http.ServeMux) {
 	})
 }
 
-// executePDPRequest is a helper function that sends a PDP request and returns the response
+// executePDPRequest is a helper function that evaluates a PDP request and returns the response
 func executePDPRequest(t *testing.T, service *Component, pdpRequest APIRequest) APIResponse {
 	t.Helper()
-
-	// Marshal the request body
-	requestBody, err := json.Marshal(pdpRequest)
-	require.NoError(t, err)
-
-	// Create HTTP request
-	req := httptest.NewRequest("POST", "/pdp", bytes.NewReader(requestBody))
-	req.Header.Set("Content-Type", "application/json")
-
-	// Create response recorder
-	w := httptest.NewRecorder()
-
-	// Call the handler
-	service.HandleMainPolicy(w, req)
-
-	response, err := from.JSONResponse[APIResponse](w.Result())
-	require.NoError(t, err)
-
+	response, _ := service.Evaluate(t.Context(), pdpRequest)
 	return response
 }
 
-func TestHandleMainPolicy(t *testing.T) {
-	t.Run("invalid HTTP request body", func(t *testing.T) {
-		service := &Component{}
-		httpRequest := httptest.NewRequest("POST", "/pdp", strings.NewReader("invalid json"))
-		httpRequest.Header.Set("Content-Type", "application/json")
-		httpResponse := httptest.NewRecorder()
-
-		service.HandleMainPolicy(httpResponse, httpRequest)
-
-		assert.Equal(t, http.StatusBadRequest, httpResponse.Code)
-		var actual APIResponse
-		err := json.NewDecoder(httpResponse.Body).Decode(&actual)
-		require.NoError(t, err)
-		require.False(t, actual.Allow)
-		assert.Equal(t, "unable to parse request body: invalid character 'i' looking for beginning of value", actual.Error)
-	})
-}
-
-func TestHandleMainPolicy_WithoutMitz(t *testing.T) {
+func TestEvaluate_WithoutMitz(t *testing.T) {
 	mux := http.NewServeMux()
 	httpServer := httptest.NewServer(mux)
 	defer httpServer.Close()
@@ -143,7 +105,7 @@ func TestHandleMainPolicy_WithoutMitz(t *testing.T) {
 	})
 }
 
-func TestHandleMainPolicy_CaseInsensitivePolicyNames(t *testing.T) {
+func TestEvaluate_CaseInsensitivePolicyNames(t *testing.T) {
 	mux := http.NewServeMux()
 	httpServer := httptest.NewServer(mux)
 	defer httpServer.Close()
@@ -225,7 +187,7 @@ func TestHandleMainPolicy_CaseInsensitivePolicyNames(t *testing.T) {
 	})
 }
 
-func TestHandleMainPolicy_Integration(t *testing.T) {
+func TestEvaluate_Integration(t *testing.T) {
 	// Load all bundles including test_ prefixed ones for unit testing purposes.
 	// Test bundles are excluded from production bundle loading (policies.Bundles),
 	// but are needed here to test AND/OR search param logic via evalRegoPolicy.
@@ -551,39 +513,29 @@ func TestHandleMainPolicy_Integration(t *testing.T) {
 			})
 		}
 	})
-	t.Run("test_search_params policy - blocked at handler", func(t *testing.T) {
-		// test_ prefixed scopes must be rejected by the HTTP handler with 400
-		body, _ := json.Marshal(APIRequest{
+	t.Run("test_search_params policy - blocked", func(t *testing.T) {
+		// test_ prefixed scopes must be rejected with 400
+		response, statusCode := service.Evaluate(t.Context(), APIRequest{
 			Input: APIInput{
 				Subject: APISubject{Scope: "test_search_params"},
 				Request: HTTPRequest{Method: "GET", Path: "/Observation", Query: "category=a,b&patient=Patient%2F1000"},
 				Context: APIContext{ConnectionTypeCode: "hl7-fhir-rest"},
 			},
 		})
-		req := httptest.NewRequest("POST", "/pdp", bytes.NewReader(body))
-		w := httptest.NewRecorder()
-		service.HandleMainPolicy(w, req)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		var response APIResponse
-		require.NoError(t, json.NewDecoder(w.Body).Decode(&response))
+		assert.Equal(t, http.StatusBadRequest, statusCode)
 		assert.False(t, response.Allow)
 		assert.Contains(t, response.Error, "policy not allowed")
 	})
-	t.Run("system policy - blocked at handler", func(t *testing.T) {
+	t.Run("system policy - blocked", func(t *testing.T) {
 		// The `system` bundle hosts OPA infrastructure (decision-log masking) and is not invokable as a policy.
-		body, _ := json.Marshal(APIRequest{
+		response, statusCode := service.Evaluate(t.Context(), APIRequest{
 			Input: APIInput{
 				Subject: APISubject{Scope: "system"},
 				Request: HTTPRequest{Method: "GET", Path: "/Patient"},
 				Context: APIContext{ConnectionTypeCode: "hl7-fhir-rest"},
 			},
 		})
-		req := httptest.NewRequest("POST", "/pdp", bytes.NewReader(body))
-		w := httptest.NewRecorder()
-		service.HandleMainPolicy(w, req)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		var response APIResponse
-		require.NoError(t, json.NewDecoder(w.Body).Decode(&response))
+		assert.Equal(t, http.StatusBadRequest, statusCode)
 		assert.False(t, response.Allow)
 		assert.Contains(t, response.Error, "policy not allowed")
 	})

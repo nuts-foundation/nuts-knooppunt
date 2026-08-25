@@ -2,7 +2,6 @@ package pdp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -79,24 +78,8 @@ func (c *Component) Stop(ctx context.Context) error {
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 }
 
-func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
-	var reqBody APIRequest
-	err := json.NewDecoder(r.Body).Decode(&reqBody)
-	if err != nil {
-		writeResponseWithCode(r.Context(), w, APIResponse{
-			Error:    "unable to parse request body: " + err.Error(),
-			Policies: map[string]PolicyResult{},
-		}, http.StatusBadRequest)
-		return
-	}
-	response, statusCode := c.Evaluate(r.Context(), reqBody)
-	writeResponseWithCode(r.Context(), w, response, statusCode)
-}
-
 // Evaluate runs the core PDP evaluation: given an already-decoded request, it returns the
-// authorization decision and the HTTP status code it should be served with. Split out from
-// HandleMainPolicy so it can be called directly (e.g. by the generated strict API server)
-// without going through the HTTP layer.
+// authorization decision and the HTTP status code it should be served with.
 func (c *Component) Evaluate(ctx context.Context, reqBody APIRequest) (APIResponse, int) {
 	input := reqBody.Input
 
@@ -249,21 +232,6 @@ func (c *Component) EvaluateDefaultAuthorization(ctx context.Context, request ap
 		return api.EvaluateDefaultAuthorization400JSONResponse(apiResponse), nil
 	default:
 		return nil, fmt.Errorf("unexpected status code from PDP evaluation: %d", statusCode)
-	}
-}
-
-func writeResponseWithCode(ctx context.Context, w http.ResponseWriter, response any, statusCode int) {
-	b, err := json.Marshal(response)
-	if err != nil {
-		http.Error(w, "failed to encode json output", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	_, err = w.Write(b)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to write response to ResponseWriter", logging.Error(err))
 	}
 }
 
