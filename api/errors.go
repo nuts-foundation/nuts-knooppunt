@@ -21,6 +21,22 @@ import (
 //
 // Hand-written, not generated: this file is never touched by `go generate`, which only writes
 // to server.gen.go (see oapi-codegen.yaml).
+//
+// The VisitXxxResponse methods below exist only because Go interfaces require exact method
+// names: each operation's XxxResponseObject is its own interface (VisitRegisterNVIListBundleResponse,
+// VisitGetNVIListResponse, ...), so satisfying several of them means implementing several
+// identically-shaped methods — there's no way to express "any operation whose error response is
+// an OperationOutcome" as a single method. This is intentionally not generated: the boilerplate
+// is a couple of lines per operation, whereas a generator would mean either re-implementing $ref
+// resolution against openapi.yaml or depending on oapi-codegen's internal template format, which
+// is far more maintenance surface for less benefit.
+//
+// This is safe to maintain by hand: it does NOT fail silently if you add a new operation to
+// openapi.yaml that uses the OperationOutcomeError response and forget to add its Visit method
+// here. The first call site that tries to return an OperationOutcomeResponse as that operation's
+// ResponseObject (typically via NewOperationOutcomeResponse) will fail to compile, naming the
+// exact missing method. If you add a new operation's error handling and the compiler doesn't
+// complain, you don't need a new method here.
 type OperationOutcomeResponse struct {
 	StatusCode int
 	Outcome    FHIROperationOutcome
@@ -46,22 +62,6 @@ func NewOperationOutcomeResponse(ctx context.Context, err error) OperationOutcom
 	return OperationOutcomeResponse{StatusCode: fhirapi.StatusCodeForError(err), Outcome: fhirapi.OperationOutcomeForError(err)}
 }
 
-// The methods below exist only because Go interfaces require exact method names: each
-// operation's XxxResponseObject is its own interface (VisitRegisterNVIListBundleResponse,
-// VisitGetNVIListResponse, ...), so satisfying several of them means implementing several
-// identically-shaped methods — there's no way to express "any operation whose error response is
-// an OperationOutcome" as a single method. This is intentionally NOT generated (see the
-// package-level comment on why): the boilerplate is a couple of lines per operation, whereas a
-// generator would mean either re-implementing $ref resolution against openapi.yaml or depending
-// on oapi-codegen's internal template format, which is far more maintenance surface for less
-// benefit.
-//
-// This is safe to maintain by hand: it does NOT fail silently if you add a new operation to
-// openapi.yaml that uses the OperationOutcomeError response and forget to add its Visit method
-// here. The first call site that tries to return an OperationOutcomeResponse as that operation's
-// ResponseObject (typically via NewOperationOutcomeResponse) will fail to compile, naming the
-// exact missing method. If you add a new operation's error handling and the compiler doesn't
-// complain, you don't need a new method here.
 func (r OperationOutcomeResponse) VisitRegisterNVIListBundleResponse(w http.ResponseWriter) error {
 	return r.Write(w)
 }
