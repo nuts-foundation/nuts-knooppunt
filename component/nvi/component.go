@@ -80,10 +80,10 @@ func New(config Config, httpClientFn authn.HTTPClientProvider, pseudonymizer pse
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 }
 
-// RegisterBundle submits a FHIR transaction Bundle containing one or more `List` resources to
+// registerBundle submits a FHIR transaction Bundle containing one or more `List` resources to
 // NVI. BSN values in `List.subject.identifier` are pseudonymized (tokenized) before the Bundle
 // is forwarded to the upstream NVI FHIR server.
-func (c Component) RegisterBundle(ctx context.Context, tenantURA string, bundle fhir.Bundle) (*fhir.Bundle, error) {
+func (c Component) registerBundle(ctx context.Context, tenantURA string, bundle fhir.Bundle) (*fhir.Bundle, error) {
 	// Use BSN transport tokens to NVI, instead of BSNs
 	for i, entry := range bundle.Entry {
 		if entry.Resource == nil {
@@ -153,8 +153,8 @@ func (c Component) registerList(ctx context.Context, tenantURA string, list fhir
 	return &result, nil
 }
 
-// ReadList reads a single `List` resource by its NVI id.
-func (c Component) ReadList(ctx context.Context, tenantURA string, id string) (*fhir.List, error) {
+// readList reads a single `List` resource by its NVI id.
+func (c Component) readList(ctx context.Context, tenantURA string, id string) (*fhir.List, error) {
 	fhirClient, err := c.fhirClientFn(ctx, tenantURA)
 	if err != nil {
 		return nil, err
@@ -172,8 +172,8 @@ func (c Component) ReadList(ctx context.Context, tenantURA string, id string) (*
 	return &result, nil
 }
 
-// DeleteListByID deletes a single `List` resource by its NVI id.
-func (c Component) DeleteListByID(ctx context.Context, tenantURA string, id string) error {
+// deleteListByID deletes a single `List` resource by its NVI id.
+func (c Component) deleteListByID(ctx context.Context, tenantURA string, id string) error {
 	fhirClient, err := c.fhirClientFn(ctx, tenantURA)
 	if err != nil {
 		return err
@@ -189,9 +189,9 @@ func (c Component) DeleteListByID(ctx context.Context, tenantURA string, id stri
 	return nil
 }
 
-// DeleteListByParams deletes every `List` resource matching the given search parameters (at
+// deleteListByParams deletes every `List` resource matching the given search parameters (at
 // least one of patient:identifier, subject:identifier or source:identifier is required).
-func (c Component) DeleteListByParams(ctx context.Context, tenantURA string, params url.Values) error {
+func (c Component) deleteListByParams(ctx context.Context, tenantURA string, params url.Values) error {
 	deleteParams, err := c.tokenizeSearchParams(ctx, params, tenantURA)
 	if err != nil {
 		return err
@@ -212,9 +212,9 @@ func (c Component) DeleteListByParams(ctx context.Context, tenantURA string, par
 	return nil
 }
 
-// SearchList searches for `List` resources matching the given search parameters (at least one
+// searchList searches for `List` resources matching the given search parameters (at least one
 // of patient:identifier, subject:identifier or source:identifier is required).
-func (c Component) SearchList(ctx context.Context, tenantURA string, params url.Values) (*fhir.Bundle, error) {
+func (c Component) searchList(ctx context.Context, tenantURA string, params url.Values) (*fhir.Bundle, error) {
 	searchParams, err := c.tokenizeSearchParams(ctx, params, tenantURA)
 	if err != nil {
 		return nil, err
@@ -249,7 +249,7 @@ func (c Component) SearchList(ctx context.Context, tenantURA string, params url.
 // tokenizeSearchParams validates that at least one patient/subject/source identifier is
 // present (to prevent querying/deleting by empty values), then converts BSN values to NVI
 // transport tokens, mapping patient:identifier to subject:identifier (NVI's native parameter
-// name) along the way. Shared by SearchList and DeleteListByParams, which apply the exact same
+// name) along the way. Shared by searchList and deleteListByParams, which apply the exact same
 // parameter rules.
 func (c Component) tokenizeSearchParams(ctx context.Context, params url.Values, tenantURA string) (url.Values, error) {
 	hasIdentifier := false
@@ -388,7 +388,7 @@ func searchParamValues(patientIdentifier, subjectIdentifier, sourceIdentifier, c
 }
 
 func (c Component) RegisterNVIListBundle(ctx context.Context, request api.RegisterNVIListBundleRequestObject) (api.RegisterNVIListBundleResponseObject, error) {
-	result, err := c.RegisterBundle(ctx, request.Params.XTenantID.URA(), *request.Body)
+	result, err := c.registerBundle(ctx, request.Params.XTenantID.URA(), *request.Body)
 	if err != nil {
 		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
@@ -404,7 +404,7 @@ func (c Component) RegisterNVIList(ctx context.Context, request api.RegisterNVIL
 }
 
 func (c Component) GetNVIList(ctx context.Context, request api.GetNVIListRequestObject) (api.GetNVIListResponseObject, error) {
-	result, err := c.ReadList(ctx, request.Params.XTenantID.URA(), request.Id)
+	result, err := c.readList(ctx, request.Params.XTenantID.URA(), request.Id)
 	if err != nil {
 		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
@@ -412,7 +412,7 @@ func (c Component) GetNVIList(ctx context.Context, request api.GetNVIListRequest
 }
 
 func (c Component) DeleteNVIList(ctx context.Context, request api.DeleteNVIListRequestObject) (api.DeleteNVIListResponseObject, error) {
-	if err := c.DeleteListByID(ctx, request.Params.XTenantID.URA(), request.Id); err != nil {
+	if err := c.deleteListByID(ctx, request.Params.XTenantID.URA(), request.Id); err != nil {
 		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
 	return api.DeleteNVIList204Response{}, nil
@@ -420,7 +420,7 @@ func (c Component) DeleteNVIList(ctx context.Context, request api.DeleteNVIListR
 
 func (c Component) DeleteNVIListsByParams(ctx context.Context, request api.DeleteNVIListsByParamsRequestObject) (api.DeleteNVIListsByParamsResponseObject, error) {
 	params := searchParamValues(request.Params.PatientIdentifier, request.Params.SubjectIdentifier, request.Params.SourceIdentifier, nil, nil)
-	if err := c.DeleteListByParams(ctx, request.Params.XTenantID.URA(), params); err != nil {
+	if err := c.deleteListByParams(ctx, request.Params.XTenantID.URA(), params); err != nil {
 		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
 	return api.DeleteNVIListsByParams204Response{}, nil
@@ -428,7 +428,7 @@ func (c Component) DeleteNVIListsByParams(ctx context.Context, request api.Delet
 
 func (c Component) SearchNVILists(ctx context.Context, request api.SearchNVIListsRequestObject) (api.SearchNVIListsResponseObject, error) {
 	params := searchParamValues(request.Params.PatientIdentifier, request.Params.SubjectIdentifier, request.Params.SourceIdentifier, request.Params.Code, request.Params.UnderscoreCount)
-	result, err := c.SearchList(ctx, request.Params.XTenantID.URA(), params)
+	result, err := c.searchList(ctx, request.Params.XTenantID.URA(), params)
 	if err != nil {
 		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
@@ -441,7 +441,7 @@ func (c Component) SearchNVIListsForm(ctx context.Context, request api.SearchNVI
 		body = *request.Body
 	}
 	params := searchParamValues(body.PatientIdentifier, body.SubjectIdentifier, body.SourceIdentifier, body.Code, body.UnderscoreCount)
-	result, err := c.SearchList(ctx, request.Params.XTenantID.URA(), params)
+	result, err := c.searchList(ctx, request.Params.XTenantID.URA(), params)
 	if err != nil {
 		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
