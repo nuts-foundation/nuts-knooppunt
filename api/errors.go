@@ -2,8 +2,13 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
+
+	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 )
 
 // OperationOutcomeResponse implements the XxxResponseObject Visit method of every operation
@@ -32,6 +37,15 @@ func (r OperationOutcomeResponse) Write(w http.ResponseWriter) error {
 	return err
 }
 
+// NewOperationOutcomeResponse logs err and builds the OperationOutcomeResponse it should be
+// returned as: the HTTP status code and FHIR OperationOutcome body are both derived from err via
+// fhirapi.StatusCodeForError/OperationOutcomeForError. Shared by every operation whose declared
+// error response is OperationOutcomeError (currently NVI and MITZ) — not specific to either.
+func NewOperationOutcomeResponse(ctx context.Context, err error) OperationOutcomeResponse {
+	slog.ErrorContext(ctx, "FHIR API error", logging.Error(err))
+	return OperationOutcomeResponse{StatusCode: fhirapi.StatusCodeForError(err), Outcome: fhirapi.OperationOutcomeForError(err)}
+}
+
 // The methods below exist only because Go interfaces require exact method names: each
 // operation's XxxResponseObject is its own interface (VisitRegisterNVIListBundleResponse,
 // VisitGetNVIListResponse, ...), so satisfying several of them means implementing several
@@ -45,9 +59,9 @@ func (r OperationOutcomeResponse) Write(w http.ResponseWriter) error {
 // This is safe to maintain by hand: it does NOT fail silently if you add a new operation to
 // openapi.yaml that uses the OperationOutcomeError response and forget to add its Visit method
 // here. The first call site that tries to return an OperationOutcomeResponse as that operation's
-// ResponseObject (typically a `nviError(ctx, err)`-style helper in the owning component) will
-// fail to compile, naming the exact missing method. If you add a new operation's error handling
-// and the compiler doesn't complain, you don't need a new method here.
+// ResponseObject (typically via NewOperationOutcomeResponse) will fail to compile, naming the
+// exact missing method. If you add a new operation's error handling and the compiler doesn't
+// complain, you don't need a new method here.
 func (r OperationOutcomeResponse) VisitRegisterNVIListBundleResponse(w http.ResponseWriter) error {
 	return r.Write(w)
 }

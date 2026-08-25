@@ -74,10 +74,9 @@ func (c *Component) Stop(ctx context.Context) error {
 	return nil
 }
 
+// RegisterHttpHandlers registers no routes: every PDP operation is served through the generated
+// OpenAPI strict server, wired up in strictAPIServer.RegisterHttpHandlers in package cmd.
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", c.HandlePolicy)
-	// /pdp, /pdp/bundles and /pdp/bundles/{policyName} are served through the generated
-	// OpenAPI strict server, wired up in strictAPIServer.RegisterHttpHandlers in package cmd.
 }
 
 func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
@@ -221,15 +220,19 @@ func (c *Component) EvaluateAuthorization(ctx context.Context, request api.Evalu
 	if err != nil {
 		return nil, err
 	}
-	if statusCode == http.StatusBadRequest {
+	switch statusCode {
+	case http.StatusOK:
+		return api.EvaluateAuthorization200JSONResponse(apiResponse), nil
+	case http.StatusBadRequest:
 		return api.EvaluateAuthorization400JSONResponse(apiResponse), nil
+	default:
+		return nil, fmt.Errorf("unexpected status code from PDP evaluation: %d", statusCode)
 	}
-	return api.EvaluateAuthorization200JSONResponse(apiResponse), nil
 }
 
-// EvaluateAuthorizationDirect backs POST /pdp, a shorthand alias of POST
-// /pdp/v1/data/knooppunt/authz with identical request/response schemas.
-func (c *Component) EvaluateAuthorizationDirect(ctx context.Context, request api.EvaluateAuthorizationDirectRequestObject) (api.EvaluateAuthorizationDirectResponseObject, error) {
+// EvaluateDefaultAuthorization backs POST /pdp, a shorter path to the same, single policy that
+// POST /pdp/v1/data/knooppunt/authz addresses via the Open Policy Agent convention.
+func (c *Component) EvaluateDefaultAuthorization(ctx context.Context, request api.EvaluateDefaultAuthorizationRequestObject) (api.EvaluateDefaultAuthorizationResponseObject, error) {
 	apiRequest, err := to.JSONConvert[APIRequest](request.Body)
 	if err != nil {
 		return nil, err
@@ -239,10 +242,14 @@ func (c *Component) EvaluateAuthorizationDirect(ctx context.Context, request api
 	if err != nil {
 		return nil, err
 	}
-	if statusCode == http.StatusBadRequest {
-		return api.EvaluateAuthorizationDirect400JSONResponse(apiResponse), nil
+	switch statusCode {
+	case http.StatusOK:
+		return api.EvaluateDefaultAuthorization200JSONResponse(apiResponse), nil
+	case http.StatusBadRequest:
+		return api.EvaluateDefaultAuthorization400JSONResponse(apiResponse), nil
+	default:
+		return nil, fmt.Errorf("unexpected status code from PDP evaluation: %d", statusCode)
 	}
-	return api.EvaluateAuthorizationDirect200JSONResponse(apiResponse), nil
 }
 
 func writeResponseWithCode(ctx context.Context, w http.ResponseWriter, response any, statusCode int) {
@@ -260,24 +267,8 @@ func writeResponseWithCode(ctx context.Context, w http.ResponseWriter, response 
 	}
 }
 
-func (c *Component) HandlePolicy(w http.ResponseWriter, r *http.Request) {
-	pack := r.PathValue("package")
-	if pack != "knooppunt" {
-		http.Error(w, "invalid package", http.StatusBadRequest)
-		return
-	}
-
-	policy := r.PathValue("rule")
-	switch policy {
-	case "authz":
-		c.HandleMainPolicy(w, r)
-	default:
-		http.Error(w, fmt.Sprintf("unknown rule %s", policy), http.StatusBadRequest)
-	}
-}
-
-// BundleNames returns the names of the loaded Open Policy Agent bundles.
-func (c *Component) BundleNames(ctx context.Context) ([]string, error) {
+// bundleNames returns the names of the loaded Open Policy Agent bundles.
+func (c *Component) bundleNames(ctx context.Context) ([]string, error) {
 	bundles, err := policies.Bundles(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve bundles: %w", err)
@@ -285,9 +276,9 @@ func (c *Component) BundleNames(ctx context.Context) ([]string, error) {
 	return maps.Keys(bundles), nil
 }
 
-// Bundle returns the raw OPA bundle (gzipped tar) for the given policy, trimming a trailing
+// bundle returns the raw OPA bundle (gzipped tar) for the given policy, trimming a trailing
 // ".tar.gz" suffix if present. found reports whether a bundle with that name is loaded.
-func (c *Component) Bundle(ctx context.Context, policyName string) (data []byte, found bool, err error) {
+func (c *Component) bundle(ctx context.Context, policyName string) (data []byte, found bool, err error) {
 	policyName = strings.TrimSuffix(policyName, ".tar.gz")
 	bundles, err := policies.Bundles(ctx)
 	if err != nil {
@@ -298,7 +289,7 @@ func (c *Component) Bundle(ctx context.Context, policyName string) (data []byte,
 }
 
 func (c *Component) ListAuthorizationPolicyBundles(ctx context.Context, _ api.ListAuthorizationPolicyBundlesRequestObject) (api.ListAuthorizationPolicyBundlesResponseObject, error) {
-	names, err := c.BundleNames(ctx)
+	names, err := c.bundleNames(ctx)
 	if err != nil {
 		// No error response is declared for this internal-use endpoint; falls through to the
 		// framework's generic 500 plain-text handler, same as the original http.Error call.
@@ -308,7 +299,7 @@ func (c *Component) ListAuthorizationPolicyBundles(ctx context.Context, _ api.Li
 }
 
 func (c *Component) GetAuthorizationPolicyBundle(ctx context.Context, request api.GetAuthorizationPolicyBundleRequestObject) (api.GetAuthorizationPolicyBundleResponseObject, error) {
-	data, found, err := c.Bundle(ctx, request.PolicyName)
+	data, found, err := c.bundle(ctx, request.PolicyName)
 	if err != nil {
 		return nil, err
 	}

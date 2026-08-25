@@ -182,10 +182,10 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 }
 
 func (c *Component) TriggerLrzaSync(ctx context.Context, _ api.TriggerLrzaSyncRequestObject) (api.TriggerLrzaSyncResponseObject, error) {
-	report, err := c.Update(ctx)
+	report, err := c.update(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "LRZA update failed", logging.Error(err))
-		return api.TriggerLrzaSync500TextResponse("Failed to update LRZA: " + err.Error()), nil
+		return api.TriggerLrzaSync500JSONResponse{Error: to.Ptr("Failed to update LRZA: " + err.Error())}, nil
 	}
 	return api.TriggerLrzaSync200JSONResponse(api.DirectoryUpdateReport{
 		Created:  to.Ptr(report.CountCreated),
@@ -196,9 +196,9 @@ func (c *Component) TriggerLrzaSync(ctx context.Context, _ api.TriggerLrzaSyncRe
 	}), nil
 }
 
-// Update runs one sync cycle: fetch the trusted source's history, build a transaction from it, apply
+// update runs one sync cycle: fetch the trusted source's history, build a transaction from it, apply
 // it to the query directory, and record the timestamp for the next incremental sync.
-func (c *Component) Update(ctx context.Context) (UpdateReport, error) {
+func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
 

@@ -93,11 +93,11 @@ func (s *strictAPIServer) EvaluateAuthorization(ctx context.Context, r api.Evalu
 	return s.pdp.EvaluateAuthorization(ctx, r)
 }
 
-func (s *strictAPIServer) EvaluateAuthorizationDirect(ctx context.Context, r api.EvaluateAuthorizationDirectRequestObject) (api.EvaluateAuthorizationDirectResponseObject, error) {
+func (s *strictAPIServer) EvaluateDefaultAuthorization(ctx context.Context, r api.EvaluateDefaultAuthorizationRequestObject) (api.EvaluateDefaultAuthorizationResponseObject, error) {
 	if s.pdp == nil {
 		return nil, errComponentDisabled
 	}
-	return s.pdp.EvaluateAuthorizationDirect(ctx, r)
+	return s.pdp.EvaluateDefaultAuthorization(ctx, r)
 }
 
 func (s *strictAPIServer) RegisterNVIListBundle(ctx context.Context, r api.RegisterNVIListBundleRequestObject) (api.RegisterNVIListBundleResponseObject, error) {

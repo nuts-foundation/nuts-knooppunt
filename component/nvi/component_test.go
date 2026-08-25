@@ -16,6 +16,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonymisation"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/tenants"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
 	testUtil "github.com/nuts-foundation/nuts-knooppunt/test"
 	"github.com/stretchr/testify/assert"
@@ -44,6 +45,15 @@ func searchParamFields(t *testing.T, raw string) (patient, subject, source, code
 		count = &n
 	}
 	return get("patient:identifier"), get("subject:identifier"), get("source:identifier"), get("code"), count
+}
+
+// mustTenantID parses token the same way the generated parameter binder does at runtime (via
+// tenants.ID.UnmarshalText), for tests that build a RequestObject directly and so bypass binding.
+func mustTenantID(t *testing.T, token string) api.TenantID {
+	t.Helper()
+	var id tenants.ID
+	require.NoError(t, id.UnmarshalText([]byte(token)))
+	return id
 }
 
 var bsnIdentifier = fhir.Identifier{
@@ -77,20 +87,6 @@ func TestComponent_RegisterNVIListBundle(t *testing.T) {
 						Severity:    fhir.IssueSeverityError,
 						Code:        fhir.IssueTypeTransient,
 						Diagnostics: to.Ptr("Failed to register Bundle at NVI"),
-					},
-				},
-			},
-		},
-		{
-			name:           "invalid tenant ID",
-			expectedStatus: http.StatusBadRequest,
-			tenantID:       to.Ptr("invalid"),
-			expectedOperationOutcome: &fhir.OperationOutcome{
-				Issue: []fhir.OperationOutcomeIssue{
-					{
-						Severity:    fhir.IssueSeverityError,
-						Code:        fhir.IssueTypeValue,
-						Diagnostics: to.Ptr("invalid tenant ID in request header"),
 					},
 				},
 			},
@@ -140,7 +136,7 @@ func TestComponent_RegisterNVIListBundle(t *testing.T) {
 			bundle := testUtil.ParseJSON[fhir.Bundle](t, testdata.FS, "bundle-transaction.json")
 
 			result, err := component.RegisterNVIListBundle(t.Context(), api.RegisterNVIListBundleRequestObject{
-				Params: api.RegisterNVIListBundleParams{XTenantID: tenantID},
+				Params: api.RegisterNVIListBundleParams{XTenantID: mustTenantID(t, tenantID)},
 				Body:   &bundle,
 			})
 			require.NoError(t, err)
@@ -269,21 +265,6 @@ func TestComponent_RegisterNVIList(t *testing.T) {
 				},
 			},
 		},
-		{
-			name:           "invalid tenant ID",
-			requestBody:    newListResource,
-			expectedStatus: http.StatusBadRequest,
-			tenantID:       to.Ptr("invalid"),
-			expectedOperationOutcome: &fhir.OperationOutcome{
-				Issue: []fhir.OperationOutcomeIssue{
-					{
-						Severity:    fhir.IssueSeverityError,
-						Code:        fhir.IssueTypeValue,
-						Diagnostics: to.Ptr("invalid tenant ID in request header"),
-					},
-				},
-			},
-		},
 	}
 
 	for _, testCase := range testCases {
@@ -314,7 +295,7 @@ func TestComponent_RegisterNVIList(t *testing.T) {
 
 			body := testCase.requestBody()
 			result, err := component.RegisterNVIList(t.Context(), api.RegisterNVIListRequestObject{
-				Params: api.RegisterNVIListParams{XTenantID: tenantID},
+				Params: api.RegisterNVIListParams{XTenantID: mustTenantID(t, tenantID)},
 				Body:   &body,
 			})
 			require.NoError(t, err)
@@ -417,7 +398,7 @@ func TestComponent_GetNVIList(t *testing.T) {
 			}
 			result, err := component.GetNVIList(t.Context(), api.GetNVIListRequestObject{
 				Id:     testCase.id,
-				Params: api.GetNVIListParams{XTenantID: coding.URANamingSystem + "|" + localURA},
+				Params: api.GetNVIListParams{XTenantID: mustTenantID(t, coding.URANamingSystem+"|"+localURA)},
 			})
 			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
@@ -489,7 +470,7 @@ func TestComponent_DeleteNVIList(t *testing.T) {
 			}
 			result, err := component.DeleteNVIList(t.Context(), api.DeleteNVIListRequestObject{
 				Id:     testCase.id,
-				Params: api.DeleteNVIListParams{XTenantID: coding.URANamingSystem + "|" + localURA},
+				Params: api.DeleteNVIListParams{XTenantID: mustTenantID(t, coding.URANamingSystem+"|"+localURA)},
 			})
 			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
@@ -587,7 +568,7 @@ func TestComponent_DeleteNVIListsByParams(t *testing.T) {
 			patient, subject, source, _, _ := searchParamFields(t, testCase.searchParams)
 			result, err := component.DeleteNVIListsByParams(t.Context(), api.DeleteNVIListsByParamsRequestObject{
 				Params: api.DeleteNVIListsByParamsParams{
-					XTenantID:         coding.URANamingSystem + "|" + localURA,
+					XTenantID:         mustTenantID(t, coding.URANamingSystem+"|"+localURA),
 					PatientIdentifier: patient,
 					SubjectIdentifier: subject,
 					SourceIdentifier:  source,
@@ -755,7 +736,7 @@ func TestComponent_SearchNVILists(t *testing.T) {
 
 			result, err := component.SearchNVILists(t.Context(), api.SearchNVIListsRequestObject{
 				Params: api.SearchNVIListsParams{
-					XTenantID:         coding.URANamingSystem + "|" + localURA,
+					XTenantID:         mustTenantID(t, coding.URANamingSystem+"|"+localURA),
 					PatientIdentifier: patient,
 					SubjectIdentifier: subject,
 					SourceIdentifier:  source,
@@ -813,7 +794,7 @@ func TestComponent_SearchNVIListsForm(t *testing.T) {
 			}
 
 			result, err := component.SearchNVIListsForm(t.Context(), api.SearchNVIListsFormRequestObject{
-				Params: api.SearchNVIListsFormParams{XTenantID: coding.URANamingSystem + "|" + localURA},
+				Params: api.SearchNVIListsFormParams{XTenantID: mustTenantID(t, coding.URANamingSystem+"|"+localURA)},
 				Body:   &body,
 			})
 			require.NoError(t, err)

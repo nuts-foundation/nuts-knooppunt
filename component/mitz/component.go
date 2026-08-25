@@ -429,8 +429,7 @@ func (c *Component) CreateSubscription(ctx context.Context, resource fhir.Subscr
 func (c *Component) CreateMitzSubscription(ctx context.Context, request api.CreateMitzSubscriptionRequestObject) (api.CreateMitzSubscriptionResponseObject, error) {
 	result, err := c.CreateSubscription(ctx, *request.Body)
 	if err != nil {
-		slog.ErrorContext(ctx, "FHIR API error", logging.Error(err))
-		return api.OperationOutcomeResponse{StatusCode: fhirapi.StatusCodeForError(err), Outcome: fhirapi.OperationOutcomeForError(err)}, nil
+		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
 	return api.CreateMitzSubscription201ApplicationFhirPlusJSONResponse(*result), nil
 }

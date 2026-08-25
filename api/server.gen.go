@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/nuts-foundation/nuts-knooppunt/lib/tenants"
 	"github.com/oapi-codegen/runtime"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -260,7 +261,7 @@ type PDPAuthzResponsePoliciesReasonsCode string
 type Count = int
 
 // TenantID defines model for TenantID.
-type TenantID = string
+type TenantID = tenants.ID
 
 // OperationOutcomeError A FHIR R4 OperationOutcome resource, returned for error responses. See https://hl7.org/fhir/R4/operationoutcome.html for its schema; not redefined here.
 //
@@ -358,8 +359,8 @@ type RegisterNVIListApplicationFhirPlusJSONRequestBody = FHIRList
 // SearchNVIListsFormFormdataRequestBody defines body for SearchNVIListsForm for application/x-www-form-urlencoded ContentType.
 type SearchNVIListsFormFormdataRequestBody SearchNVIListsFormFormdataBody
 
-// EvaluateAuthorizationDirectJSONRequestBody defines body for EvaluateAuthorizationDirect for application/json ContentType.
-type EvaluateAuthorizationDirectJSONRequestBody = PDPAuthzRequest
+// EvaluateDefaultAuthorizationJSONRequestBody defines body for EvaluateDefaultAuthorization for application/json ContentType.
+type EvaluateDefaultAuthorizationJSONRequestBody = PDPAuthzRequest
 
 // EvaluateAuthorizationJSONRequestBody defines body for EvaluateAuthorization for application/json ContentType.
 type EvaluateAuthorizationJSONRequestBody = PDPAuthzRequest
@@ -566,9 +567,9 @@ type ServerInterface interface {
 	// GetNVIList Read a List by ID
 	// (GET /nvi/List/{id})
 	GetNVIList(w http.ResponseWriter, r *http.Request, id string, params GetNVIListParams)
-	// EvaluateAuthorizationDirect Evaluate an authorization request (shorthand alias)
+	// EvaluateDefaultAuthorization Evaluate the default authorization policy
 	// (POST /pdp)
-	EvaluateAuthorizationDirect(w http.ResponseWriter, r *http.Request)
+	EvaluateDefaultAuthorization(w http.ResponseWriter, r *http.Request)
 	// ListAuthorizationPolicyBundles List loaded policy bundles
 	// (GET /pdp/bundles)
 	ListAuthorizationPolicyBundles(w http.ResponseWriter, r *http.Request)
@@ -1060,11 +1061,11 @@ func (siw *ServerInterfaceWrapper) GetNVIList(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
-// EvaluateAuthorizationDirect operation middleware
-func (siw *ServerInterfaceWrapper) EvaluateAuthorizationDirect(w http.ResponseWriter, r *http.Request) {
+// EvaluateDefaultAuthorization operation middleware
+func (siw *ServerInterfaceWrapper) EvaluateDefaultAuthorization(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.EvaluateAuthorizationDirect(w, r)
+		siw.Handler.EvaluateDefaultAuthorization(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1279,7 +1280,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/status", wrapper.GetStatus)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/version", wrapper.GetVersion)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/lrza/update", wrapper.TriggerLrzaSync)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/pdp", wrapper.EvaluateAuthorizationDirect)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/pdp", wrapper.EvaluateDefaultAuthorization)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/pdp/v1/data/knooppunt/authz", wrapper.EvaluateAuthorization)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/pdp/bundles", wrapper.ListAuthorizationPolicyBundles)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/pdp/bundles/{policyName}", wrapper.GetAuthorizationPolicyBundle)
@@ -1318,14 +1319,19 @@ func (response TriggerLrzaSync200JSONResponse) VisitTriggerLrzaSyncResponse(w ht
 	return err
 }
 
-type TriggerLrzaSync500TextResponse string
+type TriggerLrzaSync500JSONResponse struct {
+	Error *string `json:"error,omitempty"`
+}
 
-func (response TriggerLrzaSync500TextResponse) VisitTriggerLrzaSyncResponse(w http.ResponseWriter) error {
+func (response TriggerLrzaSync500JSONResponse) VisitTriggerLrzaSyncResponse(w http.ResponseWriter) error {
 
-	w.Header().Set("Content-Type", "text/plain")
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(500)
-
-	_, err := w.Write([]byte(fmt.Sprint(response)))
+	_, err := buf.WriteTo(w)
 	return err
 }
 
@@ -1878,17 +1884,17 @@ func (response GetNVIList503ApplicationFhirPlusJSONResponse) VisitGetNVIListResp
 	return err
 }
 
-type EvaluateAuthorizationDirectRequestObject struct {
-	Body *EvaluateAuthorizationDirectJSONRequestBody
+type EvaluateDefaultAuthorizationRequestObject struct {
+	Body *EvaluateDefaultAuthorizationJSONRequestBody
 }
 
-type EvaluateAuthorizationDirectResponseObject interface {
-	VisitEvaluateAuthorizationDirectResponse(w http.ResponseWriter) error
+type EvaluateDefaultAuthorizationResponseObject interface {
+	VisitEvaluateDefaultAuthorizationResponse(w http.ResponseWriter) error
 }
 
-type EvaluateAuthorizationDirect200JSONResponse PDPAuthzResponse
+type EvaluateDefaultAuthorization200JSONResponse PDPAuthzResponse
 
-func (response EvaluateAuthorizationDirect200JSONResponse) VisitEvaluateAuthorizationDirectResponse(w http.ResponseWriter) error {
+func (response EvaluateDefaultAuthorization200JSONResponse) VisitEvaluateDefaultAuthorizationResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1900,9 +1906,9 @@ func (response EvaluateAuthorizationDirect200JSONResponse) VisitEvaluateAuthoriz
 	return err
 }
 
-type EvaluateAuthorizationDirect400JSONResponse PDPAuthzResponse
+type EvaluateDefaultAuthorization400JSONResponse PDPAuthzResponse
 
-func (response EvaluateAuthorizationDirect400JSONResponse) VisitEvaluateAuthorizationDirectResponse(w http.ResponseWriter) error {
+func (response EvaluateDefaultAuthorization400JSONResponse) VisitEvaluateDefaultAuthorizationResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -2071,9 +2077,9 @@ type StrictServerInterface interface {
 	// GetNVIList Read a List by ID
 	// (GET /nvi/List/{id})
 	GetNVIList(ctx context.Context, request GetNVIListRequestObject) (GetNVIListResponseObject, error)
-	// EvaluateAuthorizationDirect Evaluate an authorization request (shorthand alias)
+	// EvaluateDefaultAuthorization Evaluate the default authorization policy
 	// (POST /pdp)
-	EvaluateAuthorizationDirect(ctx context.Context, request EvaluateAuthorizationDirectRequestObject) (EvaluateAuthorizationDirectResponseObject, error)
+	EvaluateDefaultAuthorization(ctx context.Context, request EvaluateDefaultAuthorizationRequestObject) (EvaluateDefaultAuthorizationResponseObject, error)
 	// ListAuthorizationPolicyBundles List loaded policy bundles
 	// (GET /pdp/bundles)
 	ListAuthorizationPolicyBundles(ctx context.Context, request ListAuthorizationPolicyBundlesRequestObject) (ListAuthorizationPolicyBundlesResponseObject, error)
@@ -2394,11 +2400,11 @@ func (sh *strictHandler) GetNVIList(w http.ResponseWriter, r *http.Request, id s
 	}
 }
 
-// EvaluateAuthorizationDirect operation middleware
-func (sh *strictHandler) EvaluateAuthorizationDirect(w http.ResponseWriter, r *http.Request) {
-	var request EvaluateAuthorizationDirectRequestObject
+// EvaluateDefaultAuthorization operation middleware
+func (sh *strictHandler) EvaluateDefaultAuthorization(w http.ResponseWriter, r *http.Request) {
+	var request EvaluateDefaultAuthorizationRequestObject
 
-	var body EvaluateAuthorizationDirectJSONRequestBody
+	var body EvaluateDefaultAuthorizationJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -2406,18 +2412,18 @@ func (sh *strictHandler) EvaluateAuthorizationDirect(w http.ResponseWriter, r *h
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.EvaluateAuthorizationDirect(ctx, request.(EvaluateAuthorizationDirectRequestObject))
+		return sh.ssi.EvaluateDefaultAuthorization(ctx, request.(EvaluateDefaultAuthorizationRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "EvaluateAuthorizationDirect")
+		handler = middleware(handler, "EvaluateDefaultAuthorization")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(EvaluateAuthorizationDirectResponseObject); ok {
-		if err := validResponse.VisitEvaluateAuthorizationDirectResponse(w); err != nil {
+	} else if validResponse, ok := response.(EvaluateDefaultAuthorizationResponseObject); ok {
+		if err := validResponse.VisitEvaluateDefaultAuthorizationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

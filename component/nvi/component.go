@@ -19,8 +19,6 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/tenants"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -369,13 +367,6 @@ func (c Component) identifierToToken(ctx context.Context, identifier fhir.Identi
 	return result, nil
 }
 
-// nviError logs err and converts it into the shared api.OperationOutcomeResponse (status code +
-// FHIR OperationOutcome body) every NVI operation uses for its error responses.
-func nviError(ctx context.Context, err error) api.OperationOutcomeResponse {
-	slog.ErrorContext(ctx, "FHIR API error", logging.Error(err))
-	return api.OperationOutcomeResponse{StatusCode: fhirapi.StatusCodeForError(err), Outcome: fhirapi.OperationOutcomeForError(err)}
-}
-
 // searchParamValues builds the url.Values SearchList/DeleteListByParams expect from the
 // generated, individually-bound query parameters. code and count are nil for DeleteNVIList's
 // params, which don't declare them.
@@ -397,90 +388,62 @@ func searchParamValues(patientIdentifier, subjectIdentifier, sourceIdentifier, c
 }
 
 func (c Component) RegisterNVIListBundle(ctx context.Context, request api.RegisterNVIListBundleRequestObject) (api.RegisterNVIListBundleResponseObject, error) {
-	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
+	result, err := c.RegisterBundle(ctx, request.Params.XTenantID.URA(), *request.Body)
 	if err != nil {
-		return nviError(ctx, err), nil
-	}
-	result, err := c.RegisterBundle(ctx, *tenantID.Value, *request.Body)
-	if err != nil {
-		return nviError(ctx, err), nil
+		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
 	return api.RegisterNVIListBundle200ApplicationFhirPlusJSONResponse(*result), nil
 }
 
 func (c Component) RegisterNVIList(ctx context.Context, request api.RegisterNVIListRequestObject) (api.RegisterNVIListResponseObject, error) {
-	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
+	result, err := c.registerList(ctx, request.Params.XTenantID.URA(), *request.Body)
 	if err != nil {
-		return nviError(ctx, err), nil
-	}
-	result, err := c.registerList(ctx, *tenantID.Value, *request.Body)
-	if err != nil {
-		return nviError(ctx, err), nil
+		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
 	return api.RegisterNVIList200ApplicationFhirPlusJSONResponse(*result), nil
 }
 
 func (c Component) GetNVIList(ctx context.Context, request api.GetNVIListRequestObject) (api.GetNVIListResponseObject, error) {
-	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
+	result, err := c.ReadList(ctx, request.Params.XTenantID.URA(), request.Id)
 	if err != nil {
-		return nviError(ctx, err), nil
-	}
-	result, err := c.ReadList(ctx, *tenantID.Value, request.Id)
-	if err != nil {
-		return nviError(ctx, err), nil
+		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
 	return api.GetNVIList200ApplicationFhirPlusJSONResponse(*result), nil
 }
 
 func (c Component) DeleteNVIList(ctx context.Context, request api.DeleteNVIListRequestObject) (api.DeleteNVIListResponseObject, error) {
-	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
-	if err != nil {
-		return nviError(ctx, err), nil
-	}
-	if err := c.DeleteListByID(ctx, *tenantID.Value, request.Id); err != nil {
-		return nviError(ctx, err), nil
+	if err := c.DeleteListByID(ctx, request.Params.XTenantID.URA(), request.Id); err != nil {
+		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
 	return api.DeleteNVIList204Response{}, nil
 }
 
 func (c Component) DeleteNVIListsByParams(ctx context.Context, request api.DeleteNVIListsByParamsRequestObject) (api.DeleteNVIListsByParamsResponseObject, error) {
-	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
-	if err != nil {
-		return nviError(ctx, err), nil
-	}
 	params := searchParamValues(request.Params.PatientIdentifier, request.Params.SubjectIdentifier, request.Params.SourceIdentifier, nil, nil)
-	if err := c.DeleteListByParams(ctx, *tenantID.Value, params); err != nil {
-		return nviError(ctx, err), nil
+	if err := c.DeleteListByParams(ctx, request.Params.XTenantID.URA(), params); err != nil {
+		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
 	return api.DeleteNVIListsByParams204Response{}, nil
 }
 
 func (c Component) SearchNVILists(ctx context.Context, request api.SearchNVIListsRequestObject) (api.SearchNVIListsResponseObject, error) {
-	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
-	if err != nil {
-		return nviError(ctx, err), nil
-	}
 	params := searchParamValues(request.Params.PatientIdentifier, request.Params.SubjectIdentifier, request.Params.SourceIdentifier, request.Params.Code, request.Params.UnderscoreCount)
-	result, err := c.SearchList(ctx, *tenantID.Value, params)
+	result, err := c.SearchList(ctx, request.Params.XTenantID.URA(), params)
 	if err != nil {
-		return nviError(ctx, err), nil
+		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
 	return api.SearchNVILists200ApplicationFhirPlusJSONResponse(*result), nil
 }
 
 func (c Component) SearchNVIListsForm(ctx context.Context, request api.SearchNVIListsFormRequestObject) (api.SearchNVIListsFormResponseObject, error) {
-	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
-	if err != nil {
-		return nviError(ctx, err), nil
-	}
 	var body api.SearchNVIListsFormFormdataRequestBody
 	if request.Body != nil {
 		body = *request.Body
 	}
 	params := searchParamValues(body.PatientIdentifier, body.SubjectIdentifier, body.SourceIdentifier, body.Code, body.UnderscoreCount)
-	result, err := c.SearchList(ctx, *tenantID.Value, params)
+	result, err := c.SearchList(ctx, request.Params.XTenantID.URA(), params)
 	if err != nil {
-		return nviError(ctx, err), nil
+		return api.NewOperationOutcomeResponse(ctx, err), nil
 	}
 	return api.SearchNVIListsForm200ApplicationFhirPlusJSONResponse(*result), nil
 }

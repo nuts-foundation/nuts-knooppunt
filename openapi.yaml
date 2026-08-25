@@ -120,20 +120,26 @@ paths:
         "500":
           description: Synchronization failed
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
-                example: "Failed to update LRZA: connection refused"
+                type: object
+                properties:
+                  error:
+                    type: string
+                example:
+                  error: "Failed to update LRZA: connection refused"
 
   /pdp:
     post:
       tags: [pdp]
-      summary: Evaluate an authorization request (shorthand alias)
-      operationId: evaluateAuthorizationDirect
+      summary: Evaluate the default authorization policy
+      operationId: evaluateDefaultAuthorization
       description: >
         Equivalent to `POST /pdp/v1/data/knooppunt/authz` — same request
         body, responses and behavior; see that operation for details. This
-        is a shorter alias, not an Open Policy Agent convention route.
+        is a shorter path to the same, single policy that route's
+        `knooppunt/authz` package/rule addresses via the Open Policy Agent
+        convention.
       requestBody:
         required: true
         content:
@@ -764,6 +770,9 @@ components:
         `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
       schema:
         type: string
+        x-go-type: tenants.ID
+        x-go-type-import:
+          path: github.com/nuts-foundation/nuts-knooppunt/lib/tenants
       example: "http://fhir.nl/fhir/NamingSystem/ura|00000020"
 
     Count:
