@@ -182,6 +182,7 @@ func (s *strictAPIServer) RegisterHttpHandlers(_ *http.ServeMux, internalMux *ht
 				http.NotFound(w, r)
 				return
 			}
+			slog.ErrorContext(r.Context(), "API operation failed", slog.String("method", r.Method), slog.String("path", r.URL.Path), logging.Error(err))
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		},
 	})
