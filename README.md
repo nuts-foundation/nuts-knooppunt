@@ -16,10 +16,8 @@ See [mock-components/demo-ehr/README.md](mock-components/demo-ehr/README.md) for
 - mCSD Admin Application: [http://localhost:8080/mcsdadmin](http://localhost:8080/mcsdadmin)
 - mCSD Update Client force update: [POST http://localhost:8081/mcsd/update](http://localhost:8081/mcsd/update)
 - NVI FHIR gateway endpoints:
-  - Registration endpoint: [POST http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
-  - Search endpoint:
-    - [POST http://localhost:8081/nvi/DocumentReference/_search](http://localhost:8081/nvi/DocumentReference/_search)
-    - [GET http://localhost:8081/nvi/DocumentReference](http://localhost:8081/nvi/DocumentReference)
+  - Registration endpoint: [POST http://localhost:8081/nvi](http://localhost:8081/nvi) (transaction Bundle) or [POST http://localhost:8081/nvi/List](http://localhost:8081/nvi/List) (single `List`)
+  - Search endpoint: [GET http://localhost:8081/nvi/List](http://localhost:8081/nvi/List)
 - Demo EHR Application: [http://localhost:3000](http://localhost:3000)
 
 ## Configuration
