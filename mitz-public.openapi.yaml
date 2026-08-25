@@ -22,6 +22,7 @@ paths:
   /mitz/notify:
     post:
       tags: [mitz]
+      operationId: receiveMitzNotification
       summary: Receive a MITZ consent notification
       description: >
         Public endpoint MITZ calls to notify about consent changes for an

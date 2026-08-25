@@ -12,6 +12,7 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/api"
+	"github.com/nuts-foundation/nuts-knooppunt/api/mitzpublic"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
@@ -114,10 +115,24 @@ func createHTTPClient(config Config) (*http.Client, error) {
 
 // RegisterHttpHandlers registers the HTTP handlers for the MITZ component. /mitz/Subscription
 // isn't registered here: it's served through the generated OpenAPI strict server, wired up in
-// cmd.RegisterAPIRoutes. /mitz/notify isn't part of openapi.yaml (see mitz-public.openapi.yaml)
-// so it keeps registering directly.
+// strictAPIServer.RegisterHttpHandlers in package cmd. /mitz/notify is generated from a separate
+// spec, mitz-public.openapi.yaml (see api/mitzpublic), since it's served on the public interface
+// and isn't part of openapi.yaml; Component implements its StrictServerInterface directly, since
+// it's the sole operation and the sole owning component.
+//
+// A custom RequestErrorHandlerFunc replaces the generated default (400 Bad Request): MITZ
+// sometimes sends XML bodies despite the fhir+json content type the spec declares, which the
+// generated JSON body binding can't decode. ReceiveMitzNotification doesn't look at request.Body
+// anyway (see its comment), so a body that fails to bind is still acknowledged rather than
+// rejected, matching the previous handler's behavior of never reading the body at all.
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	publicMux.Handle("POST /mitz/notify", http.HandlerFunc(c.handleNotify))
+	handler := mitzpublic.NewStrictHandlerWithOptions(c, nil, mitzpublic.StrictHTTPServerOptions{
+		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			slog.DebugContext(r.Context(), "MITZ notification body could not be decoded, ignoring", logging.Error(err))
+			w.WriteHeader(http.StatusNoContent)
+		},
+	})
+	mitzpublic.HandlerFromMux(handler, publicMux)
 }
 
 // Start starts the component
@@ -130,14 +145,16 @@ func (c *Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-// handleNotify handles FHIR consent bundle notifications
-func (c *Component) handleNotify(httpResponse http.ResponseWriter, httpRequest *http.Request) {
-	slog.DebugContext(httpRequest.Context(), "Received FHIR consent bundle notification")
+var _ mitzpublic.StrictServerInterface = (*Component)(nil)
+
+// ReceiveMitzNotification handles FHIR consent bundle notifications
+func (c *Component) ReceiveMitzNotification(ctx context.Context, _ mitzpublic.ReceiveMitzNotificationRequestObject) (mitzpublic.ReceiveMitzNotificationResponseObject, error) {
+	slog.DebugContext(ctx, "Received FHIR consent bundle notification")
 
 	// todo: process it? atm we don't care about it. If we will care, we may have a problem because they seem
 	// to be sending XMLs, which go fhir lib doesn't support yet
 
-	httpResponse.WriteHeader(http.StatusNoContent)
+	return mitzpublic.ReceiveMitzNotification204Response{}, nil
 }
 
 // CheckConsent triggers a consent check by invoking MITZ closed query.
@@ -417,4 +434,3 @@ func (c *Component) CreateMitzSubscription(ctx context.Context, request api.Crea
 	}
 	return api.CreateMitzSubscription201ApplicationFhirPlusJSONResponse(*result), nil
 }
-
