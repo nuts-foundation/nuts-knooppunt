@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/api"
+	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
@@ -14,6 +16,12 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 )
+
+// errComponentDisabled is returned by a forwarding method when the component that owns the
+// operation was disabled (its field on strictAPIServer is nil). RegisterHttpHandlers' response
+// error handler turns this into a 404, matching the previous behavior of simply not registering
+// the route at all.
+var errComponentDisabled = errors.New("component disabled")
 
 // strictAPIServer implements api.StrictServerInterface, generated from openapi.yaml, by
 // forwarding each operation to the component that owns it. The component-specific logic
@@ -30,10 +38,17 @@ import (
 // assertion below requires strictAPIServer to implement every operation in the generated
 // interface: add an operation to the spec, run `go generate ./api/...`, and the next `go build`
 // fails at that assertion, naming the exact missing method, until you add its forwarding method
-// here (and register its route in RegisterAPIRoutes). If the build passes, wiring is complete.
-// Any field may be left nil when that component is disabled: RegisterAPIRoutes skips
-// registering its routes in that case, matching the previous behavior of each component's own
-// RegisterHttpHandlers method.
+// here. RegisterHttpHandlers registers every operation's route unconditionally (see its own
+// comment), so once the build passes, wiring is complete — there's no separate route list to
+// remember to update.
+//
+// Any field may be left nil when that component is disabled. A forwarding method for an operation
+// owned by such a component must check for nil itself and return errComponentDisabled — see e.g.
+// TriggerLrzaSync below — since its route is still registered either way.
+//
+// strictAPIServer is itself a component.Lifecycle, added to the components slice in start.go
+// like any other component, so it goes through the same RegisterHttpHandlers/Start/Stop loop
+// instead of a separate call — Start and Stop are no-ops since it owns no resources of its own.
 type strictAPIServer struct {
 	status *status.Component
 	lrza   *lrza.Component
@@ -51,68 +66,127 @@ func (s *strictAPIServer) GetVersion(ctx context.Context, r api.GetVersionReques
 }
 
 func (s *strictAPIServer) TriggerLrzaSync(ctx context.Context, r api.TriggerLrzaSyncRequestObject) (api.TriggerLrzaSyncResponseObject, error) {
+	if s.lrza == nil {
+		return nil, errComponentDisabled
+	}
 	return s.lrza.TriggerLrzaSync(ctx, r)
 }
 
-func (s *strictAPIServer) ListPolicyBundles(ctx context.Context, r api.ListPolicyBundlesRequestObject) (api.ListPolicyBundlesResponseObject, error) {
-	return s.pdp.ListPolicyBundles(ctx, r)
+func (s *strictAPIServer) ListAuthorizationPolicyBundles(ctx context.Context, r api.ListAuthorizationPolicyBundlesRequestObject) (api.ListAuthorizationPolicyBundlesResponseObject, error) {
+	if s.pdp == nil {
+		return nil, errComponentDisabled
+	}
+	return s.pdp.ListAuthorizationPolicyBundles(ctx, r)
 }
 
-func (s *strictAPIServer) GetPolicyBundle(ctx context.Context, r api.GetPolicyBundleRequestObject) (api.GetPolicyBundleResponseObject, error) {
-	return s.pdp.GetPolicyBundle(ctx, r)
+func (s *strictAPIServer) GetAuthorizationPolicyBundle(ctx context.Context, r api.GetAuthorizationPolicyBundleRequestObject) (api.GetAuthorizationPolicyBundleResponseObject, error) {
+	if s.pdp == nil {
+		return nil, errComponentDisabled
+	}
+	return s.pdp.GetAuthorizationPolicyBundle(ctx, r)
 }
 
 func (s *strictAPIServer) EvaluateAuthorization(ctx context.Context, r api.EvaluateAuthorizationRequestObject) (api.EvaluateAuthorizationResponseObject, error) {
+	if s.pdp == nil {
+		return nil, errComponentDisabled
+	}
 	return s.pdp.EvaluateAuthorization(ctx, r)
 }
 
-func (s *strictAPIServer) RegisterListBundle(ctx context.Context, r api.RegisterListBundleRequestObject) (api.RegisterListBundleResponseObject, error) {
-	return s.nvi.RegisterListBundle(ctx, r)
+func (s *strictAPIServer) EvaluateAuthorizationDirect(ctx context.Context, r api.EvaluateAuthorizationDirectRequestObject) (api.EvaluateAuthorizationDirectResponseObject, error) {
+	if s.pdp == nil {
+		return nil, errComponentDisabled
+	}
+	return s.pdp.EvaluateAuthorizationDirect(ctx, r)
 }
 
-func (s *strictAPIServer) RegisterList(ctx context.Context, r api.RegisterListRequestObject) (api.RegisterListResponseObject, error) {
-	return s.nvi.RegisterList(ctx, r)
+func (s *strictAPIServer) RegisterNVIListBundle(ctx context.Context, r api.RegisterNVIListBundleRequestObject) (api.RegisterNVIListBundleResponseObject, error) {
+	if s.nvi == nil {
+		return nil, errComponentDisabled
+	}
+	return s.nvi.RegisterNVIListBundle(ctx, r)
 }
 
-func (s *strictAPIServer) SearchLists(ctx context.Context, r api.SearchListsRequestObject) (api.SearchListsResponseObject, error) {
-	return s.nvi.SearchLists(ctx, r)
+func (s *strictAPIServer) RegisterNVIList(ctx context.Context, r api.RegisterNVIListRequestObject) (api.RegisterNVIListResponseObject, error) {
+	if s.nvi == nil {
+		return nil, errComponentDisabled
+	}
+	return s.nvi.RegisterNVIList(ctx, r)
 }
 
-func (s *strictAPIServer) DeleteListsByParams(ctx context.Context, r api.DeleteListsByParamsRequestObject) (api.DeleteListsByParamsResponseObject, error) {
-	return s.nvi.DeleteListsByParams(ctx, r)
+func (s *strictAPIServer) SearchNVILists(ctx context.Context, r api.SearchNVIListsRequestObject) (api.SearchNVIListsResponseObject, error) {
+	if s.nvi == nil {
+		return nil, errComponentDisabled
+	}
+	return s.nvi.SearchNVILists(ctx, r)
 }
 
-func (s *strictAPIServer) SearchListsForm(ctx context.Context, r api.SearchListsFormRequestObject) (api.SearchListsFormResponseObject, error) {
-	return s.nvi.SearchListsForm(ctx, r)
+func (s *strictAPIServer) DeleteNVIListsByParams(ctx context.Context, r api.DeleteNVIListsByParamsRequestObject) (api.DeleteNVIListsByParamsResponseObject, error) {
+	if s.nvi == nil {
+		return nil, errComponentDisabled
+	}
+	return s.nvi.DeleteNVIListsByParams(ctx, r)
 }
 
-func (s *strictAPIServer) GetList(ctx context.Context, r api.GetListRequestObject) (api.GetListResponseObject, error) {
-	return s.nvi.GetList(ctx, r)
+func (s *strictAPIServer) SearchNVIListsForm(ctx context.Context, r api.SearchNVIListsFormRequestObject) (api.SearchNVIListsFormResponseObject, error) {
+	if s.nvi == nil {
+		return nil, errComponentDisabled
+	}
+	return s.nvi.SearchNVIListsForm(ctx, r)
 }
 
-func (s *strictAPIServer) DeleteList(ctx context.Context, r api.DeleteListRequestObject) (api.DeleteListResponseObject, error) {
-	return s.nvi.DeleteList(ctx, r)
+func (s *strictAPIServer) GetNVIList(ctx context.Context, r api.GetNVIListRequestObject) (api.GetNVIListResponseObject, error) {
+	if s.nvi == nil {
+		return nil, errComponentDisabled
+	}
+	return s.nvi.GetNVIList(ctx, r)
+}
+
+func (s *strictAPIServer) DeleteNVIList(ctx context.Context, r api.DeleteNVIListRequestObject) (api.DeleteNVIListResponseObject, error) {
+	if s.nvi == nil {
+		return nil, errComponentDisabled
+	}
+	return s.nvi.DeleteNVIList(ctx, r)
 }
 
 func (s *strictAPIServer) CreateMitzSubscription(ctx context.Context, r api.CreateMitzSubscriptionRequestObject) (api.CreateMitzSubscriptionResponseObject, error) {
+	if s.mitz == nil {
+		return nil, errComponentDisabled
+	}
 	return s.mitz.CreateMitzSubscription(ctx, r)
 }
 
 var _ api.StrictServerInterface = (*strictAPIServer)(nil)
+var _ component.Lifecycle = (*strictAPIServer)(nil)
 
-// RegisterAPIRoutes mounts the generated OpenAPI strict server's routes onto internalMux.
-// Components s was built with as nil (disabled) don't get their routes registered, matching the
-// previous behavior of each component's own RegisterHttpHandlers method.
+func (s *strictAPIServer) Start() error {
+	return nil
+}
+
+func (s *strictAPIServer) Stop(_ context.Context) error {
+	return nil
+}
+
+// RegisterHttpHandlers mounts the generated OpenAPI strict server's routes onto internalMux; all
+// of them are internal-only, so publicMux is unused.
 //
-// Unlike strictAPIServer's forwarding methods above, the internalMux.HandleFunc calls below are
-// NOT compiler-enforced: wrapper.SomeOperation exists for every operation regardless of whether
-// it's actually registered on a route here, so forgetting one compiles fine and just 404s at
-// runtime. When adding an operation, register its route here as well as adding its forwarding
-// method above.
-func (s *strictAPIServer) RegisterAPIRoutes(internalMux *http.ServeMux) {
-	handler := api.NewStrictHandler(s, nil)
-	wrapper := api.ServerInterfaceWrapper{
-		Handler: handler,
+// Every operation's route is registered unconditionally via api.HandlerWithOptions, regardless of
+// whether the component that owns it is enabled: unlike the manual per-route registration this
+// replaced, there's no way to forget one. A disabled component's forwarding method (see above)
+// returns errComponentDisabled instead, which ResponseErrorHandlerFunc below turns into a 404 —
+// matching the previous behavior of not registering the route at all.
+func (s *strictAPIServer) RegisterHttpHandlers(_ *http.ServeMux, internalMux *http.ServeMux) {
+	handler := api.NewStrictHandlerWithOptions(s, nil, api.StrictHTTPServerOptions{
+		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			if errors.Is(err, errComponentDisabled) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		},
+	})
+	api.HandlerWithOptions(handler, api.StdHTTPServerOptions{
+		BaseRouter: internalMux,
 		// NVI/MITZ params (the X-Tenant-ID header, search query params) are the only ones
 		// declared in openapi.yaml, so this is only ever hit for those two components' routes;
 		// respond the same way their own code does for a bad/missing request: a FHIR
@@ -125,28 +199,5 @@ func (s *strictAPIServer) RegisterAPIRoutes(internalMux *http.ServeMux) {
 				Outcome:    fhirapi.OperationOutcomeForError(badRequestErr),
 			}.Write(w)
 		},
-	}
-
-	internalMux.HandleFunc("GET /status", wrapper.GetStatus)
-	internalMux.HandleFunc("GET /version", wrapper.GetVersion)
-	if s.lrza != nil {
-		internalMux.HandleFunc("POST /lrza/update", wrapper.TriggerLrzaSync)
-	}
-	if s.pdp != nil {
-		internalMux.HandleFunc("GET /pdp/bundles", wrapper.ListPolicyBundles)
-		internalMux.HandleFunc("GET /pdp/bundles/{policyName}", wrapper.GetPolicyBundle)
-		internalMux.HandleFunc("POST /pdp/v1/data/knooppunt/authz", wrapper.EvaluateAuthorization)
-	}
-	if s.nvi != nil {
-		internalMux.HandleFunc("POST /nvi", wrapper.RegisterListBundle)
-		internalMux.HandleFunc("POST /nvi/List", wrapper.RegisterList)
-		internalMux.HandleFunc("GET /nvi/List", wrapper.SearchLists)
-		internalMux.HandleFunc("DELETE /nvi/List", wrapper.DeleteListsByParams)
-		internalMux.HandleFunc("POST /nvi/List/_search", wrapper.SearchListsForm)
-		internalMux.HandleFunc("GET /nvi/List/{id}", wrapper.GetList)
-		internalMux.HandleFunc("DELETE /nvi/List/{id}", wrapper.DeleteList)
-	}
-	if s.mitz != nil {
-		internalMux.HandleFunc("POST /mitz/Subscription", wrapper.CreateMitzSubscription)
-	}
+	})
 }

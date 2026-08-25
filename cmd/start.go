@@ -122,18 +122,18 @@ func Start(ctx context.Context, config Config) error {
 		slog.InfoContext(ctx, "NVI component is disabled")
 	}
 
-	// Components: RegisterHandlers()
-	for _, cmp := range components {
-		cmp.RegisterHttpHandlers(publicMux, internalMux)
-	}
-	apiServer := &strictAPIServer{
+	components = append(components, &strictAPIServer{
 		status: statusComponent,
 		lrza:   lrzaClient,
 		pdp:    pdpComponent,
 		nvi:    nviComponent,
 		mitz:   mitzComponent,
+	})
+
+	// Components: RegisterHandlers()
+	for _, cmp := range components {
+		cmp.RegisterHttpHandlers(publicMux, internalMux)
 	}
-	apiServer.RegisterAPIRoutes(internalMux)
 
 	// Components: Start()
 	for _, cmp := range components {

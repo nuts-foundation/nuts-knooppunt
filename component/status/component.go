@@ -43,7 +43,7 @@ func (c *Component) Ready() bool {
 }
 
 // RegisterHttpHandlers registers no routes: /status and /version are served through the
-// generated OpenAPI strict server, wired up in cmd.RegisterAPIRoutes.
+// generated OpenAPI strict server, wired up in strictAPIServer.RegisterHttpHandlers in package cmd.
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 }
 

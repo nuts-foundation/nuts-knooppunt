@@ -23,7 +23,7 @@ import (
 )
 
 // registerBundleRoute wires GET /pdp/bundles/{policyName} onto mux via the component's
-// GetPolicyBundle method, mirroring what cmd.RegisterAPIRoutes does in the real app.
+// GetAuthorizationPolicyBundle method, mirroring what strictAPIServer.RegisterHttpHandlers in package cmd does in the real app.
 // RegisterHttpHandlers no longer serves this route itself (it moved to the generated strict
 // server, wired up outside the component), but OPA's bundle loader - configured via
 // opaBundleBaseURL - still fetches bundles over HTTP at service.Start(), so tests that point it
@@ -31,9 +31,9 @@ import (
 func registerBundleRoute(t *testing.T, service *Component, mux *http.ServeMux) {
 	t.Helper()
 	mux.HandleFunc("GET /pdp/bundles/{policyName}", func(w http.ResponseWriter, r *http.Request) {
-		resp, err := service.GetPolicyBundle(r.Context(), api.GetPolicyBundleRequestObject{PolicyName: r.PathValue("policyName")})
+		resp, err := service.GetAuthorizationPolicyBundle(r.Context(), api.GetAuthorizationPolicyBundleRequestObject{PolicyName: r.PathValue("policyName")})
 		require.NoError(t, err)
-		require.NoError(t, resp.VisitGetPolicyBundleResponse(w))
+		require.NoError(t, resp.VisitGetAuthorizationPolicyBundleResponse(w))
 	})
 }
 

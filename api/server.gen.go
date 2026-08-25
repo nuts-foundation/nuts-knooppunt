@@ -267,14 +267,14 @@ type TenantID = string
 // Example: {"issue":[{"code":"value","diagnostics":"missing tenant request header: X-Tenant-ID","severity":"error"}],"resourceType":"OperationOutcome"}
 type OperationOutcomeError = FHIROperationOutcome
 
-// RegisterListBundleParams defines parameters for RegisterListBundle.
-type RegisterListBundleParams struct {
+// RegisterNVIListBundleParams defines parameters for RegisterNVIListBundle.
+type RegisterNVIListBundleParams struct {
 	// XTenantID The local care organization, who is performing (or on whose behalf) the request is being made, as a FHIR token: `<system>|<value>` where `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
 	XTenantID TenantID `json:"X-Tenant-ID"`
 }
 
-// DeleteListsByParamsParams defines parameters for DeleteListsByParams.
-type DeleteListsByParamsParams struct {
+// DeleteNVIListsByParamsParams defines parameters for DeleteNVIListsByParams.
+type DeleteNVIListsByParamsParams struct {
 	// PatientIdentifier BSN of the patient referenced by `List.subject`, as a FHIR token (`system|value`). Mapped to `subject:identifier` before forwarding to NVI.
 	PatientIdentifier *string `form:"patient:identifier,omitempty" json:"patient:identifier,omitempty"`
 
@@ -288,8 +288,8 @@ type DeleteListsByParamsParams struct {
 	XTenantID TenantID `json:"X-Tenant-ID"`
 }
 
-// SearchListsParams defines parameters for SearchLists.
-type SearchListsParams struct {
+// SearchNVIListsParams defines parameters for SearchNVILists.
+type SearchNVIListsParams struct {
 	// PatientIdentifier BSN of the patient referenced by `List.subject`, as a FHIR token (`system|value`). Mapped to `subject:identifier` before forwarding to NVI.
 	PatientIdentifier *string `form:"patient:identifier,omitempty" json:"patient:identifier,omitempty"`
 
@@ -309,14 +309,14 @@ type SearchListsParams struct {
 	XTenantID TenantID `json:"X-Tenant-ID"`
 }
 
-// RegisterListParams defines parameters for RegisterList.
-type RegisterListParams struct {
+// RegisterNVIListParams defines parameters for RegisterNVIList.
+type RegisterNVIListParams struct {
 	// XTenantID The local care organization, who is performing (or on whose behalf) the request is being made, as a FHIR token: `<system>|<value>` where `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
 	XTenantID TenantID `json:"X-Tenant-ID"`
 }
 
-// SearchListsFormFormdataBody defines parameters for SearchListsForm.
-type SearchListsFormFormdataBody struct {
+// SearchNVIListsFormFormdataBody defines parameters for SearchNVIListsForm.
+type SearchNVIListsFormFormdataBody struct {
 	// UnderscoreCount FHIR `_count` search parameter: maximum number of results per page. Forwarded to NVI as-is.
 	//
 	//
@@ -328,20 +328,20 @@ type SearchListsFormFormdataBody struct {
 	SubjectIdentifier *string `form:"subject:identifier,omitempty" json:"subject:identifier,omitempty"`
 }
 
-// SearchListsFormParams defines parameters for SearchListsForm.
-type SearchListsFormParams struct {
+// SearchNVIListsFormParams defines parameters for SearchNVIListsForm.
+type SearchNVIListsFormParams struct {
 	// XTenantID The local care organization, who is performing (or on whose behalf) the request is being made, as a FHIR token: `<system>|<value>` where `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
 	XTenantID TenantID `json:"X-Tenant-ID"`
 }
 
-// DeleteListParams defines parameters for DeleteList.
-type DeleteListParams struct {
+// DeleteNVIListParams defines parameters for DeleteNVIList.
+type DeleteNVIListParams struct {
 	// XTenantID The local care organization, who is performing (or on whose behalf) the request is being made, as a FHIR token: `<system>|<value>` where `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
 	XTenantID TenantID `json:"X-Tenant-ID"`
 }
 
-// GetListParams defines parameters for GetList.
-type GetListParams struct {
+// GetNVIListParams defines parameters for GetNVIList.
+type GetNVIListParams struct {
 	// XTenantID The local care organization, who is performing (or on whose behalf) the request is being made, as a FHIR token: `<system>|<value>` where `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
 	XTenantID TenantID `json:"X-Tenant-ID"`
 }
@@ -349,14 +349,17 @@ type GetListParams struct {
 // CreateMitzSubscriptionApplicationFhirPlusJSONRequestBody defines body for CreateMitzSubscription for application/fhir+json ContentType.
 type CreateMitzSubscriptionApplicationFhirPlusJSONRequestBody = FHIRSubscription
 
-// RegisterListBundleApplicationFhirPlusJSONRequestBody defines body for RegisterListBundle for application/fhir+json ContentType.
-type RegisterListBundleApplicationFhirPlusJSONRequestBody = FHIRBundle
+// RegisterNVIListBundleApplicationFhirPlusJSONRequestBody defines body for RegisterNVIListBundle for application/fhir+json ContentType.
+type RegisterNVIListBundleApplicationFhirPlusJSONRequestBody = FHIRBundle
 
-// RegisterListApplicationFhirPlusJSONRequestBody defines body for RegisterList for application/fhir+json ContentType.
-type RegisterListApplicationFhirPlusJSONRequestBody = FHIRList
+// RegisterNVIListApplicationFhirPlusJSONRequestBody defines body for RegisterNVIList for application/fhir+json ContentType.
+type RegisterNVIListApplicationFhirPlusJSONRequestBody = FHIRList
 
-// SearchListsFormFormdataRequestBody defines body for SearchListsForm for application/x-www-form-urlencoded ContentType.
-type SearchListsFormFormdataRequestBody SearchListsFormFormdataBody
+// SearchNVIListsFormFormdataRequestBody defines body for SearchNVIListsForm for application/x-www-form-urlencoded ContentType.
+type SearchNVIListsFormFormdataRequestBody SearchNVIListsFormFormdataBody
+
+// EvaluateAuthorizationDirectJSONRequestBody defines body for EvaluateAuthorizationDirect for application/json ContentType.
+type EvaluateAuthorizationDirectJSONRequestBody = PDPAuthzRequest
 
 // EvaluateAuthorizationJSONRequestBody defines body for EvaluateAuthorization for application/json ContentType.
 type EvaluateAuthorizationJSONRequestBody = PDPAuthzRequest
@@ -542,33 +545,36 @@ type ServerInterface interface {
 	// CreateMitzSubscription Create a MITZ consent subscription
 	// (POST /mitz/Subscription)
 	CreateMitzSubscription(w http.ResponseWriter, r *http.Request)
-	// RegisterListBundle Register a List via a transaction Bundle
+	// RegisterNVIListBundle Register a List via a transaction Bundle
 	// (POST /nvi)
-	RegisterListBundle(w http.ResponseWriter, r *http.Request, params RegisterListBundleParams)
-	// DeleteListsByParams Delete Lists matching search parameters
+	RegisterNVIListBundle(w http.ResponseWriter, r *http.Request, params RegisterNVIListBundleParams)
+	// DeleteNVIListsByParams Delete Lists matching search parameters
 	// (DELETE /nvi/List)
-	DeleteListsByParams(w http.ResponseWriter, r *http.Request, params DeleteListsByParamsParams)
-	// SearchLists Search for Lists
+	DeleteNVIListsByParams(w http.ResponseWriter, r *http.Request, params DeleteNVIListsByParamsParams)
+	// SearchNVILists Search for Lists
 	// (GET /nvi/List)
-	SearchLists(w http.ResponseWriter, r *http.Request, params SearchListsParams)
-	// RegisterList Register a List directly
+	SearchNVILists(w http.ResponseWriter, r *http.Request, params SearchNVIListsParams)
+	// RegisterNVIList Register a List directly
 	// (POST /nvi/List)
-	RegisterList(w http.ResponseWriter, r *http.Request, params RegisterListParams)
-	// SearchListsForm Search for Lists (form-encoded body)
+	RegisterNVIList(w http.ResponseWriter, r *http.Request, params RegisterNVIListParams)
+	// SearchNVIListsForm Search for Lists (form-encoded body)
 	// (POST /nvi/List/_search)
-	SearchListsForm(w http.ResponseWriter, r *http.Request, params SearchListsFormParams)
-	// DeleteList Delete a List by ID
+	SearchNVIListsForm(w http.ResponseWriter, r *http.Request, params SearchNVIListsFormParams)
+	// DeleteNVIList Delete a List by ID
 	// (DELETE /nvi/List/{id})
-	DeleteList(w http.ResponseWriter, r *http.Request, id string, params DeleteListParams)
-	// GetList Read a List by ID
+	DeleteNVIList(w http.ResponseWriter, r *http.Request, id string, params DeleteNVIListParams)
+	// GetNVIList Read a List by ID
 	// (GET /nvi/List/{id})
-	GetList(w http.ResponseWriter, r *http.Request, id string, params GetListParams)
-	// ListPolicyBundles List loaded policy bundles
+	GetNVIList(w http.ResponseWriter, r *http.Request, id string, params GetNVIListParams)
+	// EvaluateAuthorizationDirect Evaluate an authorization request (shorthand alias)
+	// (POST /pdp)
+	EvaluateAuthorizationDirect(w http.ResponseWriter, r *http.Request)
+	// ListAuthorizationPolicyBundles List loaded policy bundles
 	// (GET /pdp/bundles)
-	ListPolicyBundles(w http.ResponseWriter, r *http.Request)
-	// GetPolicyBundle Get a loaded policy bundle by name
+	ListAuthorizationPolicyBundles(w http.ResponseWriter, r *http.Request)
+	// GetAuthorizationPolicyBundle Get a loaded policy bundle by name
 	// (GET /pdp/bundles/{policyName})
-	GetPolicyBundle(w http.ResponseWriter, r *http.Request, policyName string)
+	GetAuthorizationPolicyBundle(w http.ResponseWriter, r *http.Request, policyName string)
 	// EvaluateAuthorization Evaluate an authorization request
 	// (POST /pdp/v1/data/knooppunt/authz)
 	EvaluateAuthorization(w http.ResponseWriter, r *http.Request)
@@ -617,14 +623,14 @@ func (siw *ServerInterfaceWrapper) CreateMitzSubscription(w http.ResponseWriter,
 	handler.ServeHTTP(w, r)
 }
 
-// RegisterListBundle operation middleware
-func (siw *ServerInterfaceWrapper) RegisterListBundle(w http.ResponseWriter, r *http.Request) {
+// RegisterNVIListBundle operation middleware
+func (siw *ServerInterfaceWrapper) RegisterNVIListBundle(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params RegisterListBundleParams
+	var params RegisterNVIListBundleParams
 
 	headers := r.Header
 
@@ -652,7 +658,7 @@ func (siw *ServerInterfaceWrapper) RegisterListBundle(w http.ResponseWriter, r *
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RegisterListBundle(w, r, params)
+		siw.Handler.RegisterNVIListBundle(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -662,14 +668,14 @@ func (siw *ServerInterfaceWrapper) RegisterListBundle(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
-// DeleteListsByParams operation middleware
-func (siw *ServerInterfaceWrapper) DeleteListsByParams(w http.ResponseWriter, r *http.Request) {
+// DeleteNVIListsByParams operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNVIListsByParams(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params DeleteListsByParamsParams
+	var params DeleteNVIListsByParamsParams
 
 	// ------------- Optional query parameter "patient:identifier" -------------
 
@@ -736,7 +742,7 @@ func (siw *ServerInterfaceWrapper) DeleteListsByParams(w http.ResponseWriter, r 
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteListsByParams(w, r, params)
+		siw.Handler.DeleteNVIListsByParams(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -746,14 +752,14 @@ func (siw *ServerInterfaceWrapper) DeleteListsByParams(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
-// SearchLists operation middleware
-func (siw *ServerInterfaceWrapper) SearchLists(w http.ResponseWriter, r *http.Request) {
+// SearchNVILists operation middleware
+func (siw *ServerInterfaceWrapper) SearchNVILists(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params SearchListsParams
+	var params SearchNVIListsParams
 
 	// ------------- Optional query parameter "patient:identifier" -------------
 
@@ -846,7 +852,7 @@ func (siw *ServerInterfaceWrapper) SearchLists(w http.ResponseWriter, r *http.Re
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SearchLists(w, r, params)
+		siw.Handler.SearchNVILists(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -856,14 +862,14 @@ func (siw *ServerInterfaceWrapper) SearchLists(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
-// RegisterList operation middleware
-func (siw *ServerInterfaceWrapper) RegisterList(w http.ResponseWriter, r *http.Request) {
+// RegisterNVIList operation middleware
+func (siw *ServerInterfaceWrapper) RegisterNVIList(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params RegisterListParams
+	var params RegisterNVIListParams
 
 	headers := r.Header
 
@@ -891,7 +897,7 @@ func (siw *ServerInterfaceWrapper) RegisterList(w http.ResponseWriter, r *http.R
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RegisterList(w, r, params)
+		siw.Handler.RegisterNVIList(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -901,14 +907,14 @@ func (siw *ServerInterfaceWrapper) RegisterList(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
-// SearchListsForm operation middleware
-func (siw *ServerInterfaceWrapper) SearchListsForm(w http.ResponseWriter, r *http.Request) {
+// SearchNVIListsForm operation middleware
+func (siw *ServerInterfaceWrapper) SearchNVIListsForm(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params SearchListsFormParams
+	var params SearchNVIListsFormParams
 
 	headers := r.Header
 
@@ -936,7 +942,7 @@ func (siw *ServerInterfaceWrapper) SearchListsForm(w http.ResponseWriter, r *htt
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SearchListsForm(w, r, params)
+		siw.Handler.SearchNVIListsForm(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -946,62 +952,8 @@ func (siw *ServerInterfaceWrapper) SearchListsForm(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
-// DeleteList operation middleware
-func (siw *ServerInterfaceWrapper) DeleteList(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-	_ = err
-
-	// ------------- Path parameter "id" -------------
-	var id string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params DeleteListParams
-
-	headers := r.Header
-
-	// ------------- Required header parameter "X-Tenant-ID" -------------
-	if valueList, found := headers[http.CanonicalHeaderKey("X-Tenant-ID")]; found {
-		var XTenantID TenantID
-		n := len(valueList)
-		if n != 1 {
-			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Tenant-ID", Count: n})
-			return
-		}
-
-		err = runtime.BindStyledParameterWithOptions("simple", "X-Tenant-ID", valueList[0], &XTenantID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
-		if err != nil {
-			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Tenant-ID", Err: err})
-			return
-		}
-
-		params.XTenantID = XTenantID
-
-	} else {
-		err := fmt.Errorf("Header parameter X-Tenant-ID is required, but not found")
-		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Tenant-ID", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteList(w, r, id, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetList operation middleware
-func (siw *ServerInterfaceWrapper) GetList(w http.ResponseWriter, r *http.Request) {
+// DeleteNVIList operation middleware
+func (siw *ServerInterfaceWrapper) DeleteNVIList(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -1016,7 +968,7 @@ func (siw *ServerInterfaceWrapper) GetList(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Parameter object where we will unmarshal all parameters from the context
-	var params GetListParams
+	var params DeleteNVIListParams
 
 	headers := r.Header
 
@@ -1044,7 +996,7 @@ func (siw *ServerInterfaceWrapper) GetList(w http.ResponseWriter, r *http.Reques
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetList(w, r, id, params)
+		siw.Handler.DeleteNVIList(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1054,11 +1006,51 @@ func (siw *ServerInterfaceWrapper) GetList(w http.ResponseWriter, r *http.Reques
 	handler.ServeHTTP(w, r)
 }
 
-// ListPolicyBundles operation middleware
-func (siw *ServerInterfaceWrapper) ListPolicyBundles(w http.ResponseWriter, r *http.Request) {
+// GetNVIList operation middleware
+func (siw *ServerInterfaceWrapper) GetNVIList(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetNVIListParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Tenant-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Tenant-ID")]; found {
+		var XTenantID TenantID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Tenant-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Tenant-ID", valueList[0], &XTenantID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Tenant-ID", Err: err})
+			return
+		}
+
+		params.XTenantID = XTenantID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Tenant-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Tenant-ID", Err: err})
+		return
+	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListPolicyBundles(w, r)
+		siw.Handler.GetNVIList(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1068,8 +1060,36 @@ func (siw *ServerInterfaceWrapper) ListPolicyBundles(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
-// GetPolicyBundle operation middleware
-func (siw *ServerInterfaceWrapper) GetPolicyBundle(w http.ResponseWriter, r *http.Request) {
+// EvaluateAuthorizationDirect operation middleware
+func (siw *ServerInterfaceWrapper) EvaluateAuthorizationDirect(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EvaluateAuthorizationDirect(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAuthorizationPolicyBundles operation middleware
+func (siw *ServerInterfaceWrapper) ListAuthorizationPolicyBundles(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAuthorizationPolicyBundles(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAuthorizationPolicyBundle operation middleware
+func (siw *ServerInterfaceWrapper) GetAuthorizationPolicyBundle(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_ = err
@@ -1084,7 +1104,7 @@ func (siw *ServerInterfaceWrapper) GetPolicyBundle(w http.ResponseWriter, r *htt
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetPolicyBundle(w, r, policyName)
+		siw.Handler.GetAuthorizationPolicyBundle(w, r, policyName)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1259,16 +1279,17 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/status", wrapper.GetStatus)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/version", wrapper.GetVersion)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/lrza/update", wrapper.TriggerLrzaSync)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/pdp", wrapper.EvaluateAuthorizationDirect)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/pdp/v1/data/knooppunt/authz", wrapper.EvaluateAuthorization)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/pdp/bundles", wrapper.ListPolicyBundles)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/pdp/bundles/{policyName}", wrapper.GetPolicyBundle)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nvi", wrapper.RegisterListBundle)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nvi/List", wrapper.DeleteListsByParams)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nvi/List", wrapper.SearchLists)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nvi/List", wrapper.RegisterList)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nvi/List/_search", wrapper.SearchListsForm)
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nvi/List/{id}", wrapper.DeleteList)
-	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nvi/List/{id}", wrapper.GetList)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/pdp/bundles", wrapper.ListAuthorizationPolicyBundles)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/pdp/bundles/{policyName}", wrapper.GetAuthorizationPolicyBundle)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nvi", wrapper.RegisterNVIListBundle)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nvi/List", wrapper.DeleteNVIListsByParams)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nvi/List", wrapper.SearchNVILists)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nvi/List", wrapper.RegisterNVIList)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/nvi/List/_search", wrapper.SearchNVIListsForm)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nvi/List/{id}", wrapper.DeleteNVIList)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nvi/List/{id}", wrapper.GetNVIList)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/mitz/Subscription", wrapper.CreateMitzSubscription)
 
 	return m
@@ -1374,18 +1395,18 @@ func (response CreateMitzSubscription503ApplicationFhirPlusJSONResponse) VisitCr
 	return err
 }
 
-type RegisterListBundleRequestObject struct {
-	Params RegisterListBundleParams
-	Body   *RegisterListBundleApplicationFhirPlusJSONRequestBody
+type RegisterNVIListBundleRequestObject struct {
+	Params RegisterNVIListBundleParams
+	Body   *RegisterNVIListBundleApplicationFhirPlusJSONRequestBody
 }
 
-type RegisterListBundleResponseObject interface {
-	VisitRegisterListBundleResponse(w http.ResponseWriter) error
+type RegisterNVIListBundleResponseObject interface {
+	VisitRegisterNVIListBundleResponse(w http.ResponseWriter) error
 }
 
-type RegisterListBundle200ApplicationFhirPlusJSONResponse FHIRBundle
+type RegisterNVIListBundle200ApplicationFhirPlusJSONResponse FHIRBundle
 
-func (response RegisterListBundle200ApplicationFhirPlusJSONResponse) VisitRegisterListBundleResponse(w http.ResponseWriter) error {
+func (response RegisterNVIListBundle200ApplicationFhirPlusJSONResponse) VisitRegisterNVIListBundleResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1397,11 +1418,11 @@ func (response RegisterListBundle200ApplicationFhirPlusJSONResponse) VisitRegist
 	return err
 }
 
-type RegisterListBundle400ApplicationFhirPlusJSONResponse struct {
+type RegisterNVIListBundle400ApplicationFhirPlusJSONResponse struct {
 	OperationOutcomeErrorApplicationFhirPlusJSONResponse
 }
 
-func (response RegisterListBundle400ApplicationFhirPlusJSONResponse) VisitRegisterListBundleResponse(w http.ResponseWriter) error {
+func (response RegisterNVIListBundle400ApplicationFhirPlusJSONResponse) VisitRegisterNVIListBundleResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1413,9 +1434,9 @@ func (response RegisterListBundle400ApplicationFhirPlusJSONResponse) VisitRegist
 	return err
 }
 
-type RegisterListBundle500ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type RegisterNVIListBundle500ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response RegisterListBundle500ApplicationFhirPlusJSONResponse) VisitRegisterListBundleResponse(w http.ResponseWriter) error {
+func (response RegisterNVIListBundle500ApplicationFhirPlusJSONResponse) VisitRegisterNVIListBundleResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1427,9 +1448,9 @@ func (response RegisterListBundle500ApplicationFhirPlusJSONResponse) VisitRegist
 	return err
 }
 
-type RegisterListBundle503ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type RegisterNVIListBundle503ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response RegisterListBundle503ApplicationFhirPlusJSONResponse) VisitRegisterListBundleResponse(w http.ResponseWriter) error {
+func (response RegisterNVIListBundle503ApplicationFhirPlusJSONResponse) VisitRegisterNVIListBundleResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1441,27 +1462,27 @@ func (response RegisterListBundle503ApplicationFhirPlusJSONResponse) VisitRegist
 	return err
 }
 
-type DeleteListsByParamsRequestObject struct {
-	Params DeleteListsByParamsParams
+type DeleteNVIListsByParamsRequestObject struct {
+	Params DeleteNVIListsByParamsParams
 }
 
-type DeleteListsByParamsResponseObject interface {
-	VisitDeleteListsByParamsResponse(w http.ResponseWriter) error
+type DeleteNVIListsByParamsResponseObject interface {
+	VisitDeleteNVIListsByParamsResponse(w http.ResponseWriter) error
 }
 
-type DeleteListsByParams204Response struct {
+type DeleteNVIListsByParams204Response struct {
 }
 
-func (response DeleteListsByParams204Response) VisitDeleteListsByParamsResponse(w http.ResponseWriter) error {
+func (response DeleteNVIListsByParams204Response) VisitDeleteNVIListsByParamsResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
 	return nil
 }
 
-type DeleteListsByParams400ApplicationFhirPlusJSONResponse struct {
+type DeleteNVIListsByParams400ApplicationFhirPlusJSONResponse struct {
 	OperationOutcomeErrorApplicationFhirPlusJSONResponse
 }
 
-func (response DeleteListsByParams400ApplicationFhirPlusJSONResponse) VisitDeleteListsByParamsResponse(w http.ResponseWriter) error {
+func (response DeleteNVIListsByParams400ApplicationFhirPlusJSONResponse) VisitDeleteNVIListsByParamsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1473,9 +1494,9 @@ func (response DeleteListsByParams400ApplicationFhirPlusJSONResponse) VisitDelet
 	return err
 }
 
-type DeleteListsByParams500ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type DeleteNVIListsByParams500ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response DeleteListsByParams500ApplicationFhirPlusJSONResponse) VisitDeleteListsByParamsResponse(w http.ResponseWriter) error {
+func (response DeleteNVIListsByParams500ApplicationFhirPlusJSONResponse) VisitDeleteNVIListsByParamsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1487,9 +1508,9 @@ func (response DeleteListsByParams500ApplicationFhirPlusJSONResponse) VisitDelet
 	return err
 }
 
-type DeleteListsByParams503ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type DeleteNVIListsByParams503ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response DeleteListsByParams503ApplicationFhirPlusJSONResponse) VisitDeleteListsByParamsResponse(w http.ResponseWriter) error {
+func (response DeleteNVIListsByParams503ApplicationFhirPlusJSONResponse) VisitDeleteNVIListsByParamsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1501,17 +1522,17 @@ func (response DeleteListsByParams503ApplicationFhirPlusJSONResponse) VisitDelet
 	return err
 }
 
-type SearchListsRequestObject struct {
-	Params SearchListsParams
+type SearchNVIListsRequestObject struct {
+	Params SearchNVIListsParams
 }
 
-type SearchListsResponseObject interface {
-	VisitSearchListsResponse(w http.ResponseWriter) error
+type SearchNVIListsResponseObject interface {
+	VisitSearchNVIListsResponse(w http.ResponseWriter) error
 }
 
-type SearchLists200ApplicationFhirPlusJSONResponse FHIRBundle
+type SearchNVILists200ApplicationFhirPlusJSONResponse FHIRBundle
 
-func (response SearchLists200ApplicationFhirPlusJSONResponse) VisitSearchListsResponse(w http.ResponseWriter) error {
+func (response SearchNVILists200ApplicationFhirPlusJSONResponse) VisitSearchNVIListsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1523,11 +1544,11 @@ func (response SearchLists200ApplicationFhirPlusJSONResponse) VisitSearchListsRe
 	return err
 }
 
-type SearchLists400ApplicationFhirPlusJSONResponse struct {
+type SearchNVILists400ApplicationFhirPlusJSONResponse struct {
 	OperationOutcomeErrorApplicationFhirPlusJSONResponse
 }
 
-func (response SearchLists400ApplicationFhirPlusJSONResponse) VisitSearchListsResponse(w http.ResponseWriter) error {
+func (response SearchNVILists400ApplicationFhirPlusJSONResponse) VisitSearchNVIListsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1539,9 +1560,9 @@ func (response SearchLists400ApplicationFhirPlusJSONResponse) VisitSearchListsRe
 	return err
 }
 
-type SearchLists422ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type SearchNVILists422ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response SearchLists422ApplicationFhirPlusJSONResponse) VisitSearchListsResponse(w http.ResponseWriter) error {
+func (response SearchNVILists422ApplicationFhirPlusJSONResponse) VisitSearchNVIListsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1553,76 +1574,9 @@ func (response SearchLists422ApplicationFhirPlusJSONResponse) VisitSearchListsRe
 	return err
 }
 
-type SearchLists500ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type SearchNVILists500ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response SearchLists500ApplicationFhirPlusJSONResponse) VisitSearchListsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/fhir+json")
-	w.WriteHeader(500)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type SearchLists503ApplicationFhirPlusJSONResponse FHIROperationOutcome
-
-func (response SearchLists503ApplicationFhirPlusJSONResponse) VisitSearchListsResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/fhir+json")
-	w.WriteHeader(503)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type RegisterListRequestObject struct {
-	Params RegisterListParams
-	Body   *RegisterListApplicationFhirPlusJSONRequestBody
-}
-
-type RegisterListResponseObject interface {
-	VisitRegisterListResponse(w http.ResponseWriter) error
-}
-
-type RegisterList200ApplicationFhirPlusJSONResponse FHIRList
-
-func (response RegisterList200ApplicationFhirPlusJSONResponse) VisitRegisterListResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/fhir+json")
-	w.WriteHeader(200)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type RegisterList400ApplicationFhirPlusJSONResponse struct {
-	OperationOutcomeErrorApplicationFhirPlusJSONResponse
-}
-
-func (response RegisterList400ApplicationFhirPlusJSONResponse) VisitRegisterListResponse(w http.ResponseWriter) error {
-
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
-		return err
-	}
-	w.Header().Set("Content-Type", "application/fhir+json")
-	w.WriteHeader(400)
-	_, err := buf.WriteTo(w)
-	return err
-}
-
-type RegisterList500ApplicationFhirPlusJSONResponse FHIROperationOutcome
-
-func (response RegisterList500ApplicationFhirPlusJSONResponse) VisitRegisterListResponse(w http.ResponseWriter) error {
+func (response SearchNVILists500ApplicationFhirPlusJSONResponse) VisitSearchNVIListsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1634,9 +1588,9 @@ func (response RegisterList500ApplicationFhirPlusJSONResponse) VisitRegisterList
 	return err
 }
 
-type RegisterList503ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type SearchNVILists503ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response RegisterList503ApplicationFhirPlusJSONResponse) VisitRegisterListResponse(w http.ResponseWriter) error {
+func (response SearchNVILists503ApplicationFhirPlusJSONResponse) VisitSearchNVIListsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1648,18 +1602,18 @@ func (response RegisterList503ApplicationFhirPlusJSONResponse) VisitRegisterList
 	return err
 }
 
-type SearchListsFormRequestObject struct {
-	Params SearchListsFormParams
-	Body   *SearchListsFormFormdataRequestBody
+type RegisterNVIListRequestObject struct {
+	Params RegisterNVIListParams
+	Body   *RegisterNVIListApplicationFhirPlusJSONRequestBody
 }
 
-type SearchListsFormResponseObject interface {
-	VisitSearchListsFormResponse(w http.ResponseWriter) error
+type RegisterNVIListResponseObject interface {
+	VisitRegisterNVIListResponse(w http.ResponseWriter) error
 }
 
-type SearchListsForm200ApplicationFhirPlusJSONResponse FHIRBundle
+type RegisterNVIList200ApplicationFhirPlusJSONResponse FHIRList
 
-func (response SearchListsForm200ApplicationFhirPlusJSONResponse) VisitSearchListsFormResponse(w http.ResponseWriter) error {
+func (response RegisterNVIList200ApplicationFhirPlusJSONResponse) VisitRegisterNVIListResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1671,11 +1625,11 @@ func (response SearchListsForm200ApplicationFhirPlusJSONResponse) VisitSearchLis
 	return err
 }
 
-type SearchListsForm400ApplicationFhirPlusJSONResponse struct {
+type RegisterNVIList400ApplicationFhirPlusJSONResponse struct {
 	OperationOutcomeErrorApplicationFhirPlusJSONResponse
 }
 
-func (response SearchListsForm400ApplicationFhirPlusJSONResponse) VisitSearchListsFormResponse(w http.ResponseWriter) error {
+func (response RegisterNVIList400ApplicationFhirPlusJSONResponse) VisitRegisterNVIListResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1687,9 +1641,76 @@ func (response SearchListsForm400ApplicationFhirPlusJSONResponse) VisitSearchLis
 	return err
 }
 
-type SearchListsForm422ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type RegisterNVIList500ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response SearchListsForm422ApplicationFhirPlusJSONResponse) VisitSearchListsFormResponse(w http.ResponseWriter) error {
+func (response RegisterNVIList500ApplicationFhirPlusJSONResponse) VisitRegisterNVIListResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterNVIList503ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response RegisterNVIList503ApplicationFhirPlusJSONResponse) VisitRegisterNVIListResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchNVIListsFormRequestObject struct {
+	Params SearchNVIListsFormParams
+	Body   *SearchNVIListsFormFormdataRequestBody
+}
+
+type SearchNVIListsFormResponseObject interface {
+	VisitSearchNVIListsFormResponse(w http.ResponseWriter) error
+}
+
+type SearchNVIListsForm200ApplicationFhirPlusJSONResponse FHIRBundle
+
+func (response SearchNVIListsForm200ApplicationFhirPlusJSONResponse) VisitSearchNVIListsFormResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchNVIListsForm400ApplicationFhirPlusJSONResponse struct {
+	OperationOutcomeErrorApplicationFhirPlusJSONResponse
+}
+
+func (response SearchNVIListsForm400ApplicationFhirPlusJSONResponse) VisitSearchNVIListsFormResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SearchNVIListsForm422ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response SearchNVIListsForm422ApplicationFhirPlusJSONResponse) VisitSearchNVIListsFormResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1701,9 +1722,9 @@ func (response SearchListsForm422ApplicationFhirPlusJSONResponse) VisitSearchLis
 	return err
 }
 
-type SearchListsForm500ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type SearchNVIListsForm500ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response SearchListsForm500ApplicationFhirPlusJSONResponse) VisitSearchListsFormResponse(w http.ResponseWriter) error {
+func (response SearchNVIListsForm500ApplicationFhirPlusJSONResponse) VisitSearchNVIListsFormResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1715,9 +1736,9 @@ func (response SearchListsForm500ApplicationFhirPlusJSONResponse) VisitSearchLis
 	return err
 }
 
-type SearchListsForm503ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type SearchNVIListsForm503ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response SearchListsForm503ApplicationFhirPlusJSONResponse) VisitSearchListsFormResponse(w http.ResponseWriter) error {
+func (response SearchNVIListsForm503ApplicationFhirPlusJSONResponse) VisitSearchNVIListsFormResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1729,28 +1750,28 @@ func (response SearchListsForm503ApplicationFhirPlusJSONResponse) VisitSearchLis
 	return err
 }
 
-type DeleteListRequestObject struct {
+type DeleteNVIListRequestObject struct {
 	Id     string `json:"id"`
-	Params DeleteListParams
+	Params DeleteNVIListParams
 }
 
-type DeleteListResponseObject interface {
-	VisitDeleteListResponse(w http.ResponseWriter) error
+type DeleteNVIListResponseObject interface {
+	VisitDeleteNVIListResponse(w http.ResponseWriter) error
 }
 
-type DeleteList204Response struct {
+type DeleteNVIList204Response struct {
 }
 
-func (response DeleteList204Response) VisitDeleteListResponse(w http.ResponseWriter) error {
+func (response DeleteNVIList204Response) VisitDeleteNVIListResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
 	return nil
 }
 
-type DeleteList400ApplicationFhirPlusJSONResponse struct {
+type DeleteNVIList400ApplicationFhirPlusJSONResponse struct {
 	OperationOutcomeErrorApplicationFhirPlusJSONResponse
 }
 
-func (response DeleteList400ApplicationFhirPlusJSONResponse) VisitDeleteListResponse(w http.ResponseWriter) error {
+func (response DeleteNVIList400ApplicationFhirPlusJSONResponse) VisitDeleteNVIListResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1762,9 +1783,9 @@ func (response DeleteList400ApplicationFhirPlusJSONResponse) VisitDeleteListResp
 	return err
 }
 
-type DeleteList500ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type DeleteNVIList500ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response DeleteList500ApplicationFhirPlusJSONResponse) VisitDeleteListResponse(w http.ResponseWriter) error {
+func (response DeleteNVIList500ApplicationFhirPlusJSONResponse) VisitDeleteNVIListResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1776,9 +1797,9 @@ func (response DeleteList500ApplicationFhirPlusJSONResponse) VisitDeleteListResp
 	return err
 }
 
-type DeleteList503ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type DeleteNVIList503ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response DeleteList503ApplicationFhirPlusJSONResponse) VisitDeleteListResponse(w http.ResponseWriter) error {
+func (response DeleteNVIList503ApplicationFhirPlusJSONResponse) VisitDeleteNVIListResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1790,18 +1811,18 @@ func (response DeleteList503ApplicationFhirPlusJSONResponse) VisitDeleteListResp
 	return err
 }
 
-type GetListRequestObject struct {
+type GetNVIListRequestObject struct {
 	Id     string `json:"id"`
-	Params GetListParams
+	Params GetNVIListParams
 }
 
-type GetListResponseObject interface {
-	VisitGetListResponse(w http.ResponseWriter) error
+type GetNVIListResponseObject interface {
+	VisitGetNVIListResponse(w http.ResponseWriter) error
 }
 
-type GetList200ApplicationFhirPlusJSONResponse FHIRList
+type GetNVIList200ApplicationFhirPlusJSONResponse FHIRList
 
-func (response GetList200ApplicationFhirPlusJSONResponse) VisitGetListResponse(w http.ResponseWriter) error {
+func (response GetNVIList200ApplicationFhirPlusJSONResponse) VisitGetNVIListResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1813,11 +1834,11 @@ func (response GetList200ApplicationFhirPlusJSONResponse) VisitGetListResponse(w
 	return err
 }
 
-type GetList400ApplicationFhirPlusJSONResponse struct {
+type GetNVIList400ApplicationFhirPlusJSONResponse struct {
 	OperationOutcomeErrorApplicationFhirPlusJSONResponse
 }
 
-func (response GetList400ApplicationFhirPlusJSONResponse) VisitGetListResponse(w http.ResponseWriter) error {
+func (response GetNVIList400ApplicationFhirPlusJSONResponse) VisitGetNVIListResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1829,9 +1850,9 @@ func (response GetList400ApplicationFhirPlusJSONResponse) VisitGetListResponse(w
 	return err
 }
 
-type GetList500ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type GetNVIList500ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response GetList500ApplicationFhirPlusJSONResponse) VisitGetListResponse(w http.ResponseWriter) error {
+func (response GetNVIList500ApplicationFhirPlusJSONResponse) VisitGetNVIListResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1843,9 +1864,9 @@ func (response GetList500ApplicationFhirPlusJSONResponse) VisitGetListResponse(w
 	return err
 }
 
-type GetList503ApplicationFhirPlusJSONResponse FHIROperationOutcome
+type GetNVIList503ApplicationFhirPlusJSONResponse FHIROperationOutcome
 
-func (response GetList503ApplicationFhirPlusJSONResponse) VisitGetListResponse(w http.ResponseWriter) error {
+func (response GetNVIList503ApplicationFhirPlusJSONResponse) VisitGetNVIListResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1857,16 +1878,17 @@ func (response GetList503ApplicationFhirPlusJSONResponse) VisitGetListResponse(w
 	return err
 }
 
-type ListPolicyBundlesRequestObject struct {
+type EvaluateAuthorizationDirectRequestObject struct {
+	Body *EvaluateAuthorizationDirectJSONRequestBody
 }
 
-type ListPolicyBundlesResponseObject interface {
-	VisitListPolicyBundlesResponse(w http.ResponseWriter) error
+type EvaluateAuthorizationDirectResponseObject interface {
+	VisitEvaluateAuthorizationDirectResponse(w http.ResponseWriter) error
 }
 
-type ListPolicyBundles200JSONResponse []string
+type EvaluateAuthorizationDirect200JSONResponse PDPAuthzResponse
 
-func (response ListPolicyBundles200JSONResponse) VisitListPolicyBundlesResponse(w http.ResponseWriter) error {
+func (response EvaluateAuthorizationDirect200JSONResponse) VisitEvaluateAuthorizationDirectResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1878,26 +1900,61 @@ func (response ListPolicyBundles200JSONResponse) VisitListPolicyBundlesResponse(
 	return err
 }
 
-type GetPolicyBundleRequestObject struct {
+type EvaluateAuthorizationDirect400JSONResponse PDPAuthzResponse
+
+func (response EvaluateAuthorizationDirect400JSONResponse) VisitEvaluateAuthorizationDirectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAuthorizationPolicyBundlesRequestObject struct {
+}
+
+type ListAuthorizationPolicyBundlesResponseObject interface {
+	VisitListAuthorizationPolicyBundlesResponse(w http.ResponseWriter) error
+}
+
+type ListAuthorizationPolicyBundles200JSONResponse []string
+
+func (response ListAuthorizationPolicyBundles200JSONResponse) VisitListAuthorizationPolicyBundlesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAuthorizationPolicyBundleRequestObject struct {
 	PolicyName string `json:"policyName"`
 }
 
-type GetPolicyBundleResponseObject interface {
-	VisitGetPolicyBundleResponse(w http.ResponseWriter) error
+type GetAuthorizationPolicyBundleResponseObject interface {
+	VisitGetAuthorizationPolicyBundleResponse(w http.ResponseWriter) error
 }
 
-type GetPolicyBundle200Response struct {
+type GetAuthorizationPolicyBundle200Response struct {
 }
 
-func (response GetPolicyBundle200Response) VisitGetPolicyBundleResponse(w http.ResponseWriter) error {
+func (response GetAuthorizationPolicyBundle200Response) VisitGetAuthorizationPolicyBundleResponse(w http.ResponseWriter) error {
 	w.WriteHeader(200)
 	return nil
 }
 
-type GetPolicyBundle404Response struct {
+type GetAuthorizationPolicyBundle404Response struct {
 }
 
-func (response GetPolicyBundle404Response) VisitGetPolicyBundleResponse(w http.ResponseWriter) error {
+func (response GetAuthorizationPolicyBundle404Response) VisitGetAuthorizationPolicyBundleResponse(w http.ResponseWriter) error {
 	w.WriteHeader(404)
 	return nil
 }
@@ -1993,33 +2050,36 @@ type StrictServerInterface interface {
 	// CreateMitzSubscription Create a MITZ consent subscription
 	// (POST /mitz/Subscription)
 	CreateMitzSubscription(ctx context.Context, request CreateMitzSubscriptionRequestObject) (CreateMitzSubscriptionResponseObject, error)
-	// RegisterListBundle Register a List via a transaction Bundle
+	// RegisterNVIListBundle Register a List via a transaction Bundle
 	// (POST /nvi)
-	RegisterListBundle(ctx context.Context, request RegisterListBundleRequestObject) (RegisterListBundleResponseObject, error)
-	// DeleteListsByParams Delete Lists matching search parameters
+	RegisterNVIListBundle(ctx context.Context, request RegisterNVIListBundleRequestObject) (RegisterNVIListBundleResponseObject, error)
+	// DeleteNVIListsByParams Delete Lists matching search parameters
 	// (DELETE /nvi/List)
-	DeleteListsByParams(ctx context.Context, request DeleteListsByParamsRequestObject) (DeleteListsByParamsResponseObject, error)
-	// SearchLists Search for Lists
+	DeleteNVIListsByParams(ctx context.Context, request DeleteNVIListsByParamsRequestObject) (DeleteNVIListsByParamsResponseObject, error)
+	// SearchNVILists Search for Lists
 	// (GET /nvi/List)
-	SearchLists(ctx context.Context, request SearchListsRequestObject) (SearchListsResponseObject, error)
-	// RegisterList Register a List directly
+	SearchNVILists(ctx context.Context, request SearchNVIListsRequestObject) (SearchNVIListsResponseObject, error)
+	// RegisterNVIList Register a List directly
 	// (POST /nvi/List)
-	RegisterList(ctx context.Context, request RegisterListRequestObject) (RegisterListResponseObject, error)
-	// SearchListsForm Search for Lists (form-encoded body)
+	RegisterNVIList(ctx context.Context, request RegisterNVIListRequestObject) (RegisterNVIListResponseObject, error)
+	// SearchNVIListsForm Search for Lists (form-encoded body)
 	// (POST /nvi/List/_search)
-	SearchListsForm(ctx context.Context, request SearchListsFormRequestObject) (SearchListsFormResponseObject, error)
-	// DeleteList Delete a List by ID
+	SearchNVIListsForm(ctx context.Context, request SearchNVIListsFormRequestObject) (SearchNVIListsFormResponseObject, error)
+	// DeleteNVIList Delete a List by ID
 	// (DELETE /nvi/List/{id})
-	DeleteList(ctx context.Context, request DeleteListRequestObject) (DeleteListResponseObject, error)
-	// GetList Read a List by ID
+	DeleteNVIList(ctx context.Context, request DeleteNVIListRequestObject) (DeleteNVIListResponseObject, error)
+	// GetNVIList Read a List by ID
 	// (GET /nvi/List/{id})
-	GetList(ctx context.Context, request GetListRequestObject) (GetListResponseObject, error)
-	// ListPolicyBundles List loaded policy bundles
+	GetNVIList(ctx context.Context, request GetNVIListRequestObject) (GetNVIListResponseObject, error)
+	// EvaluateAuthorizationDirect Evaluate an authorization request (shorthand alias)
+	// (POST /pdp)
+	EvaluateAuthorizationDirect(ctx context.Context, request EvaluateAuthorizationDirectRequestObject) (EvaluateAuthorizationDirectResponseObject, error)
+	// ListAuthorizationPolicyBundles List loaded policy bundles
 	// (GET /pdp/bundles)
-	ListPolicyBundles(ctx context.Context, request ListPolicyBundlesRequestObject) (ListPolicyBundlesResponseObject, error)
-	// GetPolicyBundle Get a loaded policy bundle by name
+	ListAuthorizationPolicyBundles(ctx context.Context, request ListAuthorizationPolicyBundlesRequestObject) (ListAuthorizationPolicyBundlesResponseObject, error)
+	// GetAuthorizationPolicyBundle Get a loaded policy bundle by name
 	// (GET /pdp/bundles/{policyName})
-	GetPolicyBundle(ctx context.Context, request GetPolicyBundleRequestObject) (GetPolicyBundleResponseObject, error)
+	GetAuthorizationPolicyBundle(ctx context.Context, request GetAuthorizationPolicyBundleRequestObject) (GetAuthorizationPolicyBundleResponseObject, error)
 	// EvaluateAuthorization Evaluate an authorization request
 	// (POST /pdp/v1/data/knooppunt/authz)
 	EvaluateAuthorization(ctx context.Context, request EvaluateAuthorizationRequestObject) (EvaluateAuthorizationResponseObject, error)
@@ -2125,13 +2185,13 @@ func (sh *strictHandler) CreateMitzSubscription(w http.ResponseWriter, r *http.R
 	}
 }
 
-// RegisterListBundle operation middleware
-func (sh *strictHandler) RegisterListBundle(w http.ResponseWriter, r *http.Request, params RegisterListBundleParams) {
-	var request RegisterListBundleRequestObject
+// RegisterNVIListBundle operation middleware
+func (sh *strictHandler) RegisterNVIListBundle(w http.ResponseWriter, r *http.Request, params RegisterNVIListBundleParams) {
+	var request RegisterNVIListBundleRequestObject
 
 	request.Params = params
 
-	var body RegisterListBundleApplicationFhirPlusJSONRequestBody
+	var body RegisterNVIListBundleApplicationFhirPlusJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -2139,18 +2199,18 @@ func (sh *strictHandler) RegisterListBundle(w http.ResponseWriter, r *http.Reque
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.RegisterListBundle(ctx, request.(RegisterListBundleRequestObject))
+		return sh.ssi.RegisterNVIListBundle(ctx, request.(RegisterNVIListBundleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "RegisterListBundle")
+		handler = middleware(handler, "RegisterNVIListBundle")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(RegisterListBundleResponseObject); ok {
-		if err := validResponse.VisitRegisterListBundleResponse(w); err != nil {
+	} else if validResponse, ok := response.(RegisterNVIListBundleResponseObject); ok {
+		if err := validResponse.VisitRegisterNVIListBundleResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2158,25 +2218,25 @@ func (sh *strictHandler) RegisterListBundle(w http.ResponseWriter, r *http.Reque
 	}
 }
 
-// DeleteListsByParams operation middleware
-func (sh *strictHandler) DeleteListsByParams(w http.ResponseWriter, r *http.Request, params DeleteListsByParamsParams) {
-	var request DeleteListsByParamsRequestObject
+// DeleteNVIListsByParams operation middleware
+func (sh *strictHandler) DeleteNVIListsByParams(w http.ResponseWriter, r *http.Request, params DeleteNVIListsByParamsParams) {
+	var request DeleteNVIListsByParamsRequestObject
 
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteListsByParams(ctx, request.(DeleteListsByParamsRequestObject))
+		return sh.ssi.DeleteNVIListsByParams(ctx, request.(DeleteNVIListsByParamsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteListsByParams")
+		handler = middleware(handler, "DeleteNVIListsByParams")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteListsByParamsResponseObject); ok {
-		if err := validResponse.VisitDeleteListsByParamsResponse(w); err != nil {
+	} else if validResponse, ok := response.(DeleteNVIListsByParamsResponseObject); ok {
+		if err := validResponse.VisitDeleteNVIListsByParamsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2184,25 +2244,25 @@ func (sh *strictHandler) DeleteListsByParams(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-// SearchLists operation middleware
-func (sh *strictHandler) SearchLists(w http.ResponseWriter, r *http.Request, params SearchListsParams) {
-	var request SearchListsRequestObject
+// SearchNVILists operation middleware
+func (sh *strictHandler) SearchNVILists(w http.ResponseWriter, r *http.Request, params SearchNVIListsParams) {
+	var request SearchNVIListsRequestObject
 
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.SearchLists(ctx, request.(SearchListsRequestObject))
+		return sh.ssi.SearchNVILists(ctx, request.(SearchNVIListsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "SearchLists")
+		handler = middleware(handler, "SearchNVILists")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(SearchListsResponseObject); ok {
-		if err := validResponse.VisitSearchListsResponse(w); err != nil {
+	} else if validResponse, ok := response.(SearchNVIListsResponseObject); ok {
+		if err := validResponse.VisitSearchNVIListsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2210,13 +2270,13 @@ func (sh *strictHandler) SearchLists(w http.ResponseWriter, r *http.Request, par
 	}
 }
 
-// RegisterList operation middleware
-func (sh *strictHandler) RegisterList(w http.ResponseWriter, r *http.Request, params RegisterListParams) {
-	var request RegisterListRequestObject
+// RegisterNVIList operation middleware
+func (sh *strictHandler) RegisterNVIList(w http.ResponseWriter, r *http.Request, params RegisterNVIListParams) {
+	var request RegisterNVIListRequestObject
 
 	request.Params = params
 
-	var body RegisterListApplicationFhirPlusJSONRequestBody
+	var body RegisterNVIListApplicationFhirPlusJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -2224,18 +2284,18 @@ func (sh *strictHandler) RegisterList(w http.ResponseWriter, r *http.Request, pa
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.RegisterList(ctx, request.(RegisterListRequestObject))
+		return sh.ssi.RegisterNVIList(ctx, request.(RegisterNVIListRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "RegisterList")
+		handler = middleware(handler, "RegisterNVIList")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(RegisterListResponseObject); ok {
-		if err := validResponse.VisitRegisterListResponse(w); err != nil {
+	} else if validResponse, ok := response.(RegisterNVIListResponseObject); ok {
+		if err := validResponse.VisitRegisterNVIListResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2243,9 +2303,9 @@ func (sh *strictHandler) RegisterList(w http.ResponseWriter, r *http.Request, pa
 	}
 }
 
-// SearchListsForm operation middleware
-func (sh *strictHandler) SearchListsForm(w http.ResponseWriter, r *http.Request, params SearchListsFormParams) {
-	var request SearchListsFormRequestObject
+// SearchNVIListsForm operation middleware
+func (sh *strictHandler) SearchNVIListsForm(w http.ResponseWriter, r *http.Request, params SearchNVIListsFormParams) {
+	var request SearchNVIListsFormRequestObject
 
 	request.Params = params
 
@@ -2253,7 +2313,7 @@ func (sh *strictHandler) SearchListsForm(w http.ResponseWriter, r *http.Request,
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode formdata: %w", err))
 		return
 	}
-	var body SearchListsFormFormdataRequestBody
+	var body SearchNVIListsFormFormdataRequestBody
 	if err := runtime.BindForm(&body, r.Form, nil, nil); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't bind formdata: %w", err))
 		return
@@ -2261,18 +2321,18 @@ func (sh *strictHandler) SearchListsForm(w http.ResponseWriter, r *http.Request,
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.SearchListsForm(ctx, request.(SearchListsFormRequestObject))
+		return sh.ssi.SearchNVIListsForm(ctx, request.(SearchNVIListsFormRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "SearchListsForm")
+		handler = middleware(handler, "SearchNVIListsForm")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(SearchListsFormResponseObject); ok {
-		if err := validResponse.VisitSearchListsFormResponse(w); err != nil {
+	} else if validResponse, ok := response.(SearchNVIListsFormResponseObject); ok {
+		if err := validResponse.VisitSearchNVIListsFormResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2280,26 +2340,26 @@ func (sh *strictHandler) SearchListsForm(w http.ResponseWriter, r *http.Request,
 	}
 }
 
-// DeleteList operation middleware
-func (sh *strictHandler) DeleteList(w http.ResponseWriter, r *http.Request, id string, params DeleteListParams) {
-	var request DeleteListRequestObject
+// DeleteNVIList operation middleware
+func (sh *strictHandler) DeleteNVIList(w http.ResponseWriter, r *http.Request, id string, params DeleteNVIListParams) {
+	var request DeleteNVIListRequestObject
 
 	request.Id = id
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.DeleteList(ctx, request.(DeleteListRequestObject))
+		return sh.ssi.DeleteNVIList(ctx, request.(DeleteNVIListRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "DeleteList")
+		handler = middleware(handler, "DeleteNVIList")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(DeleteListResponseObject); ok {
-		if err := validResponse.VisitDeleteListResponse(w); err != nil {
+	} else if validResponse, ok := response.(DeleteNVIListResponseObject); ok {
+		if err := validResponse.VisitDeleteNVIListResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2307,26 +2367,26 @@ func (sh *strictHandler) DeleteList(w http.ResponseWriter, r *http.Request, id s
 	}
 }
 
-// GetList operation middleware
-func (sh *strictHandler) GetList(w http.ResponseWriter, r *http.Request, id string, params GetListParams) {
-	var request GetListRequestObject
+// GetNVIList operation middleware
+func (sh *strictHandler) GetNVIList(w http.ResponseWriter, r *http.Request, id string, params GetNVIListParams) {
+	var request GetNVIListRequestObject
 
 	request.Id = id
 	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetList(ctx, request.(GetListRequestObject))
+		return sh.ssi.GetNVIList(ctx, request.(GetNVIListRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetList")
+		handler = middleware(handler, "GetNVIList")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetListResponseObject); ok {
-		if err := validResponse.VisitGetListResponse(w); err != nil {
+	} else if validResponse, ok := response.(GetNVIListResponseObject); ok {
+		if err := validResponse.VisitGetNVIListResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2334,23 +2394,30 @@ func (sh *strictHandler) GetList(w http.ResponseWriter, r *http.Request, id stri
 	}
 }
 
-// ListPolicyBundles operation middleware
-func (sh *strictHandler) ListPolicyBundles(w http.ResponseWriter, r *http.Request) {
-	var request ListPolicyBundlesRequestObject
+// EvaluateAuthorizationDirect operation middleware
+func (sh *strictHandler) EvaluateAuthorizationDirect(w http.ResponseWriter, r *http.Request) {
+	var request EvaluateAuthorizationDirectRequestObject
+
+	var body EvaluateAuthorizationDirectJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.ListPolicyBundles(ctx, request.(ListPolicyBundlesRequestObject))
+		return sh.ssi.EvaluateAuthorizationDirect(ctx, request.(EvaluateAuthorizationDirectRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "ListPolicyBundles")
+		handler = middleware(handler, "EvaluateAuthorizationDirect")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(ListPolicyBundlesResponseObject); ok {
-		if err := validResponse.VisitListPolicyBundlesResponse(w); err != nil {
+	} else if validResponse, ok := response.(EvaluateAuthorizationDirectResponseObject); ok {
+		if err := validResponse.VisitEvaluateAuthorizationDirectResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2358,25 +2425,49 @@ func (sh *strictHandler) ListPolicyBundles(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// GetPolicyBundle operation middleware
-func (sh *strictHandler) GetPolicyBundle(w http.ResponseWriter, r *http.Request, policyName string) {
-	var request GetPolicyBundleRequestObject
+// ListAuthorizationPolicyBundles operation middleware
+func (sh *strictHandler) ListAuthorizationPolicyBundles(w http.ResponseWriter, r *http.Request) {
+	var request ListAuthorizationPolicyBundlesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAuthorizationPolicyBundles(ctx, request.(ListAuthorizationPolicyBundlesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAuthorizationPolicyBundles")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAuthorizationPolicyBundlesResponseObject); ok {
+		if err := validResponse.VisitListAuthorizationPolicyBundlesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAuthorizationPolicyBundle operation middleware
+func (sh *strictHandler) GetAuthorizationPolicyBundle(w http.ResponseWriter, r *http.Request, policyName string) {
+	var request GetAuthorizationPolicyBundleRequestObject
 
 	request.PolicyName = policyName
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.GetPolicyBundle(ctx, request.(GetPolicyBundleRequestObject))
+		return sh.ssi.GetAuthorizationPolicyBundle(ctx, request.(GetAuthorizationPolicyBundleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "GetPolicyBundle")
+		handler = middleware(handler, "GetAuthorizationPolicyBundle")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(GetPolicyBundleResponseObject); ok {
-		if err := validResponse.VisitGetPolicyBundleResponse(w); err != nil {
+	} else if validResponse, ok := response.(GetAuthorizationPolicyBundleResponseObject); ok {
+		if err := validResponse.VisitGetAuthorizationPolicyBundleResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

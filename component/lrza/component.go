@@ -177,7 +177,7 @@ func (c *Component) Start() error {
 func (c *Component) Stop(ctx context.Context) error { return nil }
 
 // RegisterHttpHandlers registers no routes: /lrza/update is served through the generated
-// OpenAPI strict server, wired up in cmd.RegisterAPIRoutes.
+// OpenAPI strict server, wired up in strictAPIServer.RegisterHttpHandlers in package cmd.
 func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) {
 }
 

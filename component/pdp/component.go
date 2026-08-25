@@ -75,10 +75,9 @@ func (c *Component) Stop(ctx context.Context) error {
 }
 
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	internalMux.HandleFunc("POST /pdp", c.HandleMainPolicy)
 	internalMux.HandleFunc("POST /pdp/v1/data/{package}/{rule}", c.HandlePolicy)
-	// /pdp/bundles and /pdp/bundles/{policyName} are served through the generated OpenAPI
-	// strict server, wired up in cmd.RegisterAPIRoutes.
+	// /pdp, /pdp/bundles and /pdp/bundles/{policyName} are served through the generated
+	// OpenAPI strict server, wired up in strictAPIServer.RegisterHttpHandlers in package cmd.
 }
 
 func (c *Component) HandleMainPolicy(w http.ResponseWriter, r *http.Request) {
@@ -228,6 +227,24 @@ func (c *Component) EvaluateAuthorization(ctx context.Context, request api.Evalu
 	return api.EvaluateAuthorization200JSONResponse(apiResponse), nil
 }
 
+// EvaluateAuthorizationDirect backs POST /pdp, a shorthand alias of POST
+// /pdp/v1/data/knooppunt/authz with identical request/response schemas.
+func (c *Component) EvaluateAuthorizationDirect(ctx context.Context, request api.EvaluateAuthorizationDirectRequestObject) (api.EvaluateAuthorizationDirectResponseObject, error) {
+	apiRequest, err := to.JSONConvert[APIRequest](request.Body)
+	if err != nil {
+		return nil, err
+	}
+	result, statusCode := c.Evaluate(ctx, apiRequest)
+	apiResponse, err := to.JSONConvert[api.PDPAuthzResponse](result)
+	if err != nil {
+		return nil, err
+	}
+	if statusCode == http.StatusBadRequest {
+		return api.EvaluateAuthorizationDirect400JSONResponse(apiResponse), nil
+	}
+	return api.EvaluateAuthorizationDirect200JSONResponse(apiResponse), nil
+}
+
 func writeResponseWithCode(ctx context.Context, w http.ResponseWriter, response any, statusCode int) {
 	b, err := json.Marshal(response)
 	if err != nil {
@@ -280,23 +297,23 @@ func (c *Component) Bundle(ctx context.Context, policyName string) (data []byte,
 	return data, found, nil
 }
 
-func (c *Component) ListPolicyBundles(ctx context.Context, _ api.ListPolicyBundlesRequestObject) (api.ListPolicyBundlesResponseObject, error) {
+func (c *Component) ListAuthorizationPolicyBundles(ctx context.Context, _ api.ListAuthorizationPolicyBundlesRequestObject) (api.ListAuthorizationPolicyBundlesResponseObject, error) {
 	names, err := c.BundleNames(ctx)
 	if err != nil {
 		// No error response is declared for this internal-use endpoint; falls through to the
 		// framework's generic 500 plain-text handler, same as the original http.Error call.
 		return nil, err
 	}
-	return api.ListPolicyBundles200JSONResponse(names), nil
+	return api.ListAuthorizationPolicyBundles200JSONResponse(names), nil
 }
 
-func (c *Component) GetPolicyBundle(ctx context.Context, request api.GetPolicyBundleRequestObject) (api.GetPolicyBundleResponseObject, error) {
+func (c *Component) GetAuthorizationPolicyBundle(ctx context.Context, request api.GetAuthorizationPolicyBundleRequestObject) (api.GetAuthorizationPolicyBundleResponseObject, error) {
 	data, found, err := c.Bundle(ctx, request.PolicyName)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
-		return api.GetPolicyBundle404Response{}, nil
+		return api.GetAuthorizationPolicyBundle404Response{}, nil
 	}
 	return rawBundleResponse{
 		contentType:        "application/gzip",
@@ -305,10 +322,10 @@ func (c *Component) GetPolicyBundle(ctx context.Context, request api.GetPolicyBu
 	}, nil
 }
 
-// rawBundleResponse implements api.GetPolicyBundleResponseObject by hand: the OpenAPI
+// rawBundleResponse implements api.GetAuthorizationPolicyBundleResponseObject by hand: the OpenAPI
 // spec doesn't declare a content schema for this response (it's an internal-use, binary
 // download), so oapi-codegen has nothing to generate a typed body from. The response object is
-// just an interface (VisitGetPolicyBundleResponse(w) error), so a hand-written
+// just an interface (VisitGetAuthorizationPolicyBundleResponse(w) error), so a hand-written
 // implementation slots in the same way a generated one would.
 type rawBundleResponse struct {
 	contentType        string
@@ -316,7 +333,7 @@ type rawBundleResponse struct {
 	body               []byte
 }
 
-func (r rawBundleResponse) VisitGetPolicyBundleResponse(w http.ResponseWriter) error {
+func (r rawBundleResponse) VisitGetAuthorizationPolicyBundleResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", r.contentType)
 	w.Header().Set("Content-Disposition", r.contentDisposition)
 	w.WriteHeader(http.StatusOK)

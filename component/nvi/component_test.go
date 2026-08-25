@@ -55,7 +55,7 @@ var bsnTokenIdentifier = fhir.Identifier{
 	Value:  to.Ptr("abcdefghi"),
 }
 
-func TestComponent_RegisterListBundle(t *testing.T) {
+func TestComponent_RegisterNVIListBundle(t *testing.T) {
 	testCases := []struct {
 		name                     string
 		nviTransportError        error
@@ -139,13 +139,13 @@ func TestComponent_RegisterListBundle(t *testing.T) {
 			}
 			bundle := testUtil.ParseJSON[fhir.Bundle](t, testdata.FS, "bundle-transaction.json")
 
-			result, err := component.RegisterListBundle(t.Context(), api.RegisterListBundleRequestObject{
-				Params: api.RegisterListBundleParams{XTenantID: tenantID},
+			result, err := component.RegisterNVIListBundle(t.Context(), api.RegisterNVIListBundleRequestObject{
+				Params: api.RegisterNVIListBundleParams{XTenantID: tenantID},
 				Body:   &bundle,
 			})
 			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
-			require.NoError(t, result.VisitRegisterListBundleResponse(httpResponse))
+			require.NoError(t, result.VisitRegisterNVIListBundleResponse(httpResponse))
 
 			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
 			responseData, _ := io.ReadAll(httpResponse.Body)
@@ -173,8 +173,8 @@ func TestComponent_RegisterListBundle(t *testing.T) {
 	}
 }
 
-func TestComponent_RegisterList(t *testing.T) {
-	// Each returns a fresh fhir.List (not a shared value/pointers): RegisterList mutates its
+func TestComponent_RegisterNVIList(t *testing.T) {
+	// Each returns a fresh fhir.List (not a shared value/pointers): RegisterNVIList mutates its
 	// input's nested Subject/Extension in place, so reusing one value across sub-tests would let
 	// an earlier sub-test's mutation leak into a later one.
 	newListResource := func() fhir.List {
@@ -313,13 +313,13 @@ func TestComponent_RegisterList(t *testing.T) {
 			}
 
 			body := testCase.requestBody()
-			result, err := component.RegisterList(t.Context(), api.RegisterListRequestObject{
-				Params: api.RegisterListParams{XTenantID: tenantID},
+			result, err := component.RegisterNVIList(t.Context(), api.RegisterNVIListRequestObject{
+				Params: api.RegisterNVIListParams{XTenantID: tenantID},
 				Body:   &body,
 			})
 			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
-			require.NoError(t, result.VisitRegisterListResponse(httpResponse))
+			require.NoError(t, result.VisitRegisterNVIListResponse(httpResponse))
 
 			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
 			responseData, _ := io.ReadAll(httpResponse.Body)
@@ -365,7 +365,7 @@ func TestComponent_RegisterList(t *testing.T) {
 	}
 }
 
-func TestComponent_GetList(t *testing.T) {
+func TestComponent_GetNVIList(t *testing.T) {
 	listResource := testUtil.ParseJSON[fhir.List](t, testdata.FS, "list-resource-tokenized.json")
 
 	testCases := []struct {
@@ -415,13 +415,13 @@ func TestComponent_GetList(t *testing.T) {
 				pseudonymizer: pseudonymizer,
 				audience:      "nvi",
 			}
-			result, err := component.GetList(t.Context(), api.GetListRequestObject{
+			result, err := component.GetNVIList(t.Context(), api.GetNVIListRequestObject{
 				Id:     testCase.id,
-				Params: api.GetListParams{XTenantID: coding.URANamingSystem + "|" + localURA},
+				Params: api.GetNVIListParams{XTenantID: coding.URANamingSystem + "|" + localURA},
 			})
 			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
-			require.NoError(t, result.VisitGetListResponse(httpResponse))
+			require.NoError(t, result.VisitGetNVIListResponse(httpResponse))
 
 			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
 			responseData, _ := io.ReadAll(httpResponse.Body)
@@ -442,7 +442,7 @@ func TestComponent_GetList(t *testing.T) {
 	}
 }
 
-func TestComponent_DeleteList(t *testing.T) {
+func TestComponent_DeleteNVIList(t *testing.T) {
 	testCases := []struct {
 		name                     string
 		id                       string
@@ -487,13 +487,13 @@ func TestComponent_DeleteList(t *testing.T) {
 				pseudonymizer: pseudonymizer,
 				audience:      "nvi",
 			}
-			result, err := component.DeleteList(t.Context(), api.DeleteListRequestObject{
+			result, err := component.DeleteNVIList(t.Context(), api.DeleteNVIListRequestObject{
 				Id:     testCase.id,
-				Params: api.DeleteListParams{XTenantID: coding.URANamingSystem + "|" + localURA},
+				Params: api.DeleteNVIListParams{XTenantID: coding.URANamingSystem + "|" + localURA},
 			})
 			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
-			require.NoError(t, result.VisitDeleteListResponse(httpResponse))
+			require.NoError(t, result.VisitDeleteNVIListResponse(httpResponse))
 
 			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
 			if testCase.expectedOperationOutcome != nil {
@@ -510,7 +510,7 @@ func TestComponent_DeleteList(t *testing.T) {
 	}
 }
 
-func TestComponent_DeleteListsByParams(t *testing.T) {
+func TestComponent_DeleteNVIListsByParams(t *testing.T) {
 	testCases := []struct {
 		name                     string
 		nviTransportError        error
@@ -585,8 +585,8 @@ func TestComponent_DeleteListsByParams(t *testing.T) {
 				audience:      "nvi",
 			}
 			patient, subject, source, _, _ := searchParamFields(t, testCase.searchParams)
-			result, err := component.DeleteListsByParams(t.Context(), api.DeleteListsByParamsRequestObject{
-				Params: api.DeleteListsByParamsParams{
+			result, err := component.DeleteNVIListsByParams(t.Context(), api.DeleteNVIListsByParamsRequestObject{
+				Params: api.DeleteNVIListsByParamsParams{
 					XTenantID:         coding.URANamingSystem + "|" + localURA,
 					PatientIdentifier: patient,
 					SubjectIdentifier: subject,
@@ -595,7 +595,7 @@ func TestComponent_DeleteListsByParams(t *testing.T) {
 			})
 			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
-			require.NoError(t, result.VisitDeleteListsByParamsResponse(httpResponse))
+			require.NoError(t, result.VisitDeleteNVIListsByParamsResponse(httpResponse))
 
 			require.Equal(t, testCase.expectedStatus, httpResponse.Code)
 			responseData, _ := io.ReadAll(httpResponse.Body)
@@ -624,10 +624,10 @@ type searchListsTestCase struct {
 	expectedSearch           string
 }
 
-// searchListsTestCases is shared between TestComponent_SearchLists (GET, query parameters) and
-// TestComponent_SearchListsForm (POST, form-encoded body): both operations apply the exact same
+// searchNVIListsTestCases is shared between TestComponent_SearchNVILists (GET, query parameters) and
+// TestComponent_SearchNVIListsForm (POST, form-encoded body): both operations apply the exact same
 // parameter rules and tokenization logic via SearchList.
-func searchListsTestCases(listResource fhir.List) []searchListsTestCase {
+func searchNVIListsTestCases(listResource fhir.List) []searchListsTestCase {
 	return []searchListsTestCase{
 		{
 			name:            "searches at NVI",
@@ -725,11 +725,11 @@ func assertSearchListsResult(t *testing.T, nvi *test.StubFHIRClient, testCase se
 	}
 }
 
-func TestComponent_SearchLists(t *testing.T) {
+func TestComponent_SearchNVILists(t *testing.T) {
 	// NVI stores List resources with tokenized (transport token) identifiers.
 	listResource := testUtil.ParseJSON[fhir.List](t, testdata.FS, "list-resource-tokenized.json")
 
-	for _, testCase := range searchListsTestCases(listResource) {
+	for _, testCase := range searchNVIListsTestCases(listResource) {
 		t.Run(testCase.name, func(t *testing.T) {
 			const localURA = "1"
 			ctrl := gomock.NewController(t)
@@ -753,8 +753,8 @@ func TestComponent_SearchLists(t *testing.T) {
 			}
 			patient, subject, source, code, count := searchParamFields(t, searchParams)
 
-			result, err := component.SearchLists(t.Context(), api.SearchListsRequestObject{
-				Params: api.SearchListsParams{
+			result, err := component.SearchNVILists(t.Context(), api.SearchNVIListsRequestObject{
+				Params: api.SearchNVIListsParams{
 					XTenantID:         coding.URANamingSystem + "|" + localURA,
 					PatientIdentifier: patient,
 					SubjectIdentifier: subject,
@@ -765,23 +765,23 @@ func TestComponent_SearchLists(t *testing.T) {
 			})
 			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
-			require.NoError(t, result.VisitSearchListsResponse(httpResponse))
+			require.NoError(t, result.VisitSearchNVIListsResponse(httpResponse))
 
 			assertSearchListsResult(t, nvi, testCase, httpResponse)
 		})
 	}
 }
 
-// TestComponent_SearchListsForm covers the same cases as TestComponent_SearchLists, via the
+// TestComponent_SearchNVIListsForm covers the same cases as TestComponent_SearchNVILists, via the
 // form-encoded POST /nvi/List/_search operation instead of GET /nvi/List's query parameters.
 // It does not cover a malformed form body (e.g. an unparseable ";"): the generated strict server
-// wrapper parses the form body with r.ParseForm() before SearchListsForm is ever called, so that
+// wrapper parses the form body with r.ParseForm() before SearchNVIListsForm is ever called, so that
 // failure is now caught by the framework, not by component logic — there's nothing left at this
 // level to unit-test for that case.
-func TestComponent_SearchListsForm(t *testing.T) {
+func TestComponent_SearchNVIListsForm(t *testing.T) {
 	listResource := testUtil.ParseJSON[fhir.List](t, testdata.FS, "list-resource-tokenized.json")
 
-	for _, testCase := range searchListsTestCases(listResource) {
+	for _, testCase := range searchNVIListsTestCases(listResource) {
 		t.Run(testCase.name, func(t *testing.T) {
 			const localURA = "1"
 			ctrl := gomock.NewController(t)
@@ -804,7 +804,7 @@ func TestComponent_SearchListsForm(t *testing.T) {
 				searchParams = "patient:identifier=" + url.PathEscape(*bsnIdentifier.System+"|"+*bsnIdentifier.Value)
 			}
 			patient, subject, source, code, count := searchParamFields(t, searchParams)
-			body := api.SearchListsFormFormdataRequestBody{
+			body := api.SearchNVIListsFormFormdataRequestBody{
 				PatientIdentifier: patient,
 				SubjectIdentifier: subject,
 				SourceIdentifier:  source,
@@ -812,13 +812,13 @@ func TestComponent_SearchListsForm(t *testing.T) {
 				UnderscoreCount:   count,
 			}
 
-			result, err := component.SearchListsForm(t.Context(), api.SearchListsFormRequestObject{
-				Params: api.SearchListsFormParams{XTenantID: coding.URANamingSystem + "|" + localURA},
+			result, err := component.SearchNVIListsForm(t.Context(), api.SearchNVIListsFormRequestObject{
+				Params: api.SearchNVIListsFormParams{XTenantID: coding.URANamingSystem + "|" + localURA},
 				Body:   &body,
 			})
 			require.NoError(t, err)
 			httpResponse := httptest.NewRecorder()
-			require.NoError(t, result.VisitSearchListsFormResponse(httpResponse))
+			require.NoError(t, result.VisitSearchNVIListsFormResponse(httpResponse))
 
 			assertSearchListsResult(t, nvi, testCase, httpResponse)
 		})

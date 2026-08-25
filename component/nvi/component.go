@@ -78,7 +78,7 @@ func New(config Config, httpClientFn authn.HTTPClientProvider, pseudonymizer pse
 }
 
 // RegisterHttpHandlers registers no routes: every NVI operation is served through the generated
-// OpenAPI strict server, wired up in cmd.RegisterAPIRoutes.
+// OpenAPI strict server, wired up in strictAPIServer.RegisterHttpHandlers in package cmd.
 func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 }
 
@@ -130,8 +130,8 @@ func (c Component) RegisterBundle(ctx context.Context, tenantURA string, bundle 
 }
 
 // registerList registers a `List` resource directly (not wrapped in a Bundle) at NVI. Named in
-// lowercase to avoid colliding with the RegisterList method required by api.StrictServerInterface
-// (generated for the POST /nvi/List operation, named "registerList" in openapi.yaml).
+// lowercase to avoid colliding with the RegisterNVIList method required by api.StrictServerInterface
+// (generated for the POST /nvi/List operation, named "registerNVIList" in openapi.yaml).
 func (c Component) registerList(ctx context.Context, tenantURA string, list fhir.List) (*fhir.List, error) {
 	tokenizedList, err := c.tokenizeListIdentifiers(ctx, list, tenantURA, c.audience)
 	if err != nil {
@@ -377,7 +377,7 @@ func nviError(ctx context.Context, err error) api.OperationOutcomeResponse {
 }
 
 // searchParamValues builds the url.Values SearchList/DeleteListByParams expect from the
-// generated, individually-bound query parameters. code and count are nil for DeleteList's
+// generated, individually-bound query parameters. code and count are nil for DeleteNVIList's
 // params, which don't declare them.
 func searchParamValues(patientIdentifier, subjectIdentifier, sourceIdentifier, code *string, count *int) url.Values {
 	values := url.Values{}
@@ -396,7 +396,7 @@ func searchParamValues(patientIdentifier, subjectIdentifier, sourceIdentifier, c
 	return values
 }
 
-func (c Component) RegisterListBundle(ctx context.Context, request api.RegisterListBundleRequestObject) (api.RegisterListBundleResponseObject, error) {
+func (c Component) RegisterNVIListBundle(ctx context.Context, request api.RegisterNVIListBundleRequestObject) (api.RegisterNVIListBundleResponseObject, error) {
 	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
 	if err != nil {
 		return nviError(ctx, err), nil
@@ -405,10 +405,10 @@ func (c Component) RegisterListBundle(ctx context.Context, request api.RegisterL
 	if err != nil {
 		return nviError(ctx, err), nil
 	}
-	return api.RegisterListBundle200ApplicationFhirPlusJSONResponse(*result), nil
+	return api.RegisterNVIListBundle200ApplicationFhirPlusJSONResponse(*result), nil
 }
 
-func (c Component) RegisterList(ctx context.Context, request api.RegisterListRequestObject) (api.RegisterListResponseObject, error) {
+func (c Component) RegisterNVIList(ctx context.Context, request api.RegisterNVIListRequestObject) (api.RegisterNVIListResponseObject, error) {
 	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
 	if err != nil {
 		return nviError(ctx, err), nil
@@ -417,10 +417,10 @@ func (c Component) RegisterList(ctx context.Context, request api.RegisterListReq
 	if err != nil {
 		return nviError(ctx, err), nil
 	}
-	return api.RegisterList200ApplicationFhirPlusJSONResponse(*result), nil
+	return api.RegisterNVIList200ApplicationFhirPlusJSONResponse(*result), nil
 }
 
-func (c Component) GetList(ctx context.Context, request api.GetListRequestObject) (api.GetListResponseObject, error) {
+func (c Component) GetNVIList(ctx context.Context, request api.GetNVIListRequestObject) (api.GetNVIListResponseObject, error) {
 	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
 	if err != nil {
 		return nviError(ctx, err), nil
@@ -429,10 +429,10 @@ func (c Component) GetList(ctx context.Context, request api.GetListRequestObject
 	if err != nil {
 		return nviError(ctx, err), nil
 	}
-	return api.GetList200ApplicationFhirPlusJSONResponse(*result), nil
+	return api.GetNVIList200ApplicationFhirPlusJSONResponse(*result), nil
 }
 
-func (c Component) DeleteList(ctx context.Context, request api.DeleteListRequestObject) (api.DeleteListResponseObject, error) {
+func (c Component) DeleteNVIList(ctx context.Context, request api.DeleteNVIListRequestObject) (api.DeleteNVIListResponseObject, error) {
 	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
 	if err != nil {
 		return nviError(ctx, err), nil
@@ -440,10 +440,10 @@ func (c Component) DeleteList(ctx context.Context, request api.DeleteListRequest
 	if err := c.DeleteListByID(ctx, *tenantID.Value, request.Id); err != nil {
 		return nviError(ctx, err), nil
 	}
-	return api.DeleteList204Response{}, nil
+	return api.DeleteNVIList204Response{}, nil
 }
 
-func (c Component) DeleteListsByParams(ctx context.Context, request api.DeleteListsByParamsRequestObject) (api.DeleteListsByParamsResponseObject, error) {
+func (c Component) DeleteNVIListsByParams(ctx context.Context, request api.DeleteNVIListsByParamsRequestObject) (api.DeleteNVIListsByParamsResponseObject, error) {
 	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
 	if err != nil {
 		return nviError(ctx, err), nil
@@ -452,10 +452,10 @@ func (c Component) DeleteListsByParams(ctx context.Context, request api.DeleteLi
 	if err := c.DeleteListByParams(ctx, *tenantID.Value, params); err != nil {
 		return nviError(ctx, err), nil
 	}
-	return api.DeleteListsByParams204Response{}, nil
+	return api.DeleteNVIListsByParams204Response{}, nil
 }
 
-func (c Component) SearchLists(ctx context.Context, request api.SearchListsRequestObject) (api.SearchListsResponseObject, error) {
+func (c Component) SearchNVILists(ctx context.Context, request api.SearchNVIListsRequestObject) (api.SearchNVIListsResponseObject, error) {
 	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
 	if err != nil {
 		return nviError(ctx, err), nil
@@ -465,15 +465,15 @@ func (c Component) SearchLists(ctx context.Context, request api.SearchListsReque
 	if err != nil {
 		return nviError(ctx, err), nil
 	}
-	return api.SearchLists200ApplicationFhirPlusJSONResponse(*result), nil
+	return api.SearchNVILists200ApplicationFhirPlusJSONResponse(*result), nil
 }
 
-func (c Component) SearchListsForm(ctx context.Context, request api.SearchListsFormRequestObject) (api.SearchListsFormResponseObject, error) {
+func (c Component) SearchNVIListsForm(ctx context.Context, request api.SearchNVIListsFormRequestObject) (api.SearchNVIListsFormResponseObject, error) {
 	tenantID, err := tenants.IDFromHeaderValue(request.Params.XTenantID)
 	if err != nil {
 		return nviError(ctx, err), nil
 	}
-	var body api.SearchListsFormFormdataRequestBody
+	var body api.SearchNVIListsFormFormdataRequestBody
 	if request.Body != nil {
 		body = *request.Body
 	}
@@ -482,7 +482,7 @@ func (c Component) SearchListsForm(ctx context.Context, request api.SearchListsF
 	if err != nil {
 		return nviError(ctx, err), nil
 	}
-	return api.SearchListsForm200ApplicationFhirPlusJSONResponse(*result), nil
+	return api.SearchNVIListsForm200ApplicationFhirPlusJSONResponse(*result), nil
 }
 
 func (c Component) Start() error {

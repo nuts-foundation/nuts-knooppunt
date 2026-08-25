@@ -33,8 +33,8 @@ func (r OperationOutcomeResponse) Write(w http.ResponseWriter) error {
 }
 
 // The methods below exist only because Go interfaces require exact method names: each
-// operation's XxxResponseObject is its own interface (VisitRegisterListBundleResponse,
-// VisitGetListResponse, ...), so satisfying several of them means implementing several
+// operation's XxxResponseObject is its own interface (VisitRegisterNVIListBundleResponse,
+// VisitGetNVIListResponse, ...), so satisfying several of them means implementing several
 // identically-shaped methods — there's no way to express "any operation whose error response is
 // an OperationOutcome" as a single method. This is intentionally NOT generated (see the
 // package-level comment on why): the boilerplate is a couple of lines per operation, whereas a
@@ -48,31 +48,31 @@ func (r OperationOutcomeResponse) Write(w http.ResponseWriter) error {
 // ResponseObject (typically a `nviError(ctx, err)`-style helper in the owning component) will
 // fail to compile, naming the exact missing method. If you add a new operation's error handling
 // and the compiler doesn't complain, you don't need a new method here.
-func (r OperationOutcomeResponse) VisitRegisterListBundleResponse(w http.ResponseWriter) error {
+func (r OperationOutcomeResponse) VisitRegisterNVIListBundleResponse(w http.ResponseWriter) error {
 	return r.Write(w)
 }
 
-func (r OperationOutcomeResponse) VisitRegisterListResponse(w http.ResponseWriter) error {
+func (r OperationOutcomeResponse) VisitRegisterNVIListResponse(w http.ResponseWriter) error {
 	return r.Write(w)
 }
 
-func (r OperationOutcomeResponse) VisitGetListResponse(w http.ResponseWriter) error {
+func (r OperationOutcomeResponse) VisitGetNVIListResponse(w http.ResponseWriter) error {
 	return r.Write(w)
 }
 
-func (r OperationOutcomeResponse) VisitDeleteListResponse(w http.ResponseWriter) error {
+func (r OperationOutcomeResponse) VisitDeleteNVIListResponse(w http.ResponseWriter) error {
 	return r.Write(w)
 }
 
-func (r OperationOutcomeResponse) VisitDeleteListsByParamsResponse(w http.ResponseWriter) error {
+func (r OperationOutcomeResponse) VisitDeleteNVIListsByParamsResponse(w http.ResponseWriter) error {
 	return r.Write(w)
 }
 
-func (r OperationOutcomeResponse) VisitSearchListsResponse(w http.ResponseWriter) error {
+func (r OperationOutcomeResponse) VisitSearchNVIListsResponse(w http.ResponseWriter) error {
 	return r.Write(w)
 }
 
-func (r OperationOutcomeResponse) VisitSearchListsFormResponse(w http.ResponseWriter) error {
+func (r OperationOutcomeResponse) VisitSearchNVIListsFormResponse(w http.ResponseWriter) error {
 	return r.Write(w)
 }
 
