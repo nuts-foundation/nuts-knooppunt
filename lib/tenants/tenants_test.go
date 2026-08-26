@@ -1,72 +1,51 @@
 package tenants
 
 import (
-	"net/http"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/stretchr/testify/require"
-	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-func TestIDFromRequest(t *testing.T) {
-	t.Run("missing header", func(t *testing.T) {
-		request := http.Request{}
-		_, err := IDFromRequest(&request)
+func TestID_UnmarshalText(t *testing.T) {
+	t.Run("empty value", func(t *testing.T) {
+		var id ID
+		err := id.UnmarshalText([]byte(""))
 		fhirError := &fhirapi.Error{}
 		require.ErrorAs(t, err, &fhirError)
-		require.Equal(t, "missing tenant request header: X-Tenant-ID", fhirError.Message)
+		require.Equal(t, "invalid tenant ID", fhirError.Message)
 		require.Equal(t, fhir.IssueTypeValue, fhirError.IssueType)
 	})
 	t.Run("invalid token", func(t *testing.T) {
-		hdrs := http.Header{}
-		hdrs.Set("X-Tenant-ID", "something")
-		request := http.Request{
-			Header: hdrs,
-		}
-		_, err := IDFromRequest(&request)
+		var id ID
+		err := id.UnmarshalText([]byte("something"))
 		fhirError := &fhirapi.Error{}
 		require.ErrorAs(t, err, &fhirError)
-		require.Equal(t, "invalid tenant ID in request header", fhirError.Message)
+		require.Equal(t, "invalid tenant ID", fhirError.Message)
 		require.Equal(t, fhir.IssueTypeValue, fhirError.IssueType)
 	})
 	t.Run("invalid system", func(t *testing.T) {
-		hdrs := http.Header{}
-		hdrs.Set("X-Tenant-ID", "something|1")
-		request := http.Request{
-			Header: hdrs,
-		}
-		_, err := IDFromRequest(&request)
+		var id ID
+		err := id.UnmarshalText([]byte("something|1"))
 		fhirError := &fhirapi.Error{}
 		require.ErrorAs(t, err, &fhirError)
-		require.Equal(t, "invalid tenant ID in request header, expected system: "+coding.URANamingSystem, fhirError.Message)
+		require.Equal(t, "invalid tenant ID, expected system: "+coding.URANamingSystem, fhirError.Message)
 		require.Equal(t, fhir.IssueTypeValue, fhirError.IssueType)
 	})
 	t.Run("no value", func(t *testing.T) {
-		hdrs := http.Header{}
-		hdrs.Set("X-Tenant-ID", coding.URANamingSystem+"|")
-		request := http.Request{
-			Header: hdrs,
-		}
-		_, err := IDFromRequest(&request)
+		var id ID
+		err := id.UnmarshalText([]byte(coding.URANamingSystem + "|"))
 		fhirError := &fhirapi.Error{}
 		require.ErrorAs(t, err, &fhirError)
-		require.Equal(t, "invalid tenant ID in request header, missing value", fhirError.Message)
+		require.Equal(t, "invalid tenant ID, missing value", fhirError.Message)
 		require.Equal(t, fhir.IssueTypeValue, fhirError.IssueType)
 	})
 	t.Run("valid", func(t *testing.T) {
-		hdrs := http.Header{}
-		hdrs.Set("X-Tenant-ID", coding.URANamingSystem+"|1")
-		request := http.Request{
-			Header: hdrs,
-		}
-		identifier, err := IDFromRequest(&request)
+		var id ID
+		err := id.UnmarshalText([]byte(coding.URANamingSystem + "|1"))
 		require.NoError(t, err)
-		require.Equal(t, &fhir.Identifier{
-			System: to.Ptr(coding.URANamingSystem),
-			Value:  to.Ptr("1"),
-		}, identifier)
+		require.Equal(t, "1", id.URA())
 	})
 }

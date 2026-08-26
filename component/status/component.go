@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sync/atomic"
 
+	"github.com/nuts-foundation/nuts-knooppunt/api"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 )
 
@@ -36,18 +37,18 @@ func (c *Component) SetReady() {
 	c.ready.Store(true)
 }
 
+// RegisterHttpHandlers registers no routes: /status and /version are served through the
+// generated OpenAPI strict server, wired up in strictAPIServer.RegisterHttpHandlers in package cmd.
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	internalMux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
-		if !c.ready.Load() {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("starting"))
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("OK"))
-	})
-	internalMux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(BuildInfo()))
-	})
+}
+
+func (c *Component) GetStatus(_ context.Context, _ api.GetStatusRequestObject) (api.GetStatusResponseObject, error) {
+	if !c.ready.Load() {
+		return api.GetStatus503TextResponse("starting"), nil
+	}
+	return api.GetStatus200TextResponse("OK"), nil
+}
+
+func (c *Component) GetVersion(_ context.Context, _ api.GetVersionRequestObject) (api.GetVersionResponseObject, error) {
+	return api.GetVersion200TextResponse(BuildInfo()), nil
 }

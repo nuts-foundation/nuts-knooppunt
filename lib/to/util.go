@@ -27,3 +27,16 @@ func JSONMap[T any](val T) (map[string]any, error) {
 	}
 	return m, nil
 }
+
+// JSONConvert converts in to TOut by marshaling to JSON and unmarshaling into TOut. Useful
+// between types with identical JSON shapes but different Go representations, e.g. between the
+// generated OpenAPI client's opaque map-shaped types and this codebase's typed structs.
+func JSONConvert[TOut any](in any) (TOut, error) {
+	var out TOut
+	data, err := json.Marshal(in)
+	if err != nil {
+		return out, err
+	}
+	err = json.Unmarshal(data, &out)
+	return out, err
+}

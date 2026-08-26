@@ -11,6 +11,7 @@ require (
 	github.com/beevik/etree v1.6.0
 	github.com/cloudflare/circl v1.6.3
 	github.com/docker/docker v28.2.2+incompatible
+	github.com/getkin/kin-openapi v0.142.0
 	github.com/google/uuid v1.6.0
 	github.com/gowebpki/jcs v1.0.1
 	github.com/knadh/koanf/parsers/yaml v1.1.0
@@ -21,6 +22,7 @@ require (
 	github.com/lestrrat-go/jwx/v2 v2.1.6
 	github.com/mitchellh/copystructure v1.2.0
 	github.com/nuts-foundation/nuts-node v1.0.1-0.20260417134758-22ceb753a1f5
+	github.com/oapi-codegen/runtime v1.6.0
 	github.com/open-policy-agent/opa v1.12.3
 	github.com/pkg/errors v0.9.1
 	github.com/russellhaering/goxmldsig v1.5.0
@@ -106,6 +108,7 @@ require (
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
+	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.8.4 // indirect
 	github.com/edsrzf/mmap-go v1.1.0 // indirect
@@ -126,6 +129,8 @@ require (
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
+	github.com/go-openapi/jsonpointer v0.23.1 // indirect
+	github.com/go-openapi/swag/jsonname v0.26.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/go-redsync/redsync/v4 v4.13.0 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
@@ -137,7 +142,6 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
-	github.com/golang/mock v1.6.0 // indirect
 	github.com/goodsign/monday v1.0.2 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
@@ -222,7 +226,9 @@ require (
 	github.com/nuts-foundation/go-leia/v4 v4.3.0 // indirect
 	github.com/nuts-foundation/go-stoabs v1.11.1 // indirect
 	github.com/nuts-foundation/sqlite v1.0.0 // indirect
-	github.com/oapi-codegen/runtime v1.3.1 // indirect
+	github.com/oapi-codegen/oapi-codegen/v2 v2.8.0 // indirect
+	github.com/oasdiff/yaml v0.1.1 // indirect
+	github.com/oasdiff/yaml3 v0.0.14 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
@@ -245,6 +251,7 @@ require (
 	github.com/rs/zerolog v1.34.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/santhosh-tekuri/jsonschema v1.2.4 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/shengdoushi/base58 v1.0.0 // indirect
@@ -252,6 +259,8 @@ require (
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sietseringers/go-sse v0.0.0-20200801161811-e2cf2c63ca50 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
+	github.com/speakeasy-api/jsonpath v0.6.3 // indirect
+	github.com/speakeasy-api/openapi v1.24.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.3 // indirect
 	github.com/templexxx/cpu v0.0.9 // indirect
@@ -269,6 +278,7 @@ require (
 	github.com/valyala/fastjson v1.6.4 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.31 // indirect
+	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
@@ -288,13 +298,15 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.50.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/term v0.42.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/crypto v0.54.0 // indirect
+	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/term v0.45.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
+	golang.org/x/tools v0.48.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/grpc v1.80.0 // indirect
@@ -315,3 +327,5 @@ require (
 	schneider.vip/problem v1.9.1 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen

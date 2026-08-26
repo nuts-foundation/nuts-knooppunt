@@ -54,8 +54,9 @@ func Start(ctx context.Context, config Config) error {
 	}
 
 	// The LRZA sync client is only registered when a trusted source directory is configured.
+	var lrzaClient *lrza.Component
 	if config.LRZA.LRZABaseUrl != "" {
-		lrzaClient, err := lrza.New(config.LRZA)
+		lrzaClient, err = lrza.New(config.LRZA)
 		if err != nil {
 			return errors.Wrap(err, "failed to create LRZA sync client")
 		}
@@ -85,8 +86,9 @@ func Start(ctx context.Context, config Config) error {
 
 	// Create MITZ component
 	var consentChecker mitz.ConsentChecker
+	var mitzComponent *mitz.Component
 	if config.MITZ.Enabled() {
-		mitzComponent, err := mitz.New(config.MITZ)
+		mitzComponent, err = mitz.New(config.MITZ)
 		if err != nil {
 			return errors.Wrap(err, "failed to create MITZ component")
 		}
@@ -97,8 +99,9 @@ func Start(ctx context.Context, config Config) error {
 	}
 
 	// Create PDP component
+	var pdpComponent *pdp.Component
 	if config.PDP.Enabled {
-		pdpComponent, err := pdp.New(config.PDP, consentChecker)
+		pdpComponent, err = pdp.New(config.PDP, consentChecker)
 		if err != nil {
 			return errors.Wrap(err, "failed to create PDP component")
 		}
@@ -106,10 +109,11 @@ func Start(ctx context.Context, config Config) error {
 	}
 
 	// Create NVI component
+	var nviComponent *nvi.Component
 	if config.NVI.Enabled() {
 		pseudoComponent := pseudonymisation.New(config.Pseudonymisation, authnComponent.MinVWSHTTPClient)
 
-		nviComponent, err := nvi.New(config.NVI, authnComponent.MinVWSHTTPClient, pseudoComponent)
+		nviComponent, err = nvi.New(config.NVI, authnComponent.MinVWSHTTPClient, pseudoComponent)
 		if err != nil {
 			return errors.Wrap(err, "failed to create NVI component")
 		}
@@ -117,6 +121,14 @@ func Start(ctx context.Context, config Config) error {
 	} else {
 		slog.InfoContext(ctx, "NVI component is disabled")
 	}
+
+	components = append(components, &strictAPIServer{
+		status: statusComponent,
+		lrza:   lrzaClient,
+		pdp:    pdpComponent,
+		nvi:    nviComponent,
+		mitz:   mitzComponent,
+	})
 
 	// Components: RegisterHandlers()
 	for _, cmp := range components {

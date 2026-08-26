@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/nuts-foundation/nuts-knooppunt/api"
+	"github.com/nuts-foundation/nuts-knooppunt/api/mitzpublic"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
@@ -111,10 +113,26 @@ func createHTTPClient(config Config) (*http.Client, error) {
 	}, nil
 }
 
-// RegisterHttpHandlers registers the HTTP handlers for the MITZ component
+// RegisterHttpHandlers registers the HTTP handlers for the MITZ component. /mitz/Subscription
+// isn't registered here: it's served through the generated OpenAPI strict server, wired up in
+// strictAPIServer.RegisterHttpHandlers in package cmd. /mitz/notify is generated from a separate
+// spec, mitz-public.openapi.yaml (see api/mitzpublic), since it's served on the public interface
+// and isn't part of openapi.yaml; Component implements its StrictServerInterface directly, since
+// it's the sole operation and the sole owning component.
+//
+// A custom RequestErrorHandlerFunc replaces the generated default (400 Bad Request): MITZ
+// sometimes sends XML bodies despite the fhir+json content type the spec declares, which the
+// generated JSON body binding can't decode. ReceiveMitzNotification doesn't look at request.Body
+// anyway (see its comment), so a body that fails to bind is still acknowledged rather than
+// rejected, matching the previous handler's behavior of never reading the body at all.
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
-	publicMux.Handle("POST /mitz/notify", http.HandlerFunc(c.handleNotify))
-	internalMux.Handle("POST /mitz/Subscription", http.HandlerFunc(c.handleSubscribe))
+	handler := mitzpublic.NewStrictHandlerWithOptions(c, nil, mitzpublic.StrictHTTPServerOptions{
+		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			slog.DebugContext(r.Context(), "MITZ notification body could not be decoded, ignoring", logging.Error(err))
+			w.WriteHeader(http.StatusNoContent)
+		},
+	})
+	mitzpublic.HandlerFromMux(handler, publicMux)
 }
 
 // Start starts the component
@@ -127,14 +145,16 @@ func (c *Component) Stop(ctx context.Context) error {
 	return nil
 }
 
-// handleNotify handles FHIR consent bundle notifications
-func (c *Component) handleNotify(httpResponse http.ResponseWriter, httpRequest *http.Request) {
-	slog.DebugContext(httpRequest.Context(), "Received FHIR consent bundle notification")
+var _ mitzpublic.StrictServerInterface = (*Component)(nil)
+
+// ReceiveMitzNotification handles FHIR consent bundle notifications
+func (c *Component) ReceiveMitzNotification(ctx context.Context, _ mitzpublic.ReceiveMitzNotificationRequestObject) (mitzpublic.ReceiveMitzNotificationResponseObject, error) {
+	slog.DebugContext(ctx, "Received FHIR consent bundle notification")
 
 	// todo: process it? atm we don't care about it. If we will care, we may have a problem because they seem
 	// to be sending XMLs, which go fhir lib doesn't support yet
 
-	httpResponse.WriteHeader(http.StatusNoContent)
+	return mitzpublic.ReceiveMitzNotification204Response{}, nil
 }
 
 // CheckConsent triggers a consent check by invoking MITZ closed query.
@@ -311,40 +331,33 @@ func (c *Component) addConfigExtensions(ctx context.Context, subscription *fhir.
 	}
 }
 
-// handleSubscribe handles subscription creation requests where payload is already Mitz compliant Consent
-func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpRequest *http.Request) {
-	fhirRequest, err := fhirapi.ParseRequest[fhir.Subscription](httpRequest)
-	if err != nil {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
-		return
-	}
-	resource := fhirRequest.Resource
-
+// CreateSubscription validates a MITZ consent Subscription, fills in gateway/source system
+// extensions and a default channel endpoint/payload from configuration, and creates it at MITZ.
+func (c *Component) CreateSubscription(ctx context.Context, resource fhir.Subscription) (*fhir.Subscription, error) {
 	// Validate the subscription resource
 	if err := validateMITZSubscription(resource); err != nil {
-		fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
-		return
+		return nil, err
 	}
 
 	// Add gateway and source system extensions from config
-	c.addConfigExtensions(httpRequest.Context(), &resource)
+	c.addConfigExtensions(ctx, &resource)
 
 	// Set default payload if not provided
 	if resource.Channel.Payload == nil || *resource.Channel.Payload == "" {
 		resource.Channel.Payload = to.Ptr(fhirJSONContentType)
-		slog.DebugContext(httpRequest.Context(), "Set default channel payload", slog.String("payload", fhirJSONContentType))
+		slog.DebugContext(ctx, "Set default channel payload", slog.String("payload", fhirJSONContentType))
 	}
 
 	// Use endpoint from configuration if not already provided in the request
 	if resource.Channel.Endpoint == nil || *resource.Channel.Endpoint == "" {
 		if c.notifyEndpoint != "" {
 			resource.Channel.Endpoint = to.Ptr(c.notifyEndpoint)
-			slog.DebugContext(httpRequest.Context(), "Set subscription channel endpoint from configuration", slog.String("endpoint", c.notifyEndpoint))
+			slog.DebugContext(ctx, "Set subscription channel endpoint from configuration", slog.String("endpoint", c.notifyEndpoint))
 		} else {
-			slog.WarnContext(httpRequest.Context(), "No subscription notify endpoint configured")
+			slog.WarnContext(ctx, "No subscription notify endpoint configured")
 		}
 	} else {
-		slog.DebugContext(httpRequest.Context(), "Using channel endpoint from incoming subscription", slog.String("endpoint", *resource.Channel.Endpoint))
+		slog.DebugContext(ctx, "Using channel endpoint from incoming subscription", slog.String("endpoint", *resource.Channel.Endpoint))
 	}
 
 	// Send subscription to configured FHIR endpoint
@@ -352,7 +365,7 @@ func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpReques
 	// Note: The go-fhir-client library only supports JSON, not XML
 	// XML support would require manually constructing the HTTP request
 	var headers fhirclient.Headers
-	err = c.client.CreateWithContext(httpRequest.Context(), resource, nil, fhirclient.ResponseHeaders(&headers))
+	err := c.client.CreateWithContext(ctx, resource, nil, fhirclient.ResponseHeaders(&headers))
 	if err != nil {
 		// Check if it's an OperationOutcome error to extract status code
 		if outcomeErr, ok := err.(fhirclient.OperationOutcomeError); ok {
@@ -394,9 +407,11 @@ func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpReques
 					IssueType: fhir.IssueTypeTransient,
 				}
 			}
-			fhirapi.SendErrorResponse(httpRequest.Context(), httpResponse, err)
-			return
+			return nil, err
 		}
+		// NOTE: preserves a pre-existing quirk — if err isn't a fhirclient.OperationOutcomeError,
+		// execution falls through here and the subscription is reported as created despite the
+		// failure, exactly as handleSubscribe did before this method was split out.
 	}
 
 	location := headers.Header.Get("Location")
@@ -408,9 +423,13 @@ func (c *Component) handleSubscribe(httpResponse http.ResponseWriter, httpReques
 		}
 	}
 
-	// MITZ should respond with 202 Accepted
-	// Note: The fhir-client doesn't expose the raw HTTP response,
-	// so we trust that if CreateWithContext succeeds, the subscription was accepted
-	fhirapi.SendResponse(httpRequest.Context(), httpResponse, http.StatusCreated, resource)
+	return &resource, nil
 }
 
+func (c *Component) CreateMitzSubscription(ctx context.Context, request api.CreateMitzSubscriptionRequestObject) (api.CreateMitzSubscriptionResponseObject, error) {
+	result, err := c.CreateSubscription(ctx, *request.Body)
+	if err != nil {
+		return api.NewOperationOutcomeResponse(ctx, err), nil
+	}
+	return api.CreateMitzSubscription201ApplicationFhirPlusJSONResponse(*result), nil
+}

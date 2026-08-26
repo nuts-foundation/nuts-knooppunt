@@ -24,12 +24,14 @@ import (
 	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/nuts-foundation/nuts-knooppunt/api"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/httpauth"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -174,19 +176,24 @@ func (c *Component) Start() error {
 
 func (c *Component) Stop(ctx context.Context) error { return nil }
 
+// RegisterHttpHandlers registers no routes: /lrza/update is served through the generated
+// OpenAPI strict server, wired up in strictAPIServer.RegisterHttpHandlers in package cmd.
 func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) {
-	internalMux.HandleFunc("POST /lrza/update", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		report, err := c.update(ctx)
-		if err != nil {
-			slog.ErrorContext(ctx, "LRZA update failed", logging.Error(err))
-			http.Error(w, "Failed to update LRZA: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(report)
-	})
+}
+
+func (c *Component) TriggerLrzaSync(ctx context.Context, _ api.TriggerLrzaSyncRequestObject) (api.TriggerLrzaSyncResponseObject, error) {
+	report, err := c.update(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "LRZA update failed", logging.Error(err))
+		return api.TriggerLrzaSync500JSONResponse{Error: to.Ptr("Failed to update LRZA: " + err.Error())}, nil
+	}
+	return api.TriggerLrzaSync200JSONResponse(api.DirectoryUpdateReport{
+		Created:  to.Ptr(report.CountCreated),
+		Updated:  to.Ptr(report.CountUpdated),
+		Deleted:  to.Ptr(report.CountDeleted),
+		Warnings: to.Ptr(report.Warnings),
+		Errors:   to.Ptr(report.Errors),
+	}), nil
 }
 
 // update runs one sync cycle: fetch the trusted source's history, build a transaction from it, apply

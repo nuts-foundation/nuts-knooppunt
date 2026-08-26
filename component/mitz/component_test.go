@@ -73,6 +73,26 @@ func TestRegisterHttpHandlers(t *testing.T) {
 	assert.NotEqual(t, http.StatusNotFound, w.Code)
 }
 
+func TestRegisterHttpHandlers_NotifyIgnoresUnparseableBody(t *testing.T) {
+	// MITZ sometimes sends XML despite the fhir+json content type the spec declares; the
+	// notification is acknowledged regardless, since the body is never actually read.
+	config := Config{
+		MitzBase: "http://example.com",
+	}
+	component, err := New(config)
+	require.NoError(t, err)
+
+	publicMux := http.NewServeMux()
+	internalMux := http.NewServeMux()
+	component.RegisterHttpHandlers(publicMux, internalMux)
+
+	req := httptest.NewRequest(http.MethodPost, "/mitz/notify", bytes.NewReader([]byte("<Bundle/>")))
+	req.Header.Set("Content-Type", "application/fhir+json")
+	w := httptest.NewRecorder()
+	publicMux.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
 func TestComponentLifecycle(t *testing.T) {
 	component := &Component{}
 

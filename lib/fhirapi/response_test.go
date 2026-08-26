@@ -1,99 +1,55 @@
 package fhirapi
 
 import (
-	"context"
 	"errors"
 	"net/http"
-	"net/http/httptest"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-func TestSendResponse(t *testing.T) {
-	t.Run("send response", func(t *testing.T) {
-		resource := map[string]interface{}{
-			"resourceType": "Patient",
-			"id":           "123",
-			"name": []map[string]interface{}{
-				{"family": "Doe", "given": []string{"John"}},
-			},
-		}
+func TestStatusCodeForError(t *testing.T) {
+	t.Run("invalid issue type maps to 400", func(t *testing.T) {
+		err := &Error{Message: "bad input", IssueType: fhir.IssueTypeInvalid}
+		assert.Equal(t, http.StatusBadRequest, StatusCodeForError(err))
+	})
 
-		recorder := httptest.NewRecorder()
-		ctx := context.Background()
-		SendResponse(ctx, recorder, http.StatusOK, resource)
+	t.Run("transient issue type maps to 503", func(t *testing.T) {
+		err := &Error{Message: "upstream unavailable", IssueType: fhir.IssueTypeTransient}
+		assert.Equal(t, http.StatusServiceUnavailable, StatusCodeForError(err))
+	})
 
-		// Check status code
-		assert.Equal(t, http.StatusOK, recorder.Code)
+	t.Run("too costly issue type maps to 422", func(t *testing.T) {
+		err := &Error{Message: "too many results", IssueType: fhir.IssueTypeTooCostly}
+		assert.Equal(t, http.StatusUnprocessableEntity, StatusCodeForError(err))
+	})
 
-		// Check headers
-		assert.Equal(t, JSONMimeType, recorder.Header().Get("Content-Type"))
-		expectedLength := len(recorder.Body.Bytes())
-		assert.Equal(t, strconv.Itoa(expectedLength), recorder.Header().Get("Content-Length"))
+	t.Run("unmapped issue type maps to 500", func(t *testing.T) {
+		err := &Error{Message: "not authorized", IssueType: fhir.IssueTypeSecurity}
+		assert.Equal(t, http.StatusInternalServerError, StatusCodeForError(err))
+	})
 
-		// Check response body contains expected JSON
-		body := recorder.Body.String()
-		assert.Contains(t, body, `"resourceType": "Patient"`)
-		assert.Contains(t, body, `"id": "123"`)
-		assert.Contains(t, body, `"family": "Doe"`)
+	t.Run("non-Error maps to 500", func(t *testing.T) {
+		assert.Equal(t, http.StatusInternalServerError, StatusCodeForError(errors.New("database connection failed")))
 	})
 }
 
-func TestSendErrorResponse(t *testing.T) {
-	t.Run("API error", func(t *testing.T) {
-		// Test FHIR API error that should return 400 Bad Request
-		apiError := &Error{
-			Message:   "Invalid resource format",
-			Cause:     errors.New("validation failed"),
-			IssueType: fhir.IssueTypeInvalid,
-		}
+func TestOperationOutcomeForError(t *testing.T) {
+	t.Run("Error yields its own OperationOutcome", func(t *testing.T) {
+		err := &Error{Message: "Invalid resource format", Cause: errors.New("validation failed"), IssueType: fhir.IssueTypeInvalid}
 
-		recorder := httptest.NewRecorder()
-		ctx := context.Background()
+		outcome := OperationOutcomeForError(err)
 
-		SendErrorResponse(ctx, recorder, apiError)
-
-		// Check status code - should be 400 for invalid issue types
-		assert.Equal(t, http.StatusBadRequest, recorder.Code)
-
-		// Check headers
-		assert.Equal(t, JSONMimeType, recorder.Header().Get("Content-Type"))
-		expectedLength := len(recorder.Body.Bytes())
-		assert.Equal(t, strconv.Itoa(expectedLength), recorder.Header().Get("Content-Length"))
-
-		// Check response body contains OperationOutcome with the API error details
-		body := recorder.Body.String()
-		assert.Contains(t, body, `"resourceType": "OperationOutcome"`)
-		assert.Contains(t, body, `"severity": "error"`)
-		assert.Contains(t, body, `"code": "invalid"`)
-		assert.Contains(t, body, `"diagnostics": "Invalid resource format"`)
+		assert.Equal(t, err.OperationOutcome(), outcome)
+		assert.Equal(t, "Invalid resource format", *outcome.Issue[0].Diagnostics)
+		assert.Equal(t, fhir.IssueTypeInvalid, outcome.Issue[0].Code)
 	})
 
-	t.Run("other error", func(t *testing.T) {
-		// Test generic error that should return 500 Internal Server Error
-		genericError := errors.New("database connection failed")
+	t.Run("generic error yields a diagnostics-free OperationOutcome", func(t *testing.T) {
+		outcome := OperationOutcomeForError(errors.New("database connection failed"))
 
-		recorder := httptest.NewRecorder()
-		ctx := context.Background()
-
-		SendErrorResponse(ctx, recorder, genericError)
-
-		// Check status code - should be 500 for generic errors
-		assert.Equal(t, http.StatusInternalServerError, recorder.Code)
-
-		// Check headers
-		assert.Equal(t, JSONMimeType, recorder.Header().Get("Content-Type"))
-		expectedLength := len(recorder.Body.Bytes())
-		assert.Equal(t, strconv.Itoa(expectedLength), recorder.Header().Get("Content-Length"))
-
-		// Check response body contains generic OperationOutcome
-		body := recorder.Body.String()
-		assert.Contains(t, body, `"resourceType": "OperationOutcome"`)
-		assert.Contains(t, body, `"severity": "error"`)
-		assert.Contains(t, body, `"code": "processing"`)
-		assert.Contains(t, body, `"diagnostics": "An internal server error occurred"`)
+		assert.Equal(t, fhir.IssueTypeProcessing, outcome.Issue[0].Code)
+		assert.Equal(t, "An internal server error occurred", *outcome.Issue[0].Diagnostics)
 	})
 }
