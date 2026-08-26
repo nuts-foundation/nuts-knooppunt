@@ -19,6 +19,7 @@ func Organizations() []fhir.Organization {
 	return []fhir.Organization{
 		CareHomeSunflower(),
 		Care2Cure(),
+		HospitalPlataan(),
 	}
 }
 
@@ -27,6 +28,7 @@ func Endpoints(fhirBaseURL *url.URL) []fhir.Endpoint {
 	var allEndpoints []fhir.Endpoint
 	allEndpoints = append(allEndpoints, CareHomeSunflowerEndpoints(fhirBaseURL)...)
 	allEndpoints = append(allEndpoints, Care2CureEndpoints(fhirBaseURL)...)
+	allEndpoints = append(allEndpoints, HospitalPlataanEndpoints(fhirBaseURL)...)
 	return allEndpoints
 }
 

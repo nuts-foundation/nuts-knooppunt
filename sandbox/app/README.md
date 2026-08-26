@@ -79,7 +79,13 @@ the vendored v1.0.2 bundle. Keep this form when adding interactivity.
   `GET /demo/auth/callback` creates the session, `POST /demo/logout` ends it. `authSession` in
   `session.go` holds the raw attestation that E4 sends to the Nuts node as `id_token`; templates
   only ever see the derived `Session` view model.
-- The reset stub, `POST /demo/reset` (E5).
+- `page.Session` and the `topbar` partial (E2).
+- Reset/recycle (E5, landed): `POST /demo/reset` (global, `override=true` past active locks),
+  `POST /demo/patients/{key}/recycle` (per-patient, 409 if locked), `POST /demo/patients/{key}/lock` and
+  `/release` (manual lock control), and `GET /demo/patients` (pool + lock status JSON). These call
+  `vectors.ResetGlobal` / `vectors.RecyclePatient`; they are enabled only when `KNOOPPUNT_INTERNAL_URL` and
+  `HAPI_BASE_URL` are set (see `docker-compose.yml`), otherwise reset reports "disabled". The lock trigger on
+  scenario-run start is E4/E6; E5 ships the registry, reset-side enforcement and the manual controls.
 - The `#gf-viewer-steps` container and `window.GFJourney.apply(stepEvent)` / `.reset()`, consuming the DESIGN.md §7
   step-event schema (E6).
 
