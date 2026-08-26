@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -13,9 +15,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testConfig returns a Config for handler tests: a fresh lock registry and no
+// wired reset functions (so reset/recycle report "disabled" unless the test
+// injects fakes).
+func testConfig() Config {
+	return Config{Locks: NewRegistry()}
+}
+
 func getPage(t *testing.T, path string) (int, string) {
 	t.Helper()
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	res, err := http.Get(srv.URL + path)
 	require.NoError(t, err)
@@ -123,7 +132,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestEhrRedirectsWhenNotSignedIn(t *testing.T) {
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -137,7 +146,7 @@ func TestEhrRedirectsWhenNotSignedIn(t *testing.T) {
 }
 
 func TestLoginRedirectsToDezi(t *testing.T) {
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -154,7 +163,7 @@ func TestLoginRedirectsToDezi(t *testing.T) {
 }
 
 func TestCallbackRejectsUnknownState(t *testing.T) {
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -166,7 +175,7 @@ func TestCallbackRejectsUnknownState(t *testing.T) {
 }
 
 func TestCallbackSurfacesOAuthError(t *testing.T) {
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -187,7 +196,7 @@ func TestCallbackSurfacesOAuthError(t *testing.T) {
 func TestLogoutEndsSessionServerSide(t *testing.T) {
 	dezi := fakeDezi(t)
 	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := signInViaDezi(t, srv)
 	raw := sessionCookieValue(t, client, srv.URL)
@@ -201,6 +210,7 @@ func TestLogoutEndsSessionServerSide(t *testing.T) {
 	res.Body.Close()
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
 	require.Equal(t, "/demo?notice=signed-out", res.Header.Get("Location"))
+	requireDeletionCookie(t, res)
 
 	// Replay the cookie value the browser held before logout. If the server
 	// still honours it, clearing the cookie client-side was cosmetic and the
@@ -213,10 +223,48 @@ func TestLogoutEndsSessionServerSide(t *testing.T) {
 	require.Equal(t, http.StatusOK, status, "logout must end only the caller's session")
 }
 
+// requireDeletionCookie asserts the response carries a cookie that actually
+// deletes the session cookie, rather than merely mentioning its name.
+//
+// This is the property the two routes share and the one nothing else here
+// covers: a browser removes a cookie only when the replacement matches the
+// original's Name and Path, so a wrong Path leaves the old cookie in place
+// beside a new empty one and the session survives in the browser. Both routes
+// go through clearSessionCookie (session.go); before that helper existed each
+// route carried its own copy of these attributes, and every test still passed
+// while they drifted.
+//
+// Secure is compared against secureCookies() rather than hardcoded: the set
+// cookie's Secure flag is already pinned for http and https by
+// TestCallbackSetsSecureCookieAttributes and its https counterpart, and the
+// deletion cookie has to agree with whatever those produce.
+func requireDeletionCookie(t *testing.T, res *http.Response) {
+	t.Helper()
+	for _, cookie := range res.Cookies() {
+		if cookie.Name != sessionCookie {
+			continue
+		}
+		require.Empty(t, cookie.Value, "the deletion cookie must not carry a session value")
+		require.Equal(t, "/", cookie.Path, "a cookie is deleted only when the Path matches the one it was set with")
+		require.True(t, cookie.HttpOnly, "the replacement must not be readable from script when the original was not")
+		require.Equal(t, secureCookies(), cookie.Secure, "the deletion cookie must match the set cookie's Secure flag")
+		require.Equal(t, -1, cookie.MaxAge, "MaxAge -1 is what expires the cookie immediately")
+		return
+	}
+	t.Fatalf("no %s cookie in the response, so the browser keeps the one it has", sessionCookie)
+}
+
 func TestResetEndsSessionServerSide(t *testing.T) {
 	dezi := fakeDezi(t)
 	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
-	srv := httptest.NewServer(NewMux())
+	// A configured reset, because an unwired Config makes the route report
+	// "disabled" and return before it reaches the sessions, which is the whole
+	// claim here. Teardown itself does not depend on the restore succeeding;
+	// TestResetEndsSessionEvenWhenTheRestoreFails covers that half.
+	cfg := testConfig()
+	cfg.resetGlobal = func(context.Context) error { return nil }
+	cfg.recyclePatient = func(context.Context, string) error { return nil }
+	srv := httptest.NewServer(NewMux(cfg))
 	t.Cleanup(srv.Close)
 	client := signInViaDezi(t, srv)
 	raw := sessionCookieValue(t, client, srv.URL)
@@ -228,7 +276,8 @@ func TestResetEndsSessionServerSide(t *testing.T) {
 	require.NoError(t, err)
 	res.Body.Close()
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
-	require.Equal(t, "/demo?notice=reset-pending", res.Header.Get("Location"))
+	require.Equal(t, "/demo?notice=reset-done", res.Header.Get("Location"))
+	requireDeletionCookie(t, res)
 
 	status, location := replaySessionCookie(t, srv, raw)
 	require.Equal(t, http.StatusSeeOther, status, "reset must drop every session, not just clear the caller's cookie")
@@ -238,8 +287,38 @@ func TestResetEndsSessionServerSide(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, status, "reset must also drop a session that never made the request")
 }
 
+// ResetGlobal is not transactional: it clears the mutable tenants, then reloads
+// fixtures and re-seeds the NVI, and a failure at any of those steps returns
+// with the data already mutated. Keeping the session alive across that would
+// hand the practitioner a signed-in view of a half-restored dataset, so
+// teardown does not wait for the restore to succeed.
+func TestResetEndsSessionEvenWhenTheRestoreFails(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	cfg := testConfig()
+	cfg.resetGlobal = func(context.Context) error { return errors.New("reload fixtures: hapi is down") }
+	cfg.recyclePatient = func(context.Context, string) error { return nil }
+	srv := httptest.NewServer(NewMux(cfg))
+	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+	raw := sessionCookieValue(t, client, srv.URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/reset", nil)
+	require.NoError(t, err)
+	body, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, http.StatusInternalServerError, res.StatusCode)
+	require.Contains(t, string(body), "hapi is down", "the caller is told why the reset failed")
+	requireDeletionCookie(t, res)
+
+	status, location := replaySessionCookie(t, srv, raw)
+	require.Equal(t, http.StatusSeeOther, status, "a failed reset must still drop the session")
+	require.Equal(t, "/demo/login", location)
+}
+
 func TestResetRejectsCrossSiteRequest(t *testing.T) {
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
@@ -257,7 +336,7 @@ func TestResetRejectsCrossSiteRequest(t *testing.T) {
 func TestResetRejectsSameSiteRequestAndKeepsSessions(t *testing.T) {
 	dezi := fakeDezi(t)
 	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	first := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
 	second := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
@@ -281,8 +360,12 @@ func TestResetRejectsSameSiteRequestAndKeepsSessions(t *testing.T) {
 	}
 }
 
+// The 303 here proves the request cleared the guard, which is the whole claim.
+// Which redirect it then gets is another test's business: with the unwired
+// testConfig this lands on the "reset-disabled" notice rather than performing a
+// reset, where before E5 it hit the stub's "reset-pending".
 func TestResetAcceptsSameOriginRequest(t *testing.T) {
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -299,7 +382,7 @@ func TestResetAcceptsSameOriginRequest(t *testing.T) {
 func TestCallbackSetsSecureCookieAttributes(t *testing.T) {
 	dezi := fakeDezi(t)
 	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -328,7 +411,7 @@ func TestCallbackMarksCookieSecureForAnHTTPSDeployment(t *testing.T) {
 	// this process is plain http regardless. Only the public URL says what the
 	// browser used, which is why the cookie flag is derived from it.
 	t.Setenv("SANDBOX_PUBLIC_URL", "https://sandbox.example.com")
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -351,7 +434,7 @@ func TestCallbackMarksCookieSecureForAnHTTPSDeployment(t *testing.T) {
 func TestCallbackRejectsReplayedState(t *testing.T) {
 	dezi := fakeDezi(t)
 	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -399,7 +482,7 @@ func TestRequireSessionGuardsAnySubpath(t *testing.T) {
 func TestCallbackWithoutCodeIsARequestError(t *testing.T) {
 	dezi := fakeDezi(t)
 	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -422,7 +505,7 @@ func TestCallbackWithoutCodeIsARequestError(t *testing.T) {
 func TestLogoutRejectsCrossSiteRequest(t *testing.T) {
 	dezi := fakeDezi(t)
 	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := signInViaDezi(t, srv)
 	raw := sessionCookieValue(t, client, srv.URL)
@@ -434,7 +517,7 @@ func TestLogoutRejectsCrossSiteRequest(t *testing.T) {
 	require.NoError(t, err)
 	defer res.Body.Close()
 	require.Equal(t, http.StatusForbidden, res.StatusCode,
-		"logout mutates session state and must be guarded like reset")
+		"a cross-site form post must not be able to sign a practitioner out")
 
 	// Status alone is too weak: a handler that clears the cookie and then
 	// returns 403 would pass that check while still signing the victim out.
@@ -448,7 +531,7 @@ func TestLogoutRejectsCrossSiteRequest(t *testing.T) {
 func TestLogoutRejectsSameSiteRequestAndKeepsTheSession(t *testing.T) {
 	dezi := fakeDezi(t)
 	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	raw := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
 
@@ -472,7 +555,7 @@ func TestLogoutRejectsSameSiteRequestAndKeepsTheSession(t *testing.T) {
 }
 
 func TestLogoutAcceptsSameOriginRequest(t *testing.T) {
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -504,7 +587,7 @@ func authorizeSandbox(t *testing.T, nodeBaseURL string) (*httptest.Server, *http
 	}
 	t.Setenv("DEZI_INTERNAL_BASE_URL", fakeDezi(t).URL)
 	t.Setenv("NUTS_INTERNAL_BASE_URL", nodeBaseURL)
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	return srv, signInViaDezi(t, srv)
 }
@@ -637,8 +720,12 @@ func TestAuthorizeShowsThePractitionerChrome(t *testing.T) {
 	// the guise stopped being cosmetic the moment this page grew the chrome:
 	// under "shell" the markup below still renders and the layout collapses.
 	require.Contains(t, body, "/static/css/ehr.css", "the chrome is styled only there")
-	require.Contains(t, body, "Dr. S. el Amrani", "the practitioner's name")
-	require.Contains(t, body, "Clinical geriatrician · UZI 900001234 · De Plataan Hospital",
+	// As the attestation spells them: no courtesy title it does not carry, and
+	// the role and organization in Dutch rather than through a lookup table
+	// that only ever covered this persona. See authSession.view.
+	require.Contains(t, body, "S. el Amrani", "the practitioner's name")
+	require.NotContains(t, body, "Dr. S. el Amrani", "the attestation carries no title")
+	require.Contains(t, body, "Klinisch geriater · UZI 900001234 · Ziekenhuis De Plataan",
 		"role, UZI number and organisation, the rest of criterion 2")
 	require.Contains(t, body, "Dezi ✓", "the top bar shows the signed-in badge")
 	require.Contains(t, body, "<h2>Authorization</h2>", "the top bar names the screen")
@@ -648,7 +735,7 @@ func TestAuthorizeShowsThePractitionerChrome(t *testing.T) {
 }
 
 func TestAuthorizeRequiresASession(t *testing.T) {
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -864,7 +951,7 @@ func TestAuthorizeAcceptsSameOriginRequest(t *testing.T) {
 func TestEhrHomeOffersTheAuthorizeControl(t *testing.T) {
 	dezi := fakeDezi(t)
 	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := signInViaDezi(t, srv)
 

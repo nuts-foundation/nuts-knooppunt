@@ -20,6 +20,9 @@ pep/logs/
 # Helm chart dependencies
 helm/**/charts/*.tgz
 
+# Scratch files
+.scratch/
+
 # AI review artifacts (local only)
 .codex-*
 

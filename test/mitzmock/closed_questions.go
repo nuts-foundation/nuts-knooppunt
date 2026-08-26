@@ -3,6 +3,7 @@ package mitzmock
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -22,19 +23,25 @@ type ClosedQuestionService struct {
 	ResponseMessage  string
 }
 
-// NewClosedQuestionService creates and starts a new mock XACML MITZ server
-func NewClosedQuestionService(t *testing.T) *ClosedQuestionService {
-	t.Helper()
-
+// New creates and starts a mock XACML MITZ server on listenAddr, which is
+// anything net.Listen accepts ("localhost:0" for an ephemeral test port, ":8080"
+// to serve the compose network). Callers own the returned service and must call
+// Stop when done.
+//
+// This is the testing.T-free constructor, so the mock can run both in-process
+// from tests (via NewClosedQuestionService) and as a standalone container in
+// docker compose (via cmd/main.go), where a real Mitz is not available.
+func New(listenAddr string) (*ClosedQuestionService, error) {
 	mitz := &ClosedQuestionService{
 		requests:         [][]byte{},
 		ResponseDecision: "Permit", // Default to Permit
 		ResponseMessage:  "Consent granted",
 	}
 
-	// Find an available port
-	listener, err := net.Listen("tcp", "localhost:0")
-	require.NoError(t, err, "failed to find available port")
+	listener, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to listen on %s: %w", listenAddr, err)
+	}
 
 	mitz.url = fmt.Sprintf("http://%s", listener.Addr().String())
 
@@ -50,13 +57,27 @@ func NewClosedQuestionService(t *testing.T) *ClosedQuestionService {
 	// Start server in background
 	go func() {
 		if err := mitz.server.Serve(listener); err != nil && err != http.ErrServerClosed {
-			t.Logf("mock XACML MITZ server error: %v", err)
+			slog.Error("mock XACML MITZ server error", "error", err)
 		}
 	}()
 
-	t.Logf("Mock XACML MITZ server started at %s", mitz.url)
+	slog.Info("Mock XACML MITZ server started", "url", mitz.url)
+
+	return mitz, nil
+}
+
+// NewClosedQuestionService creates and starts a new mock XACML MITZ server on an
+// ephemeral port, registering cleanup with t.
+func NewClosedQuestionService(t *testing.T) *ClosedQuestionService {
+	t.Helper()
+
+	mitz, err := New("localhost:0")
+	require.NoError(t, err, "failed to start mock XACML MITZ server")
+
 	t.Cleanup(func() {
-		mitz.Stop(t)
+		if err := mitz.Stop(); err != nil {
+			t.Logf("error stopping mock XACML MITZ server: %v", err)
+		}
 	})
 
 	return mitz
@@ -160,9 +181,6 @@ func (m *ClosedQuestionService) GetLastRequestXML() string {
 }
 
 // Stop stops the mock XACML MITZ server
-func (m *ClosedQuestionService) Stop(t *testing.T) {
-	t.Helper()
-	if err := m.server.Close(); err != nil {
-		t.Logf("error stopping mock XACML MITZ server: %v", err)
-	}
+func (m *ClosedQuestionService) Stop() error {
+	return m.server.Close()
 }

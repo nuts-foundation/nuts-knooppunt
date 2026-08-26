@@ -35,18 +35,20 @@ func TestDemoStartIntroducesScenario(t *testing.T) {
 	require.Contains(t, body, "Reset", "demo bar must carry the reset control")
 }
 
-func TestResetStubRedirectsWithNotice(t *testing.T) {
-	srv := httptest.NewServer(NewMux())
+func TestResetWithoutBackendReportsDisabled(t *testing.T) {
+	// With no Knooppunt/HAPI wired (the default test config), reset is disabled
+	// and redirects with an explanatory notice rather than erroring.
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	res, err := client.Post(srv.URL+"/demo/reset", "application/x-www-form-urlencoded", nil)
 	require.NoError(t, err)
 	defer res.Body.Close()
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
-	require.Equal(t, "/demo?notice=reset-pending", res.Header.Get("Location"))
+	require.Equal(t, "/demo?notice=reset-disabled", res.Header.Get("Location"))
 
-	_, body := getPage(t, "/demo?notice=reset-pending")
-	require.Contains(t, body, "Reset arrives with the seeded dataset (E5)")
+	_, body := getPage(t, "/demo?notice=reset-disabled")
+	require.Contains(t, body, "Reset is unavailable")
 }
 
 func TestLoginScreenMatchesWireframeCopy(t *testing.T) {
@@ -60,6 +62,10 @@ func TestLoginScreenMatchesWireframeCopy(t *testing.T) {
 		"Simulated login (GF Authentication) · test environment with synthetic data only",
 		"One overview, wherever the data lives.",
 		"All people and data are synthetic.",
+		// The organization is named as the attestation spells it. Without this
+		// the login brand could drift back to an English translation and the
+		// copy test would still pass.
+		"Ziekenhuis De Plataan",
 	} {
 		require.Contains(t, body, s)
 	}
@@ -71,7 +77,7 @@ func TestEhrHomeShowsFullChrome(t *testing.T) {
 	// TestEhrRedirectsWhenNotSignedIn.
 	dezi := fakeDezi(t)
 	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	client := signInViaDezi(t, srv)
 
@@ -80,7 +86,7 @@ func TestEhrHomeShowsFullChrome(t *testing.T) {
 	for _, s := range []string{"sb-bar", `class="app"`, `class="side"`, `class="top"`, "hood-dock", "gf-tab", `id="gf-viewer-steps"`, "/static/js/journey-strip.js"} {
 		require.Contains(t, body, s)
 	}
-	require.Contains(t, body, "Dr. S. el Amrani", "the signed-in practitioner's name renders in the top bar")
+	require.Contains(t, body, "S. el Amrani", "the signed-in practitioner's name renders in the top bar")
 	require.Contains(t, body, "Dezi ✓", "the top bar shows the signed-in badge")
 	require.Contains(t, body, `class="hood-dock on"`, "viewer opens by default past login")
 	require.Contains(t, body, "hood-open", "body binds the hood-open class")

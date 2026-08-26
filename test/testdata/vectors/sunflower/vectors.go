@@ -1,10 +1,32 @@
 package sunflower
 
 import (
+	"os"
+
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
+
+// EndpointAddressEnvVar overrides the address published in Zonnebloem's mCSD
+// Endpoint.
+//
+// The seeded address is consumed in two incompatible contexts: docker compose,
+// where a PEP fronts the data and the address must point at it over the compose
+// network, and the e2e harness, where no PEP runs and the address must resolve
+// straight to HAPI. Defaulting to the HAPI-direct address keeps the harness
+// working unchanged; docker compose sets this variable on the seed.
+const EndpointAddressEnvVar = "SEED_ZONNEBLOEM_ENDPOINT_ADDRESS"
+
+// EndpointAddress returns the address to publish in the mCSD Endpoint, and to
+// advertise as the organization's FHIR base URL on discovery. See
+// EndpointAddressEnvVar for why this is deployment-dependent.
+func EndpointAddress() string {
+	if v := os.Getenv(EndpointAddressEnvVar); v != "" {
+		return v
+	}
+	return "http://localhost:7050/fhir/sunflower-patients"
+}
 
 func AdminHAPITenant() hapi.Tenant {
 	return hapi.Tenant{
@@ -46,7 +68,7 @@ func Endpoints() []fhir.Endpoint {
 	return []fhir.Endpoint{
 		{
 			Id:      to.Ptr("f8a9c2d1-4567-489a-bcde-123456789abc"),
-			Address: "http://localhost:7050/fhir/sunflower-patients",
+			Address: EndpointAddress(),
 			Meta: &fhir.Meta{
 				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
 			},

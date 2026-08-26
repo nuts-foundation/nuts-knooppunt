@@ -31,6 +31,20 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+// sandboxPublicURL is the URL the browser reaches this process on. Two things
+// derive from it: the redirect URI below, which a provider matches for exact
+// equality, and whether the session cookie carries Secure (session.go). The
+// fallback was written out at both call sites, so changing one was a silent
+// change to half the behaviour.
+//
+// This centralises the variable name and the default, not a snapshot of the
+// value. NewMux still builds the two consumers independently, so it does not
+// make them incapable of disagreeing; it makes disagreement something you have
+// to introduce deliberately rather than by editing one of two literals.
+func sandboxPublicURL() string {
+	return envOr("SANDBOX_PUBLIC_URL", "http://localhost:8091")
+}
+
 func deziConfigFromEnv() deziConfig {
 	return deziConfig{
 		PublicAuthorizeURL: envOr("DEZI_PUBLIC_AUTHORIZE_URL", "http://localhost:8092/authorize"),
@@ -40,7 +54,7 @@ func deziConfigFromEnv() deziConfig {
 		// checks it again at /token, and a real provider matches it against a
 		// registered value. A configured "https://host/" would otherwise
 		// produce "https://host//demo/auth/callback".
-		RedirectURI: strings.TrimRight(envOr("SANDBOX_PUBLIC_URL", "http://localhost:8091"), "/") + "/demo/auth/callback",
+		RedirectURI: strings.TrimRight(sandboxPublicURL(), "/") + "/demo/auth/callback",
 		ClientID:    "gf-sandbox",
 	}
 }

@@ -78,6 +78,10 @@ func TestExchangeBuildsASessionFromTheAttestation(t *testing.T) {
 	require.Equal(t, "00000010", session.OrgURA)
 	require.Equal(t, "Ziekenhuis De Plataan", session.OrgName)
 	require.Equal(t, "01.022", session.RoleCode)
+	// The role name is rendered directly now that nothing translates it, so
+	// this couples rol_naam ingestion to what the top bar shows. Without it the
+	// two halves are tested separately and a dropped claim renders as a blank.
+	require.Equal(t, "Klinisch geriater", session.RoleName)
 	require.Equal(t, fixtureAttestation, session.Attestation, "the raw attestation is kept for E4")
 	require.False(t, session.ExpiresAt.IsZero())
 }
@@ -103,4 +107,18 @@ func TestRedirectURITrimsTrailingSlash(t *testing.T) {
 
 	t.Setenv("SANDBOX_PUBLIC_URL", "https://sandbox.example.com")
 	require.Equal(t, "https://sandbox.example.com/demo/auth/callback", deziConfigFromEnv().RedirectURI)
+}
+
+// The default is load-bearing and was previously only implied. Two consumers
+// read it, the redirect URI and the Secure-cookie decision (session.go), and
+// they have to land on the same host and scheme or the local demo breaks in a
+// way that looks like a Dezi problem. Every other test here builds a
+// deziConfig literal or sets the variable, so none of them would notice the
+// fallback changing.
+func TestPublicURLFallsBackToTheLocalDemoPort(t *testing.T) {
+	t.Setenv("SANDBOX_PUBLIC_URL", "")
+
+	require.Equal(t, "http://localhost:8091", sandboxPublicURL())
+	require.Equal(t, "http://localhost:8091/demo/auth/callback", deziConfigFromEnv().RedirectURI)
+	require.False(t, secureCookies(), "the local default is plain http, where a Secure cookie would be dropped")
 }

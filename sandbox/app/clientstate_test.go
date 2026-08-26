@@ -7,12 +7,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestPendingTakeRejectsExpiredState drives pendingStore's now seam directly,
-// mirroring mock-components/dezi/store_test.go: NewMux does not expose the
-// pending store it builds, so this is the only way to reach the expiry
+// TestClientStateTakeRejectsExpiredState drives clientStateStore's now seam
+// directly, mirroring mock-components/dezi/store_test.go: NewMux does not
+// expose the store it builds, so this is the only way to reach the expiry
 // branch without sleeping the suite for pendingAuthTTL.
-func TestPendingTakeRejectsExpiredState(t *testing.T) {
-	p := newPendingStore()
+func TestClientStateTakeRejectsExpiredState(t *testing.T) {
+	p := newClientStateStore()
 	start := time.Now()
 	p.now = func() time.Time { return start }
 
@@ -25,23 +25,23 @@ func TestPendingTakeRejectsExpiredState(t *testing.T) {
 }
 
 func TestPutSweepsExpiredAttempts(t *testing.T) {
-	store := newPendingStore()
+	store := newClientStateStore()
 	base := time.Now()
 	store.now = func() time.Time { return base }
 	store.put("abandoned-state", "verifier-one")
-	require.Len(t, store.pending, 1)
+	require.Len(t, store.states, 1)
 
 	// take only removes the state it is handed, so an attempt nobody ever
 	// calls back would otherwise stay for the lifetime of the process.
 	store.now = func() time.Time { return base.Add(pendingAuthTTL + time.Second) }
 	store.put("fresh-state", "verifier-two")
-	require.Len(t, store.pending, 1, "starting a login must sweep the expired attempts")
-	_, ok := store.pending["abandoned-state"]
+	require.Len(t, store.states, 1, "starting a login must sweep the expired attempts")
+	_, ok := store.states["abandoned-state"]
 	require.False(t, ok)
 }
 
 func TestTakeConsumesOnlyTheStateItIsGiven(t *testing.T) {
-	store := newPendingStore()
+	store := newClientStateStore()
 	store.put("first-state", "verifier-one")
 	store.put("second-state", "verifier-two")
 

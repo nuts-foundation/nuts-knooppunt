@@ -7,18 +7,65 @@ services:
     environment:
       KNPT_MCSDADMIN_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-admin
       KNPT_MCSD_QUERY_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-query
-      KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL: https://knooppunt-test.nuts-services.nl/lrza/mcsd
+      # The seeded LRZa tenant, NOT the external test LRZa. The seed registers the
+      # demo organizations (De Plataan, Zonnebloem, Care2Cure) here, and the mCSD
+      # sync walks this directory to populate the query directory. Pointing this
+      # at the external LRZa instead yields a query directory full of unrelated
+      # organizations and none of the demo ones — so the seeded patient would be
+      # findable but not addressable.
+      KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL: http://hapi-fhir:7050/fhir/lrza-mcsd-admin
       KNPT_NVI_BASEURL: http://hapi-fhir:7050/fhir/nvi
       KNPT_TRACING_OTLPENDPOINT: ${KNPT_TRACING_OTLPENDPOINT:-aspire-dashboard:18890}
+      # The PDP's Policy Information Point resolves Patient/<id> to a BSN, which
+      # the BGZ policy needs before it will ask Mitz for consent. It must point at
+      # the tenant that actually holds the data being protected — the seeded pool
+      # patients live in sunflower-patients, not in the generic PIP tenant. With
+      # the wrong tenant the lookup 404s, no BSN is derived, MitzConsent stays
+      # false and every request is denied with an opaque 403.
+      #
+      # NOTE: this makes the composed PDP single-data-holder. It is correct while
+      # Zonnebloem is the only organization serving data through a PEP here; once
+      # both demo organizations hold data, the PIP has to become per-tenant.
+      KNPT_PDP_PIP_URL: http://hapi-fhir:7050/fhir/sunflower-patients
+      # Trust the test CA that issues the demo X509Credentials. Go reads
+      # SSL_CERT_FILE once at process start, so it has to be an environment
+      # variable rather than config.
+      #
+      # ⚠️ This REPLACES the system trust store: any outbound HTTPS from the
+      # knooppunt will fail verification. That is why the external LRZa sync is
+      # disabled below — otherwise its TLS errors fill the logs and mask real
+      # failures in the authorization chain.
+      SSL_CERT_FILE: /app/certs/ca.pem
+      # Empty disables the LRZa sync client (see lrza.Config.Enabled).
+      KNPT_LRZA_LRZABASEURL: ""
+      KNPT_MITZ_MITZBASE: http://mitzmock:8080
     volumes:
       - ./config:/app/config:ro
+      - ./test/e2e/pep/certs/ca.pem:/app/certs/ca.pem:ro
+
+  # Seeds FHIR test data, creates a Nuts subject per demo organization and writes
+  # each subject's DID to the shared scratch volume for the credential issuers.
   init:
     image: golang:1.24.4-alpine
     depends_on:
       hapi-fhir-healthcheck:
         condition: service_completed_successfully
+      knooppunt-healthcheck:
+        condition: service_completed_successfully
+    environment:
+      # Publish the mCSD Endpoints (and the discovery registrations) at each
+      # organization's PEP rather than straight at HAPI, so a resolved address
+      # leads through the authorization chain instead of bypassing it.
+      #
+      # ⚠️ These hostnames resolve only INSIDE the compose network. From the host,
+      # use http://localhost:9080/fhir (Zonnebloem) and :9081 (De Plataan).
+      SEED_ZONNEBLOEM_ENDPOINT_ADDRESS: http://pep-zonnebloem:8080/fhir
+      SEED_PLATAAN_ENDPOINT_ADDRESS: http://pep-plataan:8080/fhir
+      # Where to write the created DIDs for the credential-issuer services.
+      SEED_DID_DIR: /shared
     volumes:
       - ./test/testdata:/app/:ro
+      - seed-shared:/shared
     command: /bin/sh -c "cd /app && go run main.go http://knooppunt:8081 http://hapi-fhir:7050/fhir"
 
   nutsadmin:
@@ -131,6 +178,16 @@ services:
       hapi.fhir.tester.sunflowerpatients.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.sunflowerpatients.fhir_version: R4
 
+      hapi.fhir.tester.plataan.name: Plataan Admin Directory
+      hapi.fhir.tester.plataan.server_address: http://localhost:7050/fhir/plataan-admin
+      hapi.fhir.tester.plataan.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.plataan.fhir_version: R4
+
+      hapi.fhir.tester.plataanpatients.name: Plataan Patients Directory
+      hapi.fhir.tester.plataanpatients.server_address: http://localhost:7050/fhir/plataan-patients
+      hapi.fhir.tester.plataanpatients.refuse_to_fetch_third_party_urls: false
+      hapi.fhir.tester.plataanpatients.fhir_version: R4
+
       hapi.fhir.tester.nvi.name: NVI
       hapi.fhir.tester.nvi.server_address: http://localhost:7050/fhir/nvi
       hapi.fhir.tester.nvi.refuse_to_fetch_third_party_urls: false
@@ -157,6 +214,94 @@ services:
     # Ensure the container exits successfully after the check
     restart: "no"
 
+  # The init service seeds NVI Lists through the Knooppunt's internal API, so it
+  # must wait for the Knooppunt to accept requests — not just for HAPI.
+  knooppunt-healthcheck:
+    image: curlimages/curl:7.87.0
+    depends_on:
+      - knooppunt
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "echo 'Starting knooppunt healthcheck...'; while ! curl -s -f http://knooppunt:8081/status > /dev/null; do echo 'Waiting for Knooppunt to be ready...'; sleep 5; done; echo 'Knooppunt is up and running.'",
+      ]
+    # Ensure the container exits successfully after the check
+    restart: "no"
+
+  # Mock MITZ closed-question (consent) service. The real Mitz is a national
+  # service that is not reachable from a local deployment, but the BGZ policy
+  # will not permit a retrieval without a consent decision — so AC1 needs one
+  # locally. Answers Permit by default; see test/mitzmock/cmd/main.go.
+  mitzmock:
+    build:
+      context: .
+      dockerfile: test/mitzmock/Dockerfile
+    container_name: knooppunt-mitzmock
+    ports:
+      - "8087:8080"
+
+  # ---------------------------------------------------------------------------
+  # Credential issuance
+  #
+  # did:web subject DIDs contain a fresh UUID per subject creation, so an
+  # X509Credential — which binds credentialSubject.id to that DID — cannot be
+  # generated ahead of time and committed. It has to be issued after the subject
+  # exists, which is why this runs as compose services rather than as fixtures.
+  #
+  # Ordering: init (creates subjects, writes DIDs) → credential-issuer-* (mint
+  # the JWT VCs) → init-credentials (store them in the wallets, register on
+  # discovery, seed the NVI).
+  # ---------------------------------------------------------------------------
+  credential-issuer-plataan:
+    image: nutsfoundation/go-didx509-toolkit:main
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    volumes:
+      - ./test/e2e/pep/certs:/certs:ro
+      - seed-shared:/shared
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        /usr/bin/didx509-toolkit vc /certs/plataan-chain.pem /certs/plataan.key "CN=Fake UZI Root CA" "$$(cat /shared/plataan.did)" > /shared/plataan.jwt
+        echo "issued X509Credential for plataan"
+
+  credential-issuer-zonnebloem:
+    image: nutsfoundation/go-didx509-toolkit:main
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    volumes:
+      - ./test/e2e/pep/certs:/certs:ro
+      - seed-shared:/shared
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        /usr/bin/didx509-toolkit vc /certs/zonnebloem-chain.pem /certs/zonnebloem.key "CN=Fake UZI Root CA" "$$(cat /shared/zonnebloem.did)" > /shared/zonnebloem.jwt
+        echo "issued X509Credential for zonnebloem"
+
+  # Stores the issued credentials in each subject's wallet, registers both on the
+  # discovery service, then seeds the NVI localization records. NVI seeding runs
+  # last so a failure to authorize is not masked by a half-seeded index.
+  init-credentials:
+    image: golang:1.24.4-alpine
+    depends_on:
+      credential-issuer-plataan:
+        condition: service_completed_successfully
+      credential-issuer-zonnebloem:
+        condition: service_completed_successfully
+    environment:
+      SEED_DID_DIR: /shared
+      SEED_ZONNEBLOEM_ENDPOINT_ADDRESS: http://pep-zonnebloem:8080/fhir
+      SEED_PLATAAN_ENDPOINT_ADDRESS: http://pep-plataan:8080/fhir
+    volumes:
+      - ./test/testdata:/app/:ro
+      - seed-shared:/shared
+    command: /bin/sh -c "cd /app && go run ./cmd/credentials http://knooppunt:8081"
+
   vektis-issuer:
     image: ghcr.io/nuts-foundation/mock-vc-issuer:latest
     build:
@@ -171,43 +316,101 @@ services:
       NUTS_NODE_INTERNAL_URL: http://knooppunt:8081/nuts
       NUTS_ISSUER_DID: TODO
 
-  # Policy Enforcement Point (PEP) - NGINX-based reference implementation
-  # Start with: docker compose --profile pep up
-  pep:
+  # ---------------------------------------------------------------------------
+  # Policy Enforcement Points (NGINX-based reference implementation)
+  #
+  # The PEP is single-tenant by design (pep/README.md), so each demo organization
+  # gets its own container. Both run the SAME image and differ only by
+  # environment, so there is no per-tenant build.
+  #
+  # These are deliberately NOT behind a `profiles:` key. AC1 requires a fresh
+  # `docker compose up` to yield a retrievable patient, and requiring
+  # `--profile pep` would make that a manual step.
+  #
+  # ⚠️ FHIR_BASE_PATH must stay identical on both: authorize.js reads it via
+  # process.env, and nginx.conf only exports the variables it declares with
+  # `env`. Per-organization routing is done with FHIR_UPSTREAM_PATH, which is
+  # consumed by envsubst when the config is rendered.
+  # ---------------------------------------------------------------------------
+
+  # Zonnebloem is the data holder on the AC1 path: the seeded pool patients live
+  # in its tenant, and its mCSD Endpoint resolves here.
+  pep-zonnebloem:
     build:
       context: ./pep/nginx
       dockerfile: Dockerfile
-    container_name: knooppunt-pep
+    container_name: knooppunt-pep-zonnebloem
     ports:
       - "9080:8080"
     volumes:
-      - ./pep/logs:/var/log/nginx
+      - ./pep/logs/zonnebloem:/var/log/nginx
     environment:
       # Backend connections
       - FHIR_BACKEND_HOST=hapi-fhir
       - FHIR_BACKEND_PORT=7050
       - FHIR_BASE_PATH=/fhir
-      - FHIR_UPSTREAM_PATH=/fhir/DEFAULT
+      - FHIR_UPSTREAM_PATH=/fhir/sunflower-patients
       - KNOOPPUNT_PDP_HOST=knooppunt
       - KNOOPPUNT_PDP_PORT=8081
       # Nuts node connection (Authorization Server)
       - NUTS_NODE_HOST=knooppunt
       - NUTS_NODE_INTERNAL_PORT=8081
-      # Data holder (this organization)
-      - DATA_HOLDER_ORGANIZATION_URA=00000666
+      # Data holder (this organization): Zorgcentrum De Zonnebloem
+      - DATA_HOLDER_ORGANIZATION_URA=00000020
       - DATA_HOLDER_FACILITY_TYPE=Z3
     depends_on:
-      - hapi-fhir
-      - knooppunt # Knooppunt provides the PDP and proxies to Nuts node
+      hapi-fhir-healthcheck:
+        condition: service_completed_successfully
+      knooppunt-healthcheck:
+        condition: service_completed_successfully
     healthcheck:
+      # Must be 127.0.0.1, not localhost: nginx.conf uses `listen 8080` (IPv4
+      # only), while wget resolves "localhost" to ::1 first via /etc/hosts and
+      # gets connection refused, leaving the container permanently unhealthy.
       test:
-        ["CMD", "wget", "--spider", "--quiet", "http://localhost:8080/health"]
+        ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 10s
-    profiles:
-      - pep
+
+  # De Plataan is the requester on the AC1 path and holds no data that AC1
+  # retrieves, but its seeded Endpoint must resolve to a PEP for the same reason
+  # Zonnebloem's does (DESIGN §5.4) — otherwise the addressing story is only half
+  # true.
+  pep-plataan:
+    build:
+      context: ./pep/nginx
+      dockerfile: Dockerfile
+    container_name: knooppunt-pep-plataan
+    ports:
+      - "9081:8080"
+    volumes:
+      - ./pep/logs/plataan:/var/log/nginx
+    environment:
+      - FHIR_BACKEND_HOST=hapi-fhir
+      - FHIR_BACKEND_PORT=7050
+      - FHIR_BASE_PATH=/fhir
+      - FHIR_UPSTREAM_PATH=/fhir/plataan-patients
+      - KNOOPPUNT_PDP_HOST=knooppunt
+      - KNOOPPUNT_PDP_PORT=8081
+      - NUTS_NODE_HOST=knooppunt
+      - NUTS_NODE_INTERNAL_PORT=8081
+      # Data holder (this organization): Ziekenhuis De Plataan
+      - DATA_HOLDER_ORGANIZATION_URA=00000010
+      - DATA_HOLDER_FACILITY_TYPE=Z3
+    depends_on:
+      hapi-fhir-healthcheck:
+        condition: service_completed_successfully
+      knooppunt-healthcheck:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   demo-dezi-client:
     image: ghcr.io/nuts-foundation/demo-dezi-client:latest
@@ -279,6 +482,10 @@ services:
       # fail the match, which is why this is not the bug it resembles; a split
       # deployment has to satisfy reachability and equality at the same time.
       NUTS_INTERNAL_BASE_URL: http://knooppunt:8081
+      # Enable the reset/recycle actions: the sandbox backend calls the
+      # Knooppunt internal /nvi endpoint and HAPI to restore the seeded dataset.
+      KNOOPPUNT_INTERNAL_URL: http://knooppunt:8081
+      HAPI_BASE_URL: http://hapi-fhir:7050/fhir
     # The ordering that makes the authorization route work lives in
     # docker-compose.sandbox.yml: it depends on a service only that file defines.
     # Spelled in mapping form to match the override there. Compose 5.3.0 merges
@@ -286,6 +493,10 @@ services:
     # means this dependency's survival does not rest on that.
     depends_on:
       mock-dezi:
+        condition: service_started
+      knooppunt:
+        condition: service_started
+      hapi-fhir:
         condition: service_started
     profiles:
       - sandbox
@@ -315,9 +526,9 @@ services:
       - ./sandbox/.certs/mock-dezi.pem:/certs/mock-dezi.pem:ro
       - ./sandbox/.certs/mock-dezi.key:/certs/mock-dezi.key:ro
       - ./sandbox/.certs/dezi-signing.key:/certs/dezi-signing.key:ro
+
     profiles:
       - sandbox
-
   # Aspire Dashboard - unified observability for traces, logs, and metrics
   # UI available at http://localhost:18888
   aspire-dashboard:
@@ -333,3 +544,6 @@ services:
 volumes:
   #postgres-data:
   hapi-data:
+  # Scratch space shared by the seed pipeline: init writes <org>.did, the
+  # credential issuers write <org>.jwt, init-credentials consumes both.
+  seed-shared:
