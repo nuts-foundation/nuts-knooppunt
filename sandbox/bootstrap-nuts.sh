@@ -26,7 +26,7 @@
 
 set -euo pipefail
 
-NUTS="${NUTS_INTERNAL_BASE_URL:-http://localhost:8081}/nuts/internal"
+NUTS="${KNOOPPUNT_INTERNAL_URL:-http://localhost:8081}/nuts/internal"
 SUBJECT="${SANDBOX_NUTS_SUBJECT:-plataan}"
 CERTS="$(cd "$(dirname "$0")" && pwd)/.certs"
 

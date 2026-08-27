@@ -100,7 +100,12 @@ services:
 
   # HAPI FHIR Server
   hapi-fhir:
-    image: ghcr.io/nuts-foundation/fake-nvi:latest # which is hapi:v8.2.0-2 with our NVI specifics
+    # :main, not :latest. The e2e harness pins :main (test/e2e/harness/hapi.go), and :latest
+    # lags it far enough to reject the "subject:identifier" modifier the NVI component sends,
+    # which fails the seed at boot with a transient error and leaves `docker compose up`
+    # without a dataset. Two tags for one component is how that went unnoticed: the e2e
+    # suite passed on :main while compose was broken on :latest.
+    image: ghcr.io/nuts-foundation/fake-nvi:main # hapi with our NVI specifics
     container_name: hapi-fhir-server
     ports:
       - "7050:7050"
@@ -462,26 +467,6 @@ services:
       DEZI_PUBLIC_AUTHORIZE_URL: http://localhost:8092/authorize
       DEZI_INTERNAL_BASE_URL: http://mock-dezi:8092
       SANDBOX_PUBLIC_URL: http://localhost:8091
-      # The only Nuts setting this topology changes: localhost inside this
-      # container is the sandbox itself, so the node is reached by service name.
-      #
-      # sandbox/app/nuts.go already defaults SANDBOX_NUTS_SUBJECT, SANDBOX_BGZ_SCOPE,
-      # SANDBOX_AUTH_SERVER and SANDBOX_FACILITY_TYPE to the values that are correct
-      # here, and restating them would override the code rather than document it.
-      # sandbox/app/README.md carries the table of all five.
-      #
-      # SANDBOX_AUTH_SERVER in particular keeps its localhost:8080 default inside
-      # the container, and the reason is not the one it looks like. The node does
-      # dial this URL: before requesting a token it fetches the authorization
-      # server metadata from it (nuts-node auth/client/iam/openid4vp.go,
-      # RequestRFC021AccessToken -> AuthorizationServerMetadata -> an HTTP GET on
-      # /.well-known/oauth-authorization-server). It must also equal the issuer
-      # the node advertises. Both hold here because the node dials it from inside
-      # its own container, where localhost:8080 is its own public listener
-      # (config/knooppunt.yml). A service name would be reachable and would then
-      # fail the match, which is why this is not the bug it resembles; a split
-      # deployment has to satisfy reachability and equality at the same time.
-      NUTS_INTERNAL_BASE_URL: http://knooppunt:8081
       # Enable the reset/recycle actions: the sandbox backend calls the
       # Knooppunt internal /nvi endpoint and HAPI to restore the seeded dataset.
       KNOOPPUNT_INTERNAL_URL: http://knooppunt:8081

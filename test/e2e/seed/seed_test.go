@@ -226,6 +226,12 @@ func tenantHeader(custodianURA string) fhirclient.PreRequestOption {
 	})
 }
 
+// searchNVIByBSN returns a subject's NVI Lists under one custodian. The search
+// itself is by subject only: the tenant header scopes pseudonymization, not the
+// result set, and no custodian search parameter exists, so the custodian is
+// applied here as a filter. Without it every caller below would see the
+// patient's registration at the other organization too, and deleteNVIByBSN
+// would delete it.
 func searchNVIByBSN(t *testing.T, nviBaseURL *url.URL, custodianURA, bsn string) []fhir.BundleEntry {
 	t.Helper()
 	var searchSet fhir.Bundle
@@ -233,7 +239,21 @@ func searchNVIByBSN(t *testing.T, nviBaseURL *url.URL, custodianURA, bsn string)
 		"subject:identifier": {bsnSystem + "|" + bsn},
 	}, &searchSet, tenantHeader(custodianURA))
 	require.NoError(t, err)
-	return searchSet.Entry
+
+	var mine []fhir.BundleEntry
+	for _, entry := range searchSet.Entry {
+		var list fhir.List
+		require.NoError(t, json.Unmarshal(entry.Resource, &list))
+		for _, ext := range list.Extension {
+			if ext.Url == coding.NVICustodianExtensionURL && ext.ValueReference != nil &&
+				ext.ValueReference.Identifier != nil && ext.ValueReference.Identifier.Value != nil &&
+				*ext.ValueReference.Identifier.Value == custodianURA {
+				mine = append(mine, entry)
+				break
+			}
+		}
+	}
+	return mine
 }
 
 // deleteNVIByBSN removes a subject's NVI Lists under a custodian by searching

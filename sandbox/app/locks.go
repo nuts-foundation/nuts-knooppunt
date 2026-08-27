@@ -84,6 +84,16 @@ func (r *Registry) Release(key, owner string) bool {
 	return true
 }
 
+// ReleaseAll drops every lock. It exists for reset, which invalidates every
+// session: ownership is derived from the session, so a lock whose owner is gone
+// can no longer be released by anyone and would block recycle and the next
+// non-override reset until its TTL expired.
+func (r *Registry) ReleaseAll() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	clear(r.locks)
+}
+
 // IsLocked reports whether key currently has a live lock held by any owner.
 func (r *Registry) IsLocked(key string) bool {
 	r.mu.Lock()

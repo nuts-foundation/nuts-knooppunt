@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"net/http"
@@ -49,6 +50,10 @@ func clearSessionCookie(w http.ResponseWriter, secure bool) {
 // raw attestation, which E4 sends to the Nuts node as id_token. It is never
 // rendered and never logged; templates receive the Session view model instead.
 type authSession struct {
+	// ID is the session's own store key, set by sessionStore.create. It is the
+	// cookie value, so it is a credential: never render it and never log it.
+	// lockOwner exists to keep it out of responses.
+	ID            string
 	DeziNumber    string
 	Initials      string
 	SurnamePrefix string
@@ -104,6 +109,16 @@ func (a authSession) view() Session {
 	}
 }
 
+// lockOwner derives the demo-lock owner from a session. It hashes rather than
+// using the session ID directly: the ID is the cookie value, and handleLock
+// echoes the owner back in its JSON response, where the raw value would reach
+// proxy and access logs. A truncated digest is enough to tell a handful of
+// concurrent demo runs apart, and it cannot be replayed as a cookie.
+func lockOwner(session *authSession) string {
+	sum := sha256.Sum256([]byte(session.ID))
+	return base64.RawURLEncoding.EncodeToString(sum[:9])
+}
+
 type sessionStore struct {
 	mu       sync.Mutex
 	sessions map[string]authSession
@@ -128,6 +143,7 @@ func newSessionID() string {
 // up and would otherwise stay for the lifetime of the process.
 func (s *sessionStore) create(a authSession) string {
 	id := newSessionID()
+	a.ID = id
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()

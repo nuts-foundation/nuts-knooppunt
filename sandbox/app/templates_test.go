@@ -38,9 +38,11 @@ func TestDemoStartIntroducesScenario(t *testing.T) {
 func TestResetWithoutBackendReportsDisabled(t *testing.T) {
 	// With no Knooppunt/HAPI wired (the default test config), reset is disabled
 	// and redirects with an explanatory notice rather than erroring.
+	t.Setenv("DEZI_INTERNAL_BASE_URL", fakeDezi(t).URL)
 	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
-	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	// Reset requires a session, so "disabled" is only reachable once signed in.
+	client := signInViaDezi(t, srv)
 	res, err := client.Post(srv.URL+"/demo/reset", "application/x-www-form-urlencoded", nil)
 	require.NoError(t, err)
 	defer res.Body.Close()

@@ -124,10 +124,48 @@ func RegisterList(ctx context.Context, nviBaseURL *url.URL, list SeedList) error
 	return nil
 }
 
+// lastFour renders just enough of a BSN to correlate an error with a record
+// without putting a national identifier in a log line.
+func lastFour(bsn string) string {
+	if len(bsn) <= 4 {
+		return "****"
+	}
+	return "****" + bsn[len(bsn)-4:]
+}
+
+// custodianOf returns the custodian URA carried by a List's localization
+// extension, or "" when the List has none.
+func custodianOf(list fhir.List) string {
+	for _, ext := range list.Extension {
+		if ext.Url != custodianExtensionURL {
+			continue
+		}
+		if ext.ValueReference != nil && ext.ValueReference.Identifier != nil && ext.ValueReference.Identifier.Value != nil {
+			return *ext.ValueReference.Identifier.Value
+		}
+	}
+	return ""
+}
+
 // deleteListsForSubject removes every NVI List for a subject under a custodian,
 // via search (by BSN) then delete-by-id. The Knooppunt tokenizes the BSN on both
 // the search and the delete.
+//
+// The custodian is applied as a filter on the results, not as a search
+// parameter. The tenant header scopes pseudonymization, not the result set, and
+// the custodian lives in an extension the NVI does not index, so the search
+// returns every List for this subject whatever organization registered it.
+// Deleting all of them made the seed destroy its own work: a patient gets one
+// registration per custodian, and registering the second deleted the first,
+// leaving one where pool.NVILists promises the patient is findable from either
+// side.
 func deleteListsForSubject(ctx context.Context, client fhirclient.Client, custodianURA, bsn string) error {
+	// Without this an empty URA would match every List whose custodian
+	// extension is missing or malformed, because custodianOf reports those as
+	// "" too, and the filter below would delete them as if they were ours.
+	if custodianURA == "" {
+		return fmt.Errorf("refusing to delete NVI Lists for an empty custodian (bsn ending %s)", lastFour(bsn))
+	}
 	var searchSet fhir.Bundle
 	err := client.SearchWithContext(ctx, "List", url.Values{
 		"subject:identifier": {bsnNamingSystem + "|" + bsn},
@@ -140,7 +178,7 @@ func deleteListsForSubject(ctx context.Context, client fhirclient.Client, custod
 		if err := json.Unmarshal(entry.Resource, &existing); err != nil {
 			return fmt.Errorf("parse existing NVI List (custodian=%s): %w", custodianURA, err)
 		}
-		if existing.Id == nil {
+		if existing.Id == nil || custodianOf(existing) != custodianURA {
 			continue
 		}
 		if err := client.DeleteWithContext(ctx, "List/"+*existing.Id, tenantHeader(custodianURA)); err != nil {
@@ -162,5 +200,19 @@ func CountLists(ctx context.Context, nviBaseURL *url.URL, custodianURA, bsn stri
 	if err != nil {
 		return 0, fmt.Errorf("search NVI Lists (custodian=%s): %w", custodianURA, err)
 	}
-	return len(searchSet.Entry), nil
+	// Filtered for the same reason deleteListsForSubject filters: the search is
+	// by subject, so it returns the patient's registration under every
+	// custodian. Counting the raw result would report a patient registered at
+	// both organizations as two registrations for each of them.
+	count := 0
+	for _, entry := range searchSet.Entry {
+		var list fhir.List
+		if err := json.Unmarshal(entry.Resource, &list); err != nil {
+			return 0, fmt.Errorf("parse NVI List (custodian=%s): %w", custodianURA, err)
+		}
+		if custodianOf(list) == custodianURA {
+			count++
+		}
+	}
+	return count, nil
 }

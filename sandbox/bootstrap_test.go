@@ -281,7 +281,7 @@ func (n *fakeNode) breakWallet() {
 
 func bootstrap(nodeURL string, env ...string) *exec.Cmd {
 	cmd := exec.Command("bash", "bootstrap-nuts.sh")
-	cmd.Env = append(cmd.Environ(), "NUTS_INTERNAL_BASE_URL="+nodeURL)
+	cmd.Env = append(cmd.Environ(), "KNOOPPUNT_INTERNAL_URL="+nodeURL)
 	cmd.Env = append(cmd.Env, env...)
 	return cmd
 }
@@ -300,13 +300,13 @@ func skipDidx509(t *testing.T) []string {
 	}
 }
 
-// bootstrapWithoutBaseURL leaves NUTS_INTERNAL_BASE_URL out of the
+// bootstrapWithoutBaseURL leaves KNOOPPUNT_INTERNAL_URL out of the
 // environment, which bootstrap always sets, so that the default an operator
 // actually runs with can be exercised at all.
 func bootstrapWithoutBaseURL(env ...string) *exec.Cmd {
 	cmd := exec.Command("bash", "bootstrap-nuts.sh")
 	for _, entry := range cmd.Environ() {
-		if !strings.HasPrefix(entry, "NUTS_INTERNAL_BASE_URL=") {
+		if !strings.HasPrefix(entry, "KNOOPPUNT_INTERNAL_URL=") {
 			cmd.Env = append(cmd.Env, entry)
 		}
 	}

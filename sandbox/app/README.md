@@ -93,7 +93,7 @@ defaults instead of extending them.
 | `DEZI_PUBLIC_AUTHORIZE_URL` | `http://localhost:8092/authorize` | where the **browser** is sent |
 | `DEZI_INTERNAL_BASE_URL` | `http://localhost:8092` | where the **backend** calls token and userinfo |
 | `SANDBOX_PUBLIC_URL` | `http://localhost:8091` | the URL the browser reaches the sandbox on. Builds the redirect URI, and its scheme decides whether the session cookie carries `Secure`. A hosted deployment behind a TLS-terminating proxy must set this to its `https://` URL: the request arriving at this process is plain http, so nothing else here can tell that the browser used TLS |
-| `NUTS_INTERNAL_BASE_URL` | `http://localhost:8081` | where the **backend** calls the Nuts node's internal API, which the knooppunt proxies under `/nuts` |
+| `KNOOPPUNT_INTERNAL_URL` | `http://localhost:8081` | the knooppunt's internal mux. The backend reaches the Nuts node through it (proxied under `/nuts`) for the token request, and the same address enables reset/recycle when `HAPI_BASE_URL` is set too. One variable because it is one address: it was spelled `NUTS_INTERNAL_BASE_URL` here and `KNOOPPUNT_INTERNAL_URL` for reset, and `NUTS_` is the node's own configuration prefix, so that name read as node config the node never sees |
 | `SANDBOX_NUTS_SUBJECT` | `plataan` | the Nuts subject the token is requested for. Must name the subject `sandbox/bootstrap-nuts.sh` creates, whose wallet holds the `X509Credential` |
 | `SANDBOX_BGZ_SCOPE` | `bgz` | the scope requested. Must be a key in the definition the node loads, which the sandbox renders to `sandbox/.certs/policy/bgz.json` from `sandbox/policy/bgz.json.template`, or the node answers `invalid_scope` |
 | `SANDBOX_AUTH_SERVER` | `http://localhost:8080/nuts/oauth2/plataan` | the authorization server the token is requested from. It has to satisfy two requirements at once: equal the issuer the node advertises, and be reachable **by the node**, which fetches `/.well-known/oauth-authorization-server` from it before requesting a token (nuts-node `auth/client/iam/openid4vp.go`, `RequestRFC021AccessToken` to `AuthorizationServerMetadata`). Both hold here because the node dials it from inside its own container, where port 8080 is its own public listener. A split deployment has to find one address that satisfies both |
@@ -102,7 +102,7 @@ defaults instead of extending them.
 The public and internal URLs are separate on purpose. Under compose the browser cannot resolve the
 `mock-dezi` service name, and the sandbox container resolving `localhost` would reach itself.
 
-Of the five Nuts settings, `docker-compose.yml` overrides only `NUTS_INTERNAL_BASE_URL`, to
+Of the five Nuts settings, `docker-compose.yml` overrides only `KNOOPPUNT_INTERNAL_URL`, to
 `http://knooppunt:8081`. It is the only one this topology changes; the other four already default to
 the values that are correct there. This table describes what the application reads, which is not the
 same question as what compose sets.

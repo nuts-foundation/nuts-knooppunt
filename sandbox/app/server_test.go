@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 	"github.com/stretchr/testify/require"
 )
 
@@ -303,7 +304,18 @@ func TestResetEndsSessionEvenWhenTheRestoreFails(t *testing.T) {
 	client := signInViaDezi(t, srv)
 	raw := sessionCookieValue(t, client, srv.URL)
 
-	res, err := client.PostForm(srv.URL+"/demo/reset", nil)
+	// A lock held across the failure. Locks are owned by a session, so one that
+	// outlives the teardown is unreleasable; the failure path has to clear them
+	// for the same reason the success path does.
+	locked := postForm(t, client, srv, "/demo/patients/"+pool.Patients()[0].Key+"/lock", nil)
+	locked.Body.Close()
+	require.Equal(t, http.StatusOK, locked.StatusCode)
+	require.True(t, cfg.Locks.IsLocked(pool.Patients()[0].Key))
+
+	// override, because the lock above is exactly what a plain reset refuses;
+	// without it this would redirect with reset-locked and never reach the
+	// failure path under test.
+	res, err := client.PostForm(srv.URL+"/demo/reset", url.Values{"override": {"true"}})
 	require.NoError(t, err)
 	body, err := io.ReadAll(res.Body)
 	require.NoError(t, err)
@@ -315,16 +327,23 @@ func TestResetEndsSessionEvenWhenTheRestoreFails(t *testing.T) {
 	status, location := replaySessionCookie(t, srv, raw)
 	require.Equal(t, http.StatusSeeOther, status, "a failed reset must still drop the session")
 	require.Equal(t, "/demo/login", location)
+	require.False(t, cfg.Locks.IsLocked(pool.Patients()[0].Key),
+		"a failed reset must not leave a lock whose owning session it just destroyed")
 }
 
 func TestResetRejectsCrossSiteRequest(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
 	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
+	// Signed in on purpose: an anonymous caller is turned away by the session
+	// guard, so only an authenticated request proves the cross-site check.
+	client := signInViaDezi(t, srv)
 
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
 	require.NoError(t, err)
 	req.Header.Set("Sec-Fetch-Site", "cross-site")
-	res, err := srv.Client().Do(req)
+	res, err := client.Do(req)
 	require.NoError(t, err)
 	defer res.Body.Close()
 	require.Equal(t, http.StatusForbidden, res.StatusCode, "a cross-site Sec-Fetch-Site must be rejected")
@@ -338,15 +357,16 @@ func TestResetRejectsSameSiteRequestAndKeepsSessions(t *testing.T) {
 	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
 	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
-	first := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
+	client := signInViaDezi(t, srv)
+	first := sessionCookieValue(t, client, srv.URL)
 	second := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
 
-	// Reset needs no session and clears everyone's, so a sibling origin being
-	// able to reach it is the damaging case.
+	// Reset clears every session, not just the caller's, so a sibling origin
+	// reaching it is the damaging case.
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
 	require.NoError(t, err)
 	req.Header.Set("Sec-Fetch-Site", "same-site")
-	res, err := srv.Client().Do(req)
+	res, err := client.Do(req)
 	require.NoError(t, err)
 	defer res.Body.Close()
 	require.Equal(t, http.StatusForbidden, res.StatusCode, "a sibling origin must not be able to reset")
@@ -365,10 +385,11 @@ func TestResetRejectsSameSiteRequestAndKeepsSessions(t *testing.T) {
 // testConfig this lands on the "reset-disabled" notice rather than performing a
 // reset, where before E5 it hit the stub's "reset-pending".
 func TestResetAcceptsSameOriginRequest(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
 	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
-	client := srv.Client()
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	client := signInViaDezi(t, srv)
 
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
 	require.NoError(t, err)
@@ -376,7 +397,11 @@ func TestResetAcceptsSameOriginRequest(t *testing.T) {
 	res, err := client.Do(req)
 	require.NoError(t, err)
 	defer res.Body.Close()
+	// 303 to the disabled notice, not to /demo/login: signing in is what makes
+	// this assertion about the cross-site guard rather than about the session
+	// guard turning an anonymous caller away with the same status.
 	require.Equal(t, http.StatusSeeOther, res.StatusCode, "a same-origin Sec-Fetch-Site must be allowed")
+	require.Equal(t, "/demo?notice=reset-disabled", res.Header.Get("Location"))
 }
 
 func TestCallbackSetsSecureCookieAttributes(t *testing.T) {
@@ -586,7 +611,7 @@ func authorizeSandbox(t *testing.T, nodeBaseURL string) (*httptest.Server, *http
 		t.Setenv(key, "")
 	}
 	t.Setenv("DEZI_INTERNAL_BASE_URL", fakeDezi(t).URL)
-	t.Setenv("NUTS_INTERNAL_BASE_URL", nodeBaseURL)
+	t.Setenv("KNOOPPUNT_INTERNAL_URL", nodeBaseURL)
 	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	return srv, signInViaDezi(t, srv)

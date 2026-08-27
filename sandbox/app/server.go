@@ -206,10 +206,19 @@ func NewMux(cfg Config) *http.ServeMux {
 		http.Redirect(w, r, "/demo?notice=signed-out", http.StatusSeeOther)
 	})
 
-	mux.HandleFunc("POST /demo/reset", cfg.handleReset)
-	mux.HandleFunc("POST /demo/patients/{key}/recycle", cfg.handleRecycle)
-	mux.HandleFunc("POST /demo/patients/{key}/lock", cfg.handleLock)
-	mux.HandleFunc("POST /demo/patients/{key}/release", cfg.handleRelease)
+	// Every destructive demo control needs a session. Without one they were
+	// reachable unauthenticated: any browser on a shared deployment could reset
+	// the dataset out from under a running demo, or reclaim its patient. The
+	// cross-site check inside each handler stops another site driving them; it
+	// says nothing about who the caller is.
+	mux.HandleFunc("POST /demo/reset", requireSession(signedIn, func(w http.ResponseWriter, r *http.Request, _ *authSession) {
+		cfg.handleReset(w, r)
+	}))
+	mux.HandleFunc("POST /demo/patients/{key}/recycle", requireSession(signedIn, func(w http.ResponseWriter, r *http.Request, _ *authSession) {
+		cfg.handleRecycle(w, r)
+	}))
+	mux.HandleFunc("POST /demo/patients/{key}/lock", requireSession(signedIn, cfg.handleLock))
+	mux.HandleFunc("POST /demo/patients/{key}/release", requireSession(signedIn, cfg.handleRelease))
 	mux.HandleFunc("GET /demo/patients", cfg.handleListPatients)
 	mux.HandleFunc("POST /demo/authorize", requireSession(signedIn, func(w http.ResponseWriter, r *http.Request, session *authSession) {
 		if crossSiteRequest(r) {
@@ -374,6 +383,11 @@ func (c Config) handleReset(w http.ResponseWriter, r *http.Request) {
 		c.sessions.dropAll()
 		clearSessionCookie(w, c.secureCookie)
 	}
+	// The locks go with them. Ownership is derived from the session, so a lock
+	// outliving its owner is one nobody can release: it would refuse recycle and
+	// the next non-override reset until the 15-minute TTL ran out. An override
+	// reset is exactly the case that produces them.
+	c.Locks.ReleaseAll()
 
 	if resetErr != nil {
 		http.Error(w, "reset failed: "+resetErr.Error(), http.StatusInternalServerError)
@@ -410,10 +424,11 @@ func (c Config) handleRecycle(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/demo?notice=recycle-done", http.StatusSeeOther)
 }
 
-// handleLock manually acquires a lock (testability; the real trigger is E4/E6).
-// The lock owner is taken from the "owner" form/query value, defaulting to
-// "manual".
-func (c Config) handleLock(w http.ResponseWriter, r *http.Request) {
+// handleLock claims a pool patient for the caller's session. Ownership comes
+// from the session and nothing else: it used to be a request field defaulting
+// to "manual", which made every caller the same owner, so any browser could
+// release any other run's lock and the 409 below was true only by accident.
+func (c Config) handleLock(w http.ResponseWriter, r *http.Request, session *authSession) {
 	if crossSiteRequest(r) {
 		http.Error(w, "cross-site lock is not allowed", http.StatusForbidden)
 		return
@@ -423,11 +438,7 @@ func (c Config) handleLock(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown patient: "+key, http.StatusNotFound)
 		return
 	}
-	owner, err := formOrQueryDefault(r, "owner", "manual")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	owner := lockOwner(session)
 	if !c.Locks.Lock(key, owner) {
 		http.Error(w, "patient "+key+" is already locked by another session", http.StatusConflict)
 		return
@@ -435,8 +446,10 @@ func (c Config) handleLock(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"key": key, "locked": true, "owner": owner})
 }
 
-// handleRelease manually releases a lock.
-func (c Config) handleRelease(w http.ResponseWriter, r *http.Request) {
+// handleRelease drops the caller's own lock. A session that does not hold the
+// lock gets released=false rather than an error: releasing something you never
+// held is a no-op, not a failure.
+func (c Config) handleRelease(w http.ResponseWriter, r *http.Request, session *authSession) {
 	if crossSiteRequest(r) {
 		http.Error(w, "cross-site release is not allowed", http.StatusForbidden)
 		return
@@ -446,12 +459,7 @@ func (c Config) handleRelease(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown patient: "+key, http.StatusNotFound)
 		return
 	}
-	owner, err := formOrQueryDefault(r, "owner", "manual")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	released := c.Locks.Release(key, owner)
+	released := c.Locks.Release(key, lockOwner(session))
 	writeJSON(w, http.StatusOK, map[string]any{"key": key, "locked": c.Locks.IsLocked(key), "released": released})
 }
 
@@ -490,17 +498,6 @@ func formOrQuery(r *http.Request, key string) (string, error) {
 		return "", fmt.Errorf("parse request form: %w", err)
 	}
 	return r.Form.Get(key), nil
-}
-
-func formOrQueryDefault(r *http.Request, key, def string) (string, error) {
-	v, err := formOrQuery(r, key)
-	if err != nil {
-		return "", err
-	}
-	if v == "" {
-		return def, nil
-	}
-	return v, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

@@ -42,7 +42,7 @@ func TestNutsConfigDefaultsAreDevelopmentLocal(t *testing.T) {
 	// failure here, since envOr would then read the real value instead of
 	// falling back to the default this test asserts.
 	for _, key := range []string{
-		"NUTS_INTERNAL_BASE_URL",
+		"KNOOPPUNT_INTERNAL_URL",
 		"SANDBOX_NUTS_SUBJECT",
 		"SANDBOX_BGZ_SCOPE",
 		"SANDBOX_AUTH_SERVER",
@@ -69,7 +69,7 @@ func TestNutsConfigDefaultsAreDevelopmentLocal(t *testing.T) {
 // in place and go uncaught there. Distinct sentinel values per key catch
 // both.
 func TestNutsConfigFromEnvReadsEachVariable(t *testing.T) {
-	t.Setenv("NUTS_INTERNAL_BASE_URL", "http://internal-base-url.example")
+	t.Setenv("KNOOPPUNT_INTERNAL_URL", "http://internal-base-url.example")
 	t.Setenv("SANDBOX_NUTS_SUBJECT", "sentinel-subject")
 	t.Setenv("SANDBOX_BGZ_SCOPE", "sentinel-scope")
 	t.Setenv("SANDBOX_AUTH_SERVER", "http://auth-server.example")
@@ -237,7 +237,7 @@ func TestNutsErrorsNameTheirStep(t *testing.T) {
 	require.ErrorContains(t, err, "introspect access token")
 }
 
-// A malformed NUTS_INTERNAL_BASE_URL reaches http.NewRequestWithContext's
+// A malformed KNOOPPUNT_INTERNAL_URL reaches http.NewRequestWithContext's
 // error branch. That branch was previously untested and the label "unreachable
 // in practice" was wrong: it is one bad environment variable away, and a
 // version that swallowed the error would leave the request nil and panic

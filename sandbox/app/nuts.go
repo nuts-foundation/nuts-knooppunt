@@ -26,7 +26,13 @@ type nutsConfig struct {
 
 func nutsConfigFromEnv() nutsConfig {
 	return nutsConfig{
-		InternalBaseURL:     envOr("NUTS_INTERNAL_BASE_URL", "http://localhost:8081"),
+		// Same variable the reset wiring reads (NewConfigFromEnv). Both address
+		// the knooppunt's internal mux on :8081, which proxies the node under
+		// /nuts, so two names for it was one too many. KNOOPPUNT_INTERNAL_URL is
+		// the survivor because NUTS_ is the node's own configuration prefix
+		// (NUTS_POLICY_DIRECTORY and friends), and a sandbox setting wearing it
+		// reads as node config that the node never sees.
+		InternalBaseURL:     envOr("KNOOPPUNT_INTERNAL_URL", "http://localhost:8081"),
 		Subject:             envOr("SANDBOX_NUTS_SUBJECT", "plataan"),
 		Scope:               envOr("SANDBOX_BGZ_SCOPE", "bgz"),
 		AuthorizationServer: envOr("SANDBOX_AUTH_SERVER", "http://localhost:8080/nuts/oauth2/plataan"),
