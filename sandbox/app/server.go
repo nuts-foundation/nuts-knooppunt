@@ -97,6 +97,10 @@ func NewMux(cfg Config) *http.ServeMux {
 	}
 
 	sessions := newSessionStore()
+	// A session ending releases whatever patient it held.
+	sessions.onDrop = func(sessionID string) {
+		cfg.Locks.ReleaseOwner(lockOwner(&authSession{ID: sessionID}))
+	}
 	client := newDeziClient(deziConfigFromEnv())
 	nuts := newNutsClient(nutsConfigFromEnv())
 	clientStates := newClientStateStore()

@@ -273,6 +273,21 @@ func TestLockOwnerIsNotTheSessionCookie(t *testing.T) {
 	require.NotContains(t, raw, locked.Owner, "the owner must not be a prefix of the session cookie either")
 }
 
+func TestLogout_ReleasesTheSessionsPatientLock(t *testing.T) {
+	cfg, _, _ := fakeConfig()
+	anna := pool.Patients()[0].Key
+	srv, client := demoServer(t, cfg)
+
+	res := postForm(t, client, srv, "/demo/patients/"+anna+"/lock", nil)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+
+	out := postForm(t, client, srv, "/demo/logout", nil)
+	defer out.Body.Close()
+
+	require.False(t, cfg.Locks.IsLocked(anna), "signing out must not strand the patient for the lock TTL")
+}
+
 func TestListPatientsReflectsPoolAndLocks(t *testing.T) {
 	cfg, _, _ := fakeConfig()
 	anna := pool.Patients()[0].Key

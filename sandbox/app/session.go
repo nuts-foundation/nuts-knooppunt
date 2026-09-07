@@ -123,6 +123,13 @@ type sessionStore struct {
 	mu       sync.Mutex
 	sessions map[string]authSession
 	now      func() time.Time
+
+	// onDrop is called with a session id whenever that session stops existing:
+	// logout, expiry on read, the sweep in create, or reset. The lock registry
+	// subscribes to it, because lock ownership derives from the session id and a
+	// lock outliving its session is one nobody can release. Optional; nil in
+	// tests that build a store directly.
+	onDrop func(sessionID string)
 }
 
 func newSessionStore() *sessionStore {
@@ -141,26 +148,41 @@ func newSessionID() string {
 // what actually bounds this map. Reaping in get only reaches sessions that are
 // presented again; one whose cookie is discarded after expiry is never looked
 // up and would otherwise stay for the lifetime of the process.
+//
+// The sweep collects the swept ids and calls onDrop only after the mutex is
+// released: onDrop reaches into the lock registry, which has its own mutex, and
+// calling it while holding s.mu would invite a lock-order inversion against
+// code that takes the two in the other order.
 func (s *sessionStore) create(a authSession) string {
 	id := newSessionID()
 	a.ID = id
+
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	now := s.now()
+	var swept []string
 	for key, session := range s.sessions {
 		if now.After(session.ExpiresAt) {
 			delete(s.sessions, key)
+			swept = append(swept, key)
 		}
 	}
 	s.sessions[id] = a
+	onDrop := s.onDrop
+	s.mu.Unlock()
+
+	if onDrop != nil {
+		for _, key := range swept {
+			onDrop(key)
+		}
+	}
 	return id
 }
 
 func (s *sessionStore) get(id string) (authSession, bool) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	a, ok := s.sessions[id]
 	if !ok {
+		s.mu.Unlock()
 		return authSession{}, false
 	}
 	if s.now().After(a.ExpiresAt) {
@@ -168,19 +190,43 @@ func (s *sessionStore) get(id string) (authSession, bool) {
 		// back. create sweeps the rest, so this only saves the map from
 		// holding an entry until the next sign-in.
 		delete(s.sessions, id)
+		onDrop := s.onDrop
+		s.mu.Unlock()
+
+		if onDrop != nil {
+			onDrop(id)
+		}
 		return authSession{}, false
 	}
+	s.mu.Unlock()
 	return a, true
 }
 
 func (s *sessionStore) drop(id string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	_, existed := s.sessions[id]
 	delete(s.sessions, id)
+	onDrop := s.onDrop
+	s.mu.Unlock()
+
+	if existed && onDrop != nil {
+		onDrop(id)
+	}
 }
 
 func (s *sessionStore) dropAll() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	ids := make([]string, 0, len(s.sessions))
+	for id := range s.sessions {
+		ids = append(ids, id)
+	}
 	clear(s.sessions)
+	onDrop := s.onDrop
+	s.mu.Unlock()
+
+	if onDrop != nil {
+		for _, id := range ids {
+			onDrop(id)
+		}
+	}
 }
