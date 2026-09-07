@@ -189,9 +189,12 @@
   .quick-add:hover { border-color: var(--teal); color: var(--teal-deep); background: var(--teal-soft); }
 
   /* The patient-row and status-chip rules that used to sit here were dead:
-     no viewer template ever used them, they were carried over from the
+     nothing in this panel matched .prow, so none of .prow .pav/.pn/.pm/.chev
+     or the .stat-chip family applied to anything. They came over from the
      wireframe, and because this file loads after ehr.css they silently
-     overrode the live patient list. They now live in ehr.css alone. */
+     overrode the live patient list. They now live in ehr.css alone.
+     (The .gf-tab below does render a bare .chev; that is styled by
+     .gf-tab .chev here and by the bare .chev in ehr.css, both untouched.) */
 
   .hd-idle { font-size: 11.5px; line-height: 1.6; color: rgba(240,235,225,0.72); margin-bottom: 10px; }
 
