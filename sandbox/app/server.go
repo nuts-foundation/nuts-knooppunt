@@ -35,6 +35,11 @@ type Config struct {
 	resetGlobal    func(ctx context.Context) error
 	recyclePatient func(ctx context.Context, patientKey string) error
 
+	// The NVI half of the share flow, wired in NewConfigFromEnv and injectable so
+	// handler tests need no live NVI.
+	nviCategories func(ctx context.Context, bsn string) ([]string, error)
+	nviRegister   func(ctx context.Context, bsn string, categories []string) error
+
 	// sessions and secureCookie carry the session half of reset, which E2 owns.
 	// A reset restores the dataset AND signs everyone out; doing only the first
 	// would leave practitioners holding sessions for a world that no longer
@@ -76,6 +81,12 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 	cfg.recyclePatient = func(ctx context.Context, patientKey string) error {
 		return vectors.RecyclePatient(ctx, hapiURL, knooppuntURL, patientKey)
 	}
+
+	clientID := getenv("SANDBOX_NVI_CLIENT_ID")
+	if clientID == "" {
+		clientID = pool.PlataanClientID
+	}
+	cfg.nviCategories, cfg.nviRegister = nviFuncs(knooppuntURL, clientID)
 	return cfg, nil
 }
 
