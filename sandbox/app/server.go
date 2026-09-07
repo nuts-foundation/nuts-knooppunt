@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sort"
@@ -15,6 +17,7 @@ import (
 
 var notices = map[string]string{
 	"reset-done":        "Dataset restored to the seeded fixtures.",
+	"reset-partial":     "Dataset restored, but some state could not be cleared. Check the sandbox logs.",
 	"recycle-done":      "Patient restored to the seeded state.",
 	"reset-disabled":    "Reset is unavailable: the sandbox is not wired to the Knooppunt in this environment.",
 	"signed-out":        "Signed out. The Dezi session has been cleared.",
@@ -127,7 +130,7 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		return Config{}, fmt.Errorf("invalid HAPI_BASE_URL: %w", err)
 	}
 	cfg.resetGlobal = func(ctx context.Context) error {
-		return vectors.ResetGlobal(ctx, hapiURL, knooppuntURL)
+		return vectors.ResetGlobal(ctx, hapiURL, knooppuntURL, cfg.mitzMockURL)
 	}
 	cfg.recyclePatient = func(ctx context.Context, patientKey string) error {
 		return vectors.RecyclePatient(ctx, hapiURL, knooppuntURL, patientKey)
@@ -450,6 +453,11 @@ func (c Config) handleReset(w http.ResponseWriter, r *http.Request) {
 	c.Locks.ReleaseAll()
 
 	if resetErr != nil {
+		if errors.Is(resetErr, vectors.ErrPartialReset) {
+			slog.Warn("reset completed with warnings", "error", resetErr)
+			http.Redirect(w, r, "/demo?notice=reset-partial", http.StatusSeeOther)
+			return
+		}
 		http.Error(w, "reset failed: "+resetErr.Error(), http.StatusInternalServerError)
 		return
 	}

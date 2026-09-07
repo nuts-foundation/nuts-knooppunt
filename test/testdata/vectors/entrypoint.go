@@ -3,9 +3,11 @@ package vectors
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
@@ -198,7 +200,8 @@ func SeedNVI(ctx context.Context, knooppuntInternalBaseURL *url.URL) error {
 // ResetGlobal restores the entire seeded dataset to its fixtures ("restore
 // fixtures" path). It clears the mutable stores — removing any user-created
 // records, which have random ids a plain re-seed cannot overwrite — then re-runs
-// Load (re-PUTs the mCSD/PIP directories and pool resources) and SeedNVI.
+// Load (re-PUTs the mCSD/PIP directories and pool resources), SeedNVI, and
+// clears the mock Mitz's captured consent subscriptions.
 //
 // Clearing is per-resource deletion within the tenant, not $expunge; see
 // clearTenant for why the expunge form cannot be used here.
@@ -210,9 +213,12 @@ func SeedNVI(ctx context.Context, knooppuntInternalBaseURL *url.URL) error {
 // pool's own BSNs. DESIGN §5.6 wants those gone; doing so needs the Knooppunt to
 // expose a custodian-scoped listing (or the seed to track what it registered).
 //
-// It does not reset Mitz subscriptions (no standalone mitz service yet; see
-// README) or the mCSD query directory cache (rebuilt by the mCSD update process).
-func ResetGlobal(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL *url.URL) error {
+// mitzMockBaseURL is nil when no mock is configured, in which case the Mitz step
+// is a no-op. A configured but unreachable mock yields ErrPartialReset rather
+// than failing the whole reset or claiming a clean slate that does not exist;
+// see clearMitzSubscriptions. ResetGlobal still does not reach the mCSD query
+// directory cache, which is rebuilt by the mCSD update process instead.
+func ResetGlobal(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL, mitzMockBaseURL *url.URL) error {
 	// Clear the mutable patient stores so user-created (random-id) records go.
 	//
 	// The NVI tenant is NOT cleared this way: its pseudonymization interceptor
@@ -234,6 +240,41 @@ func ResetGlobal(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL *url
 	}
 	if err := SeedNVI(ctx, knooppuntInternalBaseURL); err != nil {
 		return fmt.Errorf("reseed NVI: %w", err)
+	}
+
+	// Last, and its error returned last: a partial-cleanup warning must not mask
+	// a real restoration failure above it.
+	return clearMitzSubscriptions(ctx, mitzMockBaseURL)
+}
+
+// ErrPartialReset reports that the dataset was restored but something optional
+// could not be cleared. Callers surface it rather than treating the reset as
+// clean or as failed: both readings are wrong.
+var ErrPartialReset = errors.New("reset completed with warnings")
+
+// clearMitzSubscriptions drops every captured consent subscription from the mock
+// Mitz, so a reset restores a clean consent state (DESIGN §5.6).
+//
+// A nil URL means no mock is configured and there is nothing to clear. A
+// configured but unreachable mock yields ErrPartialReset: failing the whole reset
+// would make demo cleanup depend on a mock's availability, and reporting success
+// would claim a clean slate that does not exist.
+func clearMitzSubscriptions(ctx context.Context, mitzMockBaseURL *url.URL) error {
+	if mitzMockBaseURL == nil {
+		return nil
+	}
+	endpoint := mitzMockBaseURL.JoinPath("abonnementen", "fhir", "Subscription").String()
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("%w: build Mitz cleanup request: %w", ErrPartialReset, err)
+	}
+	res, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	if err != nil {
+		return fmt.Errorf("%w: Mitz subscriptions were not cleared: %w", ErrPartialReset, err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("%w: Mitz cleanup returned %s", ErrPartialReset, res.Status)
 	}
 	return nil
 }

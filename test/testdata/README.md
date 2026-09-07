@@ -122,7 +122,7 @@ subject's wallet, which is empty until the credential is stored.
 
 ### Reset variants (used by the GF Sandbox backend)
 
-- `vectors.ResetGlobal(ctx, hapiBaseURL, knooppuntInternalBaseURL)` — clears the
+- `vectors.ResetGlobal(ctx, hapiBaseURL, knooppuntInternalBaseURL, mitzMockBaseURL)` — clears the
   mutable patient stores (removing user-created records, which have random ids a
   plain re-seed cannot overwrite), then re-runs `Load` + `SeedNVI`. This is the
   "restore fixtures" path.

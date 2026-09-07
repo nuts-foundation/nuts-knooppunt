@@ -116,7 +116,7 @@ func TestResetGlobal_PreservesPartitions(t *testing.T) {
 	h := harness.Start(t)
 	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
 
-	require.NoError(t, vectors.ResetGlobal(t.Context(), h.HAPIBaseURL, h.KnooppuntInternalBaseURL))
+	require.NoError(t, vectors.ResetGlobal(t.Context(), h.HAPIBaseURL, h.KnooppuntInternalBaseURL, nil))
 
 	// Every tenant must still resolve — both the mutable ones the reset clears
 	// and the read-only ones it must leave alone.
@@ -165,7 +165,7 @@ func TestResetGlobal_RemovesUserCreatedRecordsAndRestoresFixtures(t *testing.T) 
 	allergyID := "pool-" + anna.Key + "-zonnebloem-allergy"
 	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+allergyID))
 
-	require.NoError(t, vectors.ResetGlobal(t.Context(), h.HAPIBaseURL, h.KnooppuntInternalBaseURL))
+	require.NoError(t, vectors.ResetGlobal(t.Context(), h.HAPIBaseURL, h.KnooppuntInternalBaseURL, nil))
 
 	// The user-created record is gone (cascaded away with the Patient it hung off)...
 	var gone fhir.Procedure
@@ -180,6 +180,25 @@ func TestResetGlobal_RemovesUserCreatedRecordsAndRestoresFixtures(t *testing.T) 
 	var patient fhir.Patient
 	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "Patient/"+anna.ZonnebloemPatientID, &patient))
 	require.Equal(t, anna.BSN, *patient.Identifier[0].Value)
+}
+
+// The cleanup runs after restoration and does not skip it: a warning about a
+// mock nobody can reach must not leave the dataset unrestored.
+func TestResetGlobal_RestoresEvenWhenMitzCleanupFails(t *testing.T) {
+	h := harness.Start(t)
+	unreachable, err := url.Parse("http://127.0.0.1:1")
+	require.NoError(t, err)
+
+	err = vectors.ResetGlobal(t.Context(), h.HAPIBaseURL, h.KnooppuntInternalBaseURL, unreachable)
+
+	require.ErrorIs(t, err, vectors.ErrPartialReset)
+
+	anna := pool.Patients()[0]
+	lists, listErr := nvi.ListsForCustodian(t.Context(), h.KnooppuntInternalBaseURL.JoinPath("nvi"),
+		zonnebloemURA(), anna.BSN)
+	require.NoError(t, listErr)
+	require.Equal(t, anna.ZonnebloemCategories(), nvi.CategoriesOf(lists),
+		"the fixtures must be restored even when the optional cleanup warned")
 }
 
 func TestRecyclePatient_RestoresTargetLeavesOthersIntact(t *testing.T) {
