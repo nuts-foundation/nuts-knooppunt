@@ -51,6 +51,10 @@ func newRegistrationBundle(t *testing.T) fhir.Bundle {
 				Value:  to.Ptr(sourceIdentValue),
 			},
 		},
+		// Note: this code is not a member of nl-gf-zorgcontext-vs, whose codes come
+		// from nl-gf-data-categories-cs and are data categories at FHIR resource
+		// granularity. Nothing validates List.code, so this passes. The sandbox
+		// registers conformant codes; see test/testdata/vectors/nvi.
 		Code: &fhir.CodeableConcept{
 			Coding: []fhir.Coding{
 				{

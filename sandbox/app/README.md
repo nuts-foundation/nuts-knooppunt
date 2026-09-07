@@ -98,6 +98,8 @@ defaults instead of extending them.
 | `SANDBOX_BGZ_SCOPE` | `bgz` | the scope requested. Must be a key in the definition the node loads, which the sandbox renders to `sandbox/.certs/policy/bgz.json` from `sandbox/policy/bgz.json.template`, or the node answers `invalid_scope` |
 | `SANDBOX_AUTH_SERVER` | `http://localhost:8080/nuts/oauth2/plataan` | the authorization server the token is requested from. It has to satisfy two requirements at once: equal the issuer the node advertises, and be reachable **by the node**, which fetches `/.well-known/oauth-authorization-server` from it before requesting a token (nuts-node `auth/client/iam/openid4vp.go`, `RequestRFC021AccessToken` to `AuthorizationServerMetadata`). Both hold here because the node dials it from inside its own container, where port 8080 is its own public listener. A split deployment has to find one address that satisfies both |
 | `SANDBOX_FACILITY_TYPE` | `Z3` | the facility type asserted in the organization context credential, the only thing on this path that carries one |
+| `SANDBOX_NVI_CLIENT_ID` | `gf-sandbox-plataan` | `List.source.identifier` on published localization records. Synthetic: no NVI OAuth client is registered for the demo, and this is not the `gf-sandbox` client id used on the Dezi flow. **Overriding it breaks per-patient recycle**, which deletes under the compiled-in `pool.PlataanClientID`: the client id is the scope a registration is deleted by, so a share published under a different one is invisible to recycle. Change it only together with that constant. |
+| `MITZMOCK_URL` | unset | Base URL of the mock Mitz. Enables subscription reconciliation and reset cleanup; unset means both degrade to "unknown". |
 
 The public and internal URLs are separate on purpose. Under compose the browser cannot resolve the
 `mock-dezi` service name, and the sandbox container resolving `localhost` would reach itself.
@@ -110,6 +112,28 @@ same question as what compose sets.
 `POST /demo/authorize` needs the compose stack. It asks the Nuts node for a service access token and
 introspects it, and the `go run` path has no node to reach, so there it answers 502 naming the step
 that failed. Sign-in, session and every other route keep working locally.
+
+## Patient registration (E3)
+
+Sharing a patient publishes one NVI localization record per data category De Plataan holds for them
+(`Patient`, `Condition`, `MedicationRequest`), and starts a Mitz consent subscription.
+
+There is no BGZ code. `List.code` is bound to a value set of data categories at FHIR resource
+granularity, so a patient summary is the set of categories it contains, and the confirmation card
+names those rather than claiming "BGZ".
+
+Three limitations are carried deliberately:
+
+- **Repeat registration converges, it is not atomic.** The NVI exposes no `PUT`, and the conditional
+  operations that would make a transaction Bundle atomic cannot be used: the Knooppunt does not
+  pseudonymize `entry.request.url`, so a conditional URL would carry a plaintext BSN, and the fake
+  NVI does not accept the `:identifier` modifier on a conditional delete. Registration is
+  search-delete-create, serialized per patient within this process and guarded by the demo lock.
+  Two sandbox processes registering the same patient at once can still duplicate.
+- **The demo lock is advisory and process-local**, with a 15-minute lease. Ownership is checked when
+  a share begins, not held for its duration.
+- **Reconciliation is a mock-only affordance.** The "was that subscription actually created?" query
+  reads the mock directly; neither the Knooppunt nor the national Mitz offers such a lookup.
 
 ## Architecture
 
