@@ -138,11 +138,19 @@ func DeleteForClient(ctx context.Context, nviBaseURL *url.URL, custodianURA, bsn
 }
 
 func deleteForClient(ctx context.Context, client fhirclient.Client, custodianURA, bsn, clientID string) error {
-	// An empty custodian or client would widen the search instead of narrowing
-	// it, and the custodian filter below reports a missing or malformed
-	// extension as "" too, so both would match records that are not ours.
-	if custodianURA == "" || clientID == "" {
-		return fmt.Errorf("refusing to delete NVI Lists for an empty custodian or client (bsn ending %s)", lastFour(bsn))
+	// Every one of the three narrows the delete, and an empty value for any of
+	// them widens it instead.
+	//
+	// The custodian filter below reports a missing or malformed extension as ""
+	// too, so an empty custodian matches records that are not ours. An empty
+	// client id does the same through the source scope. And an empty BSN is the
+	// least obvious of the three: it makes the subject parameter
+	// "<bsn-system>|", which FHIR R4 token search reads as "any element whose
+	// system property matches" rather than as an empty match, so a delete meant
+	// for one patient would take every List this custodian and client hold.
+	if custodianURA == "" || clientID == "" || bsn == "" {
+		return fmt.Errorf("refusing to delete NVI Lists without all three of custodian, client and BSN (custodian=%q, client=%q, bsn ending %s)",
+			custodianURA, clientID, lastFour(bsn))
 	}
 
 	// The client scope is a search parameter, not a filter on the results.

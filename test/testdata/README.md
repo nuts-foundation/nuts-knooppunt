@@ -60,8 +60,11 @@ fixture:
 - **De Zonnebloem side** (`sunflower-patients` tenant): Patient (same BSN, own
   local id) + AllergyIntolerance (penicillin-class) + MedicationRequests
   (metoprolol, metformin) + Conditions (type 2 diabetes, hypertension).
-- **NVI localization**: one List per custodian (Plataan 00000010 and Zonnebloem
-  00000020), so the patient is findable by BSN (pseudonymized) from either side.
+- **NVI localization**: one List per data category De Zonnebloem holds
+  (`Patient`, `AllergyIntolerance`, `MedicationRequest`, `Condition`), so the
+  patient is findable by BSN (pseudonymized) at the source. De Plataan's side is
+  deliberately not seeded: publishing it is what the GF Sandbox demonstrates
+  when a practitioner shares a patient.
 
 All FHIR resource IDs are derived deterministically from the patient key, so
 seeding is an idempotent PUT-by-fixed-id upsert. Clones keep the same BGZ
@@ -83,8 +86,13 @@ a PUT-by-fixed-id upsert and there is no `$expunge` on the normal path.
 
 `vectors.SeedNVI(ctx, knooppuntInternalBaseURL)` registers each pool patient's NVI
 Lists through the Knooppunt's internal `/nvi` endpoint. It is idempotent via
-delete-then-create per subject+custodian (the Knooppunt's `POST /nvi/List` is
-otherwise an unconditional create, which would accumulate duplicates).
+delete-then-create per subject+custodian+**client** (the Knooppunt's
+`POST /nvi/List` is otherwise an unconditional create, which would accumulate
+duplicates). The client scope is the OAuth client id in `List.source`, and it is
+applied as a `source:identifier` search parameter rather than as a filter on the
+records that come back: the NVI rewrites `source.identifier` into a Device
+reference on storage, so a client-side comparison would match nothing and delete
+nothing while every count still looked right.
 
 `vectors.Load` writes the demo organizations into the seeded **local** LRZa tenant
 (`lrza-mcsd-admin`), which is what `KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL` must point
@@ -154,8 +162,13 @@ subject's wallet, which is empty until the credential is stored.
 - **`data/nuts` is not a persistent volume.** Recreating the knooppunt container
   mints new DIDs; the seed re-runs credential issuance against whatever DIDs
   exist, so re-run the seed after such a restart.
-- **`MEDAFSPRAAK` is a placeholder zorgcontext** for the seeded BGZ data; swap it
-  when the CodeSystem gains a real BGZ code.
+- **There is no BGZ code, and there will not be one.** `List.code` is bound to
+  `nl-gf-zorgcontext-vs`, whose 28 codes come from `nl-gf-data-categories-cs` and
+  are data categories at FHIR resource granularity (`Condition`,
+  `MedicationRequest`, `Patient`, ...). A patient summary is therefore the set of
+  categories it contains, registered as one List each. An earlier IG used a
+  single aggregate LOINC code and the published IG replaced it; `MEDAFSPRAAK`,
+  which this seed used to register, is not a member of that value set at all.
 
 ## AC1 walkthrough: findable, addressable, retrievable
 

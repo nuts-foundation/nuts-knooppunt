@@ -238,11 +238,40 @@ func TestCountListsCountsOneCustodian(t *testing.T) {
 
 // An empty custodian or client must not be usable as a wildcard: an unguarded
 // empty value would widen the search instead of narrowing it.
-func TestDeleteForClientRefusesAnEmptyCustodianOrClient(t *testing.T) {
-	client := fhirclient.New(&url.URL{Scheme: "http", Host: "127.0.0.1:1"}, http.DefaultClient, nil)
-	for _, tc := range []struct{ custodian, clientID string }{{"", "c"}, {"00000010", ""}} {
-		if err := deleteForClient(context.Background(), client, tc.custodian, "999900006", tc.clientID); err == nil {
-			t.Errorf("custodian=%q client=%q: want an error, got nil", tc.custodian, tc.clientID)
-		}
+// The guard has to refuse before it reaches the NVI, so the test has to be able
+// to tell "refused" from "the request failed". Pointing an unreachable address
+// at it and asserting only that an error came back cannot: delete the guard and
+// connection-refused returns an error too, and the test still passes. This
+// server fails the test on any request at all, which is the thing being
+// protected — a search missing one of the three scopes is a wildcard delete.
+func TestDeleteForClientRefusesAnEmptyScope(t *testing.T) {
+	for name, tc := range map[string]struct{ custodian, bsn, clientID string }{
+		"empty custodian": {"", "999900006", "gf-sandbox-plataan"},
+		"empty client":    {"00000010", "999900006", ""},
+		"empty bsn":       {"00000010", "", "gf-sandbox-plataan"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var requests int
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				requests++
+				w.Header().Set("Content-Type", "application/fhir+json")
+				_ = json.NewEncoder(w).Encode(searchSetOf())
+			}))
+			t.Cleanup(srv.Close)
+			base, err := url.Parse(srv.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			err = deleteForClient(context.Background(),
+				fhirclient.New(base, http.DefaultClient, nil), tc.custodian, tc.bsn, tc.clientID)
+
+			if err == nil {
+				t.Error("want an error, got nil")
+			}
+			if requests != 0 {
+				t.Errorf("the guard let %d request(s) reach the NVI; it must refuse before searching", requests)
+			}
+		})
 	}
 }
