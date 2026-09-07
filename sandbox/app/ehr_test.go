@@ -7,7 +7,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
@@ -322,4 +325,201 @@ func TestSubscribe_RejectsASessionWithoutTheLock(t *testing.T) {
 	defer res.Body.Close()
 
 	require.Equal(t, http.StatusConflict, res.StatusCode)
+}
+
+type shareCalls struct {
+	registeredBSN  string
+	registeredCats []string
+	registerCount  int
+	subscribeCount int
+}
+
+func shareConfig(t *testing.T) (Config, *shareCalls, pool.PoolPatient) {
+	t.Helper()
+	anna := pool.Patients()[0]
+	calls := &shareCalls{}
+	cfg, _, _ := fakeConfig()
+	cfg.nviCategories = categoriesByBSN(nil, nil)
+	cfg.nviRegister = func(_ context.Context, bsn string, cats []string) error {
+		calls.registeredBSN, calls.registeredCats = bsn, cats
+		calls.registerCount++
+		return nil
+	}
+	cfg.mitzSubscribe = func(context.Context, string) error { calls.subscribeCount++; return nil }
+	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return false, nil }
+	return cfg, calls, anna
+}
+
+func openAndShare(t *testing.T, cfg Config, key string) (int, string) {
+	t.Helper()
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+key+"/open", nil).Body.Close()
+
+	res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/share", nil)
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	return res.StatusCode, string(body)
+}
+
+func TestShare_RegistersTheDerivedCategoriesAndConfirmsBothSteps(t *testing.T) {
+	cfg, calls, anna := shareConfig(t)
+
+	_, body := openAndShare(t, cfg, anna.Key)
+
+	require.Equal(t, anna.BSN, calls.registeredBSN)
+	require.Equal(t, anna.PlataanCategories(), calls.registeredCats,
+		"the handler must send exactly the categories De Plataan holds")
+	require.Contains(t, body, "Localization records published")
+	require.Contains(t, body, "Mitz subscription started")
+}
+
+func TestShare_CardNamesTheRegisteredCategories(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+
+	_, body := openAndShare(t, cfg, anna.Key)
+
+	for _, category := range anna.PlataanCategories() {
+		require.Contains(t, body, category)
+	}
+	require.NotContains(t, body, "BGZ (patient summary)")
+}
+
+func TestShare_MitzFailureIsShownWithoutFakingTheNVIResult(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	cfg.mitzSubscribe = func(context.Context, string) error { return errors.New("mitz unreachable") }
+
+	_, body := openAndShare(t, cfg, anna.Key)
+
+	require.Contains(t, body, "Localization records published")
+	require.Contains(t, body, "Mitz subscription failed")
+	require.NotContains(t, body, "Mitz subscription started")
+}
+
+// An error the reconciliation query says did commit is a lost response, not a
+// failure, and must not invite a retry that could duplicate against real Mitz.
+func TestShare_LostMitzResponseIsReportedAsUnknownNotFailed(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	cfg.mitzSubscribe = func(context.Context, string) error { return context.DeadlineExceeded }
+	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return true, nil }
+
+	_, body := openAndShare(t, cfg, anna.Key)
+
+	require.Contains(t, body, "Mitz subscription started")
+	require.NotContains(t, body, "Mitz subscription failed")
+}
+
+func TestShare_MitzIsSkippedWhenTheNVIStepFailed(t *testing.T) {
+	cfg, calls, anna := shareConfig(t)
+	cfg.nviRegister = func(context.Context, string, []string) error { return errors.New("nvi unreachable") }
+
+	_, body := openAndShare(t, cfg, anna.Key)
+
+	require.Zero(t, calls.subscribeCount)
+	require.Contains(t, body, "Localization records may be incomplete")
+	require.Contains(t, body, "Not attempted")
+	require.NotContains(t, body, "restores a consistent state",
+		"a persistent failure is not repaired by retrying; the card must not promise it")
+}
+
+// A page whose lock expired, or that belongs to a different patient, must not be
+// able to write. The stale tab is the realistic concurrency case.
+func TestShare_RejectsASubmissionWithoutTheLock(t *testing.T) {
+	cfg, calls, anna := shareConfig(t)
+	srv, client := demoServer(t, cfg)
+
+	res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusConflict, res.StatusCode)
+	require.Zero(t, calls.registerCount)
+}
+
+func TestShare_RejectsASubmissionForADifferentPatient(t *testing.T) {
+	cfg, calls, _ := shareConfig(t)
+	first, second := pool.Patients()[0].Key, pool.Patients()[1].Key
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+first+"/open", nil).Body.Close()
+
+	res := postForm(t, client, srv, "/demo/ehr/patients/"+second+"/share", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusConflict, res.StatusCode)
+	require.Zero(t, calls.registerCount)
+}
+
+func TestShare_RejectsASubmissionAfterTheLeaseExpired(t *testing.T) {
+	cfg, calls, anna := shareConfig(t)
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	// The presenter walked away; the lease ran out while the page stayed open.
+	cfg.Locks.ReleaseAll()
+
+	res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusConflict, res.StatusCode)
+	require.Zero(t, calls.registerCount)
+}
+
+func TestShare_RejectsCrossSiteSubmissions(t *testing.T) {
+	cfg, calls, anna := shareConfig(t)
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/ehr/patients/"+anna.Key+"/share", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusForbidden, res.StatusCode)
+	require.Zero(t, calls.registerCount)
+}
+
+// Two submits for the same patient must serialize rather than interleave.
+func TestShare_ConcurrentSubmitsSerialize(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	// Every shared counter goes atomic and nothing calls require off the test
+	// goroutine: shareConfig's nviRegister AND mitzSubscribe closures both
+	// increment plain ints, and postForm calls require, all of which race when
+	// two handlers run at once.
+	cfg.mitzSubscribe = func(context.Context, string) error { return nil }
+	var inFlight, maxInFlight, total int32
+	cfg.nviRegister = func(context.Context, string, []string) error {
+		current := atomic.AddInt32(&inFlight, 1)
+		for {
+			observed := atomic.LoadInt32(&maxInFlight)
+			if current <= observed || atomic.CompareAndSwapInt32(&maxInFlight, observed, current) {
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+		atomic.AddInt32(&inFlight, -1)
+		atomic.AddInt32(&total, 1)
+		return nil
+	}
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			res, err := client.Post(srv.URL+"/demo/ehr/patients/"+anna.Key+"/share",
+				"application/x-www-form-urlencoded", nil)
+			if err == nil {
+				_ = res.Body.Close()
+			}
+		}()
+	}
+	wg.Wait()
+
+	require.Equal(t, int32(2), atomic.LoadInt32(&total), "both submits should have reached the NVI")
+
+	require.Equal(t, int32(1), atomic.LoadInt32(&maxInFlight),
+		"the per-patient mutex must keep two share submits from overlapping")
 }

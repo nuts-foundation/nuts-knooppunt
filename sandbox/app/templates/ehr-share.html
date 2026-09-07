@@ -1,0 +1,55 @@
+{{define "content"}}
+{{template "demobar" .}}
+<div class="app">
+  {{template "sidebar" .}}
+  <div class="main-col">
+    {{template "topbar" .}}
+    <main class="content content-narrow">
+      {{with .Patient}}
+      <div class="card">
+        <h3>Share patient through the generic functions</h3>
+        <div class="h-sub">
+          {{if .Shared}}This patient is already shared. Sharing again republishes the same
+          localization records and retries the consent subscription; it does not create duplicates.
+          {{else}}This record exists only in De Plataan's own store. Sharing publishes one
+          localization record per data category, so other providers can find that this hospital holds
+          data about this patient, and subscribes to their consent changes. The data itself stays here.
+          {{end}}
+        </div>
+        <div class="kv"><span class="k">Patient</span><span class="v">{{.Name}} ({{.BirthDate}})</span></div>
+        <div class="kv"><span class="k">BSN</span><span class="v mono">{{.BSN}}</span></div>
+        <div class="kv"><span class="k">Data categories</span>
+          <span class="v">{{range $i, $c := .Categories}}{{if $i}}, {{end}}<span class="mono">{{$c}}</span>{{end}}</span></div>
+        <form method="post" action="/demo/ehr/patients/{{.Key}}/share">
+          <button class="btn solid" type="submit">Share patient</button>
+        </form>
+      </div>
+      {{end}}
+
+      {{if .NVICard}}
+      <div class="confirm-grid">
+        {{template "sharecard" .NVICard}}
+        {{template "sharecard" .MitzCard}}
+      </div>
+      {{if .NVICard.OK}}
+      <a class="btn solid big" href="/demo/ehr/patients/{{.Patient.Key}}">Open patient record</a>
+      <div class="btn-sub">Opens the record in the context of the <b>Nuts BGZ retrieval</b> use case.</div>
+      {{end}}
+      {{end}}
+    </main>
+  </div>
+  {{template "viewer" .}}
+</div>
+{{end}}
+
+{{define "sharecard"}}
+<div class="confirm-card {{if .Failed}}failed{{else if .Skipped}}skipped{{end}}">
+  <h4>
+    {{if .OK}}<span class="ok-ic">&check;</span>
+    {{else if .Failed}}<span class="fail-ic">&times;</span>
+    {{else}}<span class="skip-ic">&ndash;</span>{{end}}{{.Title}}
+  </h4>
+  <div class="cc-detail">{{.Detail}}</div>
+  {{range .Rows}}<div class="kv"><span class="k">{{.Key}}</span><span class="v">{{.Value}}</span></div>{{end}}
+</div>
+{{end}}

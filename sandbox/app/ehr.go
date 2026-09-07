@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
@@ -174,4 +175,141 @@ func (c Config) handleSubscribe(w http.ResponseWriter, r *http.Request, session 
 		return
 	}
 	http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice=mitz-retry-done", http.StatusSeeOther)
+}
+
+// cardResult is one confirmation card. Skipped is a third state beside OK and
+// Failed: "not attempted" is not "failed", and the next safe action differs.
+type cardResult struct {
+	Title   string
+	Detail  string
+	OK      bool
+	Failed  bool
+	Skipped bool
+	Rows    []cardRow
+}
+
+type cardRow struct{ Key, Value string }
+
+// handleShareForm renders the share screen. Read-only; the lock was taken when
+// the patient was opened.
+func (c Config) handleShareForm(w http.ResponseWriter, r *http.Request, session *authSession) {
+	patient, ok := pool.PatientByKey(r.PathValue("key"))
+	if !ok {
+		http.Error(w, "unknown patient: "+r.PathValue("key"), http.StatusNotFound)
+		return
+	}
+	c.renderShare(w, r, session, patient, nil, nil)
+}
+
+// handleShare publishes the localization records and starts the Mitz
+// subscription, then renders both outcomes.
+//
+// Ownership is checked here rather than trusted from the page: a tab whose lease
+// expired, or one left open on a different patient, still renders an actionable
+// button. It is checked once, at the start; the lease can still expire mid-flight
+// and another session can then take the patient. That window is bounded by the
+// call deadlines and is documented rather than closed, because closing it means a
+// reservation the advisory registry does not offer.
+func (c Config) handleShare(w http.ResponseWriter, r *http.Request, session *authSession) {
+	if crossSiteRequest(r) {
+		http.Error(w, "cross-site share is not allowed", http.StatusForbidden)
+		return
+	}
+	patient, ok := pool.PatientByKey(r.PathValue("key"))
+	if !ok {
+		http.Error(w, "unknown patient: "+r.PathValue("key"), http.StatusNotFound)
+		return
+	}
+	if !c.Locks.HeldBy(patient.Key, lockOwner(session)) {
+		http.Error(w, "this session does not hold patient "+patient.Key+"; reopen the record", http.StatusConflict)
+		return
+	}
+
+	nviCard := c.shareNVI(r.Context(), patient)
+	mitzCard := c.shareMitz(r.Context(), patient, nviCard.Failed)
+	c.renderShare(w, r, session, patient, nviCard, mitzCard)
+}
+
+func (c Config) shareNVI(ctx context.Context, patient pool.PoolPatient) *cardResult {
+	if err := c.registerPatient(ctx, patient); err != nil {
+		// One card for every NVI failure: Register is search-delete-create behind
+		// an opaque error, so the handler cannot tell a failed search from a
+		// failed create from a committed write whose response was lost. Saying
+		// which would be invention; the card states the ambiguity and the action.
+		return &cardResult{
+			Failed: true,
+			Title:  "Localization records may be incomplete",
+			Detail: "The NVI did not confirm the update: " + err.Error() + ". Some records may have " +
+				"been removed or created. Sharing again attempts to reconcile; it cannot guarantee " +
+				"it, and a configuration problem will keep failing until it is fixed.",
+		}
+	}
+	return &cardResult{
+		OK:    true,
+		Title: "Localization records published",
+		Detail: "Other care providers can now find that De Plataan holds data for this patient. " +
+			"Only the pointer was published; no clinical data left De Plataan.",
+		Rows: []cardRow{
+			{Key: "Holder", Value: "Ziekenhuis De Plataan · URA " + plataanURA},
+			{Key: "Data categories", Value: strings.Join(patient.PlataanCategories(), ", ")},
+			{Key: "Patient", Value: "as a pseudonym, via the pseudonym service"},
+		},
+	}
+}
+
+func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFailed bool) *cardResult {
+	if nviFailed {
+		// Nothing to subscribe consent changes about, and the retry redoes the
+		// NVI step anyway.
+		return &cardResult{Skipped: true, Title: "Mitz subscription",
+			Detail: "Not attempted: the localization step did not succeed."}
+	}
+	if c.mitzSubscribe == nil {
+		return &cardResult{Skipped: true, Title: "Mitz subscription",
+			Detail: "Not attempted: Mitz is not wired up in this environment."}
+	}
+
+	err := c.mitzSubscribe(ctx, patient.BSN)
+	if err != nil && c.mitzSubscribed != nil {
+		// The call failed, but a timeout or dropped connection can follow a
+		// commit. Ask before declaring a failure: reporting a committed
+		// subscription as failed invites a retry that duplicates it against a
+		// Mitz which, unlike the mock, does not deduplicate.
+		if subscribed, queryErr := c.mitzSubscribed(ctx, patient.BSN); queryErr == nil && subscribed {
+			err = nil
+		}
+	}
+	if err != nil {
+		return &cardResult{
+			Failed: true,
+			Title:  "Mitz subscription failed",
+			Detail: "The patient is shared, but consent changes will not be delivered: " + err.Error() +
+				". The record page keeps this visible and offers a retry of this step alone.",
+		}
+	}
+	return &cardResult{
+		OK:     true,
+		Title:  "Mitz subscription started",
+		Detail: "You will be notified of every change this patient makes to their consents.",
+		Rows: []cardRow{
+			{Key: "Subscriber", Value: "Ziekenhuis De Plataan"},
+			{Key: "Registry", Value: "Mitz (simulated)"},
+		},
+	}
+}
+
+func (c Config) renderShare(w http.ResponseWriter, r *http.Request, session *authSession,
+	patient pool.PoolPatient, nviCard, mitzCard *cardResult) {
+	row := c.patientRowFor(r.Context(), patient, session)
+	// The share screen names what would be, or has just been, registered.
+	row.Categories = patient.PlataanCategories()
+
+	view := session.view()
+	render(w, "ehr-share.html", page{
+		Title: "Share patient · Plataan EHR", Guise: "ehr",
+		Scenario: scenario, ShowReset: true,
+		BodyClass: "hood-open", BodyAttrs: viewerBodyAttrs(true),
+		Active: "dossier", TopTitle: "Patient registration", ViewerOpen: true,
+		Session: &view, Patient: &row, NVICard: nviCard, MitzCard: mitzCard,
+	})
 }

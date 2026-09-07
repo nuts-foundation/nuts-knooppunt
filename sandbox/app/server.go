@@ -386,6 +386,8 @@ func NewMux(cfg Config) *http.ServeMux {
 	mux.HandleFunc("POST /demo/ehr/patients/{key}/open", requireSession(signedIn, cfg.handleOpenPatient))
 	mux.HandleFunc("GET /demo/ehr/patients/{key}", requireSession(signedIn, cfg.handlePatientRecord))
 	mux.HandleFunc("POST /demo/ehr/patients/{key}/subscribe", requireSession(signedIn, cfg.handleSubscribe))
+	mux.HandleFunc("GET /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.handleShareForm))
+	mux.HandleFunc("POST /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.handleShare))
 	return mux
 }
 
