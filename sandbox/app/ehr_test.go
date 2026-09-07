@@ -282,8 +282,11 @@ func TestPatientRecord_UnconfiguredLookupShowsUnknownNotMissing(t *testing.T) {
 
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key)
 
-	require.Contains(t, body, "subscription status unknown")
+	require.Contains(t, body, `<span class="stat-chip unknown">`,
+		"the chip class, not its label: NVIUnknown is false here, so this class can only be the subscription one")
 	require.NotContains(t, body, "consent subscription missing")
+	require.Contains(t, body, "/subscribe",
+		"unknown keeps the retry, so the presenter is not stranded with no way forward")
 	// A fragment that sits on one source line: the template wraps its prose, so
 	// a longer phrase would straddle a newline and never match.
 	require.Contains(t, body, "could not be asked whether a subscription already exists",
