@@ -22,8 +22,10 @@ import (
 
 // Test_PEPAuthorization tests the PEP authorization flow with real Nuts node
 // credential validation using the medicatieoverdracht scope. The access policy
-// in testdata/ is based on config/policies/medicatieoverdracht-policy.json with
-// additional claim mappings for MITZ input validation (see accesspolicy.json).
+// and discovery definition come from the repository's config/ directory — the
+// same files docker compose serves — so this test and the composed stack cannot
+// drift apart (see config/policy/accesspolicy.json and
+// config/discovery/bgz-test.json).
 //
 // This test validates the FULL credential flow:
 //   - X509Credential issued via go-didx509-toolkit from test certificates
@@ -43,8 +45,6 @@ func Test_PEPAuthorization(t *testing.T) {
 
 	certsDir, err := filepath.Abs("certs")
 	require.NoError(t, err)
-	testdataDir, err := filepath.Abs("testdata")
-	require.NoError(t, err)
 
 	chainPath := filepath.Join(certsDir, "requester-chain.pem")
 	keyPath := filepath.Join(certsDir, "requester.key")
@@ -53,8 +53,7 @@ func Test_PEPAuthorization(t *testing.T) {
 	}
 
 	pep := harness.StartPEP(t, harness.PEPTestConfig{
-		CertsDir:    certsDir,
-		TestDataDir: testdataDir,
+		CertsDir: certsDir,
 	})
 
 	createTestPatient(t, pep.HAPIBaseURL, "patient-123", "900186021")

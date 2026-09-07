@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dezi (simulated)</title>
+<style>
+  /* This screen intentionally has its own CSS and shares no design tokens with
+     sandbox/app/static/css/tokens.css (the EHR chrome the user arrives from).
+     --accent is a plain slate, not the EHR's --rv-blauw, so consent reads as
+     a separate identity service rather than a themed part of the EHR. */
+  :root { --ink: #1a1a1a; --line: #d4d4d4; --accent: #2c3e50; --bg: #f3f3f3; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+         background: var(--bg); color: var(--ink); display: flex; min-height: 100vh;
+         align-items: center; justify-content: center; padding: 24px; }
+  main { background: #fff; border: 1px solid var(--line); max-width: 460px; width: 100%; }
+  .bar { background: var(--accent); color: #fff; padding: 14px 24px; font-weight: 700;
+         letter-spacing: 0.02em; }
+  .bar span { display: block; font-weight: 400; font-size: 12px; opacity: 0.85; }
+  .body { padding: 24px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #555; font-size: 13px; margin: 0 0 20px; }
+  dl { margin: 0 0 24px; border-top: 1px solid var(--line); }
+  .row { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0;
+         border-bottom: 1px solid var(--line); font-size: 13px; }
+  dt { color: #555; margin: 0; }
+  dd { margin: 0; font-weight: 600; text-align: right; }
+  button { width: 100%; padding: 12px; font-size: 15px; font-weight: 600; color: #fff;
+           background: var(--accent); border: 0; cursor: pointer; }
+  .note { margin: 16px 0 0; font-size: 11px; color: #666; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <div class="bar">Dezi <span>Simulated authentication, synthetic data only</span></div>
+  <div class="body">
+    <h1>Share your professional identity</h1>
+    <p class="sub">Plataan EHR is asking Dezi to confirm who you are.</p>
+    <dl>
+      <div class="row"><dt>Name</dt><dd>{{.Initials}} {{.Surname}}</dd></div>
+      <div class="row"><dt>UZI number</dt><dd>{{.DeziNumber}}</dd></div>
+      <div class="row"><dt>Role</dt><dd>{{.RoleName}}</dd></div>
+      <div class="row"><dt>Organization</dt><dd>{{.OrgName}}</dd></div>
+      <div class="row"><dt>URA</dt><dd>{{.OrgURA}}</dd></div>
+    </dl>
+    <form method="post" action="/authorize">
+      <input type="hidden" name="request" value="{{.Handle}}">
+      <button type="submit">Confirm and continue</button>
+    </form>
+    <p class="note">This is a mock of Dezi built for the GF Sandbox. It is not Dezi.</p>
+  </div>
+</main>
+</body>
+</html>

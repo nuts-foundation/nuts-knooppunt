@@ -3,6 +3,8 @@
 
 # Binaries (use / prefix to match only in root directory)
 /nuts-knooppunt
+/app
+/dezi
 
 # Runtime files
 data
@@ -20,3 +22,9 @@ helm/**/charts/*.tgz
 
 # Scratch files
 .scratch/
+
+# AI review artifacts (local only)
+.codex-*
+
+# GF Sandbox demo PKI and signing key (generated, never committed)
+sandbox/.certs/

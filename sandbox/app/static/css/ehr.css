@@ -65,6 +65,10 @@
   .btn.ghost:hover { background: #f5f1ea; border-color: #cfc5b4; }
   .btn.big { padding: 11px 24px; font-size: 13px; }
   .btn-sub { font-size: 11px; color: var(--text2); margin-top: 8px; }
+  /* a card's own control, below the copy that introduces it. base.css resets
+     every margin, so the gap has to come from somewhere; .btn-sub carries the
+     rest of the group's spacing */
+  .card-action { margin-top: 14px; }
 
   .form-row { margin-bottom: 14px; }
   label { display: block; font-size: 11px; font-weight: 600; color: #57534e; margin-bottom: 6px; }
@@ -214,6 +218,15 @@
   .check.ok .tag { color: var(--sage); background: var(--sage-soft); }
   .check.fail .tag { color: var(--red); background: var(--red-soft); }
   .check.skip .tag { color: var(--text3); background: #f1ede6; }
+
+  /* introspected claims: the .kv name-and-value pattern as table rows, sharing
+     the row rule the card lists use and the mono treatment every other machine
+     value on this page gets */
+  .claims { width: 100%; max-width: 560px; border-collapse: collapse; }
+  .claims th, .claims td { text-align: left; vertical-align: baseline; padding: 8px 0; border-top: 1px solid #f1ece3; }
+  .claims tr:first-child th, .claims tr:first-child td { border-top: none; }
+  .claims th { width: 220px; font-size: 11.5px; font-weight: 400; color: var(--text2); }
+  .claims td { font-family: 'Fira Mono', monospace; font-size: 11px; }
 
   /* Mitz notification */
   .mitz-note { border: 1px solid var(--plum-soft); border-left: 3px solid var(--plum); background: var(--card); border-radius: 13px; padding: 14px 18px; display: flex; gap: 13px; align-items: flex-start; margin-bottom: 16px; box-shadow: var(--shadow); }

@@ -1,1 +1,21 @@
 mock-components/**
+# mock-dezi is part of the root Go module and is built from the repo root
+# context, like sandbox/app; the other mock-components are separate stacks
+# with their own build context and stay excluded from this one.
+!mock-components/dezi/**
+
+# Demo CA and signing keys from sandbox/generate-demo-certs.sh. Gitignored,
+# but the Dockerfiles built from this context still do `COPY . .`, which
+# would otherwise pull them into the builder stage regardless of git
+# tracking. Keep this rule after the negation above so it is not
+# re-included by it.
+sandbox/.certs/
+
+# Private key material and local runtime state, excluded by shape rather
+# than by location so a new key directory does not silently start shipping.
+# Nothing built from this context needs any of it: no Dockerfile copies a
+# key, and no go:embed pattern matches one. `pki/cacerts/*.crt`, the only
+# certificate material an image does need, is public and unaffected.
+**/*.key
+**/*_private.pem
+data/

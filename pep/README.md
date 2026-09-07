@@ -11,8 +11,8 @@ The PEP uses nginx subrequests to proxy calls to Nuts node and PDP via internal 
 ## Quick Start
 
 ```bash
-# Start PEP with rest of stack
-docker compose --profile pep up -d
+# The PEPs are part of the default stack — no profile needed
+docker compose up -d
 
 # Test requires a valid OAuth token from Nuts node
 # The PEP will introspect the token and validate DPoP if present
@@ -20,8 +20,12 @@ docker compose --profile pep up -d
 
 **Endpoints:**
 
-- PEP: `http://localhost:9080`
+- PEP (Zonnebloem, URA 00000020, serves `sunflower-patients`): `http://localhost:9080`
+- PEP (De Plataan, URA 00000010, serves `plataan-patients`): `http://localhost:9081`
 - PDP: `http://localhost:8081/pdp` (internal API)
+
+From inside the compose network these are `http://pep-zonnebloem:8080` and
+`http://pep-plataan:8080`; the `localhost:908x` forms only work from the host.
 
 ## How It Works
 
@@ -71,7 +75,8 @@ For BgZ use cases, the PD typically requires:
 2. **HealthcareProviderRoleTypeCredential** - Vektis facility type
 3. **NutsEmployeeCredential** - Employee identity for Mitz consent verification
 
-See `test/e2e/pep/testdata/accesspolicy.json` for an example PD used in e2e tests.
+See `config/policy/accesspolicy.json` for the PD used by both the e2e tests and
+the local `docker compose` stack.
 
 ## Claim Flow (No Mapping Required)
 

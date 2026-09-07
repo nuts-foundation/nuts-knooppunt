@@ -1,17 +1,31 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 	"github.com/stretchr/testify/require"
 )
 
+// testConfig returns a Config for handler tests: a fresh lock registry and no
+// wired reset functions (so reset/recycle report "disabled" unless the test
+// injects fakes).
+func testConfig() Config {
+	return Config{Locks: NewRegistry()}
+}
+
 func getPage(t *testing.T, path string) (int, string) {
 	t.Helper()
-	srv := httptest.NewServer(NewMux())
+	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
 	res, err := http.Get(srv.URL + path)
 	require.NoError(t, err)
@@ -21,8 +35,983 @@ func getPage(t *testing.T, path string) (int, string) {
 	return res.StatusCode, string(body)
 }
 
+// getPageWithClient is getPage for a caller-supplied client, so a session
+// cookie obtained via signInViaDezi carries over to the request.
+func getPageWithClient(t *testing.T, client *http.Client, url string) (int, string) {
+	t.Helper()
+	res, err := client.Get(url)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	return res.StatusCode, string(body)
+}
+
+// signInViaDezi drives the real POST /demo/login -> GET /demo/auth/callback
+// round trip against a fakeDezi backend and returns a client carrying the
+// resulting session cookie. srv's NewMux must have been constructed after
+// DEZI_INTERNAL_BASE_URL was pointed at a fakeDezi server, so the callback's
+// token and userinfo calls land there instead of the real Dezi mock.
+func signInViaDezi(t *testing.T, srv *httptest.Server) *http.Client {
+	t.Helper()
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+	client := &http.Client{
+		Jar:           jar,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+
+	res, err := client.PostForm(srv.URL+"/demo/login", nil)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	location, err := url.Parse(res.Header.Get("Location"))
+	require.NoError(t, err)
+	state := location.Query().Get("state")
+	require.NotEmpty(t, state)
+
+	res, err = client.Get(srv.URL + "/demo/auth/callback?code=the-code&state=" + state)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo/ehr", res.Header.Get("Location"), "a successful callback lands on the EHR home")
+
+	return client
+}
+
+// startLogin drives POST /demo/login and returns the state it issued, so a
+// caller can complete or replay the callback under precise control.
+func startLogin(t *testing.T, client *http.Client, srv string) string {
+	t.Helper()
+	res, err := client.PostForm(srv+"/demo/login", nil)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	location, err := url.Parse(res.Header.Get("Location"))
+	require.NoError(t, err)
+	state := location.Query().Get("state")
+	require.NotEmpty(t, state)
+	return state
+}
+
+// sessionCookieValue returns the raw session cookie value client is holding
+// for target. A test can then replay it directly on a fresh request, which
+// is the only way to prove the server itself, not just the client-side
+// cookie jar, has forgotten a session.
+func sessionCookieValue(t *testing.T, client *http.Client, target string) string {
+	t.Helper()
+	u, err := url.Parse(target)
+	require.NoError(t, err)
+	for _, c := range client.Jar.Cookies(u) {
+		if c.Name == sessionCookie {
+			return c.Value
+		}
+	}
+	t.Fatalf("no %s cookie held for %s", sessionCookie, target)
+	return ""
+}
+
+// replaySessionCookie sends value as the session cookie on a fresh,
+// jar-less request to /demo/ehr, bypassing whatever the client-side cookie
+// jar believes, and reports where the server sends it.
+func replaySessionCookie(t *testing.T, srv *httptest.Server, value string) (int, string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/demo/ehr", nil)
+	require.NoError(t, err)
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: value})
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	return res.StatusCode, res.Header.Get("Location")
+}
+
 func TestHealthz(t *testing.T) {
 	status, body := getPage(t, "/healthz")
 	require.Equal(t, http.StatusOK, status)
 	require.JSONEq(t, `{"ok": true}`, body)
+}
+
+func TestEhrRedirectsWhenNotSignedIn(t *testing.T) {
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	res, err := client.Get(srv.URL + "/demo/ehr")
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo/login", res.Header.Get("Location"))
+}
+
+func TestLoginRedirectsToDezi(t *testing.T) {
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	res, err := client.PostForm(srv.URL+"/demo/login", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	location, err := url.Parse(res.Header.Get("Location"))
+	require.NoError(t, err)
+	require.NotEmpty(t, location.Query().Get("state"))
+	require.Equal(t, "S256", location.Query().Get("code_challenge_method"))
+}
+
+func TestCallbackRejectsUnknownState(t *testing.T) {
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	res, err := client.Get(srv.URL + "/demo/auth/callback?code=x&state=never-issued")
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusBadRequest, res.StatusCode)
+}
+
+func TestCallbackSurfacesOAuthError(t *testing.T) {
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	// state=x is never issued, so a bare status check here would also pass if
+	// the error branch were deleted: the unknown-state check below it returns
+	// 400 too. The body must name the OAuth error to prove this is the error
+	// branch, not the unrelated unknown-state rejection.
+	res, err := client.Get(srv.URL + "/demo/auth/callback?error=access_denied&state=x")
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusBadRequest, res.StatusCode)
+	body, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(body), "access_denied")
+}
+
+func TestLogoutEndsSessionServerSide(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+	raw := sessionCookieValue(t, client, srv.URL)
+	// A second practitioner, so this pins which sessions logout ends. With one
+	// session a handler that cleared the whole store would pass identically,
+	// and signing one person out would sign out everybody.
+	bystander := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/logout", nil)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo?notice=signed-out", res.Header.Get("Location"))
+	requireDeletionCookie(t, res)
+
+	// Replay the cookie value the browser held before logout. If the server
+	// still honours it, clearing the cookie client-side was cosmetic and the
+	// old session is still live.
+	status, location := replaySessionCookie(t, srv, raw)
+	require.Equal(t, http.StatusSeeOther, status, "a logged-out session must not still resolve server-side")
+	require.Equal(t, "/demo/login", location)
+
+	status, _ = replaySessionCookie(t, srv, bystander)
+	require.Equal(t, http.StatusOK, status, "logout must end only the caller's session")
+}
+
+// requireDeletionCookie asserts the response carries a cookie that actually
+// deletes the session cookie, rather than merely mentioning its name.
+//
+// This is the property the two routes share and the one nothing else here
+// covers: a browser removes a cookie only when the replacement matches the
+// original's Name and Path, so a wrong Path leaves the old cookie in place
+// beside a new empty one and the session survives in the browser. Both routes
+// go through clearSessionCookie (session.go); before that helper existed each
+// route carried its own copy of these attributes, and every test still passed
+// while they drifted.
+//
+// Secure is compared against secureCookies() rather than hardcoded: the set
+// cookie's Secure flag is already pinned for http and https by
+// TestCallbackSetsSecureCookieAttributes and its https counterpart, and the
+// deletion cookie has to agree with whatever those produce.
+func requireDeletionCookie(t *testing.T, res *http.Response) {
+	t.Helper()
+	for _, cookie := range res.Cookies() {
+		if cookie.Name != sessionCookie {
+			continue
+		}
+		require.Empty(t, cookie.Value, "the deletion cookie must not carry a session value")
+		require.Equal(t, "/", cookie.Path, "a cookie is deleted only when the Path matches the one it was set with")
+		require.True(t, cookie.HttpOnly, "the replacement must not be readable from script when the original was not")
+		require.Equal(t, secureCookies(), cookie.Secure, "the deletion cookie must match the set cookie's Secure flag")
+		require.Equal(t, -1, cookie.MaxAge, "MaxAge -1 is what expires the cookie immediately")
+		return
+	}
+	t.Fatalf("no %s cookie in the response, so the browser keeps the one it has", sessionCookie)
+}
+
+func TestResetEndsSessionServerSide(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	// A configured reset, because an unwired Config makes the route report
+	// "disabled" and return before it reaches the sessions, which is the whole
+	// claim here. Teardown itself does not depend on the restore succeeding;
+	// TestResetEndsSessionEvenWhenTheRestoreFails covers that half.
+	cfg := testConfig()
+	cfg.resetGlobal = func(context.Context) error { return nil }
+	cfg.recyclePatient = func(context.Context, string) error { return nil }
+	srv := httptest.NewServer(NewMux(cfg))
+	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+	raw := sessionCookieValue(t, client, srv.URL)
+	// The claim below is about every session, so the fixture needs more than
+	// the caller's: dropping only the caller would otherwise satisfy it.
+	other := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/reset", nil)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo?notice=reset-done", res.Header.Get("Location"))
+	requireDeletionCookie(t, res)
+
+	status, location := replaySessionCookie(t, srv, raw)
+	require.Equal(t, http.StatusSeeOther, status, "reset must drop every session, not just clear the caller's cookie")
+	require.Equal(t, "/demo/login", location)
+
+	status, _ = replaySessionCookie(t, srv, other)
+	require.Equal(t, http.StatusSeeOther, status, "reset must also drop a session that never made the request")
+}
+
+// ResetGlobal is not transactional: it clears the mutable tenants, then reloads
+// fixtures and re-seeds the NVI, and a failure at any of those steps returns
+// with the data already mutated. Keeping the session alive across that would
+// hand the practitioner a signed-in view of a half-restored dataset, so
+// teardown does not wait for the restore to succeed.
+func TestResetEndsSessionEvenWhenTheRestoreFails(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	cfg := testConfig()
+	cfg.resetGlobal = func(context.Context) error { return errors.New("reload fixtures: hapi is down") }
+	cfg.recyclePatient = func(context.Context, string) error { return nil }
+	srv := httptest.NewServer(NewMux(cfg))
+	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+	raw := sessionCookieValue(t, client, srv.URL)
+
+	// A lock held across the failure. Locks are owned by a session, so one that
+	// outlives the teardown is unreleasable; the failure path has to clear them
+	// for the same reason the success path does.
+	locked := postForm(t, client, srv, "/demo/patients/"+pool.Patients()[0].Key+"/lock", nil)
+	locked.Body.Close()
+	require.Equal(t, http.StatusOK, locked.StatusCode)
+	require.True(t, cfg.Locks.IsLocked(pool.Patients()[0].Key))
+
+	// override, because the lock above is exactly what a plain reset refuses;
+	// without it this would redirect with reset-locked and never reach the
+	// failure path under test.
+	res, err := client.PostForm(srv.URL+"/demo/reset", url.Values{"override": {"true"}})
+	require.NoError(t, err)
+	body, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, http.StatusInternalServerError, res.StatusCode)
+	require.Contains(t, string(body), "hapi is down", "the caller is told why the reset failed")
+	requireDeletionCookie(t, res)
+
+	status, location := replaySessionCookie(t, srv, raw)
+	require.Equal(t, http.StatusSeeOther, status, "a failed reset must still drop the session")
+	require.Equal(t, "/demo/login", location)
+	require.False(t, cfg.Locks.IsLocked(pool.Patients()[0].Key),
+		"a failed reset must not leave a lock whose owning session it just destroyed")
+}
+
+func TestResetRejectsCrossSiteRequest(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	// Signed in on purpose: an anonymous caller is turned away by the session
+	// guard, so only an authenticated request proves the cross-site check.
+	client := signInViaDezi(t, srv)
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusForbidden, res.StatusCode, "a cross-site Sec-Fetch-Site must be rejected")
+	for _, c := range res.Cookies() {
+		require.NotEqual(t, sessionCookie, c.Name, "a rejected reset must not touch the session cookie")
+	}
+}
+
+func TestResetRejectsSameSiteRequestAndKeepsSessions(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+	first := sessionCookieValue(t, client, srv.URL)
+	second := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
+
+	// Reset clears every session, not just the caller's, so a sibling origin
+	// reaching it is the damaging case.
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusForbidden, res.StatusCode, "a sibling origin must not be able to reset")
+	for _, c := range res.Cookies() {
+		require.NotEqual(t, sessionCookie, c.Name, "a rejected reset must not sign the browser out either")
+	}
+
+	for _, raw := range []string{first, second} {
+		status, _ := replaySessionCookie(t, srv, raw)
+		require.Equal(t, http.StatusOK, status, "a rejected reset must leave every session intact")
+	}
+}
+
+// The 303 here proves the request cleared the guard, which is the whole claim.
+// Which redirect it then gets is another test's business: with the unwired
+// testConfig this lands on the "reset-disabled" notice rather than performing a
+// reset, where before E5 it hit the stub's "reset-pending".
+func TestResetAcceptsSameOriginRequest(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/reset", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	// 303 to the disabled notice, not to /demo/login: signing in is what makes
+	// this assertion about the cross-site guard rather than about the session
+	// guard turning an anonymous caller away with the same status.
+	require.Equal(t, http.StatusSeeOther, res.StatusCode, "a same-origin Sec-Fetch-Site must be allowed")
+	require.Equal(t, "/demo?notice=reset-disabled", res.Header.Get("Location"))
+}
+
+func TestCallbackSetsSecureCookieAttributes(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	state := startLogin(t, client, srv.URL)
+
+	res, err := client.Get(srv.URL + "/demo/auth/callback?code=the-code&state=" + state)
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	var sessionCk *http.Cookie
+	for _, c := range res.Cookies() {
+		if c.Name == sessionCookie {
+			sessionCk = c
+		}
+	}
+	require.NotNil(t, sessionCk, "the callback must set the session cookie")
+	require.True(t, sessionCk.HttpOnly, "the session cookie must be HttpOnly so client script cannot read it")
+	require.Equal(t, http.SameSiteLaxMode, sessionCk.SameSite, "the session cookie must be SameSite=Lax")
+	require.False(t, sessionCk.Secure, "over a plain-http public URL Secure would make the browser drop the cookie")
+}
+
+func TestCallbackMarksCookieSecureForAnHTTPSDeployment(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	// The hosted sandbox terminates TLS at a proxy, so the request reaching
+	// this process is plain http regardless. Only the public URL says what the
+	// browser used, which is why the cookie flag is derived from it.
+	t.Setenv("SANDBOX_PUBLIC_URL", "https://sandbox.example.com")
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	state := startLogin(t, client, srv.URL)
+
+	res, err := client.Get(srv.URL + "/demo/auth/callback?code=the-code&state=" + state)
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	var sessionCk *http.Cookie
+	for _, c := range res.Cookies() {
+		if c.Name == sessionCookie {
+			sessionCk = c
+		}
+	}
+	require.NotNil(t, sessionCk, "the callback must set the session cookie")
+	require.True(t, sessionCk.Secure, "an https public URL must restrict the session cookie to https")
+}
+
+func TestCallbackRejectsReplayedState(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	state := startLogin(t, client, srv.URL)
+	callback := srv.URL + "/demo/auth/callback?code=the-code&state=" + state
+
+	res, err := client.Get(callback)
+	require.NoError(t, err)
+	res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode, "the first use of a genuinely issued state must succeed")
+
+	// Unlike TestCallbackRejectsUnknownState, this state really was issued by
+	// POST /demo/login above; it must still be rejected the second time,
+	// because a state is single-use.
+	res, err = client.Get(callback)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusBadRequest, res.StatusCode, "a state must not be usable a second time")
+}
+
+// TestRequireSessionGuardsAnySubpath proves the extracted guard, not just the
+// one route wired to it today, protects a subpath. No subpath under
+// /demo/ehr is registered in NewMux yet, so this builds a minimal mux of its
+// own rather than adding an unused route to production code: the next
+// epic's screens under /demo/ehr wrap with requireSession the same way.
+func TestRequireSessionGuardsAnySubpath(t *testing.T) {
+	resolve := func(*http.Request) *authSession { return nil }
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /demo/ehr/notes", requireSession(resolve, func(w http.ResponseWriter, _ *http.Request, _ *authSession) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	res, err := client.Get(srv.URL + "/demo/ehr/notes")
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo/login", res.Header.Get("Location"))
+}
+
+func TestCallbackWithoutCodeIsARequestError(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	state := startLogin(t, client, srv.URL)
+
+	res, err := client.Get(srv.URL + "/demo/auth/callback?state=" + state)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusBadRequest, res.StatusCode,
+		"a callback without a code is a client error, not a Dezi failure")
+
+	// The attempt must survive, so the practitioner can follow a correct
+	// callback instead of having to restart the sign-in.
+	good, err := client.Get(srv.URL + "/demo/auth/callback?code=the-code&state=" + state)
+	require.NoError(t, err)
+	defer good.Body.Close()
+	require.Equal(t, http.StatusSeeOther, good.StatusCode, "the sign-in attempt must not have been consumed")
+}
+
+func TestLogoutRejectsCrossSiteRequest(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+	raw := sessionCookieValue(t, client, srv.URL)
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/logout", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	res, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusForbidden, res.StatusCode,
+		"a cross-site form post must not be able to sign a practitioner out")
+
+	// Status alone is too weak: a handler that clears the cookie and then
+	// returns 403 would pass that check while still signing the victim out.
+	for _, c := range res.Cookies() {
+		require.NotEqual(t, sessionCookie, c.Name, "a rejected logout must not touch the session cookie")
+	}
+	status, _ := replaySessionCookie(t, srv, raw)
+	require.Equal(t, http.StatusOK, status, "the live session must survive a rejected cross-site logout")
+}
+
+func TestLogoutRejectsSameSiteRequestAndKeepsTheSession(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	raw := sessionCookieValue(t, signInViaDezi(t, srv), srv.URL)
+
+	// same-site covers sibling origins under one registrable domain, so on a
+	// hosted deployment any other subdomain would qualify. The cookie is sent
+	// deliberately: SameSite=Lax withholds it cross-site but attaches it
+	// same-site, so this is the one browser vector that hands a live session
+	// to a rejected logout. Without it the assertion below is vacuous, and a
+	// handler that dropped the session before checking the guard would pass.
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/logout", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: raw})
+	res, err := srv.Client().Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusForbidden, res.StatusCode, "a sibling origin must not be trusted")
+
+	status, _ := replaySessionCookie(t, srv, raw)
+	require.Equal(t, http.StatusOK, status, "a rejected logout must not have dropped the session")
+}
+
+func TestLogoutAcceptsSameOriginRequest(t *testing.T) {
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/logout", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode, "a same-origin sign-out must be allowed")
+}
+
+// authorizeSandbox starts a sandbox wired to a fake Dezi and to nodeBaseURL,
+// and returns it together with a client holding a live session. The SANDBOX_
+// variables are cleared for the same reason testNutsClient clears them: the
+// node fakes pin their routes and assertions to nutsConfigFromEnv's defaults,
+// so a developer with any of them exported would otherwise get a sandbox those
+// fakes reject.
+func authorizeSandbox(t *testing.T, nodeBaseURL string) (*httptest.Server, *http.Client) {
+	t.Helper()
+	for _, key := range []string{
+		"SANDBOX_NUTS_SUBJECT",
+		"SANDBOX_BGZ_SCOPE",
+		"SANDBOX_AUTH_SERVER",
+		"SANDBOX_FACILITY_TYPE",
+	} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("DEZI_INTERNAL_BASE_URL", fakeDezi(t).URL)
+	t.Setenv("KNOOPPUNT_INTERNAL_URL", nodeBaseURL)
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	return srv, signInViaDezi(t, srv)
+}
+
+// nodeIntrospecting issues a usable token and answers introspection with the
+// given status and body, which is the one shape neither existing fake can
+// produce: fakeNode always succeeds at both steps, and recordingNode answers
+// every path alike, so a failing introspection there is preceded by a failing
+// token request.
+func nodeIntrospecting(t *testing.T, status int, response string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /nuts/internal/auth/v2/plataan/request-service-access-token",
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"the-token"}`))
+		})
+	mux.HandleFunc("POST /nuts/internal/auth/v2/accesstoken/introspect",
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(response))
+		})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// vouchedClaims is the claim set the bgz presentation definition emits and
+// component/pdp reads into PolicySubject, as the node returns it for a token it
+// vouched for. It is a fragment rather than a whole response so that the tests
+// below can vary the active member alone, which is the one difference between a
+// token the node stands behind and one it refuses.
+const vouchedClaims = `"user_id":"900001234","user_role":"01.022",` +
+	`"organization_ura":"00000010","organization_ura_dezi":"00000010",` +
+	`"organization_name":"Ziekenhuis De Plataan",` +
+	`"organization_facility_type":"Z3"`
+
+// nodeVouchingForTheToken answers both steps the way the node does for a token
+// it vouched for under the bgz policy. nuts_test.go's fakeNode answers
+// introspection without organization_name, so it no longer reaches the page
+// this route renders; once that fake carries the PDP's full set, this helper
+// collapses back into it. The id_token assertion comes along with the success
+// path, because it is the only check that the route hands the node the
+// attestation the signed-in session carries rather than an empty one.
+func nodeVouchingForTheToken(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /nuts/internal/auth/v2/plataan/request-service-access-token",
+		func(w http.ResponseWriter, r *http.Request) {
+			var body struct {
+				IdToken string `json:"id_token"`
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+			require.Equal(t, fixtureAttestation, body.IdToken, "the route must send the session's attestation")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"the-token"}`))
+		})
+	mux.HandleFunc("POST /nuts/internal/auth/v2/accesstoken/introspect",
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"active":true,` + vouchedClaims + `}`))
+		})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestAuthorizeRendersTheClaims(t *testing.T) {
+	srv, client := authorizeSandbox(t, nodeVouchingForTheToken(t).URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	body := string(raw)
+
+	// Exact values, not merely present: a wrong persona or a mismatched
+	// certificate would satisfy a non-empty check. Name and value are asserted
+	// as the row the template renders, because a value alone also passes when
+	// it is rendered under the wrong claim name, and because 900001234 is the
+	// practitioner's Dezi number, which any page carrying the session view
+	// would print regardless of what the node returned.
+	//
+	// Every claim the PDP reads, not the subset the route used to carry: the
+	// page says it shows what the token carries, so a claim the policy emits and
+	// the route drops is one the reader is told does not exist.
+	for _, row := range []string{
+		"<th>user_id</th><td>900001234</td>",
+		"<th>user_role</th><td>01.022</td>",
+		"<th>organization_ura</th><td>00000010</td>",
+		"<th>organization_ura_dezi</th><td>00000010</td>",
+		"<th>organization_name</th><td>Ziekenhuis De Plataan</td>",
+		"<th>organization_facility_type</th><td>Z3</td>",
+	} {
+		require.Contains(t, body, row)
+	}
+	require.Contains(t, body, "<title>Authorization · Plataan EHR</title>")
+	require.Contains(t, body, "Service access token")
+	require.Contains(t, body, "The decision itself is not made here",
+		"the page must say the authorization decision is not what it shows")
+	require.Contains(t, body, scenario, "the demo bar carries the scenario")
+	require.Contains(t, body, "Reset", "the demo bar carries the reset control")
+}
+
+// Issue #540's second acceptance criterion is that every authenticated screen
+// shows the practitioner's name, role, UZI number and organisation. This route
+// sits behind requireSession and renders a full page, so the criterion covers
+// it, and Session.Description is where the last three come from. This is the
+// same assertion TestEhrHomeShowsFullChrome makes for /demo/ehr.
+//
+// It is also what makes page.Session load-bearing here: with no top bar the
+// field was set and never read, so dropping it changed no byte of the response.
+func TestAuthorizeShowsThePractitionerChrome(t *testing.T) {
+	srv, client := authorizeSandbox(t, nodeVouchingForTheToken(t).URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	body := string(raw)
+
+	require.Contains(t, body, `class="side"`, "the EHR sidebar")
+	require.Contains(t, body, `class="top"`, "the EHR top bar")
+	// .app, .side, .top and .card have rules in ehr.css and nowhere else, so
+	// the guise stopped being cosmetic the moment this page grew the chrome:
+	// under "shell" the markup below still renders and the layout collapses.
+	require.Contains(t, body, "/static/css/ehr.css", "the chrome is styled only there")
+	// As the attestation spells them: no courtesy title it does not carry, and
+	// the role and organization in Dutch rather than through a lookup table
+	// that only ever covered this persona. See authSession.view.
+	require.Contains(t, body, "S. el Amrani", "the practitioner's name")
+	require.NotContains(t, body, "Dr. S. el Amrani", "the attestation carries no title")
+	require.Contains(t, body, "Klinisch geriater · UZI 900001234 · Ziekenhuis De Plataan",
+		"role, UZI number and organisation, the rest of criterion 2")
+	require.Contains(t, body, "Dezi ✓", "the top bar shows the signed-in badge")
+	require.Contains(t, body, "<h2>Authorization</h2>", "the top bar names the screen")
+	// Which item is highlighted is the sidebar's business; that one is at all
+	// is this page's, and it is the whole of page.Active's effect here.
+	require.Contains(t, body, `class="nav-item active"`, "the page marks its section in the sidebar")
+}
+
+func TestAuthorizeRequiresASession(t *testing.T) {
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo/login", res.Header.Get("Location"))
+}
+
+// The local go run path has no node at all. The route must say so rather than
+// the app failing to start or the page rendering an empty table.
+func TestAuthorizeNamesTheFailingStepWhenTheNodeIsAbsent(t *testing.T) {
+	srv, client := authorizeSandbox(t, "http://127.0.0.1:1")
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusBadGateway, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	body := string(raw)
+	require.Contains(t, body, "request service access token")
+	// The handler must stop here. Without the return the empty token is
+	// introspected anyway, and the response carries the second step's failure
+	// on top of the first, naming the wrong step to whoever reads it.
+	require.NotContains(t, body, "introspect access token")
+}
+
+// The token step succeeding and introspection failing is unreachable from the
+// absent-node case above, which never gets past the first call, so the second
+// error branch would otherwise be untested.
+func TestAuthorizeNamesTheIntrospectionStep(t *testing.T) {
+	srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusUnauthorized, `{"error":"unauthorized"}`).URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusBadGateway, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	body := string(raw)
+	require.Contains(t, body, "introspect access token")
+	// The status the node gave, not just the step: the claimless guard below
+	// reports the same step, so without this an ignored introspection error
+	// reads identically to an introspection that returned nothing.
+	require.Contains(t, body, "status 401")
+	require.NotContains(t, body, "no claims", "the response must carry one failure, not the next check's as well")
+	require.NotContains(t, body, "user_id", "a failed introspection must not also render the claims table")
+}
+
+// RFC 7662 section 2.2 makes active a required boolean and the indication of
+// whether the token is currently active, and the node's own contract marks it
+// required. The section only recommends against an inactive response carrying
+// anything else, so the claims a response happens to hold say nothing about
+// whether the node stands behind the token: four of the cases below carry every
+// claim the page renders and are refusals all the same.
+//
+// {"active": false} on its own is the node's canonical answer to a token it
+// will not vouch for: auth/api/iam/api.go returns it for an empty token, for
+// one absent from its store and for an expired one, each under the comment
+// "Return 200 + 'Active = false' when token is invalid or malformed".
+//
+// A response missing active, or carrying it as something other than a boolean,
+// is a different fault and says so: nothing that answers that way is a
+// conforming introspection endpoint, where active=false is a conforming
+// endpoint doing its job.
+func TestAuthorizeRequiresAnActiveToken(t *testing.T) {
+	for name, tc := range map[string]struct{ response, failure string }{
+		"inactive with every claim":  {`{"active":false,` + vouchedClaims + `}`, "not active"},
+		"the node's canonical shape": {`{"active":false}`, "not active"},
+		"absent":                     {`{` + vouchedClaims + `}`, "no boolean active"},
+		"a string":                   {`{"active":"true",` + vouchedClaims + `}`, "no boolean active"},
+		"a number":                   {`{"active":1,` + vouchedClaims + `}`, "no boolean active"},
+		"null response":              {`null`, "no boolean active"},
+		"empty object":               {`{}`, "no boolean active"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusOK, tc.response).URL)
+
+			res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+			require.NoError(t, err)
+			defer res.Body.Close()
+			require.Equal(t, http.StatusBadGateway, res.StatusCode)
+			raw, err := io.ReadAll(res.Body)
+			require.NoError(t, err)
+			body := string(raw)
+			require.Contains(t, body, "introspect access token")
+			require.Contains(t, body, tc.failure)
+			// The page's own heading, because the claims are present in most of
+			// these responses: a page rendered from them would carry rows that
+			// look entirely correct while the node has said the token is not live.
+			require.NotContains(t, body, "Service access token", "an inactive token must not render the page")
+			require.NotContains(t, body, "<th>user_id</th>", "nor a table of the claims it carried anyway")
+		})
+	}
+}
+
+// An active token whose introspection carries no claims at all. The node has
+// vouched for the token, so the guard above passes it, and rendering the result
+// would be a page of empty rows calling a flow successful that produced nothing
+// the PDP could decide on.
+func TestAuthorizeRejectsAClaimlessIntrospection(t *testing.T) {
+	srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusOK, `{"active":true}`).URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusBadGateway, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	body := string(raw)
+	require.Contains(t, body, "introspect access token")
+	require.Contains(t, body, "no claims")
+	require.NotContains(t, body, "user_id", "an empty introspection must not render a table of blanks")
+}
+
+// A response carrying some of the claims is the same failure one row at a
+// time: fmt.Sprint of an absent or null value is "<nil>", so the page would
+// print a blank the reader has no way to tell from a claim the node genuinely
+// returned as the string "<nil>". The step is named with the claims it did not
+// carry, because that is the difference between a misconfigured credential and
+// a token the node refused outright.
+//
+// organization_name gets a case of its own because it is the claim the route
+// used to leave out of this list: the bgz presentation definition emits it and
+// component/pdp reads it into PolicySubject.Organization.Name, so a response
+// without it is a response the PDP could not decide on.
+func TestAuthorizeRejectsAPartialIntrospection(t *testing.T) {
+	for name, tc := range map[string]struct{ response, missing string }{
+		"absent": {`{"active":true,"user_id":"900001234","user_role":"01.022","organization_ura":"00000010",` +
+			`"organization_name":"Ziekenhuis De Plataan"}`, "organization_facility_type"},
+		"null": {`{"active":true,"user_id":"900001234","user_role":"01.022","organization_ura":"00000010",` +
+			`"organization_name":"Ziekenhuis De Plataan","organization_facility_type":null}`, "organization_facility_type"},
+		"the claim the PDP reads as the organisation's name": {`{"active":true,"user_id":"900001234","user_role":"01.022",` +
+			`"organization_ura":"00000010","organization_ura_dezi":"00000010","organization_facility_type":"Z3"}`, "organization_name"},
+		// The Dezi credential's own organisation. Nothing compares it against
+		// organization_ura yet, which is exactly why it has to reach the page:
+		// it is the only evidence a reader has that the practitioner was
+		// authenticated for the organisation the token names. A response
+		// without it is a response in which that check became impossible, so
+		// the route must refuse rather than render a page that looks complete.
+		"the organisation the Dezi credential authenticated": {`{"active":true,"user_id":"900001234","user_role":"01.022",` +
+			`"organization_ura":"00000010","organization_name":"Ziekenhuis De Plataan",` +
+			`"organization_facility_type":"Z3"}`, "organization_ura_dezi"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusOK, tc.response).URL)
+
+			res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+			require.NoError(t, err)
+			defer res.Body.Close()
+			require.Equal(t, http.StatusBadGateway, res.StatusCode)
+			raw, err := io.ReadAll(res.Body)
+			require.NoError(t, err)
+			body := string(raw)
+			require.Contains(t, body, "introspect access token")
+			require.Contains(t, body, tc.missing, "the failure must name the claim that is missing")
+			require.NotContains(t, body, "no claims",
+				"a shortfall is not the same failure as none, and must not report as it")
+			// The page's own heading, not a claim name: the message above names
+			// one, so absence of a claim name no longer proves absence of a page.
+			require.NotContains(t, body, "Service access token", "a partial introspection must not render the page")
+			require.NotContains(t, body, "<nil>", "the blank this guard exists to keep off the screen")
+		})
+	}
+}
+
+func TestAuthorizeRejectsCrossSiteRequest(t *testing.T) {
+	srv, client := authorizeSandbox(t, fakeNode(t).URL)
+
+	// The session is deliberately live. requireSession is the outer guard, so
+	// without one this request is turned away at the login redirect and the
+	// check below is never reached, leaving the assertion vacuous.
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusForbidden, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	body := string(raw)
+	require.Contains(t, body, "cross-site")
+	// Status alone is too weak: without the return the handler goes on to ask
+	// the node for a token and appends the page to the rejection.
+	require.NotContains(t, body, "user_id", "a rejected request must not reach the node at all")
+}
+
+// The guard rejects on evidence of another site rather than on the header
+// being present, and only a request that carries same-origin proves it: the
+// tests above send no Sec-Fetch-Site at all, as non-browser clients do.
+func TestAuthorizeAcceptsSameOriginRequest(t *testing.T) {
+	srv, client := authorizeSandbox(t, nodeVouchingForTheToken(t).URL)
+
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+}
+
+// Every other test on this route reaches it with PostForm, which passes
+// whether or not a person can. The route is POST-only behind crossSiteRequest,
+// so no URL a visitor can type reaches it and no link can either: a form on
+// the signed-in home page is the only way in, and its absence is invisible to
+// a suite that drives the route directly. That is how the route came to be
+// wired, documented and covered while no click could reach it.
+func TestEhrHomeOffersTheAuthorizeControl(t *testing.T) {
+	dezi := fakeDezi(t)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", dezi.URL)
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := signInViaDezi(t, srv)
+
+	status, body := getPageWithClient(t, client, srv.URL+"/demo/ehr")
+	require.Equal(t, http.StatusOK, status)
+
+	// The opening tag whole, not the two attributes apart. The top bar already
+	// renders method="post" for sign-out, so a separate check for that
+	// attribute passes on today's page, which carries no authorize form at all.
+	const openTag = `<form method="post" action="/demo/authorize">`
+	require.Contains(t, body, openTag, "the home page must post to the authorization route")
+
+	// A form with no submit control is as unreachable as no form, and a button
+	// elsewhere on the page submits nothing, so the control is looked for
+	// between this form's tags rather than anywhere in the body.
+	form, _, closed := strings.Cut(body[strings.Index(body, openTag)+len(openTag):], "</form>")
+	require.True(t, closed, "the authorize form must be closed")
+	require.Contains(t, form, `type="submit"`, "the form needs a submit control to be clickable")
+	require.Contains(t, form, "Show what is in my access token", "the control must say what clicking it does")
+}
+
+// The claims page renders inside the EHR chrome, whose sidebar items are
+// static divs, so its only other controls are sign-out and reset, and both end
+// the demo. Reload is not an exit either: the page is a POST response with no
+// redirect after it, so the browser offers to resubmit the form instead. This
+// link is the only way off the screen that leaves the session standing.
+func TestAuthorizeLinksBackToTheEhr(t *testing.T) {
+	srv, client := authorizeSandbox(t, nodeVouchingForTheToken(t).URL)
+
+	res, err := client.PostForm(srv.URL+"/demo/authorize", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+	raw, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+
+	require.Contains(t, string(raw), `href="/demo/ehr"`, "the claims page must offer a way back into the EHR")
 }
