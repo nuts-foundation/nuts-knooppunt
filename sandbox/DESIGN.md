@@ -271,10 +271,10 @@ HAPI guarantee), user-created records and their NVI registrations are gone, and 
 
 Two gaps against that as implemented, both recorded in `test/testdata/README.md`:
 
-- Reset performs no Mitz cleanup. That has no subscription-state effect yet, because the composed `mitzmock` is the
-  closed-question consent responder and holds no subscriptions (`test/mitzmock/cmd/main.go` starts only that service);
-  it does accumulate raw XACML request bodies, which reset leaves in place. It becomes a real gap the moment a mock
-  holds subscriptions.
+- Reset clears Mitz subscriptions only where a mock is configured. E3 gave the standalone `mitzmock` a subscription
+  store and a `DELETE`, and `ResetGlobal` calls it when `MITZMOCK_URL` is set; the compose overlay sets it, the base
+  file does not, so a stack brought up without the overlay still leaves a running demo's subscription in place. Reset
+  also leaves the accumulated raw XACML request bodies.
 - NVI Lists registered under a BSN outside the pool survive, because the NVI tenant's pseudonymization interceptor
   rejects a List search that is not scoped to a patient, subject or source, so they cannot be enumerated to be deleted.
 

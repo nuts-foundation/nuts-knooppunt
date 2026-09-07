@@ -213,30 +213,36 @@ func TestResetGlobal_UnsharesAPatientSharedDuringADemo(t *testing.T) {
 	h := harness.Start(t)
 	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
 	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
-	anna := pool.Patients()[0]
-
-	// What the sandbox does when a practitioner shares a patient.
-	require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
-		CustodianURA: plataan.URA,
-		BSN:          anna.BSN,
-		ClientID:     pool.PlataanClientID,
-		Categories:   anna.PlataanCategories(),
-	}))
-	shared, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, anna.BSN)
-	require.NoError(t, err)
-	require.NotEmpty(t, shared, "precondition: the patient is shared")
+	// Two patients, not one: a fix that unshared only the patient it was handed
+	// would satisfy a single-patient assertion.
+	shared := pool.Patients()[:2]
+	for _, p := range shared {
+		// What the sandbox does when a practitioner shares a patient.
+		require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
+			CustodianURA: plataan.URA,
+			BSN:          p.BSN,
+			ClientID:     pool.PlataanClientID,
+			Categories:   p.PlataanCategories(),
+		}))
+		before, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, p.BSN)
+		require.NoError(t, err)
+		require.NotEmptyf(t, before, "precondition: %s is shared", p.Key)
+	}
 
 	require.NoError(t, vectors.ResetGlobal(t.Context(), h.HAPIBaseURL, h.KnooppuntInternalBaseURL, nil))
 
-	after, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, anna.BSN)
-	require.NoError(t, err)
-	require.Empty(t, after,
-		"reset says the dataset is restored to the seeded fixtures, so the patient must be unshared again")
+	for _, p := range pool.Patients() {
+		after, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, p.BSN)
+		require.NoError(t, err)
+		require.Emptyf(t, after,
+			"reset says the dataset is restored to the seeded fixtures, so %s must be unshared again", p.Key)
 
-	// And the source side is still there, or the reset broke what E4 needs.
-	zonnebloem, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), anna.BSN)
-	require.NoError(t, err)
-	require.Equal(t, anna.ZonnebloemCategories(), nvi.CategoriesOf(zonnebloem))
+		// And the source side is still there, or the reset broke what E4 needs.
+		zonnebloem, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), p.BSN)
+		require.NoError(t, err)
+		require.Equalf(t, p.ZonnebloemCategories(), nvi.CategoriesOf(zonnebloem),
+			"the source side must survive for %s", p.Key)
+	}
 }
 
 // The other half of "cleanup runs last": its warning must not stand in for a

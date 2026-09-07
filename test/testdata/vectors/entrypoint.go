@@ -207,8 +207,10 @@ func SeedNVI(ctx context.Context, knooppuntInternalBaseURL *url.URL) error {
 // ResetGlobal restores the entire seeded dataset to its fixtures ("restore
 // fixtures" path). It clears the mutable stores — removing any user-created
 // records, which have random ids a plain re-seed cannot overwrite — then re-runs
-// Load (re-PUTs the mCSD/PIP directories and pool resources), SeedNVI, and
-// clears the mock Mitz's captured consent subscriptions.
+// Load (re-PUTs the mCSD/PIP directories and pool resources) and SeedNVI, removes
+// the localization records the sandbox published on De Plataan's side, and clears
+// the mock Mitz's captured consent subscriptions. Every pool patient ends up
+// unshared, which is the state a demo starts from.
 //
 // Clearing is per-resource deletion within the tenant, not $expunge; see
 // clearTenant for why the expunge form cannot be used here.

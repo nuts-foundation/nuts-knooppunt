@@ -369,7 +369,7 @@ func (p PoolPatient) ZonnebloemCategories() []string { return categoriesOf(p.Zon
 // NVIRegistrations returns what the seed publishes: De Zonnebloem's side only.
 // De Plataan's is deliberately absent, because publishing it is the action E3
 // demonstrates (DESIGN §5.7). The sandbox registers it at share time and
-// RecyclePatient removes it again.
+// RecyclePatient and ResetGlobal remove it again, both scoped to PlataanClientID.
 func (p PoolPatient) NVIRegistrations() []nvi.Registration {
 	return []nvi.Registration{{
 		CustodianURA: *sunflower.Organization().Identifier[0].Value,

@@ -189,11 +189,13 @@
   .quick-add:hover { border-color: var(--teal); color: var(--teal-deep); background: var(--teal-soft); }
 
   /* The patient-row and status-chip rules that used to sit here are gone.
-     Nothing in this panel ever matched .prow, so the .prow-scoped rules were
-     dead — but .stat-chip and its .local/.gf variants were unscoped, and
-     because this file loads after ehr.css they won the cascade over the live
-     patient list they were never meant to touch. They came over from the
-     wireframe and now live in ehr.css alone.
+     None of them were dead. They came over from the wireframe for a panel
+     widget that was never built, but they were written unscoped, so they
+     matched the live patient list instead: this file loads after ehr.css, so
+     .stat-chip and its .local/.gf variants won the cascade outright, and
+     .prow .pav beat ehr.css's bare .pav on specificity regardless of order,
+     which is why the avatar rendered at 38px instead of 50. They now live in
+     ehr.css alone.
      (The .gf-tab below does render a bare .chev; that is styled by
      .gf-tab .chev here and by the bare .chev in ehr.css, both untouched.) */
 
