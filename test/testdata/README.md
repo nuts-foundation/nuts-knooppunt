@@ -150,9 +150,13 @@ subject's wallet, which is empty until the credential is stored.
   and `SeedNVI`'s delete-then-create only covers the pool's own BSNs. DESIGN §5.6
   wants those gone; that needs a custodian-scoped listing on the Knooppunt (or the
   seed tracking what it registered).
-- **Mitz subscriptions are not reset** by these paths. The compose `mitzmock`
-  service is a stateless consent responder (closed questions only); a running
-  demo's subscription survives a reset. This is expected, not a bug.
+- **Mitz subscriptions are only reset when the mock is configured.** `ResetGlobal`
+  issues a `DELETE /abonnementen/fhir/Subscription` against `mitzMockBaseURL`, which
+  the sandbox fills from `MITZMOCK_URL`. With that unset the argument is nil and
+  the step is a no-op, so a running demo's subscription survives. Reaching a
+  configured mock and failing yields `ErrPartialReset` rather than a failed reset:
+  cleanup must not depend on a mock's availability, and it must not claim a clean
+  slate it did not produce.
 - **NVI delete-then-create is not atomic.** Acceptable for a single-writer seed
   (boot/reset only); concurrent seed + live registration could interleave.
 - **The composed PDP is single-data-holder.** `KNPT_PDP_PIP_URL` points at

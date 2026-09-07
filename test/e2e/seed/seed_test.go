@@ -201,6 +201,29 @@ func TestResetGlobal_RestoresEvenWhenMitzCleanupFails(t *testing.T) {
 		"the fixtures must be restored even when the optional cleanup warned")
 }
 
+// The other half of "cleanup runs last": its warning must not stand in for a
+// real failure above it.
+//
+// The test above cannot see this. An implementation that ran the cleanup FIRST,
+// kept its error, then restored, and returned the kept error at the end would
+// satisfy both of its assertions while violating the ordering entirely. Here
+// restoration itself is broken, so a reset that returns ErrPartialReset is
+// reporting a mock it could not reach while silently swallowing a dataset it
+// could not restore.
+func TestResetGlobal_ACleanupWarningDoesNotMaskARestoreFailure(t *testing.T) {
+	h := harness.Start(t)
+	unreachableMitz, err := url.Parse("http://127.0.0.1:1")
+	require.NoError(t, err)
+	unreachableHAPI, err := url.Parse("http://127.0.0.1:2/fhir")
+	require.NoError(t, err)
+
+	err = vectors.ResetGlobal(t.Context(), unreachableHAPI, h.KnooppuntInternalBaseURL, unreachableMitz)
+
+	require.Error(t, err, "a reset that cannot reach HAPI has failed, not warned")
+	require.NotErrorIs(t, err, vectors.ErrPartialReset,
+		"the restoration failure must surface as itself, not as a cleanup warning")
+}
+
 func TestRecyclePatient_RestoresTargetLeavesOthersIntact(t *testing.T) {
 	h := harness.Start(t)
 	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
