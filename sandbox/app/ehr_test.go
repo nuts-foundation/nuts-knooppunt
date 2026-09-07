@@ -372,6 +372,10 @@ func TestShare_RegistersTheDerivedCategoriesAndConfirmsBothSteps(t *testing.T) {
 		"the handler must send exactly the categories De Plataan holds")
 	require.Contains(t, body, "Localization records published")
 	require.Contains(t, body, "Mitz subscription started")
+	// State, not just title: a card carrying Failed alongside a success title
+	// renders red with a cross and would satisfy the titles alone.
+	require.Contains(t, body, `<span class="ok-ic">`)
+	require.NotContains(t, body, "confirm-card failed")
 }
 
 func TestShare_CardNamesTheRegisteredCategories(t *testing.T) {
@@ -379,10 +383,31 @@ func TestShare_CardNamesTheRegisteredCategories(t *testing.T) {
 
 	_, body := openAndShare(t, cfg, anna.Key)
 
-	for _, category := range anna.PlataanCategories() {
-		require.Contains(t, body, category)
-	}
+	// The card's own row, not just "somewhere on the page": the share form above
+	// the cards renders the same categories on every response, so a bare
+	// Contains stays green with the card's row deleted entirely. The comma-joined
+	// form can only come from the card — the form block wraps each category in
+	// its own span.
+	require.Contains(t, body,
+		`<span class="k">Data categories</span><span class="v">`+strings.Join(anna.PlataanCategories(), ", ")+`</span>`,
+		"the NVI card must name the categories itself")
 	require.NotContains(t, body, "BGZ (patient summary)")
+}
+
+// The route the record page's Share button points at. Nine tests exercise the
+// POST, none the GET, so deleting the mux registration would leave the build and
+// the whole suite green while the demo's front door 404s. It also covers the one
+// branch the POST never reaches: the template with no cards yet.
+func TestShare_FormRendersBeforeAnythingIsShared(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, "Share patient")
+	require.NotContains(t, body, "confirm-card", "no outcome cards before the share has run")
 }
 
 func TestShare_MitzFailureIsShownWithoutFakingTheNVIResult(t *testing.T) {
@@ -394,6 +419,7 @@ func TestShare_MitzFailureIsShownWithoutFakingTheNVIResult(t *testing.T) {
 	require.Contains(t, body, "Localization records published")
 	require.Contains(t, body, "Mitz subscription failed")
 	require.NotContains(t, body, "Mitz subscription started")
+	require.Contains(t, body, "confirm-card failed", "the failed card must render as failed, not merely be titled so")
 }
 
 // An error the reconciliation query says did commit is a lost response, not a

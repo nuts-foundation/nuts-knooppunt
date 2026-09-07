@@ -283,7 +283,12 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 		return &cardResult{
 			Failed: true,
 			Title:  "Mitz subscription failed",
-			Detail: "The patient is shared, but consent changes will not be delivered: " + err.Error() +
+			// "may", not "will": reconciliation is unavailable when no mock is
+			// configured and inconclusive when the lookup itself errored, so a
+			// subscription that was committed and lost its response lands here
+			// too. Stating non-delivery as fact would be the same overclaim the
+			// NVI card above is careful to avoid.
+			Detail: "The patient is shared, but consent changes may not be delivered: " + err.Error() +
 				". The record page keeps this visible and offers a retry of this step alone.",
 		}
 	}
