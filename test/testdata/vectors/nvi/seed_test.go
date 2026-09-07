@@ -187,7 +187,7 @@ func TestDeleteForClientLeavesOtherCustodiansAlone(t *testing.T) {
 // custodianOf reports a missing or malformed extension as "", and must not
 // panic on a nil ValueReference or Identifier along the way. That "" is why
 // deleteForClient refuses an empty custodian outright rather than
-// comparing against one: see TestDeleteForClientRefusesAnEmptyCustodianOrClient.
+// comparing against one: see TestDeleteForClientRefusesAnEmptyScope.
 func TestCustodianOfHandlesMissingAndMalformedExtensions(t *testing.T) {
 	for name, list := range map[string]fhir.List{
 		"no extensions":   {},
