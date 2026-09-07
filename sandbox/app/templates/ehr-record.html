@@ -23,7 +23,14 @@
             <form method="post" action="/demo/ehr/patients/{{.Key}}/subscribe">
               <button class="btn solid" type="submit">Start the consent subscription</button>
             </form>
+            {{if .SubscriptionUnknown}}
+            <div class="btn-sub">Retries only the Mitz step; the localization records stay as they
+            are. Mitz could not be asked whether a subscription already exists, so this may create a
+            second one. Against the mock that is harmless, because it keys a subscription on the
+            provider and patient; against the national Mitz it would not be.</div>
+            {{else}}
             <div class="btn-sub">Retries only the Mitz step. The localization records stay as they are.</div>
+            {{end}}
           </div>
           {{end}}
         {{else}}

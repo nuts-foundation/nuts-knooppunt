@@ -244,6 +244,52 @@ func TestPatientRecord_ShowsTheMissingSubscriptionState(t *testing.T) {
 	require.Contains(t, body, "/demo/ehr/patients/"+anna.Key+"/subscribe")
 }
 
+// The inverse, and the case the whole reconciliation exists to produce: a lost
+// POST, the user returns, the lookup finds the subscription after all, and the
+// record must stop offering a retry.
+//
+// Asserting the presence of "Shared via GF" cannot show this, because that text
+// is a prefix of all three chips. Only the absence of the missing state and of
+// the retry form distinguishes it.
+func TestPatientRecord_SubscribedShowsNoRetry(t *testing.T) {
+	anna := pool.Patients()[0]
+	cfg, _, _ := fakeConfig()
+	cfg.nviCategories = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
+	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return true, nil }
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key)
+
+	require.Contains(t, body, `<span class="stat-chip gf">`)
+	require.NotContains(t, body, "consent subscription missing")
+	require.NotContains(t, body, "subscription status unknown")
+	require.NotContains(t, body, "/subscribe")
+}
+
+// With no mock configured the sandbox cannot ask, and "cannot ask" must not
+// render as "not subscribed" — that state offers a retry, and against a real
+// Mitz retrying an existing subscription would duplicate it. MITZMOCK_URL is
+// unset in every deployment that has not wired the mock, so this is the default
+// path, not an edge case.
+func TestPatientRecord_UnconfiguredLookupShowsUnknownNotMissing(t *testing.T) {
+	anna := pool.Patients()[0]
+	cfg, _, _ := fakeConfig()
+	cfg.nviCategories = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
+	cfg.mitzSubscribed = nil
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key)
+
+	require.Contains(t, body, "subscription status unknown")
+	require.NotContains(t, body, "consent subscription missing")
+	// A fragment that sits on one source line: the template wraps its prose, so
+	// a longer phrase would straddle a newline and never match.
+	require.Contains(t, body, "could not be asked whether a subscription already exists",
+		"the unknown state must admit that a retry is not known to be safe")
+}
+
 func TestSubscribe_RetriesOnlyTheMitzStep(t *testing.T) {
 	cfg, anna := sharedNotSubscribed(t)
 	var subscribed []string
