@@ -861,7 +861,7 @@
                 </div>
               </div>
             </div>
-            <div class="btn-sub" id="cc-nvi-note">There is no BGZ code. A patient summary is registered as the set of data categories it contains, which is what the card above names.</div>
+            <div class="btn-sub hidden" id="cc-nvi-note">There is no BGZ code. A patient summary is registered as the set of data categories it contains, which is what the NVI card above names.</div>
             <button class="btn solid big hidden" id="btn-openrec" onclick="go('scr-dossier')">Open patient record
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2,8 L12,8 M8.5,4 L12.5,8 L8.5,12"/></svg>
             </button>
@@ -2272,6 +2272,7 @@
       document.getElementById('aanmeld-result').classList.toggle('hidden', !done);
       document.querySelectorAll('#aanmeld-result .cc-load').forEach(function (e) { e.classList.toggle('hidden', done); });
       document.querySelectorAll('#aanmeld-result .cc-done').forEach(function (e) { e.classList.toggle('hidden', !done); });
+      document.getElementById('cc-nvi-note').classList.toggle('hidden', !done);
       document.getElementById('btn-openrec').classList.toggle('hidden', !done);
       document.getElementById('btn-openrec-sub').classList.toggle('hidden', !done);
       var b = document.getElementById('btn-aanmeld');
@@ -2567,6 +2568,7 @@
     later(function () {
       document.querySelector('#cc-nvi .cc-load').classList.add('hidden');
       document.querySelector('#cc-nvi .cc-done').classList.remove('hidden');
+      document.getElementById('cc-nvi-note').classList.remove('hidden');
       setBadge(4);
     }, 3200);
     later(function () {

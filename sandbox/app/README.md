@@ -127,7 +127,8 @@ Three limitations are carried deliberately:
 - **Repeat registration converges, it is not atomic.** The NVI exposes no `PUT`, and the conditional
   operations that would make a transaction Bundle atomic cannot be used: the Knooppunt does not
   pseudonymize `entry.request.url`, so a conditional URL would carry a plaintext BSN, and the fake
-  NVI does not accept the `:identifier` modifier on a conditional delete. Registration is
+  NVI was found not to accept the `:identifier` modifier on a conditional delete
+  (recorded in `test/testdata/vectors/nvi`; nothing on this branch re-tests it). Registration is
   search-delete-create, serialized per patient within this process and guarded by the demo lock.
   Two sandbox processes registering the same patient at once can still duplicate.
 - **The demo lock is advisory and process-local**, with a 15-minute lease. Ownership is checked when
