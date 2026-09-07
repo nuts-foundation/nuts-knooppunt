@@ -18,6 +18,7 @@ var notices = map[string]string{
 	"recycle-done":   "Patient restored to the seeded state.",
 	"reset-disabled": "Reset is unavailable: the sandbox is not wired to the Knooppunt in this environment.",
 	"signed-out":     "Signed out. The Dezi session has been cleared.",
+	"patient-busy":   "That patient is in use by another demo run. Pick a different one.",
 }
 
 // Config holds the sandbox backend's runtime dependencies. The two URLs point at
@@ -39,6 +40,10 @@ type Config struct {
 	// handler tests need no live NVI.
 	nviCategories func(ctx context.Context, bsn string) ([]string, error)
 	nviRegister   func(ctx context.Context, bsn string, categories []string) error
+
+	// mitzSubscribed reports whether a BSN has an active Mitz consent
+	// subscription. Wired in Task 7; nil (and unused) until then.
+	mitzSubscribed func(ctx context.Context, bsn string) (bool, error)
 
 	// sessions and secureCookie carry the session half of reset, which E2 owns.
 	// A reset restores the dataset AND signs everyone out; doing only the first
@@ -348,6 +353,8 @@ func NewMux(cfg Config) *http.ServeMux {
 	}))
 
 	mux.HandleFunc("GET /demo/ehr", requireSession(signedIn, cfg.handlePatientList))
+	mux.HandleFunc("POST /demo/ehr/patients/{key}/open", requireSession(signedIn, cfg.handleOpenPatient))
+	mux.HandleFunc("GET /demo/ehr/patients/{key}", requireSession(signedIn, cfg.handlePatientRecord))
 	return mux
 }
 

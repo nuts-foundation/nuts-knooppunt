@@ -108,3 +108,86 @@ func TestPatientList_RequiresASession(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
 	require.Equal(t, "/demo/login", res.Header.Get("Location"))
 }
+
+func TestOpenPatient_TakesTheLockAndRedirects(t *testing.T) {
+	cfg, _, _ := fakeConfig()
+	cfg.nviCategories = categoriesByBSN(nil, nil)
+	anna := pool.Patients()[0].Key
+	srv, client := demoServer(t, cfg)
+
+	res := postForm(t, client, srv, "/demo/ehr/patients/"+anna+"/open", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo/ehr/patients/"+anna, res.Header.Get("Location"))
+	require.True(t, cfg.Locks.IsLocked(anna))
+}
+
+func TestOpenPatient_ReleasesThePreviouslyOpenedPatient(t *testing.T) {
+	cfg, _, _ := fakeConfig()
+	cfg.nviCategories = categoriesByBSN(nil, nil)
+	first, second := pool.Patients()[0].Key, pool.Patients()[1].Key
+	srv, client := demoServer(t, cfg)
+
+	postForm(t, client, srv, "/demo/ehr/patients/"+first+"/open", nil).Body.Close()
+	postForm(t, client, srv, "/demo/ehr/patients/"+second+"/open", nil).Body.Close()
+
+	require.False(t, cfg.Locks.IsLocked(first), "one session runs one demo at a time")
+	require.True(t, cfg.Locks.IsLocked(second))
+}
+
+func TestOpenPatient_RefusesAPatientAnotherSessionHolds(t *testing.T) {
+	cfg, _, _ := fakeConfig()
+	cfg.nviCategories = categoriesByBSN(nil, nil)
+	anna := pool.Patients()[0].Key
+	require.True(t, cfg.Locks.Lock(anna, "someone-else"))
+	srv, client := demoServer(t, cfg)
+
+	res := postForm(t, client, srv, "/demo/ehr/patients/"+anna+"/open", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo/ehr?notice=patient-busy", res.Header.Get("Location"))
+	require.True(t, cfg.Locks.HeldBy(anna, "someone-else"),
+		"a refused open must leave the holder's lock exactly as it was")
+}
+
+func TestPatientRecord_ShowsNotFindableYetWhenUnshared(t *testing.T) {
+	cfg, _, _ := fakeConfig()
+	cfg.nviCategories = categoriesByBSN(nil, nil)
+	anna := pool.Patients()[0].Key
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna+"/open", nil).Body.Close()
+
+	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna)
+
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, "Not findable yet")
+	require.Contains(t, body, "Share via the generic functions")
+}
+
+func TestPatientRecord_ShowsRegisteredCategoriesWhenShared(t *testing.T) {
+	anna := pool.Patients()[0]
+	cfg, _, _ := fakeConfig()
+	cfg.nviCategories = categoriesByBSN(
+		map[string][]string{anna.BSN: {nvi.CategoryCondition, nvi.CategoryMedicationRequest}}, nil)
+	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return true, nil }
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key)
+
+	require.Contains(t, body, "Shared via GF")
+	require.Contains(t, body, nvi.CategoryMedicationRequest)
+	require.NotContains(t, body, "BGZ (patient summary)",
+		"there is no BGZ code; the record must name what was registered")
+}
+
+func TestPatientRecord_UnknownPatientIs404(t *testing.T) {
+	cfg, _, _ := fakeConfig()
+	srv, client := demoServer(t, cfg)
+
+	status, _ := getBody(t, client, srv, "/demo/ehr/patients/nope")
+
+	require.Equal(t, http.StatusNotFound, status)
+}

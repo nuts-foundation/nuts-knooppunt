@@ -1,0 +1,38 @@
+{{define "content"}}
+{{template "demobar" .}}
+<div class="app">
+  {{template "sidebar" .}}
+  <div class="main-col">
+    {{template "topbar" .}}
+    <main class="content content-narrow">
+      {{with .Patient}}
+      <div class="card">
+        <h3>{{.Name}}</h3>
+        <div class="h-sub">{{.BirthDate}} · BSN <span class="mono">{{.BSN}}</span></div>
+        {{if .NVIUnknown}}
+          <span class="stat-chip unknown">Status unknown</span>
+          <p>The NVI could not be reached, so it is not known whether this record is findable.</p>
+        {{else if .Shared}}
+          <span class="stat-chip gf">Shared via GF</span>
+          <p>Other care providers can find this record through the NVI, for these data categories:</p>
+          <ul class="cat-list">{{range .Categories}}<li class="mono">{{.}}</li>{{end}}</ul>
+        {{else}}
+          <span class="stat-chip local">Not findable yet</span>
+          <p>This record exists only in De Plataan's own store. Other care providers cannot find it.</p>
+        {{end}}
+        <div class="card-action">
+          <a class="btn solid" href="/demo/ehr/patients/{{.Key}}/share">Share via the generic functions</a>
+          <div class="btn-sub">Publishes a localization record per data category and starts a Mitz
+          consent subscription. No clinical data leaves De Plataan.</div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Available sources</h3>
+        <div class="data-empty">Ziekenhuis De Plataan only. Retrieving from other sources arrives with E4.</div>
+      </div>
+      {{end}}
+    </main>
+  </div>
+  {{template "viewer" .}}
+</div>
+{{end}}

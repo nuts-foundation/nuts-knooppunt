@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"sync"
 
@@ -83,4 +84,60 @@ func patientInitials(p pool.PoolPatient) string {
 		initials += firstLetter(*p.Name.Family)
 	}
 	return initials
+}
+
+// handleOpenPatient claims the patient for this session and redirects to the
+// record.
+//
+// A POST, not a GET on the record itself. Acquiring the lock changes shared
+// state: it denies another session access and releases this session's previous
+// patient. RFC 9110 §9.2.1 makes safe methods essentially read-only from the
+// client's perspective, and prefetchers, link scanners and retries rely on that.
+// The patient row submits this on the same click, so the demo still costs one
+// click.
+func (c Config) handleOpenPatient(w http.ResponseWriter, r *http.Request, session *authSession) {
+	if crossSiteRequest(r) {
+		http.Error(w, "cross-site patient open is not allowed", http.StatusForbidden)
+		return
+	}
+	key := r.PathValue("key")
+	if _, ok := pool.PatientByKey(key); !ok {
+		http.Error(w, "unknown patient: "+key, http.StatusNotFound)
+		return
+	}
+	if !c.Locks.Switch(key, lockOwner(session)) {
+		http.Redirect(w, r, "/demo/ehr?notice=patient-busy", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/demo/ehr/patients/"+key, http.StatusSeeOther)
+}
+
+// handlePatientRecord renders one patient's local record and its localization
+// status. Read-only: the lock was taken by handleOpenPatient.
+func (c Config) handlePatientRecord(w http.ResponseWriter, r *http.Request, session *authSession) {
+	patient, ok := pool.PatientByKey(r.PathValue("key"))
+	if !ok {
+		http.Error(w, "unknown patient: "+r.PathValue("key"), http.StatusNotFound)
+		return
+	}
+	row := c.patientRowFor(r.Context(), patient, session)
+	view := session.view()
+	render(w, "ehr-record.html", page{
+		Title: row.Name + " · Plataan EHR", Guise: "ehr",
+		Scenario: scenario, ShowReset: true,
+		BodyClass: "hood-open", BodyAttrs: viewerBodyAttrs(true),
+		Active: "dossier", TopTitle: "Patient record", ViewerOpen: true,
+		Session: &view, Patient: &row, Notice: demoNotice(r),
+	})
+}
+
+// patientRowFor builds the header shared by the record and share screens.
+func (c Config) patientRowFor(ctx context.Context, patient pool.PoolPatient, session *authSession) patientRow {
+	status := c.patientShareStatus(ctx, patient.BSN)
+	return patientRow{
+		Key: patient.Key, Name: patientDisplayName(patient), BSN: patient.BSN,
+		BirthDate: patient.BirthDate, Initials: patientInitials(patient),
+		Shared: status.Shared, NVIUnknown: status.NVIUnknown, Categories: status.Categories,
+		Mine: c.Locks.HeldBy(patient.Key, lockOwner(session)),
+	}
 }
