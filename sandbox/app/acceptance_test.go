@@ -145,8 +145,14 @@ func TestAcceptance_SharingTwiceIsSafe(t *testing.T) {
 	require.True(t, ok)
 
 	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
-	postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+	firstStatus, firstBody := postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
 	status, body := postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+
+	// Both shares, for the same reason. A first share that failed and wrote
+	// nothing would leave the second one's fresh create at the same three-List
+	// count, which reads as convergence just as convincingly.
+	require.Equal(t, http.StatusOK, firstStatus)
+	require.Contains(t, firstBody, "Localization records published")
 
 	// The second share has to have succeeded, or the count below proves nothing:
 	// a failed registration answers 200 with a Failed card and writes nothing,
