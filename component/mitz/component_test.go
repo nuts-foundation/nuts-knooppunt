@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -326,11 +327,18 @@ func validSubscription() fhir.Subscription {
 // demo asserting something that did not happen.
 func TestCreateSubscription_TransportFailureIsAnError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// assert, not require: this runs on the server's goroutine, where
+		// FailNow would Goexit the handler and leave the client hanging on a
+		// connection nobody closes, instead of failing the test cleanly.
 		hijacker, ok := w.(http.Hijacker)
-		require.True(t, ok)
+		if !assert.True(t, ok) {
+			return
+		}
 		conn, _, err := hijacker.Hijack()
-		require.NoError(t, err)
-		require.NoError(t, conn.Close())
+		if !assert.NoError(t, err) {
+			return
+		}
+		assert.NoError(t, conn.Close())
 	}))
 	defer server.Close()
 
@@ -341,6 +349,14 @@ func TestCreateSubscription_TransportFailureIsAnError(t *testing.T) {
 
 	require.Error(t, err, "a subscription that never reached Mitz must not be reported as created")
 	require.Nil(t, result)
+
+	// The type and issue type are the contract, not just "an error": they are
+	// what makes the response a 503 through fhirapi.StatusCodeForError. A later
+	// change to a bare fmt.Errorf would keep the assertions above green and
+	// silently move the status code.
+	var apiErr *fhirapi.Error
+	require.ErrorAs(t, err, &apiErr)
+	require.Equal(t, fhir.IssueTypeTransient, apiErr.IssueType)
 }
 
 // Helper function
