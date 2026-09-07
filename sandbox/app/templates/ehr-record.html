@@ -13,9 +13,19 @@
           <span class="stat-chip unknown">Status unknown</span>
           <p>The NVI could not be reached, so it is not known whether this record is findable.</p>
         {{else if .Shared}}
-          <span class="stat-chip gf">Shared via GF</span>
+          {{if .Subscribed}}<span class="stat-chip gf">Shared via GF</span>
+          {{else if .SubscriptionUnknown}}<span class="stat-chip unknown">Shared via GF · subscription status unknown</span>
+          {{else}}<span class="stat-chip partial">Shared via GF · consent subscription missing</span>{{end}}
           <p>Other care providers can find this record through the NVI, for these data categories:</p>
           <ul class="cat-list">{{range .Categories}}<li class="mono">{{.}}</li>{{end}}</ul>
+          {{if not .Subscribed}}
+          <div class="card-action">
+            <form method="post" action="/demo/ehr/patients/{{.Key}}/subscribe">
+              <button class="btn solid" type="submit">Start the consent subscription</button>
+            </form>
+            <div class="btn-sub">Retries only the Mitz step. The localization records stay as they are.</div>
+          </div>
+          {{end}}
         {{else}}
           <span class="stat-chip local">Not findable yet</span>
           <p>This record exists only in De Plataan's own store. Other care providers cannot find it.</p>

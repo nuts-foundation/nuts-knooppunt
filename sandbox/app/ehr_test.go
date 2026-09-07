@@ -220,3 +220,57 @@ func TestPatientRecord_UnknownPatientIs404(t *testing.T) {
 
 	require.Equal(t, http.StatusNotFound, status)
 }
+
+func sharedNotSubscribed(t *testing.T) (Config, pool.PoolPatient) {
+	t.Helper()
+	anna := pool.Patients()[0]
+	cfg, _, _ := fakeConfig()
+	cfg.nviCategories = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
+	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return false, nil }
+	return cfg, anna
+}
+
+// The state the design's no-rollback decision depends on: registered, no
+// subscription, visible after leaving the confirmation page, repairable on its
+// own.
+func TestPatientRecord_ShowsTheMissingSubscriptionState(t *testing.T) {
+	cfg, anna := sharedNotSubscribed(t)
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key)
+
+	require.Contains(t, body, "consent subscription missing")
+	require.Contains(t, body, "/demo/ehr/patients/"+anna.Key+"/subscribe")
+}
+
+func TestSubscribe_RetriesOnlyTheMitzStep(t *testing.T) {
+	cfg, anna := sharedNotSubscribed(t)
+	var subscribed []string
+	cfg.mitzSubscribe = func(_ context.Context, bsn string) error {
+		subscribed = append(subscribed, bsn)
+		return nil
+	}
+	var registered int
+	cfg.nviRegister = func(context.Context, string, []string) error { registered++; return nil }
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/subscribe", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, []string{anna.BSN}, subscribed)
+	require.Zero(t, registered, "the retry must not redo the NVI work")
+}
+
+func TestSubscribe_RejectsASessionWithoutTheLock(t *testing.T) {
+	cfg, anna := sharedNotSubscribed(t)
+	cfg.mitzSubscribe = func(context.Context, string) error { return nil }
+	srv, client := demoServer(t, cfg)
+
+	res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/subscribe", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusConflict, res.StatusCode)
+}

@@ -24,27 +24,61 @@ const plataanURA = plataan.URA
 // slow NVI degrades individual rows to unknown instead of hanging the page.
 const nviCallTimeout = 5 * time.Second
 
-// shareStatus is what the UI knows about a patient's localization state.
-// NVIUnknown is a third state on purpose: "we could not ask" is not "not
-// shared", and rendering the latter would be a lie the presenter acts on.
+// shareStatus is what the UI knows about a patient's localization and Mitz
+// consent subscription state. NVIUnknown is a third state on purpose: "we
+// could not ask" is not "not shared", and rendering the latter would be a lie
+// the presenter acts on. SubscriptionUnknown carries the same reasoning for
+// Mitz: it is distinct from Subscribed being false, which would invite a
+// retry that could duplicate against a real Mitz.
 type shareStatus struct {
-	Shared     bool
-	Categories []string
-	NVIUnknown bool
+	Shared              bool
+	Categories          []string
+	NVIUnknown          bool
+	Subscribed          bool
+	SubscriptionUnknown bool
 }
 
 func (c Config) patientShareStatus(ctx context.Context, bsn string) shareStatus {
 	if c.nviCategories == nil {
 		return shareStatus{NVIUnknown: true}
 	}
-	ctx, cancel := context.WithTimeout(ctx, nviCallTimeout)
-	defer cancel()
-
-	categories, err := c.nviCategories(ctx, bsn)
+	categories, err := c.withTimeout(ctx, nviCallTimeout, func(callCtx context.Context) ([]string, error) {
+		return c.nviCategories(callCtx, bsn)
+	})
 	if err != nil {
 		return shareStatus{NVIUnknown: true}
 	}
-	return shareStatus{Shared: len(categories) > 0, Categories: categories}
+
+	status := shareStatus{Shared: len(categories) > 0, Categories: categories}
+	if !status.Shared {
+		// Nothing is registered, so there is nothing a subscription would
+		// accompany; asking is noise.
+		return status
+	}
+	if c.mitzSubscribed == nil {
+		status.SubscriptionUnknown = true
+		return status
+	}
+	mitzCtx, cancel := context.WithTimeout(ctx, mitzCallTimeout)
+	defer cancel()
+	subscribed, err := c.mitzSubscribed(mitzCtx, bsn)
+	if err != nil {
+		status.SubscriptionUnknown = true
+		return status
+	}
+	status.Subscribed = subscribed
+	return status
+}
+
+// withTimeout derives d from ctx rather than from whatever time another call
+// left on it, so two independent remote calls in the same request (NVI, then
+// Mitz) each get their own budget instead of the second inheriting the
+// first's leftovers.
+func (c Config) withTimeout(ctx context.Context, d time.Duration,
+	call func(context.Context) ([]string, error)) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	return call(ctx)
 }
 
 // nviFuncs builds the real NVI calls against the Knooppunt's internal API.

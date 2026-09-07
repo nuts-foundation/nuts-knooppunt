@@ -14,11 +14,14 @@ import (
 )
 
 var notices = map[string]string{
-	"reset-done":     "Dataset restored to the seeded fixtures.",
-	"recycle-done":   "Patient restored to the seeded state.",
-	"reset-disabled": "Reset is unavailable: the sandbox is not wired to the Knooppunt in this environment.",
-	"signed-out":     "Signed out. The Dezi session has been cleared.",
-	"patient-busy":   "That patient is in use by another demo run. Pick a different one.",
+	"reset-done":        "Dataset restored to the seeded fixtures.",
+	"recycle-done":      "Patient restored to the seeded state.",
+	"reset-disabled":    "Reset is unavailable: the sandbox is not wired to the Knooppunt in this environment.",
+	"signed-out":        "Signed out. The Dezi session has been cleared.",
+	"patient-busy":      "That patient is in use by another demo run. Pick a different one.",
+	"mitz-retry-done":   "Consent subscription started.",
+	"mitz-retry-failed": "The consent subscription could not be started. Try again.",
+	"mitz-disabled":     "Mitz is not wired up in this environment.",
 }
 
 // Config holds the sandbox backend's runtime dependencies. The two URLs point at
@@ -41,9 +44,19 @@ type Config struct {
 	nviCategories func(ctx context.Context, bsn string) ([]string, error)
 	nviRegister   func(ctx context.Context, bsn string, categories []string) error
 
-	// mitzSubscribed reports whether a BSN has an active Mitz consent
-	// subscription. Wired in Task 7; nil (and unused) until then.
+	// mitzSubscribe starts a consent subscription for a shared patient: the
+	// second remote call the share flow makes, alongside nviRegister above.
+	// mitzSubscribed is the mock-only reconciliation query (mitzclient.go) that
+	// answers whether one already exists, for the record screen and the retry
+	// route. Both are wired in NewConfigFromEnv; mitzSubscribed stays nil when
+	// MITZMOCK_URL is unset, and callers must render that as unknown, not "not
+	// subscribed".
+	mitzSubscribe  func(ctx context.Context, bsn string) error
 	mitzSubscribed func(ctx context.Context, bsn string) (bool, error)
+
+	// mitzMockURL is the mock's own base URL, used for reconciliation here and
+	// for reset cleanup in Task 10. Nil when MITZMOCK_URL is unset.
+	mitzMockURL *url.URL
 
 	// sessions and secureCookie carry the session half of reset, which E2 owns.
 	// A reset restores the dataset AND signs everyone out; doing only the first
@@ -88,6 +101,23 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		clientID = pool.PlataanClientID
 	}
 	cfg.nviCategories, cfg.nviRegister = nviFuncs(knooppuntURL, clientID)
+
+	// Read through the injected getenv, not envOr: NewConfigFromEnv takes the
+	// lookup as a parameter so tests can drive it, and envOr goes straight to
+	// os.Getenv.
+	facilityType := getenv("SANDBOX_FACILITY_TYPE")
+	if facilityType == "" {
+		facilityType = "Z3"
+	}
+	cfg.mitzSubscribe = mitzSubscribeFunc(knooppuntURL, plataanURA, facilityType)
+	if raw := getenv("MITZMOCK_URL"); raw != "" {
+		mitzMockURL, err := url.Parse(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid MITZMOCK_URL: %w", err)
+		}
+		cfg.mitzMockURL = mitzMockURL
+		cfg.mitzSubscribed = mitzSubscribedFunc(mitzMockURL, plataanURA)
+	}
 
 	if cfg.HAPIBaseURL == "" {
 		return cfg, nil
@@ -355,6 +385,7 @@ func NewMux(cfg Config) *http.ServeMux {
 	mux.HandleFunc("GET /demo/ehr", requireSession(signedIn, cfg.handlePatientList))
 	mux.HandleFunc("POST /demo/ehr/patients/{key}/open", requireSession(signedIn, cfg.handleOpenPatient))
 	mux.HandleFunc("GET /demo/ehr/patients/{key}", requireSession(signedIn, cfg.handlePatientRecord))
+	mux.HandleFunc("POST /demo/ehr/patients/{key}/subscribe", requireSession(signedIn, cfg.handleSubscribe))
 	return mux
 }
 

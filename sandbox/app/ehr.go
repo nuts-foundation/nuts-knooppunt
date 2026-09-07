@@ -11,16 +11,18 @@ import (
 // patientRow is one row of the practitioner's patient list, and the header of
 // the record and share screens.
 type patientRow struct {
-	Key        string
-	Name       string
-	BSN        string
-	BirthDate  string
-	Initials   string
-	Shared     bool
-	NVIUnknown bool
-	Locked     bool // held by another session: "demo in progress"
-	Mine       bool // held by this session
-	Categories []string
+	Key                 string
+	Name                string
+	BSN                 string
+	BirthDate           string
+	Initials            string
+	Shared              bool
+	NVIUnknown          bool
+	Subscribed          bool
+	SubscriptionUnknown bool
+	Locked              bool // held by another session: "demo in progress"
+	Mine                bool // held by this session
+	Categories          []string
 }
 
 // handlePatientList renders the practitioner's patients with their localization
@@ -138,6 +140,38 @@ func (c Config) patientRowFor(ctx context.Context, patient pool.PoolPatient, ses
 		Key: patient.Key, Name: patientDisplayName(patient), BSN: patient.BSN,
 		BirthDate: patient.BirthDate, Initials: patientInitials(patient),
 		Shared: status.Shared, NVIUnknown: status.NVIUnknown, Categories: status.Categories,
+		Subscribed: status.Subscribed, SubscriptionUnknown: status.SubscriptionUnknown,
 		Mine: c.Locks.HeldBy(patient.Key, lockOwner(session)),
 	}
+}
+
+// handleSubscribe retries only the Mitz step.
+//
+// This is what makes "no rollback" survivable. A patient whose localization
+// records exist but whose consent subscription does not is a real state the flow
+// can land in, and re-running the whole share to repair it would redo the NVI
+// work for no reason.
+func (c Config) handleSubscribe(w http.ResponseWriter, r *http.Request, session *authSession) {
+	if crossSiteRequest(r) {
+		http.Error(w, "cross-site subscribe is not allowed", http.StatusForbidden)
+		return
+	}
+	patient, ok := pool.PatientByKey(r.PathValue("key"))
+	if !ok {
+		http.Error(w, "unknown patient: "+r.PathValue("key"), http.StatusNotFound)
+		return
+	}
+	if !c.Locks.HeldBy(patient.Key, lockOwner(session)) {
+		http.Error(w, "this session does not hold patient "+patient.Key+"; reopen the record", http.StatusConflict)
+		return
+	}
+	if c.mitzSubscribe == nil {
+		http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice=mitz-disabled", http.StatusSeeOther)
+		return
+	}
+	if err := c.mitzSubscribe(r.Context(), patient.BSN); err != nil {
+		http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice=mitz-retry-failed", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice=mitz-retry-done", http.StatusSeeOther)
 }
