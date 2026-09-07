@@ -204,12 +204,15 @@ func TestResetGlobal_RestoresEvenWhenMitzCleanupFails(t *testing.T) {
 // The other half of "cleanup runs last": its warning must not stand in for a
 // real failure above it.
 //
-// The test above cannot see this. An implementation that ran the cleanup FIRST,
-// kept its error, then restored, and returned the kept error at the end would
-// satisfy both of its assertions while violating the ordering entirely. Here
-// restoration itself is broken, so a reset that returns ErrPartialReset is
-// reporting a mock it could not reach while silently swallowing a dataset it
-// could not restore.
+// The test above cannot see this. An implementation that ran the cleanup first,
+// kept its error, then restored while swallowing the restore errors, and
+// returned the kept error would satisfy both of its assertions. Here restoration
+// itself is broken, so a reset that returns ErrPartialReset is reporting a mock
+// it could not reach while silently swallowing a dataset it could not restore.
+//
+// What this pins is exactly that substitution, not the call order. Moving the
+// cleanup earlier while leaving each restore step's early return intact is not
+// caught, and does not need to be: the restore error still surfaces.
 func TestResetGlobal_ACleanupWarningDoesNotMaskARestoreFailure(t *testing.T) {
 	h := harness.Start(t)
 	unreachableMitz, err := url.Parse("http://127.0.0.1:1")
