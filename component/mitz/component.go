@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/api"
@@ -110,6 +111,10 @@ func createHTTPClient(config Config) (*http.Client, error) {
 
 	return &http.Client{
 		Transport: tracing.WrapTransport(transport),
+		// Mitz is a remote national service. Without this a blackholed endpoint
+		// holds the request goroutine open until the caller's context expires, and
+		// callers passing context.Background() never recover.
+		Timeout: 30 * time.Second,
 	}, nil
 }
 
@@ -409,9 +414,16 @@ func (c *Component) CreateSubscription(ctx context.Context, resource fhir.Subscr
 			}
 			return nil, err
 		}
-		// NOTE: preserves a pre-existing quirk — if err isn't a fhirclient.OperationOutcomeError,
-		// execution falls through here and the subscription is reported as created despite the
-		// failure, exactly as handleSubscribe did before this method was split out.
+		// Anything that is not an OperationOutcomeError never got a response from
+		// Mitz: a dial failure, a closed connection, a context deadline. This used
+		// to fall through to the Location parsing below and report the
+		// subscription as created, preserved from the handler this was split out
+		// of. It is a lie the caller cannot detect, so it now surfaces.
+		return nil, &fhirapi.Error{
+			Message:   "Failed to reach MITZ endpoint to create subscription",
+			Cause:     err,
+			IssueType: fhir.IssueTypeTransient,
+		}
 	}
 
 	location := headers.Header.Get("Location")

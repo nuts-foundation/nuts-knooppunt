@@ -309,6 +309,40 @@ func TestParseXACMLResponse(t *testing.T) {
 	})
 }
 
+// validSubscription is the minimum that passes validateMITZSubscription, so a
+// test about transport failure fails on transport and not on validation.
+func validSubscription() fhir.Subscription {
+	return fhir.Subscription{
+		Status:   fhir.SubscriptionStatusRequested,
+		Reason:   "OTV",
+		Criteria: "Consent?_query=otv&patientid=999900006&providerid=00000010&providertype=Z3",
+		Channel:  fhir.SubscriptionChannel{Type: fhir.SubscriptionChannelTypeRestHook},
+	}
+}
+
+// A transport failure is not an OperationOutcomeError, and used to fall through
+// the status switch and be reported as a created subscription. The GF Sandbox
+// renders that as a green confirmation card, so a silent failure here becomes a
+// demo asserting something that did not happen.
+func TestCreateSubscription_TransportFailureIsAnError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hijacker, ok := w.(http.Hijacker)
+		require.True(t, ok)
+		conn, _, err := hijacker.Hijack()
+		require.NoError(t, err)
+		require.NoError(t, conn.Close())
+	}))
+	defer server.Close()
+
+	component, err := New(Config{MitzBase: server.URL})
+	require.NoError(t, err)
+
+	result, err := component.CreateSubscription(t.Context(), validSubscription())
+
+	require.Error(t, err, "a subscription that never reached Mitz must not be reported as created")
+	require.Nil(t, result)
+}
+
 // Helper function
 func toPtr(s string) *string {
 	return &s
