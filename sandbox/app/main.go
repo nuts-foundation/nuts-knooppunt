@@ -17,6 +17,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// One line per feature that is off, naming the variable that turns it on.
+	// A single message covering both sent an operator who had set only
+	// KNOOPPUNT_INTERNAL_URL looking for a reset problem, while the real symptom
+	// was every patient reading "status unknown" because the NVI was disabled.
+	if !cfg.nviConfigured() {
+		log.Printf("gf-sandbox: NVI disabled, every patient will read as status unknown (set KNOOPPUNT_INTERNAL_URL to enable)")
+	}
 	if !cfg.configured() {
 		log.Printf("gf-sandbox: reset/recycle disabled (set KNOOPPUNT_INTERNAL_URL and HAPI_BASE_URL to enable)")
 	}

@@ -81,3 +81,44 @@ func TestRegisterPatient_SendsTheDerivedCategories(t *testing.T) {
 func TestRegisterPatient_ErrorsWhenUnconfigured(t *testing.T) {
 	require.Error(t, Config{}.registerPatient(t.Context(), pool.Patients()[0]))
 }
+
+// The NVI client talks only to the Knooppunt, so it must come up on
+// KNOOPPUNT_INTERNAL_URL alone. Gating it on HAPI_BASE_URL as well disabled it
+// over a variable it never reads, and the only symptom was every patient row
+// reading "status unknown" with nothing to say why.
+func TestNewConfigFromEnv_WiresTheNVIWithoutHAPI(t *testing.T) {
+	cfg, err := NewConfigFromEnv(func(key string) string {
+		if key == "KNOOPPUNT_INTERNAL_URL" {
+			return "http://knooppunt:8081"
+		}
+		return ""
+	})
+
+	require.NoError(t, err)
+	require.True(t, cfg.nviConfigured(), "the NVI needs only the Knooppunt URL")
+	require.False(t, cfg.configured(), "reset and recycle still need HAPI_BASE_URL")
+}
+
+func TestNewConfigFromEnv_WiresResetWhenBothAreSet(t *testing.T) {
+	cfg, err := NewConfigFromEnv(func(key string) string {
+		switch key {
+		case "KNOOPPUNT_INTERNAL_URL":
+			return "http://knooppunt:8081"
+		case "HAPI_BASE_URL":
+			return "http://hapi:7050/fhir"
+		}
+		return ""
+	})
+
+	require.NoError(t, err)
+	require.True(t, cfg.nviConfigured())
+	require.True(t, cfg.configured())
+}
+
+func TestNewConfigFromEnv_NothingIsWiredWithoutTheKnooppunt(t *testing.T) {
+	cfg, err := NewConfigFromEnv(func(string) string { return "" })
+
+	require.NoError(t, err)
+	require.False(t, cfg.nviConfigured())
+	require.False(t, cfg.configured())
+}

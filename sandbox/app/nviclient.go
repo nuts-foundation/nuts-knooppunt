@@ -8,12 +8,17 @@ import (
 	"time"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/plataan"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 )
 
 // plataanURA is the requesting hospital, and the custodian under which the
 // sandbox publishes localization records when a patient is shared.
-const plataanURA = "00000010"
+//
+// Derived rather than restated: the seed registers and recycles against
+// plataan.URA, so a second literal here would desync silently and leave the
+// sandbox querying one custodian while the seed wrote another.
+const plataanURA = plataan.URA
 
 // nviCallTimeout bounds a single NVI call. The list issues one per patient, so a
 // slow NVI degrades individual rows to unknown instead of hanging the page.

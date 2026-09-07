@@ -55,21 +55,37 @@ func (c Config) configured() bool {
 }
 
 // NewConfigFromEnv builds a Config from the KNOOPPUNT_INTERNAL_URL and
-// HAPI_BASE_URL environment variables. When both are set, the reset functions
-// are wired to the vectors package; otherwise they are left nil (reset disabled).
+// HAPI_BASE_URL environment variables.
+//
+// The two features have different needs and are wired separately. The NVI
+// client talks only to the Knooppunt, so it comes up as soon as
+// KNOOPPUNT_INTERNAL_URL is set. Reset and recycle also rewrite the FHIR store
+// directly and need HAPI_BASE_URL as well. Gating both on both would disable the
+// NVI over a variable it never reads, and the only symptom would be every
+// patient reading "status unknown" with nothing to say why.
 func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 	cfg := Config{
 		KnooppuntInternalURL: getenv("KNOOPPUNT_INTERNAL_URL"),
 		HAPIBaseURL:          getenv("HAPI_BASE_URL"),
 		Locks:                NewRegistry(),
 	}
-	if cfg.KnooppuntInternalURL == "" || cfg.HAPIBaseURL == "" {
+	if cfg.KnooppuntInternalURL == "" {
 		return cfg, nil
 	}
 
 	knooppuntURL, err := url.Parse(cfg.KnooppuntInternalURL)
 	if err != nil {
 		return Config{}, fmt.Errorf("invalid KNOOPPUNT_INTERNAL_URL: %w", err)
+	}
+
+	clientID := getenv("SANDBOX_NVI_CLIENT_ID")
+	if clientID == "" {
+		clientID = pool.PlataanClientID
+	}
+	cfg.nviCategories, cfg.nviRegister = nviFuncs(knooppuntURL, clientID)
+
+	if cfg.HAPIBaseURL == "" {
+		return cfg, nil
 	}
 	hapiURL, err := url.Parse(cfg.HAPIBaseURL)
 	if err != nil {
@@ -81,14 +97,12 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 	cfg.recyclePatient = func(ctx context.Context, patientKey string) error {
 		return vectors.RecyclePatient(ctx, hapiURL, knooppuntURL, patientKey)
 	}
-
-	clientID := getenv("SANDBOX_NVI_CLIENT_ID")
-	if clientID == "" {
-		clientID = pool.PlataanClientID
-	}
-	cfg.nviCategories, cfg.nviRegister = nviFuncs(knooppuntURL, clientID)
 	return cfg, nil
 }
+
+// nviConfigured reports whether the sandbox can reach the NVI. main uses it to
+// say which feature is off, rather than letting one message stand for both.
+func (c Config) nviConfigured() bool { return c.nviCategories != nil }
 
 // patientStatus is the JSON shape returned by GET /demo/patients.
 type patientStatus struct {
