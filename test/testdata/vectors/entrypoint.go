@@ -179,9 +179,16 @@ func putResources(ctx context.Context, client fhirclient.Client, resources []fhi
 }
 
 // SeedNVI registers every pool patient's NVI localization Lists through the
-// Knooppunt's internal /nvi endpoint (one List per custodian). It is idempotent:
-// each registration is a delete-then-create per subject+custodian, so running
-// SeedNVI repeatedly yields exactly one List per patient per custodian.
+// Knooppunt's internal /nvi endpoint: one List per data category De Zonnebloem
+// holds, and nothing on De Plataan's side, which the sandbox publishes when a
+// patient is shared. It is idempotent: each registration is a delete-then-create
+// per subject+custodian+client, so running SeedNVI repeatedly yields exactly one
+// List per patient per custodian per category.
+//
+// The client is part of the key on purpose. A custodian-wide delete would erase
+// records another installation of the same organization registered; the cost is
+// that this function cannot clean up the sandbox's own registrations, which
+// ResetGlobal does by name.
 //
 // knooppuntInternalBaseURL is the Knooppunt internal API base (e.g.
 // http://knooppunt:8081); the /nvi path is appended here.
@@ -223,9 +230,10 @@ func ResetGlobal(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL, mit
 	//
 	// The NVI tenant is NOT cleared this way: its pseudonymization interceptor
 	// rejects a List search that is not scoped to a patient/subject/source, so
-	// there is no way to enumerate "every List" in it. SeedNVI below is
-	// delete-then-create per pool BSN, which restores the pool's own Lists to
-	// exactly one each; see the known limitation in test/testdata/README.md.
+	// there is no way to enumerate "every List" in it. SeedNVI below restores De
+	// Zonnebloem's registrations, and the loop after it removes the ones the
+	// sandbox published; see the known limitation in test/testdata/README.md for
+	// what still survives.
 	for _, tenant := range []hapi.Tenant{
 		sunflower.PatientsHAPITenant(),
 		plataan.PatientsHAPITenant(),
@@ -240,6 +248,22 @@ func ResetGlobal(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL, mit
 	}
 	if err := SeedNVI(ctx, knooppuntInternalBaseURL); err != nil {
 		return fmt.Errorf("reseed NVI: %w", err)
+	}
+
+	// Remove what the demo published on De Plataan's side, so every patient goes
+	// back to the pool unshared, which is what this function's callers tell the
+	// presenter it did.
+	//
+	// SeedNVI cannot do this. It registers De Zonnebloem only, and its delete is
+	// scoped to the client that registers, so it never touches records another
+	// installation wrote. That scoping is deliberate — a custodian-wide delete
+	// would erase a second installation's registrations — but it means the
+	// sandbox's own records survive unless they are removed here by name.
+	nviBaseURL := knooppuntInternalBaseURL.JoinPath("nvi")
+	for _, patient := range pool.Patients() {
+		if err := nvi.DeleteForClient(ctx, nviBaseURL, plataan.URA, patient.BSN, pool.PlataanClientID); err != nil {
+			return fmt.Errorf("unshare patient %s: %w", patient.Key, err)
+		}
 	}
 
 	// Last, and its error returned last: a partial-cleanup warning must not mask

@@ -175,7 +175,12 @@ func TestAcceptance_ShareLeavesZonnebloemIntact(t *testing.T) {
 	require.True(t, ok)
 
 	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
-	postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+	status, body := postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+
+	// Without this the test passes when the share never ran: a 409 or a 500
+	// leaves Zonnebloem exactly as seeded, which is what it asserts below.
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, "Localization records published")
 
 	zonnebloem := filterByCustodian(rawNVILists(t, h, anna.BSN), h.SunflowerURA)
 	require.Equal(t, anna.ZonnebloemCategories(), nvi.CategoriesOf(zonnebloem))

@@ -10,7 +10,10 @@
         <h3>Share patient through the generic functions</h3>
         <div class="h-sub">
           {{if .Shared}}This patient is already shared. Sharing again republishes the same
-          localization records and retries the consent subscription; it does not create duplicates.
+          localization records and retries the consent subscription. The localization records
+          converge on one per data category. The consent subscription does not duplicate against
+          the mock, which keys one per provider and patient; the national Mitz makes no such
+          promise.
           {{else}}This record exists only in De Plataan's own store. Sharing publishes one
           localization record per data category, so other providers can find that this hospital holds
           data about this patient, and subscribes to their consent changes. The data itself stays here.

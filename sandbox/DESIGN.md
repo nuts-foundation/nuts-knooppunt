@@ -585,8 +585,10 @@ subscription. The open question on the authorization breakdown source (section 1
   00000010/00000020) and that RvIG test-BSNs are accepted there. Note the failure mode: with `prsurl` set, an
   unreachable PRS fails the lookup (no silent fake fallback), so a demo depends on acc availability; decide whether that
   is acceptable or needs a visible degradation.
-- The NVI registration needs a BGZ zorgcontext code: the existing e2e vector registers `MEDAFSPRAAK`; verify the
-  zorgcontext CodeSystem has (or gets) a BGZ entry for the demo's data type.
+- ~~The NVI registration needs a BGZ zorgcontext code.~~ Settled by E3: there is none, and there cannot be. `List.code`
+  binds to `nl-gf-zorgcontext-vs`, whose 28 codes come from `nl-gf-data-categories-cs` and are data categories at FHIR
+  resource granularity. A patient summary is registered as the set of categories it contains, one List each. The
+  `MEDAFSPRAAK` the e2e vector uses is not a member of that value set at all.
 - Demo-lock details (section 5.7 sketches the intent): the exact lock trigger (record open versus share), the TTL, and
   whether the global-reset override needs more friction than a confirmation dialog.
 - The BGZ retrieval contract: the PDP's BGZ policy authorizes resource-level FHIR searches (and is itself marked "to be

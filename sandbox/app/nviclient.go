@@ -20,9 +20,16 @@ import (
 // sandbox querying one custodian while the seed wrote another.
 const plataanURA = plataan.URA
 
-// nviCallTimeout bounds a single NVI call. The list issues one per patient, so a
+// nviCallTimeout bounds a single NVI read. The list issues one per patient, so a
 // slow NVI degrades individual rows to unknown instead of hanging the page.
 const nviCallTimeout = 5 * time.Second
+
+// nviRegisterTimeout bounds the whole registration, which is not one call: a
+// search, then a delete per record already there, then a create per category.
+// Budgeting that at nviCallTimeout would show the red "may be incomplete" card
+// over a working but cold stack, which is the demo asserting a failure that did
+// not happen.
+const nviRegisterTimeout = 20 * time.Second
 
 // shareStatus is what the UI knows about a patient's localization and Mitz
 // consent subscription state. NVIUnknown is a third state on purpose: "we
@@ -127,7 +134,7 @@ func (c Config) registerPatient(ctx context.Context, patient pool.PoolPatient) e
 	unlock := lockPatientWrites(patient.Key)
 	defer unlock()
 
-	ctx, cancel := context.WithTimeout(ctx, nviCallTimeout)
+	ctx, cancel := context.WithTimeout(ctx, nviRegisterTimeout)
 	defer cancel()
 	return c.nviRegister(ctx, patient.BSN, patient.PlataanCategories())
 }

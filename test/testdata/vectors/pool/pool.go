@@ -2,7 +2,8 @@
 // synthetic patients (Anna Jansen plus structural clones), each a complete
 // two-source fixture. Every patient has hospital-side data at Ziekenhuis De
 // Plataan (URA 00000010), a BGZ at Zorgcentrum De Zonnebloem (URA 00000020),
-// and an NVI localization registration under both custodians.
+// and an NVI localization registration under De Zonnebloem only:
+// publishing De Plataan's side is the action the GF Sandbox demonstrates.
 //
 // All FHIR resource IDs are derived deterministically from the patient Key so
 // that seeding is an idempotent PUT-by-fixed-id upsert. Counts shown in any UI

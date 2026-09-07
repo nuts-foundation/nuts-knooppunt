@@ -201,6 +201,44 @@ func TestResetGlobal_RestoresEvenWhenMitzCleanupFails(t *testing.T) {
 		"the fixtures must be restored even when the optional cleanup warned")
 }
 
+// A reset must return every patient to the pool unshared, which is what its own
+// notice tells the presenter it did.
+//
+// Nothing before this test covered it: the reset tests all run against a harness
+// where nothing was ever shared, so the Plataan side was empty either way. The
+// seed used to register both custodians with a custodian-wide delete, which
+// cleaned up De Plataan's side as a side effect. Narrowing that delete to the
+// registering client removed the side effect, and nothing replaced it.
+func TestResetGlobal_UnsharesAPatientSharedDuringADemo(t *testing.T) {
+	h := harness.Start(t)
+	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
+	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
+	anna := pool.Patients()[0]
+
+	// What the sandbox does when a practitioner shares a patient.
+	require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
+		CustodianURA: plataan.URA,
+		BSN:          anna.BSN,
+		ClientID:     pool.PlataanClientID,
+		Categories:   anna.PlataanCategories(),
+	}))
+	shared, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, anna.BSN)
+	require.NoError(t, err)
+	require.NotEmpty(t, shared, "precondition: the patient is shared")
+
+	require.NoError(t, vectors.ResetGlobal(t.Context(), h.HAPIBaseURL, h.KnooppuntInternalBaseURL, nil))
+
+	after, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, anna.BSN)
+	require.NoError(t, err)
+	require.Empty(t, after,
+		"reset says the dataset is restored to the seeded fixtures, so the patient must be unshared again")
+
+	// And the source side is still there, or the reset broke what E4 needs.
+	zonnebloem, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), anna.BSN)
+	require.NoError(t, err)
+	require.Equal(t, anna.ZonnebloemCategories(), nvi.CategoriesOf(zonnebloem))
+}
+
 // The other half of "cleanup runs last": its warning must not stand in for a
 // real failure above it.
 //

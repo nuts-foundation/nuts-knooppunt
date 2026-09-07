@@ -171,7 +171,22 @@ func (c Config) handleSubscribe(w http.ResponseWriter, r *http.Request, session 
 		return
 	}
 	if err := c.mitzSubscribe(r.Context(), patient.BSN); err != nil {
-		http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice=mitz-retry-failed", http.StatusSeeOther)
+		// Same reconciliation as the share flow, for the same reason: a timeout
+		// or dropped connection can follow a commit. Without asking, this branch
+		// would tell the presenter the subscription could not be started and
+		// invite another retry, on the one screen whose own subtext warns that a
+		// retry may duplicate against the national Mitz.
+		notice := "mitz-retry-unknown"
+		if c.mitzSubscribed != nil {
+			if subscribed, queryErr := c.mitzSubscribed(r.Context(), patient.BSN); queryErr == nil {
+				if subscribed {
+					notice = "mitz-retry-done"
+				} else {
+					notice = "mitz-retry-failed"
+				}
+			}
+		}
+		http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice="+notice, http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice=mitz-retry-done", http.StatusSeeOther)

@@ -316,6 +316,42 @@ func TestSubscribe_RetriesOnlyTheMitzStep(t *testing.T) {
 	require.Zero(t, registered, "the retry must not redo the NVI work")
 }
 
+// A failed retry must not assert a failure it did not establish. The share flow
+// reconciles a failed POST against the lookup for exactly this reason; this
+// branch used to skip that and tell the presenter to try again, on the screen
+// whose own subtext says a retry may duplicate against the national Mitz.
+func TestSubscribe_RetryOutcomesFollowTheLookup(t *testing.T) {
+	for name, tc := range map[string]struct {
+		subscribed func(context.Context, string) (bool, error)
+		want       string
+	}{
+		"lookup says it committed after all": {
+			func(context.Context, string) (bool, error) { return true, nil }, "mitz-retry-done",
+		},
+		"lookup confirms it did not": {
+			func(context.Context, string) (bool, error) { return false, nil }, "mitz-retry-failed",
+		},
+		"lookup itself failed": {
+			func(context.Context, string) (bool, error) { return false, errors.New("unreachable") },
+			"mitz-retry-unknown",
+		},
+		"no lookup configured": {nil, "mitz-retry-unknown"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg, anna := sharedNotSubscribed(t)
+			cfg.mitzSubscribe = func(context.Context, string) error { return errors.New("timeout") }
+			cfg.mitzSubscribed = tc.subscribed
+			srv, client := demoServer(t, cfg)
+			postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+			res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/subscribe", nil)
+			defer res.Body.Close()
+
+			require.Equal(t, "/demo/ehr/patients/"+anna.Key+"?notice="+tc.want, res.Header.Get("Location"))
+		})
+	}
+}
+
 func TestSubscribe_RejectsASessionWithoutTheLock(t *testing.T) {
 	cfg, anna := sharedNotSubscribed(t)
 	cfg.mitzSubscribe = func(context.Context, string) error { return nil }

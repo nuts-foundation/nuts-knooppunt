@@ -124,8 +124,10 @@ subject's wallet, which is empty until the credential is stored.
 
 - `vectors.ResetGlobal(ctx, hapiBaseURL, knooppuntInternalBaseURL, mitzMockBaseURL)` — clears the
   mutable patient stores (removing user-created records, which have random ids a
-  plain re-seed cannot overwrite), then re-runs `Load` + `SeedNVI`. This is the
-  "restore fixtures" path.
+  plain re-seed cannot overwrite), then re-runs `Load` + `SeedNVI`, removes the
+  localization records the sandbox published on De Plataan's side, and clears the
+  mock Mitz's subscriptions when one is configured. This is the "restore fixtures"
+  path, and it returns every pool patient to the unshared state a demo starts from.
 
   Clearing is a search-and-delete per resource type with `_cascade=delete`, **not**
   `$expunge`. HAPI applies `expungeEverything=true` server-wide regardless of the
@@ -145,6 +147,9 @@ subject's wallet, which is empty until the credential is stored.
   (they have random ids). A global reset is the escape hatch until a later epic
   tags user-created resources for targeted deletion.
 - **NVI Lists registered under a BSN outside the pool survive a global reset.**
+  Pool BSNs are handled: `SeedNVI` restores De Zonnebloem's registrations and
+  `ResetGlobal` removes De Plataan's by client id. A BSN that is not in the pool
+  is reachable by neither.
   The NVI tenant's pseudonymization interceptor rejects any `List` search not
   scoped to a patient/subject/source, so they cannot be enumerated to be deleted,
   and `SeedNVI`'s delete-then-create only covers the pool's own BSNs. DESIGN §5.6
