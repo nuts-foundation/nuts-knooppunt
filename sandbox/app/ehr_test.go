@@ -152,6 +152,35 @@ func TestOpenPatient_RefusesAPatientAnotherSessionHolds(t *testing.T) {
 		"a refused open must leave the holder's lock exactly as it was")
 }
 
+// A refused open must not cost the caller the patient it already had.
+//
+// This is the case that tells Switch apart from a naive "release mine, then
+// lock the target": with nothing held, releasing first is a no-op and both
+// implementations look identical, which is why every other test here passes
+// under either one. Here the session holds the first patient, the second is
+// taken, and the release-first version would have thrown the first away for an
+// acquire that then failed.
+func TestOpenPatient_ARefusedSwitchKeepsThePatientAlreadyHeld(t *testing.T) {
+	cfg, _, _ := fakeConfig()
+	cfg.nviCategories = categoriesByBSN(nil, nil)
+	held, taken := pool.Patients()[0].Key, pool.Patients()[1].Key
+	require.True(t, cfg.Locks.Lock(taken, "someone-else"))
+	srv, client := demoServer(t, cfg)
+
+	first := postForm(t, client, srv, "/demo/ehr/patients/"+held+"/open", nil)
+	require.NoError(t, first.Body.Close())
+	require.Equal(t, http.StatusSeeOther, first.StatusCode)
+
+	res := postForm(t, client, srv, "/demo/ehr/patients/"+taken+"/open", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, "/demo/ehr?notice=patient-busy", res.Header.Get("Location"))
+	require.True(t, cfg.Locks.IsLocked(held),
+		"the failed switch must not have released the patient this session was working on")
+	require.True(t, cfg.Locks.HeldBy(taken, "someone-else"),
+		"and the other session keeps what it held")
+}
+
 func TestPatientRecord_ShowsNotFindableYetWhenUnshared(t *testing.T) {
 	cfg, _, _ := fakeConfig()
 	cfg.nviCategories = categoriesByBSN(nil, nil)
