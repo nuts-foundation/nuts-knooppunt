@@ -186,8 +186,8 @@ func putResources(ctx context.Context, client fhirclient.Client, resources []fhi
 func SeedNVI(ctx context.Context, knooppuntInternalBaseURL *url.URL) error {
 	nviBaseURL := knooppuntInternalBaseURL.JoinPath("nvi")
 	for _, patient := range pool.Patients() {
-		for _, list := range patient.NVILists() {
-			if err := nvi.RegisterList(ctx, nviBaseURL, list); err != nil {
+		for _, reg := range patient.NVIRegistrations() {
+			if err := nvi.Register(ctx, nviBaseURL, reg); err != nil {
 				return fmt.Errorf("seed NVI for patient %s: %w", patient.Key, err)
 			}
 		}
@@ -239,8 +239,9 @@ func ResetGlobal(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL *url
 }
 
 // RecyclePatient restores a single pool patient to its seeded, unshared state
-// without touching any other patient: it deletes that patient's NVI Lists (both
-// custodians) and re-PUTs its seeded FHIR resources by fixed id.
+// without touching any other patient: it removes that patient's De Plataan NVI
+// registration, re-registers De Zonnebloem's, and re-PUTs its seeded FHIR
+// resources by fixed id.
 //
 // Known limitation: RecyclePatient cannot remove that patient's user-created
 // marker records (random ids) — only a global reset (expunge) clears those. For
@@ -252,11 +253,15 @@ func RecyclePatient(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL *
 		return fmt.Errorf("unknown pool patient: %q", patientKey)
 	}
 
-	// Re-register the NVI Lists (delete-then-create is idempotent and also
-	// removes any extra Lists accumulated during the demo).
+	// Re-publish the seeded registrations (Zonnebloem's) and remove De Plataan's,
+	// which exists only if this patient was shared during a demo. Recycling a
+	// patient means returning them to the pool unshared.
 	nviBaseURL := knooppuntInternalBaseURL.JoinPath("nvi")
-	for _, list := range patient.NVILists() {
-		if err := nvi.RegisterList(ctx, nviBaseURL, list); err != nil {
+	if err := nvi.DeleteForClient(ctx, nviBaseURL, plataan.URA, patient.BSN, pool.PlataanClientID); err != nil {
+		return fmt.Errorf("recycle: remove plataan NVI registration for %s: %w", patient.Key, err)
+	}
+	for _, reg := range patient.NVIRegistrations() {
+		if err := nvi.Register(ctx, nviBaseURL, reg); err != nil {
 			return fmt.Errorf("recycle NVI for patient %s: %w", patient.Key, err)
 		}
 	}

@@ -26,8 +26,6 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-const bsnSystem = "http://fhir.nl/fhir/NamingSystem/bsn"
-
 func zonnebloemURA() string { return *sunflower.Organization().Identifier[0].Value }
 
 // TestPoolBSNsPassElfproef is the E5 elfproef acceptance: every seeded pool BSN
@@ -58,18 +56,26 @@ func TestSeed_PlataanOrganizationInQueryDirectory(t *testing.T) {
 	assert.Equal(t, "Ziekenhuis De Plataan", *org.Name)
 }
 
-func TestSeed_NVIListsFindableUnderBothCustodians(t *testing.T) {
+// The pool seeds De Zonnebloem's side only: it is the source holding the BGZ.
+// De Plataan's side is published by the sandbox when a patient is shared, so a
+// freshly seeded patient must have nothing under 00000010 (DESIGN §5.7).
+//
+// Both halves are asserted. Checking only the absence would let a seed that
+// registers nothing at all pass, silently removing E4's prerequisite.
+func TestSeed_ZonnebloemRegisteredPlataanNot(t *testing.T) {
 	h := harness.Start(t)
-
-	// The harness loads FHIR data but not NVI Lists; seed them now.
 	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
-
-	anna := pool.Patients()[0]
 	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
 
-	for _, custodian := range []string{plataan.URA, zonnebloemURA()} {
-		entries := searchNVIByBSN(t, nviBaseURL, custodian, anna.BSN)
-		require.Lenf(t, entries, 1, "patient %s should have exactly one NVI List under custodian %s", anna.Key, custodian)
+	for _, p := range pool.Patients() {
+		zonnebloem, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), p.BSN)
+		require.NoError(t, err)
+		require.Equal(t, p.ZonnebloemCategories(), nvi.CategoriesOf(zonnebloem),
+			"patient %s should be registered for exactly the categories De Zonnebloem holds", p.Key)
+
+		plataanLists, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, p.BSN)
+		require.NoError(t, err)
+		require.Empty(t, plataanLists, "patient %s must start unshared from De Plataan", p.Key)
 	}
 }
 
@@ -82,11 +88,14 @@ func TestSeed_NVIIsIdempotent(t *testing.T) {
 
 	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
 	for _, p := range pool.Patients() {
-		for _, custodian := range []string{plataan.URA, zonnebloemURA()} {
-			count, err := nvi.CountLists(t.Context(), nviBaseURL, custodian, p.BSN)
-			require.NoError(t, err)
-			require.Equalf(t, 1, count, "patient %s custodian %s should have exactly one List after double-seed", p.Key, custodian)
-		}
+		zonnebloem, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), p.BSN)
+		require.NoError(t, err)
+		require.Lenf(t, zonnebloem, len(p.ZonnebloemCategories()),
+			"patient %s should have one List per category after a double seed, not two", p.Key)
+
+		plataanLists, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, p.BSN)
+		require.NoError(t, err)
+		require.Emptyf(t, plataanLists, "patient %s is not seeded from De Plataan's side", p.Key)
 	}
 }
 
@@ -181,24 +190,27 @@ func TestRecyclePatient_RestoresTargetLeavesOthersIntact(t *testing.T) {
 	target, other := patients[0], patients[1]
 	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
 
-	// Simulate demo drift: delete the target's Lists under one custodian.
-	deleteNVIByBSN(t, nviBaseURL, plataan.URA, target.BSN)
-	require.Len(t, searchNVIByBSN(t, nviBaseURL, plataan.URA, target.BSN), 0, "precondition: target's plataan List removed")
+	// Simulate demo drift: remove the target's seeded Zonnebloem registration.
+	// De Plataan's no longer exists to delete, since the pool no longer seeds it.
+	require.NoError(t, nvi.DeleteForClient(t.Context(), nviBaseURL, zonnebloemURA(), target.BSN, pool.ZonnebloemClientID))
+	before, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), target.BSN)
+	require.NoError(t, err)
+	require.Empty(t, before, "precondition: the target's Zonnebloem registration is gone")
 
-	// Recycle the target patient.
 	require.NoError(t, vectors.RecyclePatient(t.Context(), h.HAPIBaseURL, h.KnooppuntInternalBaseURL, target.Key))
 
-	// The target is restored under both custodians...
-	for _, custodian := range []string{plataan.URA, zonnebloemURA()} {
-		require.Lenf(t, searchNVIByBSN(t, nviBaseURL, custodian, target.BSN), 1,
-			"recycled patient %s should have exactly one List under custodian %s", target.Key, custodian)
-	}
+	// The target is restored on the source side and unshared on Plataan's...
+	restored, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), target.BSN)
+	require.NoError(t, err)
+	require.Equal(t, target.ZonnebloemCategories(), nvi.CategoriesOf(restored))
+	plataanLists, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, target.BSN)
+	require.NoError(t, err)
+	require.Empty(t, plataanLists, "recycle returns a patient to the pool unshared")
 
-	// ...and another patient's Lists are untouched (still exactly one each).
-	for _, custodian := range []string{plataan.URA, zonnebloemURA()} {
-		require.Lenf(t, searchNVIByBSN(t, nviBaseURL, custodian, other.BSN), 1,
-			"non-recycled patient %s should still have exactly one List under custodian %s", other.Key, custodian)
-	}
+	// ...and another patient is untouched.
+	otherLists, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), other.BSN)
+	require.NoError(t, err)
+	require.Equal(t, other.ZonnebloemCategories(), nvi.CategoriesOf(otherLists))
 
 	// The target's Plataan-side Patient resource is restored (by fixed id).
 	plataanPatients := fhirclient.New(plataan.PatientsHAPITenant().BaseURL(h.HAPIBaseURL), http.DefaultClient, nil)
@@ -214,60 +226,6 @@ func invokeMCSDUpdate(t *testing.T, internalBaseURL *url.URL) {
 	resp, err := http.Post(internalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-}
-
-func nviClient(nviBaseURL *url.URL) fhirclient.Client {
-	return fhirclient.New(nviBaseURL, http.DefaultClient, nil)
-}
-
-func tenantHeader(custodianURA string) fhirclient.PreRequestOption {
-	return fhirclient.RequestHeaders(http.Header{
-		"X-Tenant-ID": {coding.URANamingSystem + "|" + custodianURA},
-	})
-}
-
-// searchNVIByBSN returns a subject's NVI Lists under one custodian. The search
-// itself is by subject only: the tenant header scopes pseudonymization, not the
-// result set, and no custodian search parameter exists, so the custodian is
-// applied here as a filter. Without it every caller below would see the
-// patient's registration at the other organization too, and deleteNVIByBSN
-// would delete it.
-func searchNVIByBSN(t *testing.T, nviBaseURL *url.URL, custodianURA, bsn string) []fhir.BundleEntry {
-	t.Helper()
-	var searchSet fhir.Bundle
-	err := nviClient(nviBaseURL).Search("List", url.Values{
-		"subject:identifier": {bsnSystem + "|" + bsn},
-	}, &searchSet, tenantHeader(custodianURA))
-	require.NoError(t, err)
-
-	var mine []fhir.BundleEntry
-	for _, entry := range searchSet.Entry {
-		var list fhir.List
-		require.NoError(t, json.Unmarshal(entry.Resource, &list))
-		for _, ext := range list.Extension {
-			if ext.Url == coding.NVICustodianExtensionURL && ext.ValueReference != nil &&
-				ext.ValueReference.Identifier != nil && ext.ValueReference.Identifier.Value != nil &&
-				*ext.ValueReference.Identifier.Value == custodianURA {
-				mine = append(mine, entry)
-				break
-			}
-		}
-	}
-	return mine
-}
-
-// deleteNVIByBSN removes a subject's NVI Lists under a custodian by searching
-// then deleting each by id (the fake-NVI store rejects a conditional delete with
-// the ":identifier" modifier, so we resolve ids first).
-func deleteNVIByBSN(t *testing.T, nviBaseURL *url.URL, custodianURA, bsn string) {
-	t.Helper()
-	client := nviClient(nviBaseURL)
-	for _, entry := range searchNVIByBSN(t, nviBaseURL, custodianURA, bsn) {
-		var list fhir.List
-		require.NoError(t, json.Unmarshal(entry.Resource, &list))
-		require.NotNil(t, list.Id)
-		require.NoError(t, client.DeleteWithContext(t.Context(), "List/"+*list.Id, tenantHeader(custodianURA)))
-	}
 }
 
 func searchOrg(client fhirclient.Client, ura string) (*fhir.Organization, error) {
