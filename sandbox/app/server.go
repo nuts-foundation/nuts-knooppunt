@@ -347,16 +347,7 @@ func NewMux(cfg Config) *http.ServeMux {
 		render(w, "authorize.html", rendered)
 	}))
 
-	mux.HandleFunc("GET /demo/ehr", requireSession(signedIn, func(w http.ResponseWriter, r *http.Request, session *authSession) {
-		view := session.view()
-		render(w, "ehr-home.html", page{
-			Title: "Home · Plataan EHR", Guise: "ehr",
-			Scenario: scenario, ShowReset: true,
-			BodyClass: "hood-open", BodyAttrs: viewerBodyAttrs(true),
-			Active: "dossier", TopTitle: "Home", ViewerOpen: true,
-			Session: &view,
-		})
-	}))
+	mux.HandleFunc("GET /demo/ehr", requireSession(signedIn, cfg.handlePatientList))
 	return mux
 }
 

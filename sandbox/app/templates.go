@@ -35,6 +35,7 @@ type page struct {
 	Alert      bool
 	ViewerOpen bool
 	Claims     []claim
+	Patients   []patientRow
 }
 
 // claim is one introspected value, rendered on the authorization page.
