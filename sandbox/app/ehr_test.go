@@ -327,26 +327,51 @@ func TestSubscribe_RetriesOnlyTheMitzStep(t *testing.T) {
 // branch used to skip that and tell the presenter to try again, on the screen
 // whose own subtext says a retry may duplicate against the national Mitz.
 func TestSubscribe_RetryOutcomesFollowTheLookup(t *testing.T) {
+	// Two answers per case, in order: the preflight before the write and the
+	// reconciliation after it. They have to be separable, because the notice
+	// turns on the difference between them. A fake answering both from one value
+	// cannot tell "absent, then present" (this call committed) from "present,
+	// then present" (it was already there and the write established nothing).
+	type answer struct {
+		subscribed bool
+		err        error
+	}
+	unreachable := errors.New("unreachable")
 	for name, tc := range map[string]struct {
-		subscribed func(context.Context, string) (bool, error)
-		want       string
+		answers []answer
+		want    string
 	}{
-		"lookup says it committed after all": {
-			func(context.Context, string) (bool, error) { return true, nil }, "mitz-retry-done",
+		"absent before, present after: this call committed": {
+			[]answer{{false, nil}, {true, nil}}, "mitz-retry-done",
 		},
-		"lookup confirms it did not": {
-			func(context.Context, string) (bool, error) { return false, nil }, "mitz-retry-failed",
+		"present before and after: the write failed and changed nothing": {
+			[]answer{{true, nil}, {true, nil}}, "mitz-retry-existing",
+		},
+		"preflight failed, reconciliation found one: exists, since when unknown": {
+			[]answer{{false, unreachable}, {true, nil}}, "mitz-retry-registered",
+		},
+		"reconciliation confirms it did not": {
+			[]answer{{false, nil}, {false, nil}}, "mitz-retry-failed",
 		},
 		"lookup itself failed": {
-			func(context.Context, string) (bool, error) { return false, errors.New("unreachable") },
-			"mitz-retry-unknown",
+			[]answer{{false, unreachable}, {false, unreachable}}, "mitz-retry-unknown",
 		},
 		"no lookup configured": {nil, "mitz-retry-unknown"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg, anna := sharedNotSubscribed(t)
 			cfg.mitzSubscribe = func(context.Context, string) error { return errors.New("timeout") }
-			cfg.mitzSubscribed = tc.subscribed
+			cfg.mitzSubscribed = nil
+			if tc.answers != nil {
+				answers := tc.answers
+				cfg.mitzSubscribed = func(context.Context, string) (bool, error) {
+					next := answers[0]
+					if len(answers) > 1 {
+						answers = answers[1:]
+					}
+					return next.subscribed, next.err
+				}
+			}
 			srv, client := demoServer(t, cfg)
 			postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
 
@@ -516,19 +541,34 @@ func TestShare_AFailedPreflightFallsBackToTheNeutralCard(t *testing.T) {
 // separately it presents a stored legacy record as the same set it is about to
 // write, under copy promising convergence on one per category.
 func TestShareForm_UnrecognizedCategoriesAreNotDescribedAsTheSameRecords(t *testing.T) {
-	cfg, _, anna := shareConfig(t)
-	cfg.nviLookup = func(context.Context, string) (nviRecords, error) {
-		return nviRecords{Count: 1}, nil
+	// Both shapes, because the mixed one is the trap: derived from an empty
+	// recognized set, three records this client wrote alongside one it cannot
+	// name reads as "all recognized" and falls into the copy promising that a
+	// repeat republishes the same records and converges on one per category.
+	for name, records := range map[string]nviRecords{
+		"only unrecognized": {Count: 1},
+		"mixed with recognized": {
+			Count: 4, Categories: []string{"Condition", "MedicationRequest", "Patient"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg, _, anna := shareConfig(t)
+			cfg.nviLookup = func(context.Context, string) (nviRecords, error) { return records, nil }
+			srv, client := demoServer(t, cfg)
+			postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+			status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+
+			require.Equal(t, http.StatusOK, status)
+			require.Contains(t, body, "does not recognize")
+			require.NotContains(t, body, "republishes the same")
+			require.NotContains(t, body, "exists only in De Plataan's own store")
+			// And no claim about who wrote them or what happens to them, which
+			// the record count cannot establish either way.
+			require.NotContains(t, body, "not published by this client")
+			require.NotContains(t, body, "does not replace or remove")
+		})
 	}
-	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
-
-	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
-
-	require.Equal(t, http.StatusOK, status)
-	require.Contains(t, body, "cannot name")
-	require.NotContains(t, body, "republishes the same")
-	require.NotContains(t, body, "exists only in De Plataan's own store")
 }
 
 // The retry route is offered when the subscription's state is unknown, and the
@@ -723,10 +763,24 @@ func TestShare_ConcurrentSubmitsSerialize(t *testing.T) {
 	// one, and no way for the caller to tell the two apart from the response.
 	var mitzMu sync.Mutex
 	subscriptionExists := false
+	// A barrier, not a sleep. The claim under test is about the interval between
+	// reading "no subscription" and creating one, so both preflights have to be
+	// given every chance to land inside it: each waits here until the other
+	// arrives, or briefly. With the lock released before the Mitz step both
+	// arrive and both read "absent"; with it spanning both steps the second
+	// cannot start until the first has finished, so the first waits out its
+	// deadline alone and the race the old arrangement produced cannot occur.
+	var arrived int32
 	cfg.mitzSubscribed = func(context.Context, string) (bool, error) {
 		mitzMu.Lock()
-		defer mitzMu.Unlock()
-		return subscriptionExists, nil
+		existing := subscriptionExists
+		mitzMu.Unlock()
+
+		atomic.AddInt32(&arrived, 1)
+		for deadline := time.Now().Add(200 * time.Millisecond); atomic.LoadInt32(&arrived) < 2 && time.Now().Before(deadline); {
+			time.Sleep(time.Millisecond)
+		}
+		return existing, nil
 	}
 	cfg.mitzSubscribe = func(context.Context, string) error {
 		mitzMu.Lock()

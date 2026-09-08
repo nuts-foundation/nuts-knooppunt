@@ -29,6 +29,29 @@ import (
 
 func zonnebloemURA() string { return *sunflower.Organization().Identifier[0].Value }
 
+// sharePlataan publishes De Plataan's localization records for one patient, which
+// is what a demo run does and what "restored to the seeded fixtures" has to undo.
+func sharePlataan(t *testing.T, h harness.Details, p pool.PoolPatient) {
+	t.Helper()
+	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
+	require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
+		CustodianURA: plataan.URA, BSN: p.BSN,
+		ClientID: pool.PlataanClientID, Categories: p.PlataanCategories(),
+	}))
+	before, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, p.BSN)
+	require.NoError(t, err)
+	require.NotEmptyf(t, before, "precondition: %s is shared", p.Key)
+}
+
+// requireUnshared asserts the patient went back to the pool unshared.
+func requireUnshared(t *testing.T, h harness.Details, p pool.PoolPatient) {
+	t.Helper()
+	after, err := nvi.ListsForCustodian(t.Context(), h.KnooppuntInternalBaseURL.JoinPath("nvi"),
+		plataan.URA, p.BSN)
+	require.NoError(t, err)
+	require.Emptyf(t, after, "the notice says %s was restored, so the share must be gone", p.Key)
+}
+
 // sandboxTarget points reset and recycle at the harness, mock Mitz included.
 // Leaving that URL nil would exercise the unconfigured path in every test that
 // only wants a working reset, and the unconfigured path is now a warning.
@@ -210,6 +233,7 @@ func TestResetGlobal_RestoresEvenWhenMitzCleanupFails(t *testing.T) {
 	// reloading them, then returned its warning, empties both stores and leaves
 	// that registration exactly where it was.
 	anna := pool.Patients()[0]
+	sharePlataan(t, h, anna)
 	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL)
 	allergyID := "pool-" + anna.Key + "-zonnebloem-allergy"
 	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+allergyID))
@@ -220,9 +244,13 @@ func TestResetGlobal_RestoresEvenWhenMitzCleanupFails(t *testing.T) {
 
 	require.ErrorIs(t, err, vectors.ErrPartialReset)
 
+	// Both halves of "restored", because they are separate steps: the reload and
+	// the unshare. A cleanup that returned its warning between them satisfies
+	// whichever one is left unasserted.
 	var allergy fhir.AllergyIntolerance
 	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "AllergyIntolerance/"+allergyID, &allergy),
 		"the cleanup warning must not stand in for a dataset that was never restored")
+	requireUnshared(t, h, anna)
 
 	lists, listErr := nvi.ListsForCustodian(t.Context(), h.KnooppuntInternalBaseURL.JoinPath("nvi"),
 		zonnebloemURA(), anna.BSN)
@@ -344,6 +372,7 @@ func TestResetGlobal_WithoutAMockReportsPartialNotClean(t *testing.T) {
 	// Deleted first, so "restored" means something a nil-only early return cannot
 	// satisfy.
 	anna := pool.Patients()[0]
+	sharePlataan(t, h, anna)
 	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL)
 	allergyID := "pool-" + anna.Key + "-zonnebloem-allergy"
 	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+allergyID))
@@ -357,6 +386,7 @@ func TestResetGlobal_WithoutAMockReportsPartialNotClean(t *testing.T) {
 	// reason to skip the work.
 	var allergy fhir.AllergyIntolerance
 	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "AllergyIntolerance/"+allergyID, &allergy))
+	requireUnshared(t, h, anna)
 	lists, listErr := nvi.ListsForCustodian(t.Context(), h.KnooppuntInternalBaseURL.JoinPath("nvi"),
 		zonnebloemURA(), anna.BSN)
 	require.NoError(t, listErr)
@@ -373,6 +403,7 @@ func TestRecyclePatient_ACleanupWarningDoesNotMaskAFailedRestore(t *testing.T) {
 	require.NoError(t, err)
 
 	anna := pool.Patients()[0]
+	sharePlataan(t, h, anna)
 	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL)
 	allergyID := "pool-" + anna.Key + "-zonnebloem-allergy"
 	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+allergyID))
@@ -387,6 +418,7 @@ func TestRecyclePatient_ACleanupWarningDoesNotMaskAFailedRestore(t *testing.T) {
 	var allergy fhir.AllergyIntolerance
 	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "AllergyIntolerance/"+allergyID, &allergy),
 		"the warning must not stand in for a patient that was never restored")
+	requireUnshared(t, h, anna)
 }
 
 // The client id has to reach recycle too, not only the global reset.

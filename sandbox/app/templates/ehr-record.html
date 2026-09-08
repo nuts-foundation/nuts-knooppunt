@@ -19,6 +19,10 @@
           {{if .Categories}}
           <p>Other care providers can find this record through the NVI, for these data categories:</p>
           <ul class="cat-list">{{range .Categories}}<li class="mono">{{.}}</li>{{end}}</ul>
+          {{if .UnnamedRecords}}
+          <p>Alongside those, the NVI holds {{.UnnamedRecords}} further localization record(s) for this
+          patient whose data category this build cannot name.</p>
+          {{end}}
           {{else}}
           <p>Other care providers can find this record through the NVI. Its localization records carry no
           data category this build recognizes, so they cannot be named here.</p>

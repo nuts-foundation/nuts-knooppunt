@@ -33,7 +33,8 @@ implementers is the viewer itself: anyone can read along with every step without
 v1 definition of done for /demo, aligned with the acceptance criteria of #532:
 
 - Dezi session info is visible in the EMR top bar at all times.
-- Patient registration publishes an NVI localization record and starts a Mitz subscription, both confirmed on screen.
+- Patient registration publishes an NVI localization record per data category and starts a Mitz subscription, both
+  confirmed on screen with what the calls established and nothing more.
 - The localization results clearly distinguish NVI output from GF Adressering output.
 - Retrieval requires explicit user confirmation before data is pulled.
 - The authorization result page shows all sub-checks with the demo disclaimer.
@@ -142,9 +143,9 @@ cross-cutting below). Screens (the wireframe numbers these 1-8, splitting record
    patients (section 5.7) start as local only; the presenter picks a fresh one (Anna in the canonical walkthrough), and
    patients locked by a running demo are marked "demo in progress".
 3. **Record overview and sharing (patiëntaanmelding)**: opening Anna's record shows her existing local data plus a "not
-   findable yet" callout. Sharing the patient publishes the NVI localization record (data type, holder URA) and starts
-   the Mitz subscription, both confirmed on screen with their registered attributes; no clinical data leaves the source,
-   only a pointer. The record is then marked shared, an "available sources" card shows where data comes from (initially
+   findable yet" callout. Sharing the patient publishes one NVI localization record per data category the hospital
+   holds (there is no aggregate code; see section 10) and starts the Mitz subscription, both confirmed on screen with
+   their registered attributes; no clinical data leaves the source, only a pointer. The record is then marked shared, an "available sources" card shows where data comes from (initially
    only De Plataan itself), and a prominent "retrieve data" button opens the localize flow.
 4. **Retrieve data** (modal): the localize flow.
 1. Loading state: "localizing where patient data can be found".
@@ -507,7 +508,8 @@ enriched home with per-item source attribution and marker highlighting.
 Everything in section 5: the plataan vector (URA 00000010), the idempotent bootstrap (did:web, wallet-held
 `X509Credential` for the URA, mCSD Organization plus Endpoint, tenant registration), Anna's two-source clinical data,
 the seeded NVI registration for De Zonnebloem, BSN verification against the RvIG test set, and the reset endpoint
-(expunge mutable stores, re-run the loader; not Mitz subscriptions, see section 5.6). The seed must run both as the
+(expunge mutable stores, re-run the loader, and clear Mitz subscriptions where a mock is configured, reporting a partial
+restore where one is not; see section 5.6). The seed must run both as the
 compose init service and as a job in the hosted deployment; reset reuses it. Seeding covers the whole demo pool (section
 5.7), and the reset endpoint gains a per-patient recycle variant; both respect demo locks. The hosted deployment also
 configures the pseudonymisation component against the PRS acceptance environment (`prsurl`); offline compose

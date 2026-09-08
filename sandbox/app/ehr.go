@@ -26,12 +26,11 @@ type patientRow struct {
 	Mine                bool // held by this session
 	Categories          []string
 
-	// CategoriesUnrecognized marks a patient the NVI holds records for whose
-	// codes this build cannot name. The share screen needs it separately because
-	// it replaces Categories with what it proposes to publish, which would
-	// otherwise present a stored legacy record as the same set of records this
-	// client is about to write.
-	CategoriesUnrecognized bool
+	// UnnamedRecords counts NVI records this build cannot name. The share screen
+	// needs it separately because it replaces Categories with what it proposes to
+	// publish, which would otherwise present a stranger's record as one of the
+	// set this client is about to write.
+	UnnamedRecords int
 }
 
 // handlePatientList renders the practitioner's patients with their localization
@@ -149,7 +148,8 @@ func (c Config) patientRowFor(ctx context.Context, patient pool.PoolPatient, ses
 		Key: patient.Key, Name: patientDisplayName(patient), BSN: patient.BSN,
 		BirthDate: patient.BirthDate, Initials: patientInitials(patient),
 		Shared: status.Shared, NVIUnknown: status.NVIUnknown, Categories: status.Categories,
-		Subscribed: status.Subscribed, SubscriptionUnknown: status.SubscriptionUnknown,
+		UnnamedRecords: status.UnnamedRecords,
+		Subscribed:     status.Subscribed, SubscriptionUnknown: status.SubscriptionUnknown,
 		Mine: c.Locks.HeldBy(patient.Key, lockOwner(session)),
 	}
 }
@@ -197,10 +197,22 @@ func (c Config) handleSubscribe(w http.ResponseWriter, r *http.Request, session 
 		notice := "mitz-retry-unknown"
 		if c.mitzSubscribed != nil {
 			if subscribed, queryErr := c.mitzSubscribed(r.Context(), patient.BSN); queryErr == nil {
-				if subscribed {
-					notice = "mitz-retry-done"
-				} else {
+				switch {
+				case !subscribed:
 					notice = "mitz-retry-failed"
+				case knewBefore && existedBefore:
+					// It was there before this call and it is there now. The
+					// failed write established nothing, least of all that this
+					// retry created it.
+					notice = "mitz-retry-existing"
+				case knewBefore:
+					// Absent before, present after: this call committed and only
+					// its response went missing.
+					notice = "mitz-retry-done"
+				default:
+					// The reconciliation query worked but the preflight did not,
+					// so the subscription exists and nobody knows since when.
+					notice = "mitz-retry-registered"
 				}
 			}
 		}
@@ -426,9 +438,8 @@ func mitzUnknownCard(callErr error, why string) *cardResult {
 func (c Config) renderShare(w http.ResponseWriter, r *http.Request, session *authSession,
 	patient pool.PoolPatient, nviCard, mitzCard *cardResult) {
 	row := c.patientRowFor(r.Context(), patient, session)
-	// Read before the overwrite below: shared with nothing this build can name
-	// means the NVI holds records this client did not write and will not replace.
-	row.CategoriesUnrecognized = row.Shared && len(row.Categories) == 0
+	// Read before the overwrite below, because that replaces what the NVI holds
+	// with what this screen proposes to publish.
 	// The share screen names what would be, or has just been, registered.
 	row.Categories = patient.PlataanCategories()
 

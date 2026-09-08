@@ -38,8 +38,16 @@ const nviRegisterTimeout = 20 * time.Second
 // Mitz: it is distinct from Subscribed being false, which would invite a
 // retry that could duplicate against a real Mitz.
 type shareStatus struct {
-	Shared              bool
-	Categories          []string
+	Shared     bool
+	Categories []string
+
+	// UnnamedRecords counts the Lists whose data category this build cannot name.
+	// Derived rather than inferred from an empty category set, because the two
+	// kinds coexist: a patient can hold three records this client wrote and one
+	// left by an earlier seed, and treating that as "all recognized" would let a
+	// screen describe the stranger as one of ours.
+	UnnamedRecords int
+
 	NVIUnknown          bool
 	Subscribed          bool
 	SubscriptionUnknown bool
@@ -70,7 +78,11 @@ func (c Config) patientShareStatus(ctx context.Context, bsn string) shareStatus 
 		return shareStatus{NVIUnknown: true}
 	}
 
-	status := shareStatus{Shared: records.Count > 0, Categories: records.Categories}
+	status := shareStatus{
+		Shared:         records.Count > 0,
+		Categories:     records.Categories,
+		UnnamedRecords: records.Count - len(records.Categories),
+	}
 	if !status.Shared {
 		// Nothing is registered, so there is nothing a subscription would
 		// accompany; asking is noise.

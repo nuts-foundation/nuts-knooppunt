@@ -14,10 +14,11 @@
           providers can find that this hospital holds data about this patient, and subscribes to their
           consent changes. The data itself stays here. If records already exist, sharing converges on
           one per data category rather than adding more.
-          {{else if .CategoriesUnrecognized}}The NVI already holds localization records for this
-          patient that this build cannot name: their data category comes from a code system it does
-          not recognize, so they were not published by this client. Sharing adds the records listed
-          below alongside them; it does not replace or remove them.
+          {{else if .UnnamedRecords}}The NVI holds localization records for this patient whose data
+          category comes from a code system this build does not recognize. Sharing publishes one
+          record per category listed below. Whether that replaces the unrecognized ones depends on
+          which client registered them, which this screen cannot see: the delete is scoped by client,
+          and the stored records do not report theirs.
           {{else if .Shared}}This patient is already shared. Sharing again republishes the same
           localization records and retries the consent subscription. The localization records
           converge on one per data category. The consent subscription does not duplicate against
