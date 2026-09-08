@@ -208,6 +208,32 @@ func TestAcceptance_AnUnrecognizedListStillReadsAsShared(t *testing.T) {
 	require.NotContains(t, body, "exists only in De Plataan's own store")
 }
 
+// A duplicate is not a stranger. Two Lists of the same recognized category, which
+// a client-id override or a second sandbox process can leave behind, must not be
+// reported as records whose category this build cannot name: the category is
+// Condition, in the vocabulary, and only the deduplication makes it look absent.
+func TestAcceptance_ADuplicateCategoryIsNotReportedAsUnnamed(t *testing.T) {
+	h, srv, client := acceptanceServer(t)
+	anna, ok := pool.PatientByKey("anna")
+	require.True(t, ok)
+
+	// The same category this share is about to publish, under a client id the
+	// scoped delete does not match, so both survive.
+	duplicate := nvi.BuildList(nvi.Registration{
+		CustodianURA: plataanURA, BSN: anna.BSN, ClientID: "PLATAAN-EHR-legacy",
+	}, nvi.CategoryCondition)
+	postRawNVIList(t, h, duplicate)
+
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key)
+
+	require.Equal(t, http.StatusOK, status)
+	require.NotContains(t, body, "data category this build cannot name",
+		"a duplicate of a recognized category is not a record whose category cannot be named")
+	require.Contains(t, body, nvi.CategoryCondition)
+}
+
 // postRawNVIList writes a List through the Knooppunt without going via
 // nvi.Register, so a test can store one the vocabulary does not recognize.
 func postRawNVIList(t *testing.T, h harness.Details, list fhir.List) {

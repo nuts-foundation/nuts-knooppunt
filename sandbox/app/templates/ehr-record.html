@@ -11,7 +11,8 @@
         <div class="h-sub">{{.BirthDate}} · BSN <span class="mono">{{.BSN}}</span></div>
         {{if .NVIUnknown}}
           <span class="stat-chip unknown">Status unknown</span>
-          <p>The NVI could not be reached, so it is not known whether this record is findable.</p>
+          <p>The NVI was not reached, so it is not known whether this record is findable. Either the call
+          failed or this deployment has no Knooppunt configured; the sandbox log says which.</p>
         {{else if .Shared}}
           {{if .Subscribed}}<span class="stat-chip gf">Shared via GF</span>
           {{else if .SubscriptionUnknown}}<span class="stat-chip unknown">Shared via GF · subscription status unknown</span>

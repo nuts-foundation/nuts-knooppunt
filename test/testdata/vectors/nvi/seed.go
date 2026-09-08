@@ -227,13 +227,8 @@ func listsForCustodian(ctx context.Context, client fhirclient.Client, custodianU
 func CategoriesOf(lists []fhir.List) []string {
 	seen := map[string]bool{}
 	for _, list := range lists {
-		if list.Code == nil {
-			continue
-		}
-		for _, coding := range list.Code.Coding {
-			if coding.System != nil && *coding.System == DataCategorySystem && coding.Code != nil {
-				seen[*coding.Code] = true
-			}
+		if category, ok := categoryOf(list); ok {
+			seen[category] = true
 		}
 	}
 	categories := make([]string, 0, len(seen))
@@ -242,6 +237,37 @@ func CategoriesOf(lists []fhir.List) []string {
 	}
 	sort.Strings(categories)
 	return categories
+}
+
+// UnnamedListCount counts the Lists carrying no data category this build
+// recognizes.
+//
+// Not derivable by subtracting CategoriesOf's result from the number of Lists.
+// That set is deduplicated, so two Lists of the same recognized category would
+// come out as one recognized and one unnamed, and a screen would report a plain
+// duplicate as a record whose category it cannot name.
+func UnnamedListCount(lists []fhir.List) int {
+	unnamed := 0
+	for _, list := range lists {
+		if _, ok := categoryOf(list); !ok {
+			unnamed++
+		}
+	}
+	return unnamed
+}
+
+// categoryOf returns the List's data category, if it carries one from the
+// vocabulary this build knows.
+func categoryOf(list fhir.List) (string, bool) {
+	if list.Code == nil {
+		return "", false
+	}
+	for _, coding := range list.Code.Coding {
+		if coding.System != nil && *coding.System == DataCategorySystem && coding.Code != nil {
+			return *coding.Code, true
+		}
+	}
+	return "", false
 }
 
 // lastFour renders just enough of a BSN to correlate an error with a record

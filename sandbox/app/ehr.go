@@ -438,9 +438,9 @@ func mitzUnknownCard(callErr error, why string) *cardResult {
 func (c Config) renderShare(w http.ResponseWriter, r *http.Request, session *authSession,
 	patient pool.PoolPatient, nviCard, mitzCard *cardResult) {
 	row := c.patientRowFor(r.Context(), patient, session)
-	// Read before the overwrite below, because that replaces what the NVI holds
-	// with what this screen proposes to publish.
-	// The share screen names what would be, or has just been, registered.
+	// The share screen names what would be, or has just been, registered, rather
+	// than what the NVI currently holds. UnnamedRecords survives that swap and is
+	// what the template uses to say the two are not the same set.
 	row.Categories = patient.PlataanCategories()
 
 	// A successful publish is knowledge the follow-up read cannot take away. That
@@ -451,6 +451,10 @@ func (c Config) renderShare(w http.ResponseWriter, r *http.Request, session *aut
 	if nviCard != nil && nviCard.OK {
 		row.Shared, row.NVIUnknown = true, false
 	}
+	// Subscribed and SubscriptionUnknown are deliberately not corrected the same
+	// way: this template renders no subscription chip, so there is nothing to
+	// correct. Anyone adding one here has to override them from mitzCard first,
+	// or it will show the follow-up read's answer instead of what just happened.
 
 	view := session.view()
 	render(w, "ehr-share.html", page{

@@ -119,6 +119,35 @@ func TestCategoriesOf_SortedAndDeduplicated(t *testing.T) {
 	}
 }
 
+// A duplicate is not an unnamed record. CategoriesOf deduplicates, so counting
+// unnamed Lists by subtracting its result from the number of Lists reports a
+// second List of the same category as one whose category cannot be named.
+func TestUnnamedListCount_CountsListsNotMissingCategories(t *testing.T) {
+	reg := Registration{CustodianURA: "00000010", BSN: "999900006", ClientID: "c"}
+	foreign := BuildList(reg, CategoryCondition)
+	foreign.Code.Coding[0].System = to.Ptr("http://example.test/other")
+	uncoded := BuildList(reg, CategoryCondition)
+	uncoded.Code = nil
+
+	for name, tc := range map[string]struct {
+		lists []fhir.List
+		want  int
+	}{
+		"duplicates of one recognized category": {
+			[]fhir.List{BuildList(reg, CategoryCondition), BuildList(reg, CategoryCondition)}, 0,
+		},
+		"a foreign code system": {[]fhir.List{BuildList(reg, CategoryCondition), foreign}, 1},
+		"no code at all":        {[]fhir.List{uncoded}, 1},
+		"nothing":               {nil, 0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := UnnamedListCount(tc.lists); got != tc.want {
+				t.Errorf("UnnamedListCount = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCategoriesOf_IgnoresOtherCodeSystems(t *testing.T) {
 	list := BuildList(Registration{CustodianURA: "00000010", BSN: "1", ClientID: "c"}, CategoryCondition)
 	list.Code.Coding[0].System = to.Ptr("http://example.test/other")

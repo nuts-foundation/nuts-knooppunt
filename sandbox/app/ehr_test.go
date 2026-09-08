@@ -546,9 +546,9 @@ func TestShareForm_UnrecognizedCategoriesAreNotDescribedAsTheSameRecords(t *test
 	// name reads as "all recognized" and falls into the copy promising that a
 	// repeat republishes the same records and converges on one per category.
 	for name, records := range map[string]nviRecords{
-		"only unrecognized": {Count: 1},
+		"only unrecognized": {Count: 1, Unnamed: 1},
 		"mixed with recognized": {
-			Count: 4, Categories: []string{"Condition", "MedicationRequest", "Patient"},
+			Count: 4, Categories: []string{"Condition", "MedicationRequest", "Patient"}, Unnamed: 1,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -733,6 +733,47 @@ func TestShare_RejectsASubmissionAfterTheLeaseExpired(t *testing.T) {
 
 	require.Equal(t, http.StatusConflict, res.StatusCode)
 	require.Zero(t, calls.registerCount)
+}
+
+// Held by someone else, not merely held. Every other rejection test arranges for
+// nobody to hold the patient, so "locked by anyone" and "locked by me" answer the
+// same there and the ownership half of the guard is unpinned: a check that only
+// asked whether the patient is locked would let this session write to a patient
+// another demo is running.
+func TestWriteRoutes_RejectAPatientHeldByAnotherSession(t *testing.T) {
+	for name, path := range map[string]string{"share": "/share", "subscribe": "/subscribe"} {
+		t.Run(name, func(t *testing.T) {
+			cfg, calls, anna := shareConfig(t)
+			var subscribes int
+			cfg.mitzSubscribe = func(context.Context, string) error { subscribes++; return nil }
+			srv, client := demoServer(t, cfg)
+			require.True(t, cfg.Locks.Lock(anna.Key, "another-session"),
+				"precondition: a different session holds the patient")
+
+			res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+path, nil)
+			defer res.Body.Close()
+
+			require.Equal(t, http.StatusConflict, res.StatusCode)
+			require.Zero(t, calls.registerCount, "no NVI write for a patient this session does not hold")
+			require.Zero(t, subscribes, "and no Mitz write either")
+		})
+	}
+}
+
+// The presenter's own patient is not "in use by another demo run". Without the
+// ownership half of that condition the row they just opened goes disabled and
+// tells them someone else has it.
+func TestPatientList_DoesNotMarkThisSessionsOwnPatientBusy(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	status, body := getBody(t, client, srv, "/demo/ehr")
+
+	require.Equal(t, http.StatusOK, status)
+	require.NotContains(t, body, "Demo in progress",
+		"the row this session holds must stay openable")
+	require.NotContains(t, body, "disabled")
 }
 
 func TestShare_RejectsCrossSiteSubmissions(t *testing.T) {

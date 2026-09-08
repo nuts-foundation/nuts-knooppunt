@@ -65,6 +65,13 @@ type shareStatus struct {
 type nviRecords struct {
 	Count      int
 	Categories []string
+
+	// Unnamed counts the Lists carrying no category this build recognizes,
+	// reported by the NVI helper rather than derived here. Count minus the
+	// number of categories is not that number: the category set is
+	// deduplicated, so a second List of the same category would read as a
+	// record whose category cannot be named.
+	Unnamed int
 }
 
 func (c Config) patientShareStatus(ctx context.Context, bsn string) shareStatus {
@@ -81,7 +88,7 @@ func (c Config) patientShareStatus(ctx context.Context, bsn string) shareStatus 
 	status := shareStatus{
 		Shared:         records.Count > 0,
 		Categories:     records.Categories,
-		UnnamedRecords: records.Count - len(records.Categories),
+		UnnamedRecords: records.Unnamed,
 	}
 	if !status.Shared {
 		// Nothing is registered, so there is nothing a subscription would
@@ -129,7 +136,9 @@ func nviFuncs(knooppuntInternalURL *url.URL, clientID string) (
 		// Count the Lists, name the categories this build recognizes. The two
 		// can differ, and the difference is what the record screen reports as
 		// "findable, categories not recognized" rather than as local-only.
-		return nviRecords{Count: len(lists), Categories: nvi.CategoriesOf(lists)}, nil
+		return nviRecords{
+			Count: len(lists), Categories: nvi.CategoriesOf(lists), Unnamed: nvi.UnnamedListCount(lists),
+		}, nil
 	}
 	register := func(ctx context.Context, bsn string, cats []string) error {
 		return nvi.Register(ctx, base, nvi.Registration{

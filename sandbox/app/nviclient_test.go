@@ -43,7 +43,7 @@ func TestPatientShareStatus_LocalOnlyWhenNoCategories(t *testing.T) {
 // delete only removes what this build wrote.
 func TestPatientShareStatus_SharedWhenAListHasNoRecognizedCategory(t *testing.T) {
 	cfg := Config{nviLookup: func(context.Context, string) (nviRecords, error) {
-		return nviRecords{Count: 1}, nil
+		return nviRecords{Count: 1, Unnamed: 1}, nil
 	}}
 
 	status := cfg.patientShareStatus(t.Context(), "999900006")
