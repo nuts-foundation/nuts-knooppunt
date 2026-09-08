@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -139,4 +142,62 @@ func TestNewConfigFromEnv_NothingIsWiredWithoutTheKnooppunt(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, cfg.nviConfigured())
 	require.False(t, cfg.configured())
+}
+
+// SANDBOX_NVI_CLIENT_ID has to reach publication and cleanup as one value. The
+// client id is the scope a registration is deleted by, so an override that moves
+// only the publishing half leaves recycle deleting under an id nothing was
+// written with, while its notice still says the patient was restored.
+//
+// Observed at the wire, not at the wiring: both paths are closures, and asserting
+// that they were assigned says nothing about which id they carry.
+func TestNewConfigFromEnv_TheOverriddenClientIDReachesPublicationAndCleanup(t *testing.T) {
+	const override = "gf-sandbox-plataan-override"
+	var mu sync.Mutex
+	var seen []string
+	nviFake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err == nil {
+			if source := r.Form.Get("source:identifier"); source != "" {
+				mu.Lock()
+				seen = append(seen, source)
+				mu.Unlock()
+			}
+		}
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset"}`))
+	}))
+	defer nviFake.Close()
+
+	cfg, err := NewConfigFromEnv(func(key string) string {
+		switch key {
+		case "KNOOPPUNT_INTERNAL_URL":
+			return nviFake.URL
+		case "HAPI_BASE_URL":
+			// Unreachable on purpose: recycle deletes De Plataan's NVI records
+			// before it touches HAPI, so the client id is already on the wire by
+			// the time this fails, and nothing here needs a FHIR store.
+			return "http://127.0.0.1:1/fhir"
+		case "SANDBOX_NVI_CLIENT_ID":
+			return override
+		}
+		return ""
+	})
+	require.NoError(t, err)
+
+	anna := pool.Patients()[0]
+	require.NoError(t, cfg.nviRegister(t.Context(), anna.BSN, anna.PlataanCategories()))
+	_ = cfg.recyclePatient(t.Context(), anna.Key)
+
+	mu.Lock()
+	defer mu.Unlock()
+	overridden := 0
+	for _, source := range seen {
+		if source == nvi.OAuthClientIDSystem+"|"+override {
+			overridden++
+		}
+	}
+	require.Equal(t, 2, overridden,
+		"publication and De Plataan's cleanup must both scope by the configured client id")
+	require.Contains(t, seen, nvi.OAuthClientIDSystem+"|"+pool.ZonnebloemClientID,
+		"and the override must not follow along into the source side's own registration")
 }

@@ -137,20 +137,18 @@ func lockPatientWrites(key string) (unlock func()) {
 	return mu.Unlock
 }
 
-// registerPatient publishes De Plataan's localization records, serialized per
-// patient.
+// registerPatient publishes De Plataan's localization records.
 //
 // nvi.Register is search-delete-create and is not atomic: the NVI exposes no PUT
-// and no usable conditional operation. The mutex makes a double submit within
-// this process converge instead of interleaving. It does not order two sandbox
-// processes; that limitation is stated in the design and the README.
+// and no usable conditional operation, so a double submit must not interleave.
+// The caller holds the patient write lock for that; it is taken there rather
+// than here because the Mitz step needs the same critical section, and a lock
+// released between the two lets two handlers both read "no subscription" and
+// both report that they started the one that exists.
 func (c Config) registerPatient(ctx context.Context, patient pool.PoolPatient) error {
 	if c.nviRegister == nil {
 		return fmt.Errorf("the sandbox is not wired to the Knooppunt in this environment")
 	}
-	unlock := lockPatientWrites(patient.Key)
-	defer unlock()
-
 	ctx, cancel := context.WithTimeout(ctx, nviRegisterTimeout)
 	defer cancel()
 	return c.nviRegister(ctx, patient.BSN, patient.PlataanCategories())

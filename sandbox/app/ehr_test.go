@@ -483,6 +483,86 @@ func TestShare_CardNamesTheRegisteredCategories(t *testing.T) {
 	require.NotContains(t, body, "BGZ (patient summary)")
 }
 
+// The base --profile sandbox deployment sets no MITZMOCK_URL, so the preflight
+// cannot run there and the card must not claim this request created anything.
+func TestShare_WithoutALookupTheSuccessCardClaimsNoCreation(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	cfg.mitzSubscribed = nil
+
+	_, body := openAndShare(t, cfg, anna.Key)
+
+	require.Contains(t, body, "Consent subscription registered")
+	require.NotContains(t, body, "Consent subscription started")
+	require.NotContains(t, body, "confirm-card failed")
+}
+
+// A preflight that errors is the same state as not having one: nothing was
+// established, so neither "started" nor "already active" is available.
+func TestShare_AFailedPreflightFallsBackToTheNeutralCard(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	cfg.mitzSubscribed = func(context.Context, string) (bool, error) {
+		return false, errors.New("mock unreachable")
+	}
+
+	_, body := openAndShare(t, cfg, anna.Key)
+
+	require.Contains(t, body, "Consent subscription registered")
+	require.NotContains(t, body, "Consent subscription started")
+	require.NotContains(t, body, "Consent subscription already active")
+}
+
+// The NVI holds records this build cannot name. The share form replaces the
+// category list with what it proposes to publish, so without carrying that state
+// separately it presents a stored legacy record as the same set it is about to
+// write, under copy promising convergence on one per category.
+func TestShareForm_UnrecognizedCategoriesAreNotDescribedAsTheSameRecords(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	cfg.nviLookup = func(context.Context, string) (nviRecords, error) {
+		return nviRecords{Count: 1}, nil
+	}
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, "cannot name")
+	require.NotContains(t, body, "republishes the same")
+	require.NotContains(t, body, "exists only in De Plataan's own store")
+}
+
+// The retry route is offered when the subscription's state is unknown, and the
+// mock upserts, so a POST succeeding proves nothing about creation. Reporting
+// "started" here contradicts the warning on the button that produced the click.
+func TestSubscribe_ExistingSubscriptionIsNotReportedAsStarted(t *testing.T) {
+	cfg, anna := sharedNotSubscribed(t)
+	cfg.mitzSubscribe = func(context.Context, string) error { return nil }
+	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return true, nil }
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/subscribe", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, "/demo/ehr/patients/"+anna.Key+"?notice=mitz-retry-existing",
+		res.Header.Get("Location"))
+}
+
+// And with no lookup at all, neither claim is available.
+func TestSubscribe_WithoutALookupReportsRegisteredNotStarted(t *testing.T) {
+	cfg, anna := sharedNotSubscribed(t)
+	cfg.mitzSubscribe = func(context.Context, string) error { return nil }
+	cfg.mitzSubscribed = nil
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/subscribe", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, "/demo/ehr/patients/"+anna.Key+"?notice=mitz-retry-registered",
+		res.Header.Get("Location"))
+}
+
 // The route the record page's Share button points at. Nine tests exercise the
 // POST, none the GET, so deleting the mux registration would leave the build and
 // the whole suite green while the demo's front door 404s. It also covers the one
@@ -638,7 +718,22 @@ func TestShare_ConcurrentSubmitsSerialize(t *testing.T) {
 	// goroutine: shareConfig's nviRegister AND mitzSubscribe closures both
 	// increment plain ints, and postForm calls require, all of which race when
 	// two handlers run at once.
-	cfg.mitzSubscribe = func(context.Context, string) error { return nil }
+	// The mock's behaviour, because that is what makes the claim falsifiable: one
+	// subscription per provider and patient, a repeat answered with the existing
+	// one, and no way for the caller to tell the two apart from the response.
+	var mitzMu sync.Mutex
+	subscriptionExists := false
+	cfg.mitzSubscribed = func(context.Context, string) (bool, error) {
+		mitzMu.Lock()
+		defer mitzMu.Unlock()
+		return subscriptionExists, nil
+	}
+	cfg.mitzSubscribe = func(context.Context, string) error {
+		mitzMu.Lock()
+		defer mitzMu.Unlock()
+		subscriptionExists = true
+		return nil
+	}
 	var inFlight, maxInFlight, total int32
 	cfg.nviRegister = func(context.Context, string, []string) error {
 		current := atomic.AddInt32(&inFlight, 1)
@@ -656,15 +751,21 @@ func TestShare_ConcurrentSubmitsSerialize(t *testing.T) {
 	srv, client := demoServer(t, cfg)
 	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
 
+	bodies := make([]string, 2)
 	var wg sync.WaitGroup
-	for range 2 {
+	for i := range 2 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			res, err := client.Post(srv.URL+"/demo/ehr/patients/"+anna.Key+"/share",
 				"application/x-www-form-urlencoded", nil)
-			if err == nil {
-				_ = res.Body.Close()
+			if err != nil {
+				return
+			}
+			defer res.Body.Close()
+			body, readErr := io.ReadAll(res.Body)
+			if readErr == nil {
+				bodies[i] = string(body)
 			}
 		}()
 	}
@@ -674,4 +775,20 @@ func TestShare_ConcurrentSubmitsSerialize(t *testing.T) {
 
 	require.Equal(t, int32(1), atomic.LoadInt32(&maxInFlight),
 		"the per-patient mutex must keep two share submits from overlapping")
+
+	// What the two responses claimed, which serialization of the NVI call alone
+	// does not establish. Exactly one request created the subscription; if the
+	// lock ends before the Mitz step, both read "not subscribed" first and both
+	// render the green card saying they started it.
+	started, existing := 0, 0
+	for _, body := range bodies {
+		if strings.Contains(body, "Consent subscription started") {
+			started++
+		}
+		if strings.Contains(body, "Consent subscription already active") {
+			existing++
+		}
+	}
+	require.Equal(t, 1, started, "only the request that created the subscription may say it started it")
+	require.Equal(t, 1, existing, "the other must report that it found one")
 }

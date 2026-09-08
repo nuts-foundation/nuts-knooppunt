@@ -16,17 +16,19 @@ import (
 )
 
 var notices = map[string]string{
-	"reset-done":         "Dataset restored to the seeded fixtures.",
-	"reset-partial":      "Dataset restored, but some state could not be cleared. Check the sandbox logs.",
-	"recycle-done":       "Patient restored to the seeded state.",
-	"recycle-partial":    "Patient restored, but the consent subscription could not be cleared. Check the sandbox logs.",
-	"reset-disabled":     "Reset is unavailable: the sandbox is not wired to the Knooppunt in this environment.",
-	"signed-out":         "Signed out. The Dezi session has been cleared.",
-	"patient-busy":       "That patient is in use by another demo run. Pick a different one.",
-	"mitz-retry-done":    "Consent subscription started.",
-	"mitz-retry-failed":  "Mitz confirms there is still no subscription. The call failed; try again.",
-	"mitz-retry-unknown": "The call failed and Mitz could not be asked whether it went through anyway. Check the record before retrying: another attempt may create a second subscription.",
-	"mitz-disabled":      "Mitz is not wired up in this environment.",
+	"reset-done":            "Dataset restored to the seeded fixtures.",
+	"reset-partial":         "Dataset restored, but some state could not be cleared. Check the sandbox logs.",
+	"recycle-done":          "Patient restored to the seeded state.",
+	"recycle-partial":       "Patient restored, but the consent subscription could not be cleared. Check the sandbox logs.",
+	"reset-disabled":        "Reset is unavailable: it needs both KNOOPPUNT_INTERNAL_URL and HAPI_BASE_URL, and one of them is unset. Sharing only needs the first, so it can work while this does not.",
+	"signed-out":            "Signed out. The Dezi session has been cleared.",
+	"patient-busy":          "That patient is in use by another demo run. Pick a different one.",
+	"mitz-retry-done":       "Consent subscription started.",
+	"mitz-retry-existing":   "A consent subscription for this patient was already registered. Mitz answered with that one rather than creating a second.",
+	"mitz-retry-registered": "Mitz accepted the subscription. Whether one already existed could not be established, so this may have found rather than created it.",
+	"mitz-retry-failed":     "Mitz confirms there is still no subscription. The call failed; try again.",
+	"mitz-retry-unknown":    "The call failed and Mitz could not be asked whether it went through anyway. Check the record before retrying: another attempt may create a second subscription.",
+	"mitz-disabled":         "Mitz is not wired up in this environment.",
 }
 
 // Config holds the sandbox backend's runtime dependencies. The two URLs point at

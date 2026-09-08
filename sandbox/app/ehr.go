@@ -25,6 +25,13 @@ type patientRow struct {
 	Locked              bool // held by another session: "demo in progress"
 	Mine                bool // held by this session
 	Categories          []string
+
+	// CategoriesUnrecognized marks a patient the NVI holds records for whose
+	// codes this build cannot name. The share screen needs it separately because
+	// it replaces Categories with what it proposes to publish, which would
+	// otherwise present a stored legacy record as the same set of records this
+	// client is about to write.
+	CategoriesUnrecognized bool
 }
 
 // handlePatientList renders the practitioner's patients with their localization
@@ -171,6 +178,16 @@ func (c Config) handleSubscribe(w http.ResponseWriter, r *http.Request, session 
 		http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice=mitz-disabled", http.StatusSeeOther)
 		return
 	}
+	// The same critical section and the same question as the share flow. This
+	// route is offered precisely when the subscription's state is unknown, and
+	// the mock upserts on provider and patient, so a POST here succeeds whether
+	// it created anything or found what was already there. Reporting "started"
+	// unconditionally turns the screen's own "this may already exist" warning
+	// into a false claim on the next click.
+	unlock := lockPatientWrites(patient.Key)
+	defer unlock()
+	existedBefore, knewBefore := c.subscriptionBefore(r.Context(), patient.BSN)
+
 	if err := c.mitzSubscribe(r.Context(), patient.BSN); err != nil {
 		// Same reconciliation as the share flow, for the same reason: a timeout
 		// or dropped connection can follow a commit. Without asking, this branch
@@ -190,7 +207,30 @@ func (c Config) handleSubscribe(w http.ResponseWriter, r *http.Request, session 
 		http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice="+notice, http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice=mitz-retry-done", http.StatusSeeOther)
+	notice := "mitz-retry-done"
+	switch {
+	case !knewBefore:
+		notice = "mitz-retry-registered"
+	case existedBefore:
+		notice = "mitz-retry-existing"
+	}
+	http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice="+notice, http.StatusSeeOther)
+}
+
+// subscriptionBefore asks whether a subscription already exists, and whether the
+// answer is worth anything. Both the share flow and the retry route need it, and
+// both must hold the patient write lock across it and the create: the gap
+// between reading "no subscription" and creating one is exactly where two
+// requests can both conclude that they were the one that started it.
+func (c Config) subscriptionBefore(ctx context.Context, bsn string) (existed, known bool) {
+	if c.mitzSubscribed == nil {
+		return false, false
+	}
+	subscribed, err := c.mitzSubscribed(ctx, bsn)
+	if err != nil {
+		return false, false
+	}
+	return subscribed, true
 }
 
 // cardResult is one confirmation card. Skipped and Unknown are states beside OK
@@ -245,6 +285,19 @@ func (c Config) handleShare(w http.ResponseWriter, r *http.Request, session *aut
 		return
 	}
 
+	// One critical section over both remote steps, not one per step. The Mitz
+	// half decides what the card claims by asking whether a subscription exists
+	// before creating one, and a lock that ends between the two lets a double
+	// submit run both queries while the answer is still no. Both would then
+	// report that they started the subscription that only one of them created:
+	// the mock deduplicates on provider and patient and answers the loser with
+	// the winner's, which is indistinguishable from success at the HTTP layer.
+	//
+	// Per process, like the NVI serialization it replaces. Two sandbox processes
+	// are still unordered; that limitation is stated in the design and README.
+	unlock := lockPatientWrites(patient.Key)
+	defer unlock()
+
 	nviCard := c.shareNVI(r.Context(), patient)
 	mitzCard := c.shareMitz(r.Context(), patient, nviCard.Failed)
 	c.renderShare(w, r, session, patient, nviCard, mitzCard)
@@ -293,12 +346,7 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 	// subscription or found one already there. The mock keys one subscription per
 	// provider and patient and answers a repeat with the existing one, so without
 	// this a second share reports that it started something it did not.
-	existedBefore, knewBefore := false, false
-	if c.mitzSubscribed != nil {
-		if subscribed, err := c.mitzSubscribed(ctx, patient.BSN); err == nil {
-			existedBefore, knewBefore = subscribed, true
-		}
-	}
+	existedBefore, knewBefore := c.subscriptionBefore(ctx, patient.BSN)
 
 	err := c.mitzSubscribe(ctx, patient.BSN)
 	if err != nil {
@@ -330,8 +378,12 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 			"established here, so this may have found rather than created it."
 	case existedBefore:
 		title = "Consent subscription already active"
-		detail = "A subscription for this patient at De Plataan was already registered, and Mitz " +
-			"answered this request with that one rather than creating a second."
+		// What the subscription is, not what Mitz did with this request. This
+		// branch is also reached when the call itself failed and reconciliation
+		// only found the earlier subscription still there, and that establishes
+		// nothing about an answer to this request.
+		detail = "A subscription for this patient at De Plataan was already registered and is still " +
+			"active, so this request did not create a second one."
 	}
 	return &cardResult{
 		OK:    true,
@@ -374,6 +426,9 @@ func mitzUnknownCard(callErr error, why string) *cardResult {
 func (c Config) renderShare(w http.ResponseWriter, r *http.Request, session *authSession,
 	patient pool.PoolPatient, nviCard, mitzCard *cardResult) {
 	row := c.patientRowFor(r.Context(), patient, session)
+	// Read before the overwrite below: shared with nothing this build can name
+	// means the NVI holds records this client did not write and will not replace.
+	row.CategoriesUnrecognized = row.Shared && len(row.Categories) == 0
 	// The share screen names what would be, or has just been, registered.
 	row.Categories = patient.PlataanCategories()
 

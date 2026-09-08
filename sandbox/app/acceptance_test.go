@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 	"github.com/stretchr/testify/require"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -175,6 +177,54 @@ func TestAcceptance_SharingTwiceIsSafe(t *testing.T) {
 	require.Len(t, plataanLists, len(anna.PlataanCategories()),
 		"two shares must leave one List per category, not two")
 	require.Len(t, h.MockMitzXACML.GetSubscriptions(), 1)
+}
+
+// A List whose data category comes from another code system is still a record
+// other providers can find. This crosses the real adapter, which the unit test
+// cannot: that one injects an already-converted record count, so deriving the
+// count from the recognized categories inside nviFuncs would leave it green while
+// a findable patient reads as local-only again.
+func TestAcceptance_AnUnrecognizedListStillReadsAsShared(t *testing.T) {
+	h, srv, client := acceptanceServer(t)
+	anna, ok := pool.PatientByKey("anna")
+	require.True(t, ok)
+
+	// What an earlier seed left behind: De Plataan's custodian, a code system
+	// this build does not know, and a source id the client-scoped delete does not
+	// match. Compose reuses an unchanged hapi-fhir container, so a stack upgraded
+	// into this branch still holds records like it.
+	legacy := nvi.BuildList(nvi.Registration{
+		CustodianURA: plataanURA, BSN: anna.BSN, ClientID: "PLATAAN-EHR-legacy",
+	}, "Condition")
+	legacy.Code.Coding[0].System = to.Ptr("http://example.test/legacy-categories")
+	postRawNVIList(t, h, legacy)
+
+	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key)
+
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, "data category this build recognizes",
+		"a findable patient whose categories cannot be named must say so")
+	require.NotContains(t, body, "Not findable yet")
+	require.NotContains(t, body, "exists only in De Plataan's own store")
+}
+
+// postRawNVIList writes a List through the Knooppunt without going via
+// nvi.Register, so a test can store one the vocabulary does not recognize.
+func postRawNVIList(t *testing.T, h harness.Details, list fhir.List) {
+	t.Helper()
+	body, err := json.Marshal(list)
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+		h.KnooppuntInternalBaseURL.JoinPath("nvi", "List").String(), bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/fhir+json")
+	req.Header.Set("X-Tenant-ID", "http://fhir.nl/fhir/NamingSystem/ura|"+plataanURA)
+
+	res, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Contains(t, []int{http.StatusOK, http.StatusCreated}, res.StatusCode,
+		"precondition: the legacy List was stored")
 }
 
 // Sharing must not disturb the source registration E4 depends on.

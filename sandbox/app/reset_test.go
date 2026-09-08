@@ -120,6 +120,24 @@ func TestReset_PartialResetIsReportedNotFailed(t *testing.T) {
 	require.Equal(t, "/demo?notice=reset-partial", res.Header.Get("Location"))
 }
 
+// A recycle whose Mitz cleanup could not run restored the patient's fixtures and
+// left a consent subscription behind. Reporting that as a failure sends the
+// presenter away from a working patient; reporting it as clean hides a
+// subscription that outlived the demo it belongs to.
+func TestRecycle_PartialRecycleIsReportedNotFailed(t *testing.T) {
+	cfg, _, _ := fakeConfig()
+	cfg.recyclePatient = func(context.Context, string) error {
+		return fmt.Errorf("%w: the consent subscription was not cleared", vectors.ErrPartialReset)
+	}
+	srv, client := demoServer(t, cfg)
+
+	res := postForm(t, client, srv, "/demo/patients/"+pool.Patients()[0].Key+"/recycle", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo?notice=recycle-partial", res.Header.Get("Location"))
+}
+
 func TestRecycle_RefusesLockedPatient(t *testing.T) {
 	cfg, _, recycles := fakeConfig()
 	anna := pool.Patients()[0].Key

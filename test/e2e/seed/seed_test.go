@@ -204,13 +204,26 @@ func TestResetGlobal_RestoresEvenWhenMitzCleanupFails(t *testing.T) {
 	unreachable, err := url.Parse("http://127.0.0.1:1")
 	require.NoError(t, err)
 
+	// Delete a seeded fixture first. Asserting only an untouched registration
+	// afterwards cannot tell restoration from a reset that skipped it: an
+	// implementation that ran the cleanup between clearing the tenants and
+	// reloading them, then returned its warning, empties both stores and leaves
+	// that registration exactly where it was.
+	anna := pool.Patients()[0]
+	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL)
+	allergyID := "pool-" + anna.Key + "-zonnebloem-allergy"
+	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+allergyID))
+
 	target := sandboxTarget(t, h)
 	target.MitzMockBaseURL = unreachable
 	err = vectors.ResetGlobal(t.Context(), target)
 
 	require.ErrorIs(t, err, vectors.ErrPartialReset)
 
-	anna := pool.Patients()[0]
+	var allergy fhir.AllergyIntolerance
+	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "AllergyIntolerance/"+allergyID, &allergy),
+		"the cleanup warning must not stand in for a dataset that was never restored")
+
 	lists, listErr := nvi.ListsForCustodian(t.Context(), h.KnooppuntInternalBaseURL.JoinPath("nvi"),
 		zonnebloemURA(), anna.BSN)
 	require.NoError(t, listErr)
@@ -328,6 +341,13 @@ func TestResetGlobal_WithoutAMockReportsPartialNotClean(t *testing.T) {
 	target := sandboxTarget(t, h)
 	target.MitzMockBaseURL = nil
 
+	// Deleted first, so "restored" means something a nil-only early return cannot
+	// satisfy.
+	anna := pool.Patients()[0]
+	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL)
+	allergyID := "pool-" + anna.Key + "-zonnebloem-allergy"
+	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+allergyID))
+
 	err := vectors.ResetGlobal(t.Context(), target)
 
 	require.ErrorIs(t, err, vectors.ErrPartialReset,
@@ -335,11 +355,61 @@ func TestResetGlobal_WithoutAMockReportsPartialNotClean(t *testing.T) {
 
 	// And the dataset was still restored: the warning is about the mock, not a
 	// reason to skip the work.
-	anna := pool.Patients()[0]
+	var allergy fhir.AllergyIntolerance
+	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "AllergyIntolerance/"+allergyID, &allergy))
 	lists, listErr := nvi.ListsForCustodian(t.Context(), h.KnooppuntInternalBaseURL.JoinPath("nvi"),
 		zonnebloemURA(), anna.BSN)
 	require.NoError(t, listErr)
 	require.Equal(t, anna.ZonnebloemCategories(), nvi.CategoriesOf(lists))
+}
+
+// The same for recycle: its cleanup runs last so a warning cannot stand in for a
+// patient that was never restored, and that ordering has to be pinned or moving
+// the cleanup to the front leaves every recycle test green.
+func TestRecyclePatient_ACleanupWarningDoesNotMaskAFailedRestore(t *testing.T) {
+	h := harness.Start(t)
+	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
+	unreachable, err := url.Parse("http://127.0.0.1:1")
+	require.NoError(t, err)
+
+	anna := pool.Patients()[0]
+	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL)
+	allergyID := "pool-" + anna.Key + "-zonnebloem-allergy"
+	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+allergyID))
+
+	target := sandboxTarget(t, h)
+	target.MitzMockBaseURL = unreachable
+	err = vectors.RecyclePatient(t.Context(), target, anna.Key)
+
+	require.ErrorIs(t, err, vectors.ErrPartialReset,
+		"an uncleared subscription is a warning, not a failed recycle")
+
+	var allergy fhir.AllergyIntolerance
+	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "AllergyIntolerance/"+allergyID, &allergy),
+		"the warning must not stand in for a patient that was never restored")
+}
+
+// The client id has to reach recycle too, not only the global reset.
+func TestRecyclePatient_UnsharesUnderTheConfiguredClientID(t *testing.T) {
+	h := harness.Start(t)
+	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
+	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
+	const overrideClientID = "gf-sandbox-plataan-override"
+
+	anna := pool.Patients()[0]
+	require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
+		CustodianURA: plataan.URA, BSN: anna.BSN,
+		ClientID: overrideClientID, Categories: anna.PlataanCategories(),
+	}))
+
+	target := sandboxTarget(t, h)
+	target.NVIClientID = overrideClientID
+	require.NoError(t, vectors.RecyclePatient(t.Context(), target, anna.Key))
+
+	after, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, anna.BSN)
+	require.NoError(t, err)
+	require.Empty(t, after,
+		"recycle says the patient is back in the pool unshared, so records under the configured client must be gone")
 }
 
 // A recycled patient goes back to the pool unshared, and the consent

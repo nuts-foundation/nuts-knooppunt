@@ -222,7 +222,9 @@ type SandboxTarget struct {
 	MitzMockBaseURL *url.URL
 
 	// NVIClientID is the client the sandbox publishes under. Empty means the
-	// compiled-in default, which is what the seed itself uses.
+	// compiled-in default, which is what the sandbox share flow uses when
+	// SANDBOX_NVI_CLIENT_ID is unset. Not the seed: SeedNVI publishes De
+	// Zonnebloem's registrations, under pool.ZonnebloemClientID.
 	NVIClientID string
 }
 

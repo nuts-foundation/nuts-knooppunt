@@ -837,11 +837,11 @@
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
               <div class="confirm-card" id="cc-nvi">
                 <div class="cc-load">
-                  <h4><span class="spinner"></span>Publishing localization record (NVI)…</h4>
+                  <h4><span class="spinner"></span>Publishing localization records (NVI)…</h4>
                   <div class="skl w85"></div><div class="skl w70"></div><div class="skl w50"></div>
                 </div>
                 <div class="cc-done hidden">
-                  <h4><span class="ok-ic">✓</span>Localization record published (NVI)</h4>
+                  <h4><span class="ok-ic">✓</span>Localization records published (NVI)</h4>
                   <div class="kv"><span class="k">Data categories</span><span class="v">Condition, MedicationRequest, Patient</span></div>
                   <div class="kv"><span class="k">Holder</span><span class="v">Ziekenhuis De Plataan · URA <span class="v mono">00000010</span></span></div>
                   <div class="kv"><span class="k">Patient</span><span class="v">as a pseudonym, via the pseudonym service</span></div>
@@ -854,8 +854,8 @@
                   <div class="skl w85"></div><div class="skl w70"></div><div class="skl w50"></div>
                 </div>
                 <div class="cc-done hidden">
-                  <h4><span class="ok-ic">✓</span>Mitz subscription started</h4>
-                  <div class="kv" style="display:block; margin-bottom:5px;"><span class="v">You will be notified of every change this patient makes to her consents.</span></div>
+                  <h4><span class="ok-ic">✓</span>Consent subscription started</h4>
+                  <div class="kv" style="display:block; margin-bottom:5px;"><span class="v">Mitz holds the subscription against this patient's consent. Delivering the notifications themselves is not wired up in the sandbox, so nothing arrives here when consent changes.</span></div>
                   <div class="kv"><span class="k">Subscriber</span><span class="v">Ziekenhuis De Plataan</span></div>
                   <div class="kv"><span class="k">Registry</span><span class="v">Mitz (simulated)</span></div>
                 </div>
@@ -1608,7 +1608,7 @@
             </div>
             <div class="hnode plan">
               <span class="hicon n5">2</span>
-              <div><b>Subscribe · Mitz</b><div class="hd">De Plataan will be notified of consent changes by this patient.</div>
+              <div><b>Subscribe · Mitz</b><div class="hd">De Plataan subscribes to consent changes by this patient. Delivery of the notifications lands with E8.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/mitz/subscriptions</span><span class="s pend">—</span></div></div>
               </div>
               <div class="hstat"><span class="pend">— ms</span><br><span class="cap-chip plan">planned</span></div>
@@ -1635,7 +1635,7 @@
             </div>
             <div class="hnode">
               <span class="hicon n5">2</span>
-              <div><b>Subscribe · Mitz</b><div class="hd">De Plataan will be notified of consent changes by this patient.</div>
+              <div><b>Subscribe · Mitz</b><div class="hd">De Plataan subscribes to consent changes by this patient. Delivery of the notifications lands with E8.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/mitz/subscriptions</span><span class="s">201</span></div></div>
               </div>
               <div class="hstat"><span class="ok">✓ 44 ms</span><br><span class="cap-chip ev">step event</span></div>
@@ -1665,7 +1665,7 @@
             </div>
             <div class="hnode plan">
               <span class="hicon n5">2</span>
-              <div><b>Subscribe · Mitz</b><div class="hd">Get notified of consent changes by this patient.</div>
+              <div><b>Subscribe · Mitz</b><div class="hd">Subscribe to consent changes by this patient. Delivery of the notifications lands with E8.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/mitz/subscriptions</span><span class="s pend">—</span></div></div>
               </div>
               <div class="hstat"><span class="pend">— ms</span><br><span class="cap-chip plan">planned</span></div>
@@ -1685,7 +1685,7 @@
             </div>
             <div class="hnode">
               <span class="hicon n5">✓</span>
-              <div><b>Mitz subscription active</b><div class="hd">De Plataan is notified of consent changes by this patient.</div>
+              <div><b>Mitz subscription active</b><div class="hd">Mitz holds De Plataan's subscription for this patient. No notification is delivered until E8 builds the receiving side.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/mitz/subscriptions</span><span class="s">201</span></div></div>
               </div>
               <div class="hstat"><span class="ok">✓ 44 ms</span><br><span class="cap-chip ev">step event</span></div>

@@ -122,7 +122,9 @@ subject's wallet, which is empty until the credential is stored.
 
 ### Reset variants (used by the GF Sandbox backend)
 
-- `vectors.ResetGlobal(ctx, hapiBaseURL, knooppuntInternalBaseURL, mitzMockBaseURL)` — clears the
+- `vectors.ResetGlobal(ctx, target)`, where `target` is a `vectors.SandboxTarget`
+  carrying the HAPI and Knooppunt base URLs, the mock Mitz base URL (nil when none
+  is configured) and the NVI client id the caller publishes under — clears the
   mutable patient stores (removing user-created records, which have random ids a
   plain re-seed cannot overwrite), then re-runs `Load` + `SeedNVI`, removes the
   localization records the sandbox published on De Plataan's side, and clears the
@@ -137,9 +139,15 @@ subject's wallet, which is empty until the credential is stored.
   `docker compose down -v`. The partition-scoped `?_expunge=true` form is correct
   but asynchronous (a Batch2 job on a 60s maintenance schedule), which is too slow
   for a reset behind a UI button. `TestResetGlobal_PreservesPartitions` guards this.
-- `vectors.RecyclePatient(ctx, hapiBaseURL, knooppuntInternalBaseURL, patientKey)`
-  — restores one patient to its seeded, unshared state (re-registers its NVI Lists
-  and re-PUTs its FHIR resources) without touching any other patient.
+- `vectors.RecyclePatient(ctx, target, patientKey)` — restores one patient to its
+  seeded, unshared state (re-registers its NVI Lists, re-PUTs its FHIR resources
+  and clears that patient's consent subscription) without touching any other
+  patient. The subscription delete is scoped to one `providerid`/`patientid` pair
+  precisely so a recycle cannot cancel a concurrent demo's.
+
+  The client id travels in the target rather than being read from a constant on
+  each side: the sandbox publishes under `SANDBOX_NVI_CLIENT_ID` when it is set,
+  and a cleanup holding a different id deletes nothing while reporting a restore.
 
 ### Known limitations
 
