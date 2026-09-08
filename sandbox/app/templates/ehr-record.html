@@ -16,8 +16,13 @@
           {{if .Subscribed}}<span class="stat-chip gf">Shared via GF</span>
           {{else if .SubscriptionUnknown}}<span class="stat-chip unknown">Shared via GF · subscription status unknown</span>
           {{else}}<span class="stat-chip partial">Shared via GF · consent subscription missing</span>{{end}}
+          {{if .Categories}}
           <p>Other care providers can find this record through the NVI, for these data categories:</p>
           <ul class="cat-list">{{range .Categories}}<li class="mono">{{.}}</li>{{end}}</ul>
+          {{else}}
+          <p>Other care providers can find this record through the NVI. Its localization records carry no
+          data category this build recognizes, so they cannot be named here.</p>
+          {{end}}
           {{if not .Subscribed}}
           <div class="card-action">
             <form method="post" action="/demo/ehr/patients/{{.Key}}/subscribe">

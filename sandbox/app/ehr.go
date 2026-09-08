@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -192,14 +193,18 @@ func (c Config) handleSubscribe(w http.ResponseWriter, r *http.Request, session 
 	http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice=mitz-retry-done", http.StatusSeeOther)
 }
 
-// cardResult is one confirmation card. Skipped is a third state beside OK and
-// Failed: "not attempted" is not "failed", and the next safe action differs.
+// cardResult is one confirmation card. Skipped and Unknown are states beside OK
+// and Failed because the next safe action differs for each: "not attempted" is
+// not "failed", and "we could not establish what happened" is not "it did not
+// happen". A red card with a cross asserts a failure, so an unknown outcome
+// rendered that way is the demo claiming knowledge it does not have.
 type cardResult struct {
 	Title   string
 	Detail  string
 	OK      bool
 	Failed  bool
 	Skipped bool
+	Unknown bool
 	Rows    []cardRow
 }
 
@@ -284,37 +289,85 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 			Detail: "Not attempted: Mitz is not wired up in this environment."}
 	}
 
+	// Asked before the call, so the card can say whether this request created the
+	// subscription or found one already there. The mock keys one subscription per
+	// provider and patient and answers a repeat with the existing one, so without
+	// this a second share reports that it started something it did not.
+	existedBefore, knewBefore := false, false
+	if c.mitzSubscribed != nil {
+		if subscribed, err := c.mitzSubscribed(ctx, patient.BSN); err == nil {
+			existedBefore, knewBefore = subscribed, true
+		}
+	}
+
 	err := c.mitzSubscribe(ctx, patient.BSN)
-	if err != nil && c.mitzSubscribed != nil {
+	if err != nil {
 		// The call failed, but a timeout or dropped connection can follow a
-		// commit. Ask before declaring a failure: reporting a committed
+		// commit. Ask before declaring anything: reporting a committed
 		// subscription as failed invites a retry that duplicates it against a
 		// Mitz which, unlike the mock, does not deduplicate.
-		if subscribed, queryErr := c.mitzSubscribed(ctx, patient.BSN); queryErr == nil && subscribed {
-			err = nil
+		switch subscribed, queryErr := c.subscriptionExists(ctx, patient.BSN); {
+		case queryErr != nil:
+			return mitzUnknownCard(err, queryErr.Error())
+		case subscribed:
+			err = nil // it committed after all; its response was the casualty
+		default:
+			return &cardResult{
+				Failed: true,
+				Title:  "Mitz subscription failed",
+				Detail: "The patient is shared, but no consent subscription exists: " + err.Error() +
+					". Mitz confirms there is none, so nothing was created and a retry cannot " +
+					"duplicate. The record page keeps this visible and offers a retry of this step alone.",
+			}
 		}
 	}
-	if err != nil {
-		return &cardResult{
-			Failed: true,
-			Title:  "Mitz subscription failed",
-			// "may", not "will": reconciliation is unavailable when no mock is
-			// configured and inconclusive when the lookup itself errored, so a
-			// subscription that was committed and lost its response lands here
-			// too. Stating non-delivery as fact would be the same overclaim the
-			// NVI card above is careful to avoid.
-			Detail: "The patient is shared, but consent changes may not be delivered: " + err.Error() +
-				". The record page keeps this visible and offers a retry of this step alone.",
-		}
+
+	title, detail := "Consent subscription started", "This request registered the subscription at Mitz."
+	switch {
+	case !knewBefore:
+		title = "Consent subscription registered"
+		detail = "Mitz accepted the subscription. Whether one already existed could not be " +
+			"established here, so this may have found rather than created it."
+	case existedBefore:
+		title = "Consent subscription already active"
+		detail = "A subscription for this patient at De Plataan was already registered, and Mitz " +
+			"answered this request with that one rather than creating a second."
 	}
 	return &cardResult{
-		OK:     true,
-		Title:  "Mitz subscription started",
-		Detail: "You will be notified of every change this patient makes to their consents.",
+		OK:    true,
+		Title: title,
+		// What the subscription is, not what will arrive. The sandbox configures
+		// no notification endpoint and has nothing listening for one, so
+		// promising delivery here would be the demo asserting a message the
+		// stack cannot send.
+		Detail: detail + " Mitz holds it against this patient's consent; delivering the notifications " +
+			"themselves is not wired up in the sandbox, so nothing arrives here when consent changes.",
 		Rows: []cardRow{
 			{Key: "Subscriber", Value: "Ziekenhuis De Plataan"},
 			{Key: "Registry", Value: "Mitz (simulated)"},
 		},
+	}
+}
+
+// subscriptionExists answers the reconciliation question, distinguishing "no
+// subscription" from "could not ask". The nil lookup is the second, not the
+// first: MITZMOCK_URL is unset in that case, and reading silence as a definite
+// negative is what would put a red failure card over a subscription that exists.
+func (c Config) subscriptionExists(ctx context.Context, bsn string) (bool, error) {
+	if c.mitzSubscribed == nil {
+		return false, errors.New("Mitz cannot be queried in this environment")
+	}
+	return c.mitzSubscribed(ctx, bsn)
+}
+
+func mitzUnknownCard(callErr error, why string) *cardResult {
+	return &cardResult{
+		Unknown: true,
+		Title:   "Mitz subscription outcome unknown",
+		Detail: "The call did not complete: " + callErr.Error() + ". Mitz could not be asked whether " +
+			"it went through anyway (" + why + "), so it is not known whether a subscription exists. " +
+			"The record page keeps this visible and offers a retry of this step alone; against the " +
+			"national Mitz that retry may create a second subscription.",
 	}
 }
 
@@ -323,6 +376,15 @@ func (c Config) renderShare(w http.ResponseWriter, r *http.Request, session *aut
 	row := c.patientRowFor(r.Context(), patient, session)
 	// The share screen names what would be, or has just been, registered.
 	row.Categories = patient.PlataanCategories()
+
+	// A successful publish is knowledge the follow-up read cannot take away. That
+	// read can fail on its own, and letting it decide the header would put "this
+	// record exists only in De Plataan's own store" directly beneath the green
+	// card reporting the records this request just published. The write is the
+	// better evidence here: it is the thing that happened.
+	if nviCard != nil && nviCard.OK {
+		row.Shared, row.NVIUnknown = true, false
+	}
 
 	view := session.view()
 	render(w, "ehr-share.html", page{

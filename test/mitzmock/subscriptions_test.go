@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -116,4 +117,69 @@ func TestStandaloneService_ServesSubscriptions(t *testing.T) {
 	require.NoError(t, err)
 	defer del.Body.Close()
 	require.Equal(t, http.StatusNoContent, del.StatusCode)
+}
+
+// A scoped DELETE removes one pair and leaves the rest. The per-patient recycle
+// depends on it: clearing the store instead would cancel a concurrent demo's
+// consent subscription while reporting that it restored one patient.
+func TestClosedQuestionService_ScopedDeleteRemovesOnlyThatPair(t *testing.T) {
+	service := NewClosedQuestionService(t)
+
+	for _, bsn := range []string{"999900006", "999911120"} {
+		postSubscription(t, service, "00000010", bsn)
+	}
+	require.Len(t, service.GetSubscriptions(), 2)
+
+	deleteSubscriptions(t, service, url.Values{"providerid": {"00000010"}, "patientid": {"999900006"}})
+
+	remaining := service.GetSubscriptions()
+	require.Len(t, remaining, 1)
+	require.Contains(t, remaining[0].Criteria, "patientid=999911120")
+}
+
+// Half a pair cannot address a subscription this store keys on both, and the
+// destructive reading of that request is to delete everything.
+func TestClosedQuestionService_HalfAScopeIsRejectedRatherThanClearingAll(t *testing.T) {
+	service := NewClosedQuestionService(t)
+	postSubscription(t, service, "00000010", "999900006")
+
+	req, err := http.NewRequest(http.MethodDelete,
+		service.GetURL()+"/abonnementen/fhir/Subscription?providerid=00000010", nil)
+	require.NoError(t, err)
+	res, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusBadRequest, res.StatusCode)
+	require.Len(t, service.GetSubscriptions(), 1, "an ambiguous scope must not clear the store")
+}
+
+func postSubscription(t *testing.T, service *ClosedQuestionService, providerURA, bsn string) {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"resourceType": "Subscription",
+		"status":       "requested",
+		"criteria":     "Consent?_query=otv&patientid=" + bsn + "&providerid=" + providerURA,
+		"channel":      map[string]any{"type": "rest-hook"},
+	})
+	require.NoError(t, err)
+	res, err := http.Post(service.GetURL()+"/abonnementen/fhir/Subscription",
+		"application/fhir+json", bytes.NewReader(body))
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusCreated, res.StatusCode)
+}
+
+func deleteSubscriptions(t *testing.T, service *ClosedQuestionService, scope url.Values) {
+	t.Helper()
+	endpoint := service.GetURL() + "/abonnementen/fhir/Subscription"
+	if len(scope) > 0 {
+		endpoint += "?" + scope.Encode()
+	}
+	req, err := http.NewRequest(http.MethodDelete, endpoint, nil)
+	require.NoError(t, err)
+	res, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusNoContent, res.StatusCode)
 }

@@ -12,8 +12,8 @@ import (
 )
 
 func TestPatientShareStatus_SharedWhenCategoriesExist(t *testing.T) {
-	cfg := Config{nviCategories: func(context.Context, string) ([]string, error) {
-		return []string{nvi.CategoryCondition, nvi.CategoryPatient}, nil
+	cfg := Config{nviLookup: func(context.Context, string) (nviRecords, error) {
+		return nviRecords{Count: 2, Categories: []string{nvi.CategoryCondition, nvi.CategoryPatient}}, nil
 	}}
 
 	status := cfg.patientShareStatus(t.Context(), "999900006")
@@ -24,7 +24,7 @@ func TestPatientShareStatus_SharedWhenCategoriesExist(t *testing.T) {
 }
 
 func TestPatientShareStatus_LocalOnlyWhenNoCategories(t *testing.T) {
-	cfg := Config{nviCategories: func(context.Context, string) ([]string, error) { return nil, nil }}
+	cfg := Config{nviLookup: func(context.Context, string) (nviRecords, error) { return nviRecords{}, nil }}
 
 	status := cfg.patientShareStatus(t.Context(), "999900006")
 
@@ -32,11 +32,29 @@ func TestPatientShareStatus_LocalOnlyWhenNoCategories(t *testing.T) {
 	require.False(t, status.NVIUnknown)
 }
 
+// A List this build cannot decode is still a List. Deriving "shared" from the
+// recognized categories would tell the presenter the patient is local-only while
+// other providers can find them, which is the demo denying a registration that
+// exists. Reachable on a stack whose NVI still holds records from an earlier
+// seed: compose reuses an unchanged hapi-fhir container, and the client-scoped
+// delete only removes what this build wrote.
+func TestPatientShareStatus_SharedWhenAListHasNoRecognizedCategory(t *testing.T) {
+	cfg := Config{nviLookup: func(context.Context, string) (nviRecords, error) {
+		return nviRecords{Count: 1}, nil
+	}}
+
+	status := cfg.patientShareStatus(t.Context(), "999900006")
+
+	require.True(t, status.Shared, "a List the vocabulary does not recognize still makes the patient findable")
+	require.Empty(t, status.Categories)
+	require.False(t, status.NVIUnknown)
+}
+
 // A failing NVI must produce an unknown chip, not a failed page and not "local
 // only": the latter would invite a presenter to share an already-shared patient.
 func TestPatientShareStatus_UnknownWhenTheNVIFails(t *testing.T) {
-	cfg := Config{nviCategories: func(context.Context, string) ([]string, error) {
-		return nil, errors.New("connection refused")
+	cfg := Config{nviLookup: func(context.Context, string) (nviRecords, error) {
+		return nviRecords{}, errors.New("connection refused")
 	}}
 
 	require.True(t, cfg.patientShareStatus(t.Context(), "999900006").NVIUnknown)
@@ -45,9 +63,9 @@ func TestPatientShareStatus_UnknownWhenTheNVIFails(t *testing.T) {
 // http.DefaultClient carries no timeout, so without a deadline a blackholed NVI
 // hangs the request goroutine and the page forever.
 func TestPatientShareStatus_UnknownWhenTheCallExceedsItsDeadline(t *testing.T) {
-	cfg := Config{nviCategories: func(ctx context.Context, _ string) ([]string, error) {
+	cfg := Config{nviLookup: func(ctx context.Context, _ string) (nviRecords, error) {
 		<-ctx.Done()
-		return nil, ctx.Err()
+		return nviRecords{}, ctx.Err()
 	}}
 
 	start := time.Now()

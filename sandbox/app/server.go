@@ -19,6 +19,7 @@ var notices = map[string]string{
 	"reset-done":         "Dataset restored to the seeded fixtures.",
 	"reset-partial":      "Dataset restored, but some state could not be cleared. Check the sandbox logs.",
 	"recycle-done":       "Patient restored to the seeded state.",
+	"recycle-partial":    "Patient restored, but the consent subscription could not be cleared. Check the sandbox logs.",
 	"reset-disabled":     "Reset is unavailable: the sandbox is not wired to the Knooppunt in this environment.",
 	"signed-out":         "Signed out. The Dezi session has been cleared.",
 	"patient-busy":       "That patient is in use by another demo run. Pick a different one.",
@@ -44,9 +45,11 @@ type Config struct {
 	recyclePatient func(ctx context.Context, patientKey string) error
 
 	// The NVI half of the share flow, wired in NewConfigFromEnv and injectable so
-	// handler tests need no live NVI.
-	nviCategories func(ctx context.Context, bsn string) ([]string, error)
-	nviRegister   func(ctx context.Context, bsn string, categories []string) error
+	// handler tests need no live NVI. nviLookup answers with the record count as
+	// well as the categories, because a List this build cannot decode still makes
+	// the patient findable (see nviRecords).
+	nviLookup   func(ctx context.Context, bsn string) (nviRecords, error)
+	nviRegister func(ctx context.Context, bsn string, categories []string) error
 
 	// mitzSubscribe starts a consent subscription for a shared patient: the
 	// second remote call the share flow makes, alongside nviRegister above.
@@ -104,7 +107,7 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 	if clientID == "" {
 		clientID = pool.PlataanClientID
 	}
-	cfg.nviCategories, cfg.nviRegister = nviFuncs(knooppuntURL, clientID)
+	cfg.nviLookup, cfg.nviRegister = nviFuncs(knooppuntURL, clientID)
 
 	// Read through the injected getenv, not envOr: NewConfigFromEnv takes the
 	// lookup as a parameter so tests can drive it, and envOr goes straight to
@@ -130,18 +133,28 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("invalid HAPI_BASE_URL: %w", err)
 	}
+	// One target for both, carrying the client id the share flow publishes
+	// under. Passing the compiled-in default instead would make every cleanup a
+	// no-op whenever SANDBOX_NVI_CLIENT_ID is set, while both notices still
+	// reported that the dataset was restored.
+	target := vectors.SandboxTarget{
+		HAPIBaseURL:              hapiURL,
+		KnooppuntInternalBaseURL: knooppuntURL,
+		MitzMockBaseURL:          cfg.mitzMockURL,
+		NVIClientID:              clientID,
+	}
 	cfg.resetGlobal = func(ctx context.Context) error {
-		return vectors.ResetGlobal(ctx, hapiURL, knooppuntURL, cfg.mitzMockURL)
+		return vectors.ResetGlobal(ctx, target)
 	}
 	cfg.recyclePatient = func(ctx context.Context, patientKey string) error {
-		return vectors.RecyclePatient(ctx, hapiURL, knooppuntURL, patientKey)
+		return vectors.RecyclePatient(ctx, target, patientKey)
 	}
 	return cfg, nil
 }
 
 // nviConfigured reports whether the sandbox can reach the NVI. main uses it to
 // say which feature is off, rather than letting one message stand for both.
-func (c Config) nviConfigured() bool { return c.nviCategories != nil }
+func (c Config) nviConfigured() bool { return c.nviLookup != nil }
 
 // patientStatus is the JSON shape returned by GET /demo/patients.
 type patientStatus struct {
@@ -487,6 +500,16 @@ func (c Config) handleRecycle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := c.recyclePatient(r.Context(), key); err != nil {
+		// Same split as handleReset: the patient's fixtures were restored and
+		// something optional was not cleared. Reporting that as a failed recycle
+		// would send the presenter to a working patient they were told is broken,
+		// and reporting it as clean would hide a subscription that outlived the
+		// demo it belongs to.
+		if errors.Is(err, vectors.ErrPartialReset) {
+			slog.Warn("recycle completed with warnings", "patient", key, "error", err)
+			http.Redirect(w, r, "/demo?notice=recycle-partial", http.StatusSeeOther)
+			return
+		}
 		http.Error(w, "recycle failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

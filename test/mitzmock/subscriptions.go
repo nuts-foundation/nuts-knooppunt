@@ -200,6 +200,20 @@ func (s *subscriptionStore) all() []fhir.Subscription {
 	return out
 }
 
+// deleteOne drops the subscription for one provider/patient pair, so a
+// per-patient recycle can restore that patient without touching a concurrent
+// demo's. Reports whether anything was there.
+func (s *subscriptionStore) deleteOne(providerID, patientID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := providerID + "|" + patientID
+	if _, ok := s.byKey[key]; !ok {
+		return false
+	}
+	delete(s.byKey, key)
+	return true
+}
+
 func (s *subscriptionStore) clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -267,8 +281,24 @@ func (m *ClosedQuestionService) handleSearchSubscriptions(w http.ResponseWriter,
 }
 
 // handleClearSubscriptions drops everything, so a demo reset restores a clean
-// consent state (DESIGN §5.6).
-func (m *ClosedQuestionService) handleClearSubscriptions(w http.ResponseWriter, _ *http.Request) {
+// consent state (DESIGN §5.6). With providerid and patientid it drops just that
+// pair, which is what a per-patient recycle needs: clearing the store would
+// cancel a concurrent demo's subscription along with this patient's.
+//
+// Both parameters or neither. Half a pair cannot address a subscription this
+// store keys on both, and deleting everything because one was missing is the
+// destructive reading of an ambiguous request.
+func (m *ClosedQuestionService) handleClearSubscriptions(w http.ResponseWriter, r *http.Request) {
+	provider, patient := r.URL.Query().Get("providerid"), r.URL.Query().Get("patientid")
+	if provider != "" || patient != "" {
+		if provider == "" || patient == "" {
+			http.Error(w, "providerid and patientid must be given together", http.StatusBadRequest)
+			return
+		}
+		m.subscriptions.deleteOne(provider, patient)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	m.subscriptions.clear()
 	w.WriteHeader(http.StatusNoContent)
 }

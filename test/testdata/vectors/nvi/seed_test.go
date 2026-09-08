@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
@@ -84,10 +85,22 @@ func TestBuildList_IsProfileConformant(t *testing.T) {
 // A guard on the vocabulary, not on BuildList: nothing validates List.code at
 // runtime, so the defence against reintroducing an aggregate code is that no
 // such constant exists to reach for.
+//
+// Two rules, because a denylist alone is only as good as the names someone
+// thinks to forbid. The shape rule is the general one: every member of
+// nl-gf-zorgcontext-vs is a FHIR resource type, so a code carrying a digit or a
+// hyphen is from some other system by construction. That is what catches
+// 55188-7, the aggregate LOINC "Patient data Document" this per-category model
+// replaced, which the previous spelling of this test let through. The denylist
+// then covers the aggregates that do have a resource-type shape.
 func TestCategoryConstants_ContainNoAggregateCode(t *testing.T) {
+	aggregates := []string{"MEDAFSPRAAK", "55188-7"}
 	for _, category := range []string{CategoryPatient, CategoryCondition, CategoryMedicationRequest, CategoryAllergyIntolerance} {
-		if strings.Contains(category, "BGZ") || category == "MEDAFSPRAAK" {
-			t.Errorf("category %q is not a member of nl-gf-zorgcontext-vs", category)
+		if strings.Contains(category, "BGZ") || slices.Contains(aggregates, category) {
+			t.Errorf("category %q is an aggregate code, not a member of nl-gf-zorgcontext-vs", category)
+		}
+		if strings.ContainsFunc(category, func(r rune) bool { return !unicode.IsLetter(r) }) {
+			t.Errorf("category %q is not a FHIR resource type, so it cannot be a member of nl-gf-zorgcontext-vs", category)
 		}
 	}
 }

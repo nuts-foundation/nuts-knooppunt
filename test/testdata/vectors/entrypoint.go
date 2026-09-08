@@ -204,6 +204,35 @@ func SeedNVI(ctx context.Context, knooppuntInternalBaseURL *url.URL) error {
 	return nil
 }
 
+// SandboxTarget names the stack a reset or recycle acts on, and the identity it
+// acts as.
+//
+// The client id travels with the URLs on purpose. The sandbox publishes its
+// localization records under a configurable client (SANDBOX_NVI_CLIENT_ID), and
+// the delete that cleans them up is scoped to that client. A cleanup holding a
+// different id removes nothing and reports that it restored the dataset, which
+// is the failure this struct exists to make hard: one value, passed by the
+// caller that owns it, rather than a constant each side reaches for separately.
+type SandboxTarget struct {
+	HAPIBaseURL              *url.URL
+	KnooppuntInternalBaseURL *url.URL
+
+	// MitzMockBaseURL is nil when no mock is configured. Cleanup then cannot run
+	// and the caller is told so; see clearMitzSubscriptions.
+	MitzMockBaseURL *url.URL
+
+	// NVIClientID is the client the sandbox publishes under. Empty means the
+	// compiled-in default, which is what the seed itself uses.
+	NVIClientID string
+}
+
+func (t SandboxTarget) clientID() string {
+	if t.NVIClientID == "" {
+		return pool.PlataanClientID
+	}
+	return t.NVIClientID
+}
+
 // ResetGlobal restores the entire seeded dataset to its fixtures ("restore
 // fixtures" path). It clears the mutable stores — removing any user-created
 // records, which have random ids a plain re-seed cannot overwrite — then re-runs
@@ -222,12 +251,13 @@ func SeedNVI(ctx context.Context, knooppuntInternalBaseURL *url.URL) error {
 // pool's own BSNs. DESIGN §5.6 wants those gone; doing so needs the Knooppunt to
 // expose a custodian-scoped listing (or the seed to track what it registered).
 //
-// mitzMockBaseURL is nil when no mock is configured, in which case the Mitz step
-// is a no-op. A configured but unreachable mock yields ErrPartialReset rather
-// than failing the whole reset or claiming a clean slate that does not exist;
-// see clearMitzSubscriptions. ResetGlobal still does not reach the mCSD query
+// An unconfigured or unreachable mock Mitz yields ErrPartialReset rather than
+// failing the whole reset or claiming a clean slate that does not exist; see
+// clearMitzSubscriptions. ResetGlobal still does not reach the mCSD query
 // directory cache, which is rebuilt by the mCSD update process instead.
-func ResetGlobal(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL, mitzMockBaseURL *url.URL) error {
+func ResetGlobal(ctx context.Context, target SandboxTarget) error {
+	hapiBaseURL := target.HAPIBaseURL
+	knooppuntInternalBaseURL := target.KnooppuntInternalBaseURL
 	// Clear the mutable patient stores so user-created (random-id) records go.
 	//
 	// The NVI tenant is NOT cleared this way: its pseudonymization interceptor
@@ -263,14 +293,14 @@ func ResetGlobal(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL, mit
 	// sandbox's own records survive unless they are removed here by name.
 	nviBaseURL := knooppuntInternalBaseURL.JoinPath("nvi")
 	for _, patient := range pool.Patients() {
-		if err := nvi.DeleteForClient(ctx, nviBaseURL, plataan.URA, patient.BSN, pool.PlataanClientID); err != nil {
+		if err := nvi.DeleteForClient(ctx, nviBaseURL, plataan.URA, patient.BSN, target.clientID()); err != nil {
 			return fmt.Errorf("unshare patient %s: %w", patient.Key, err)
 		}
 	}
 
 	// Last, and its error returned last: a partial-cleanup warning must not mask
 	// a real restoration failure above it.
-	return clearMitzSubscriptions(ctx, mitzMockBaseURL)
+	return clearMitzSubscriptions(ctx, target.MitzMockBaseURL, url.Values{})
 }
 
 // ErrPartialReset reports that the dataset was restored but something optional
@@ -278,19 +308,27 @@ func ResetGlobal(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL, mit
 // clean or as failed: both readings are wrong.
 var ErrPartialReset = errors.New("reset completed with warnings")
 
-// clearMitzSubscriptions drops every captured consent subscription from the mock
-// Mitz, so a reset restores a clean consent state (DESIGN §5.6).
+// clearMitzSubscriptions drops captured consent subscriptions from the mock
+// Mitz, so a reset restores a clean consent state (DESIGN §5.6). An empty scope
+// clears everything; providerid and patientid narrow it to one pair.
 //
-// A nil URL means no mock is configured and there is nothing to clear. A
-// configured but unreachable mock yields ErrPartialReset: failing the whole reset
-// would make demo cleanup depend on a mock's availability, and reporting success
-// would claim a clean slate that does not exist.
-func clearMitzSubscriptions(ctx context.Context, mitzMockBaseURL *url.URL) error {
+// A nil URL yields ErrPartialReset, not success. No mock configured means the
+// subscriptions cannot be cleared, and a subscription can exist regardless: the
+// sandbox subscribes through the Knooppunt, which reaches Mitz whether or not
+// MITZMOCK_URL was ever set, and the base compose profile sets it nowhere. A
+// silent nil there is the reset telling the presenter it restored a clean
+// consent state over one it never touched. A configured but unreachable mock is
+// the same answer for the same reason; failing the whole reset instead would make
+// demo cleanup depend on a mock's availability.
+func clearMitzSubscriptions(ctx context.Context, mitzMockBaseURL *url.URL, scope url.Values) error {
 	if mitzMockBaseURL == nil {
-		return nil
+		return fmt.Errorf("%w: no mock Mitz is configured, so consent subscriptions were not cleared", ErrPartialReset)
 	}
-	endpoint := mitzMockBaseURL.JoinPath("abonnementen", "fhir", "Subscription").String()
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
+	endpoint := mitzMockBaseURL.JoinPath("abonnementen", "fhir", "Subscription")
+	if len(scope) > 0 {
+		endpoint.RawQuery = scope.Encode()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint.String(), nil)
 	if err != nil {
 		return fmt.Errorf("%w: build Mitz cleanup request: %w", ErrPartialReset, err)
 	}
@@ -307,14 +345,22 @@ func clearMitzSubscriptions(ctx context.Context, mitzMockBaseURL *url.URL) error
 
 // RecyclePatient restores a single pool patient to its seeded, unshared state
 // without touching any other patient: it removes that patient's De Plataan NVI
-// registration, re-registers De Zonnebloem's, and re-PUTs its seeded FHIR
-// resources by fixed id.
+// registration and consent subscription, re-registers De Zonnebloem's, and
+// re-PUTs its seeded FHIR resources by fixed id.
+//
+// The subscription is part of that state, not an afterthought. Demo state is
+// keyed per patient (DESIGN §5.7) and the consent subscription is one of those
+// keys, so leaving it behind returns a patient to the pool who is unshared in the
+// NVI and still subscribed at Mitz. Sharing them again then finds the existing
+// subscription instead of creating one, and the "restored to the seeded state"
+// notice was untrue when it was shown.
 //
 // Known limitation: RecyclePatient cannot remove that patient's user-created
 // marker records (random ids) — only a global reset (expunge) clears those. For
 // the common between-demos need this is enough: recycle restores the seeded
 // state and clears the shared/registered flags.
-func RecyclePatient(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL *url.URL, patientKey string) error {
+func RecyclePatient(ctx context.Context, target SandboxTarget, patientKey string) error {
+	hapiBaseURL := target.HAPIBaseURL
 	patient, ok := pool.PatientByKey(patientKey)
 	if !ok {
 		return fmt.Errorf("unknown pool patient: %q", patientKey)
@@ -323,8 +369,8 @@ func RecyclePatient(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL *
 	// Re-publish the seeded registrations (Zonnebloem's) and remove De Plataan's,
 	// which exists only if this patient was shared during a demo. Recycling a
 	// patient means returning them to the pool unshared.
-	nviBaseURL := knooppuntInternalBaseURL.JoinPath("nvi")
-	if err := nvi.DeleteForClient(ctx, nviBaseURL, plataan.URA, patient.BSN, pool.PlataanClientID); err != nil {
+	nviBaseURL := target.KnooppuntInternalBaseURL.JoinPath("nvi")
+	if err := nvi.DeleteForClient(ctx, nviBaseURL, plataan.URA, patient.BSN, target.clientID()); err != nil {
 		return fmt.Errorf("recycle: remove plataan NVI registration for %s: %w", patient.Key, err)
 	}
 	for _, reg := range patient.NVIRegistrations() {
@@ -340,7 +386,14 @@ func RecyclePatient(ctx context.Context, hapiBaseURL, knooppuntInternalBaseURL *
 	if err := putResources(ctx, sunflower.PatientsHAPITenant().FHIRClient(hapiBaseURL), patient.ZonnebloemResources()); err != nil {
 		return fmt.Errorf("recycle zonnebloem resources for patient %s: %w", patient.Key, err)
 	}
-	return nil
+
+	// Last, and scoped to this patient: clearing the store would cancel a
+	// concurrent demo's subscription, which is the one thing a per-patient
+	// recycle promises not to do. Its error is returned last so a cleanup warning
+	// cannot mask a real restoration failure above it.
+	return clearMitzSubscriptions(ctx, target.MitzMockBaseURL, url.Values{
+		"providerid": {plataan.URA}, "patientid": {patient.BSN},
+	})
 }
 
 // mutableResourceTypes are the resource types the reset paths clear from the

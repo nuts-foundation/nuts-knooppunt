@@ -45,18 +45,32 @@ type shareStatus struct {
 	SubscriptionUnknown bool
 }
 
+// nviRecords is what the NVI holds for one patient at De Plataan: how many
+// localization records exist, and which data categories they name.
+//
+// The count is not derivable from the categories, which is the whole reason this
+// is a struct. A List whose code is missing, or carries a code from another
+// system, is a record other providers can find and a category this build does
+// not recognize. Deriving "shared" from the recognized categories would report
+// that patient as local-only while they are findable, which is the demo denying
+// a registration that exists.
+type nviRecords struct {
+	Count      int
+	Categories []string
+}
+
 func (c Config) patientShareStatus(ctx context.Context, bsn string) shareStatus {
-	if c.nviCategories == nil {
+	if c.nviLookup == nil {
 		return shareStatus{NVIUnknown: true}
 	}
-	categories, err := c.withTimeout(ctx, nviCallTimeout, func(callCtx context.Context) ([]string, error) {
-		return c.nviCategories(callCtx, bsn)
+	records, err := withTimeout(ctx, nviCallTimeout, func(callCtx context.Context) (nviRecords, error) {
+		return c.nviLookup(callCtx, bsn)
 	})
 	if err != nil {
 		return shareStatus{NVIUnknown: true}
 	}
 
-	status := shareStatus{Shared: len(categories) > 0, Categories: categories}
+	status := shareStatus{Shared: records.Count > 0, Categories: records.Categories}
 	if !status.Shared {
 		// Nothing is registered, so there is nothing a subscription would
 		// accompany; asking is noise.
@@ -81,8 +95,8 @@ func (c Config) patientShareStatus(ctx context.Context, bsn string) shareStatus 
 // left on it, so two independent remote calls in the same request (NVI, then
 // Mitz) each get their own budget instead of the second inheriting the
 // first's leftovers.
-func (c Config) withTimeout(ctx context.Context, d time.Duration,
-	call func(context.Context) ([]string, error)) ([]string, error) {
+func withTimeout[T any](ctx context.Context, d time.Duration,
+	call func(context.Context) (T, error)) (T, error) {
 	ctx, cancel := context.WithTimeout(ctx, d)
 	defer cancel()
 	return call(ctx)
@@ -90,24 +104,27 @@ func (c Config) withTimeout(ctx context.Context, d time.Duration,
 
 // nviFuncs builds the real NVI calls against the Knooppunt's internal API.
 func nviFuncs(knooppuntInternalURL *url.URL, clientID string) (
-	func(context.Context, string) ([]string, error),
+	func(context.Context, string) (nviRecords, error),
 	func(context.Context, string, []string) error,
 ) {
 	base := knooppuntInternalURL.JoinPath("nvi")
 
-	categories := func(ctx context.Context, bsn string) ([]string, error) {
+	lookup := func(ctx context.Context, bsn string) (nviRecords, error) {
 		lists, err := nvi.ListsForCustodian(ctx, base, plataanURA, bsn)
 		if err != nil {
-			return nil, err
+			return nviRecords{}, err
 		}
-		return nvi.CategoriesOf(lists), nil
+		// Count the Lists, name the categories this build recognizes. The two
+		// can differ, and the difference is what the record screen reports as
+		// "findable, categories not recognized" rather than as local-only.
+		return nviRecords{Count: len(lists), Categories: nvi.CategoriesOf(lists)}, nil
 	}
 	register := func(ctx context.Context, bsn string, cats []string) error {
 		return nvi.Register(ctx, base, nvi.Registration{
 			CustodianURA: plataanURA, BSN: bsn, ClientID: clientID, Categories: cats,
 		})
 	}
-	return categories, register
+	return lookup, register
 }
 
 var patientWriteMu sync.Map // patient key -> *sync.Mutex

@@ -9,7 +9,12 @@
       <div class="card">
         <h3>Share patient through the generic functions</h3>
         <div class="h-sub">
-          {{if .Shared}}This patient is already shared. Sharing again republishes the same
+          {{if .NVIUnknown}}The NVI could not be reached, so it is not known whether this patient is
+          already shared. Sharing publishes one localization record per data category, so other
+          providers can find that this hospital holds data about this patient, and subscribes to their
+          consent changes. The data itself stays here. If records already exist, sharing converges on
+          one per data category rather than adding more.
+          {{else if .Shared}}This patient is already shared. Sharing again republishes the same
           localization records and retries the consent subscription. The localization records
           converge on one per data category. The consent subscription does not duplicate against
           the mock, which keys one per provider and patient; the national Mitz makes no such
@@ -46,10 +51,11 @@
 {{end}}
 
 {{define "sharecard"}}
-<div class="confirm-card {{if .Failed}}failed{{else if .Skipped}}skipped{{end}}">
+<div class="confirm-card {{if .Failed}}failed{{else if .Unknown}}unknown{{else if .Skipped}}skipped{{end}}">
   <h4>
     {{if .OK}}<span class="ok-ic">&check;</span>
     {{else if .Failed}}<span class="fail-ic">&times;</span>
+    {{else if .Unknown}}<span class="unk-ic">?</span>
     {{else}}<span class="skip-ic">&ndash;</span>{{end}}{{.Title}}
   </h4>
   <div class="cc-detail">{{.Detail}}</div>

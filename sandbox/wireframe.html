@@ -825,7 +825,7 @@
         <main class="content" style="max-width:840px;">
           <div class="card">
             <h3><span class="cic-sq teal"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="5.5" r="2.6"/><path d="M2,13.5 C2,10.9 4,9.5 6.5,9.5 C7.6,9.5 8.6,9.8 9.4,10.3 M12,9.5 L12,13.5 M10,11.5 L14,11.5"/></svg></span>Share patient via the generic functions</h3>
-            <div class="h-sub">Anna's record exists only in De Plataan's own store. Sharing publishes a localization record (this hospital holds BGZ data on her) and subscribes to her consent changes, within the use case <b>Nuts BGZ retrieval</b>. Her data itself stays at the source.</div>
+            <div class="h-sub">Anna's record exists only in De Plataan's own store. Sharing publishes one localization record per data category this hospital holds on her, and subscribes to her consent changes, within the use case <b>Nuts BGZ retrieval</b>. Her data itself stays at the source.</div>
             <div style="display:grid; grid-template-columns:220px 1fr; gap:14px; max-width:560px;">
               <div class="form-row"><label>BSN <span class="hint">· test number</span></label><input class="input mono" value="999911120"></div>
               <div class="form-row"><label>Name <span class="hint">· prefilled</span></label><input class="input" value="Jansen, Anna (1944)"></div>
@@ -1601,7 +1601,7 @@
             </div>
             <div class="hnode plan">
               <span class="hicon n1">1</span>
-              <div><b>Publish localization · NVI</b><div class="hd">De Plataan will declare: we hold BGZ data on this patient.</div>
+              <div><b>Publish localization · NVI</b><div class="hd">De Plataan will declare, per data category: we hold this kind of data on this patient.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/nvi/List</span><span class="s pend">—</span></div></div>
               </div>
               <div class="hstat"><span class="pend">— ms</span><br><span class="cap-chip plan">planned</span></div>
@@ -1628,7 +1628,7 @@
             </div>
             <div class="hnode">
               <span class="hicon n1">1</span>
-              <div><b>Publish localization · NVI</b><div class="hd">De Plataan declared: we hold BGZ data on this patient.</div>
+              <div><b>Publish localization · NVI</b><div class="hd">De Plataan declared, per data category: we hold this kind of data on this patient.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/nvi/List</span><span class="s">201</span></div></div>
               </div>
               <div class="hstat"><span class="ok">✓ 96 ms</span><br><span class="cap-chip ev">step event</span></div>
@@ -1658,7 +1658,7 @@
           <div class="hflow">
             <div class="hnode plan">
               <span class="hicon n1">1</span>
-              <div><b>Publish localization · NVI</b><div class="hd">De Plataan declares: we hold BGZ data on this patient.</div>
+              <div><b>Publish localization · NVI</b><div class="hd">De Plataan declares, per data category: we hold this kind of data on this patient.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/nvi/List</span><span class="s pend">—</span></div></div>
               </div>
               <div class="hstat"><span class="pend">— ms</span><br><span class="cap-chip plan">planned</span></div>
@@ -1671,14 +1671,14 @@
               <div class="hstat"><span class="pend">— ms</span><br><span class="cap-chip plan">planned</span></div>
             </div>
           </div>
-          <div class="hd-note">Sharing publishes a pointer, not data: the record itself never leaves De Plataan.</div>
+          <div class="hd-note">Sharing publishes pointers, not data: one per data category, and the record itself never leaves De Plataan. There is no aggregate BGZ code to publish; a patient summary is the set of categories it contains.</div>
         </div>
         <div class="hd-post">
           <div class="lane-lbl">Shared just now</div>
           <div class="hflow">
             <div class="hnode">
               <span class="hicon n1">✓</span>
-              <div><b>Localization published · NVI</b><div class="hd">Other providers can now find that De Plataan holds BGZ data on Anna.</div>
+              <div><b>Localization published · NVI</b><div class="hd">Other providers can now find which categories of data De Plataan holds on Anna.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/nvi/List</span><span class="s">201</span></div></div>
               </div>
               <div class="hstat"><span class="ok">✓ 96 ms</span><br><span class="cap-chip ev">step event</span></div>

@@ -28,19 +28,20 @@ func getBody(t *testing.T, client *http.Client, srv *httptest.Server, path strin
 }
 
 // categoriesByBSN drives the NVI fake per patient, so a test can make one row
-// fail while the others succeed.
-func categoriesByBSN(m map[string][]string, failFor map[string]bool) func(context.Context, string) ([]string, error) {
-	return func(_ context.Context, bsn string) ([]string, error) {
+// fail while the others succeed. One List per category, which is what the real
+// registration writes; recordsByBSN covers the case where the two diverge.
+func categoriesByBSN(m map[string][]string, failFor map[string]bool) func(context.Context, string) (nviRecords, error) {
+	return func(_ context.Context, bsn string) (nviRecords, error) {
 		if failFor[bsn] {
-			return nil, errors.New("connection refused")
+			return nviRecords{}, errors.New("connection refused")
 		}
-		return m[bsn], nil
+		return nviRecords{Count: len(m[bsn]), Categories: m[bsn]}, nil
 	}
 }
 
 func TestPatientList_ShowsLocalOnlyForAnUnsharedPatient(t *testing.T) {
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(nil, nil)
+	cfg.nviLookup = categoriesByBSN(nil, nil)
 	srv, client := demoServer(t, cfg)
 
 	status, body := getBody(t, client, srv, "/demo/ehr")
@@ -57,7 +58,7 @@ func TestPatientList_ShowsLocalOnlyForAnUnsharedPatient(t *testing.T) {
 func TestPatientList_ShowsSharedForARegisteredPatient(t *testing.T) {
 	anna := pool.Patients()[0]
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
+	cfg.nviLookup = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
 	srv, client := demoServer(t, cfg)
 
 	_, body := getBody(t, client, srv, "/demo/ehr")
@@ -71,7 +72,7 @@ func TestPatientList_ShowsSharedForARegisteredPatient(t *testing.T) {
 func TestPatientList_OneFailingRowDoesNotAffectTheOthers(t *testing.T) {
 	patients := pool.Patients()
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(
+	cfg.nviLookup = categoriesByBSN(
 		map[string][]string{patients[1].BSN: {nvi.CategoryCondition}},
 		map[string]bool{patients[0].BSN: true},
 	)
@@ -87,7 +88,7 @@ func TestPatientList_OneFailingRowDoesNotAffectTheOthers(t *testing.T) {
 
 func TestPatientList_MarksAPatientLockedByAnotherSession(t *testing.T) {
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(nil, nil)
+	cfg.nviLookup = categoriesByBSN(nil, nil)
 	require.True(t, cfg.Locks.Lock(pool.Patients()[0].Key, "someone-else"))
 	srv, client := demoServer(t, cfg)
 
@@ -114,7 +115,7 @@ func TestPatientList_RequiresASession(t *testing.T) {
 
 func TestOpenPatient_TakesTheLockAndRedirects(t *testing.T) {
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(nil, nil)
+	cfg.nviLookup = categoriesByBSN(nil, nil)
 	anna := pool.Patients()[0].Key
 	srv, client := demoServer(t, cfg)
 
@@ -128,7 +129,7 @@ func TestOpenPatient_TakesTheLockAndRedirects(t *testing.T) {
 
 func TestOpenPatient_ReleasesThePreviouslyOpenedPatient(t *testing.T) {
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(nil, nil)
+	cfg.nviLookup = categoriesByBSN(nil, nil)
 	first, second := pool.Patients()[0].Key, pool.Patients()[1].Key
 	srv, client := demoServer(t, cfg)
 
@@ -141,7 +142,7 @@ func TestOpenPatient_ReleasesThePreviouslyOpenedPatient(t *testing.T) {
 
 func TestOpenPatient_RefusesAPatientAnotherSessionHolds(t *testing.T) {
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(nil, nil)
+	cfg.nviLookup = categoriesByBSN(nil, nil)
 	anna := pool.Patients()[0].Key
 	require.True(t, cfg.Locks.Lock(anna, "someone-else"))
 	srv, client := demoServer(t, cfg)
@@ -165,7 +166,7 @@ func TestOpenPatient_RefusesAPatientAnotherSessionHolds(t *testing.T) {
 // acquire that then failed.
 func TestOpenPatient_ARefusedSwitchKeepsThePatientAlreadyHeld(t *testing.T) {
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(nil, nil)
+	cfg.nviLookup = categoriesByBSN(nil, nil)
 	held, taken := pool.Patients()[0].Key, pool.Patients()[1].Key
 	require.True(t, cfg.Locks.Lock(taken, "someone-else"))
 	srv, client := demoServer(t, cfg)
@@ -186,7 +187,7 @@ func TestOpenPatient_ARefusedSwitchKeepsThePatientAlreadyHeld(t *testing.T) {
 
 func TestPatientRecord_ShowsNotFindableYetWhenUnshared(t *testing.T) {
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(nil, nil)
+	cfg.nviLookup = categoriesByBSN(nil, nil)
 	anna := pool.Patients()[0].Key
 	srv, client := demoServer(t, cfg)
 	postForm(t, client, srv, "/demo/ehr/patients/"+anna+"/open", nil).Body.Close()
@@ -201,7 +202,7 @@ func TestPatientRecord_ShowsNotFindableYetWhenUnshared(t *testing.T) {
 func TestPatientRecord_ShowsRegisteredCategoriesWhenShared(t *testing.T) {
 	anna := pool.Patients()[0]
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(
+	cfg.nviLookup = categoriesByBSN(
 		map[string][]string{anna.BSN: {nvi.CategoryCondition, nvi.CategoryMedicationRequest}}, nil)
 	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return true, nil }
 	srv, client := demoServer(t, cfg)
@@ -228,7 +229,7 @@ func sharedNotSubscribed(t *testing.T) (Config, pool.PoolPatient) {
 	t.Helper()
 	anna := pool.Patients()[0]
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
+	cfg.nviLookup = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
 	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return false, nil }
 	return cfg, anna
 }
@@ -257,7 +258,7 @@ func TestPatientRecord_ShowsTheMissingSubscriptionState(t *testing.T) {
 func TestPatientRecord_SubscribedShowsNoRetry(t *testing.T) {
 	anna := pool.Patients()[0]
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
+	cfg.nviLookup = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
 	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return true, nil }
 	srv, client := demoServer(t, cfg)
 	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
@@ -278,7 +279,7 @@ func TestPatientRecord_SubscribedShowsNoRetry(t *testing.T) {
 func TestPatientRecord_UnconfiguredLookupShowsUnknownNotMissing(t *testing.T) {
 	anna := pool.Patients()[0]
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
+	cfg.nviLookup = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
 	cfg.mitzSubscribed = nil
 	srv, client := demoServer(t, cfg)
 	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
@@ -314,6 +315,11 @@ func TestSubscribe_RetriesOnlyTheMitzStep(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
 	require.Equal(t, []string{anna.BSN}, subscribed)
 	require.Zero(t, registered, "the retry must not redo the NVI work")
+	// The redirect target, not just its status: the notice is the only thing the
+	// practitioner reads, so a success that redirects to the failure or unknown
+	// notice is the demo asserting something that did not happen.
+	require.Equal(t, "/demo/ehr/patients/"+anna.Key+"?notice=mitz-retry-done",
+		res.Header.Get("Location"), "a successful retry must report success")
 }
 
 // A failed retry must not assert a failure it did not establish. The share flow
@@ -375,11 +381,20 @@ func shareConfig(t *testing.T) (Config, *shareCalls, pool.PoolPatient) {
 	anna := pool.Patients()[0]
 	calls := &shareCalls{}
 	cfg, _, _ := fakeConfig()
-	cfg.nviCategories = categoriesByBSN(nil, nil)
 	cfg.nviRegister = func(_ context.Context, bsn string, cats []string) error {
 		calls.registeredBSN, calls.registeredCats = bsn, cats
 		calls.registerCount++
 		return nil
+	}
+	// The read after the write sees the write. A fake that always answers "no
+	// records" makes the share response render the green publication card above
+	// prose saying the patient is local-only, and every success test here would
+	// pass while showing the presenter a page that contradicts itself.
+	cfg.nviLookup = func(_ context.Context, bsn string) (nviRecords, error) {
+		if calls.registeredBSN != bsn {
+			return nviRecords{}, nil
+		}
+		return nviRecords{Count: len(calls.registeredCats), Categories: calls.registeredCats}, nil
 	}
 	cfg.mitzSubscribe = func(context.Context, string) error { calls.subscribeCount++; return nil }
 	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return false, nil }
@@ -407,11 +422,49 @@ func TestShare_RegistersTheDerivedCategoriesAndConfirmsBothSteps(t *testing.T) {
 	require.Equal(t, anna.PlataanCategories(), calls.registeredCats,
 		"the handler must send exactly the categories De Plataan holds")
 	require.Contains(t, body, "Localization records published")
-	require.Contains(t, body, "Mitz subscription started")
+	require.Contains(t, body, "Consent subscription started")
 	// State, not just title: a card carrying Failed alongside a success title
 	// renders red with a cross and would satisfy the titles alone.
 	require.Contains(t, body, `<span class="ok-ic">`)
 	require.NotContains(t, body, "confirm-card failed")
+	require.NotContains(t, body, "exists only in De Plataan's own store",
+		"the page must not deny the publication it just reported")
+}
+
+// The publish succeeded and the read that follows it failed. The header is built
+// from that read, so without the write's own outcome overriding it the response
+// carries the green "Localization records published" card above prose telling the
+// presenter the record never left the building.
+func TestShare_SuccessIsNotContradictedByAFailedFollowUpRead(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	cfg.nviLookup = func(context.Context, string) (nviRecords, error) {
+		return nviRecords{}, errors.New("connection refused")
+	}
+
+	_, body := openAndShare(t, cfg, anna.Key)
+
+	require.Contains(t, body, "Localization records published")
+	require.NotContains(t, body, "exists only in De Plataan's own store")
+	require.NotContains(t, body, "it is not known whether this patient is")
+}
+
+// The mirror of the test above, on the way in: with no card to override it, an
+// unreachable NVI must not let the share form assert that the patient is
+// local-only. The form is where a presenter decides whether to share at all.
+func TestShareForm_UnknownNVIIsNotRenderedAsLocalOnly(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	cfg.nviLookup = func(context.Context, string) (nviRecords, error) {
+		return nviRecords{}, errors.New("connection refused")
+	}
+	srv, client := demoServer(t, cfg)
+	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+
+	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, "it is not known whether this patient is")
+	require.NotContains(t, body, "exists only in De Plataan's own store")
+	require.NotContains(t, body, "This patient is already shared")
 }
 
 func TestShare_CardNamesTheRegisteredCategories(t *testing.T) {
@@ -454,21 +507,58 @@ func TestShare_MitzFailureIsShownWithoutFakingTheNVIResult(t *testing.T) {
 
 	require.Contains(t, body, "Localization records published")
 	require.Contains(t, body, "Mitz subscription failed")
-	require.NotContains(t, body, "Mitz subscription started")
+	require.NotContains(t, body, "Consent subscription started")
 	require.Contains(t, body, "confirm-card failed", "the failed card must render as failed, not merely be titled so")
 }
 
 // An error the reconciliation query says did commit is a lost response, not a
 // failure, and must not invite a retry that could duplicate against real Mitz.
-func TestShare_LostMitzResponseIsReportedAsUnknownNotFailed(t *testing.T) {
+func TestShare_LostMitzResponseIsReportedAsStartedNotFailed(t *testing.T) {
 	cfg, _, anna := shareConfig(t)
-	cfg.mitzSubscribe = func(context.Context, string) error { return context.DeadlineExceeded }
-	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return true, nil }
+	// Stateful, because the handler asks twice and the two answers differ: not
+	// subscribed on the way in, subscribed once the call has committed. A fake
+	// answering "yes" to both would make the card report a subscription that was
+	// already there, which is a different claim from the one under test.
+	committed := false
+	cfg.mitzSubscribe = func(context.Context, string) error { committed = true; return context.DeadlineExceeded }
+	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return committed, nil }
 
 	_, body := openAndShare(t, cfg, anna.Key)
 
-	require.Contains(t, body, "Mitz subscription started")
+	require.Contains(t, body, "Consent subscription started")
 	require.NotContains(t, body, "Mitz subscription failed")
+	require.NotContains(t, body, "Mitz subscription outcome unknown")
+}
+
+// The third outcome. A failed call the sandbox cannot reconcile is not a failed
+// subscription: MITZMOCK_URL is unset in the base compose profile, so this is the
+// shipped behaviour there, and a red cross over it would tell the presenter that
+// Mitz refused when nothing established that.
+func TestShare_UnreconcilableMitzFailureIsUnknownNotFailed(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	cfg.mitzSubscribe = func(context.Context, string) error { return context.DeadlineExceeded }
+	cfg.mitzSubscribed = nil
+
+	_, body := openAndShare(t, cfg, anna.Key)
+
+	require.Contains(t, body, "Mitz subscription outcome unknown")
+	require.NotContains(t, body, "Mitz subscription failed")
+	require.NotContains(t, body, "confirm-card failed",
+		"an outcome nobody established must not render as a confirmed failure")
+	require.Contains(t, body, "confirm-card unknown")
+}
+
+// The reconciliation query itself failing is the same state as not having one:
+// the call's outcome is unestablished either way.
+func TestShare_FailedReconciliationQueryIsUnknownNotFailed(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	cfg.mitzSubscribe = func(context.Context, string) error { return context.DeadlineExceeded }
+	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return false, errors.New("mock unreachable") }
+
+	_, body := openAndShare(t, cfg, anna.Key)
+
+	require.Contains(t, body, "Mitz subscription outcome unknown")
+	require.NotContains(t, body, "confirm-card failed")
 }
 
 func TestShare_MitzIsSkippedWhenTheNVIStepFailed(t *testing.T) {

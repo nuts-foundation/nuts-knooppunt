@@ -26,7 +26,7 @@ func acceptanceServer(t *testing.T) (harness.Details, *httptest.Server, *http.Cl
 	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
 
 	cfg := Config{Locks: NewRegistry()}
-	cfg.nviCategories, cfg.nviRegister = nviFuncs(h.KnooppuntInternalBaseURL, pool.PlataanClientID)
+	cfg.nviLookup, cfg.nviRegister = nviFuncs(h.KnooppuntInternalBaseURL, pool.PlataanClientID)
 	cfg.mitzSubscribe = mitzSubscribeFunc(h.KnooppuntInternalBaseURL, plataanURA, "Z3")
 	mockBase, err := url.Parse(h.MockMitzXACML.GetURL())
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestAcceptance_ShareRegistersBothAndConfirms(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "Localization records published")
-	require.Contains(t, body, "Mitz subscription started")
+	require.Contains(t, body, "Consent subscription started")
 
 	lists := rawNVILists(t, h, anna.BSN)
 	plataanLists := filterByCustodian(lists, plataanURA)
@@ -161,6 +161,15 @@ func TestAcceptance_SharingTwiceIsSafe(t *testing.T) {
 	// title is unique to the success branch.
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "Localization records published")
+
+	// What each share actually did with the subscription, which the count below
+	// cannot show: one subscription is the same number whether the second share
+	// created it or found it. The mock answers a repeat with the existing
+	// subscription and still returns 201, so a card reading "started" on the
+	// second share would be the demo claiming an action Mitz did not take.
+	require.Contains(t, firstBody, "Consent subscription started")
+	require.Contains(t, body, "Consent subscription already active")
+	require.NotContains(t, body, "Consent subscription started")
 
 	plataanLists := filterByCustodian(rawNVILists(t, h, anna.BSN), plataanURA)
 	require.Len(t, plataanLists, len(anna.PlataanCategories()),

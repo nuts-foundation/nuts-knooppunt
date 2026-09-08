@@ -86,7 +86,9 @@ func TestMitzSubscribed_NilBaseIsUnconfigured(t *testing.T) {
 
 func TestPatientShareStatus_SubscriptionUnknownWhenTheQueryFails(t *testing.T) {
 	cfg := Config{
-		nviCategories:  func(context.Context, string) ([]string, error) { return []string{"Condition"}, nil },
+		nviLookup: func(context.Context, string) (nviRecords, error) {
+			return nviRecords{Count: 1, Categories: []string{"Condition"}}, nil
+		},
 		mitzSubscribed: func(context.Context, string) (bool, error) { return false, context.DeadlineExceeded },
 	}
 
