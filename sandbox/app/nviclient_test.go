@@ -2,16 +2,21 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/plataan"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 	"github.com/stretchr/testify/require"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 func TestPatientShareStatus_SharedWhenCategoriesExist(t *testing.T) {
@@ -200,4 +205,41 @@ func TestNewConfigFromEnv_TheOverriddenClientIDReachesPublicationAndCleanup(t *t
 		"publication and De Plataan's cleanup must both scope by the configured client id")
 	require.Contains(t, seen, nvi.OAuthClientIDSystem+"|"+pool.ZonnebloemClientID,
 		"and the override must not follow along into the source side's own registration")
+}
+
+// The adapter is where the unnamed count is produced, and every other test in
+// this file injects an already-populated nviRecords, so none of them can see it
+// stop being produced. Returning a constant zero there makes a mixed real
+// response lose its warning and select the "same records" copy, with the helper's
+// own test still green because it only exercises the producer.
+func TestNVIFuncs_CarriesTheUnnamedCountFromTheRealResponse(t *testing.T) {
+	reg := nvi.Registration{CustodianURA: plataan.URA, BSN: "999900006", ClientID: "c"}
+	recognized := nvi.BuildList(reg, nvi.CategoryCondition)
+	foreign := nvi.BuildList(reg, nvi.CategoryCondition)
+	foreign.Code.Coding[0].System = to.Ptr("http://example.test/legacy-categories")
+
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		entries := make([]fhir.BundleEntry, 0, 2)
+		for _, list := range []fhir.List{recognized, foreign} {
+			raw, err := json.Marshal(list)
+			require.NoError(t, err)
+			entries = append(entries, fhir.BundleEntry{Resource: raw})
+		}
+		body, err := json.Marshal(fhir.Bundle{Type: fhir.BundleTypeSearchset, Entry: entries})
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = w.Write(body)
+	}))
+	defer fake.Close()
+	base, err := url.Parse(fake.URL)
+	require.NoError(t, err)
+
+	lookup, _ := nviFuncs(base, "c")
+	records, err := lookup(t.Context(), reg.BSN)
+
+	require.NoError(t, err)
+	require.Equal(t, 2, records.Count)
+	require.Equal(t, []string{nvi.CategoryCondition}, records.Categories)
+	require.Equal(t, 1, records.Unnamed,
+		"the adapter must report the record this build cannot name, not derive it from the category set")
 }

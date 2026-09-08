@@ -170,7 +170,7 @@ func TestAcceptance_SharingTwiceIsSafe(t *testing.T) {
 	// subscription and still returns 201, so a card reading "started" on the
 	// second share would be the demo claiming an action Mitz did not take.
 	require.Contains(t, firstBody, "Consent subscription started")
-	require.Contains(t, body, "Consent subscription already active")
+	require.Contains(t, body, "Consent subscription already registered")
 	require.NotContains(t, body, "Consent subscription started")
 
 	plataanLists := filterByCustodian(rawNVILists(t, h, anna.BSN), plataanURA)
@@ -225,7 +225,29 @@ func TestAcceptance_ADuplicateCategoryIsNotReportedAsUnnamed(t *testing.T) {
 	postRawNVIList(t, h, duplicate)
 
 	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
-	postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+	shareStatus, shareBody := postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+
+	// The share has to have run, or the assertions below hold over the single
+	// preloaded fixture and prove nothing: a failed registration answers 200 with
+	// a Failed card and writes nothing.
+	require.Equal(t, http.StatusOK, shareStatus)
+	require.Contains(t, shareBody, "Localization records published")
+
+	// And what the scoped write actually leaves behind: this client's three
+	// categories plus the foreign client's Condition, which it cannot delete. Two
+	// Condition Lists, not one, which is why the share screen must not promise
+	// convergence on one per category.
+	plataanLists := filterByCustodian(rawNVILists(t, h, anna.BSN), plataanURA)
+	require.Len(t, plataanLists, len(anna.PlataanCategories())+1,
+		"the foreign client's List survives a scoped delete")
+	conditions := 0
+	for _, list := range plataanLists {
+		if code := list.Code.Coding[0].Code; code != nil && *code == nvi.CategoryCondition {
+			conditions++
+		}
+	}
+	require.Equal(t, 2, conditions, "both Condition Lists are there, ours and the stranger's")
+
 	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key)
 
 	require.Equal(t, http.StatusOK, status)

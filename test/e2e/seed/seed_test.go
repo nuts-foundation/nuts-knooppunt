@@ -331,6 +331,51 @@ func TestResetGlobal_ACleanupWarningDoesNotMaskARestoreFailure(t *testing.T) {
 		"the restoration failure must surface as itself, not as a cleanup warning")
 }
 
+// A registration this cleanup cannot match must not be reported as a clean
+// restore. The branch's own earlier seed wrote De Plataan under a different
+// identifier system, and Compose reuses an unchanged HAPI container, so an
+// upgraded stack still holds records the client-scoped delete cannot see.
+func TestResetGlobal_ReportsPartialWhenAForeignClientRegistrationSurvives(t *testing.T) {
+	h := harness.Start(t)
+	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
+	anna := pool.Patients()[0]
+
+	// Another client's registration for the same custodian and patient.
+	require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
+		CustodianURA: plataan.URA, BSN: anna.BSN,
+		ClientID: "PLATAAN-EHR-legacy", Categories: []string{nvi.CategoryCondition},
+	}))
+
+	err := vectors.ResetGlobal(t.Context(), sandboxTarget(t, h))
+
+	require.ErrorIs(t, err, vectors.ErrPartialReset,
+		"a patient still findable under De Plataan is not a restored dataset")
+	require.Contains(t, err.Error(), anna.Key)
+
+	// The rest of the restore still happened: the warning is not an early exit.
+	zonnebloem, listErr := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), anna.BSN)
+	require.NoError(t, listErr)
+	require.Equal(t, anna.ZonnebloemCategories(), nvi.CategoriesOf(zonnebloem))
+}
+
+// The same for one patient.
+func TestRecyclePatient_ReportsPartialWhenAForeignClientRegistrationSurvives(t *testing.T) {
+	h := harness.Start(t)
+	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
+	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
+	anna := pool.Patients()[0]
+
+	require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
+		CustodianURA: plataan.URA, BSN: anna.BSN,
+		ClientID: "PLATAAN-EHR-legacy", Categories: []string{nvi.CategoryCondition},
+	}))
+
+	err := vectors.RecyclePatient(t.Context(), sandboxTarget(t, h), anna.Key)
+
+	require.ErrorIs(t, err, vectors.ErrPartialReset)
+	require.Contains(t, err.Error(), anna.Key)
+}
+
 // The sandbox publishes under SANDBOX_NVI_CLIENT_ID when it is set, and the
 // delete that cleans up is scoped to a client. A reset holding the compiled-in
 // default while the app published under an override removes nothing and still

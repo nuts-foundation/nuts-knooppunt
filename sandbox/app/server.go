@@ -24,7 +24,7 @@ var notices = map[string]string{
 	"signed-out":            "Signed out. The Dezi session has been cleared.",
 	"patient-busy":          "That patient is in use by another demo run. Pick a different one.",
 	"mitz-retry-done":       "Consent subscription started.",
-	"mitz-retry-existing":   "A consent subscription for this patient was already registered and is still active. This retry did not create a second one.",
+	"mitz-retry-existing":   "A consent subscription for this patient was already registered at Mitz. This retry did not create a second one.",
 	"mitz-retry-registered": "Mitz accepted the subscription. Whether one already existed could not be established, so this may have found rather than created it.",
 	"mitz-retry-failed":     "Mitz confirms there is still no subscription. The call failed; try again.",
 	"mitz-retry-unknown":    "The call failed and Mitz could not be asked whether it went through anyway. Check the record before retrying: another attempt may create a second subscription.",

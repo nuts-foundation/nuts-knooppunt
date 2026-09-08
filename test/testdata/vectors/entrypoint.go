@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -294,15 +295,48 @@ func ResetGlobal(ctx context.Context, target SandboxTarget) error {
 	// would erase a second installation's registrations — but it means the
 	// sandbox's own records survive unless they are removed here by name.
 	nviBaseURL := knooppuntInternalBaseURL.JoinPath("nvi")
+	var stillShared []string
 	for _, patient := range pool.Patients() {
 		if err := nvi.DeleteForClient(ctx, nviBaseURL, plataan.URA, patient.BSN, target.clientID()); err != nil {
 			return fmt.Errorf("unshare patient %s: %w", patient.Key, err)
+		}
+		remaining, err := nvi.ListsForCustodian(ctx, nviBaseURL, plataan.URA, patient.BSN)
+		if err != nil {
+			return fmt.Errorf("verify patient %s is unshared: %w", patient.Key, err)
+		}
+		if len(remaining) > 0 {
+			stillShared = append(stillShared, patient.Key)
 		}
 	}
 
 	// Last, and its error returned last: a partial-cleanup warning must not mask
 	// a real restoration failure above it.
-	return clearMitzSubscriptions(ctx, target.MitzMockBaseURL, url.Values{})
+	if err := clearMitzSubscriptions(ctx, target.MitzMockBaseURL, url.Values{}); err != nil {
+		return err
+	}
+	return unsharedOrPartial(stillShared)
+}
+
+// unsharedOrPartial turns surviving De Plataan registrations into a warning
+// rather than letting the caller report a clean restore over them.
+//
+// The delete is scoped by client id, and deliberately so: a custodian-wide
+// delete would erase a second installation's registrations. The cost is that it
+// cannot reach records this installation did not write, and there are two ways
+// to have them. The branch's own earlier seed registered De Plataan under a
+// different identifier system, and Compose reuses an unchanged HAPI container,
+// so an upgraded stack still holds them. An operator who changes
+// SANDBOX_NVI_CLIENT_ID moves what the delete matches and strands whatever the
+// previous value wrote.
+//
+// Checking what is actually there costs one search per patient and needs no
+// knowledge of the formats that produced them.
+func unsharedOrPartial(stillShared []string) error {
+	if len(stillShared) == 0 {
+		return nil
+	}
+	return fmt.Errorf("%w: these patients are still registered under De Plataan by a client this cleanup does not match, so they remain findable: %s",
+		ErrPartialReset, strings.Join(stillShared, ", "))
 }
 
 // ErrPartialReset reports that the dataset was restored but something optional
@@ -393,9 +427,23 @@ func RecyclePatient(ctx context.Context, target SandboxTarget, patientKey string
 	// concurrent demo's subscription, which is the one thing a per-patient
 	// recycle promises not to do. Its error is returned last so a cleanup warning
 	// cannot mask a real restoration failure above it.
-	return clearMitzSubscriptions(ctx, target.MitzMockBaseURL, url.Values{
+	if err := clearMitzSubscriptions(ctx, target.MitzMockBaseURL, url.Values{
 		"providerid": {plataan.URA}, "patientid": {patient.BSN},
-	})
+	}); err != nil {
+		return err
+	}
+
+	// And the same check the global reset makes, for the same reason: the delete
+	// above is scoped by client, so it cannot reach a registration another client
+	// wrote, and "restored to the seeded state" would be untrue over one.
+	remaining, err := nvi.ListsForCustodian(ctx, nviBaseURL, plataan.URA, patient.BSN)
+	if err != nil {
+		return fmt.Errorf("verify patient %s is unshared: %w", patient.Key, err)
+	}
+	if len(remaining) > 0 {
+		return unsharedOrPartial([]string{patient.Key})
+	}
+	return nil
 }
 
 // mutableResourceTypes are the resource types the reset paths clear from the

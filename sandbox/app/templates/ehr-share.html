@@ -9,21 +9,21 @@
       <div class="card">
         <h3>Share patient through the generic functions</h3>
         <div class="h-sub">
-          {{if .NVIUnknown}}The NVI was not reached, so it is not known whether this patient is
-          already shared. Sharing publishes one localization record per data category, so other
-          providers can find that this hospital holds data about this patient, and subscribes to their
-          consent changes. The data itself stays here. If records already exist, sharing converges on
-          one per data category rather than adding more.
+          {{if .NVIUnknown}}The NVI's answer could not be established, so it is not known whether this
+          patient is already shared. Sharing publishes one localization record per data category, so
+          other providers can find that this hospital holds data about this patient, and subscribes to
+          their consent changes. The data itself stays here.
           {{else if .UnnamedRecords}}The NVI holds localization records for this patient whose data
-          category comes from a code system this build does not recognize. Sharing publishes one
-          record per category listed below. Whether that replaces the unrecognized ones depends on
-          which client registered them, which this screen cannot see: the delete is scoped by client,
-          and the stored records do not report theirs.
-          {{else if .Shared}}This patient is already shared. Sharing again republishes the same
-          localization records and retries the consent subscription. The localization records
-          converge on one per data category. The consent subscription does not duplicate against
-          the mock, which keys one per provider and patient; the national Mitz makes no such
-          promise.
+          category is missing or comes from a code system this build does not recognize. Sharing
+          publishes one record per category listed below. Whether that replaces the unnamed ones
+          depends on which client registered them, which this screen cannot see: the delete is scoped
+          by client, and the stored records do not report theirs.
+          {{else if .Shared}}This patient is already shared. Sharing again republishes the records
+          this installation published, converging on one per data category, and retries the consent
+          subscription. Records another client registered are not visible here and are not replaced,
+          because the delete that precedes the write is scoped to this installation's client id. The
+          consent subscription does not duplicate against the mock, which keys one per provider and
+          patient; the national Mitz makes no such promise.
           {{else}}This record exists only in De Plataan's own store. Sharing publishes one
           localization record per data category, so other providers can find that this hospital holds
           data about this patient, and subscribes to their consent changes. The data itself stays here.

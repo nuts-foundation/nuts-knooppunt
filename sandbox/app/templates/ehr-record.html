@@ -11,8 +11,9 @@
         <div class="h-sub">{{.BirthDate}} · BSN <span class="mono">{{.BSN}}</span></div>
         {{if .NVIUnknown}}
           <span class="stat-chip unknown">Status unknown</span>
-          <p>The NVI was not reached, so it is not known whether this record is findable. Either the call
-          failed or this deployment has no Knooppunt configured; the sandbox log says which.</p>
+          <p>The NVI's answer could not be established, so it is not known whether this record is
+          findable. The sandbox log carries the reason: an unconfigured Knooppunt is reported at
+          startup, a failed lookup where it happens.</p>
         {{else if .Shared}}
           {{if .Subscribed}}<span class="stat-chip gf">Shared via GF</span>
           {{else if .SubscriptionUnknown}}<span class="stat-chip unknown">Shared via GF · subscription status unknown</span>
@@ -22,7 +23,7 @@
           <ul class="cat-list">{{range .Categories}}<li class="mono">{{.}}</li>{{end}}</ul>
           {{if .UnnamedRecords}}
           <p>Alongside those, the NVI holds {{.UnnamedRecords}} further localization record(s) for this
-          patient whose data category this build cannot name.</p>
+          patient whose data category is missing or from a code system this build cannot name.</p>
           {{end}}
           {{else}}
           <p>Other care providers can find this record through the NVI. Its localization records carry no

@@ -389,13 +389,16 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 		detail = "Mitz accepted the subscription. Whether one already existed could not be " +
 			"established here, so this may have found rather than created it."
 	case existedBefore:
-		title = "Consent subscription already active"
-		// What the subscription is, not what Mitz did with this request. This
-		// branch is also reached when the call itself failed and reconciliation
-		// only found the earlier subscription still there, and that establishes
-		// nothing about an answer to this request.
-		detail = "A subscription for this patient at De Plataan was already registered and is still " +
-			"active, so this request did not create a second one."
+		title = "Consent subscription already registered"
+		// Registered, not active. The sandbox sends status "requested", which is
+		// what MITZ requires, the mock stores it unchanged, and the lookup only
+		// asks whether a Subscription exists. FHIR R4 keeps "requested" and
+		// "active" apart on purpose, so existence establishes registration and
+		// nothing about the lifecycle. Nor what Mitz did with this request: this
+		// branch is also reached when the call failed and reconciliation merely
+		// found the earlier subscription.
+		detail = "A subscription for this patient at De Plataan was already registered at Mitz, so " +
+			"this request did not create a second one."
 	}
 	return &cardResult{
 		OK:    true,

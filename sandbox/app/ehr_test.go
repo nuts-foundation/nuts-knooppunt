@@ -470,7 +470,7 @@ func TestShare_SuccessIsNotContradictedByAFailedFollowUpRead(t *testing.T) {
 
 	require.Contains(t, body, "Localization records published")
 	require.NotContains(t, body, "exists only in De Plataan's own store")
-	require.NotContains(t, body, "it is not known whether this patient is")
+	require.NotContains(t, body, "it is not known whether this")
 }
 
 // The mirror of the test above, on the way in: with no card to override it, an
@@ -487,7 +487,7 @@ func TestShareForm_UnknownNVIIsNotRenderedAsLocalOnly(t *testing.T) {
 	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
 
 	require.Equal(t, http.StatusOK, status)
-	require.Contains(t, body, "it is not known whether this patient is")
+	require.Contains(t, body, "it is not known whether this")
 	require.NotContains(t, body, "exists only in De Plataan's own store")
 	require.NotContains(t, body, "This patient is already shared")
 }
@@ -522,7 +522,7 @@ func TestShare_WithoutALookupTheSuccessCardClaimsNoCreation(t *testing.T) {
 }
 
 // A preflight that errors is the same state as not having one: nothing was
-// established, so neither "started" nor "already active" is available.
+// established, so neither "started" nor "already registered" is available.
 func TestShare_AFailedPreflightFallsBackToTheNeutralCard(t *testing.T) {
 	cfg, _, anna := shareConfig(t)
 	cfg.mitzSubscribed = func(context.Context, string) (bool, error) {
@@ -533,7 +533,7 @@ func TestShare_AFailedPreflightFallsBackToTheNeutralCard(t *testing.T) {
 
 	require.Contains(t, body, "Consent subscription registered")
 	require.NotContains(t, body, "Consent subscription started")
-	require.NotContains(t, body, "Consent subscription already active")
+	require.NotContains(t, body, "Consent subscription already registered")
 }
 
 // The NVI holds records this build cannot name. The share form replaces the
@@ -880,7 +880,7 @@ func TestShare_ConcurrentSubmitsSerialize(t *testing.T) {
 		if strings.Contains(body, "Consent subscription started") {
 			started++
 		}
-		if strings.Contains(body, "Consent subscription already active") {
+		if strings.Contains(body, "Consent subscription already registered") {
 			existing++
 		}
 	}

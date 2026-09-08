@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"sync"
 	"time"
@@ -82,6 +83,15 @@ func (c Config) patientShareStatus(ctx context.Context, bsn string) shareStatus 
 		return c.nviLookup(callCtx, bsn)
 	})
 	if err != nil {
+		// Logged, because the screen tells the presenter the log carries the
+		// reason. Without this the unknown state is silent and that instruction
+		// sends them looking for something that was never written.
+		//
+		// The patient is correlated by the last four digits of the BSN, which is
+		// what the NVI helper's own errors use: enough to match a row on screen
+		// to a line in the log, without putting a national identifier in it.
+		slog.WarnContext(ctx, "NVI lookup failed; reporting the patient's share status as unknown",
+			"patient", lastFourOfBSN(bsn), "error", err)
 		return shareStatus{NVIUnknown: true}
 	}
 
@@ -108,6 +118,15 @@ func (c Config) patientShareStatus(ctx context.Context, bsn string) shareStatus 
 	}
 	status.Subscribed = subscribed
 	return status
+}
+
+// lastFourOfBSN renders just enough of a BSN to correlate a log line with a row
+// on screen without recording a national identifier.
+func lastFourOfBSN(bsn string) string {
+	if len(bsn) <= 4 {
+		return "****"
+	}
+	return "****" + bsn[len(bsn)-4:]
 }
 
 // withTimeout derives d from ctx rather than from whatever time another call
