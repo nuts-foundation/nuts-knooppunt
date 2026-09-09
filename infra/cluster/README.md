@@ -14,8 +14,8 @@ node pool backing the GF test environment. See
   since a drain can leave everything on one node.
 
 Not yet scaffolded: Kubernetes-level manifests (namespaces, RBAC,
-ResourceQuota, ingress) and the CI/CD deploy workflow — pending the
-cluster/CI design discussion with Joris and Gaspar (see
+ResourceQuota, ingress) and the CI/CD deploy workflow — pending a
+cluster/CI design discussion within the team (see
 `infra-identity/DESIGN.md`, Open items).
 
 ## Setup
@@ -28,11 +28,9 @@ export OVH_APPLICATION_SECRET=...
 export OVH_CONSUMER_KEY=...
 ```
 
-**Current status**: the OVH credential used for `infra-identity`
-(`terraform-deploy-macbook-rein`) only has **read** access to
-`/cloud/project/*` — enough to `plan`, not to `apply`. Provisioning this
-cluster needs a token with write access to that path too (same
-`api.ovh.com/createApp` flow as `infra-identity` used, broadened).
+**Current status**: no credential with write access to `/cloud/project/*`
+exists yet — `plan` works, `apply` doesn't. Register one via
+`api.ovh.com/createApp` with write access to that path.
 
 State backend (S3-compatible, separate bucket/credentials from
 `infra-identity`'s state — don't reuse):
