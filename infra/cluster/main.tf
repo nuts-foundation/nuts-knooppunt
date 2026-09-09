@@ -28,11 +28,12 @@ resource "ovh_cloud_project_kube_nodepool" "test" {
   # adding nodes.
   flavor_name = "d2-4"
 
-  # 3 nodes not 2: upgrades drain one node at a time, so workloads must
-  # fit on 2. Autoscaling off makes the compute bill a constant -
+  # 2 nodes: accepted tradeoff for a test environment - an upgrade drain
+  # can leave everything on one node, so brief downtime is possible during
+  # upgrades. Autoscaling off makes the compute bill a constant -
   # over-deploying yields pending pods, not invoices.
-  desired_nodes = 3
-  min_nodes     = 3
-  max_nodes     = 3
+  desired_nodes = 2
+  min_nodes     = 2
+  max_nodes     = 2
   autoscale     = false
 }

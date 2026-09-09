@@ -9,8 +9,9 @@ node pool backing the GF test environment. See
 
 - `ovh_cloud_project_kube.test` — MKS cluster, region `DE1`, free control
   plane plan, `MINIMAL_DOWNTIME` update policy.
-- `ovh_cloud_project_kube_nodepool.test` — 3x `d2-4` nodes, fixed
-  (autoscaling off).
+- `ovh_cloud_project_kube_nodepool.test` — 2x `d2-4` nodes, fixed
+  (autoscaling off). Accepted tradeoff: upgrades may cause brief downtime
+  since a drain can leave everything on one node.
 
 Not yet scaffolded: Kubernetes-level manifests (namespaces, RBAC,
 ResourceQuota, ingress) and the CI/CD deploy workflow — pending the
