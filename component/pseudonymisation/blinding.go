@@ -9,8 +9,10 @@ import (
 )
 
 // Implementation uses:
-// - HKDF
-// - OPRF: https://datatracker.ietf.org/doc/rfc9497/ with Ristretto255 (https://datatracker.ietf.org/doc/draft-irtf-cfrg-voprf/)
+// - HKDF (RFC 5869) to derive the OPRF input
+// - the hash-to-group and Blind steps of RFC 9497 OPRF(ristretto255, SHA-512)
+//   (https://datatracker.ietf.org/doc/rfc9497/); the recipient de-blinds and
+//   uses the group element without RFC 9497 Finalize, see docs/prs-contract.md
 
 func deriveKey(identifier prsIdentifier, recipientOrganizationURA string, recipientScope string) ([]byte, error) {
 	info := fmt.Sprintf("ura:%s|%s|v1", recipientOrganizationURA, recipientScope)

@@ -2,10 +2,12 @@ package pseudonymisation
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
+	"golang.org/x/oauth2"
 )
 
 const (
@@ -26,25 +29,44 @@ const (
 	// testNVIURA is the NVI's URA on the acceptance environment (docs/CONFIGURATION.md).
 	testNVIURA = "90000901"
 	testScope  = "nationale-verwijsindex"
+	// testAccessToken is what the stubbed authn component's client presents.
+	testAccessToken = "access-token-issued-for-the-prs"
 )
 
-// tokenRequest captures what the component asks the authn component for.
-type tokenRequest struct {
+// providerCall records what the component asks the authn component for, and
+// the credentials the client it got back carries.
+type providerCall struct {
 	scope    []string
 	ura      string
 	audience string
+	// clientCertificate is what the returned client presents on the TLS
+	// handshake, next to testAccessToken in the Authorization header. The
+	// mock PRS requires both, so only a request made through that client
+	// succeeds.
+	clientCertificate tls.Certificate
 }
 
-func newTestComponent(t *testing.T) (*Component, *prsmock.Service, *tokenRequest) {
+func newTestComponent(t *testing.T) (*Component, *prsmock.Service, *providerCall) {
 	t.Helper()
 	prs := prsmock.NewService(t)
 	prs.RegisterRecipient(testNVIURA, testScope)
-	captured := &tokenRequest{}
-	component := New(Config{PRSBaseURL: prs.GetURL()}, func(_ context.Context, scope []string, ura string, audience string) (*http.Client, error) {
-		*captured = tokenRequest{scope: scope, ura: ura, audience: audience}
-		return http.DefaultClient, nil
+	clientCertificate, err := prsmock.NewClientCertificate()
+	require.NoError(t, err)
+	call := &providerCall{clientCertificate: clientCertificate}
+	component := New(Config{PRSBaseURL: prs.GetURL()}, func(ctx context.Context, scope []string, ura string, audience string) (*http.Client, error) {
+		call.scope, call.ura, call.audience = scope, ura, audience
+		return authenticatedClient(ctx, prs.TLSClientConfig(clientCertificate)), nil
 	})
-	return component, prs, captured
+	return component, prs, call
+}
+
+// authenticatedClient is shaped like what authn.HTTPClient returns
+// (component/authn/oauth2.go:66-80): an oauth2 client that puts the access
+// token in the Authorization header, on a transport that presents the client
+// certificate.
+func authenticatedClient(ctx context.Context, tlsConfig *tls.Config) *http.Client {
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}})
+	return oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: testAccessToken, TokenType: "Bearer"}))
 }
 
 func bsnIdentifier() fhir.Identifier {
@@ -96,10 +118,28 @@ func unquote(t *testing.T, raw json.RawMessage) string {
 
 func TestComponent_IdentifierToToken(t *testing.T) {
 	t.Run("requests an access token for the local organization with scope prs:read", func(t *testing.T) {
-		component, prs, captured := newTestComponent(t)
+		component, prs, call := newTestComponent(t)
 		tokenize(t, component, testScope)
 
-		assert.Equal(t, &tokenRequest{scope: []string{"prs:read"}, ura: testLocalURA, audience: prs.GetURL()}, captured)
+		assert.Equal(t, []string{"prs:read"}, call.scope)
+		assert.Equal(t, testLocalURA, call.ura)
+		assert.Equal(t, prs.GetURL(), call.audience)
+	})
+
+	t.Run("sends the request over TLS through the client the authn component returned", func(t *testing.T) {
+		component, prs, call := newTestComponent(t)
+		tokenize(t, component, testScope)
+
+		// The mock only speaks TLS and refuses a handshake without a client
+		// certificate and a request without a bearer token, so the call
+		// above already fails if the component drops the https scheme or
+		// uses another client. What is asserted here is that the credentials
+		// the mock saw are the ones the provider's client carries.
+		require.True(t, strings.HasPrefix(prs.GetURL(), "https://"), prs.GetURL())
+		exchange := prs.GetLastExchange()
+		require.NotNil(t, exchange.ClientCertificate, "mTLS")
+		assert.Equal(t, call.clientCertificate.Leaf.Raw, exchange.ClientCertificate.Raw)
+		assert.Equal(t, "Bearer "+testAccessToken, exchange.Header.Get("Authorization"))
 	})
 
 	t.Run("posts the v0.0.18 evaluate request", func(t *testing.T) {
@@ -174,8 +214,9 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		pseudonym := finalizeToken(t, prs, first, testScope)
 		assert.Equal(t, pseudonym, finalizeToken(t, prs, second, testScope))
 
-		// The stable value is the OPRF of the HKDF-derived input, so it is what
-		// any other RFC 9497 client derives for this identifier and recipient.
+		// The stable value is k * HashToGroup(HKDF output): the unblinded
+		// element of RFC 9497's OPRF(ristretto255, SHA-512) suite before its
+		// Finalize step, which the recipient does not apply.
 		derived, err := deriveKey(prsIdentifier{LandCode: "NL", Type: "BSN", Value: testBSN}, testNVIURA, testScope)
 		require.NoError(t, err)
 		expected, err := prs.Pseudonym(derived)
@@ -218,6 +259,40 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		assert.Contains(t, err.Error(), "PRS response: non-OK status code (status=404 Not Found")
 		assert.Contains(t, err.Error(), `{"error":"No organization found for this ura"}`)
 		assert.Equal(t, 1, prs.ExchangeCount())
+	})
+
+	t.Run("fails when the PRS answers with a server error", func(t *testing.T) {
+		for _, tc := range []struct {
+			status int
+			body   string
+		}{
+			// Starlette's error middleware on an unhandled exception.
+			{http.StatusInternalServerError, "Internal Server Error"},
+			// The ingress in front of the service while it is down.
+			{http.StatusServiceUnavailable, "503 Service Temporarily Unavailable"},
+		} {
+			t.Run(strconv.Itoa(tc.status), func(t *testing.T) {
+				component, prs, _ := newTestComponent(t)
+				prs.Fail(tc.status, tc.body)
+
+				result, err := component.IdentifierToToken(t.Context(), bsnIdentifier(), testLocalURA, testNVIURA, testScope)
+				require.Error(t, err)
+				assert.Nil(t, result)
+				assert.Contains(t, err.Error(), fmt.Sprintf("PRS response: non-OK status code (status=%d", tc.status))
+				assert.Contains(t, err.Error(), tc.body)
+			})
+		}
+	})
+
+	t.Run("stops when the context is cancelled", func(t *testing.T) {
+		component, prs, _ := newTestComponent(t)
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+
+		result, err := component.IdentifierToToken(ctx, bsnIdentifier(), testLocalURA, testNVIURA, testScope)
+		require.ErrorIs(t, err, context.Canceled)
+		assert.Nil(t, result)
+		assert.Equal(t, 0, prs.ExchangeCount())
 	})
 }
 

@@ -40,12 +40,15 @@ type Component struct {
 }
 
 // IdentifierToToken converts a BSN identifier to a pseudonymous transport token using the PRS service.
-// The process follows RFC 9497 OPRF protocol:
+// The hash-to-group, blinding and evaluation steps are those of RFC 9497's
+// OPRF(ristretto255, SHA-512) suite, but the recipient consumes the unblinded
+// group element itself rather than RFC 9497's Finalize output; see
+// docs/prs-contract.md. The process:
 // 1. Create PRS identifier from BSN
-// 2. Derive key using HKDF
-// 3. Blind the input using OPRF client
-// 4. Send blinded input to PRS for evaluation
-// 5. PRS returns the final pseudonymized identifier (deblinding happens at the consuming system/NVI)
+// 2. Derive the OPRF input using HKDF
+// 3. Blind the input (RFC 9497 Blind)
+// 4. Send the blinded element to the PRS for evaluation (RFC 9497 BlindEvaluate)
+// 5. PRS returns the evaluated element in a JWE for the recipient, which de-blinds it (the NVI)
 func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identifier, localOrganizationURA string, recipientURA string, scope string) (*fhir.Identifier, error) {
 	if c.config.PRSBaseURL == "" {
 		// TODO: Remove Fake Pseudonymizer fallback once PRS is properly integrated

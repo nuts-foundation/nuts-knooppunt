@@ -2,6 +2,8 @@ package prsmock_test
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -19,6 +21,7 @@ import (
 const (
 	recipientURA   = "90000901"
 	recipientScope = "nationale-verwijsindex"
+	accessToken    = "access-token-issued-for-the-prs"
 )
 
 // blind produces what a client sends the service for input: the blinded
@@ -35,15 +38,40 @@ func blind(t *testing.T, input []byte) (blindedInput string, blindFactor string)
 	return base64.URLEncoding.EncodeToString(element), base64.URLEncoding.EncodeToString(scalar)
 }
 
-func postEval(t *testing.T, prs *prsmock.Service, body string) (int, string) {
+// newClient returns what a caller of the mock needs: trust in the mock's
+// certificate and a client certificate to present.
+func newClient(t *testing.T, prs *prsmock.Service) (*http.Client, tls.Certificate) {
 	t.Helper()
-	response, err := http.Post(prs.GetURL()+"/oprf/eval", "application/json", strings.NewReader(body))
+	certificate, err := prsmock.NewClientCertificate()
+	require.NoError(t, err)
+	return &http.Client{Transport: &http.Transport{TLSClientConfig: prs.TLSClientConfig(certificate)}}, certificate
+}
+
+func newEvalRequest(t *testing.T, prs *prsmock.Service, body string) *http.Request {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodPost, prs.GetURL()+"/oprf/eval", strings.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Authorization", "Bearer "+accessToken)
+	return request
+}
+
+func send(t *testing.T, client *http.Client, request *http.Request) (status int, contentType string, body string) {
+	t.Helper()
+	response, err := client.Do(request)
 	require.NoError(t, err)
 	defer response.Body.Close()
 	responseBody, err := io.ReadAll(response.Body)
 	require.NoError(t, err)
-	assert.Equal(t, "application/json", response.Header.Get("Content-Type"))
-	return response.StatusCode, string(responseBody)
+	return response.StatusCode, response.Header.Get("Content-Type"), string(responseBody)
+}
+
+func postEval(t *testing.T, prs *prsmock.Service, body string) (int, string) {
+	t.Helper()
+	client, _ := newClient(t, prs)
+	status, contentType, responseBody := send(t, client, newEvalRequest(t, prs, body))
+	assert.Equal(t, "application/json", contentType)
+	return status, responseBody
 }
 
 func evalRequest(blindedInput, recipientOrganization, scope string) string {
@@ -132,6 +160,17 @@ func TestService_Eval(t *testing.T) {
 		assert.Equal(t, http.StatusOK, status, body)
 	})
 
+	t.Run("discards characters outside the base64 alphabet like Python's decoder", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		blindedInput, _ := blind(t, []byte("input"))
+		// Python's decoder skips these; the validator's padding arithmetic
+		// counts them, and the value still decodes to the same 32 bytes. The
+		// line break is JSON-escaped so it reaches the decoder as CR LF.
+		garbled := blindedInput[:10] + "!" + blindedInput[10:] + `\r\n`
+		status, body := postEval(t, prs, evalRequest(garbled, "ura:"+recipientURA, recipientScope))
+		assert.Equal(t, http.StatusOK, status, body)
+	})
+
 	t.Run("rejects a body without the v0.0.18 field names with 422", func(t *testing.T) {
 		prs := newRegisteredService(t)
 		blindedInput, _ := blind(t, []byte("input"))
@@ -140,6 +179,13 @@ func TestService_Eval(t *testing.T) {
 		for _, field := range []string{"encryptedPersonalId", "recipientOrganization", "recipientScope"} {
 			assert.Contains(t, body, `{"type":"missing","loc":["body","`+field+`"],"msg":"Field required"}`)
 		}
+	})
+
+	t.Run("rejects malformed JSON with 422", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		status, body := postEval(t, prs, `{"encryptedPersonalId":`)
+		assert.Equal(t, http.StatusUnprocessableEntity, status)
+		assert.Equal(t, `{"detail":[{"type":"json_invalid","loc":["body"],"msg":"JSON decode error"}]}`, body)
 	})
 
 	t.Run("rejects a recipient organization without the ura prefix with 400", func(t *testing.T) {
@@ -166,6 +212,26 @@ func TestService_Eval(t *testing.T) {
 		assert.Equal(t, `{"error":"No public key found for this organization and/or scope"}`, body)
 	})
 
+	t.Run("serves any scope with a key registered under *", func(t *testing.T) {
+		prs := prsmock.NewService(t)
+		prs.RegisterRecipient(recipientURA, "*")
+		blindedInput, _ := blind(t, []byte("input"))
+		status, body := postEval(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, "any-scope"))
+		assert.Equal(t, http.StatusOK, status, body)
+	})
+
+	t.Run("rejects garbage that only the validator's padding arithmetic absorbs with 400", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		blindedInput, _ := blind(t, []byte("input"))
+		// The validator pads by the length of the whole string, garbage
+		// included, so this passes validation; evaluation decodes the value
+		// as sent, without padding, and fails (oprf_service.py:17-26,45).
+		garbled := strings.TrimRight(blindedInput, "=") + "!!"
+		status, body := postEval(t, prs, evalRequest(garbled, "ura:"+recipientURA, recipientScope))
+		assert.Equal(t, http.StatusBadRequest, status)
+		assert.Equal(t, `{"error":"Unable to evaluate blind"}`, body)
+	})
+
 	t.Run("rejects an unpadded blinded input with 400", func(t *testing.T) {
 		prs := newRegisteredService(t)
 		blindedInput, _ := blind(t, []byte("input"))
@@ -182,18 +248,82 @@ func TestService_Eval(t *testing.T) {
 		assert.Equal(t, `{"error":"Unable to evaluate blind"}`, body)
 	})
 
+	t.Run("answers with the injected failure until it is cleared", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		blindedInput, _ := blind(t, []byte("input"))
+		client, _ := newClient(t, prs)
+
+		prs.Fail(http.StatusInternalServerError, "Internal Server Error")
+		status, contentType, body := send(t, client, newEvalRequest(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, recipientScope)))
+		assert.Equal(t, http.StatusInternalServerError, status)
+		assert.Equal(t, "text/plain; charset=utf-8", contentType)
+		assert.Equal(t, "Internal Server Error", body)
+		assert.Equal(t, http.StatusInternalServerError, prs.GetLastExchange().Status)
+
+		prs.Fail(0, "")
+		status, _, body = send(t, client, newEvalRequest(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, recipientScope)))
+		assert.Equal(t, http.StatusOK, status, body)
+	})
+
 	t.Run("records every exchange", func(t *testing.T) {
 		prs := newRegisteredService(t)
+		client, certificate := newClient(t, prs)
 		body := evalRequest("AA", "ura:12345678", recipientScope)
-		postEval(t, prs, body)
+		send(t, client, newEvalRequest(t, prs, body))
 		require.Equal(t, 1, prs.ExchangeCount())
 		exchange := prs.GetLastExchange()
 		assert.Equal(t, http.MethodPost, exchange.Method)
 		assert.Equal(t, "/oprf/eval", exchange.Path)
 		assert.Equal(t, "application/json", exchange.Header.Get("Content-Type"))
+		assert.Equal(t, "Bearer "+accessToken, exchange.Header.Get("Authorization"))
+		require.NotNil(t, exchange.ClientCertificate)
+		assert.Equal(t, certificate.Leaf.Raw, exchange.ClientCertificate.Raw)
 		assert.Equal(t, body, string(exchange.Body))
 		assert.Equal(t, http.StatusNotFound, exchange.Status)
 		assert.Equal(t, `{"error":"No organization found for this ura"}`, string(exchange.Response))
+	})
+}
+
+func TestService_Transport(t *testing.T) {
+	t.Run("serves an https URL", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		assert.True(t, strings.HasPrefix(prs.GetURL(), "https://"), prs.GetURL())
+	})
+
+	t.Run("refuses a request without a bearer token with 401", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		blindedInput, _ := blind(t, []byte("input"))
+		client, _ := newClient(t, prs)
+		request := newEvalRequest(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, recipientScope))
+		request.Header.Del("Authorization")
+		status, contentType, body := send(t, client, request)
+		assert.Equal(t, http.StatusUnauthorized, status)
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, `{"detail":"Missing bearer token"}`, body)
+		assert.Equal(t, http.StatusUnauthorized, prs.GetLastExchange().Status)
+	})
+
+	t.Run("refuses a handshake without a client certificate", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		pool := x509.NewCertPool()
+		pool.AddCert(prs.ServerCertificate())
+		client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}}
+		_, err := client.Do(newEvalRequest(t, prs, evalRequest("AA", "ura:"+recipientURA, recipientScope)))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "certificate required")
+		assert.Equal(t, 0, prs.ExchangeCount())
+	})
+
+	t.Run("refuses plaintext HTTP", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		response, err := http.Post("http://"+strings.TrimPrefix(prs.GetURL(), "https://")+"/oprf/eval", "application/json", strings.NewReader("{}"))
+		require.NoError(t, err)
+		defer response.Body.Close()
+		body, err := io.ReadAll(response.Body)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusBadRequest, response.StatusCode)
+		assert.Contains(t, string(body), "Client sent an HTTP request to an HTTPS server")
+		assert.Equal(t, 0, prs.ExchangeCount())
 	})
 }
 
