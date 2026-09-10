@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -145,9 +146,11 @@ func TestService_Eval(t *testing.T) {
 	t.Run("accepts the standard base64 alphabet like Python's urlsafe decoder", func(t *testing.T) {
 		prs := newRegisteredService(t)
 		// Keep blinding until the standard encoding differs from base64url, so
-		// the request really exercises the tolerance.
+		// the request really exercises the tolerance. About three in four
+		// elements qualify, so the bound is never reached in practice.
 		var element []byte
-		for {
+		for attempt := 0; ; attempt++ {
+			require.Less(t, attempt, 100, "no element with + or / in its standard encoding")
 			_, request, err := oprf.NewClient(oprf.SuiteRistretto255).Blind([][]byte{[]byte("input")})
 			require.NoError(t, err)
 			element, err = request.Elements[0].MarshalBinary()
@@ -282,6 +285,89 @@ func TestService_Eval(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, exchange.Status)
 		assert.Equal(t, `{"error":"No organization found for this ura"}`, string(exchange.Response))
 	})
+}
+
+// TestService_Validation pins the mock against FastAPI 0.129.2 and pydantic
+// 2.12.5, the versions v0.0.18 locks, running the v0.0.18 BlindRequest verbatim
+// behind a bearer dependency; docs/prs-contract.md says how the answers were
+// captured. Expected bodies of rejected inputs are FastAPI's with pydantic's
+// "input" and "ctx" echoes and the JSON decode position removed. Inputs that
+// FastAPI's stub route accepted go on to the mock's real evaluation: three
+// rows expect a JWE, and the unpadded element expects the 400 that v0.0.18's
+// evaluation gives it (oprf_service.py:45).
+func TestService_Validation(t *testing.T) {
+	prs := prsmock.NewService(t)
+	prs.RegisterRecipient("1", "s1")
+	element, _ := blind(t, []byte("input"))
+	valid := func(element string) string {
+		return `{"encryptedPersonalId":"` + element + `","recipientOrganization":"ura:1","recipientScope":"s1"}`
+	}
+	const (
+		missingBody = `{"detail":[{"type":"missing","loc":["body"],"msg":"Field required"}]}`
+		notAnObject = `{"detail":[{"type":"model_attributes_type","loc":["body"],"msg":"Input should be a valid dictionary or object to extract fields from"}]}`
+		jsonInvalid = `{"detail":[{"type":"json_invalid","loc":["body"],"msg":"JSON decode error"}]}`
+		noBearer    = `{"detail":"Missing bearer token"}`
+		tooShort    = `{"type":"string_too_short","loc":["body","%s"],"msg":"String should have at least 2 characters"}`
+	)
+	for _, tc := range []struct {
+		name        string
+		body        string
+		bearer      bool
+		contentType string
+		status      int
+		response    string // empty: a JWE is expected
+	}{
+		{"valid", valid(element), true, "application/json", 200, ""},
+		{"null body", `null`, true, "application/json", 422, missingBody},
+		{"empty body", ``, true, "application/json", 422, missingBody},
+		{"array body", `[]`, true, "application/json", 422, notAnObject},
+		{"string body", `"x"`, true, "application/json", 422, notAnObject},
+		{"number body", `1`, true, "application/json", 422, notAnObject},
+		{"empty object", `{}`, true, "application/json", 422, `{"detail":[{"type":"missing","loc":["body","encryptedPersonalId"],"msg":"Field required"},{"type":"missing","loc":["body","recipientOrganization"],"msg":"Field required"},{"type":"missing","loc":["body","recipientScope"],"msg":"Field required"}]}`},
+		{"one missing", `{"encryptedPersonalId":"AAAA","recipientOrganization":"ura:1"}`, true, "application/json", 422, `{"detail":[{"type":"missing","loc":["body","recipientScope"],"msg":"Field required"}]}`},
+		{"number member", `{"encryptedPersonalId":1,"recipientOrganization":"ura:1","recipientScope":"s1"}`, true, "application/json", 422, `{"detail":[{"type":"string_type","loc":["body","encryptedPersonalId"],"msg":"Input should be a valid string"}]}`},
+		{"null member", `{"encryptedPersonalId":null,"recipientOrganization":"ura:1","recipientScope":"s1"}`, true, "application/json", 422, `{"detail":[{"type":"string_type","loc":["body","encryptedPersonalId"],"msg":"Input should be a valid string"}]}`},
+		{"object member", `{"encryptedPersonalId":{},"recipientOrganization":"ura:1","recipientScope":"s1"}`, true, "application/json", 422, `{"detail":[{"type":"string_type","loc":["body","encryptedPersonalId"],"msg":"Input should be a valid string"}]}`},
+		{"bool member", `{"encryptedPersonalId":true,"recipientOrganization":"ura:1","recipientScope":"s1"}`, true, "application/json", 422, `{"detail":[{"type":"string_type","loc":["body","encryptedPersonalId"],"msg":"Input should be a valid string"}]}`},
+		{"all one character", `{"encryptedPersonalId":"A","recipientOrganization":"u","recipientScope":"s"}`, true, "application/json", 422, `{"detail":[` + fmt.Sprintf(tooShort, "encryptedPersonalId") + `,` + fmt.Sprintf(tooShort, "recipientOrganization") + `,` + fmt.Sprintf(tooShort, "recipientScope") + `]}`},
+		{"all empty strings", `{"encryptedPersonalId":"","recipientOrganization":"","recipientScope":""}`, true, "application/json", 422, `{"detail":[` + fmt.Sprintf(tooShort, "encryptedPersonalId") + `,` + fmt.Sprintf(tooShort, "recipientOrganization") + `,` + fmt.Sprintf(tooShort, "recipientScope") + `]}`},
+		{"one non-ASCII character is short, not invalid base64", `{"encryptedPersonalId":"é","recipientOrganization":"ura:1","recipientScope":"s1"}`, true, "application/json", 422, `{"detail":[` + fmt.Sprintf(tooShort, "encryptedPersonalId") + `]}`},
+		{"base64 with five data characters", `{"encryptedPersonalId":"AAAAA","recipientOrganization":"ura:1","recipientScope":"s1"}`, true, "application/json", 422, `{"detail":[{"type":"value_error","loc":["body","encryptedPersonalId"],"msg":"Value error, must be base64url: Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4"}]}`},
+		{"base64 padding interrupted by data", `{"encryptedPersonalId":"AA=A","recipientOrganization":"ura:1","recipientScope":"s1"}`, true, "application/json", 422, `{"detail":[{"type":"value_error","loc":["body","encryptedPersonalId"],"msg":"Value error, must be base64url: Incorrect padding"}]}`},
+		{"base64 non-ASCII", `{"encryptedPersonalId":"AAé","recipientOrganization":"ura:1","recipientScope":"s1"}`, true, "application/json", 422, `{"detail":[{"type":"value_error","loc":["body","encryptedPersonalId"],"msg":"Value error, must be base64url: string argument should contain only ASCII characters"}]}`},
+		{"base64 garbage that leaves the padding short", `{"encryptedPersonalId":"AA!!","recipientOrganization":"ura:1","recipientScope":"s1"}`, true, "application/json", 422, `{"detail":[{"type":"value_error","loc":["body","encryptedPersonalId"],"msg":"Value error, must be base64url: Incorrect padding"}]}`},
+		{"unpadded element passes validation and fails evaluation", valid(strings.TrimRight(element, "=")), true, "application/json", 400, `{"error":"Unable to evaluate blind"}`},
+		{"unknown member ignored", `{"encryptedPersonalId":"` + element + `","recipientOrganization":"ura:1","recipientScope":"s1","extra":1}`, true, "application/json", 200, ""},
+		{"malformed JSON", `{"encryptedPersonalId":`, true, "application/json", 422, jsonInvalid},
+		{"malformed JSON, missing delimiter", `{"a" 1}`, true, "application/json", 422, jsonInvalid},
+		{"malformed JSON without bearer", `{"encryptedPersonalId":`, false, "application/json", 422, jsonInvalid},
+		{"valid without bearer", valid(element), false, "application/json", 401, noBearer},
+		{"empty object without bearer", `{}`, false, "application/json", 401, noBearer},
+		{"null body without bearer", `null`, false, "application/json", 401, noBearer},
+		{"empty body without bearer", ``, false, "application/json", 401, noBearer},
+		{"no Content-Type", valid(element), true, "", 200, ""},
+		{"text/plain Content-Type", valid(element), true, "text/plain", 422, notAnObject},
+		{"no ura prefix", `{"encryptedPersonalId":"AAAA","recipientOrganization":"oin:1","recipientScope":"s1"}`, true, "application/json", 400, `{"error":"Invalid recipient organization. Format: ura:<ura_number>"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client, _ := newClient(t, prs)
+			request, err := http.NewRequest(http.MethodPost, prs.GetURL()+"/oprf/eval", strings.NewReader(tc.body))
+			require.NoError(t, err)
+			if tc.contentType != "" {
+				request.Header.Set("Content-Type", tc.contentType)
+			}
+			if tc.bearer {
+				request.Header.Set("Authorization", "Bearer "+accessToken)
+			}
+			status, _, body := send(t, client, request)
+			assert.Equal(t, tc.status, status, body)
+			if tc.response == "" {
+				assert.True(t, strings.HasPrefix(body, `{"jwe":"`), body)
+			} else {
+				assert.Equal(t, tc.response, body)
+			}
+		})
+	}
 }
 
 func TestService_Transport(t *testing.T) {

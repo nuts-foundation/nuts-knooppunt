@@ -3,6 +3,7 @@ package pseudonymisation
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -140,6 +141,24 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		require.NotNil(t, exchange.ClientCertificate, "mTLS")
 		assert.Equal(t, call.clientCertificate.Leaf.Raw, exchange.ClientCertificate.Raw)
 		assert.Equal(t, "Bearer "+testAccessToken, exchange.Header.Get("Authorization"))
+	})
+
+	t.Run("fails when the PRS certificate is not trusted", func(t *testing.T) {
+		prs := prsmock.NewService(t)
+		prs.RegisterRecipient(testNVIURA, testScope)
+		clientCertificate, err := prsmock.NewClientCertificate()
+		require.NoError(t, err)
+		component := New(Config{PRSBaseURL: prs.GetURL()}, func(ctx context.Context, _ []string, _ string, _ string) (*http.Client, error) {
+			untrusting := prs.TLSClientConfig(clientCertificate)
+			untrusting.RootCAs = x509.NewCertPool()
+			return authenticatedClient(ctx, untrusting), nil
+		})
+
+		result, err := component.IdentifierToToken(t.Context(), bsnIdentifier(), testLocalURA, testNVIURA, testScope)
+		var unknownAuthority x509.UnknownAuthorityError
+		require.ErrorAs(t, err, &unknownAuthority, "server verification must not be bypassed")
+		assert.Nil(t, result)
+		assert.Equal(t, 0, prs.ExchangeCount())
 	})
 
 	t.Run("posts the v0.0.18 evaluate request", func(t *testing.T) {

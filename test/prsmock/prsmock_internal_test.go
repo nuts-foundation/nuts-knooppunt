@@ -15,25 +15,25 @@ func Test_pythonURLSafeB64Decode(t *testing.T) {
 		name  string
 		input string
 		hex   string
-		err   bool
+		err   string
 	}{
-		{"url-safe alphabet", "-_8=", "fbff", false},
-		{"standard alphabet", "+/8=", "fbff", false},
-		{"characters outside the alphabet are discarded", "+!/ 8\n=", "fbff", false},
-		{"padding in the first two positions of a quad is ignored", "=+=/8=", "fbff", false},
-		{"decoding stops after complete padding", "+/8=AAAA", "fbff", false},
-		{"decoding stops after complete double padding", "AA==BBBB", "00", false},
-		{"empty", "", "", false},
-		{"missing padding", "+/8", "", true},
-		{"incomplete padding", "+/=", "", true},
-		{"padding interrupted by data", "AA=A", "", true},
-		{"one data character too many", "AAAAA", "", true},
-		{"non-ASCII", "+/8=é", "", true},
+		{"url-safe alphabet", "-_8=", "fbff", ""},
+		{"standard alphabet", "+/8=", "fbff", ""},
+		{"characters outside the alphabet are discarded", "+!/ 8\n=", "fbff", ""},
+		{"padding in the first two positions of a quad is ignored", "=+=/8=", "fbff", ""},
+		{"decoding stops after complete padding", "+/8=AAAA", "fbff", ""},
+		{"decoding stops after complete double padding", "AA==BBBB", "00", ""},
+		{"empty", "", "", ""},
+		{"missing padding", "+/8", "", "Incorrect padding"},
+		{"incomplete padding", "+/=", "", "Incorrect padding"},
+		{"padding interrupted by data", "AA=A", "", "Incorrect padding"},
+		{"one data character too many", "AAAAA", "", "Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4"},
+		{"non-ASCII", "+/8=é", "", "string argument should contain only ASCII characters"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			decoded, err := pythonURLSafeB64Decode(tc.input)
-			if tc.err {
-				require.Error(t, err)
+			if tc.err != "" {
+				require.EqualError(t, err, tc.err)
 				return
 			}
 			require.NoError(t, err)

@@ -14,14 +14,24 @@
 // in these respects, each covered by prsmock_test.go:
 //
 //   - a request without a bearer token is refused with 401
-//     {"detail":"Missing bearer token"} (app/auth.py:59-61), after the body has
-//     been parsed as JSON, which FastAPI does before it runs dependencies
-//     (fastapi 0.129.2, routing.py); the token is recorded, not verified;
-//   - malformed JSON and a body that fails BlindRequest's validation
-//     (app/services/oprf/oprf_service.py:12-26) are refused with 422 in
-//     FastAPI's {"detail":[...]} shape; the checks and their order are
-//     pydantic's, and each problem carries pydantic's "type", "loc" and "msg",
-//     but not its "input" and "ctx" echoes, nor the JSON decode position;
+//     {"detail":"Missing bearer token"} (app/auth.py:59-61). FastAPI reads and
+//     JSON-decodes the body before it runs that dependency and validates the
+//     body after it (fastapi 0.129.2, routing.py:367-414), so malformed JSON
+//     gets 422 without a token and every other body gets 401; the token is
+//     recorded, not verified;
+//   - the body is validated as FastAPI validates BlindRequest
+//     (app/services/oprf/oprf_service.py:12-26) and refused with 422 in
+//     FastAPI's {"detail":[...]} shape: an empty or null body, a body that is
+//     not a JSON object, a Content-Type that names a non-JSON media type (no
+//     Content-Type counts as JSON), missing members, members that are not
+//     strings, strings shorter than two characters, and a blinded element
+//     that Python's base64 decoder rejects once padded. For the inputs
+//     in TestService_Validation that FastAPI 0.129.2 and pydantic 2.12.5
+//     (the versions v0.0.18 locks) reject when running the v0.0.18
+//     BlindRequest verbatim, status and body equal FastAPI's once pydantic's
+//     "input" and "ctx" echoes and the JSON decode position are removed;
+//     inputs they accept go on to the mock's real evaluation. Other inputs
+//     are not claimed;
 //   - the recipient must be "ura:<URA>" (400), known (404) and have a key
 //     registered under the requested scope or under "*" (404), with the bodies
 //     of app/routers/oprf.py:22-35 and the wildcard of
@@ -42,10 +52,9 @@
 // Not modelled: verification of the bearer token (signature, issuer, audience
 // and the cnf thumbprint binding of app/services/client_oauth.py:87-140),
 // verification of the client certificate (the acceptance ingress checks a UZI
-// certificate, the mock accepts any), the Content-Type check (FastAPI parses
-// the body as JSON only for a JSON media type), the other routes, and a key
-// pair per recipient. Nothing in the mock fails by itself; Fail injects the
-// 5xx answers of Starlette's error middleware or of an ingress.
+// certificate, the mock accepts any), the other routes, and a key pair per
+// recipient. Nothing in the mock fails by itself; Fail injects the 5xx
+// answers of Starlette's error middleware or of an ingress.
 //
 // It deliberately does not follow the service's main branch (v0.0.34 at the
 // time of writing), which moved to "oin:" recipient identifiers and a prs:oprf
@@ -69,12 +78,14 @@ import (
 	"io"
 	"log/slog"
 	"math/big"
+	"mime"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cloudflare/circl/group"
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -443,11 +454,11 @@ func (s *Service) handleEval(w http.ResponseWriter, r *http.Request) {
 }
 
 // respond handles one request in the order the service checks it, so a client
-// gets the same status and body for the same mistake: FastAPI parses the JSON
-// body, runs the bearer-token dependency, validates the body against
-// BlindRequest, and only then enters post_eval. Response bodies are written
-// out as literals on purpose: they are the contract, not a rendering of some
-// Go struct.
+// gets the same status and body for the same mistake: FastAPI reads and
+// JSON-decodes the body, runs the bearer-token dependency, validates the body
+// against BlindRequest, and only then enters post_eval. Response bodies are
+// written out as literals on purpose: they are the contract, not a rendering
+// of some Go struct.
 func (s *Service) respond(r *http.Request, body []byte) (status int, contentType string, response string) {
 	s.mu.Lock()
 	injected := s.failure
@@ -456,18 +467,56 @@ func (s *Service) respond(r *http.Request, body []byte) (status int, contentType
 		return injected.status, textContentType, injected.body
 	}
 
-	if !json.Valid(body) {
-		return http.StatusUnprocessableEntity, jsonContentType, `{"detail":[{"type":"json_invalid","loc":["body"],"msg":"JSON decode error"}]}`
+	parsed, problem := parseBody(r.Header.Get("Content-Type"), body)
+	if problem != "" {
+		return http.StatusUnprocessableEntity, jsonContentType, `{"detail":[` + problem + `]}`
 	}
 	if _, ok := bearerToken(r); !ok {
 		return http.StatusUnauthorized, jsonContentType, `{"detail":"Missing bearer token"}`
 	}
-	request, problems := validateBlindRequest(body)
+	request, problems := validateBlindRequest(parsed)
 	if len(problems) > 0 {
 		return http.StatusUnprocessableEntity, jsonContentType, `{"detail":[` + strings.Join(problems, ",") + `]}`
 	}
 	status, response = s.evaluate(request)
 	return status, jsonContentType, response
+}
+
+// parsedBody is the request body as FastAPI hands it to validation
+// (routing.py:367-404 at 0.129.2): absent when empty, the JSON text when there
+// is no Content-Type or the media type is JSON, and the raw bytes otherwise.
+type parsedBody struct {
+	absent bool
+	raw    bool
+	json   []byte
+}
+
+// parseBody returns the body as FastAPI sees it, or the json_invalid problem
+// FastAPI raises before anything else when a JSON body does not decode.
+func parseBody(contentType string, body []byte) (parsedBody, string) {
+	if len(body) == 0 {
+		return parsedBody{absent: true}, ""
+	}
+	if !isJSONMediaType(contentType) {
+		return parsedBody{raw: true}, ""
+	}
+	if !json.Valid(body) {
+		return parsedBody{}, `{"type":"json_invalid","loc":["body"],"msg":"JSON decode error"}`
+	}
+	return parsedBody{json: body}, ""
+}
+
+// isJSONMediaType is FastAPI's test (routing.py:369-382 at 0.129.2): no
+// Content-Type means JSON; otherwise application/json or application/*+json.
+func isJSONMediaType(contentType string) bool {
+	if contentType == "" {
+		return true
+	}
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return mediaType == "application/json" || (strings.HasPrefix(mediaType, "application/") && strings.HasSuffix(mediaType, "+json"))
 }
 
 // bearerToken reads an "Authorization: Bearer <token>" header as FastAPI's
@@ -525,11 +574,24 @@ type blindRequest struct {
 // (oprf_service.py:12-26): an object with three required strings of at least
 // two characters, of which encryptedPersonalId must decode as base64url once
 // padded. Unknown members are ignored, as pydantic ignores them by default.
-// Problems are collected and reported together in FastAPI's 422 detail shape.
-func validateBlindRequest(body []byte) (blindRequest, []string) {
+// Problems are collected in field order and reported together in FastAPI's
+// 422 detail shape.
+func validateBlindRequest(parsed parsedBody) (blindRequest, []string) {
+	missingBody := []string{`{"type":"missing","loc":["body"],"msg":"Field required"}`}
+	notAnObject := []string{`{"type":"model_attributes_type","loc":["body"],"msg":"Input should be a valid dictionary or object to extract fields from"}`}
+	if parsed.absent {
+		return blindRequest{}, missingBody
+	}
+	if parsed.raw {
+		return blindRequest{}, notAnObject
+	}
 	var members map[string]json.RawMessage
-	if err := json.Unmarshal(body, &members); err != nil {
-		return blindRequest{}, []string{`{"type":"model_attributes_type","loc":["body"],"msg":"Input should be a valid dictionary or object to extract fields from"}`}
+	if err := json.Unmarshal(parsed.json, &members); err != nil {
+		return blindRequest{}, notAnObject
+	}
+	if members == nil {
+		// JSON null: FastAPI passes None on as an absent body.
+		return blindRequest{}, missingBody
 	}
 
 	var request blindRequest
@@ -551,16 +613,18 @@ func validateBlindRequest(body []byte) (blindRequest, []string) {
 			problems = append(problems, problem("string_type", member.name, "Input should be a valid string"))
 			continue
 		}
-		if len(*member.value) < 2 {
+		if utf8.RuneCountInString(*member.value) < 2 {
 			problems = append(problems, problem("string_too_short", member.name, "String should have at least 2 characters"))
+			continue
 		}
-	}
-
-	if request.encryptedPersonalID != "" {
-		// validate_base64 pads before decoding (oprf_service.py:17-26), so an
-		// unpadded value passes here and only fails at evaluation.
-		if _, err := pythonURLSafeB64Decode(padded(request.encryptedPersonalID)); err != nil {
-			problems = append(problems, problem("value_error", "encryptedPersonalId", "Value error, must be base64url: "+err.Error()))
+		if member.name == "encryptedPersonalId" {
+			// validate_base64 runs only on a value that passed the field's own
+			// checks, as pydantic runs an after-validator, and it pads before
+			// decoding (oprf_service.py:17-26), so an unpadded value passes
+			// here and only fails at evaluation.
+			if _, err := pythonURLSafeB64Decode(padded(*member.value)); err != nil {
+				problems = append(problems, problem("value_error", member.name, "Value error, must be base64url: "+err.Error()))
+			}
 		}
 	}
 	return request, problems
@@ -640,8 +704,9 @@ func thumbprint(key *rsa.PublicKey) (string, error) {
 // and "_" count as "+" and "/"; characters outside the alphabet are discarded,
 // as is "=" in the first two positions of a quad; decoding stops at the first
 // complete padding sequence and ignores what follows; and a final partial quad
-// without complete padding is an error. Checked against CPython 3.9, 3.11 and
-// 3.13 on 60,000 random inputs; prsmock_internal_test.go keeps the edge cases.
+// without complete padding is an error, with binascii's message. Checked
+// against CPython 3.9, 3.11 and 3.13 on 60,000 random inputs;
+// prsmock_internal_test.go keeps the edge cases.
 func pythonURLSafeB64Decode(s string) ([]byte, error) {
 	for i := 0; i < len(s); i++ {
 		if s[i] > 0x7f {
@@ -675,8 +740,13 @@ scan:
 		data = append(data, c)
 		quadPos = (quadPos + 1) % 4
 	}
+	// The messages are binascii's, capitalization included: they end up in
+	// the 422 body through the validator's "must be base64url: {e}".
+	if quadPos == 1 {
+		return nil, fmt.Errorf("Invalid base64-encoded string: number of data characters (%d) cannot be 1 more than a multiple of 4", len(data))
+	}
 	if quadPos != 0 {
-		return nil, errors.New("incorrect padding")
+		return nil, errors.New("Incorrect padding")
 	}
 	return base64.RawStdEncoding.DecodeString(string(data))
 }
