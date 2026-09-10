@@ -10,8 +10,9 @@
 // the comments below point into that tag.
 //
 // Only POST /oprf/eval is served, over TLS with a self-signed certificate, and
-// a client certificate is required on the handshake. The route follows v0.0.18
-// in these respects, each covered by prsmock_test.go:
+// a client certificate is required on the handshake; any other path answers
+// 404 {"detail":"Not Found"} as FastAPI does. The route follows v0.0.18 in
+// these respects, each covered by prsmock_test.go:
 //
 //   - a request without a bearer token is refused with 401
 //     {"detail":"Missing bearer token"} (app/auth.py:59-61). FastAPI reads and
@@ -214,6 +215,7 @@ func New(listenAddr string) (*Service, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST "+evalPath, prs.handleEval)
+	mux.HandleFunc("/", prs.handleUnknownPath)
 	prs.server = &http.Server{Handler: mux}
 
 	// The acceptance environment serves the PRS behind mTLS (services.yaml:53):
@@ -394,8 +396,11 @@ func (s *Service) Pseudonym(input []byte) ([]byte, error) {
 // (minvws/gfmodules-nationale-verwijsindex-crypto-service-api,
 // app/services/pseudonym_service.py:41-43) do: both values are read with
 // Python's urlsafe_b64decode, N = (1/r) * Z is computed as liboprf's
-// oprf_Unblind does (src/oprf.c) and N is returned as padded base64url. This
-// is RFC 9497's Unblind step only; neither recipient applies Finalize.
+// oprf_Unblind does (src/oprf.c:362-392 at v0.9.4) and N is returned as
+// padded base64url. Like oprf_Unblind it fails on a zero blind, which has no
+// inverse, and on an identity result, which libsodium's scalar multiplication
+// reports as a failure. This is RFC 9497's Unblind step only; neither
+// recipient applies Finalize.
 func Finalize(blindFactor string, evaluated string) (string, error) {
 	r, err := pythonURLSafeB64Decode(blindFactor)
 	if err != nil {
@@ -412,15 +417,22 @@ func Finalize(blindFactor string, evaluated string) (string, error) {
 	if err := blind.UnmarshalBinary(r); err != nil {
 		return "", fmt.Errorf("blind factor is not a scalar: %w", err)
 	}
+	if blind.IsZero() {
+		return "", errors.New("blind factor is zero")
+	}
 	element := ristretto.NewElement()
 	if err := element.UnmarshalBinary(z); err != nil {
 		return "", fmt.Errorf("evaluation is not a group element: %w", err)
 	}
-	unblinded, err := ristretto.NewElement().Mul(element, ristretto.NewScalar().Inv(blind)).MarshalBinary()
+	unblinded := ristretto.NewElement().Mul(element, ristretto.NewScalar().Inv(blind))
+	if unblinded.IsIdentity() {
+		return "", errors.New("unblinded element is the identity")
+	}
+	encoded, err := unblinded.MarshalBinary()
 	if err != nil {
 		return "", err
 	}
-	return base64.URLEncoding.EncodeToString(unblinded), nil
+	return base64.URLEncoding.EncodeToString(encoded), nil
 }
 
 func (s *Service) handleEval(w http.ResponseWriter, r *http.Request) {
@@ -432,7 +444,27 @@ func (s *Service) handleEval(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	status, contentType, response := s.respond(r, body)
+	s.record(r, body, status, response)
 
+	w.Header().Set("Content-Type", contentType)
+	w.WriteHeader(status)
+	_, _ = io.WriteString(w, response)
+}
+
+// handleUnknownPath answers every other path as FastAPI does, and records the
+// call so a test can see where a request went.
+func (s *Service) handleUnknownPath(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	const response = `{"detail":"Not Found"}`
+	s.record(r, body, http.StatusNotFound, response)
+
+	w.Header().Set("Content-Type", jsonContentType)
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = io.WriteString(w, response)
+}
+
+func (s *Service) record(r *http.Request, body []byte, status int, response string) {
 	exchange := Exchange{
 		Method:   r.Method,
 		Path:     r.URL.Path,
@@ -447,10 +479,6 @@ func (s *Service) handleEval(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.exchanges = append(s.exchanges, exchange)
 	s.mu.Unlock()
-
-	w.Header().Set("Content-Type", contentType)
-	w.WriteHeader(status)
-	_, _ = io.WriteString(w, response)
 }
 
 // respond handles one request in the order the service checks it, so a client
@@ -706,7 +734,12 @@ func thumbprint(key *rsa.PublicKey) (string, error) {
 // complete padding sequence and ignores what follows; and a final partial quad
 // without complete padding is an error, with binascii's message. Checked
 // against CPython 3.9, 3.11 and 3.13 on 60,000 random inputs;
-// prsmock_internal_test.go keeps the edge cases.
+// prsmock_internal_test.go keeps the edge cases. CPython 3.14.6 decodes
+// malformed input differently: data after a complete padding sequence is an
+// error there, and a "=" in the middle is skipped. The v0.0.18 image builds
+// from python:3.14-slim (docker/Dockerfile:3) at an unobserved patch level,
+// so for garbage input this model may be older than what acceptance runs;
+// well-formed padded values decode the same on every interpreter.
 func pythonURLSafeB64Decode(s string) ([]byte, error) {
 	for i := 0; i < len(s); i++ {
 		if s[i] > 0x7f {

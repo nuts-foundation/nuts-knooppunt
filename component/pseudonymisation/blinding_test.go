@@ -56,14 +56,17 @@ func Test_deriveKey(t *testing.T) {
 		require.Equal(t, "e96ce9a92e6b5fdf3ba6810b25c152c49c2969f6194e3e43fb050365a7104d9f", hex.EncodeToString(key))
 	})
 
-	t.Run("is bound to recipient and scope", func(t *testing.T) {
+	t.Run("is bound to identifier, recipient and scope", func(t *testing.T) {
 		key, err := deriveKey(identifier, "90000901", "nationale-verwijsindex")
+		require.NoError(t, err)
+		otherIdentifier, err := deriveKey(prsIdentifier{LandCode: "NL", Type: "BSN", Value: "999940005"}, "90000901", "nationale-verwijsindex")
 		require.NoError(t, err)
 		otherRecipient, err := deriveKey(identifier, "90000902", "nationale-verwijsindex")
 		require.NoError(t, err)
 		otherScope, err := deriveKey(identifier, "90000901", "other-scope")
 		require.NoError(t, err)
 
+		require.NotEqual(t, key, otherIdentifier)
 		require.NotEqual(t, key, otherRecipient)
 		require.NotEqual(t, key, otherScope)
 	})

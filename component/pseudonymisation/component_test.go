@@ -7,9 +7,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cloudflare/circl/group"
@@ -25,21 +27,34 @@ import (
 const (
 	// testBSN is the example identifier on the implementation guide's
 	// pseudonymisation page; it is not an issued number.
-	testBSN      = "999940003"
-	testLocalURA = "00000030"
+	testBSN = "999940003"
+	// otherBSN fails the BSN 11-check, like testBSN, so it cannot be an
+	// issued number either.
+	otherBSN      = "999940005"
+	testLocalURA  = "00000030"
+	otherLocalURA = "00000031"
 	// testNVIURA is the NVI's URA on the acceptance environment (docs/CONFIGURATION.md).
-	testNVIURA = "90000901"
-	testScope  = "nationale-verwijsindex"
+	testNVIURA        = "90000901"
+	otherRecipientURA = "90000902"
+	testScope         = "nationale-verwijsindex"
 	// testAccessToken is what the stubbed authn component's client presents.
 	testAccessToken = "access-token-issued-for-the-prs"
 )
 
+// providerContextKey marks the context a test hands to the component, so the
+// provider stub can tell whether it received that context.
+type providerContextKey struct{}
+
 // providerCall records what the component asks the authn component for, and
 // the credentials the client it got back carries.
 type providerCall struct {
-	scope    []string
-	ura      string
-	audience string
+	scope     []string
+	ura       string
+	audience  string
+	ctxMarker any
+	// transport is the returned client's base transport, which records
+	// whether the component closed the response body.
+	transport *closeTracking
 	// clientCertificate is what the returned client presents on the TLS
 	// handshake, next to testAccessToken in the Authorization header. The
 	// mock PRS requires both, so only a request made through that client
@@ -51,32 +66,81 @@ func newTestComponent(t *testing.T) (*Component, *prsmock.Service, *providerCall
 	t.Helper()
 	prs := prsmock.NewService(t)
 	prs.RegisterRecipient(testNVIURA, testScope)
+	component, call := newComponentFor(t, prs, prs.GetURL())
+	return component, prs, call
+}
+
+// newComponentFor builds a component for baseURL whose authn provider is
+// stubbed with a client that carries a fresh client certificate and
+// testAccessToken, and that records what it was asked for.
+func newComponentFor(t *testing.T, prs *prsmock.Service, baseURL string) (*Component, *providerCall) {
+	t.Helper()
 	clientCertificate, err := prsmock.NewClientCertificate()
 	require.NoError(t, err)
-	call := &providerCall{clientCertificate: clientCertificate}
-	component := New(Config{PRSBaseURL: prs.GetURL()}, func(ctx context.Context, scope []string, ura string, audience string) (*http.Client, error) {
+	call := &providerCall{
+		clientCertificate: clientCertificate,
+		transport:         &closeTracking{base: &http.Transport{TLSClientConfig: prs.TLSClientConfig(clientCertificate)}},
+	}
+	component := New(Config{PRSBaseURL: baseURL}, func(ctx context.Context, scope []string, ura string, audience string) (*http.Client, error) {
 		call.scope, call.ura, call.audience = scope, ura, audience
-		return authenticatedClient(ctx, prs.TLSClientConfig(clientCertificate)), nil
+		call.ctxMarker = ctx.Value(providerContextKey{})
+		return authenticatedClient(ctx, call.transport), nil
 	})
-	return component, prs, call
+	return component, call
 }
 
 // authenticatedClient is shaped like what authn.HTTPClient returns
 // (component/authn/oauth2.go:66-80): an oauth2 client that puts the access
 // token in the Authorization header, on a transport that presents the client
 // certificate.
-func authenticatedClient(ctx context.Context, tlsConfig *tls.Config) *http.Client {
-	ctx = context.WithValue(ctx, oauth2.HTTPClient, &http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig}})
+func authenticatedClient(ctx context.Context, transport http.RoundTripper) *http.Client {
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, &http.Client{Transport: transport})
 	return oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{AccessToken: testAccessToken, TokenType: "Bearer"}))
 }
 
+// closeTracking is a transport that records whether the body of the last
+// response it produced was closed.
+type closeTracking struct {
+	base   http.RoundTripper
+	closed atomic.Bool
+}
+
+func (c *closeTracking) RoundTrip(r *http.Request) (*http.Response, error) {
+	response, err := c.base.RoundTrip(r)
+	if err != nil {
+		return nil, err
+	}
+	c.closed.Store(false)
+	response.Body = trackedBody{ReadCloser: response.Body, closed: &c.closed}
+	return response, nil
+}
+
+type trackedBody struct {
+	io.ReadCloser
+	closed *atomic.Bool
+}
+
+func (b trackedBody) Close() error {
+	b.closed.Store(true)
+	return b.ReadCloser.Close()
+}
+
 func bsnIdentifier() fhir.Identifier {
-	return fhir.Identifier{System: to.Ptr(coding.BSNNamingSystem), Value: to.Ptr(testBSN)}
+	return identifierFor(testBSN)
+}
+
+func identifierFor(bsn string) fhir.Identifier {
+	return fhir.Identifier{System: to.Ptr(coding.BSNNamingSystem), Value: to.Ptr(bsn)}
 }
 
 func tokenize(t *testing.T, component *Component, scope string) *fhir.Identifier {
 	t.Helper()
-	result, err := component.IdentifierToToken(t.Context(), bsnIdentifier(), testLocalURA, testNVIURA, scope)
+	return tokenizeWith(t, t.Context(), component, bsnIdentifier(), testLocalURA, testNVIURA, scope)
+}
+
+func tokenizeWith(t *testing.T, ctx context.Context, component *Component, identifier fhir.Identifier, localURA string, recipientURA string, scope string) *fhir.Identifier {
+	t.Helper()
+	result, err := component.IdentifierToToken(ctx, identifier, localURA, recipientURA, scope)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.NotNil(t, result.Value)
@@ -120,11 +184,40 @@ func unquote(t *testing.T, raw json.RawMessage) string {
 func TestComponent_IdentifierToToken(t *testing.T) {
 	t.Run("requests an access token for the local organization with scope prs:read", func(t *testing.T) {
 		component, prs, call := newTestComponent(t)
-		tokenize(t, component, testScope)
+		for _, localURA := range []string{testLocalURA, otherLocalURA} {
+			ctx := context.WithValue(t.Context(), providerContextKey{}, "context of the call for "+localURA)
+			tokenizeWith(t, ctx, component, bsnIdentifier(), localURA, testNVIURA, testScope)
 
-		assert.Equal(t, []string{"prs:read"}, call.scope)
-		assert.Equal(t, testLocalURA, call.ura)
-		assert.Equal(t, prs.GetURL(), call.audience)
+			assert.Equal(t, []string{"prs:read"}, call.scope)
+			assert.Equal(t, localURA, call.ura, "the calling organization, not a fixed one")
+			assert.Equal(t, prs.GetURL(), call.audience)
+			assert.Equal(t, "context of the call for "+localURA, call.ctxMarker, "the caller's context reaches the authn component")
+		}
+	})
+
+	t.Run("closes the PRS response body", func(t *testing.T) {
+		component, _, call := newTestComponent(t)
+		tokenize(t, component, testScope)
+		assert.True(t, call.transport.closed.Load())
+
+		_, err := component.IdentifierToToken(t.Context(), bsnIdentifier(), testLocalURA, "12345678", testScope)
+		require.Error(t, err)
+		assert.True(t, call.transport.closed.Load(), "also after an error response")
+	})
+
+	t.Run("keeps the configured base path", func(t *testing.T) {
+		prs := prsmock.NewService(t)
+		prs.RegisterRecipient(testNVIURA, testScope)
+		component, _ := newComponentFor(t, prs, prs.GetURL()+"/prs")
+
+		// The mock serves nothing under /prs and answers 404 like FastAPI;
+		// what matters is where the request went.
+		result, err := component.IdentifierToToken(t.Context(), bsnIdentifier(), testLocalURA, testNVIURA, testScope)
+		require.Error(t, err)
+		assert.Nil(t, result)
+		assert.Contains(t, err.Error(), "status=404")
+		require.Equal(t, 1, prs.ExchangeCount())
+		assert.Equal(t, "/prs/oprf/eval", prs.GetLastExchange().Path)
 	})
 
 	t.Run("sends the request over TLS through the client the authn component returned", func(t *testing.T) {
@@ -151,7 +244,7 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		component := New(Config{PRSBaseURL: prs.GetURL()}, func(ctx context.Context, _ []string, _ string, _ string) (*http.Client, error) {
 			untrusting := prs.TLSClientConfig(clientCertificate)
 			untrusting.RootCAs = x509.NewCertPool()
-			return authenticatedClient(ctx, untrusting), nil
+			return authenticatedClient(ctx, &http.Transport{TLSClientConfig: untrusting}), nil
 		})
 
 		result, err := component.IdentifierToToken(t.Context(), bsnIdentifier(), testLocalURA, testNVIURA, testScope)
@@ -190,6 +283,16 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 
 		// RFC 8785 canonical form: members sorted, no whitespace.
 		assert.Equal(t, fmt.Sprintf(`{"encryptedPersonalId":%s,"recipientOrganization":"ura:90000901","recipientScope":"nationale-verwijsindex"}`, members["encryptedPersonalId"]), string(exchange.Body))
+
+		// The alphabet only shows in an encoding that contains one of its
+		// distinguishing characters, which about three in four elements do,
+		// so keep tokenizing until one turns up before pinning it.
+		assertStandardAlphabet(t, func() string {
+			tokenize(t, component, testScope)
+			var again map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(prs.GetLastExchange().Body, &again))
+			return unquote(t, again["encryptedPersonalId"])
+		})
 	})
 
 	t.Run("hands the PRS output to the NVI as base64url JSON", func(t *testing.T) {
@@ -221,6 +324,10 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, scalar, canonical, "a canonical ristretto255 scalar")
 		assert.False(t, blind.IsZero())
+
+		assertStandardAlphabet(t, func() string {
+			return unquote(t, decodeToken(t, *tokenize(t, component, testScope).Value)["blind_factor"])
+		})
 	})
 
 	t.Run("yields a token the recipient de-blinds to a stable pseudonym", func(t *testing.T) {
@@ -241,6 +348,30 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		expected, err := prs.Pseudonym(derived)
 		require.NoError(t, err)
 		assert.Equal(t, base64.URLEncoding.EncodeToString(expected), pseudonym)
+	})
+
+	t.Run("yields different pseudonyms for different BSNs", func(t *testing.T) {
+		component, prs, _ := newTestComponent(t)
+		first := finalizeToken(t, prs, decodeToken(t, *tokenize(t, component, testScope).Value), testScope)
+		other := finalizeToken(t, prs, decodeToken(t, *tokenizeWith(t, t.Context(), component, identifierFor(otherBSN), testLocalURA, testNVIURA, testScope).Value), testScope)
+		assert.NotEqual(t, first, other)
+	})
+
+	t.Run("binds the pseudonym to the recipient", func(t *testing.T) {
+		component, prs, _ := newTestComponent(t)
+		prs.RegisterRecipient(otherRecipientURA, testScope)
+
+		nvi := finalizeToken(t, prs, decodeToken(t, *tokenize(t, component, testScope).Value), testScope)
+		token := decodeToken(t, *tokenizeWith(t, t.Context(), component, bsnIdentifier(), testLocalURA, otherRecipientURA, testScope).Value)
+		other := finalizeTokenFor(t, prs, token, otherRecipientURA, testScope)
+		assert.NotEqual(t, nvi, other)
+
+		// And it is the OPRF of the input derived for that recipient.
+		derived, err := deriveKey(prsIdentifier{LandCode: "NL", Type: "BSN", Value: testBSN}, otherRecipientURA, testScope)
+		require.NoError(t, err)
+		expected, err := prs.Pseudonym(derived)
+		require.NoError(t, err)
+		assert.Equal(t, base64.URLEncoding.EncodeToString(expected), other)
 	})
 
 	t.Run("binds the pseudonym to the recipient scope", func(t *testing.T) {
@@ -315,12 +446,36 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 	})
 }
 
-// finalizeToken plays the recipient: decrypt evaluated_output, check the JWE
-// was issued for this recipient and scope, and de-blind with blind_factor.
+// assertStandardAlphabet calls next until it yields a base64 value that
+// contains a character the standard and URL-safe alphabets encode
+// differently, and requires that character to be the standard one. A random
+// 32-byte value has about a three-in-four chance per attempt.
+func assertStandardAlphabet(t *testing.T, next func() string) {
+	t.Helper()
+	for attempt := 0; ; attempt++ {
+		require.Less(t, attempt, 100, "no value with an alphabet-specific character")
+		value := next()
+		if !strings.ContainsAny(value, "+/-_") {
+			continue
+		}
+		_, err := base64.StdEncoding.Strict().DecodeString(value)
+		require.NoError(t, err, "standard base64 alphabet, not base64url: %s", value)
+		return
+	}
+}
+
+// finalizeToken plays the NVI as recipient; see finalizeTokenFor.
 func finalizeToken(t *testing.T, prs *prsmock.Service, token map[string]json.RawMessage, scope string) string {
 	t.Helper()
+	return finalizeTokenFor(t, prs, token, testNVIURA, scope)
+}
+
+// finalizeTokenFor plays the recipient: decrypt evaluated_output, check the
+// JWE was issued for this recipient and scope, and de-blind with blind_factor.
+func finalizeTokenFor(t *testing.T, prs *prsmock.Service, token map[string]json.RawMessage, recipientURA string, scope string) string {
+	t.Helper()
 	claims := decryptClaims(t, prs, unquote(t, token["evaluated_output"]))
-	assert.Equal(t, `"ura:`+testNVIURA+`"`, string(claims["aud"]))
+	assert.Equal(t, `"ura:`+recipientURA+`"`, string(claims["aud"]))
 	assert.Equal(t, fmt.Sprintf("%q", scope), string(claims["scope"]))
 	subject := unquote(t, claims["subject"])
 	require.True(t, strings.HasPrefix(subject, "pseudonym:eval:"), subject)

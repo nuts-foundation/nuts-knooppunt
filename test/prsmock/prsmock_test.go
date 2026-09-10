@@ -143,6 +143,32 @@ func TestService_Eval(t *testing.T) {
 		assert.Equal(t, base64.URLEncoding.EncodeToString(expected), pseudonym)
 	})
 
+	t.Run("de-blinding fails where liboprf's oprf_Unblind fails", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		blindedInput, blindFactor := blind(t, []byte("input"))
+		status, body := postEval(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, recipientScope))
+		require.Equal(t, http.StatusOK, status, body)
+		var response struct {
+			JWE string `json:"jwe"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(body), &response))
+		payload, err := prs.DecryptJWE(response.JWE)
+		require.NoError(t, err)
+		var claims struct {
+			Subject string `json:"subject"`
+		}
+		require.NoError(t, json.Unmarshal(payload, &claims))
+		evaluated := strings.TrimPrefix(claims.Subject, "pseudonym:eval:")
+		zero := base64.URLEncoding.EncodeToString(make([]byte, 32))
+
+		_, err = prsmock.Finalize(zero, evaluated)
+		assert.ErrorContains(t, err, "blind factor is zero")
+		_, err = prsmock.Finalize(blindFactor, zero)
+		assert.ErrorContains(t, err, "identity")
+		_, err = prsmock.Finalize(blindFactor, evaluated)
+		assert.NoError(t, err)
+	})
+
 	t.Run("accepts the standard base64 alphabet like Python's urlsafe decoder", func(t *testing.T) {
 		prs := newRegisteredService(t)
 		// Keep blinding until the standard encoding differs from base64url, so
@@ -266,6 +292,19 @@ func TestService_Eval(t *testing.T) {
 		prs.Fail(0, "")
 		status, _, body = send(t, client, newEvalRequest(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, recipientScope)))
 		assert.Equal(t, http.StatusOK, status, body)
+	})
+
+	t.Run("answers any other path with FastAPI's 404", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		client, _ := newClient(t, prs)
+		request := newEvalRequest(t, prs, evalRequest("AA", "ura:"+recipientURA, recipientScope))
+		request.URL.Path = "/evaluate"
+		status, contentType, body := send(t, client, request)
+		assert.Equal(t, http.StatusNotFound, status)
+		assert.Equal(t, "application/json", contentType)
+		assert.Equal(t, `{"detail":"Not Found"}`, body)
+		require.Equal(t, 1, prs.ExchangeCount())
+		assert.Equal(t, "/evaluate", prs.GetLastExchange().Path)
 	})
 
 	t.Run("records every exchange", func(t *testing.T) {

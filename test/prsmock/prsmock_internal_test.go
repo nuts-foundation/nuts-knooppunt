@@ -10,7 +10,10 @@ import (
 
 func Test_pythonURLSafeB64Decode(t *testing.T) {
 	// Expected values are base64.urlsafe_b64decode(input) on CPython 3.11.6,
-	// the Python line the service runs (pyproject.toml at v0.0.18).
+	// one of the interpreters the service allows (pyproject.toml:14 at
+	// v0.0.18 says ^3.11; the image builds from python:3.14-slim). The two
+	// "stops after padding" rows and "padding interrupted by data" differ on
+	// CPython 3.14.6; see pythonURLSafeB64Decode.
 	for _, tc := range []struct {
 		name  string
 		input string
