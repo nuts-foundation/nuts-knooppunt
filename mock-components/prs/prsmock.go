@@ -9,10 +9,10 @@
 // its /version.json sits behind client-certificate TLS. File references in
 // the comments below point into that tag.
 //
-// Only POST /oprf/eval is served, over TLS with a self-signed certificate, and
-// a client certificate is required on the handshake; any other path answers
-// 404 {"detail":"Not Found"} as FastAPI does. The route follows v0.0.18 in
-// these respects, each covered by prsmock_test.go:
+// POST /oprf/eval is served over TLS, with a client certificate required on
+// the handshake; any other path answers 404 {"detail":"Not Found"} as FastAPI
+// does. The route follows v0.0.18 in these respects, each covered by
+// prsmock_test.go:
 //
 //   - a request without a bearer token is refused with 401
 //     {"detail":"Missing bearer token"} (app/auth.py:59-61). FastAPI reads and
@@ -50,12 +50,29 @@
 //     for every recipient, so a test can also play the recipient and de-blind
 //     the result.
 //
-// Not modelled: verification of the bearer token (signature, issuer, audience
-// and the cnf thumbprint binding of app/services/client_oauth.py:87-140),
-// verification of the client certificate (the acceptance ingress checks a UZI
-// certificate, the mock accepts any), the other routes, and a key pair per
-// recipient. Nothing in the mock fails by itself; Fail injects the 5xx
-// answers of Starlette's error middleware or of an ingress.
+// Next to the PRS route the same listener serves POST /oauth/token, a stand-in
+// for the ministry's token endpoint: it verifies the caller's JWT-bearer
+// assertion against the presented client certificate the way
+// component/authn builds it, including its audience and the posted scope and
+// target audience, and issues an opaque token that /oprf/eval then requires,
+// presented with the same client certificate and requested for this service.
+// "This service" and "this endpoint" are Options.PublicURL, a configured
+// origin, never the request's Host header, which the caller controls.
+// /oprf/eval accepts any bearer instead when Options.AcceptAnyBearer is set. A second, plaintext listener
+// serves two routes the real PRS does not have, for a sandbox NVI that cannot
+// de-blind itself: POST /sandbox/finalize turns a Knooppunt identifier value
+// into the recipient's pseudonym, and POST /sandbox/tokenize turns a pseudonym
+// back into a fresh identifier value for an audience. Neither route
+// authenticates its caller: whoever reaches the listener can de-tokenize and
+// mint, so it belongs on a closed network only.
+//
+// Not modelled: the bearer's claims beyond what the token endpoint checked
+// (app/services/client_oauth.py:87-140 verifies issuer, audience and the cnf
+// thumbprint binding against the ministry's keys), verification of the client
+// certificate (the acceptance ingress checks a UZI certificate, the mock
+// accepts any), the other routes, and a key pair per recipient. Nothing in
+// the mock fails by itself; Fail injects the 5xx answers of Starlette's error
+// middleware or of an ingress.
 //
 // It deliberately does not follow the service's main branch (v0.0.34 at the
 // time of writing), which moved to "oin:" recipient identifiers and a prs:oprf
@@ -64,15 +81,18 @@
 package prsmock
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -82,6 +102,8 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -92,6 +114,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwe"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -110,6 +133,16 @@ const (
 
 	jsonContentType = "application/json"
 	textContentType = "text/plain; charset=utf-8"
+
+	tokenPath    = "/oauth/token"
+	finalizePath = "/sandbox/finalize"
+	tokenizePath = "/sandbox/tokenize"
+	// tokenLifetime is how long an issued access token is accepted.
+	tokenLifetime = 300 * time.Second
+	// jwtBearerAssertionType is the client_assertion_type component/authn sends.
+	jwtBearerAssertionType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
+	// defaultScope is the recipient scope the sandbox helper tokenizes for.
+	defaultScope = "nationale-verwijsindex"
 )
 
 // hashToGroupDST is the domain separation tag liboprf uses to hash an input to
@@ -137,6 +170,15 @@ func sharedRecipientKey() (*rsa.PrivateKey, error) {
 	return recipientKey, recipientKeyErr
 }
 
+// The client certificate is RSA, since component/authn signs its token
+// request with RS256 using the certificate's key, and generated once per
+// process for the same reason as the recipient key.
+var (
+	clientCertificateOnce sync.Once
+	clientCertificate     tls.Certificate
+	clientCertificateErr  error
+)
+
 // Exchange is one captured call: the request as it arrived on the wire and the
 // answer the mock gave.
 type Exchange struct {
@@ -151,13 +193,48 @@ type Exchange struct {
 	Response          []byte
 }
 
+// Options configures a mock. NewService fills them in for a test; cmd fills
+// them in from the environment.
+type Options struct {
+	// ListenAddr is where the PRS API listens, over TLS; anything net.Listen
+	// accepts ("localhost:0" for an ephemeral port).
+	ListenAddr string
+	// SandboxListenAddr is where the sandbox helper listens, in plaintext.
+	// Empty leaves the helper off.
+	SandboxListenAddr string
+	// ServerCertificate is what the PRS API serves; nil generates a
+	// self-signed certificate for 127.0.0.1 and localhost.
+	ServerCertificate *tls.Certificate
+	// RecipientKey is the key pair every JWE is encrypted to; nil uses one
+	// generated once per process.
+	RecipientKey *rsa.PrivateKey
+	// OPRFKey is the 32-byte ristretto255 scalar the service evaluates with;
+	// nil draws a random one, so pseudonyms differ per instance.
+	OPRFKey []byte
+	// PublicURL is the https origin clients address this service by, such as
+	// "https://mock-prs:8443"; assertions must name PublicURL + "/oauth/token"
+	// as their audience and tokens must target PublicURL. Empty means the
+	// listener's own address, which is what a test wants. It is a configured
+	// value on purpose: taken from the request, the Host header would let the
+	// caller choose what it is checked against.
+	PublicURL string
+	// AcceptAnyBearer makes /oprf/eval accept any bearer token, as the
+	// component tests need; otherwise only tokens /oauth/token issued count.
+	AcceptAnyBearer bool
+}
+
 // Service is a mock PRS server. Recipients must be registered before a blind
 // for them can be evaluated, as organizations and their public keys must be on
 // the real service (POST /orgs and POST /register/certificate at v0.0.18).
 type Service struct {
 	server            *http.Server
+	sandboxServer     *http.Server
 	url               string
+	sandboxURL        string
+	publicURL         string
+	publicHost        string
 	serverCertificate *x509.Certificate
+	acceptAnyBearer   bool
 	// oprfKey is the service's OPRF secret: a ristretto255 scalar, as
 	// pyoprf.keygen() produces (oprf_service.py:33-38).
 	oprfKey group.Scalar
@@ -169,6 +246,19 @@ type Service struct {
 	exchanges  []Exchange
 	recipients map[string]map[string]struct{} // URA -> scopes with a registered public key
 	failure    *failure
+	tokens     map[string]issuedToken
+}
+
+// issuedToken is what the token endpoint remembers about a token: when it
+// expires and the thumbprint of the certificate that obtained it, which the
+// PRS route requires the caller to present again, as v0.0.18's _verify_mtls
+// compares the token's cnf.x5t#S256 with the request's certificate
+// (app/services/client_oauth.py:116-150).
+type issuedToken struct {
+	expiry         time.Time
+	thumbprint     string
+	scope          string
+	targetAudience string
 }
 
 // failure is an injected answer that replaces evaluation; see Fail.
@@ -177,51 +267,101 @@ type failure struct {
 	body   string
 }
 
-// New creates and starts a mock PRS on listenAddr, which is anything
-// net.Listen accepts ("localhost:0" for an ephemeral test port). Callers own
-// the returned service and must call Stop when done; NewService is the
-// testing.T-bound variant that does so for you.
-func New(listenAddr string) (*Service, error) {
-	key, err := sharedRecipientKey()
-	if err != nil {
-		return nil, fmt.Errorf("generating recipient key: %w", err)
+// New creates and starts a mock PRS. Callers own the returned service and
+// must call Stop when done; NewService is the testing.T-bound variant that
+// does so for you.
+func New(opts Options) (*Service, error) {
+	key := opts.RecipientKey
+	if key == nil {
+		var err error
+		if key, err = sharedRecipientKey(); err != nil {
+			return nil, fmt.Errorf("generating recipient key: %w", err)
+		}
 	}
 	keyID, err := thumbprint(&key.PublicKey)
 	if err != nil {
 		return nil, fmt.Errorf("computing recipient key thumbprint: %w", err)
 	}
-	serverCertificate, err := selfSignedCertificate(&x509.Certificate{
-		Subject:     pkix.Name{CommonName: "prsmock"},
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:    []string{"localhost"},
-		IPAddresses: []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("generating server certificate: %w", err)
+	serverCertificate := opts.ServerCertificate
+	if serverCertificate == nil {
+		generated, err := selfSignedCertificate(&x509.Certificate{
+			Subject:     pkix.Name{CommonName: "prsmock"},
+			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+			DNSNames:    []string{"localhost"},
+			IPAddresses: []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("generating server certificate: %w", err)
+		}
+		serverCertificate = &generated
+	}
+	if serverCertificate.Leaf == nil {
+		leaf, err := x509.ParseCertificate(serverCertificate.Certificate[0])
+		if err != nil {
+			return nil, fmt.Errorf("parsing server certificate: %w", err)
+		}
+		serverCertificate.Leaf = leaf
+	}
+	oprfKey := ristretto.RandomNonZeroScalar(rand.Reader)
+	if opts.OPRFKey != nil {
+		oprfKey = ristretto.NewScalar()
+		if err := oprfKey.UnmarshalBinary(opts.OPRFKey); err != nil {
+			return nil, fmt.Errorf("OPRF key is not a ristretto255 scalar: %w", err)
+		}
+		// The decoder reduces a value at or above the group order rather
+		// than rejecting it; a key that does not survive the round trip
+		// would silently be a different key than the one on disk.
+		if encoded, err := oprfKey.MarshalBinary(); err != nil || !bytes.Equal(encoded, opts.OPRFKey) {
+			return nil, errors.New("OPRF key is not a canonical ristretto255 scalar (32 little-endian bytes below the group order)")
+		}
+		if oprfKey.IsZero() {
+			return nil, errors.New("OPRF key is zero")
+		}
 	}
 	prs := &Service{
 		serverCertificate: serverCertificate.Leaf,
-		oprfKey:           ristretto.RandomNonZeroScalar(rand.Reader),
+		acceptAnyBearer:   opts.AcceptAnyBearer,
+		oprfKey:           oprfKey,
 		recipientKey:      key,
 		recipientKeyID:    keyID,
 		recipients:        map[string]map[string]struct{}{},
+		tokens:            map[string]issuedToken{},
 	}
 
-	listener, err := net.Listen("tcp", listenAddr)
+	listener, err := net.Listen("tcp", opts.ListenAddr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to listen on %s: %w", listenAddr, err)
+		return nil, fmt.Errorf("failed to listen on %s: %w", opts.ListenAddr, err)
 	}
 	prs.url = "https://" + listener.Addr().String()
+	prs.publicURL = prs.url
+	if opts.PublicURL != "" {
+		// Validated as given, before any normalization: "/" is not "unset",
+		// and "https://host//" or "https://host?" are not origins either.
+		public, err := url.Parse(opts.PublicURL)
+		if err != nil || public.Scheme != "https" || public.Host == "" || public.User != nil ||
+			(public.Path != "" && public.Path != "/") || public.RawQuery != "" || public.ForceQuery || public.Fragment != "" {
+			_ = listener.Close()
+			return nil, fmt.Errorf("PublicURL must be an https origin without path, query or user information: %q", opts.PublicURL)
+		}
+		prs.publicURL = "https://" + public.Host
+	}
+	public, err := url.Parse(prs.publicURL)
+	if err != nil {
+		_ = listener.Close()
+		return nil, err
+	}
+	prs.publicHost = public.Host
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST "+evalPath, prs.handleEval)
+	mux.HandleFunc("POST "+tokenPath, prs.handleToken)
 	mux.HandleFunc("/", prs.handleUnknownPath)
 	prs.server = &http.Server{Handler: mux}
 
 	// The acceptance environment serves the PRS behind mTLS (services.yaml:53):
 	// a client certificate must be presented. Which one is not checked here.
 	tlsListener := tls.NewListener(listener, &tls.Config{
-		Certificates: []tls.Certificate{serverCertificate},
+		Certificates: []tls.Certificate{*serverCertificate},
 		ClientAuth:   tls.RequireAnyClientCert,
 		MinVersion:   tls.VersionTLS12,
 	})
@@ -232,15 +372,34 @@ func New(listenAddr string) (*Service, error) {
 	}()
 	slog.Info("Mock PRS server started", "url", prs.url)
 
+	if opts.SandboxListenAddr != "" {
+		sandboxListener, err := net.Listen("tcp", opts.SandboxListenAddr)
+		if err != nil {
+			_ = prs.server.Close()
+			return nil, fmt.Errorf("failed to listen on %s: %w", opts.SandboxListenAddr, err)
+		}
+		prs.sandboxURL = "http://" + sandboxListener.Addr().String()
+		sandboxMux := http.NewServeMux()
+		sandboxMux.HandleFunc("POST "+finalizePath, prs.handleSandboxFinalize)
+		sandboxMux.HandleFunc("POST "+tokenizePath, prs.handleSandboxTokenize)
+		prs.sandboxServer = &http.Server{Handler: sandboxMux}
+		go func() {
+			if err := prs.sandboxServer.Serve(sandboxListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				slog.Error("mock PRS sandbox helper error", "error", err)
+			}
+		}()
+		slog.Info("Mock PRS sandbox helper started", "url", prs.sandboxURL)
+	}
+
 	return prs, nil
 }
 
-// NewService creates and starts a mock PRS on an ephemeral port, registering
-// cleanup with t.
+// NewService creates and starts a mock PRS on ephemeral ports, with the
+// sandbox helper on and any bearer token accepted, registering cleanup with t.
 func NewService(t *testing.T) *Service {
 	t.Helper()
 
-	prs, err := New("localhost:0")
+	prs, err := New(Options{ListenAddr: "localhost:0", SandboxListenAddr: "localhost:0", AcceptAnyBearer: true})
 	require.NoError(t, err, "failed to start mock PRS server")
 
 	t.Cleanup(func() {
@@ -257,9 +416,69 @@ func (s *Service) GetURL() string {
 	return s.url
 }
 
-// Stop stops the mock PRS server.
+// SandboxURL returns the base URL of the plaintext sandbox helper, or "" when
+// it is off.
+func (s *Service) SandboxURL() string {
+	return s.sandboxURL
+}
+
+// Stop stops the mock PRS server and its sandbox helper.
 func (s *Service) Stop() error {
-	return s.server.Close()
+	err := s.server.Close()
+	if s.sandboxServer != nil {
+		if sandboxErr := s.sandboxServer.Close(); err == nil {
+			err = sandboxErr
+		}
+	}
+	return err
+}
+
+// TokenIssued reports whether the token endpoint issued token and it has not
+// expired.
+func (s *Service) TokenIssued(token string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	issued, ok := s.tokens[token]
+	return ok && time.Now().Before(issued.expiry)
+}
+
+// tokenIssuedTo reports whether token is valid, was obtained with the
+// certificate the request presents, and was requested for this service: the
+// ministry's token is tied to one target_audience, and the verifier checks
+// the token's audience (app/services/client_oauth.py:97-107). The scope value
+// is not checked, as v0.0.18 does not check it either.
+func (s *Service) tokenIssuedTo(token string, r *http.Request) bool {
+	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	issued, ok := s.tokens[token]
+	return ok && time.Now().Before(issued.expiry) &&
+		issued.thumbprint == certificateThumbprint(r.TLS.PeerCertificates[0]) &&
+		targetsOrigin(issued.targetAudience, s.publicHost)
+}
+
+// targetsOrigin reports whether target, the target_audience a token was
+// issued for, names this service: an https URL whose authority is exactly
+// the configured public host, with no user information, no path beyond "/",
+// no query (not even an empty one) and no fragment. A plain prefix
+// comparison would accept "https://<host>@elsewhere", and the request's
+// own Host header would let the caller choose the host.
+func targetsOrigin(target string, publicHost string) bool {
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return false
+	}
+	return parsed.Scheme == "https" && parsed.User == nil && parsed.Host == publicHost &&
+		(parsed.Path == "" || parsed.Path == "/") && parsed.RawQuery == "" && !parsed.ForceQuery && parsed.Fragment == ""
+}
+
+// certificateThumbprint is the x5t#S256 value of RFC 8705: the SHA-256 of the
+// DER certificate as unpadded base64url, what component/authn puts in cnf.
+func certificateThumbprint(certificate *x509.Certificate) string {
+	digest := sha256.Sum256(certificate.Raw)
+	return base64.RawURLEncoding.EncodeToString(digest[:])
 }
 
 // ServerCertificate returns the self-signed certificate the mock serves TLS with.
@@ -279,14 +498,23 @@ func (s *Service) TLSClientConfig(clientCertificate tls.Certificate) *tls.Config
 	}
 }
 
-// NewClientCertificate returns a fresh self-signed certificate for a caller to
+// NewClientCertificate returns a self-signed RSA certificate for a caller to
 // present on the TLS handshake, in place of the UZI server certificate the
-// acceptance environment expects.
+// acceptance environment expects, and to sign its token request with. It is
+// generated once per process.
 func NewClientCertificate() (tls.Certificate, error) {
-	return selfSignedCertificate(&x509.Certificate{
-		Subject:     pkix.Name{CommonName: "prsmock client"},
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	clientCertificateOnce.Do(func() {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			clientCertificateErr = err
+			return
+		}
+		clientCertificate, clientCertificateErr = selfSignedCertificateFor(key, &x509.Certificate{
+			Subject:     pkix.Name{CommonName: "prsmock client"},
+			ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		})
 	})
+	return clientCertificate, clientCertificateErr
 }
 
 // selfSignedCertificate issues template as a self-signed certificate on a
@@ -296,6 +524,14 @@ func selfSignedCertificate(template *x509.Certificate) (tls.Certificate, error) 
 	if err != nil {
 		return tls.Certificate{}, err
 	}
+	return selfSignedCertificateFor(key, template)
+}
+
+type signer interface {
+	Public() crypto.PublicKey
+}
+
+func selfSignedCertificateFor(key signer, template *x509.Certificate) (tls.Certificate, error) {
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
 		return tls.Certificate{}, err
@@ -305,7 +541,7 @@ func selfSignedCertificate(template *x509.Certificate) (tls.Certificate, error) 
 	template.NotAfter = time.Now().Add(24 * time.Hour)
 	template.KeyUsage = x509.KeyUsageDigitalSignature
 	template.BasicConstraintsValid = true
-	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	der, err := x509.CreateCertificate(rand.Reader, template, template, key.Public(), key)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
@@ -499,8 +735,16 @@ func (s *Service) respond(r *http.Request, body []byte) (status int, contentType
 	if problem != "" {
 		return http.StatusUnprocessableEntity, jsonContentType, `{"detail":[` + problem + `]}`
 	}
-	if _, ok := bearerToken(r); !ok {
+	token, ok := bearerToken(r)
+	if !ok {
 		return http.StatusUnauthorized, jsonContentType, `{"detail":"Missing bearer token"}`
+	}
+	if !s.acceptAnyBearer && !s.tokenIssuedTo(token, r) {
+		// What the verifier answers for a token it cannot verify or whose
+		// cnf.x5t#S256 is not the presented certificate: an HTTPException
+		// that bypasses get_auth_ctx's OAuthError handling
+		// (app/services/client_oauth.py:109-111,144-150).
+		return http.StatusUnauthorized, jsonContentType, `{"detail":"Invalid token"}`
 	}
 	request, problems := validateBlindRequest(parsed)
 	if len(problems) > 0 {
@@ -724,6 +968,219 @@ func thumbprint(key *rsa.PublicKey) (string, error) {
 	}
 	// jwcrypto renders thumbprints as unpadded base64url.
 	return base64.RawURLEncoding.EncodeToString(digest), nil
+}
+
+// handleToken is a stand-in for the ministry's token endpoint as
+// component/authn uses it (oauth2.go:101-147): a client_credentials grant
+// carrying scope and target_audience and a JWT-bearer assertion signed with
+// the client certificate's key, bound to it through cnf.x5t#S256, that
+// repeats both. The assertion must name this endpoint as its audience (RFC
+// 7523 section 3), the form values must equal the signed ones, and the
+// token is issued for that target audience and that certificate. The
+// endpoint's own URL is Options.PublicURL plus the token path, a configured
+// value, never the request's Host header.
+func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		tokenError(w, "invalid_request", "cannot parse form")
+		return
+	}
+	if r.PostForm.Get("grant_type") != "client_credentials" {
+		tokenError(w, "unsupported_grant_type", "grant_type must be client_credentials")
+		return
+	}
+	if r.PostForm.Get("client_assertion_type") != jwtBearerAssertionType {
+		tokenError(w, "invalid_request", "client_assertion_type must be "+jwtBearerAssertionType)
+		return
+	}
+	if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
+		tokenError(w, "invalid_client", "no client certificate presented")
+		return
+	}
+	certificate := r.TLS.PeerCertificates[0]
+	assertion, err := jwt.Parse([]byte(r.PostForm.Get("client_assertion")),
+		jwt.WithKey(jwa.RS256, certificate.PublicKey),
+		jwt.WithValidate(true),
+		jwt.WithRequiredClaim(jwt.IssuerKey),
+		jwt.WithRequiredClaim(jwt.SubjectKey),
+		jwt.WithRequiredClaim(jwt.AudienceKey),
+		jwt.WithRequiredClaim(jwt.ExpirationKey),
+		jwt.WithRequiredClaim(jwt.IssuedAtKey),
+		jwt.WithRequiredClaim(jwt.JwtIDKey),
+		jwt.WithRequiredClaim("scope"),
+		jwt.WithRequiredClaim("cnf"))
+	if err != nil {
+		tokenError(w, "invalid_client", "client_assertion: "+err.Error())
+		return
+	}
+	endpoint := s.publicURL + tokenPath
+	if !slices.Contains(assertion.Audience(), endpoint) {
+		tokenError(w, "invalid_client", "client_assertion aud is not this token endpoint: "+endpoint)
+		return
+	}
+	scope, _ := assertion.Get("scope")
+	if scope == "" || scope != r.PostForm.Get("scope") {
+		tokenError(w, "invalid_request", "scope must be present and equal to the client_assertion's scope")
+		return
+	}
+	if assertion.Issuer() != assertion.Subject() {
+		// component/authn puts the calling organization's URA in both
+		// (oauth2.go:106-107); the ministry's endpoint identifies the client
+		// by them.
+		tokenError(w, "invalid_client", "client_assertion iss and sub differ")
+		return
+	}
+	targetAudience, _ := assertion.Get("target_audience")
+	if targetAudience == "" || targetAudience != r.PostForm.Get("target_audience") {
+		tokenError(w, "invalid_request", "target_audience must be present and equal to the client_assertion's target_audience")
+		return
+	}
+	confirmation, _ := assertion.Get("cnf")
+	claims, _ := confirmation.(map[string]any)
+	thumbprint := certificateThumbprint(certificate)
+	if claims["x5t#S256"] != thumbprint {
+		tokenError(w, "invalid_client", "cnf.x5t#S256 is not the presented certificate")
+		return
+	}
+
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	token := base64.RawURLEncoding.EncodeToString(secret)
+	s.mu.Lock()
+	s.tokens[token] = issuedToken{
+		expiry:         time.Now().Add(tokenLifetime),
+		thumbprint:     thumbprint,
+		scope:          scope.(string),
+		targetAudience: targetAudience.(string),
+	}
+	s.mu.Unlock()
+
+	w.Header().Set("Content-Type", jsonContentType)
+	_, _ = fmt.Fprintf(w, `{"access_token":%s,"token_type":"Bearer","expires_in":%d}`, jsonString(token), int(tokenLifetime.Seconds()))
+}
+
+// tokenError answers as RFC 6749 section 5.2 prescribes.
+func tokenError(w http.ResponseWriter, code string, description string) {
+	w.Header().Set("Content-Type", jsonContentType)
+	w.WriteHeader(http.StatusBadRequest)
+	_, _ = fmt.Fprintf(w, `{"error":%s,"error_description":%s}`, jsonString(code), jsonString(description))
+}
+
+// identifierValue is the NVI identifier value the Knooppunt produces
+// (component/pseudonymisation/component.go, marshalSubjectIdentifier): the
+// blind factor as encoding/json writes a []byte, the JWE verbatim, the object
+// as unpadded base64url.
+type identifierValue struct {
+	BlindFactor     []byte `json:"blind_factor"`
+	EvaluatedOutput string `json:"evaluated_output"`
+}
+
+// handleSandboxFinalize plays the recipient for a sandbox NVI that cannot:
+// {"token": <identifier value>} in, {"pseudonym": <hex of the unblinded
+// element>} out. Hex, because the sandbox NVI uses the pseudonym as a FHIR id.
+func (s *Service) handleSandboxFinalize(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.Token == "" {
+		sandboxError(w, "body must be {\"token\": <identifier value>}")
+		return
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(request.Token, "="))
+	if err != nil {
+		sandboxError(w, "token is not base64url: "+err.Error())
+		return
+	}
+	var value identifierValue
+	if err := json.Unmarshal(decoded, &value); err != nil {
+		sandboxError(w, "token is not the identifier JSON: "+err.Error())
+		return
+	}
+	payload, err := s.DecryptJWE(value.EvaluatedOutput)
+	if err != nil {
+		sandboxError(w, "evaluated_output does not decrypt: "+err.Error())
+		return
+	}
+	var claims struct {
+		Subject string `json:"subject"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil || !strings.HasPrefix(claims.Subject, subjectPrefix) {
+		sandboxError(w, "JWE carries no evaluation")
+		return
+	}
+	pseudonym, err := Finalize(base64.URLEncoding.EncodeToString(value.BlindFactor), strings.TrimPrefix(claims.Subject, subjectPrefix))
+	if err != nil {
+		sandboxError(w, "de-blinding failed: "+err.Error())
+		return
+	}
+	element, err := base64.URLEncoding.DecodeString(pseudonym)
+	if err != nil {
+		sandboxError(w, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", jsonContentType)
+	_, _ = fmt.Fprintf(w, `{"pseudonym":%s}`, jsonString(hex.EncodeToString(element)))
+}
+
+// handleSandboxTokenize is the reverse for a sandbox NVI that hands tokens
+// out on read: {"pseudonym": <hex>, "audience": <URA>, "scope": <optional>}
+// in, {"token": <identifier value for that audience>} out. It blinds the
+// pseudonym with a fresh scalar and encrypts the result for the audience, so
+// the token de-blinds to the same pseudonym.
+func (s *Service) handleSandboxTokenize(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Pseudonym string `json:"pseudonym"`
+		Audience  string `json:"audience"`
+		Scope     string `json:"scope"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.Pseudonym == "" || request.Audience == "" {
+		sandboxError(w, "body must be {\"pseudonym\": <hex>, \"audience\": <URA>}")
+		return
+	}
+	if request.Scope == "" {
+		request.Scope = defaultScope
+	}
+	elementBytes, err := hex.DecodeString(request.Pseudonym)
+	if err != nil || len(elementBytes) != elementSize {
+		sandboxError(w, "pseudonym must be 32 bytes in hex")
+		return
+	}
+	element := ristretto.NewElement()
+	if err := element.UnmarshalBinary(elementBytes); err != nil {
+		sandboxError(w, "pseudonym is not a ristretto255 element: "+err.Error())
+		return
+	}
+	blind := ristretto.RandomNonZeroScalar(rand.Reader)
+	blinded, err := ristretto.NewElement().Mul(element, blind).MarshalBinary()
+	if err != nil {
+		sandboxError(w, err.Error())
+		return
+	}
+	token, err := s.buildJWE("ura:"+request.Audience, request.Scope, blinded)
+	if err != nil {
+		sandboxError(w, err.Error())
+		return
+	}
+	blindBytes, err := blind.MarshalBinary()
+	if err != nil {
+		sandboxError(w, err.Error())
+		return
+	}
+	value, err := json.Marshal(identifierValue{BlindFactor: blindBytes, EvaluatedOutput: token})
+	if err != nil {
+		sandboxError(w, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", jsonContentType)
+	_, _ = fmt.Fprintf(w, `{"token":%s}`, jsonString(base64.RawURLEncoding.EncodeToString(value)))
+}
+
+func sandboxError(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", jsonContentType)
+	w.WriteHeader(http.StatusBadRequest)
+	_, _ = fmt.Fprintf(w, `{"error":%s}`, jsonString(message))
 }
 
 // pythonURLSafeB64Decode decodes s as Python's base64.urlsafe_b64decode does

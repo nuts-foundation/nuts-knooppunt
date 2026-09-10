@@ -2,19 +2,31 @@ package prsmock_test
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudflare/circl/oprf"
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/nuts-foundation/nuts-knooppunt/test/prsmock"
+	"github.com/lestrrat-go/jwx/v2/jws"
+	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/nuts-foundation/nuts-knooppunt/mock-components/prs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -409,6 +421,55 @@ func TestService_Validation(t *testing.T) {
 	}
 }
 
+func TestService_Options(t *testing.T) {
+	t.Run("uses the configured OPRF key", func(t *testing.T) {
+		key, err := hex.DecodeString("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f0f")
+		require.NoError(t, err)
+		first, err := prsmock.New(prsmock.Options{ListenAddr: "localhost:0", OPRFKey: key})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = first.Stop() })
+		second, err := prsmock.New(prsmock.Options{ListenAddr: "localhost:0", OPRFKey: key})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = second.Stop() })
+		a, err := first.Pseudonym([]byte("input"))
+		require.NoError(t, err)
+		b, err := second.Pseudonym([]byte("input"))
+		require.NoError(t, err)
+		assert.Equal(t, a, b, "the same key yields the same pseudonyms across instances")
+	})
+
+	t.Run("refuses a public URL that is not a bare https origin", func(t *testing.T) {
+		for name, public := range map[string]string{
+			"http":         "http://mock-prs:8443",
+			"path":         "https://mock-prs:8443/prs",
+			"userinfo":     "https://user@mock-prs:8443",
+			"slash only":   "/",
+			"empty query":  "https://mock-prs:8443?",
+			"double slash": "https://mock-prs:8443//",
+		} {
+			_, err := prsmock.New(prsmock.Options{ListenAddr: "localhost:0", PublicURL: public})
+			assert.Error(t, err, name)
+		}
+		// A single trailing slash is the same origin.
+		prs, err := prsmock.New(prsmock.Options{ListenAddr: "localhost:0", PublicURL: "https://mock-prs:8443/"})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = prs.Stop() })
+	})
+
+	t.Run("refuses an OPRF key that is zero, non-canonical or the wrong size", func(t *testing.T) {
+		for name, key := range map[string]string{
+			"zero":            "0000000000000000000000000000000000000000000000000000000000000000",
+			"above the order": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f89",
+			"too short":       "0102",
+		} {
+			raw, err := hex.DecodeString(key)
+			require.NoError(t, err)
+			_, err = prsmock.New(prsmock.Options{ListenAddr: "localhost:0", OPRFKey: raw})
+			assert.Error(t, err, name)
+		}
+	})
+}
+
 func TestService_Transport(t *testing.T) {
 	t.Run("serves an https URL", func(t *testing.T) {
 		prs := newRegisteredService(t)
@@ -449,6 +510,383 @@ func TestService_Transport(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, response.StatusCode)
 		assert.Contains(t, string(body), "Client sent an HTTP request to an HTTPS server")
 		assert.Equal(t, 0, prs.ExchangeCount())
+	})
+}
+
+// newStrictService starts a mock that only accepts bearer tokens its own
+// token endpoint issued, as the sandbox runs it.
+func newStrictService(t *testing.T) *prsmock.Service {
+	t.Helper()
+	prs, err := prsmock.New(prsmock.Options{ListenAddr: "localhost:0", SandboxListenAddr: "localhost:0"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = prs.Stop() })
+	prs.RegisterRecipient(recipientURA, recipientScope)
+	return prs
+}
+
+const callerURA = "00000030"
+
+// clientAssertion builds the JWT-bearer assertion the way component/authn
+// builds it (oauth2.go:101-131) for prs: signed with key, bound to
+// certificate, addressed to prs's token endpoint, for prs as target audience.
+// overrides replace claims; a nil value removes one.
+func clientAssertion(t *testing.T, prs *prsmock.Service, certificate *x509.Certificate, key any, overrides map[string]any) string {
+	t.Helper()
+	digest := sha256.Sum256(certificate.Raw)
+	thumbprint := base64.RawURLEncoding.EncodeToString(digest[:])
+	token := jwt.New()
+	claims := map[string]any{
+		jwt.IssuerKey:     callerURA,
+		jwt.SubjectKey:    callerURA,
+		jwt.AudienceKey:   []string{prs.GetURL() + "/oauth/token"},
+		jwt.IssuedAtKey:   time.Now(),
+		jwt.ExpirationKey: time.Now().Add(time.Minute),
+		jwt.JwtIDKey:      "test-jti",
+		"cnf":             map[string]any{"x5t#S256": thumbprint},
+		"scope":           "prs:read",
+		"target_audience": prs.GetURL(),
+	}
+	for name, value := range overrides {
+		if value == nil {
+			delete(claims, name)
+		} else {
+			claims[name] = value
+		}
+	}
+	for name, value := range claims {
+		require.NoError(t, token.Set(name, value))
+	}
+	headers := jws.NewHeaders()
+	require.NoError(t, headers.Set(jws.KeyIDKey, thumbprint))
+	signed, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, key, jws.WithProtectedHeaders(headers)))
+	require.NoError(t, err)
+	return string(signed)
+}
+
+// tokenForm is the form component/authn posts (oauth2.go:140-146), for prs.
+func tokenForm(prs *prsmock.Service, assertion string) url.Values {
+	return url.Values{
+		"grant_type":            {"client_credentials"},
+		"scope":                 {"prs:read"},
+		"target_audience":       {prs.GetURL()},
+		"client_assertion_type": {"urn:ietf:params:oauth:client-assertion-type:jwt-bearer"},
+		"client_assertion":      {assertion},
+	}
+}
+
+// otherCertificate is a second self-signed client certificate, since
+// prsmock.NewClientCertificate hands out one per process.
+func otherCertificate(t *testing.T) tls.Certificate {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(2),
+		Subject:               pkix.Name{CommonName: "another client"},
+		NotBefore:             time.Now().Add(-time.Minute),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	require.NoError(t, err)
+	leaf, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}
+}
+
+func postForm(t *testing.T, client *http.Client, target string, form url.Values) (int, map[string]any) {
+	t.Helper()
+	response, err := client.PostForm(target, form)
+	require.NoError(t, err)
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "application/json", response.Header.Get("Content-Type"))
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(body, &parsed), string(body))
+	return response.StatusCode, parsed
+}
+
+func postJSON(t *testing.T, target string, body string) (int, map[string]any) {
+	t.Helper()
+	response, err := http.Post(target, "application/json", strings.NewReader(body))
+	require.NoError(t, err)
+	defer response.Body.Close()
+	raw, err := io.ReadAll(response.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "application/json", response.Header.Get("Content-Type"))
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal(raw, &parsed), string(raw))
+	return response.StatusCode, parsed
+}
+
+func TestService_TokenEndpoint(t *testing.T) {
+	// issue obtains a token for certificate with an assertion carrying
+	// overrides, and returns the response.
+	issue := func(t *testing.T, prs *prsmock.Service, client *http.Client, certificate tls.Certificate, overrides map[string]any, form func(url.Values)) (int, map[string]any) {
+		t.Helper()
+		values := tokenForm(prs, clientAssertion(t, prs, certificate.Leaf, certificate.PrivateKey, overrides))
+		if form != nil {
+			form(values)
+		}
+		return postForm(t, client, prs.GetURL()+"/oauth/token", values)
+	}
+	evalWith := func(t *testing.T, prs *prsmock.Service, client *http.Client, token string) (int, string) {
+		t.Helper()
+		blindedInput, _ := blind(t, []byte("input"))
+		request := newEvalRequest(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, recipientScope))
+		request.Header.Set("Authorization", "Bearer "+token)
+		status, _, body := send(t, client, request)
+		return status, body
+	}
+
+	t.Run("issues a token for a valid request, which the PRS route then accepts", func(t *testing.T) {
+		prs := newStrictService(t)
+		client, certificate := newClient(t, prs)
+		status, response := issue(t, prs, client, certificate, nil, nil)
+		require.Equal(t, http.StatusOK, status, response)
+		assert.Equal(t, "Bearer", response["token_type"])
+		assert.EqualValues(t, 300, response["expires_in"])
+		token, _ := response["access_token"].(string)
+		require.NotEmpty(t, token)
+		assert.True(t, prs.TokenIssued(token))
+
+		status, body := evalWith(t, prs, client, token)
+		assert.Equal(t, http.StatusOK, status, body)
+	})
+
+	t.Run("refuses a bearer it did not issue with 401", func(t *testing.T) {
+		prs := newStrictService(t)
+		client, _ := newClient(t, prs)
+		status, body := evalWith(t, prs, client, accessToken)
+		assert.Equal(t, http.StatusUnauthorized, status)
+		assert.Equal(t, `{"detail":"Invalid token"}`, body)
+	})
+
+	t.Run("refuses an issued token presented with another certificate", func(t *testing.T) {
+		prs := newStrictService(t)
+		client, certificate := newClient(t, prs)
+		status, response := issue(t, prs, client, certificate, nil, nil)
+		require.Equal(t, http.StatusOK, status, response)
+		token, _ := response["access_token"].(string)
+
+		other := &http.Client{Transport: &http.Transport{TLSClientConfig: prs.TLSClientConfig(otherCertificate(t))}}
+		status, body := evalWith(t, prs, other, token)
+		assert.Equal(t, http.StatusUnauthorized, status)
+		assert.Equal(t, `{"detail":"Invalid token"}`, body)
+	})
+
+	t.Run("refuses an issued token requested for another target audience", func(t *testing.T) {
+		prs := newStrictService(t)
+		client, certificate := newClient(t, prs)
+		status, response := issue(t, prs, client, certificate, map[string]any{"target_audience": "https://other-service.example"}, func(form url.Values) {
+			form.Set("target_audience", "https://other-service.example")
+		})
+		require.Equal(t, http.StatusOK, status, response)
+		token, _ := response["access_token"].(string)
+
+		status, body := evalWith(t, prs, client, token)
+		assert.Equal(t, http.StatusUnauthorized, status)
+		assert.Equal(t, `{"detail":"Invalid token"}`, body)
+	})
+
+	t.Run("refuses an issued token whose target only starts with this origin", func(t *testing.T) {
+		// "https://<host>@other-service.example" is a URL whose authority is
+		// other-service.example; a prefix comparison would accept it.
+		prs := newStrictService(t)
+		client, certificate := newClient(t, prs)
+		lookalike := "https://" + strings.TrimPrefix(prs.GetURL(), "https://") + "@other-service.example"
+		status, response := issue(t, prs, client, certificate, map[string]any{"target_audience": lookalike}, func(form url.Values) {
+			form.Set("target_audience", lookalike)
+		})
+		require.Equal(t, http.StatusOK, status, response)
+		token, _ := response["access_token"].(string)
+
+		status, body := evalWith(t, prs, client, token)
+		assert.Equal(t, http.StatusUnauthorized, status)
+		assert.Equal(t, `{"detail":"Invalid token"}`, body)
+	})
+
+	t.Run("refuses an assertion whose issuer and subject differ, or without iat or jti", func(t *testing.T) {
+		prs := newStrictService(t)
+		client, certificate := newClient(t, prs)
+		for name, claims := range map[string]map[string]any{
+			"issuer differs": {jwt.IssuerKey: "00000031"},
+			"no iat":         {jwt.IssuedAtKey: nil},
+			"no jti":         {jwt.JwtIDKey: nil},
+		} {
+			status, response := issue(t, prs, client, certificate, claims, nil)
+			assert.Equal(t, http.StatusBadRequest, status, name)
+			assert.Equal(t, "invalid_client", response["error"], name)
+		}
+	})
+
+	t.Run("checks the audience against its configured origin, not the request's Host header", func(t *testing.T) {
+		prs := newStrictService(t)
+		client, certificate := newClient(t, prs)
+
+		// An assertion for another token endpoint, sent with that endpoint's
+		// name in the Host header: the origin is configured, so this fails.
+		values := tokenForm(prs, clientAssertion(t, prs, certificate.Leaf, certificate.PrivateKey, map[string]any{jwt.AudienceKey: []string{"https://oauth.example/oauth/token"}}))
+		request, err := http.NewRequest(http.MethodPost, prs.GetURL()+"/oauth/token", strings.NewReader(values.Encode()))
+		require.NoError(t, err)
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		request.Host = "oauth.example"
+		status, _, body := send(t, client, request)
+		assert.Equal(t, http.StatusBadRequest, status, body)
+		assert.Contains(t, body, "invalid_client")
+
+		// A token issued for another target, presented with that target's
+		// name in the Host header of the PRS request: same.
+		status, response := issue(t, prs, client, certificate, map[string]any{"target_audience": "https://other-service.example"}, func(form url.Values) {
+			form.Set("target_audience", "https://other-service.example")
+		})
+		require.Equal(t, http.StatusOK, status, response)
+		token, _ := response["access_token"].(string)
+		blindedInput, _ := blind(t, []byte("input"))
+		request = newEvalRequest(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, recipientScope))
+		request.Header.Set("Authorization", "Bearer "+token)
+		request.Host = "other-service.example"
+		status, _, body = send(t, client, request)
+		assert.Equal(t, http.StatusUnauthorized, status)
+		assert.Equal(t, `{"detail":"Invalid token"}`, body)
+	})
+
+	t.Run("refuses an issued token whose target carries an empty query", func(t *testing.T) {
+		prs := newStrictService(t)
+		client, certificate := newClient(t, prs)
+		status, response := issue(t, prs, client, certificate, map[string]any{"target_audience": prs.GetURL() + "?"}, func(form url.Values) {
+			form.Set("target_audience", prs.GetURL()+"?")
+		})
+		require.Equal(t, http.StatusOK, status, response)
+		token, _ := response["access_token"].(string)
+		status, body := evalWith(t, prs, client, token)
+		assert.Equal(t, http.StatusUnauthorized, status, body)
+	})
+
+	t.Run("refuses an assertion signed with another key", func(t *testing.T) {
+		prs := newStrictService(t)
+		client, certificate := newClient(t, prs)
+		otherKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		status, response := issue(t, prs, client, tls.Certificate{Leaf: certificate.Leaf, PrivateKey: otherKey}, nil, nil)
+		assert.Equal(t, http.StatusBadRequest, status)
+		assert.Equal(t, "invalid_client", response["error"])
+	})
+
+	t.Run("refuses an assertion bound to another certificate", func(t *testing.T) {
+		prs := newStrictService(t)
+		client, certificate := newClient(t, prs)
+		status, response := issue(t, prs, client, tls.Certificate{Leaf: prs.ServerCertificate(), PrivateKey: certificate.PrivateKey}, nil, nil)
+		assert.Equal(t, http.StatusBadRequest, status)
+		assert.Equal(t, "invalid_client", response["error"])
+		assert.Contains(t, response["error_description"], "cnf.x5t#S256")
+	})
+
+	t.Run("refuses an assertion addressed to another token endpoint", func(t *testing.T) {
+		prs := newStrictService(t)
+		client, certificate := newClient(t, prs)
+		status, response := issue(t, prs, client, certificate, map[string]any{jwt.AudienceKey: []string{"https://oauth.example/oauth/token"}}, nil)
+		assert.Equal(t, http.StatusBadRequest, status)
+		assert.Equal(t, "invalid_client", response["error"])
+		assert.Contains(t, response["error_description"], "aud")
+	})
+
+	t.Run("refuses a scope or target audience that differs from the signed ones, or is missing", func(t *testing.T) {
+		prs := newStrictService(t)
+		client, certificate := newClient(t, prs)
+		for name, form := range map[string]func(url.Values){
+			"other scope":    func(v url.Values) { v.Set("scope", "prs:oprf") },
+			"missing scope":  func(v url.Values) { v.Del("scope") },
+			"other target":   func(v url.Values) { v.Set("target_audience", "https://other-service.example") },
+			"missing target": func(v url.Values) { v.Del("target_audience") },
+		} {
+			status, response := issue(t, prs, client, certificate, nil, form)
+			assert.Equal(t, http.StatusBadRequest, status, name)
+			assert.Equal(t, "invalid_request", response["error"], name)
+		}
+		status, response := issue(t, prs, client, certificate, map[string]any{"scope": nil}, nil)
+		assert.Equal(t, http.StatusBadRequest, status, "assertion without scope")
+		assert.Equal(t, "invalid_client", response["error"], "assertion without scope")
+	})
+
+	t.Run("refuses a grant that is not client_credentials", func(t *testing.T) {
+		prs := newStrictService(t)
+		client, certificate := newClient(t, prs)
+		status, response := issue(t, prs, client, certificate, nil, func(v url.Values) { v.Set("grant_type", "authorization_code") })
+		assert.Equal(t, http.StatusBadRequest, status)
+		assert.Equal(t, "unsupported_grant_type", response["error"])
+	})
+}
+
+// identifierValue is the Knooppunt's NVI identifier value before base64url.
+type identifierValue struct {
+	BlindFactor     []byte `json:"blind_factor"`
+	EvaluatedOutput string `json:"evaluated_output"`
+}
+
+func TestService_Sandbox(t *testing.T) {
+	t.Run("finalize turns a Knooppunt identifier value into the pseudonym of the input", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		input := []byte("hkdf output stands here")
+		blindedInput, blindFactor := blind(t, input)
+		status, body := postEval(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, recipientScope))
+		require.Equal(t, http.StatusOK, status, body)
+		var response struct {
+			JWE string `json:"jwe"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(body), &response))
+		scalar, err := base64.URLEncoding.DecodeString(blindFactor)
+		require.NoError(t, err)
+		value, err := json.Marshal(identifierValue{BlindFactor: scalar, EvaluatedOutput: response.JWE})
+		require.NoError(t, err)
+		token := base64.RawURLEncoding.EncodeToString(value)
+
+		status, result := postJSON(t, prs.SandboxURL()+"/sandbox/finalize", `{"token":`+strconv.Quote(token)+`}`)
+		require.Equal(t, http.StatusOK, status, result)
+		expected, err := prs.Pseudonym(input)
+		require.NoError(t, err)
+		assert.Equal(t, hex.EncodeToString(expected), result["pseudonym"])
+	})
+
+	t.Run("tokenize yields an identifier value for the audience that finalizes to the same pseudonym", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		expected, err := prs.Pseudonym([]byte("input"))
+		require.NoError(t, err)
+		pseudonym := hex.EncodeToString(expected)
+
+		status, result := postJSON(t, prs.SandboxURL()+"/sandbox/tokenize", `{"pseudonym":`+strconv.Quote(pseudonym)+`,"audience":"`+recipientURA+`"}`)
+		require.Equal(t, http.StatusOK, status, result)
+		token, _ := result["token"].(string)
+		decoded, err := base64.RawURLEncoding.DecodeString(token)
+		require.NoError(t, err, "unpadded base64url like the Knooppunt's")
+		var members map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(decoded, &members))
+		assert.ElementsMatch(t, []string{"blind_factor", "evaluated_output"}, keys(members))
+		var jwe string
+		require.NoError(t, json.Unmarshal(members["evaluated_output"], &jwe))
+		payload, err := prs.DecryptJWE(jwe)
+		require.NoError(t, err)
+		var claims map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(payload, &claims))
+		assert.Equal(t, `"ura:`+recipientURA+`"`, string(claims["aud"]))
+		assert.Equal(t, `"nationale-verwijsindex"`, string(claims["scope"]))
+
+		status, result = postJSON(t, prs.SandboxURL()+"/sandbox/finalize", `{"token":`+strconv.Quote(token)+`}`)
+		require.Equal(t, http.StatusOK, status, result)
+		assert.Equal(t, pseudonym, result["pseudonym"])
+	})
+
+	t.Run("rejects malformed input with 400", func(t *testing.T) {
+		prs := newRegisteredService(t)
+		status, result := postJSON(t, prs.SandboxURL()+"/sandbox/finalize", `{"token":"!!!"}`)
+		assert.Equal(t, http.StatusBadRequest, status)
+		assert.NotEmpty(t, result["error"])
+		status, result = postJSON(t, prs.SandboxURL()+"/sandbox/tokenize", `{"pseudonym":"zz","audience":"1"}`)
+		assert.Equal(t, http.StatusBadRequest, status)
+		assert.NotEmpty(t, result["error"])
 	})
 }
 

@@ -8,7 +8,7 @@ today, and says whether that matches the version the acceptance environment is
 documented to run. It is the checklist for the day acceptance is upgraded.
 
 The tests that pin the Knooppunt side are in `component/pseudonymisation`
-(`component_test.go`, `blinding_test.go`); they run against `test/prsmock`,
+(`component_test.go`, `blinding_test.go`); they run against `mock-components/prs`,
 which models the documented acceptance version. What the mock does and does
 not model is stated in its package comment.
 
@@ -37,7 +37,7 @@ are into v0.9.4 (`ba45204`); `src/oprf.c` is identical at v0.9.3.
 | Element | Acceptance v0.0.18 | Service `main` (v0.0.34) | Draft IG | Knooppunt sends | Match |
 |---|---|---|---|---|---|
 | **Endpoint** | `POST /oprf/eval` (`app/routers/oprf.py:14`) | `POST /oprf/eval` (`app/routers/oprf.py:28-29`) | `POST /evaluate` (`pseudonymisation.md:79`) | `POST {prsurl}/oprf/eval` (`component/pseudonymisation/component.go:154`) | Yes |
-| **Request: blinded element** | `encryptedPersonalId`, string, at least 2 characters, must decode as base64url after padding (`app/services/oprf/oprf_service.py:13,17-26`). Evaluation decodes it again *without* the padding fix (`oprf_service.py:45`), so in practice the value must be padded. | `encryptedPersonalId`; the validator returns the padded value since v0.0.20 (`3c44866`; `app/models/requests.py:151-165` on `main`), so unpadded input is accepted. | `blinded_input`, "base64url-encoded" (`pseudonymisation.md:85`) | `encryptedPersonalId`: the 32-byte ristretto255 element as Go's `encoding/json` writes a `[]byte`, standard alphabet with padding (`component.go:125,142`) | Yes, by tolerance: `base64.urlsafe_b64decode` maps `-`/`_` to `+`/`/` and lets `+`/`/` through, so standard base64 decodes correctly (verified on CPython 3.9, 3.11 and 3.13; `test/prsmock` models that decoder). Not byte-identical to what the reference client sends (`oprf/client.py:52`, urlsafe). |
+| **Request: blinded element** | `encryptedPersonalId`, string, at least 2 characters, must decode as base64url after padding (`app/services/oprf/oprf_service.py:13,17-26`). Evaluation decodes it again *without* the padding fix (`oprf_service.py:45`), so in practice the value must be padded. | `encryptedPersonalId`; the validator returns the padded value since v0.0.20 (`3c44866`; `app/models/requests.py:151-165` on `main`), so unpadded input is accepted. | `blinded_input`, "base64url-encoded" (`pseudonymisation.md:85`) | `encryptedPersonalId`: the 32-byte ristretto255 element as Go's `encoding/json` writes a `[]byte`, standard alphabet with padding (`component.go:125,142`) | Yes, by tolerance: `base64.urlsafe_b64decode` maps `-`/`_` to `+`/`/` and lets `+`/`/` through, so standard base64 decodes correctly (verified on CPython 3.9, 3.11 and 3.13; `mock-components/prs` models that decoder). Not byte-identical to what the reference client sends (`oprf/client.py:52`, urlsafe). |
 | **Request: recipient organization** | `recipientOrganization`, string, must start with `ura:` or 400 `{"error":"Invalid recipient organization. Format: ura:<ura_number>"}`; the rest is looked up as the organization's URA, 404 if unknown (`oprf.py:22-30`). Organizations are created with an 8-digit URA (`app/models/requests.py:16`). | `recipientOrganization` is a `RecipientOrganizationOin`: `oin:` followed by a 20-character OIN, 8 digits, 8 or 9 alphanumerics and trailing zeros (`app/models/oin.py:58-63,142-179`). A value without the `oin:` prefix, or not a string, is a 422 with "Invalid recipient organization. Format: oin:<oin_number>" (`oin.py:149,164-172`); a prefixed but malformed OIN is a 422 with "Invalid OIN '...'. Expected 20 characters structured as 8 digit prefix + 8/9 alphanumeric mainnumber + 4/3 trailing zeros." (`oin.py:58-63,174-179`), the same at v0.0.24. `oin:` routing came with `dd17227` (2026-06-22, tag v0.0.22), the strict type with "Add type for RecipientOrganization" (`3687f45`, 2026-06-29, tag v0.0.24). | `recipient_organization`, example `"ura:90000901"` (`pseudonymisation.md:86`) | `"ura:" + recipientURA` (`component.go:140`), where `recipientURA` is `nvi.audience` from the configuration | Yes. **Breaks from v0.0.22**: nobody has OIN values for the NVI or the demo organizations yet. |
 | **Request: recipient scope** | `recipientScope`, string, at least 2 characters; a public key must be registered for the organization under this scope, or under `*`, or 404 `{"error":"No public key found for this organization and/or scope"}` (`oprf_service.py:15`, `oprf.py:32-35`, `app/db/repositories/org_key_repository.py:18-30`) | Same (`requests.py:154`) | `recipient_scope` (`pseudonymisation.md:87`) | `nationale-verwijsindex` (`component/nvi/component.go:359`) | Yes, provided the NVI registered its key under that scope, or under `*`, on acceptance. |
 | **Response** | `{"jwe": "<compact JWE>"}` (`oprf.py:44`) | Same key (`docs/endpoints.md:159-165`); the JWE payload gains an `extra_versions` claim during key rotation (`oprf_service.py:78-100`, `docs/endpoints.md:167`) | `{"evaluated_output": "<JWE compact serialization>"}` (`pseudonymisation.md:97-99`) | Reads `jwe` (`component.go:129`) and passes it on unopened | Yes |
@@ -50,7 +50,7 @@ are into v0.9.4 (`ba45204`); `src/oprf.c` is identical at v0.9.3.
 | **HKDF parameters** | Not part of the service. The reference client shipped with the tag derives with HKDF-SHA256, 32 bytes, salt `None`, info `"{recv_org}|{recv_scope}|v1"` with `recv_org` like `ura:12345678`, and IKM `json.dumps({"landCode": ..., "type": ..., "value": ...})` in Python's default spacing (`oprf/client.py:42-45`). The service's own `/test/oprf/client` route blinds the string `NL:bsn:<number>` with no HKDF at all (`app/routers/test_oprf.py:57`, `app/personal_id.py:31`). | Documented in `README.md:279-288` and exercised in `tests/test_oprf_integration.py:113-123`: same parameters, info built from the `oin:...` recipient string, IKM compact JSON (`separators=(",", ":")`); the README notes that full RFC 8785 canonicalization is the intent. | HMAC-SHA-256, 32 bytes, no salt, info `"{recipient_organization}|{recipient_scope}|v1"`, IKM the JCS (RFC 8785) serialisation of `{"landCode","type","value"}` (`pseudonymisation.md:110-126`) | SHA-256, 32 bytes, nil salt (RFC 5869 zero salt), info `ura:<URA>|<scope>|v1`, IKM JCS (`blinding.go:17-31`, `canonical.go`). Pinned by `Test_deriveKey` against an OpenSSL-computed vector. | Parameters match the IG and the reference client. The IKM bytes differ from the v0.0.18 reference client's (it keeps `json.dumps` spaces), which the PRS never sees; it matters only for cross-client determinism, so every client of one NVI must derive alike. **From v0.0.22 the info string changes with the identifier format, so values derived after the switch no longer match the pseudonyms the NVI already holds.** |
 | **OPRF suite and de-blinding** | pyoprf/liboprf: the hash-to-group, Blind, BlindEvaluate and Unblind steps of RFC 9497's OPRF(ristretto255, SHA-512) suite in base mode; hash-to-group DST `HashToGroup-OPRFV1-\x00-ristretto255-SHA512` (`liboprf src/oprf.c:35,253`); Evaluate is `Z = k * B` (`src/oprf.c`); the recipient computes `N = r^-1 * Z` and uses `N` itself as the pseudonym. RFC 9497's Finalize, which hashes the input together with the serialized `N`, is never applied (`oprf_service.py:78-86`; crypto service `pseudonym_service.py:41-43`); liboprf's binding calls that variant HashDH and says it is not the construction the RFC specifies (`python/pyoprf/__init__.py:122-127`). | Same library; production evaluates in an HSM per OIN and key version (`docs/oprf-eval-flow.md:54-66`) | "OPRF ... with Ristretto255", references draft-irtf-cfrg-voprf | circl `oprf.SuiteRistretto255` (`blinding.go:44`), identifier `ristretto255-SHA512`, DST assembled the same way (circl `oprf/oprf.go:62-65,180-186`), hash-to-element per RFC 9380 appendix B (circl `group/ristretto255.go:93-107`); the Knooppunt performs Blind only. | Yes. Both sides use RFC 9497's hash-to-group and evaluation mechanics for this suite; the application consumes the unblinded element rather than the Finalize output. The test suite does not execute liboprf; see the cross-implementation check below. |
 | **Scalar and element encoding** | libsodium: 32-byte little-endian scalars, canonical 32-byte ristretto255 encodings | Same | Not specified | go-ristretto: little-endian scalar bytes (`scalar.go:34-75,1023-1027`), canonical element bytes (`ristretto.go:351-355`) | Yes, and covered by the cross-implementation check below. |
-| **Transport** | mTLS plus bearer token (`services.yaml:53`) | mTLS terminated by the OIN-verifier proxy | Bearer token | `https` URL from the configuration, the client the `authn` component returns: mTLS with the configured certificate, bearer from the MinVWS token endpoint (`component/authn/oauth2.go:42-80`) | Yes. Pinned: `test/prsmock` serves TLS only, requires a client certificate on the handshake and a bearer token on the request, and the component test checks that the ones it saw belong to the client the `authn` provider returned. |
+| **Transport** | mTLS plus bearer token (`services.yaml:53`) | mTLS terminated by the OIN-verifier proxy | Bearer token | `https` URL from the configuration, the client the `authn` component returns: mTLS with the configured certificate, bearer from the MinVWS token endpoint (`component/authn/oauth2.go:42-80`) | Yes. Pinned: `mock-components/prs` serves TLS only, requires a client certificate on the handshake and a bearer token on the request, and the component test checks that the ones it saw belong to the client the `authn` provider returned. |
 
 ### Note on the OAuth scope
 
@@ -60,8 +60,9 @@ that `epd:read` is the only valid scope at the moment
 (`integration-oauth.html:72-74`). The PRS at v0.0.18 does not look at the
 value, so what matters is whether the token endpoint issues a token for
 `prs:read`. That is not verifiable without the acceptance certificates. The
-component tests stub the `authn` provider and do not exercise token issuance;
-`component/pseudonymisation/integration_test.go` does, when
+component tests run the `authn` client against the mock's token endpoint,
+which accepts what the client sends; only
+`component/pseudonymisation/integration_test.go` asks the real one, when
 `component/authn/cert.pem` and `cert-key.pem` are present. Two separate
 questions follow. Whether the token endpoint issues a token for `prs:read`
 today decides whether the integration works on acceptance at all, since the
@@ -124,7 +125,7 @@ becomes acceptable (`3c44866`). No change needed; the Knooppunt pads.
 
 6. **Key rotation.** The JWE may carry `extra_versions`. That is the NVI's
    concern; the Knooppunt forwards the JWE unopened.
-7. **Mock and tests.** Update `test/prsmock` to the new version and this
+7. **Mock and tests.** Update `mock-components/prs` to the new version and this
    document with it. The mock's package comment states the tag it models.
 8. **Interpreter.** An image rebuilt on a newer CPython treats malformed
    base64 differently (3.14.6 rejects data after complete padding). The
@@ -134,7 +135,7 @@ becomes acceptable (`3c44866`). No change needed; the Knooppunt pads.
 
 ## Cross-implementation check (review evidence, not enforced)
 
-The component tests and `test/prsmock` both use CIRCL for the group
+The component tests and `mock-components/prs` both use CIRCL for the group
 arithmetic, so their round trip proves that the client and the mock agree with
 each other, not that CIRCL agrees with the liboprf behind the service. A golden
 value from liboprf is deliberately not in the test suite: nobody could
@@ -193,7 +194,7 @@ cc -I liboprf/src main.c liboprf/src/oprf.c liboprf/src/utils.c $(pkg-config --c
 
 ## Where the mock's validation answers come from
 
-`test/prsmock` answers a malformed request the way v0.0.18 does because its
+`mock-components/prs` answers a malformed request the way v0.0.18 does because its
 answers were captured from FastAPI 0.129.2, pydantic 2.12.5 and Starlette
 0.52.1, the versions `poetry.lock` locks at v0.0.18 (lines 732-733, 1506-1507,
 2219-2220), running the v0.0.18 `BlindRequest` class verbatim
@@ -259,6 +260,7 @@ print(response.status_code, response.text)
 | Test | Pins |
 |---|---|
 | `TestComponent_IdentifierToToken/requests an access token ... with scope prs:read` | The scope, URA and audience handed to the `authn` component. Token issuance itself is stubbed. |
+| `TestComponent_IdentifierToToken/obtains its token from the ministry-style endpoint and presents it` | That the `authn` client's token request (a JWT-bearer assertion signed with the client certificate and bound to it through `cnf.x5t#S256`) is accepted by a token endpoint modelled on the ministry's, and that the PRS route then sees a token that endpoint issued. |
 | `TestComponent_IdentifierToToken/sends the request over TLS through the client the authn component returned` | That the request reaches the PRS through the client the `authn` provider returned, over TLS: the mock requires a client certificate and a bearer token, and the test checks that the ones it saw are that client's. Because the mock refuses plaintext, every subtest that calls the PRS also fails if the `https` scheme is lost. |
 | `TestComponent_IdentifierToToken/posts the v0.0.18 evaluate request` | Method, path, `Content-Type`, the exact member names, the `ura:` prefix, the scope value, the blinded element's size, alphabet and padding, and the RFC 8785 member order of the body. |
 | `TestComponent_IdentifierToToken/hands the PRS output to the NVI as base64url JSON` | The NVI identifier's system, its unpadded base64url encoding, the member names `blind_factor` and `evaluated_output`, that `evaluated_output` is the response's `jwe` verbatim, and the blind factor's size, alphabet, padding and canonical scalar form. |
@@ -266,4 +268,4 @@ print(response.status_code, response.text)
 | `TestComponent_IdentifierToToken/yields different pseudonyms for different BSNs`, `.../binds the pseudonym to the recipient`, `.../keeps the configured base path`, `.../closes the PRS response body`, and the second organization and context marker in the access-token subtest | That the pseudonym depends on the BSN and on the recipient, that the calling organization, the caller's context and the configured base path reach the request rather than fixed values, and that response bodies are closed. |
 | `TestComponent_IdentifierToToken/fails when the PRS ...` | That a 404 for an unknown recipient, a 500 and a 503 surface as errors carrying the status and body, and that a cancelled context stops the call before it reaches the PRS. |
 | `Test_deriveKey/matches an independent HKDF-SHA256 derivation` | Every HKDF parameter at once, against a vector computed with OpenSSL. |
-| `test/prsmock` (`TestService_Eval`, `TestService_Validation`, `TestService_Transport`, `Test_pythonURLSafeB64Decode`) | That the mock behaves as its package comment says: the v0.0.18 route checks with their status codes and bodies; the validation answers, against the FastAPI capture above; the TLS, client-certificate and bearer-token requirements; and its model of Python's base64 decoder, against values from CPython. |
+| `mock-components/prs` (`TestService_Eval`, `TestService_Validation`, `TestService_Transport`, `TestService_TokenEndpoint`, `TestService_Sandbox`, `Test_pythonURLSafeB64Decode`) | That the mock behaves as its package comment says: the v0.0.18 route checks with their status codes and bodies; the validation answers, against the FastAPI capture above; the TLS, client-certificate and bearer-token requirements; the token endpoint's checks and that only its tokens pass; the sandbox helper's round trips; and its model of Python's base64 decoder, against values from CPython. |

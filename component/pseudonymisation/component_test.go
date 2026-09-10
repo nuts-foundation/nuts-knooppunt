@@ -6,17 +6,22 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/cloudflare/circl/group"
+	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
-	"github.com/nuts-foundation/nuts-knooppunt/test/prsmock"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
+	"github.com/nuts-foundation/nuts-knooppunt/mock-components/prs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
@@ -236,6 +241,39 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		assert.Equal(t, "Bearer "+testAccessToken, exchange.Header.Get("Authorization"))
 	})
 
+	t.Run("obtains its token from the ministry-style endpoint and presents it", func(t *testing.T) {
+		// The real authn client against a mock that only accepts tokens its
+		// own token endpoint issued: the certificate signs the token request,
+		// the token endpoint binds the token to it, the PRS route requires it.
+		prs, err := prsmock.New(prsmock.Options{ListenAddr: "localhost:0"})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = prs.Stop() })
+		prs.RegisterRecipient(testNVIURA, testScope)
+		clientCertificate, err := prsmock.NewClientCertificate()
+		require.NoError(t, err)
+		dir := t.TempDir()
+		key, err := x509.MarshalPKCS8PrivateKey(clientCertificate.PrivateKey)
+		require.NoError(t, err)
+		writePEM(t, filepath.Join(dir, "cert.pem"), "CERTIFICATE", clientCertificate.Certificate[0])
+		writePEM(t, filepath.Join(dir, "key.pem"), "PRIVATE KEY", key)
+		writePEM(t, filepath.Join(dir, "ca.pem"), "CERTIFICATE", prs.ServerCertificate().Raw)
+		ministry := authn.MinistryAuthConfig{
+			Config: tlsutil.Config{
+				TLSCertFile: filepath.Join(dir, "cert.pem"),
+				TLSKeyFile:  filepath.Join(dir, "key.pem"),
+				TLSCAFile:   filepath.Join(dir, "ca.pem"),
+			},
+			TokenEndpoint: prs.GetURL() + "/oauth/token",
+		}
+		component := New(Config{PRSBaseURL: prs.GetURL()}, func(ctx context.Context, scope []string, ura string, audience string) (*http.Client, error) {
+			return authn.HTTPClient(ctx, scope, ura, audience, ministry)
+		})
+
+		tokenize(t, component, testScope)
+		bearer := strings.TrimPrefix(prs.GetLastExchange().Header.Get("Authorization"), "Bearer ")
+		assert.True(t, prs.TokenIssued(bearer), "the PRS must see a token the token endpoint issued")
+	})
+
 	t.Run("fails when the PRS certificate is not trusted", func(t *testing.T) {
 		prs := prsmock.NewService(t)
 		prs.RegisterRecipient(testNVIURA, testScope)
@@ -444,6 +482,11 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		assert.Nil(t, result)
 		assert.Equal(t, 0, prs.ExchangeCount())
 	})
+}
+
+func writePEM(t *testing.T, path string, blockType string, der []byte) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: blockType, Bytes: der}), 0o600))
 }
 
 // assertStandardAlphabet calls next until it yields a base64 value that

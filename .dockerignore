@@ -1,8 +1,9 @@
 mock-components/**
-# mock-dezi is part of the root Go module and is built from the repo root
-# context, like sandbox/app; the other mock-components are separate stacks
-# with their own build context and stay excluded from this one.
+# mock-dezi and mock-prs are part of the root Go module and are built from the
+# repo root context, like sandbox/app; the other mock-components are separate
+# stacks with their own build context and stay excluded from this one.
 !mock-components/dezi/**
+!mock-components/prs/**
 
 # Demo CA and signing keys from sandbox/generate-demo-certs.sh. Gitignored,
 # but the Dockerfiles built from this context still do `COPY . .`, which
