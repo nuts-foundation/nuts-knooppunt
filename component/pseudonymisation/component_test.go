@@ -243,8 +243,9 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 
 	t.Run("obtains its token from the ministry-style endpoint and presents it", func(t *testing.T) {
 		// The real authn client against a mock that only accepts tokens its
-		// own token endpoint issued: the certificate signs the token request,
-		// the token endpoint binds the token to it, the PRS route requires it.
+		// own token endpoint issued to the presented certificate: the
+		// certificate signs the token request, the token endpoint binds the
+		// token to it, the PRS route requires both together.
 		prs, err := prsmock.New(prsmock.Options{ListenAddr: "localhost:0"})
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = prs.Stop() })

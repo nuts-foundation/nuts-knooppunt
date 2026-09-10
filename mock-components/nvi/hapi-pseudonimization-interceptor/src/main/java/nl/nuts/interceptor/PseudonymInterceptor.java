@@ -1,6 +1,5 @@
 package nl.nuts.interceptor;
 
-import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.interceptor.api.Hook;
 import ca.uhn.fhir.interceptor.api.Interceptor;
 import ca.uhn.fhir.interceptor.api.Pointcut;
@@ -12,6 +11,7 @@ import ca.uhn.fhir.rest.server.servlet.ServletRequestDetails;
 import ca.uhn.fhir.rest.server.util.ICachedSearchDetails;
 import lombok.extern.slf4j.Slf4j;
 import nl.nuts.util.BsnUtil;
+import nl.nuts.util.PrsMockBsnUtil;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.hl7.fhir.instance.model.api.IIdType;
 import org.hl7.fhir.r4.model.*;
@@ -37,10 +37,18 @@ public class PseudonymInterceptor {
             "NVI_TENANT", "nvi");
     private static final String LIST_EXTENSION_CUSTODIAN_URL = "http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian";
 
+    /**
+     * Where the mock PRS's sandbox helper listens. When set, tokens are the Knooppunt's real
+     * blinded values and the mock de-blinds them for this server; when unset, the XOR fake of
+     * lib/bsnutil is reversed locally, as the e2e harness expects.
+     */
+    private static final String PRS_MOCK_URL = System.getenv("PRS_MOCK_URL");
+
     private final BsnUtil bsnUtil;
 
     public PseudonymInterceptor() {
-        this.bsnUtil = new BsnUtil();
+        this.bsnUtil = PRS_MOCK_URL == null || PRS_MOCK_URL.isBlank() ? new BsnUtil() : new PrsMockBsnUtil(PRS_MOCK_URL);
+        log.info("Pseudonym resolution: {}", this.bsnUtil instanceof PrsMockBsnUtil ? "mock PRS at " + PRS_MOCK_URL : "XOR fake");
     }
 
     private boolean isEnabled(final ServletRequestDetails servletRequestDetails) {
@@ -81,7 +89,7 @@ public class PseudonymInterceptor {
             searchParameterMap.add(ListResource.SP_SOURCE, modifiedSource);
         }
 
-        log.info("{}", searchParameterMap);
+        log.info("List search parameters after pseudonym resolution: {}", searchParameterMap.keySet());
 
         if ((patient == null || patient.isEmpty()) && (subject == null || subject.isEmpty()) && (source == null
                 || source.isEmpty())) {
@@ -129,7 +137,7 @@ public class PseudonymInterceptor {
         if (!BSN_TOKEN_SYSTEM.equals(system) && !BSN_TOKEN_SYSTEM_NEW.equals(system)) {
             return null;
         }
-        log.info("Converting token to pseudonym in search parameter: {}", identifierValue);
+        log.info("Converting token to pseudonym in search parameter ({} characters)", identifierValue.length());
         return new ReferenceParam(String.format("%s/%s/%s", PSEUDO_BSN_SYSTEM, ResourceType.Patient.name(), tokenToPseudonym(identifierValue)));
     }
 
@@ -149,7 +157,7 @@ public class PseudonymInterceptor {
 
         modifyListSubjectFromTokenToPseudonym(list);
         modifyListSourceFromTokenToPseudonym(list);
-        log.info("{}", FhirContext.forR4Cached().newJsonParser().encodeResourceToString(list));
+        log.info("Converted List subject and source to pseudonym references");
     }
 
 
@@ -200,7 +208,7 @@ public class PseudonymInterceptor {
             return;
         }
 
-        log.trace("Found identifier: system={}, value={}", referenceElement.getBaseUrl(), referenceElement.getIdPart());
+        log.trace("Found pseudonym reference: system={}", referenceElement.getBaseUrl());
         final String token = pseudonymToToken(referenceElement.getIdPart(), audience);
         final Identifier identifier = new Identifier();
         identifier.setSystem(BSN_TOKEN_SYSTEM_NEW);
@@ -214,7 +222,7 @@ public class PseudonymInterceptor {
                 && !BSN_TOKEN_SYSTEM_NEW.equals(identifier.getSystem()))) {
             return;
         }
-        log.trace("Found identifier: system={}, value={}", identifier.getSystem(), identifier.getValue());
+        log.trace("Found identifier: system={}", identifier.getSystem());
         final String pseudonym = tokenToPseudonym(identifier.getValue());
         docRef.setSubject(identifierToReference(PSEUDO_BSN_SYSTEM, ResourceType.Patient.name(), pseudonym));
     }
@@ -224,7 +232,7 @@ public class PseudonymInterceptor {
         if (identifier == null) {
             return;
         }
-        log.trace("Found identifier: system={}, value={}", identifier.getSystem(), identifier.getValue());
+        log.trace("Found identifier: system={}", identifier.getSystem());
         docRef.setSource(
                 identifierToReference(identifier.getSystem(), ResourceType.Device.name(), identifier.getValue()));
     }
@@ -243,13 +251,13 @@ public class PseudonymInterceptor {
 
     private String tokenToPseudonym(final String token) {
         final String pseudonym = bsnUtil.transportTokenToPseudonym(token);
-        log.trace("Converted token to pseudonym: {}", pseudonym);
+        log.trace("Converted token to pseudonym");
         return pseudonym;
     }
 
     private String pseudonymToToken(final String pseudonym, final String audience) {
         final String token = bsnUtil.pseudonymToTransportToken(pseudonym, audience);
-        log.trace("Converted pseudonym to token: {}", token);
+        log.trace("Converted pseudonym to token for audience {}", audience);
         return token;
     }
 
