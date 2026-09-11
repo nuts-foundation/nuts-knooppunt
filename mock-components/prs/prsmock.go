@@ -21,8 +21,10 @@
 //     {"detail":"Missing bearer token"} (app/auth.py:59-61). FastAPI reads and
 //     JSON-decodes the body before it runs that dependency and validates the
 //     body after it (fastapi 0.129.2, routing.py:367-414), so malformed JSON
-//     gets 422 without a token and every other body gets 401; the token is
-//     recorded, not verified;
+//     gets 422 without a token and every other body gets 401. The token must
+//     be one /oauth/token issued for this service unless
+//     Options.AcceptAnyBearer is set; its claims are not verified the way
+//     v0.0.18 verifies them (see "Not modelled" below);
 //   - the body is validated as FastAPI validates BlindRequest
 //     (app/services/oprf/oprf_service.py:12-26) and refused with 422 in
 //     FastAPI's {"detail":[...]} shape: an empty or null body, a body that is
@@ -70,7 +72,8 @@
 // Knooppunt identifier value into the recipient's pseudonym, and POST
 // /sandbox/tokenize turns a pseudonym back into a fresh identifier value for
 // an audience. Neither route authenticates its caller: whoever reaches the
-// listener can de-tokenize and mint, so it belongs on a closed network only.
+// listener can de-tokenize and create identifier values, so it belongs on a
+// closed network only.
 //
 // Not modelled: transport security of any kind, so neither the TLS the PRS is
 // reached over nor the UZI client certificate the acceptance ingress verifies;
@@ -195,8 +198,8 @@ type Options struct {
 	OPRFKey []byte
 	// PublicURL is the origin clients address this service by, such as
 	// "http://mock-prs:8080" in compose or the https URL of the ingress that
-	// terminates TLS; assertions must name PublicURL + "/oauth/token"
-	// as their audience and tokens must target PublicURL. Empty means the
+	// terminates TLS; tokens must have been requested for PublicURL for
+	// /oprf/eval to accept them. Empty means the
 	// listener's own address, which is what a test wants. It is a configured
 	// value on purpose: taken from the request, the Host header would let the
 	// caller choose what it is checked against.
@@ -337,6 +340,12 @@ func New(opts Options) (*Service, error) {
 	}
 
 	return prs, nil
+}
+
+// NewOPRFKey draws a random OPRF key in the form Options.OPRFKey and
+// OPRF_KEY_FILE take: a canonical non-zero ristretto255 scalar, 32 bytes.
+func NewOPRFKey() ([]byte, error) {
+	return ristretto.RandomNonZeroScalar(rand.Reader).MarshalBinary()
 }
 
 // NewService creates and starts a mock PRS on ephemeral ports, with the
@@ -830,15 +839,14 @@ func thumbprint(key *rsa.PublicKey) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(digest), nil
 }
 
-// handleToken is a stand-in for the ministry's token endpoint as
-// component/authn uses it (oauth2.go:101-147): a client_credentials grant
-// carrying scope and target_audience and a JWT-bearer assertion signed with
-// the client certificate's key, bound to it through cnf.x5t#S256, that
-// repeats both. The assertion must name this endpoint as its audience (RFC
-// 7523 section 3), the form values must equal the signed ones, and the
-// token is issued for that target audience and that certificate. The
-// endpoint's own URL is Options.PublicURL plus the token path, a configured
-// value, never the request's Host header.
+// handleToken is a stand-in for the ministry's token endpoint as its
+// documentation describes it: a client_credentials grant carrying scope and
+// target_audience, authenticated by mTLS, which is assumed to have happened
+// in front of this mock. It issues an opaque token for that target audience.
+// The JWT-bearer client_assertion component/authn adds (oauth2.go:101-147) is
+// not in that documentation and is ignored. Which service a token is for is
+// later compared with Options.PublicURL, a configured value, never the
+// request's Host header.
 func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		tokenError(w, "invalid_request", "cannot parse form")

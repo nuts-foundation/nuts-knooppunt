@@ -5,24 +5,30 @@
 // audience the token endpoint demands and the target its tokens are issued
 // for), and, only when SANDBOX_LISTEN_ADDR is set, the sandbox helper on
 // that address. The helper has no authentication: whoever reaches it can turn any
-// identifier value into its pseudonym and mint identifier values for any
+// identifier value into its pseudonym and create identifier values for any
 // pseudonym, so it stays off unless the network is closed, as it is inside
-// the compose project, which sets ":8080" and publishes no port for it.
+// the compose project, which sets ":8081" and publishes no port for it.
 //
 // RECIPIENT_KEY_FILE holds the PEM RSA private key every JWE is encrypted to,
-// OPRF_KEY_FILE the OPRF key as 32 bytes in hex; without them both are
-// generated, and every pseudonym changes on the next restart. RECIPIENTS
+// OPRF_KEY_FILE the OPRF key as 32 bytes in hex. A file that does not exist
+// yet is created with a fresh key, so a persistent directory (the compose
+// project mounts a named volume on /keys) keeps pseudonyms stable across
+// restarts without any provisioning step; without the variables both keys
+// are generated in memory and every pseudonym changes on the next restart.
+// RECIPIENTS
 // lists the organizations and scopes with a registered key as "ura:scope"
 // pairs separated by commas (default "90000901:nationale-verwijsindex").
 package main
 
 import (
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -49,13 +55,13 @@ func run() error {
 		return errors.New("PUBLIC_URL must be set to the origin clients use for this service, such as http://mock-prs:8080")
 	}
 	if opts.SandboxListenAddr != "" {
-		slog.Warn("sandbox helper enabled; it de-tokenizes and mints for anyone who can reach it", "addr", opts.SandboxListenAddr)
+		slog.Warn("sandbox helper enabled; it de-tokenizes and creates identifier values for anyone who can reach it", "addr", opts.SandboxListenAddr)
 	}
 
 	if file := os.Getenv("RECIPIENT_KEY_FILE"); file != "" {
-		key, err := loadRSAPrivateKey(file)
+		key, err := ensureRecipientKey(file)
 		if err != nil {
-			return fmt.Errorf("loading RECIPIENT_KEY_FILE: %w", err)
+			return fmt.Errorf("RECIPIENT_KEY_FILE: %w", err)
 		}
 		opts.RecipientKey = key
 	} else {
@@ -63,13 +69,9 @@ func run() error {
 	}
 
 	if file := os.Getenv("OPRF_KEY_FILE"); file != "" {
-		raw, err := os.ReadFile(file)
+		key, err := ensureOPRFKey(file)
 		if err != nil {
-			return fmt.Errorf("loading OPRF_KEY_FILE: %w", err)
-		}
-		key, err := hex.DecodeString(strings.TrimSpace(string(raw)))
-		if err != nil {
-			return fmt.Errorf("OPRF_KEY_FILE is not hex: %w", err)
+			return fmt.Errorf("OPRF_KEY_FILE: %w", err)
 		}
 		opts.OPRFKey = key
 	} else {
@@ -102,6 +104,53 @@ func envOr(name string, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// ensureRecipientKey reads the PEM RSA private key at file, or creates one
+// there when the file does not exist yet.
+func ensureRecipientKey(file string) (*rsa.PrivateKey, error) {
+	key, err := loadRSAPrivateKey(file)
+	if !errors.Is(err, fs.ErrNotExist) {
+		return key, err
+	}
+	key, err = rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, err
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(file, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}), 0o600); err != nil {
+		return nil, err
+	}
+	slog.Info("generated recipient key", "file", file)
+	return key, nil
+}
+
+// ensureOPRFKey reads the hex OPRF key at file, or creates one there when the
+// file does not exist yet.
+func ensureOPRFKey(file string) ([]byte, error) {
+	raw, err := os.ReadFile(file)
+	if err == nil {
+		key, err := hex.DecodeString(strings.TrimSpace(string(raw)))
+		if err != nil {
+			return nil, fmt.Errorf("not hex: %w", err)
+		}
+		return key, nil
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	key, err := prsmock.NewOPRFKey()
+	if err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(file, []byte(hex.EncodeToString(key)+"\n"), 0o600); err != nil {
+		return nil, err
+	}
+	slog.Info("generated OPRF key", "file", file)
+	return key, nil
 }
 
 // loadRSAPrivateKey reads a PEM RSA private key in PKCS#8 or PKCS#1 form, the

@@ -32,7 +32,7 @@ service's newer main branch and the draft implementation guide.
   value into the recipient's pseudonym (hex, so it fits a FHIR id), tokenize
   turns a pseudonym back into a fresh identifier value for an audience. The
   listener has no authentication: whoever reaches it can de-tokenize any
-  identifier value and mint identifier values for any pseudonym and audience.
+  identifier value and create identifier values for any pseudonym and audience.
   It is off unless `SANDBOX_LISTEN_ADDR` is set; the compose project sets it
   and publishes no port for it, so only that project's containers reach it.
 
@@ -43,11 +43,11 @@ service's newer main branch and the draft implementation guide.
   NVI's private key, since it de-blinds on the NVI's behalf.
 - No transport security at all, where acceptance is reached over mTLS with a
   UZI certificate. The deployment terminates it in front of the mock.
-- Nothing cryptographic is committed. `./sandbox/generate-demo-certs.sh`
-  writes the recipient key and the OPRF key to the gitignored
-  `sandbox/.certs/`. Without `RECIPIENT_KEY_FILE` and
-  `OPRF_KEY_FILE` the mock generates both, and every pseudonym the NVI holds
-  stops matching on the next restart.
+- Nothing cryptographic is committed and nothing runs on the host first: the
+  service creates its recipient key and OPRF key on first start at
+  `RECIPIENT_KEY_FILE` and `OPRF_KEY_FILE` (the image defaults to `/keys`,
+  where the compose project mounts a named volume), so pseudonyms stay
+  stable across restarts and `docker compose down -v` starts afresh.
 
 ## Run
 

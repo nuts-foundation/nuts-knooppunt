@@ -21,7 +21,9 @@ RUN CGO_ENABLED=0 go build -o /out/mock-prs ./mock-components/prs/cmd
 
 FROM alpine:3.22.0
 
-RUN adduser -D -u 10000 mockprs
+# /keys holds the recipient and OPRF keys the service creates on first start;
+# compose mounts a named volume there so they survive restarts.
+RUN adduser -D -u 10000 mockprs && mkdir /keys && chown mockprs /keys
 USER mockprs
 
 COPY --from=builder /out/mock-prs /usr/local/bin/mock-prs
@@ -30,7 +32,10 @@ COPY --from=builder /out/mock-prs /usr/local/bin/mock-prs
 # sandbox helper is enabled by the compose project, which keeps its port
 # inside the project network. PUBLIC_URL is required and environment-specific,
 # so it has no default either.
-ENV LISTEN_ADDR=":8080"
+ENV LISTEN_ADDR=":8080" \
+    RECIPIENT_KEY_FILE=/keys/recipient.key \
+    OPRF_KEY_FILE=/keys/oprf.key
+VOLUME /keys
 EXPOSE 8080 8081
 
 ENTRYPOINT ["/usr/local/bin/mock-prs"]

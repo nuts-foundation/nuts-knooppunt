@@ -413,6 +413,17 @@ func TestService_Options(t *testing.T) {
 		assert.Equal(t, a, b, "the same key yields the same pseudonyms across instances")
 	})
 
+	t.Run("accepts the keys NewOPRFKey draws", func(t *testing.T) {
+		for i := 0; i < 8; i++ {
+			key, err := prsmock.NewOPRFKey()
+			require.NoError(t, err)
+			require.Len(t, key, 32)
+			prs, err := prsmock.New(prsmock.Options{ListenAddr: "localhost:0", OPRFKey: key})
+			require.NoError(t, err)
+			_ = prs.Stop()
+		}
+	})
+
 	t.Run("refuses a public URL that is not a bare origin", func(t *testing.T) {
 		for name, public := range map[string]string{
 			"no scheme":    "mock-prs:8080",
