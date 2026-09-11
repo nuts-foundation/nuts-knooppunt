@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,10 +57,13 @@ func TestMitzSubscribe_NonCreatedIsAnError(t *testing.T) {
 }
 
 func TestMitzSubscribed_ReadsTheMock(t *testing.T) {
+	// assert, not require: this runs on the server's goroutine, where FailNow
+	// calls runtime.Goexit and abandons the response mid-write, leaving the
+	// client blocked until its own timeout instead of failing here.
 	base := mitzServer(t, func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/abonnementen/fhir/Subscription", r.URL.Path)
-		require.Equal(t, "00000010", r.URL.Query().Get("providerid"))
-		require.Equal(t, "999900006", r.URL.Query().Get("patientid"))
+		assert.Equal(t, "/abonnementen/fhir/Subscription", r.URL.Path)
+		assert.Equal(t, "00000010", r.URL.Query().Get("providerid"))
+		assert.Equal(t, "999900006", r.URL.Query().Get("patientid"))
 		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","total":1,"entry":[{"resource":{"resourceType":"Subscription"}}]}`))
 	})
 
