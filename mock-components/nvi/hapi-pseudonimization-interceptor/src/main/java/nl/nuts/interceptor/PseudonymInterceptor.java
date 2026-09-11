@@ -1,5 +1,6 @@
 package nl.nuts.interceptor;
 
+import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.interceptor.api.Hook;
 import ca.uhn.fhir.interceptor.api.Interceptor;
 import ca.uhn.fhir.interceptor.api.Pointcut;
@@ -51,6 +52,7 @@ public class PseudonymInterceptor {
         log.info("Pseudonym resolution: {}", this.bsnUtil instanceof PrsMockBsnUtil ? "mock PRS at " + PRS_MOCK_URL : "XOR fake");
     }
 
+
     private boolean isEnabled(final ServletRequestDetails servletRequestDetails) {
         log.info("Tenant: {}", servletRequestDetails.getTenantId());
         return INTERCEPTOR_ENABLED_FOR_TENANT.equals(servletRequestDetails.getTenantId());
@@ -89,7 +91,7 @@ public class PseudonymInterceptor {
             searchParameterMap.add(ListResource.SP_SOURCE, modifiedSource);
         }
 
-        log.info("List search parameters after pseudonym resolution: {}", searchParameterMap.keySet());
+        log.info("{}", searchParameterMap);
 
         if ((patient == null || patient.isEmpty()) && (subject == null || subject.isEmpty()) && (source == null
                 || source.isEmpty())) {
@@ -137,7 +139,7 @@ public class PseudonymInterceptor {
         if (!BSN_TOKEN_SYSTEM.equals(system) && !BSN_TOKEN_SYSTEM_NEW.equals(system)) {
             return null;
         }
-        log.info("Converting token to pseudonym in search parameter ({} characters)", identifierValue.length());
+        log.info("Converting token to pseudonym in search parameter: {}", identifierValue);
         return new ReferenceParam(String.format("%s/%s/%s", PSEUDO_BSN_SYSTEM, ResourceType.Patient.name(), tokenToPseudonym(identifierValue)));
     }
 
@@ -157,7 +159,7 @@ public class PseudonymInterceptor {
 
         modifyListSubjectFromTokenToPseudonym(list);
         modifyListSourceFromTokenToPseudonym(list);
-        log.info("Converted List subject and source to pseudonym references");
+        log.info("{}", FhirContext.forR4Cached().newJsonParser().encodeResourceToString(list));
     }
 
 
@@ -208,7 +210,7 @@ public class PseudonymInterceptor {
             return;
         }
 
-        log.trace("Found pseudonym reference: system={}", referenceElement.getBaseUrl());
+        log.trace("Found identifier: system={}, value={}", referenceElement.getBaseUrl(), referenceElement.getIdPart());
         final String token = pseudonymToToken(referenceElement.getIdPart(), audience);
         final Identifier identifier = new Identifier();
         identifier.setSystem(BSN_TOKEN_SYSTEM_NEW);
@@ -222,7 +224,7 @@ public class PseudonymInterceptor {
                 && !BSN_TOKEN_SYSTEM_NEW.equals(identifier.getSystem()))) {
             return;
         }
-        log.trace("Found identifier: system={}", identifier.getSystem());
+        log.trace("Found identifier: system={}, value={}", identifier.getSystem(), identifier.getValue());
         final String pseudonym = tokenToPseudonym(identifier.getValue());
         docRef.setSubject(identifierToReference(PSEUDO_BSN_SYSTEM, ResourceType.Patient.name(), pseudonym));
     }
@@ -232,7 +234,7 @@ public class PseudonymInterceptor {
         if (identifier == null) {
             return;
         }
-        log.trace("Found identifier: system={}", identifier.getSystem());
+        log.trace("Found identifier: system={}, value={}", identifier.getSystem(), identifier.getValue());
         docRef.setSource(
                 identifierToReference(identifier.getSystem(), ResourceType.Device.name(), identifier.getValue()));
     }
@@ -251,13 +253,13 @@ public class PseudonymInterceptor {
 
     private String tokenToPseudonym(final String token) {
         final String pseudonym = bsnUtil.transportTokenToPseudonym(token);
-        log.trace("Converted token to pseudonym");
+        log.trace("Converted token to pseudonym: {}", pseudonym);
         return pseudonym;
     }
 
     private String pseudonymToToken(final String pseudonym, final String audience) {
         final String token = bsnUtil.pseudonymToTransportToken(pseudonym, audience);
-        log.trace("Converted pseudonym to token for audience {}", audience);
+        log.trace("Converted pseudonym to token: {}", token);
         return token;
     }
 
