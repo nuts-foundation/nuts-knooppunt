@@ -52,13 +52,36 @@
           <a class="btn solid" href="/demo/ehr/patients/{{.Key}}/share">Share via the generic functions</a>
           <div class="btn-sub">Publishes a localization record per data category and starts a Mitz
           consent subscription. No clinical data leaves De Plataan.</div>
+          <a class="btn solid" href="/demo/ehr/patients/{{.Key}}/retrieve">Retrieve data</a>
+          <div class="btn-sub">Asks the referral index where else this patient's data is held, and
+          resolves each holder to an endpoint. Nothing is retrieved before you confirm.</div>
         </div>
       </div>
-      <div class="card">
-        <h3>Available sources</h3>
-        <div class="data-empty">Ziekenhuis De Plataan only. Retrieving from other sources arrives with E4.</div>
-      </div>
       {{end}}
+
+      <div class="rec-grid">
+        {{range .Sections}}
+        <div class="card">
+          <h3>{{.Name}}</h3>
+          {{range .Items}}
+          <div class="data-item{{if .Marker}} hl{{end}}">
+            {{if .Marker}}<span class="hl-chip">&#9733; Just entered by you in ZorgDossier</span>{{end}}
+            <div><b>{{.Title}}</b>{{with .Detail}}<div class="meta">{{.}}</div>{{end}}</div>
+            <span class="src {{if .External}}zb{{else}}zmc{{end}}">{{.Source}}</span>
+          </div>
+          {{end}}
+        </div>
+        {{end}}
+        <div>
+          <div class="card">
+            <h3>Available sources</h3>
+            <div class="h-sub">Every item in the overview carries the organization it came from.</div>
+            {{range .SourceNames}}
+            <div class="data-item"><div><b>{{.}}</b></div></div>
+            {{end}}
+          </div>
+        </div>
+      </div>
     </main>
   </div>
   {{template "viewer" .}}
