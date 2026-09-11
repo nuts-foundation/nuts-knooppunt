@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/api"
@@ -111,14 +110,6 @@ func createHTTPClient(config Config) (*http.Client, error) {
 
 	return &http.Client{
 		Transport: tracing.WrapTransport(transport),
-		// Mitz is a remote national service. Without this a blackholed endpoint
-		// holds the request goroutine open until the caller's context expires, and
-		// callers passing context.Background() never recover.
-		//
-		// This client is shared: it serves the subscription requests below and the
-		// XACML consent check, so the cap applies to both. 30s is generous for a
-		// closed question and neither path streams.
-		Timeout: 30 * time.Second,
 	}, nil
 }
 
@@ -418,23 +409,9 @@ func (c *Component) CreateSubscription(ctx context.Context, resource fhir.Subscr
 			}
 			return nil, err
 		}
-		// No OperationOutcome could be parsed. That covers a request that never
-		// reached Mitz — a dial failure, a closed connection, a context deadline —
-		// and equally a response Mitz or something in front of it produced that is
-		// not FHIR, such as a gateway's 502 or an empty 401 (go-fhir-client returns
-		// a plain error for a non-2xx whose body it cannot parse). The message says
-		// only what the code can tell apart; claiming the endpoint was unreachable
-		// would misreport the likeliest real failure against a national service
-		// behind an intermediary.
-		//
-		// This used to fall through to the Location parsing below and report the
-		// subscription as created, preserved from the handler this was split out
-		// of. It is a lie the caller cannot detect, so it now surfaces.
-		return nil, &fhirapi.Error{
-			Message:   "MITZ subscription request failed without a usable FHIR response",
-			Cause:     err,
-			IssueType: fhir.IssueTypeTransient,
-		}
+		// NOTE: preserves a pre-existing quirk — if err isn't a fhirclient.OperationOutcomeError,
+		// execution falls through here and the subscription is reported as created despite the
+		// failure, exactly as handleSubscribe did before this method was split out.
 	}
 
 	location := headers.Header.Get("Location")

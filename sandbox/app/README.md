@@ -136,6 +136,12 @@ Three limitations are carried deliberately:
 - **Reconciliation is a mock-only affordance.** The "was that subscription actually created?" query
   reads the mock directly; neither the Knooppunt nor the national Mitz offers such a lookup.
 
+One more is inherited rather than chosen. The Knooppunt's `component/mitz` reports a subscription as
+created when its request to Mitz fails without a parseable `OperationOutcome` (a dial failure, a
+deadline, a gateway 502, an empty 401): it answers 201, the share screen renders "Consent subscription
+started", and nothing on this side can tell the difference. `main` records the quirk in a `NOTE` in
+`CreateSubscription`; the fix belongs in its own PR against that component.
+
 ## Architecture
 
 A standalone Go binary, not a knooppunt component (DESIGN.md standing decision 5: this backend will be the only

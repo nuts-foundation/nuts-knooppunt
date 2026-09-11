@@ -281,6 +281,13 @@ Two gaps against that as implemented, both recorded in `test/testdata/README.md`
 - NVI Lists registered under a BSN outside the pool survive, because the NVI tenant's pseudonymization interceptor
   rejects a List search that is not scoped to a patient, subject or source, so they cannot be enumerated to be deleted.
 
+A third limitation sits on the Mitz path, outside reset, and is inherited from the Knooppunt rather than chosen here.
+`component/mitz` reports a subscription as created when its request to Mitz fails without a parseable
+`OperationOutcome`: a dial failure, a deadline, a gateway 502, an empty 401. The Knooppunt then answers 201, the share
+screen renders "Consent subscription started" over a subscription that was never created, and the sandbox cannot
+detect it, because success is what it was told. `main` acknowledges the quirk in a `NOTE` in `CreateSubscription`; the
+fix belongs in its own PR against that component.
+
 Seeding is idempotent so reset, redeploy and first boot are the same code path. Because demo state is per patient
 (section 5.7), a global reset is rarely needed between demos: presenters consume fresh patients from the pool, and reset
 replenishes the pool once it runs dry. A per-patient recycle (restore one patient to unshared) covers the common case
@@ -482,7 +489,7 @@ sharing an existing local record, not creating a patient; no clinical data leave
 - Acceptance: after registration the NVI holds a List for pseudonym (BSN) with holder URA 00000010, the mock Mitz holds
   a subscription for De Plataan, and both facts are shown in the confirmation cards without claiming more than the calls
   established: the cards distinguish a subscription this request started from one it found, and an outcome nobody could
-  establish from a confirmed failure.
+  establish from a confirmed failure. One exception is inherited from the Knooppunt and recorded in section 5.6.
 
 ### E4 Retrieval chain and result screens
 

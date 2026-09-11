@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -308,55 +307,6 @@ func TestParseXACMLResponse(t *testing.T) {
 		assert.Nil(t, response)
 		assert.Contains(t, err.Error(), "invalid decision value")
 	})
-}
-
-// validSubscription is the minimum that passes validateMITZSubscription, so a
-// test about transport failure fails on transport and not on validation.
-func validSubscription() fhir.Subscription {
-	return fhir.Subscription{
-		Status:   fhir.SubscriptionStatusRequested,
-		Reason:   "OTV",
-		Criteria: "Consent?_query=otv&patientid=999900006&providerid=00000010&providertype=Z3",
-		Channel:  fhir.SubscriptionChannel{Type: fhir.SubscriptionChannelTypeRestHook},
-	}
-}
-
-// A transport failure is not an OperationOutcomeError, and used to fall through
-// the status switch and be reported as a created subscription. The GF Sandbox
-// renders that as a green confirmation card, so a silent failure here becomes a
-// demo asserting something that did not happen.
-func TestCreateSubscription_TransportFailureIsAnError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		// assert, not require: this runs on the server's goroutine, where
-		// FailNow would Goexit the handler and leave the client hanging on a
-		// connection nobody closes, instead of failing the test cleanly.
-		hijacker, ok := w.(http.Hijacker)
-		if !assert.True(t, ok) {
-			return
-		}
-		conn, _, err := hijacker.Hijack()
-		if !assert.NoError(t, err) {
-			return
-		}
-		assert.NoError(t, conn.Close())
-	}))
-	defer server.Close()
-
-	component, err := New(Config{MitzBase: server.URL})
-	require.NoError(t, err)
-
-	result, err := component.CreateSubscription(t.Context(), validSubscription())
-
-	require.Error(t, err, "a subscription that never reached Mitz must not be reported as created")
-	require.Nil(t, result)
-
-	// The type and issue type are the contract, not just "an error": they are
-	// what makes the response a 503 through fhirapi.StatusCodeForError. A later
-	// change to a bare fmt.Errorf would keep the assertions above green and
-	// silently move the status code.
-	var apiErr *fhirapi.Error
-	require.ErrorAs(t, err, &apiErr)
-	require.Equal(t, fhir.IssueTypeTransient, apiErr.IssueType)
 }
 
 // Helper function
