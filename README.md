@@ -43,6 +43,8 @@ Browse it at [https://nuts-foundation.github.io/nuts-knooppunt/docs/api/](https:
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for an overview of the architecture and design of the Knooppunt (for Knooppunt developers).
 
+See [docs/prs-contract.md](docs/prs-contract.md) for the wire contract between the pseudonymisation component and the national pseudonymization service (PRS), and how the deployed acceptance version, the service's main branch and the draft implementation guide differ.
+
 ## Go toolchain
 
 It's a typical Go application, so:
