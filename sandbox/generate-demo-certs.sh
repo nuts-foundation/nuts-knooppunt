@@ -33,9 +33,9 @@ STAGE="$OUT/.staging"
 trap 'rm -rf "$STAGE"' EXIT
 
 # Docker creates a directory wherever a bind-mount source is missing, and
-# compose mounts eleven paths out of this directory: mock-dezi.pem,
-# mock-dezi.key and dezi-signing.key, plus mock-prs.pem, mock-prs.key,
-# nvi-recipient.key and prs-oprf.key from docker-compose.yml, and
+# compose mounts nine paths out of this directory: mock-dezi.pem,
+# mock-dezi.key and dezi-signing.key, plus nvi-recipient.key and
+# prs-oprf.key from docker-compose.yml, and
 # ca-only/gf-sandbox-demo-ca.pem, policy/, knooppunt-prs.pem and
 # knooppunt-prs.key from docker-compose.sandbox.yml.
 # A stack brought up before this script has ever run therefore leaves a
@@ -89,8 +89,7 @@ require_expected_kinds() {
   for name in ca.pem ca.key ca.srl mock-dezi.pem mock-dezi.key \
     dezi-signing.key ca-only/gf-sandbox-demo-ca.pem policy/bgz.json \
     plataan-uzi.pem plataan-uzi-chain.pem plataan-uzi.key \
-    mock-prs.pem mock-prs.key nvi-recipient.key prs-oprf.key \
-    knooppunt-prs.pem knooppunt-prs.key; do
+    nvi-recipient.key prs-oprf.key knooppunt-prs.pem knooppunt-prs.key; do
     if [[ -e $OUT/$name && ! -f $OUT/$name ]]; then
       refuse_wrong_kind "$OUT/$name" "a regular file"
     fi
@@ -156,8 +155,7 @@ apply_modes() {
   local name
   for name in ca.pem mock-dezi.pem mock-dezi.key dezi-signing.key \
     plataan-uzi.pem plataan-uzi-chain.pem \
-    mock-prs.pem mock-prs.key nvi-recipient.key prs-oprf.key \
-    knooppunt-prs.pem knooppunt-prs.key; do
+    nvi-recipient.key prs-oprf.key knooppunt-prs.pem knooppunt-prs.key; do
     if [[ -f $OUT/$name ]]; then
       chmod 644 "$OUT/$name"
     fi
@@ -440,8 +438,8 @@ material_present() {
   local dir=$1 name
   for name in ca.pem ca.key mock-dezi.pem mock-dezi.key dezi-signing.key \
     ca-only/gf-sandbox-demo-ca.pem plataan-uzi.pem plataan-uzi.key \
-    plataan-uzi-chain.pem mock-prs.pem mock-prs.key nvi-recipient.key \
-    prs-oprf.key knooppunt-prs.pem knooppunt-prs.key; do
+    plataan-uzi-chain.pem nvi-recipient.key prs-oprf.key \
+    knooppunt-prs.pem knooppunt-prs.key; do
     [[ -f $dir/$name ]] || return 1
   done
 }
@@ -501,10 +499,6 @@ validate_material() {
     leaf_carries_the_ura "$dir/plataan-uzi.pem" || return 1
   check "dezi-signing.key is not an RSA private key" \
     is_rsa_private_key "$dir/dezi-signing.key" || return 1
-  check "mock-prs.key is not the key mock-prs.pem was issued for" \
-    certificate_matches_key "$dir/mock-prs.pem" "$dir/mock-prs.key" || return 1
-  check "mock-prs.pem was not issued by ca.pem" \
-    certificate_issued_by "$dir/mock-prs.pem" "$dir/ca.pem" || return 1
   check "knooppunt-prs.key is not the key knooppunt-prs.pem was issued for" \
     certificate_matches_key "$dir/knooppunt-prs.pem" "$dir/knooppunt-prs.key" || return 1
   check "knooppunt-prs.pem was not issued by ca.pem" \
@@ -526,8 +520,7 @@ install_material() {
   local name
   for name in ca.key ca.pem ca.srl mock-dezi.pem mock-dezi.key dezi-signing.key \
     plataan-uzi.pem plataan-uzi.key plataan-uzi-chain.pem \
-    mock-prs.pem mock-prs.key nvi-recipient.key prs-oprf.key \
-    knooppunt-prs.pem knooppunt-prs.key; do
+    nvi-recipient.key prs-oprf.key knooppunt-prs.pem knooppunt-prs.key; do
     mv -f "$STAGE/$name" "$OUT/$name"
   done
   mkdir -p "$OUT/ca-only"
@@ -622,18 +615,6 @@ openssl x509 -req -in "$STAGE/plataan-uzi.csr" -CA "$STAGE/ca.pem" -CAkey "$STAG
 cat "$STAGE/plataan-uzi.pem" "$STAGE/ca.pem" > "$STAGE/plataan-uzi-chain.pem"
 
 echo "Generating mock PRS material..."
-# The TLS certificate the mock PRS serves; the knooppunt verifies it against
-# the demo CA through KNPT_AUTHN_MINVWS_TLSCAFILE.
-openssl genrsa -out "$STAGE/mock-prs.key" 2048
-openssl req -new -key "$STAGE/mock-prs.key" -out "$STAGE/mock-prs.csr" \
-  -subj "/CN=mock-prs"
-cat > "$STAGE/mock-prs.ext" <<'EOF'
-extendedKeyUsage = serverAuth
-subjectAltName = DNS:mock-prs, DNS:localhost
-EOF
-openssl x509 -req -in "$STAGE/mock-prs.csr" -CA "$STAGE/ca.pem" -CAkey "$STAGE/ca.key" \
-  -CAcreateserial -CAserial "$STAGE/ca.srl" -out "$STAGE/mock-prs.pem" -days 3650 -sha256 \
-  -extfile "$STAGE/mock-prs.ext"
 # The recipient key pair every JWE is encrypted to. The real NVI would hold
 # the private key; here the mock PRS holds it, since the sandbox NVI asks the
 # mock to de-blind on its behalf (mock-components/prs/README.md).
@@ -642,9 +623,10 @@ openssl genrsa -out "$STAGE/nvi-recipient.key" 2048
 # 31 random bytes plus a most significant byte below 0x10, which keeps the
 # little-endian value under the ristretto255 group order; see is_oprf_key.
 printf '%s0%s\n' "$(openssl rand -hex 31)" "$(openssl rand -hex 1 | cut -c1)" > "$STAGE/prs-oprf.key"
-# The client certificate the knooppunt presents to the mock PRS and signs its
-# token request with. Not plataan-uzi.key: that one stays owner-only (see
-# apply_modes), and the mock accepts any client certificate anyway.
+# The certificate the knooppunt signs its token request with. The mock speaks
+# plain HTTP and never sees it, but component/authn refuses a configured token
+# endpoint without one. Not plataan-uzi.key: that one stays owner-only (see
+# apply_modes).
 openssl genrsa -out "$STAGE/knooppunt-prs.key" 2048
 openssl req -new -key "$STAGE/knooppunt-prs.key" -out "$STAGE/knooppunt-prs.csr" \
   -subj "/CN=knooppunt/O=Ziekenhuis De Plataan"
@@ -676,7 +658,6 @@ echo "  ca-only/                   CA alone, mounted into the knooppunt trust pa
 echo "  plataan-uzi.pem, .key      UZI-style leaf, SAN otherName carries the URA"
 echo "  plataan-uzi-chain.pem      leaf + ca.pem, sorted leaf to root"
 echo "  policy/bgz.json            bgz definition, pinned to this CA's fingerprint"
-echo "  mock-prs.pem, .key         TLS server certificate, SAN mock-prs + localhost"
 echo "  nvi-recipient.key          recipient key the mock PRS encrypts to and de-blinds with"
 echo "  prs-oprf.key               OPRF key, 32 bytes hex, fixed across restarts"
-echo "  knooppunt-prs.pem, .key    client certificate the knooppunt presents to the mock PRS"
+echo "  knooppunt-prs.pem, .key    certificate the knooppunt signs its token request with"

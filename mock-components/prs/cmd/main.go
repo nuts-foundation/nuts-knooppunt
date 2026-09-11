@@ -1,16 +1,14 @@
 // Command mock-prs runs the mock PRS as a standalone service for docker
-// compose: the PRS API over TLS on LISTEN_ADDR (default ":8443"), known to
-// its clients as PUBLIC_URL (required, such as "https://mock-prs:8443": the
-// audience the token endpoint demands and the target its tokens are bound
-// to), and, only
-// when SANDBOX_LISTEN_ADDR is set, the sandbox helper in plaintext on that
-// address. The helper has no authentication: whoever reaches it can turn any
+// compose: the PRS API on LISTEN_ADDR (default ":8080"), in plain HTTP,
+// because mTLS is terminated in front of the service, and known to its
+// clients as PUBLIC_URL (required, such as "http://mock-prs:8080": the
+// audience the token endpoint demands and the target its tokens are issued
+// for), and, only when SANDBOX_LISTEN_ADDR is set, the sandbox helper on
+// that address. The helper has no authentication: whoever reaches it can turn any
 // identifier value into its pseudonym and mint identifier values for any
 // pseudonym, so it stays off unless the network is closed, as it is inside
 // the compose project, which sets ":8080" and publishes no port for it.
 //
-// TLS_CERT_FILE and TLS_KEY_FILE hold the server certificate; without them a
-// self-signed certificate is generated, which no client will trust.
 // RECIPIENT_KEY_FILE holds the PEM RSA private key every JWE is encrypted to,
 // OPRF_KEY_FILE the OPRF key as 32 bytes in hex; without them both are
 // generated, and every pseudonym changes on the next restart. RECIPIENTS
@@ -20,7 +18,6 @@ package main
 
 import (
 	"crypto/rsa"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
@@ -44,25 +41,15 @@ func main() {
 
 func run() error {
 	opts := prsmock.Options{
-		ListenAddr:        envOr("LISTEN_ADDR", ":8443"),
+		ListenAddr:        envOr("LISTEN_ADDR", ":8080"),
 		SandboxListenAddr: os.Getenv("SANDBOX_LISTEN_ADDR"),
 		PublicURL:         os.Getenv("PUBLIC_URL"),
 	}
 	if opts.PublicURL == "" {
-		return errors.New("PUBLIC_URL must be set to the https origin clients use for this service, such as https://mock-prs:8443")
+		return errors.New("PUBLIC_URL must be set to the origin clients use for this service, such as http://mock-prs:8080")
 	}
 	if opts.SandboxListenAddr != "" {
 		slog.Warn("sandbox helper enabled; it de-tokenizes and mints for anyone who can reach it", "addr", opts.SandboxListenAddr)
-	}
-
-	if certFile, keyFile := os.Getenv("TLS_CERT_FILE"), os.Getenv("TLS_KEY_FILE"); certFile != "" || keyFile != "" {
-		certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
-		if err != nil {
-			return fmt.Errorf("loading TLS_CERT_FILE and TLS_KEY_FILE: %w", err)
-		}
-		opts.ServerCertificate = &certificate
-	} else {
-		slog.Warn("TLS_CERT_FILE and TLS_KEY_FILE not set; serving a self-signed certificate no client will trust")
 	}
 
 	if file := os.Getenv("RECIPIENT_KEY_FILE"); file != "" {

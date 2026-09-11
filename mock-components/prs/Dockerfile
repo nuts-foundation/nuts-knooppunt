@@ -28,8 +28,9 @@ COPY --from=builder /out/mock-prs /usr/local/bin/mock-prs
 
 # SANDBOX_LISTEN_ADDR is deliberately not set here: the unauthenticated
 # sandbox helper is enabled by the compose project, which keeps its port
-# inside the project network.
-ENV LISTEN_ADDR=":8443"
-EXPOSE 8443 8080
+# inside the project network. PUBLIC_URL is required and environment-specific,
+# so it has no default either.
+ENV LISTEN_ADDR=":8080"
+EXPOSE 8080 8081
 
 ENTRYPOINT ["/usr/local/bin/mock-prs"]

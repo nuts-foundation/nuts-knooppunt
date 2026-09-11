@@ -10,21 +10,23 @@ service's newer main branch and the draft implementation guide.
 
 ## What it serves
 
-- `POST /oprf/eval` over TLS, requiring a client certificate on the handshake
-  and a bearer token, with v0.0.18's request validation, error bodies, a real
-  OPRF evaluation on ristretto255 and a JWE for the recipient.
+- `POST /oprf/eval` over plain HTTP, requiring a bearer token, with
+  v0.0.18's request validation, error bodies, a real OPRF evaluation on
+  ristretto255 and a JWE for the recipient. The acceptance environment is
+  behind mTLS, but that is terminated by the ingress in front of the
+  service, so the mock assumes it and does not model it. Whether our own
+  client presents a certificate is covered by
+  `component/pseudonymisation/integration_test.go`, against the real service.
 - `POST /oauth/token` on the same listener: a stand-in for the ministry's
-  token endpoint. It verifies the JWT-bearer assertion `component/authn`
-  sends against the presented client certificate, requires the assertion to
-  name this endpoint as its audience and the posted scope and target audience
-  to equal the signed ones, and issues an opaque token that `/oprf/eval` then
-  requires, presented with the same certificate and requested for this
-  service, as the real service's `cnf` and audience checks demand. The scope
-  value itself is not checked, as v0.0.18 does not check it. It does not know
-  the ministry's keys, so it checks nothing the real endpoint would check
-  beyond the assertion itself.
-- `POST /sandbox/finalize` and `POST /sandbox/tokenize` on a second,
-  plaintext listener. The real PRS has neither. They exist because the
+  token endpoint as its documentation describes it: the client credentials
+  grant with `scope` and `target_audience`, authenticated by mTLS, which is
+  assumed to have happened in front of the mock. It issues an opaque token
+  that `/oprf/eval` requires and that must have been requested for this
+  service (`PUBLIC_URL`). The JWT-bearer `client_assertion` that
+  `component/authn` adds is not in that documentation and is ignored; the
+  scope value is not checked, as v0.0.18 does not check it.
+- `POST /sandbox/finalize` and `POST /sandbox/tokenize` on a second
+  listener. The real PRS has neither. They exist because the
   sandbox NVI, a HAPI server with an interceptor, cannot decrypt a JWE and
   de-blind on ristretto255 itself: finalize turns a Knooppunt identifier
   value into the recipient's pseudonym (hex, so it fits a FHIR id), tokenize
@@ -39,11 +41,11 @@ service's newer main branch and the draft implementation guide.
 - One recipient key pair serves every registered recipient; the real service
   holds a key per organization and scope. In the sandbox the mock holds the
   NVI's private key, since it de-blinds on the NVI's behalf.
-- Any client certificate is accepted; the acceptance ingress verifies a UZI
-  certificate.
+- No transport security at all, where acceptance is reached over mTLS with a
+  UZI certificate. The deployment terminates it in front of the mock.
 - Nothing cryptographic is committed. `./sandbox/generate-demo-certs.sh`
-  writes the TLS certificate, the recipient key and the OPRF key to the
-  gitignored `sandbox/.certs/`. Without `RECIPIENT_KEY_FILE` and
+  writes the recipient key and the OPRF key to the gitignored
+  `sandbox/.certs/`. Without `RECIPIENT_KEY_FILE` and
   `OPRF_KEY_FILE` the mock generates both, and every pseudonym the NVI holds
   stops matching on the next restart.
 
@@ -52,10 +54,10 @@ service's newer main branch and the draft implementation guide.
     go run ./mock-components/prs/cmd
     go test ./mock-components/prs/... ./component/pseudonymisation/...
 
-Environment: `LISTEN_ADDR` (`:8443`), `PUBLIC_URL` (required: the https
-origin clients use, the audience and target the token endpoint enforces),
-`SANDBOX_LISTEN_ADDR` (unset: helper off), `TLS_CERT_FILE`, `TLS_KEY_FILE`,
-`RECIPIENT_KEY_FILE`, `OPRF_KEY_FILE`,
+Environment: `LISTEN_ADDR` (`:8080`), `PUBLIC_URL` (required: the origin
+clients use, the audience and target the token endpoint enforces),
+`SANDBOX_LISTEN_ADDR` (unset: helper off), `RECIPIENT_KEY_FILE`,
+`OPRF_KEY_FILE`,
 `RECIPIENTS` (`ura:scope` pairs, comma separated, default
 `90000901:nationale-verwijsindex`). Containerized, it is the `mock-prs`
 service of the sandbox profile in `docker-compose.yml`.

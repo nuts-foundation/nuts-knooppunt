@@ -2,13 +2,16 @@ package pseudonymisation
 
 import (
 	"context"
-	"crypto/tls"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,6 +19,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cloudflare/circl/group"
 	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
@@ -60,11 +64,6 @@ type providerCall struct {
 	// transport is the returned client's base transport, which records
 	// whether the component closed the response body.
 	transport *closeTracking
-	// clientCertificate is what the returned client presents on the TLS
-	// handshake, next to testAccessToken in the Authorization header. The
-	// mock PRS requires both, so only a request made through that client
-	// succeeds.
-	clientCertificate tls.Certificate
 }
 
 func newTestComponent(t *testing.T) (*Component, *prsmock.Service, *providerCall) {
@@ -76,16 +75,11 @@ func newTestComponent(t *testing.T) (*Component, *prsmock.Service, *providerCall
 }
 
 // newComponentFor builds a component for baseURL whose authn provider is
-// stubbed with a client that carries a fresh client certificate and
-// testAccessToken, and that records what it was asked for.
+// stubbed with a client that carries testAccessToken, and that records what
+// it was asked for.
 func newComponentFor(t *testing.T, prs *prsmock.Service, baseURL string) (*Component, *providerCall) {
 	t.Helper()
-	clientCertificate, err := prsmock.NewClientCertificate()
-	require.NoError(t, err)
-	call := &providerCall{
-		clientCertificate: clientCertificate,
-		transport:         &closeTracking{base: &http.Transport{TLSClientConfig: prs.TLSClientConfig(clientCertificate)}},
-	}
+	call := &providerCall{transport: &closeTracking{base: &http.Transport{}}}
 	component := New(Config{PRSBaseURL: baseURL}, func(ctx context.Context, scope []string, ura string, audience string) (*http.Client, error) {
 		call.scope, call.ura, call.audience = scope, ura, audience
 		call.ctxMarker = ctx.Value(providerContextKey{})
@@ -225,44 +219,37 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		assert.Equal(t, "/prs/oprf/eval", prs.GetLastExchange().Path)
 	})
 
-	t.Run("sends the request over TLS through the client the authn component returned", func(t *testing.T) {
-		component, prs, call := newTestComponent(t)
+	t.Run("sends the request through the client the authn component returned", func(t *testing.T) {
+		component, prs, _ := newTestComponent(t)
 		tokenize(t, component, testScope)
 
-		// The mock only speaks TLS and refuses a handshake without a client
-		// certificate and a request without a bearer token, so the call
-		// above already fails if the component drops the https scheme or
-		// uses another client. What is asserted here is that the credentials
-		// the mock saw are the ones the provider's client carries.
-		require.True(t, strings.HasPrefix(prs.GetURL(), "https://"), prs.GetURL())
-		exchange := prs.GetLastExchange()
-		require.NotNil(t, exchange.ClientCertificate, "mTLS")
-		assert.Equal(t, call.clientCertificate.Leaf.Raw, exchange.ClientCertificate.Raw)
-		assert.Equal(t, "Bearer "+testAccessToken, exchange.Header.Get("Authorization"))
+		// The bearer is what the provider's client injects, so a component
+		// that used any other client would reach the mock without it. mTLS
+		// is terminated in front of the real service and is not modelled
+		// here; integration_test.go covers the client certificate.
+		assert.Equal(t, "Bearer "+testAccessToken, prs.GetLastExchange().Header.Get("Authorization"))
 	})
 
 	t.Run("obtains its token from the ministry-style endpoint and presents it", func(t *testing.T) {
 		// The real authn client against a mock that only accepts tokens its
-		// own token endpoint issued to the presented certificate: the
-		// certificate signs the token request, the token endpoint binds the
-		// token to it, the PRS route requires both together.
+		// own token endpoint issued for this service: authn signs the token
+		// request with the configured certificate, and the PRS route
+		// requires the token that came back.
 		prs, err := prsmock.New(prsmock.Options{ListenAddr: "localhost:0"})
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = prs.Stop() })
 		prs.RegisterRecipient(testNVIURA, testScope)
-		clientCertificate, err := prsmock.NewClientCertificate()
-		require.NoError(t, err)
 		dir := t.TempDir()
-		key, err := x509.MarshalPKCS8PrivateKey(clientCertificate.PrivateKey)
-		require.NoError(t, err)
-		writePEM(t, filepath.Join(dir, "cert.pem"), "CERTIFICATE", clientCertificate.Certificate[0])
+		certificate, key := selfSignedClientCertificate(t)
+		writePEM(t, filepath.Join(dir, "cert.pem"), "CERTIFICATE", certificate)
 		writePEM(t, filepath.Join(dir, "key.pem"), "PRIVATE KEY", key)
-		writePEM(t, filepath.Join(dir, "ca.pem"), "CERTIFICATE", prs.ServerCertificate().Raw)
+		// authn refuses a configured token endpoint without a client
+		// certificate, and signs its assertion with this key, even though
+		// the mock speaks plain HTTP and never sees the certificate.
 		ministry := authn.MinistryAuthConfig{
 			Config: tlsutil.Config{
 				TLSCertFile: filepath.Join(dir, "cert.pem"),
 				TLSKeyFile:  filepath.Join(dir, "key.pem"),
-				TLSCAFile:   filepath.Join(dir, "ca.pem"),
 			},
 			TokenEndpoint: prs.GetURL() + "/oauth/token",
 		}
@@ -273,24 +260,6 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		tokenize(t, component, testScope)
 		bearer := strings.TrimPrefix(prs.GetLastExchange().Header.Get("Authorization"), "Bearer ")
 		assert.True(t, prs.TokenIssued(bearer), "the PRS must see a token the token endpoint issued")
-	})
-
-	t.Run("fails when the PRS certificate is not trusted", func(t *testing.T) {
-		prs := prsmock.NewService(t)
-		prs.RegisterRecipient(testNVIURA, testScope)
-		clientCertificate, err := prsmock.NewClientCertificate()
-		require.NoError(t, err)
-		component := New(Config{PRSBaseURL: prs.GetURL()}, func(ctx context.Context, _ []string, _ string, _ string) (*http.Client, error) {
-			untrusting := prs.TLSClientConfig(clientCertificate)
-			untrusting.RootCAs = x509.NewCertPool()
-			return authenticatedClient(ctx, &http.Transport{TLSClientConfig: untrusting}), nil
-		})
-
-		result, err := component.IdentifierToToken(t.Context(), bsnIdentifier(), testLocalURA, testNVIURA, testScope)
-		var unknownAuthority x509.UnknownAuthorityError
-		require.ErrorAs(t, err, &unknownAuthority, "server verification must not be bypassed")
-		assert.Nil(t, result)
-		assert.Equal(t, 0, prs.ExchangeCount())
 	})
 
 	t.Run("posts the v0.0.18 evaluate request", func(t *testing.T) {
@@ -483,6 +452,26 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 		assert.Nil(t, result)
 		assert.Equal(t, 0, prs.ExchangeCount())
 	})
+}
+
+// selfSignedClientCertificate returns a fresh self-signed RSA certificate and
+// its PKCS#8 key, both DER, for authn to load.
+func selfSignedClientCertificate(t *testing.T) (certificate []byte, key []byte) {
+	t.Helper()
+	private, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "knooppunt test client"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	certificate, err = x509.CreateCertificate(rand.Reader, template, template, &private.PublicKey, private)
+	require.NoError(t, err)
+	key, err = x509.MarshalPKCS8PrivateKey(private)
+	require.NoError(t, err)
+	return certificate, key
 }
 
 func writePEM(t *testing.T, path string, blockType string, der []byte) {

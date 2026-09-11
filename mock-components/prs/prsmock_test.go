@@ -2,30 +2,19 @@ package prsmock_test
 
 import (
 	"bytes"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
-	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cloudflare/circl/oprf"
-	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jws"
-	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/nuts-foundation/nuts-knooppunt/mock-components/prs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,15 +40,6 @@ func blind(t *testing.T, input []byte) (blindedInput string, blindFactor string)
 	return base64.URLEncoding.EncodeToString(element), base64.URLEncoding.EncodeToString(scalar)
 }
 
-// newClient returns what a caller of the mock needs: trust in the mock's
-// certificate and a client certificate to present.
-func newClient(t *testing.T, prs *prsmock.Service) (*http.Client, tls.Certificate) {
-	t.Helper()
-	certificate, err := prsmock.NewClientCertificate()
-	require.NoError(t, err)
-	return &http.Client{Transport: &http.Transport{TLSClientConfig: prs.TLSClientConfig(certificate)}}, certificate
-}
-
 func newEvalRequest(t *testing.T, prs *prsmock.Service, body string) *http.Request {
 	t.Helper()
 	request, err := http.NewRequest(http.MethodPost, prs.GetURL()+"/oprf/eval", strings.NewReader(body))
@@ -81,7 +61,7 @@ func send(t *testing.T, client *http.Client, request *http.Request) (status int,
 
 func postEval(t *testing.T, prs *prsmock.Service, body string) (int, string) {
 	t.Helper()
-	client, _ := newClient(t, prs)
+	client := &http.Client{}
 	status, contentType, responseBody := send(t, client, newEvalRequest(t, prs, body))
 	assert.Equal(t, "application/json", contentType)
 	return status, responseBody
@@ -292,7 +272,7 @@ func TestService_Eval(t *testing.T) {
 	t.Run("answers with the injected failure until it is cleared", func(t *testing.T) {
 		prs := newRegisteredService(t)
 		blindedInput, _ := blind(t, []byte("input"))
-		client, _ := newClient(t, prs)
+		client := &http.Client{}
 
 		prs.Fail(http.StatusInternalServerError, "Internal Server Error")
 		status, contentType, body := send(t, client, newEvalRequest(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, recipientScope)))
@@ -308,7 +288,7 @@ func TestService_Eval(t *testing.T) {
 
 	t.Run("answers any other path with FastAPI's 404", func(t *testing.T) {
 		prs := newRegisteredService(t)
-		client, _ := newClient(t, prs)
+		client := &http.Client{}
 		request := newEvalRequest(t, prs, evalRequest("AA", "ura:"+recipientURA, recipientScope))
 		request.URL.Path = "/evaluate"
 		status, contentType, body := send(t, client, request)
@@ -321,7 +301,7 @@ func TestService_Eval(t *testing.T) {
 
 	t.Run("records every exchange", func(t *testing.T) {
 		prs := newRegisteredService(t)
-		client, certificate := newClient(t, prs)
+		client := &http.Client{}
 		body := evalRequest("AA", "ura:12345678", recipientScope)
 		send(t, client, newEvalRequest(t, prs, body))
 		require.Equal(t, 1, prs.ExchangeCount())
@@ -330,8 +310,6 @@ func TestService_Eval(t *testing.T) {
 		assert.Equal(t, "/oprf/eval", exchange.Path)
 		assert.Equal(t, "application/json", exchange.Header.Get("Content-Type"))
 		assert.Equal(t, "Bearer "+accessToken, exchange.Header.Get("Authorization"))
-		require.NotNil(t, exchange.ClientCertificate)
-		assert.Equal(t, certificate.Leaf.Raw, exchange.ClientCertificate.Raw)
 		assert.Equal(t, body, string(exchange.Body))
 		assert.Equal(t, http.StatusNotFound, exchange.Status)
 		assert.Equal(t, `{"error":"No organization found for this ura"}`, string(exchange.Response))
@@ -401,7 +379,7 @@ func TestService_Validation(t *testing.T) {
 		{"no ura prefix", `{"encryptedPersonalId":"AAAA","recipientOrganization":"oin:1","recipientScope":"s1"}`, true, "application/json", 400, `{"error":"Invalid recipient organization. Format: ura:<ura_number>"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			client, _ := newClient(t, prs)
+			client := &http.Client{}
 			request, err := http.NewRequest(http.MethodPost, prs.GetURL()+"/oprf/eval", strings.NewReader(tc.body))
 			require.NoError(t, err)
 			if tc.contentType != "" {
@@ -438,22 +416,19 @@ func TestService_Options(t *testing.T) {
 		assert.Equal(t, a, b, "the same key yields the same pseudonyms across instances")
 	})
 
-	t.Run("refuses a public URL that is not a bare https origin", func(t *testing.T) {
+	t.Run("refuses a public URL that is not a bare origin", func(t *testing.T) {
 		for name, public := range map[string]string{
-			"http":         "http://mock-prs:8443",
-			"path":         "https://mock-prs:8443/prs",
-			"userinfo":     "https://user@mock-prs:8443",
+			"no scheme":    "mock-prs:8080",
+			"other scheme": "ftp://mock-prs:8080",
+			"path":         "http://mock-prs:8080/prs",
+			"userinfo":     "http://user@mock-prs:8080",
 			"slash only":   "/",
-			"empty query":  "https://mock-prs:8443?",
-			"double slash": "https://mock-prs:8443//",
+			"empty query":  "http://mock-prs:8080?",
+			"double slash": "http://mock-prs:8080//",
 		} {
 			_, err := prsmock.New(prsmock.Options{ListenAddr: "localhost:0", PublicURL: public})
 			assert.Error(t, err, name)
 		}
-		// A single trailing slash is the same origin.
-		prs, err := prsmock.New(prsmock.Options{ListenAddr: "localhost:0", PublicURL: "https://mock-prs:8443/"})
-		require.NoError(t, err)
-		t.Cleanup(func() { _ = prs.Stop() })
 	})
 
 	t.Run("refuses an OPRF key that is zero, non-canonical or the wrong size", func(t *testing.T) {
@@ -471,15 +446,15 @@ func TestService_Options(t *testing.T) {
 }
 
 func TestService_Transport(t *testing.T) {
-	t.Run("serves an https URL", func(t *testing.T) {
+	t.Run("serves a plain HTTP URL, since mTLS is terminated in front of it", func(t *testing.T) {
 		prs := newRegisteredService(t)
-		assert.True(t, strings.HasPrefix(prs.GetURL(), "https://"), prs.GetURL())
+		assert.True(t, strings.HasPrefix(prs.GetURL(), "http://"), prs.GetURL())
 	})
 
 	t.Run("refuses a request without a bearer token with 401", func(t *testing.T) {
 		prs := newRegisteredService(t)
 		blindedInput, _ := blind(t, []byte("input"))
-		client, _ := newClient(t, prs)
+		client := &http.Client{}
 		request := newEvalRequest(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, recipientScope))
 		request.Header.Del("Authorization")
 		status, contentType, body := send(t, client, request)
@@ -489,28 +464,6 @@ func TestService_Transport(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, prs.GetLastExchange().Status)
 	})
 
-	t.Run("refuses a handshake without a client certificate", func(t *testing.T) {
-		prs := newRegisteredService(t)
-		pool := x509.NewCertPool()
-		pool.AddCert(prs.ServerCertificate())
-		client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}}
-		_, err := client.Do(newEvalRequest(t, prs, evalRequest("AA", "ura:"+recipientURA, recipientScope)))
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "certificate required")
-		assert.Equal(t, 0, prs.ExchangeCount())
-	})
-
-	t.Run("refuses plaintext HTTP", func(t *testing.T) {
-		prs := newRegisteredService(t)
-		response, err := http.Post("http://"+strings.TrimPrefix(prs.GetURL(), "https://")+"/oprf/eval", "application/json", strings.NewReader("{}"))
-		require.NoError(t, err)
-		defer response.Body.Close()
-		body, err := io.ReadAll(response.Body)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, response.StatusCode)
-		assert.Contains(t, string(body), "Client sent an HTTP request to an HTTPS server")
-		assert.Equal(t, 0, prs.ExchangeCount())
-	})
 }
 
 // newStrictService starts a mock that only accepts bearer tokens its own
@@ -525,76 +478,6 @@ func newStrictService(t *testing.T) *prsmock.Service {
 }
 
 const callerURA = "00000030"
-
-// clientAssertion builds the JWT-bearer assertion the way component/authn
-// builds it (oauth2.go:101-131) for prs: signed with key, bound to
-// certificate, addressed to prs's token endpoint, for prs as target audience.
-// overrides replace claims; a nil value removes one.
-func clientAssertion(t *testing.T, prs *prsmock.Service, certificate *x509.Certificate, key any, overrides map[string]any) string {
-	t.Helper()
-	digest := sha256.Sum256(certificate.Raw)
-	thumbprint := base64.RawURLEncoding.EncodeToString(digest[:])
-	token := jwt.New()
-	claims := map[string]any{
-		jwt.IssuerKey:     callerURA,
-		jwt.SubjectKey:    callerURA,
-		jwt.AudienceKey:   []string{prs.GetURL() + "/oauth/token"},
-		jwt.IssuedAtKey:   time.Now(),
-		jwt.ExpirationKey: time.Now().Add(time.Minute),
-		jwt.JwtIDKey:      "test-jti",
-		"cnf":             map[string]any{"x5t#S256": thumbprint},
-		"scope":           "prs:read",
-		"target_audience": prs.GetURL(),
-	}
-	for name, value := range overrides {
-		if value == nil {
-			delete(claims, name)
-		} else {
-			claims[name] = value
-		}
-	}
-	for name, value := range claims {
-		require.NoError(t, token.Set(name, value))
-	}
-	headers := jws.NewHeaders()
-	require.NoError(t, headers.Set(jws.KeyIDKey, thumbprint))
-	signed, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, key, jws.WithProtectedHeaders(headers)))
-	require.NoError(t, err)
-	return string(signed)
-}
-
-// tokenForm is the form component/authn posts (oauth2.go:140-146), for prs.
-func tokenForm(prs *prsmock.Service, assertion string) url.Values {
-	return url.Values{
-		"grant_type":            {"client_credentials"},
-		"scope":                 {"prs:read"},
-		"target_audience":       {prs.GetURL()},
-		"client_assertion_type": {"urn:ietf:params:oauth:client-assertion-type:jwt-bearer"},
-		"client_assertion":      {assertion},
-	}
-}
-
-// otherCertificate is a second self-signed client certificate, since
-// prsmock.NewClientCertificate hands out one per process.
-func otherCertificate(t *testing.T) tls.Certificate {
-	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	template := &x509.Certificate{
-		SerialNumber:          big.NewInt(2),
-		Subject:               pkix.Name{CommonName: "another client"},
-		NotBefore:             time.Now().Add(-time.Minute),
-		NotAfter:              time.Now().Add(time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-		BasicConstraintsValid: true,
-	}
-	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
-	require.NoError(t, err)
-	leaf, err := x509.ParseCertificate(der)
-	require.NoError(t, err)
-	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}
-}
 
 func postForm(t *testing.T, client *http.Client, target string, form url.Values) (int, map[string]any) {
 	t.Helper()
@@ -623,29 +506,43 @@ func postJSON(t *testing.T, target string, body string) (int, map[string]any) {
 }
 
 func TestService_TokenEndpoint(t *testing.T) {
-	// issue obtains a token for certificate with an assertion carrying
-	// overrides, and returns the response.
-	issue := func(t *testing.T, prs *prsmock.Service, client *http.Client, certificate tls.Certificate, overrides map[string]any, form func(url.Values)) (int, map[string]any) {
+	// issue posts the ministry's documented token request, with form applied
+	// to it first, and returns the response.
+	issue := func(t *testing.T, prs *prsmock.Service, form func(url.Values)) (int, map[string]any) {
 		t.Helper()
-		values := tokenForm(prs, clientAssertion(t, prs, certificate.Leaf, certificate.PrivateKey, overrides))
+		values := url.Values{
+			"grant_type":      {"client_credentials"},
+			"scope":           {recipientScope},
+			"target_audience": {prs.GetURL()},
+		}
 		if form != nil {
 			form(values)
 		}
-		return postForm(t, client, prs.GetURL()+"/oauth/token", values)
+		return postForm(t, &http.Client{}, prs.GetURL()+"/oauth/token", values)
 	}
-	evalWith := func(t *testing.T, prs *prsmock.Service, client *http.Client, token string) (int, string) {
+	tokenFor := func(t *testing.T, prs *prsmock.Service, target string) string {
+		t.Helper()
+		status, response := issue(t, prs, func(v url.Values) { v.Set("target_audience", target) })
+		require.Equal(t, http.StatusOK, status, response)
+		token, _ := response["access_token"].(string)
+		require.NotEmpty(t, token)
+		return token
+	}
+	evalWith := func(t *testing.T, prs *prsmock.Service, token string, host string) (int, string) {
 		t.Helper()
 		blindedInput, _ := blind(t, []byte("input"))
 		request := newEvalRequest(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, recipientScope))
 		request.Header.Set("Authorization", "Bearer "+token)
-		status, _, body := send(t, client, request)
+		if host != "" {
+			request.Host = host
+		}
+		status, _, body := send(t, &http.Client{}, request)
 		return status, body
 	}
 
-	t.Run("issues a token for a valid request, which the PRS route then accepts", func(t *testing.T) {
+	t.Run("issues a token for the documented request, which the PRS route then accepts", func(t *testing.T) {
 		prs := newStrictService(t)
-		client, certificate := newClient(t, prs)
-		status, response := issue(t, prs, client, certificate, nil, nil)
+		status, response := issue(t, prs, nil)
 		require.Equal(t, http.StatusOK, status, response)
 		assert.Equal(t, "Bearer", response["token_type"])
 		assert.EqualValues(t, 300, response["expires_in"])
@@ -653,169 +550,64 @@ func TestService_TokenEndpoint(t *testing.T) {
 		require.NotEmpty(t, token)
 		assert.True(t, prs.TokenIssued(token))
 
-		status, body := evalWith(t, prs, client, token)
+		status, body := evalWith(t, prs, token, "")
 		assert.Equal(t, http.StatusOK, status, body)
+	})
+
+	t.Run("ignores the client assertion component/authn adds, which the ministry does not document", func(t *testing.T) {
+		prs := newStrictService(t)
+		status, response := issue(t, prs, func(v url.Values) {
+			v.Set("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
+			v.Set("client_assertion", "not.a.jwt")
+		})
+		assert.Equal(t, http.StatusOK, status, response)
 	})
 
 	t.Run("refuses a bearer it did not issue with 401", func(t *testing.T) {
 		prs := newStrictService(t)
-		client, _ := newClient(t, prs)
-		status, body := evalWith(t, prs, client, accessToken)
-		assert.Equal(t, http.StatusUnauthorized, status)
-		assert.Equal(t, `{"detail":"Invalid token"}`, body)
-	})
-
-	t.Run("refuses an issued token presented with another certificate", func(t *testing.T) {
-		prs := newStrictService(t)
-		client, certificate := newClient(t, prs)
-		status, response := issue(t, prs, client, certificate, nil, nil)
-		require.Equal(t, http.StatusOK, status, response)
-		token, _ := response["access_token"].(string)
-
-		other := &http.Client{Transport: &http.Transport{TLSClientConfig: prs.TLSClientConfig(otherCertificate(t))}}
-		status, body := evalWith(t, prs, other, token)
+		status, body := evalWith(t, prs, accessToken, "")
 		assert.Equal(t, http.StatusUnauthorized, status)
 		assert.Equal(t, `{"detail":"Invalid token"}`, body)
 	})
 
 	t.Run("refuses an issued token requested for another target audience", func(t *testing.T) {
 		prs := newStrictService(t)
-		client, certificate := newClient(t, prs)
-		status, response := issue(t, prs, client, certificate, map[string]any{"target_audience": "https://other-service.example"}, func(form url.Values) {
-			form.Set("target_audience", "https://other-service.example")
-		})
-		require.Equal(t, http.StatusOK, status, response)
-		token, _ := response["access_token"].(string)
-
-		status, body := evalWith(t, prs, client, token)
-		assert.Equal(t, http.StatusUnauthorized, status)
-		assert.Equal(t, `{"detail":"Invalid token"}`, body)
-	})
-
-	t.Run("refuses an issued token whose target only starts with this origin", func(t *testing.T) {
-		// "https://<host>@other-service.example" is a URL whose authority is
-		// other-service.example; a prefix comparison would accept it.
-		prs := newStrictService(t)
-		client, certificate := newClient(t, prs)
-		lookalike := "https://" + strings.TrimPrefix(prs.GetURL(), "https://") + "@other-service.example"
-		status, response := issue(t, prs, client, certificate, map[string]any{"target_audience": lookalike}, func(form url.Values) {
-			form.Set("target_audience", lookalike)
-		})
-		require.Equal(t, http.StatusOK, status, response)
-		token, _ := response["access_token"].(string)
-
-		status, body := evalWith(t, prs, client, token)
-		assert.Equal(t, http.StatusUnauthorized, status)
-		assert.Equal(t, `{"detail":"Invalid token"}`, body)
-	})
-
-	t.Run("refuses an assertion whose issuer and subject differ, or without iat or jti", func(t *testing.T) {
-		prs := newStrictService(t)
-		client, certificate := newClient(t, prs)
-		for name, claims := range map[string]map[string]any{
-			"issuer differs": {jwt.IssuerKey: "00000031"},
-			"no iat":         {jwt.IssuedAtKey: nil},
-			"no jti":         {jwt.JwtIDKey: nil},
+		for name, target := range map[string]string{
+			"other service": "https://other-service.example",
+			// A URL whose authority is other-service.example; a prefix
+			// comparison would accept it.
+			"lookalike":   "http://" + strings.TrimPrefix(prs.GetURL(), "http://") + "@other-service.example",
+			"empty query": prs.GetURL() + "?",
 		} {
-			status, response := issue(t, prs, client, certificate, claims, nil)
-			assert.Equal(t, http.StatusBadRequest, status, name)
-			assert.Equal(t, "invalid_client", response["error"], name)
+			status, body := evalWith(t, prs, tokenFor(t, prs, target), "")
+			assert.Equal(t, http.StatusUnauthorized, status, name)
+			assert.Equal(t, `{"detail":"Invalid token"}`, body, name)
 		}
 	})
 
-	t.Run("checks the audience against its configured origin, not the request's Host header", func(t *testing.T) {
+	t.Run("checks the target against its configured origin, not the request's Host header", func(t *testing.T) {
 		prs := newStrictService(t)
-		client, certificate := newClient(t, prs)
-
-		// An assertion for another token endpoint, sent with that endpoint's
-		// name in the Host header: the origin is configured, so this fails.
-		values := tokenForm(prs, clientAssertion(t, prs, certificate.Leaf, certificate.PrivateKey, map[string]any{jwt.AudienceKey: []string{"https://oauth.example/oauth/token"}}))
-		request, err := http.NewRequest(http.MethodPost, prs.GetURL()+"/oauth/token", strings.NewReader(values.Encode()))
-		require.NoError(t, err)
-		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		request.Host = "oauth.example"
-		status, _, body := send(t, client, request)
-		assert.Equal(t, http.StatusBadRequest, status, body)
-		assert.Contains(t, body, "invalid_client")
-
-		// A token issued for another target, presented with that target's
-		// name in the Host header of the PRS request: same.
-		status, response := issue(t, prs, client, certificate, map[string]any{"target_audience": "https://other-service.example"}, func(form url.Values) {
-			form.Set("target_audience", "https://other-service.example")
-		})
-		require.Equal(t, http.StatusOK, status, response)
-		token, _ := response["access_token"].(string)
-		blindedInput, _ := blind(t, []byte("input"))
-		request = newEvalRequest(t, prs, evalRequest(blindedInput, "ura:"+recipientURA, recipientScope))
-		request.Header.Set("Authorization", "Bearer "+token)
-		request.Host = "other-service.example"
-		status, _, body = send(t, client, request)
+		token := tokenFor(t, prs, "https://other-service.example")
+		status, body := evalWith(t, prs, token, "other-service.example")
 		assert.Equal(t, http.StatusUnauthorized, status)
 		assert.Equal(t, `{"detail":"Invalid token"}`, body)
 	})
 
-	t.Run("refuses an issued token whose target carries an empty query", func(t *testing.T) {
+	t.Run("refuses a request without scope or target audience", func(t *testing.T) {
 		prs := newStrictService(t)
-		client, certificate := newClient(t, prs)
-		status, response := issue(t, prs, client, certificate, map[string]any{"target_audience": prs.GetURL() + "?"}, func(form url.Values) {
-			form.Set("target_audience", prs.GetURL()+"?")
-		})
-		require.Equal(t, http.StatusOK, status, response)
-		token, _ := response["access_token"].(string)
-		status, body := evalWith(t, prs, client, token)
-		assert.Equal(t, http.StatusUnauthorized, status, body)
-	})
-
-	t.Run("refuses an assertion signed with another key", func(t *testing.T) {
-		prs := newStrictService(t)
-		client, certificate := newClient(t, prs)
-		otherKey, err := rsa.GenerateKey(rand.Reader, 2048)
-		require.NoError(t, err)
-		status, response := issue(t, prs, client, tls.Certificate{Leaf: certificate.Leaf, PrivateKey: otherKey}, nil, nil)
-		assert.Equal(t, http.StatusBadRequest, status)
-		assert.Equal(t, "invalid_client", response["error"])
-	})
-
-	t.Run("refuses an assertion bound to another certificate", func(t *testing.T) {
-		prs := newStrictService(t)
-		client, certificate := newClient(t, prs)
-		status, response := issue(t, prs, client, tls.Certificate{Leaf: prs.ServerCertificate(), PrivateKey: certificate.PrivateKey}, nil, nil)
-		assert.Equal(t, http.StatusBadRequest, status)
-		assert.Equal(t, "invalid_client", response["error"])
-		assert.Contains(t, response["error_description"], "cnf.x5t#S256")
-	})
-
-	t.Run("refuses an assertion addressed to another token endpoint", func(t *testing.T) {
-		prs := newStrictService(t)
-		client, certificate := newClient(t, prs)
-		status, response := issue(t, prs, client, certificate, map[string]any{jwt.AudienceKey: []string{"https://oauth.example/oauth/token"}}, nil)
-		assert.Equal(t, http.StatusBadRequest, status)
-		assert.Equal(t, "invalid_client", response["error"])
-		assert.Contains(t, response["error_description"], "aud")
-	})
-
-	t.Run("refuses a scope or target audience that differs from the signed ones, or is missing", func(t *testing.T) {
-		prs := newStrictService(t)
-		client, certificate := newClient(t, prs)
 		for name, form := range map[string]func(url.Values){
-			"other scope":    func(v url.Values) { v.Set("scope", "prs:oprf") },
 			"missing scope":  func(v url.Values) { v.Del("scope") },
-			"other target":   func(v url.Values) { v.Set("target_audience", "https://other-service.example") },
 			"missing target": func(v url.Values) { v.Del("target_audience") },
 		} {
-			status, response := issue(t, prs, client, certificate, nil, form)
+			status, response := issue(t, prs, form)
 			assert.Equal(t, http.StatusBadRequest, status, name)
 			assert.Equal(t, "invalid_request", response["error"], name)
 		}
-		status, response := issue(t, prs, client, certificate, map[string]any{"scope": nil}, nil)
-		assert.Equal(t, http.StatusBadRequest, status, "assertion without scope")
-		assert.Equal(t, "invalid_client", response["error"], "assertion without scope")
 	})
 
 	t.Run("refuses a grant that is not client_credentials", func(t *testing.T) {
 		prs := newStrictService(t)
-		client, certificate := newClient(t, prs)
-		status, response := issue(t, prs, client, certificate, nil, func(v url.Values) { v.Set("grant_type", "authorization_code") })
+		status, response := issue(t, prs, func(v url.Values) { v.Set("grant_type", "authorization_code") })
 		assert.Equal(t, http.StatusBadRequest, status)
 		assert.Equal(t, "unsupported_grant_type", response["error"])
 	})
