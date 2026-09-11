@@ -2,7 +2,8 @@
 // synthetic patients (Anna Jansen plus structural clones), each a complete
 // two-source fixture. Every patient has hospital-side data at Ziekenhuis De
 // Plataan (URA 00000010), a BGZ at Zorgcentrum De Zonnebloem (URA 00000020),
-// and an NVI localization registration under both custodians.
+// and an NVI localization registration under De Zonnebloem only:
+// publishing De Plataan's side is the action the GF Sandbox demonstrates.
 //
 // All FHIR resource IDs are derived deterministically from the patient Key so
 // that seeding is an idempotent PUT-by-fixed-id upsert. Counts shown in any UI
@@ -11,10 +12,10 @@ package pool
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
-	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/plataan"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -26,11 +27,15 @@ const (
 	// snomedSystem is used for the clinical codes. Real values are structured as
 	// BGZ sections so a real BGZ dataset can replace them (DESIGN §5.3).
 	snomedSystem = "http://snomed.info/sct"
+)
 
-	// Source Device identifier systems, one per custodian side. The NVI Source
-	// records which system published the registration.
-	plataanSourceSystem    = "https://plataan.example/device-identifiers"
-	zonnebloemSourceSystem = "https://zonnebloem.example/device-identifiers"
+// Client ids identifying the registering installation, used as
+// List.source.identifier per the localization profile. Synthetic: no NVI OAuth
+// client is registered for the demo, and these are not the `gf-sandbox` client
+// id used on the Dezi flow. A real deployment supplies its own.
+const (
+	PlataanClientID    = "gf-sandbox-plataan"
+	ZonnebloemClientID = "zorgdossier-zonnebloem"
 )
 
 // PoolPatient is one demo patient: a stable Key, an elfproef-valid synthetic
@@ -325,24 +330,50 @@ func (p PoolPatient) ZonnebloemResources() []fhir.HasId {
 	}
 }
 
-// NVILists returns the NVI localization registrations for this patient: one per
-// custodian (De Plataan 00000010 and De Zonnebloem 00000020), so the patient is
-// findable from either side by BSN (pseudonymized).
-func (p PoolPatient) NVILists() []nvi.SeedList {
-	return []nvi.SeedList{
-		{
-			CustodianURA: plataan.URA,
-			BSN:          p.BSN,
-			SourceSystem: plataanSourceSystem,
-			SourceValue:  "PLATAAN-EHR-" + p.Key,
-		},
-		{
-			CustodianURA: *sunflower.Organization().Identifier[0].Value,
-			BSN:          p.BSN,
-			SourceSystem: zonnebloemSourceSystem,
-			SourceValue:  "ZONNEBLOEM-EHR-" + p.Key,
-		},
+// categoriesOf maps FHIR resources to NVI data categories, deduplicated and
+// sorted so a re-seed produces the same registration every time. The switch has
+// no default case, so an unmapped type would contribute nothing;
+// TestCategoriesOf_MapsEveryPooledResourceType turns that into a failure.
+func categoriesOf(resources []fhir.HasId) []string {
+	seen := map[string]bool{}
+	for _, resource := range resources {
+		switch resource.(type) {
+		case *fhir.Patient:
+			seen[nvi.CategoryPatient] = true
+		case *fhir.Condition:
+			seen[nvi.CategoryCondition] = true
+		case *fhir.MedicationRequest:
+			seen[nvi.CategoryMedicationRequest] = true
+		case *fhir.AllergyIntolerance:
+			seen[nvi.CategoryAllergyIntolerance] = true
+		}
 	}
+	categories := make([]string, 0, len(seen))
+	for category := range seen {
+		categories = append(categories, category)
+	}
+	sort.Strings(categories)
+	return categories
+}
+
+// PlataanCategories returns what De Plataan holds for this patient. It is what
+// the sandbox registers when the patient is shared.
+func (p PoolPatient) PlataanCategories() []string { return categoriesOf(p.PlataanResources()) }
+
+// ZonnebloemCategories returns what De Zonnebloem holds.
+func (p PoolPatient) ZonnebloemCategories() []string { return categoriesOf(p.ZonnebloemResources()) }
+
+// NVIRegistrations returns what the seed publishes: De Zonnebloem's side only.
+// De Plataan's is deliberately absent, because publishing it is the action E3
+// demonstrates (DESIGN §5.7). The sandbox registers it at share time and
+// RecyclePatient and ResetGlobal remove it again, both scoped to PlataanClientID.
+func (p PoolPatient) NVIRegistrations() []nvi.Registration {
+	return []nvi.Registration{{
+		CustodianURA: *sunflower.Organization().Identifier[0].Value,
+		BSN:          p.BSN,
+		ClientID:     ZonnebloemClientID,
+		Categories:   p.ZonnebloemCategories(),
+	}}
 }
 
 // PlataanResources returns the Plataan-side FHIR resources for the whole pool.

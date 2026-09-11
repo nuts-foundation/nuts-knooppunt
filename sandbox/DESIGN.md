@@ -33,7 +33,8 @@ implementers is the viewer itself: anyone can read along with every step without
 v1 definition of done for /demo, aligned with the acceptance criteria of #532:
 
 - Dezi session info is visible in the EMR top bar at all times.
-- Patient registration publishes an NVI localization record and starts a Mitz subscription, both confirmed on screen.
+- Patient registration publishes an NVI localization record per data category and starts a Mitz subscription, both
+  confirmed on screen with what the calls established and nothing more.
 - The localization results clearly distinguish NVI output from GF Adressering output.
 - Retrieval requires explicit user confirmation before data is pulled.
 - The authorization result page shows all sub-checks with the demo disclaimer.
@@ -79,7 +80,7 @@ Two user-facing applications on top of the existing mocked stack:
 | **GF Sandbox**           | Shell (path chooser, demo controls, reset) whose /demo path renders the consumer EMR experience: **Plataan EHR**, the hospital system of Ziekenhuis De Plataan. Go backend (sandbox/app) proxies to the Knooppunt and emits step events                                                                                                         | Shell: quiet frame (6.1). EMR: warm editorial (6.2) | own port, e.g. :8091 (the current demo-ehr maps host :8091 to container :3000 and is to be split; host :3000 itself is taken by the mock VC issuer) |
 | **ZorgDossier**          | The elderly care institution's own record system: resident record, data entry, NVI registration on save. Stack decided in E7 (demo-ehr reuse or the sandbox's Go shape), restyled and reduced                                                                                                                                                   | Own brand, deliberately different (6.3)             | own port, e.g. :3001                                                                                                                                |
 | Nuts Knooppunt           | Real GF components: NVI, mCSD, PDP, Mitz client, Nuts node proxy                                                                                                                                                                                                                                                                                | n/a                                                 | :8080 public, :8081 internal                                                                                                                        |
-| PRS (pseudonymization)   | **not mocked**: the hosted sandbox uses the real PRS acceptance environment. The Knooppunt's pseudonymisation component already speaks the real protocol and needs only `prsurl` plus working auth (`prs:read` scope per organization URA). Offline compose leaves `prsurl` unset and falls back to the component's built-in fake pseudonymizer | n/a                                                 | external (acc)                                                                                                                                      |
+| PRS (pseudonymization)   | **mocked offline, real when hosted**: since PR #561 the compose overlay points `prsurl` at `mock-components/prs`, a mock modelled on acceptance PRS v0.0.18 that performs real OPRF on ristretto255 and stands in for the ministry's token endpoint, so the Knooppunt's own authn flow runs unchanged. The hosted sandbox points the same configuration at the PRS acceptance environment. The built-in fake pseudonymizer is now only reached when `prsurl` is unset, which the e2e harness still does. Scope: acceptance v0.0.18 checks no scope value, the service's `main` requires `prs:oprf`, and the acceptance OAuth service documents `epd:read`; see `docs/prs-contract.md` | n/a                                                 | external (acc)                                                                                                                                      |
 | Mocked national services | fake-NVI backing store (HAPI), fake LRZa, mock Mitz (user-controllable answer, subscriptions and notifications), mock Dezi (signed v0.7 attestation over an authorization code flow), mock VC issuer (`HealthcareProviderRoleTypeCredential` over OID4VCI; still in compose on :3000, but not on the sandbox authentication path, see E2)                                                                                                                                                                                   | n/a                                                 | existing compose ports                                                                                                                              |
 
 Mitz is mocked deliberately for `/demo`; none of the sandbox organizations or URAs need registration in the real Mitz
@@ -142,9 +143,9 @@ cross-cutting below). Screens (the wireframe numbers these 1-8, splitting record
    patients (section 5.7) start as local only; the presenter picks a fresh one (Anna in the canonical walkthrough), and
    patients locked by a running demo are marked "demo in progress".
 3. **Record overview and sharing (patiëntaanmelding)**: opening Anna's record shows her existing local data plus a "not
-   findable yet" callout. Sharing the patient publishes the NVI localization record (data type, holder URA) and starts
-   the Mitz subscription, both confirmed on screen with their registered attributes; no clinical data leaves the source,
-   only a pointer. The record is then marked shared, an "available sources" card shows where data comes from (initially
+   findable yet" callout. Sharing the patient publishes one NVI localization record per data category the hospital
+   holds (there is no aggregate code; see section 10) and starts the Mitz subscription, both confirmed on screen with
+   their registered attributes; no clinical data leaves the source, only a pointer. The record is then marked shared, an "available sources" card shows where data comes from (initially
    only De Plataan itself), and a prominent "retrieve data" button opens the localize flow.
 4. **Retrieve data** (modal): the localize flow.
 1. Loading state: "localizing where patient data can be found".
@@ -247,7 +248,7 @@ it.
 | "De Plataan has a record for pseudonym(BSN)"         | NVI List resource, published during the patiëntaanmelding (step 3)                                                                                                                                                                                                                                                                                                                                                                                                                 | same                                                    |
 | Zonnebloem's endpoints (FHIR, notification)          | mCSD admin directory (`sunflower-admin`), synced to the query directory. **Must point at Zonnebloem's PEP**: the current seed points straight at HAPI (`http://localhost:7050/fhir/sunflower-patients`), which would bypass PEP/PDP/Mitz entirely, and the compose PEP is configured for URA 00000666; repointing the endpoint and the PEP tenant config is E5 scope, and the seeded address must be deployment-aware (compose-internal hostname locally, cluster URL when hosted) | Knooppunt mCSD, queried by the sandbox backend          |
 | Anna's consent (share with treating physicians: yes) | mock Mitz, answer flippable via the withdraw-consent control on the enriched record                                                                                                                                                                                                                                                                                                                                                                                                | PDP during the authorization step                       |
-| De Plataan's Mitz subscription for Anna              | mock Mitz, created during the patiëntaanmelding; emits a notification on consent change                                                                                                                                                                                                                                                                                                                                                                                            | sandbox backend (renders the step 7 notification)       |
+| De Plataan's Mitz subscription for Anna              | mock Mitz, created during the patiëntaanmelding. It carries no `channel.endpoint`: the composed Knooppunt configures no `notifyendpoint` and the sandbox has nothing listening, so the subscription exists but no notification is delivered until E8 builds the receiving side. The share screen says so rather than promising delivery                                                                                                                                                                                                                                                                                                                                                                                            | sandbox backend (renders the step 7 notification)       |
 | Access policy (BGZ scope requires Mitz consent)      | OPA bundles in the PDP                                                                                                                                                                                                                                                                                                                                                                                                                                                             | PEP and PDP on inbound retrieval                        |
 | Dezi session claims of S. el Amrani                 | mock Dezi login; the attestation becomes a `DeziUserCredential` inside the Nuts node                                                                                                                                                                                                                                                                                                                                                                                                                     | top bar display, PDP authentication and role sub-checks |
 
@@ -271,12 +272,21 @@ HAPI guarantee), user-created records and their NVI registrations are gone, and 
 
 Two gaps against that as implemented, both recorded in `test/testdata/README.md`:
 
-- Reset performs no Mitz cleanup. That has no subscription-state effect yet, because the composed `mitzmock` is the
-  closed-question consent responder and holds no subscriptions (`test/mitzmock/cmd/main.go` starts only that service);
-  it does accumulate raw XACML request bodies, which reset leaves in place. It becomes a real gap the moment a mock
-  holds subscriptions.
+- Reset and recycle clear Mitz subscriptions only where a mock is configured. E3 gave the standalone `mitzmock` a
+  subscription store and a `DELETE` that takes an optional `providerid`/`patientid` scope; `ResetGlobal` clears
+  everything and `RecyclePatient` clears one pair, both when `MITZMOCK_URL` is set. The compose overlay sets it, the
+  base file does not, so a stack brought up without the overlay leaves a running demo's subscription in place — and
+  says so: both paths return `ErrPartialReset` and the UI reports a partial restore rather than a clean one. Reset
+  also leaves the accumulated raw XACML request bodies.
 - NVI Lists registered under a BSN outside the pool survive, because the NVI tenant's pseudonymization interceptor
   rejects a List search that is not scoped to a patient, subject or source, so they cannot be enumerated to be deleted.
+
+A third limitation sits on the Mitz path, outside reset, and is inherited from the Knooppunt rather than chosen here.
+`component/mitz` reports a subscription as created when its request to Mitz fails without a parseable
+`OperationOutcome`: a dial failure, a deadline, a gateway 502, an empty 401. The Knooppunt then answers 201, the share
+screen renders "Consent subscription started" over a subscription that was never created, and the sandbox cannot
+detect it, because success is what it was told. `main` acknowledges the quirk in a `NOTE` in `CreateSubscription`; the
+fix belongs in its own PR against that component.
 
 Seeding is idempotent so reset, redeploy and first boot are the same code path. Because demo state is per patient
 (section 5.7), a global reset is rarely needed between demos: presenters consume fresh patients from the pool, and reset
@@ -377,7 +387,7 @@ The sandbox backend emits one step event per proxied call:
   output); the full records are retained for the deeper inspector level (section 8).
 - Pseudonymization is interior to the Knooppunt (the sandbox backend never calls PRS itself), so `gf: "pseudonym"`
   entries derive from the Knooppunt's OTel span rather than the capture middleware. On the hosted environment that span
-  is a real call to the PRS acceptance environment; offline it is the built-in fake fallback.
+  is a real call to the PRS acceptance environment; offline it is a real call to the mock PRS.
 - Request strings shown in the wireframe's Technical mode are illustrative, not API contracts: the NVI List API requires
   `patient:identifier=...` (not `patient=`), and BGZ retrieval is a set of resource-level FHIR queries rather than one
   `/bgz/Bundle` call.
@@ -473,10 +483,13 @@ tenant and the Mitz subscription, both confirmed on screen with their registered
 sharing an existing local record, not creating a patient; no clinical data leaves the source.
 
 - Extends: Knooppunt NVI List API (called through the sandbox backend; (re)registration needs defined idempotency
-  semantics, the API today does an unconditional create); mitzmock already captures subscriptions, so the E3 delta is
-  controllable consent changes plus notification delivery (consumed by E8).
+  semantics, the API today does an unconditional create); mitzmock already captures subscriptions, so the E3 delta is the
+  subscription itself. Controllable consent changes and notification delivery are E8: E3 creates a subscription with no
+  `channel.endpoint`, because no `notifyendpoint` is configured and nothing here receives one.
 - Acceptance: after registration the NVI holds a List for pseudonym (BSN) with holder URA 00000010, the mock Mitz holds
-  a subscription for De Plataan, and both facts are shown in the confirmation cards.
+  a subscription for De Plataan, and both facts are shown in the confirmation cards without claiming more than the calls
+  established: the cards distinguish a subscription this request started from one it found, and an outcome nobody could
+  establish from a confirmed failure. One exception is inherited from the Knooppunt and recorded in section 5.6.
 
 ### E4 Retrieval chain and result screens
 
@@ -502,11 +515,12 @@ enriched home with per-item source attribution and marker highlighting.
 Everything in section 5: the plataan vector (URA 00000010), the idempotent bootstrap (did:web, wallet-held
 `X509Credential` for the URA, mCSD Organization plus Endpoint, tenant registration), Anna's two-source clinical data,
 the seeded NVI registration for De Zonnebloem, BSN verification against the RvIG test set, and the reset endpoint
-(expunge mutable stores, re-run the loader; not Mitz subscriptions, see section 5.6). The seed must run both as the
+(expunge mutable stores, re-run the loader, and clear Mitz subscriptions where a mock is configured, reporting a partial
+restore where one is not; see section 5.6). The seed must run both as the
 compose init service and as a job in the hosted deployment; reset reuses it. Seeding covers the whole demo pool (section
 5.7), and the reset endpoint gains a per-patient recycle variant; both respect demo locks. The hosted deployment also
-configures the pseudonymisation component against the PRS acceptance environment (`prsurl`); offline compose
-intentionally leaves it unset (fake fallback).
+configures the pseudonymisation component against the PRS acceptance environment (`prsurl`); offline compose points
+the same setting at the mock PRS (PR #561).
 
 - Extends: `test/testdata` vectors, the `init` compose service and its hosted seed-job counterpart, HAPI `$expunge`.
 - Acceptance: a fresh deployment (compose locally, Helm hosted) yields a findable, addressable, retrievable Anna without
@@ -585,8 +599,10 @@ subscription. The open question on the authorization breakdown source (section 1
   00000010/00000020) and that RvIG test-BSNs are accepted there. Note the failure mode: with `prsurl` set, an
   unreachable PRS fails the lookup (no silent fake fallback), so a demo depends on acc availability; decide whether that
   is acceptable or needs a visible degradation.
-- The NVI registration needs a BGZ zorgcontext code: the existing e2e vector registers `MEDAFSPRAAK`; verify the
-  zorgcontext CodeSystem has (or gets) a BGZ entry for the demo's data type.
+- ~~The NVI registration needs a BGZ zorgcontext code.~~ Settled by E3: there is none, and there cannot be. `List.code`
+  binds to `nl-gf-zorgcontext-vs`, whose 28 codes come from `nl-gf-data-categories-cs` and are data categories at FHIR
+  resource granularity. A patient summary is registered as the set of categories it contains, one List each. The
+  `MEDAFSPRAAK` the e2e vector uses is not a member of that value set at all.
 - Demo-lock details (section 5.7 sketches the intent): the exact lock trigger (record open versus share), the TTL, and
   whether the global-reset override needs more friction than a confirmation dialog.
 - The BGZ retrieval contract: the PDP's BGZ policy authorizes resource-level FHIR searches (and is itself marked "to be

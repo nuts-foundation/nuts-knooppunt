@@ -122,6 +122,61 @@ func TestCreateSweepsExpiredSessions(t *testing.T) {
 	require.False(t, ok, "the abandoned session must be the one dropped")
 }
 
+func TestSessionStore_DropReleasesLocks(t *testing.T) {
+	var released []string
+	store := newSessionStore()
+	store.onDrop = func(id string) { released = append(released, id) }
+
+	id := store.create(authSession{ExpiresAt: store.now().Add(time.Hour)})
+	store.drop(id)
+
+	require.Equal(t, []string{id}, released)
+}
+
+func TestSessionStore_ExpiryOnReadReleasesLocks(t *testing.T) {
+	var released []string
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	store := newSessionStore()
+	store.now = func() time.Time { return now }
+	store.onDrop = func(id string) { released = append(released, id) }
+	id := store.create(authSession{ExpiresAt: now.Add(time.Minute)})
+
+	now = now.Add(2 * time.Minute)
+	_, ok := store.get(id)
+
+	require.False(t, ok)
+	require.Equal(t, []string{id}, released, "an expired session must not strand its patient lock")
+}
+
+// create sweeps abandoned expired sessions independently of get. That sweep is
+// the only path that reaches a session whose cookie was discarded, so it is
+// exactly the case where a stranded lock would survive unnoticed.
+func TestSessionStore_CreateSweepReleasesLocks(t *testing.T) {
+	var released []string
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	store := newSessionStore()
+	store.now = func() time.Time { return now }
+	abandoned := store.create(authSession{ExpiresAt: now.Add(time.Minute)})
+
+	store.onDrop = func(id string) { released = append(released, id) }
+	now = now.Add(2 * time.Minute)
+	store.create(authSession{ExpiresAt: now.Add(time.Hour)})
+
+	require.Equal(t, []string{abandoned}, released)
+}
+
+func TestSessionStore_DropAllReleasesEveryLock(t *testing.T) {
+	var released []string
+	store := newSessionStore()
+	first := store.create(authSession{ExpiresAt: store.now().Add(time.Hour)})
+	second := store.create(authSession{ExpiresAt: store.now().Add(time.Hour)})
+	store.onDrop = func(id string) { released = append(released, id) }
+
+	store.dropAll()
+
+	require.ElementsMatch(t, []string{first, second}, released)
+}
+
 func TestSecureCookiesAcceptsAnUppercaseScheme(t *testing.T) {
 	// RFC 3986 section 3.1 makes the scheme case-insensitive, so this is a
 	// valid https URL and must not silently yield a cookie without Secure.

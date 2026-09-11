@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 	"github.com/stretchr/testify/require"
 )
@@ -102,6 +104,36 @@ func TestReset_ProceedsWithOverride(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
 	require.Equal(t, "/demo?notice=reset-done", res.Header.Get("Location"))
 	require.Equal(t, []string{"reset"}, *resets)
+}
+
+func TestReset_PartialResetIsReportedNotFailed(t *testing.T) {
+	cfg, _, _ := fakeConfig()
+	cfg.resetGlobal = func(context.Context) error {
+		return fmt.Errorf("%w: Mitz subscriptions were not cleared", vectors.ErrPartialReset)
+	}
+	srv, client := demoServer(t, cfg)
+
+	res := postForm(t, client, srv, "/demo/reset", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo?notice=reset-partial", res.Header.Get("Location"))
+}
+
+// The recycle half of the split handleRecycle makes: fixtures restored, the
+// consent subscription not cleared, which is neither a failure nor a clean run.
+func TestRecycle_PartialRecycleIsReportedNotFailed(t *testing.T) {
+	cfg, _, _ := fakeConfig()
+	cfg.recyclePatient = func(context.Context, string) error {
+		return fmt.Errorf("%w: the consent subscription was not cleared", vectors.ErrPartialReset)
+	}
+	srv, client := demoServer(t, cfg)
+
+	res := postForm(t, client, srv, "/demo/patients/"+pool.Patients()[0].Key+"/recycle", nil)
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo?notice=recycle-partial", res.Header.Get("Location"))
 }
 
 func TestRecycle_RefusesLockedPatient(t *testing.T) {
@@ -271,6 +303,21 @@ func TestLockOwnerIsNotTheSessionCookie(t *testing.T) {
 	require.NotEmpty(t, locked.Owner)
 	require.NotEqual(t, raw, locked.Owner, "the lock owner must not be the session cookie value")
 	require.NotContains(t, raw, locked.Owner, "the owner must not be a prefix of the session cookie either")
+}
+
+func TestLogout_ReleasesTheSessionsPatientLock(t *testing.T) {
+	cfg, _, _ := fakeConfig()
+	anna := pool.Patients()[0].Key
+	srv, client := demoServer(t, cfg)
+
+	res := postForm(t, client, srv, "/demo/patients/"+anna+"/lock", nil)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+
+	out := postForm(t, client, srv, "/demo/logout", nil)
+	defer out.Body.Close()
+
+	require.False(t, cfg.Locks.IsLocked(anna), "signing out must not strand the patient for the lock TTL")
 }
 
 func TestListPatientsReflectsPoolAndLocks(t *testing.T) {

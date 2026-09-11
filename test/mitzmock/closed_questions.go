@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 // ClosedQuestionService is a mock MITZ server that handles XACML authorization requests
@@ -19,6 +20,7 @@ type ClosedQuestionService struct {
 	url              string
 	requests         [][]byte // Store raw XML requests
 	mu               sync.Mutex
+	subscriptions    *subscriptionStore
 	ResponseDecision string // "Permit" or "Deny"
 	ResponseMessage  string
 }
@@ -34,6 +36,7 @@ type ClosedQuestionService struct {
 func New(listenAddr string) (*ClosedQuestionService, error) {
 	mitz := &ClosedQuestionService{
 		requests:         [][]byte{},
+		subscriptions:    newSubscriptionStore(),
 		ResponseDecision: "Permit", // Default to Permit
 		ResponseMessage:  "Consent granted",
 	}
@@ -49,6 +52,9 @@ func New(listenAddr string) (*ClosedQuestionService, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /geslotenautorisatievraag/xacml3", mitz.handleXACMLAuthz)
 	mux.HandleFunc("GET /status", mitz.handleStatus)
+	mux.HandleFunc("POST /abonnementen/fhir/Subscription", mitz.handleCreateSubscription)
+	mux.HandleFunc("GET /abonnementen/fhir/Subscription", mitz.handleSearchSubscriptions)
+	mux.HandleFunc("DELETE /abonnementen/fhir/Subscription", mitz.handleClearSubscriptions)
 
 	mitz.server = &http.Server{
 		Handler: mux,
@@ -137,6 +143,13 @@ func (m *ClosedQuestionService) handleStatus(w http.ResponseWriter, r *http.Requ
 // GetURL returns the URL of the mock XACML MITZ server
 func (m *ClosedQuestionService) GetURL() string {
 	return m.url
+}
+
+// GetSubscriptions returns every consent subscription this mock captured. The
+// standalone mock is what the harness wires the Knooppunt to, so this is how a
+// test establishes what Mitz holds.
+func (m *ClosedQuestionService) GetSubscriptions() []fhir.Subscription {
+	return m.subscriptions.all()
 }
 
 // GetRequests returns all captured XACML authorization requests (raw XML)

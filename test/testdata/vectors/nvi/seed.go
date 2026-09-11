@@ -6,82 +6,84 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-// Naming systems and the zorgcontext code used for seeded NVI registrations.
-// Kept as local constants so the testdata module stays free of the root
-// module's lib/coding package (module boundary, see plan Decisions).
+// Naming systems and code systems used for seeded NVI registrations. Kept as
+// local constants so the testdata module stays free of the root module's
+// lib/coding package (module boundary, see plan Decisions).
 const (
 	bsnNamingSystem       = "http://fhir.nl/fhir/NamingSystem/bsn"
 	uraNamingSystem       = "http://fhir.nl/fhir/NamingSystem/ura"
 	custodianExtensionURL = "http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian"
-	zorgcontextSystem     = "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-zorgcontext-cs"
+	emptyReasonSystem     = "http://terminology.hl7.org/CodeSystem/list-empty-reason"
 
-	// ZorgcontextCode is the placeholder zorgcontext for seeded BGZ data. DESIGN
-	// §10 wants a real BGZ code; MEDAFSPRAAK is reused until the CodeSystem gains
-	// one (see plan Decisions).
-	ZorgcontextCode        = "MEDAFSPRAAK"
-	zorgcontextCodeDisplay = "Medicatieafspraak"
+	// DataCategorySystem is the CodeSystem behind nl-gf-zorgcontext-vs, the
+	// required binding for List.code. Despite that value set's name, its codes
+	// are data categories at FHIR resource granularity.
+	DataCategorySystem = "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs"
+
+	// OAuthClientIDSystem is a Required Pattern on List.source.identifier.system
+	// in the localization List profile: the source is the OAuth client id of the
+	// installation that registered the record, not a Device identifier.
+	OAuthClientIDSystem = "http://minvws.github.io/generiekefuncties-docs/NamingSystem/oauth-client-id"
 )
 
-// SeedList is a source-agnostic description of one NVI localization record: it
-// says "custodian <CustodianURA> holds data for patient <BSN>". The pool
-// produces one SeedList per (patient, custodian); SeedNVI turns each into a
-// FHIR List and registers it through the Knooppunt.
+// Data categories used by this demo, all members of nl-gf-zorgcontext-vs.
 //
-// The BSN is passed in the clear: the Knooppunt's /nvi endpoint pseudonymizes
-// it (tenant-scoped) before it reaches the NVI store.
-type SeedList struct {
-	CustodianURA string // the organization that holds the data (e.g. 00000020)
-	BSN          string // patient BSN, in the clear
-	SourceSystem string // Device identifier system of the registering source
-	SourceValue  string // Device identifier value of the registering source
+// There is deliberately no BGZ code. The value set lists data categories, not
+// care contexts, so a patient summary is the set of categories it contains. An
+// earlier IG used one aggregate LOINC code and the published IG replaced it.
+const (
+	CategoryPatient            = "Patient"
+	CategoryCondition          = "Condition"
+	CategoryMedicationRequest  = "MedicationRequest"
+	CategoryAllergyIntolerance = "AllergyIntolerance"
+)
+
+// Registration says which data categories one custodian holds for one patient,
+// registered by one installation. It produces one List per category, because the
+// IG registers "the presence of data concerning a specific patient and data
+// category".
+//
+// The BSN is passed in the clear: the Knooppunt's /nvi endpoint pseudonymizes it
+// before it reaches the NVI store.
+type Registration struct {
+	CustodianURA string
+	BSN          string
+	ClientID     string   // OAuth client id of the registering installation
+	Categories   []string // from the constants above
 }
 
-// List builds the FHIR List resource for this registration, matching the shape
-// the NVI registration flow expects (custodian extension, BSN Subject, Device
-// Source, MEDAFSPRAAK zorgcontext Code). See test/e2e/nvi/registration_test.go.
-func (s SeedList) List() fhir.List {
+// BuildList returns the FHIR List for one category of a Registration.
+func BuildList(reg Registration, category string) fhir.List {
 	return fhir.List{
 		Status: fhir.ListStatusCurrent,
 		Mode:   fhir.ListModeWorking,
-		Extension: []fhir.Extension{
-			{
-				Url: custodianExtensionURL,
-				ValueReference: &fhir.Reference{
-					Identifier: &fhir.Identifier{
-						System: to.Ptr(uraNamingSystem),
-						Value:  to.Ptr(s.CustodianURA),
-					},
-				},
-			},
-		},
-		Subject: &fhir.Reference{
-			Identifier: &fhir.Identifier{
-				System: to.Ptr(bsnNamingSystem),
-				Value:  to.Ptr(s.BSN),
-			},
-		},
-		Source: &fhir.Reference{
-			Type: to.Ptr("Device"),
-			Identifier: &fhir.Identifier{
-				System: to.Ptr(s.SourceSystem),
-				Value:  to.Ptr(s.SourceValue),
-			},
-		},
-		Code: &fhir.CodeableConcept{
-			Coding: []fhir.Coding{
-				{
-					System:  to.Ptr(zorgcontextSystem),
-					Code:    to.Ptr(ZorgcontextCode),
-					Display: to.Ptr(zorgcontextCodeDisplay),
-				},
-			},
-		},
+		Extension: []fhir.Extension{{
+			Url: custodianExtensionURL,
+			ValueReference: &fhir.Reference{Identifier: &fhir.Identifier{
+				System: to.Ptr(uraNamingSystem), Value: to.Ptr(reg.CustodianURA),
+			}},
+		}},
+		Subject: &fhir.Reference{Identifier: &fhir.Identifier{
+			System: to.Ptr(bsnNamingSystem), Value: to.Ptr(reg.BSN),
+		}},
+		Source: &fhir.Reference{Identifier: &fhir.Identifier{
+			System: to.Ptr(OAuthClientIDSystem), Value: to.Ptr(reg.ClientID),
+		}},
+		Code: &fhir.CodeableConcept{Coding: []fhir.Coding{{
+			System: to.Ptr(DataCategorySystem), Code: to.Ptr(category),
+		}}},
+		// The List points at the existence of data and never contains it, so it
+		// is empty by design and the profile requires saying why.
+		EmptyReason: &fhir.CodeableConcept{Coding: []fhir.Coding{{
+			System: to.Ptr(emptyReasonSystem), Code: to.Ptr("withheld"),
+		}}},
 	}
 }
 
@@ -93,40 +95,180 @@ func tenantHeader(custodianURA string) fhirclient.PreRequestOption {
 	})
 }
 
-// RegisterList performs a delete-then-create for a single SeedList against the
-// Knooppunt's internal /nvi endpoint, making the registration idempotent: any
-// existing List(s) for this subject under this custodian are removed first,
-// then exactly one fresh List is created. Every call carries the custodian's
-// tenant header so the BSN is pseudonymized consistently.
+// Register publishes a Registration: it removes the records this installation
+// previously registered for this subject and custodian, then creates one List
+// per category.
 //
-// The delete is done as search-then-delete-by-id rather than a single
-// conditional delete: the fake-NVI store does not accept the ":identifier"
-// modifier on a conditional delete (it is only wired for search), so we resolve
-// the ids first and delete each one.
+// The delete is scoped to this client id, not to the whole custodian: deleting
+// every List under the custodian would erase records another installation of
+// the same organization published, which was tolerable for a seed with one
+// writer and is not now that the sandbox calls this live.
 //
-// Note: delete-then-create is not atomic. This is acceptable for a single
-// writer seed (boot/reset only); concurrent live registration could interleave.
-func RegisterList(ctx context.Context, nviBaseURL *url.URL, list SeedList) error {
+// Delete-then-create is what the GF Localization spec prescribes for correcting
+// a record, and the NVI exposes no PUT, so there is no upsert. The sequence is
+// not atomic: a transaction Bundle's conditional operations would be, but the
+// Knooppunt does not pseudonymize entry.request.url and the fake NVI rejects the
+// ":identifier" modifier on a conditional delete. Repeat registration converges
+// when serialized, which the sandbox arranges per process; two processes can
+// still duplicate.
+func Register(ctx context.Context, nviBaseURL *url.URL, reg Registration) error {
 	client := fhirclient.New(nviBaseURL, http.DefaultClient, nil)
 
-	if err := deleteListsForSubject(ctx, client, list.CustodianURA, list.BSN); err != nil {
+	if err := deleteForClient(ctx, client, reg.CustodianURA, reg.BSN, reg.ClientID); err != nil {
 		return err
 	}
-
-	// Create the fresh List.
-	var result fhir.List
-	err := client.CreateWithContext(ctx, list.List(), &result,
-		fhirclient.AtPath("List"),
-		tenantHeader(list.CustodianURA))
-	if err != nil {
-		return fmt.Errorf("create NVI List (custodian=%s): %w", list.CustodianURA, err)
+	for _, category := range reg.Categories {
+		var result fhir.List
+		err := client.CreateWithContext(ctx, BuildList(reg, category), &result,
+			fhirclient.AtPath("List"), tenantHeader(reg.CustodianURA))
+		if err != nil {
+			return fmt.Errorf("create NVI List (custodian=%s, category=%s): %w",
+				reg.CustodianURA, category, err)
+		}
 	}
 	return nil
 }
 
-// lastFour renders just enough of a BSN to correlate an error with a record
-// without putting a national identifier in a log line.
-func lastFour(bsn string) string {
+// DeleteForClient removes the Lists one installation registered for a subject
+// under a custodian.
+func DeleteForClient(ctx context.Context, nviBaseURL *url.URL, custodianURA, bsn, clientID string) error {
+	return deleteForClient(ctx, fhirclient.New(nviBaseURL, http.DefaultClient, nil), custodianURA, bsn, clientID)
+}
+
+func deleteForClient(ctx context.Context, client fhirclient.Client, custodianURA, bsn, clientID string) error {
+	// All three narrow the delete, and an empty value for any of them widens it
+	// instead. custodianOf reports a missing extension as "", so an empty
+	// custodian matches records that are not ours; an empty client id does the
+	// same through the source scope; and an empty BSN makes the subject
+	// parameter "<bsn-system>|", which FHIR R4 token search reads as "any value
+	// in this system", so a delete meant for one patient would take every List
+	// this custodian and client hold.
+	if custodianURA == "" || clientID == "" || bsn == "" {
+		return fmt.Errorf("refusing to delete NVI Lists without all three of custodian, client and BSN (custodian=%q, client=%q, bsn ending %s)",
+			custodianURA, clientID, LastFourOfBSN(bsn))
+	}
+
+	// The client scope is a search parameter, not a filter on the results. The
+	// NVI's pseudonymization interceptor rewrites source.identifier into a Device
+	// reference on storage, precisely so that a source:identifier search can be
+	// answered, so a List read back has no source.identifier to compare: a
+	// client-side filter matches nothing and deletes nothing while every count
+	// still looks plausible.
+	var searchSet fhir.Bundle
+	err := client.SearchWithContext(ctx, "List", url.Values{
+		"subject:identifier": {bsnNamingSystem + "|" + bsn},
+		"source:identifier":  {OAuthClientIDSystem + "|" + clientID},
+	}, &searchSet, tenantHeader(custodianURA))
+	if err != nil {
+		return fmt.Errorf("search NVI Lists to delete (custodian=%s): %w", custodianURA, err)
+	}
+
+	for _, entry := range searchSet.Entry {
+		var existing fhir.List
+		if err := json.Unmarshal(entry.Resource, &existing); err != nil {
+			return fmt.Errorf("parse NVI List to delete (custodian=%s): %w", custodianURA, err)
+		}
+		// The custodian stays a client-side filter: it lives in an extension the
+		// NVI does not index, so there is no search parameter for it.
+		if existing.Id == nil || custodianOf(existing) != custodianURA {
+			continue
+		}
+		if err := client.DeleteWithContext(ctx, "List/"+*existing.Id, tenantHeader(custodianURA)); err != nil {
+			return fmt.Errorf("delete NVI List %s (custodian=%s): %w", *existing.Id, custodianURA, err)
+		}
+	}
+	return nil
+}
+
+// ListsForCustodian returns a subject's Lists under one custodian. The search is
+// by subject only: the tenant header scopes pseudonymization, not the result set,
+// so the custodian is applied afterwards by FilterByCustodian.
+func ListsForCustodian(ctx context.Context, nviBaseURL *url.URL, custodianURA, bsn string) ([]fhir.List, error) {
+	return listsForCustodian(ctx, fhirclient.New(nviBaseURL, http.DefaultClient, nil), custodianURA, bsn)
+}
+
+func listsForCustodian(ctx context.Context, client fhirclient.Client, custodianURA, bsn string) ([]fhir.List, error) {
+	var searchSet fhir.Bundle
+	err := client.SearchWithContext(ctx, "List", url.Values{
+		"subject:identifier": {bsnNamingSystem + "|" + bsn},
+	}, &searchSet, tenantHeader(custodianURA))
+	if err != nil {
+		return nil, fmt.Errorf("search NVI Lists (custodian=%s): %w", custodianURA, err)
+	}
+
+	lists := make([]fhir.List, 0, len(searchSet.Entry))
+	for _, entry := range searchSet.Entry {
+		var list fhir.List
+		if err := json.Unmarshal(entry.Resource, &list); err != nil {
+			return nil, fmt.Errorf("parse NVI List (custodian=%s): %w", custodianURA, err)
+		}
+		lists = append(lists, list)
+	}
+	return FilterByCustodian(lists, custodianURA), nil
+}
+
+// FilterByCustodian keeps the Lists whose localization extension names
+// custodianURA. The NVI does not index that extension, so this is how a subject's
+// Lists are scoped to one custodian, here and in a test that reads the store
+// directly.
+func FilterByCustodian(lists []fhir.List, custodianURA string) []fhir.List {
+	var mine []fhir.List
+	for _, list := range lists {
+		if custodianOf(list) == custodianURA {
+			mine = append(mine, list)
+		}
+	}
+	return mine
+}
+
+// CategoriesOf returns the sorted, deduplicated data categories a set of Lists
+// carries. Codings from other systems are ignored.
+func CategoriesOf(lists []fhir.List) []string {
+	seen := map[string]bool{}
+	for _, list := range lists {
+		if category, ok := categoryOf(list); ok {
+			seen[category] = true
+		}
+	}
+	categories := make([]string, 0, len(seen))
+	for category := range seen {
+		categories = append(categories, category)
+	}
+	sort.Strings(categories)
+	return categories
+}
+
+// UnnamedListCount counts the Lists carrying no data category this build
+// recognizes. Not derivable by subtracting CategoriesOf from the number of
+// Lists: that set is deduplicated, so the subtraction reports a second List of
+// the same category as one whose category cannot be named.
+func UnnamedListCount(lists []fhir.List) int {
+	unnamed := 0
+	for _, list := range lists {
+		if _, ok := categoryOf(list); !ok {
+			unnamed++
+		}
+	}
+	return unnamed
+}
+
+// categoryOf returns the List's data category, if it carries one from the
+// vocabulary this build knows.
+func categoryOf(list fhir.List) (string, bool) {
+	if list.Code == nil {
+		return "", false
+	}
+	for _, coding := range list.Code.Coding {
+		if coding.System != nil && *coding.System == DataCategorySystem && coding.Code != nil {
+			return *coding.Code, true
+		}
+	}
+	return "", false
+}
+
+// LastFourOfBSN renders just enough of a BSN to correlate an error or log line
+// with a record without recording a national identifier.
+func LastFourOfBSN(bsn string) string {
 	if len(bsn) <= 4 {
 		return "****"
 	}
@@ -145,74 +287,4 @@ func custodianOf(list fhir.List) string {
 		}
 	}
 	return ""
-}
-
-// deleteListsForSubject removes every NVI List for a subject under a custodian,
-// via search (by BSN) then delete-by-id. The Knooppunt tokenizes the BSN on both
-// the search and the delete.
-//
-// The custodian is applied as a filter on the results, not as a search
-// parameter. The tenant header scopes pseudonymization, not the result set, and
-// the custodian lives in an extension the NVI does not index, so the search
-// returns every List for this subject whatever organization registered it.
-// Deleting all of them made the seed destroy its own work: a patient gets one
-// registration per custodian, and registering the second deleted the first,
-// leaving one where pool.NVILists promises the patient is findable from either
-// side.
-func deleteListsForSubject(ctx context.Context, client fhirclient.Client, custodianURA, bsn string) error {
-	// Without this an empty URA would match every List whose custodian
-	// extension is missing or malformed, because custodianOf reports those as
-	// "" too, and the filter below would delete them as if they were ours.
-	if custodianURA == "" {
-		return fmt.Errorf("refusing to delete NVI Lists for an empty custodian (bsn ending %s)", lastFour(bsn))
-	}
-	var searchSet fhir.Bundle
-	err := client.SearchWithContext(ctx, "List", url.Values{
-		"subject:identifier": {bsnNamingSystem + "|" + bsn},
-	}, &searchSet, tenantHeader(custodianURA))
-	if err != nil {
-		return fmt.Errorf("search existing NVI Lists (custodian=%s): %w", custodianURA, err)
-	}
-	for _, entry := range searchSet.Entry {
-		var existing fhir.List
-		if err := json.Unmarshal(entry.Resource, &existing); err != nil {
-			return fmt.Errorf("parse existing NVI List (custodian=%s): %w", custodianURA, err)
-		}
-		if existing.Id == nil || custodianOf(existing) != custodianURA {
-			continue
-		}
-		if err := client.DeleteWithContext(ctx, "List/"+*existing.Id, tenantHeader(custodianURA)); err != nil {
-			return fmt.Errorf("delete existing NVI List %s (custodian=%s): %w", *existing.Id, custodianURA, err)
-		}
-	}
-	return nil
-}
-
-// CountLists returns the number of NVI Lists registered for a subject under a
-// custodian, as seen through the Knooppunt (pseudonymized). Used by tests to
-// assert idempotency.
-func CountLists(ctx context.Context, nviBaseURL *url.URL, custodianURA, bsn string) (int, error) {
-	client := fhirclient.New(nviBaseURL, http.DefaultClient, nil)
-	var searchSet fhir.Bundle
-	err := client.SearchWithContext(ctx, "List", url.Values{
-		"subject:identifier": {bsnNamingSystem + "|" + bsn},
-	}, &searchSet, tenantHeader(custodianURA))
-	if err != nil {
-		return 0, fmt.Errorf("search NVI Lists (custodian=%s): %w", custodianURA, err)
-	}
-	// Filtered for the same reason deleteListsForSubject filters: the search is
-	// by subject, so it returns the patient's registration under every
-	// custodian. Counting the raw result would report a patient registered at
-	// both organizations as two registrations for each of them.
-	count := 0
-	for _, entry := range searchSet.Entry {
-		var list fhir.List
-		if err := json.Unmarshal(entry.Resource, &list); err != nil {
-			return 0, fmt.Errorf("parse NVI List (custodian=%s): %w", custodianURA, err)
-		}
-		if custodianOf(list) == custodianURA {
-			count++
-		}
-	}
-	return count, nil
 }

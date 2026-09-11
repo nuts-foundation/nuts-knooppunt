@@ -1,0 +1,42 @@
+{{define "content"}}
+{{template "demobar" .}}
+<div class="app">
+  {{template "sidebar" .}}
+  <div class="main-col">
+    {{template "topbar" .}}
+    <main class="content content-narrow">
+      <div class="card card-flush">
+        {{range .Patients}}
+        <form method="post" action="/demo/ehr/patients/{{.Key}}/open" class="prow-form">
+          <button class="prow" type="submit" {{if .Locked}}disabled{{end}}>
+            <span class="pav">{{.Initials}}</span>
+            <span class="pinfo">
+              <span class="pn">{{.Name}}</span>
+              <span class="pm">{{.BirthDate}} · BSN <span class="mono">{{.BSN}}</span></span>
+            </span>
+            {{if .Locked}}<span class="stat-chip busy">Demo in progress</span>
+            {{else if .NVIUnknown}}<span class="stat-chip unknown">Status unknown</span>
+            {{else if .Shared}}<span class="stat-chip gf">Shared via GF</span>
+            {{else}}<span class="stat-chip local">Local only</span>{{end}}
+            <span class="chev">&rsaquo;</span>
+          </button>
+        </form>
+        {{end}}
+      </div>
+      <div class="foot">"Local only" records exist solely in De Plataan's own store: other care
+      providers cannot find them. Sharing a patient through the generic functions makes the record
+      locatable. "Status unknown" means the NVI's answer could not be established, by failure or by not
+      being configured, not that the patient is unshared.</div>
+
+      <div class="card">
+        <h3>Session</h3>
+        <div class="card-action">
+          <form method="post" action="/demo/authorize"><button class="btn solid" type="submit">Show what is in my access token</button></form>
+          <div class="btn-sub">Asks the Nuts node for a service access token and reads back the claims it carries.</div>
+        </div>
+      </div>
+    </main>
+  </div>
+  {{template "viewer" .}}
+</div>
+{{end}}

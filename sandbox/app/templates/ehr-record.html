@@ -1,0 +1,66 @@
+{{define "content"}}
+{{template "demobar" .}}
+<div class="app">
+  {{template "sidebar" .}}
+  <div class="main-col">
+    {{template "topbar" .}}
+    <main class="content content-narrow">
+      {{with .Patient}}
+      <div class="card">
+        <h3>{{.Name}}</h3>
+        <div class="h-sub">{{.BirthDate}} · BSN <span class="mono">{{.BSN}}</span></div>
+        {{if .NVIUnknown}}
+          <span class="stat-chip unknown">Status unknown</span>
+          <p>The NVI's answer could not be established, so it is not known whether this record is
+          findable. The sandbox log carries the reason: an unconfigured Knooppunt is reported at
+          startup, a failed lookup where it happens.</p>
+        {{else if .Shared}}
+          {{if .Subscribed}}<span class="stat-chip gf">Shared via GF</span>
+          {{else if .SubscriptionUnknown}}<span class="stat-chip unknown">Shared via GF · subscription status unknown</span>
+          {{else}}<span class="stat-chip partial">Shared via GF · consent subscription missing</span>{{end}}
+          {{if .Categories}}
+          <p>Other care providers can find this record through the NVI, for these data categories:</p>
+          <ul class="cat-list">{{range .Categories}}<li class="mono">{{.}}</li>{{end}}</ul>
+          {{if .UnnamedRecords}}
+          <p>Alongside those, the NVI holds {{.UnnamedRecords}} further localization record(s) for this
+          patient whose data category is missing or from a code system this build cannot name.</p>
+          {{end}}
+          {{else}}
+          <p>Other care providers can find this record through the NVI. Its localization records carry no
+          data category this build recognizes, so they cannot be named here.</p>
+          {{end}}
+          {{if not .Subscribed}}
+          <div class="card-action">
+            <form method="post" action="/demo/ehr/patients/{{.Key}}/subscribe">
+              <button class="btn solid" type="submit">Start the consent subscription</button>
+            </form>
+            {{if .SubscriptionUnknown}}
+            <div class="btn-sub">Retries only the Mitz step; the localization records stay as they
+            are. Mitz could not be asked whether a subscription already exists, so this may create a
+            second one. Against the mock that is harmless, because it keys a subscription on the
+            provider and patient; against the national Mitz it would not be.</div>
+            {{else}}
+            <div class="btn-sub">Retries only the Mitz step. The localization records stay as they are.</div>
+            {{end}}
+          </div>
+          {{end}}
+        {{else}}
+          <span class="stat-chip local">Not findable yet</span>
+          <p>This record exists only in De Plataan's own store. Other care providers cannot find it.</p>
+        {{end}}
+        <div class="card-action">
+          <a class="btn solid" href="/demo/ehr/patients/{{.Key}}/share">Share via the generic functions</a>
+          <div class="btn-sub">Publishes a localization record per data category and starts a Mitz
+          consent subscription. No clinical data leaves De Plataan.</div>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Available sources</h3>
+        <div class="data-empty">Ziekenhuis De Plataan only. Retrieving from other sources arrives with E4.</div>
+      </div>
+      {{end}}
+    </main>
+  </div>
+  {{template "viewer" .}}
+</div>
+{{end}}

@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sort"
@@ -14,10 +16,19 @@ import (
 )
 
 var notices = map[string]string{
-	"reset-done":     "Dataset restored to the seeded fixtures.",
-	"recycle-done":   "Patient restored to the seeded state.",
-	"reset-disabled": "Reset is unavailable: the sandbox is not wired to the Knooppunt in this environment.",
-	"signed-out":     "Signed out. The Dezi session has been cleared.",
+	"reset-done":            "Dataset restored to the seeded fixtures.",
+	"reset-partial":         "Dataset restored, but some state could not be cleared. Check the sandbox logs.",
+	"recycle-done":          "Patient restored to the seeded state.",
+	"recycle-partial":       "Patient restored, but the consent subscription could not be cleared. Check the sandbox logs.",
+	"reset-disabled":        "Reset is unavailable: it needs both KNOOPPUNT_INTERNAL_URL and HAPI_BASE_URL, and one of them is unset. Sharing only needs the first, so it can work while this does not.",
+	"signed-out":            "Signed out. The Dezi session has been cleared.",
+	"patient-busy":          "That patient is in use by another demo run. Pick a different one.",
+	"mitz-retry-done":       "Consent subscription started.",
+	"mitz-retry-existing":   "A consent subscription for this patient was already registered at Mitz. This retry did not create a second one.",
+	"mitz-retry-registered": "Mitz accepted the subscription. Whether one already existed could not be established, so this may have found rather than created it.",
+	"mitz-retry-failed":     "Mitz confirms there is still no subscription. The call failed; try again.",
+	"mitz-retry-unknown":    "The call failed and Mitz could not be asked whether it went through anyway. Check the record before retrying: another attempt may create a second subscription.",
+	"mitz-disabled":         "Mitz is not wired up in this environment.",
 }
 
 // Config holds the sandbox backend's runtime dependencies. The two URLs point at
@@ -35,6 +46,21 @@ type Config struct {
 	resetGlobal    func(ctx context.Context) error
 	recyclePatient func(ctx context.Context, patientKey string) error
 
+	// The NVI half of the share flow, wired in NewConfigFromEnv and injectable so
+	// handler tests need no live NVI.
+	nviLookup   func(ctx context.Context, bsn string) (nviRecords, error)
+	nviRegister func(ctx context.Context, bsn string, categories []string) error
+
+	// The Mitz half. mitzSubscribed is the mock-only reconciliation query
+	// (mitzclient.go); it stays nil when MITZMOCK_URL is unset, and callers must
+	// render nil as unknown, not as "not subscribed".
+	mitzSubscribe  func(ctx context.Context, bsn string) error
+	mitzSubscribed func(ctx context.Context, bsn string) (bool, error)
+
+	// mitzMockURL is the mock's base URL, handed to reset and recycle for
+	// subscription cleanup. Nil when MITZMOCK_URL is unset.
+	mitzMockURL *url.URL
+
 	// sessions and secureCookie carry the session half of reset, which E2 owns.
 	// A reset restores the dataset AND signs everyone out; doing only the first
 	// would leave practitioners holding sessions for a world that no longer
@@ -50,15 +76,20 @@ func (c Config) configured() bool {
 }
 
 // NewConfigFromEnv builds a Config from the KNOOPPUNT_INTERNAL_URL and
-// HAPI_BASE_URL environment variables. When both are set, the reset functions
-// are wired to the vectors package; otherwise they are left nil (reset disabled).
+// HAPI_BASE_URL environment variables.
+//
+// The NVI client talks only to the Knooppunt, so it comes up as soon as
+// KNOOPPUNT_INTERNAL_URL is set; reset and recycle also rewrite the FHIR store
+// and need HAPI_BASE_URL as well. Gating both on both disabled the NVI over a
+// variable it never reads, and the only symptom was every patient reading
+// "status unknown".
 func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 	cfg := Config{
 		KnooppuntInternalURL: getenv("KNOOPPUNT_INTERNAL_URL"),
 		HAPIBaseURL:          getenv("HAPI_BASE_URL"),
 		Locks:                NewRegistry(),
 	}
-	if cfg.KnooppuntInternalURL == "" || cfg.HAPIBaseURL == "" {
+	if cfg.KnooppuntInternalURL == "" {
 		return cfg, nil
 	}
 
@@ -66,18 +97,56 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("invalid KNOOPPUNT_INTERNAL_URL: %w", err)
 	}
+
+	clientID := getenv("SANDBOX_NVI_CLIENT_ID")
+	if clientID == "" {
+		clientID = pool.PlataanClientID
+	}
+	cfg.nviLookup, cfg.nviRegister = nviFuncs(knooppuntURL, clientID)
+
+	// Through the injected getenv, not envOr, which reads os.Getenv directly and
+	// would bypass what a test injects.
+	facilityType := getenv("SANDBOX_FACILITY_TYPE")
+	if facilityType == "" {
+		facilityType = "Z3"
+	}
+	cfg.mitzSubscribe = mitzSubscribeFunc(knooppuntURL, plataanURA, facilityType)
+	if raw := getenv("MITZMOCK_URL"); raw != "" {
+		mitzMockURL, err := url.Parse(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid MITZMOCK_URL: %w", err)
+		}
+		cfg.mitzMockURL = mitzMockURL
+		cfg.mitzSubscribed = mitzSubscribedFunc(mitzMockURL, plataanURA)
+	}
+
+	if cfg.HAPIBaseURL == "" {
+		return cfg, nil
+	}
 	hapiURL, err := url.Parse(cfg.HAPIBaseURL)
 	if err != nil {
 		return Config{}, fmt.Errorf("invalid HAPI_BASE_URL: %w", err)
 	}
+	// One target for both, carrying the client id the share flow publishes
+	// under; SandboxTarget says why the id has to travel with the URLs.
+	target := vectors.SandboxTarget{
+		HAPIBaseURL:              hapiURL,
+		KnooppuntInternalBaseURL: knooppuntURL,
+		MitzMockBaseURL:          cfg.mitzMockURL,
+		NVIClientID:              clientID,
+	}
 	cfg.resetGlobal = func(ctx context.Context) error {
-		return vectors.ResetGlobal(ctx, hapiURL, knooppuntURL)
+		return vectors.ResetGlobal(ctx, target)
 	}
 	cfg.recyclePatient = func(ctx context.Context, patientKey string) error {
-		return vectors.RecyclePatient(ctx, hapiURL, knooppuntURL, patientKey)
+		return vectors.RecyclePatient(ctx, target, patientKey)
 	}
 	return cfg, nil
 }
+
+// nviConfigured reports whether the sandbox can reach the NVI. main uses it to
+// say which feature is off, rather than letting one message stand for both.
+func (c Config) nviConfigured() bool { return c.nviLookup != nil }
 
 // patientStatus is the JSON shape returned by GET /demo/patients.
 type patientStatus struct {
@@ -97,6 +166,10 @@ func NewMux(cfg Config) *http.ServeMux {
 	}
 
 	sessions := newSessionStore()
+	// A session ending releases whatever patient it held.
+	sessions.onDrop = func(sessionID string) {
+		cfg.Locks.ReleaseOwner(lockOwner(&authSession{ID: sessionID}))
+	}
 	client := newDeziClient(deziConfigFromEnv())
 	nuts := newNutsClient(nutsConfigFromEnv())
 	clientStates := newClientStateStore()
@@ -318,16 +391,12 @@ func NewMux(cfg Config) *http.ServeMux {
 		render(w, "authorize.html", rendered)
 	}))
 
-	mux.HandleFunc("GET /demo/ehr", requireSession(signedIn, func(w http.ResponseWriter, r *http.Request, session *authSession) {
-		view := session.view()
-		render(w, "ehr-home.html", page{
-			Title: "Home · Plataan EHR", Guise: "ehr",
-			Scenario: scenario, ShowReset: true,
-			BodyClass: "hood-open", BodyAttrs: viewerBodyAttrs(true),
-			Active: "dossier", TopTitle: "Home", ViewerOpen: true,
-			Session: &view,
-		})
-	}))
+	mux.HandleFunc("GET /demo/ehr", requireSession(signedIn, cfg.handlePatientList))
+	mux.HandleFunc("POST /demo/ehr/patients/{key}/open", requireSession(signedIn, cfg.handleOpenPatient))
+	mux.HandleFunc("GET /demo/ehr/patients/{key}", requireSession(signedIn, cfg.handlePatientRecord))
+	mux.HandleFunc("POST /demo/ehr/patients/{key}/subscribe", requireSession(signedIn, cfg.handleSubscribe))
+	mux.HandleFunc("GET /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.handleShareForm))
+	mux.HandleFunc("POST /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.handleShare))
 	return mux
 }
 
@@ -390,6 +459,11 @@ func (c Config) handleReset(w http.ResponseWriter, r *http.Request) {
 	c.Locks.ReleaseAll()
 
 	if resetErr != nil {
+		if errors.Is(resetErr, vectors.ErrPartialReset) {
+			slog.Warn("reset completed with warnings", "error", resetErr)
+			http.Redirect(w, r, "/demo?notice=reset-partial", http.StatusSeeOther)
+			return
+		}
 		http.Error(w, "reset failed: "+resetErr.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -418,6 +492,15 @@ func (c Config) handleRecycle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := c.recyclePatient(r.Context(), key); err != nil {
+		// Partial is neither failed nor clean, as in handleReset: the fixtures
+		// were restored and something optional was not cleared. Reporting a
+		// failure sends the presenter away from a working patient; reporting
+		// clean hides a subscription that outlived its demo.
+		if errors.Is(err, vectors.ErrPartialReset) {
+			slog.Warn("recycle completed with warnings", "patient", key, "error", err)
+			http.Redirect(w, r, "/demo?notice=recycle-partial", http.StatusSeeOther)
+			return
+		}
 		http.Error(w, "recycle failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

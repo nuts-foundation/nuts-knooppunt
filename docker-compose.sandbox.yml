@@ -180,6 +180,11 @@ services:
   # authorization route returns a token error the operator has no way to read as
   # "the bootstrap never ran".
   gf-sandbox:
+    environment:
+      # Lets a reset clear captured consent subscriptions, and lets the record
+      # screen reconcile a subscription whose response never arrived. Unset means
+      # both degrade to "unknown" rather than failing.
+      MITZMOCK_URL: http://mitzmock:8080
     depends_on:
       nuts-bootstrap-healthcheck:
         condition: service_completed_successfully

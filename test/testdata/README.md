@@ -60,8 +60,11 @@ fixture:
 - **De Zonnebloem side** (`sunflower-patients` tenant): Patient (same BSN, own
   local id) + AllergyIntolerance (penicillin-class) + MedicationRequests
   (metoprolol, metformin) + Conditions (type 2 diabetes, hypertension).
-- **NVI localization**: one List per custodian (Plataan 00000010 and Zonnebloem
-  00000020), so the patient is findable by BSN (pseudonymized) from either side.
+- **NVI localization**: one List per data category De Zonnebloem holds
+  (`Patient`, `AllergyIntolerance`, `MedicationRequest`, `Condition`), so the
+  patient is findable by BSN (pseudonymized) at the source. De Plataan's side is
+  deliberately not seeded: publishing it is what the GF Sandbox demonstrates
+  when a practitioner shares a patient.
 
 All FHIR resource IDs are derived deterministically from the patient key, so
 seeding is an idempotent PUT-by-fixed-id upsert. Clones keep the same BGZ
@@ -83,8 +86,13 @@ a PUT-by-fixed-id upsert and there is no `$expunge` on the normal path.
 
 `vectors.SeedNVI(ctx, knooppuntInternalBaseURL)` registers each pool patient's NVI
 Lists through the Knooppunt's internal `/nvi` endpoint. It is idempotent via
-delete-then-create per subject+custodian (the Knooppunt's `POST /nvi/List` is
-otherwise an unconditional create, which would accumulate duplicates).
+delete-then-create per subject+custodian+**client** (the Knooppunt's
+`POST /nvi/List` is otherwise an unconditional create, which would accumulate
+duplicates). The client scope is the OAuth client id in `List.source`, and it is
+applied as a `source:identifier` search parameter rather than as a filter on the
+records that come back: the NVI rewrites `source.identifier` into a Device
+reference on storage, so a client-side comparison would match nothing and delete
+nothing while every count still looked right.
 
 `vectors.Load` writes the demo organizations into the seeded **local** LRZa tenant
 (`lrza-mcsd-admin`), which is what `KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL` must point
@@ -114,10 +122,14 @@ subject's wallet, which is empty until the credential is stored.
 
 ### Reset variants (used by the GF Sandbox backend)
 
-- `vectors.ResetGlobal(ctx, hapiBaseURL, knooppuntInternalBaseURL)` — clears the
+- `vectors.ResetGlobal(ctx, target)`, where `target` is a `vectors.SandboxTarget`
+  carrying the HAPI and Knooppunt base URLs, the mock Mitz base URL (nil when none
+  is configured) and the NVI client id the caller publishes under — clears the
   mutable patient stores (removing user-created records, which have random ids a
-  plain re-seed cannot overwrite), then re-runs `Load` + `SeedNVI`. This is the
-  "restore fixtures" path.
+  plain re-seed cannot overwrite), then re-runs `Load` + `SeedNVI`, removes the
+  localization records the sandbox published on De Plataan's side, and clears the
+  mock Mitz's subscriptions when one is configured. This is the "restore fixtures"
+  path, and it returns every pool patient to the unshared state a demo starts from.
 
   Clearing is a search-and-delete per resource type with `_cascade=delete`, **not**
   `$expunge`. HAPI applies `expungeEverything=true` server-wide regardless of the
@@ -127,9 +139,15 @@ subject's wallet, which is empty until the credential is stored.
   `docker compose down -v`. The partition-scoped `?_expunge=true` form is correct
   but asynchronous (a Batch2 job on a 60s maintenance schedule), which is too slow
   for a reset behind a UI button. `TestResetGlobal_PreservesPartitions` guards this.
-- `vectors.RecyclePatient(ctx, hapiBaseURL, knooppuntInternalBaseURL, patientKey)`
-  — restores one patient to its seeded, unshared state (re-registers its NVI Lists
-  and re-PUTs its FHIR resources) without touching any other patient.
+- `vectors.RecyclePatient(ctx, target, patientKey)` — restores one patient to its
+  seeded, unshared state (re-registers its NVI Lists, re-PUTs its FHIR resources
+  and clears that patient's consent subscription) without touching any other
+  patient. The subscription delete is scoped to one `providerid`/`patientid` pair
+  precisely so a recycle cannot cancel a concurrent demo's.
+
+  The client id travels in the target rather than being read from a constant on
+  each side: the sandbox publishes under `SANDBOX_NVI_CLIENT_ID` when it is set,
+  and a cleanup holding a different id deletes nothing while reporting a restore.
 
 ### Known limitations
 
@@ -137,16 +155,28 @@ subject's wallet, which is empty until the credential is stored.
   (they have random ids). A global reset is the escape hatch until a later epic
   tags user-created resources for targeted deletion.
 - **NVI Lists registered under a BSN outside the pool survive a global reset.**
+  Pool BSNs are handled: `SeedNVI` restores De Zonnebloem's registrations and
+  `ResetGlobal` removes De Plataan's by client id. A BSN that is not in the pool
+  is reachable by neither.
   The NVI tenant's pseudonymization interceptor rejects any `List` search not
   scoped to a patient/subject/source, so they cannot be enumerated to be deleted,
   and `SeedNVI`'s delete-then-create only covers the pool's own BSNs. DESIGN §5.6
   wants those gone; that needs a custodian-scoped listing on the Knooppunt (or the
   seed tracking what it registered).
-- **Mitz subscriptions are not reset** by these paths. The compose `mitzmock`
-  service is a stateless consent responder (closed questions only); a running
-  demo's subscription survives a reset. This is expected, not a bug.
-- **NVI delete-then-create is not atomic.** Acceptable for a single-writer seed
-  (boot/reset only); concurrent seed + live registration could interleave.
+- **Mitz subscriptions are only cleared when the mock is configured.**
+  `ResetGlobal` issues a `DELETE /abonnementen/fhir/Subscription` against
+  `SandboxTarget.MitzMockBaseURL`, which the sandbox fills from `MITZMOCK_URL`;
+  `RecyclePatient` issues the same delete scoped to one `providerid`/`patientid`
+  pair, so it cannot cancel a concurrent demo's subscription. With the URL unset
+  the subscription survives, and both paths return `ErrPartialReset` so the UI
+  reports a partial restore: the sandbox subscribes through the Knooppunt, which
+  reaches Mitz whether or not `MITZMOCK_URL` was ever set, so reporting a clean
+  consent state there would be untrue. Reaching a configured mock and failing is
+  the same answer for the same reason: cleanup must not depend on a mock's
+  availability, and it must not claim a clean slate it did not produce.
+- **NVI delete-then-create is not atomic.** The seed is a single writer (boot and
+  reset). The sandbox's live registration is serialized per patient within one
+  process (see `sandbox/app/README.md`); two processes can still interleave.
 - **The composed PDP is single-data-holder.** `KNPT_PDP_PIP_URL` points at
   `sunflower-patients`, because the PIP is a data-holder-side lookup and the
   composed Knooppunt acts as Zonnebloem's PDP. Once both demo organizations serve
@@ -154,8 +184,13 @@ subject's wallet, which is empty until the credential is stored.
 - **`data/nuts` is not a persistent volume.** Recreating the knooppunt container
   mints new DIDs; the seed re-runs credential issuance against whatever DIDs
   exist, so re-run the seed after such a restart.
-- **`MEDAFSPRAAK` is a placeholder zorgcontext** for the seeded BGZ data; swap it
-  when the CodeSystem gains a real BGZ code.
+- **There is no BGZ code, and there will not be one.** `List.code` is bound to
+  `nl-gf-zorgcontext-vs`, whose 28 codes come from `nl-gf-data-categories-cs` and
+  are data categories at FHIR resource granularity (`Condition`,
+  `MedicationRequest`, `Patient`, ...). A patient summary is therefore the set of
+  categories it contains, registered as one List each. An earlier IG used a
+  single aggregate LOINC code and the published IG replaced it; `MEDAFSPRAAK`,
+  which this seed used to register, is not a member of that value set at all.
 
 ## AC1 walkthrough: findable, addressable, retrievable
 
