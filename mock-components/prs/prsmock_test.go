@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudflare/circl/oprf"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonymisation"
 	"github.com/nuts-foundation/nuts-knooppunt/mock-components/prs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,13 +29,11 @@ const (
 // blind produces what a client sends the service for input: the blinded
 // ristretto255 element (padded base64url, the encoding the service's own
 // reference client uses) and the blind factor the recipient needs afterwards.
+// It is the Knooppunt's own client step, not a copy of it, so a change there
+// shows up here.
 func blind(t *testing.T, input []byte) (blindedInput string, blindFactor string) {
 	t.Helper()
-	finalizeData, request, err := oprf.NewClient(oprf.SuiteRistretto255).Blind([][]byte{input})
-	require.NoError(t, err)
-	element, err := request.Elements[0].MarshalBinary()
-	require.NoError(t, err)
-	scalar, err := finalizeData.CopyBlinds()[0].MarshalBinary()
+	element, scalar, err := pseudonymisation.BlindInput(input)
 	require.NoError(t, err)
 	return base64.URLEncoding.EncodeToString(element), base64.URLEncoding.EncodeToString(scalar)
 }
@@ -169,9 +167,8 @@ func TestService_Eval(t *testing.T) {
 		var element []byte
 		for attempt := 0; ; attempt++ {
 			require.Less(t, attempt, 100, "no element with + or / in its standard encoding")
-			_, request, err := oprf.NewClient(oprf.SuiteRistretto255).Blind([][]byte{[]byte("input")})
-			require.NoError(t, err)
-			element, err = request.Elements[0].MarshalBinary()
+			var err error
+			element, _, err = pseudonymisation.BlindInput([]byte("input"))
 			require.NoError(t, err)
 			if strings.ContainsAny(base64.StdEncoding.EncodeToString(element), "+/") {
 				break

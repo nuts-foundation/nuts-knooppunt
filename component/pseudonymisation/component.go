@@ -79,14 +79,10 @@ func (c Component) IdentifierToToken(ctx context.Context, identifier fhir.Identi
 		return nil, err
 	}
 
-	// Step 5: Extract the blind factor so the consuming system can deblind
-	blindFactorBytes, err := blinded.finalizeData.CopyBlinds()[0].MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("marshaling blind factor: %w", err)
-	}
-
-	// Build the subject identifier value as a base64url-encoded JSON object per spec
-	subjectIdentifierValue, err := marshalSubjectIdentifier(blindFactorBytes, evaluatedOutput)
+	// Step 5: Build the subject identifier value as a base64url-encoded JSON
+	// object per spec, carrying the blind factor so the consuming system can
+	// deblind
+	subjectIdentifierValue, err := marshalSubjectIdentifier(blinded.blindFactor, evaluatedOutput)
 	if err != nil {
 		return nil, err
 	}

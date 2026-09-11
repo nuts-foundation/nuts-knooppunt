@@ -32,7 +32,7 @@ func deriveKey(identifier prsIdentifier, recipientOrganizationURA string, recipi
 
 type blindedIdentifier struct {
 	blindedInput []byte
-	finalizeData *oprf.FinalizeData
+	blindFactor  []byte
 }
 
 func blindIdentifier(identifier prsIdentifier, recipientOrganization string, recipientScope string) (*blindedIdentifier, error) {
@@ -40,18 +40,30 @@ func blindIdentifier(identifier prsIdentifier, recipientOrganization string, rec
 	if err != nil {
 		return nil, fmt.Errorf("deriving key: %w", err)
 	}
+	blindedInput, blindFactor, err := BlindInput(derivedInput)
+	if err != nil {
+		return nil, err
+	}
+	return &blindedIdentifier{blindedInput: blindedInput, blindFactor: blindFactor}, nil
+}
 
-	client := oprf.NewClient(oprf.SuiteRistretto255)
-	finalizeData, blindedInput, err := client.Blind([][]byte{derivedInput})
+// BlindInput is the Blind step of RFC 9497 OPRF(ristretto255, SHA-512) on
+// input: the blinded group element the PRS evaluates and the blind factor the
+// recipient de-blinds with, both in the suite's encoding. It is exported so
+// that the mock PRS's tests drive the mock with this component's own client
+// step rather than a copy of it.
+func BlindInput(input []byte) (blindedInput []byte, blindFactor []byte, err error) {
+	finalizeData, request, err := oprf.NewClient(oprf.SuiteRistretto255).Blind([][]byte{input})
 	if err != nil {
-		return nil, fmt.Errorf("oprf: %w", err)
+		return nil, nil, fmt.Errorf("oprf: %w", err)
 	}
-	blindedInputData, err := blindedInput.Elements[0].MarshalBinary()
+	blindedInput, err = request.Elements[0].MarshalBinary()
 	if err != nil {
-		return nil, fmt.Errorf("oprf marshaling blinded input: %w", err)
+		return nil, nil, fmt.Errorf("oprf marshaling blinded input: %w", err)
 	}
-	return &blindedIdentifier{
-		blindedInput: blindedInputData,
-		finalizeData: finalizeData,
-	}, nil
+	blindFactor, err = finalizeData.CopyBlinds()[0].MarshalBinary()
+	if err != nil {
+		return nil, nil, fmt.Errorf("marshaling blind factor: %w", err)
+	}
+	return blindedInput, blindFactor, nil
 }

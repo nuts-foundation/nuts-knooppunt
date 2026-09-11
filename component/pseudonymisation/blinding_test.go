@@ -83,5 +83,6 @@ func Test_blindIdentifier(t *testing.T) {
 
 	require.Len(t, blinded.blindedInput, 32)
 	require.NoError(t, group.Ristretto255.NewElement().UnmarshalBinary(blinded.blindedInput), "a ristretto255 element")
-	require.Len(t, blinded.finalizeData.CopyBlinds(), 1)
+	require.Len(t, blinded.blindFactor, 32)
+	require.NoError(t, group.Ristretto255.NewScalar().UnmarshalBinary(blinded.blindFactor), "a ristretto255 scalar")
 }
