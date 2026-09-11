@@ -97,6 +97,7 @@ defaults instead of extending them.
 | `SANDBOX_NUTS_SUBJECT` | `plataan` | the Nuts subject the token is requested for. Must name the subject `sandbox/bootstrap-nuts.sh` creates, whose wallet holds the `X509Credential` |
 | `SANDBOX_BGZ_SCOPE` | `bgz` | the scope requested. Must be a key in the definition the node loads, which the sandbox renders to `sandbox/.certs/policy/bgz.json` from `sandbox/policy/bgz.json.template`, or the node answers `invalid_scope` |
 | `SANDBOX_AUTH_SERVER` | `http://localhost:8080/nuts/oauth2/plataan` | the authorization server the token is requested from. It has to satisfy two requirements at once: equal the issuer the node advertises, and be reachable **by the node**, which fetches `/.well-known/oauth-authorization-server` from it before requesting a token (nuts-node `auth/client/iam/openid4vp.go`, `RequestRFC021AccessToken` to `AuthorizationServerMetadata`). Both hold here because the node dials it from inside its own container, where port 8080 is its own public listener. A split deployment has to find one address that satisfies both |
+| `SANDBOX_AUTH_SERVER_BASE` | `http://localhost:8080/nuts/oauth2` | where a **source's** authorization server is built from. Retrieval requests its token from the organization holding the data, not from De Plataan's own server, and a source's Nuts subject is its URA, so the address is this base plus the URA the directory step resolved. Separate from `SANDBOX_AUTH_SERVER` because that one names this installation's own subject, which is not a URA. The same two requirements apply to it |
 | `SANDBOX_FACILITY_TYPE` | `Z3` | the facility type asserted in the organization context credential, the only thing on this path that carries one |
 | `SANDBOX_NVI_CLIENT_ID` | `gf-sandbox-plataan` | `List.source.identifier` on published localization records. Synthetic: no NVI OAuth client is registered for the demo, and this is not the `gf-sandbox` client id used on the Dezi flow. The client id is the scope a registration is deleted by, so recycle and the global reset receive this same value in `vectors.SandboxTarget` rather than reaching for the compiled-in default; overriding it here therefore also moves what those clean up. |
 | `MITZMOCK_URL` | unset | Base URL of the mock Mitz. Enables subscription reconciliation and the consent-subscription cleanup in reset and recycle. Unset means the share flow reports an unreconciled Mitz error as unknown rather than failed, and both cleanup paths report a partial restore rather than a clean one. The sandbox compose overlay sets it; the base `--profile sandbox` invocation does not. |
@@ -148,6 +149,46 @@ created when its request to Mitz fails without a parseable `OperationOutcome` (a
 deadline, a gateway 502, an empty 401): it answers 201, the share screen renders "Consent subscription
 started", and nothing on this side can tell the difference. `main` records the quirk in a `NOTE` in
 `CreateSubscription`; the fix belongs in its own PR against that component.
+
+## Retrieval (E4)
+
+Retrieving a patient summary runs four steps in one request, server-rendered like the share flow, with
+no SSE: the step-event stream stays with E6.
+
+1. **Localization.** The NVI is searched for every localization record about this patient, not just De
+   Plataan's, and the results are grouped per custodian. Our own registration is dropped: it describes
+   the record already on screen.
+2. **Addressing.** Each remaining custodian is resolved in the mCSD query directory with
+   `Organization?identifier=ura|{URA}&_include=Organization:endpoint`. The Knooppunt syncs that
+   directory but exposes no query API, so the sandbox reads the replica directly, which is what the
+   Addressing spec has a Query Client do.
+3. **Authentication.** An access token is requested from the *source's* authorization server, with the
+   session's Dezi attestation as `id_token`. The requester stays De Plataan's subject, which is the
+   wallet holding the credential the source's presentation definition asks for.
+4. **Retrieval.** The Patient search both opens the BGZ and resolves the source's own id for this
+   patient, which every later search is scoped to. Which categories are asked for comes from the NVI;
+   which query retrieves one comes from BGZ 2017, which is what `component/pdp/policies/bgz/policy.rego`
+   enforces. A refusal is rendered as a refusal, never as an error.
+
+Nothing is retrieved before the practitioner confirms a source, and the confirmed URA is re-checked
+against a fresh localization rather than trusted from the form.
+
+Four limitations are carried deliberately:
+
+- **Endpoint selection is narrower than the spec.** It honours `status` and `period`, both SHALLs, but
+  does not match on `connectionType` and `payloadType`. The seeded Endpoints carry neither in the form
+  the spec's value sets define: `connectionType` uses a system outside NL GF Connection Types, and
+  `payloadType` is absent although the profile makes it `1..*`. Matching on them would reject every
+  endpoint in this demo.
+- **The authorization server is constructed, not discovered.** The spec has an `oauth-nuts` Endpoint
+  connection type for exactly this, but none is seeded, so the address is the configured base plus the
+  source's URA.
+- **The sub-check breakdown is narration.** The authorization specification makes the decision a single
+  `allow` boolean and everything else informational, and the sandbox talks to the source's PEP, which
+  answers with a status and nothing else. The verdict and the per-query statuses on that screen are
+  real; the four checks above them describe what the chain carried, and the screen says so.
+- **Retrieved data lives in memory, scoped to the session that fetched it.** It is discarded when that
+  session ends, along with its locks. Nothing is written to a store.
 
 ## Architecture
 
@@ -201,6 +242,9 @@ the vendored v1.0.2 bundle. Keep this form when adding interactivity.
   `vectors.ResetGlobal` / `vectors.RecyclePatient`; they are enabled only when `KNOOPPUNT_INTERNAL_URL` and
   `HAPI_BASE_URL` are set (see `docker-compose.yml`), otherwise reset reports "disabled". The E3 patient
   open/switch route reserves the patient; the manual controls remain available for reset demonstrations.
+- Retrieval (E4, landed): `GET /demo/ehr/patients/{key}/retrieve` renders where the data can be
+  found, `POST` the same path runs the confirmed chain and renders the authorization result. Both
+  need a session; the POST additionally needs this session to hold the patient's lock.
 - The `#gf-viewer-steps` container and `window.GFJourney.apply(stepEvent)` / `.reset()`, consuming the DESIGN.md §7
   step-event schema (E6).
 
