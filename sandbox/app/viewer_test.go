@@ -21,7 +21,29 @@ func TestViewerBodyAttrsCarryHoodSignals(t *testing.T) {
 	attrs := string(viewerBodyAttrs(true))
 	require.Contains(t, attrs, "data-signals")
 	require.Contains(t, attrs, "hood-open")
-	require.Contains(t, attrs, `"open":true`)
+}
+
+// The dock is 560px and reserves 574px beside the content. Opening it by default
+// on a narrow screen leaves less room for the record than one card needs, so the
+// default is conditioned on the same width at which viewer.css starts reserving
+// that room. Below it the dock stays a tab the presenter can still open.
+func TestViewerBodyAttrs_DefaultsOpenOnlyOnAWideViewport(t *testing.T) {
+	open := string(viewerBodyAttrs(true))
+	require.Contains(t, open, "window.innerWidth>="+viewerReserveBreakpoint)
+
+	// Screens that ask for it closed stay closed at every width.
+	closed := string(viewerBodyAttrs(false))
+	require.Contains(t, closed, `"open":false`)
+	require.NotContains(t, closed, "window.innerWidth")
+}
+
+// The breakpoint has to be the same on both sides: the CSS reserves the space
+// and the signal decides whether to occupy it. If they drift, one width opens a
+// dock the layout has not made room for.
+func TestViewerBreakpointMatchesTheStylesheet(t *testing.T) {
+	css, err := staticFS.ReadFile("static/css/viewer.css")
+	require.NoError(t, err)
+	require.Contains(t, string(css), "@media (min-width: "+viewerReserveBreakpoint+"px)")
 }
 
 func TestJourneyModelCoversAllGfLabels(t *testing.T) {

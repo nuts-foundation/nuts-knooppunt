@@ -25,6 +25,11 @@
   .search svg { width: 13px; height: 13px; }
   .search .kbd { margin-left: auto; font-size: 10px; color: var(--text3); background: var(--card); border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; font-family: 'Fira Mono', monospace; }
   .top-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+  /* The search box is chrome from the wireframe, not an input: nothing reads it.
+     Below this width it and the practitioner pill compete for the same row and
+     overlap, so the decoration gives way to the session context, which is an
+     acceptance criterion. */
+  @media (max-width: 1100px) { .top .search { display: none; } }
   .bell { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; color: var(--text2); }
   .bell svg { width: 15px; height: 15px; }
   .bell .bdot { position: absolute; top: 8px; right: 9px; width: 6px; height: 6px; border-radius: 50%; background: var(--plum); border: 1.5px solid var(--card); }
@@ -34,9 +39,19 @@
   .dezi-pill span { font-size: 10px; color: var(--text2); display: block; line-height: 1.3; }
   .dezi-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.05em; color: var(--teal-deep); background: var(--teal-soft); border: 1px solid var(--teal-line); border-radius: 999px; padding: 2px 8px; }
   .content { padding: 24px; max-width: 1460px; width: 100%; }
-  .rec-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 300px; gap: 16px; align-items: start; }
+  /* Reflows instead of holding four columns open. The previous
+     `repeat(3, minmax(0,1fr)) 300px` could not narrow past the fixed last
+     column, so once the content area dropped below roughly 950px the three
+     flexible tracks computed to 0px and every card's contents spilled over its
+     neighbour. auto-fit gives as many columns as fit and one full-width card
+     when nothing else does. */
+  .rec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; align-items: start; }
   .rec-grid .data-item { flex-wrap: wrap; }
-  .rec-grid .data-item .src { margin-left: 0; }
+  /* A source chip carries a full organization name here, not the short label the
+     wireframe used, so it needs to be able to break rather than overflow the
+     card. It only reaches this at the narrowest column. */
+  .rec-grid .data-item .src { margin-left: 0; white-space: normal; overflow-wrap: anywhere; }
+  .rec-grid .card h3 { overflow-wrap: anywhere; }
 
   /* patient context bar (application chrome, not content) */
   .pat-bar { display: flex; align-items: center; gap: 13px; padding: 10px 24px; background: linear-gradient(180deg, #f3eee4, #efe9dd); border-bottom: 1px solid var(--line2); }
@@ -232,11 +247,15 @@
   /* introspected claims: the .kv name-and-value pattern as table rows, sharing
      the row rule the card lists use and the mono treatment every other machine
      value on this page gets */
-  .claims { width: 100%; max-width: 560px; border-collapse: collapse; }
+  /* table-layout: fixed, because the value column carries percent-encoded request
+     URLs. Under the default auto layout a single unbreakable token sets the
+     column's minimum width, which pushed the table past its container and put a
+     horizontal scrollbar on the whole page below about 900px. */
+  .claims { width: 100%; max-width: 560px; border-collapse: collapse; table-layout: fixed; }
   .claims th, .claims td { text-align: left; vertical-align: baseline; padding: 8px 0; border-top: 1px solid #f1ece3; }
   .claims tr:first-child th, .claims tr:first-child td { border-top: none; }
-  .claims th { width: 220px; font-size: 11.5px; font-weight: 400; color: var(--text2); }
-  .claims td { font-family: 'Fira Mono', monospace; font-size: 11px; }
+  .claims th { width: min(220px, 40%); font-size: 11.5px; font-weight: 400; color: var(--text2); padding-right: 12px; }
+  .claims td { font-family: 'Fira Mono', monospace; font-size: 11px; overflow-wrap: anywhere; }
 
   /* Mitz notification */
   .mitz-note { border: 1px solid var(--plum-soft); border-left: 3px solid var(--plum); background: var(--card); border-radius: 13px; padding: 14px 18px; display: flex; gap: 13px; align-items: flex-start; margin-bottom: 16px; box-shadow: var(--shadow); }

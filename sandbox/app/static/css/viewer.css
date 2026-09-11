@@ -106,7 +106,14 @@
   .hnode.plan { border-style: dashed; background: #1e1913; }
   .hstat .pend { font-family: 'Fira Mono', monospace; font-size: 10.5px; color: #6e6558; white-space: nowrap; }
   .app { transition: padding 0.28s cubic-bezier(0.32,0.72,0.28,1); }
-  body.hood-open .app { padding-right: 574px; }
+  /* Only reserve room for the dock where there is room to spare. The dock is
+     position:fixed, so without this padding it simply overlays the content
+     instead of displacing it, which is the right trade below this width: the
+     reservation is 574px, and on a 1024px viewport it left 224px for the record
+     once the 226px sidebar was taken, which is narrower than a single card. */
+  @media (min-width: 1400px) {
+    body.hood-open .app { padding-right: 574px; }
+  }
   .gf-tab { position: absolute; top: 50%; right: calc(100% - 2px); transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; background: #1f1913; border: 1px solid rgba(240,235,225,0.14); border-right: none; border-radius: 11px 0 0 11px; padding: 12px 7px 13px 8px; cursor: pointer; font-family: 'Inter', sans-serif; box-shadow: -8px 0 22px rgba(0,0,0,0.28); transition: border-color 0.15s; }
   .hood-dock.peek { transform: translateX(100%); }
   .gf-tab svg { width: 13px; height: 13px; color: #7fc7bc; }
