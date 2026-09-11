@@ -19,17 +19,32 @@ import (
 
 func getBody(t *testing.T, client *http.Client, srv *httptest.Server, path string) (int, string) {
 	t.Helper()
-	res, err := client.Get(srv.URL + path)
-	require.NoError(t, err)
+	return getPageWithClient(t, client, srv.URL+path)
+}
+
+func postAndRead(t *testing.T, client *http.Client, srv *httptest.Server, path string) (int, string) {
+	t.Helper()
+	res := postForm(t, client, srv, path, nil)
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	require.NoError(t, err)
 	return res.StatusCode, string(body)
 }
 
+// openPatient claims the patient for the client's session, as the row's Open
+// button does, and requires the redirect to the record that says the lock was
+// taken. A refused open would otherwise surface later as a puzzling 409.
+func openPatient(t *testing.T, client *http.Client, srv *httptest.Server, key string) {
+	t.Helper()
+	res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/open", nil)
+	require.NoError(t, res.Body.Close())
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equalf(t, "/demo/ehr/patients/"+key, res.Header.Get("Location"), "opening %s must take the lock", key)
+}
+
 // categoriesByBSN drives the NVI fake per patient, so a test can make one row
 // fail while the others succeed. One List per category, which is what the real
-// registration writes; recordsByBSN covers the case where the two diverge.
+// registration writes.
 func categoriesByBSN(m map[string][]string, failFor map[string]bool) func(context.Context, string) (nviRecords, error) {
 	return func(_ context.Context, bsn string) (nviRecords, error) {
 		if failFor[bsn] {
@@ -133,8 +148,8 @@ func TestOpenPatient_ReleasesThePreviouslyOpenedPatient(t *testing.T) {
 	first, second := pool.Patients()[0].Key, pool.Patients()[1].Key
 	srv, client := demoServer(t, cfg)
 
-	postForm(t, client, srv, "/demo/ehr/patients/"+first+"/open", nil).Body.Close()
-	postForm(t, client, srv, "/demo/ehr/patients/"+second+"/open", nil).Body.Close()
+	openPatient(t, client, srv, first)
+	openPatient(t, client, srv, second)
 
 	require.False(t, cfg.Locks.IsLocked(first), "one session runs one demo at a time")
 	require.True(t, cfg.Locks.IsLocked(second))
@@ -156,13 +171,10 @@ func TestOpenPatient_RefusesAPatientAnotherSessionHolds(t *testing.T) {
 		"a refused open must leave the holder's lock exactly as it was")
 }
 
-// A refused open must not cost the caller the patient it already had.
-//
-// This is the case that tells Switch apart from a naive "release mine, then
-// lock the target": with nothing held, releasing first is a no-op and both
-// implementations look identical, which is why every other test here passes
-// under either one. Here the session holds the first patient, the second is
-// taken, and the release-first version would have thrown the first away for an
+// The case that tells Switch apart from "release mine, then lock the target":
+// with nothing held the two behave identically, so every other open test passes
+// under either. Here the session holds a patient and the target is taken, and
+// the release-first version would have thrown the held patient away for an
 // acquire that then failed.
 func TestOpenPatient_ARefusedSwitchKeepsThePatientAlreadyHeld(t *testing.T) {
 	cfg, _, _ := fakeConfig()
@@ -170,10 +182,7 @@ func TestOpenPatient_ARefusedSwitchKeepsThePatientAlreadyHeld(t *testing.T) {
 	held, taken := pool.Patients()[0].Key, pool.Patients()[1].Key
 	require.True(t, cfg.Locks.Lock(taken, "someone-else"))
 	srv, client := demoServer(t, cfg)
-
-	first := postForm(t, client, srv, "/demo/ehr/patients/"+held+"/open", nil)
-	require.NoError(t, first.Body.Close())
-	require.Equal(t, http.StatusSeeOther, first.StatusCode)
+	openPatient(t, client, srv, held)
 
 	res := postForm(t, client, srv, "/demo/ehr/patients/"+taken+"/open", nil)
 	defer res.Body.Close()
@@ -190,7 +199,7 @@ func TestPatientRecord_ShowsNotFindableYetWhenUnshared(t *testing.T) {
 	cfg.nviLookup = categoriesByBSN(nil, nil)
 	anna := pool.Patients()[0].Key
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna)
 
 	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna)
 
@@ -206,7 +215,7 @@ func TestPatientRecord_ShowsRegisteredCategoriesWhenShared(t *testing.T) {
 		map[string][]string{anna.BSN: {nvi.CategoryCondition, nvi.CategoryMedicationRequest}}, nil)
 	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return true, nil }
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key)
 
@@ -240,7 +249,7 @@ func sharedNotSubscribed(t *testing.T) (Config, pool.PoolPatient) {
 func TestPatientRecord_ShowsTheMissingSubscriptionState(t *testing.T) {
 	cfg, anna := sharedNotSubscribed(t)
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key)
 
@@ -248,20 +257,17 @@ func TestPatientRecord_ShowsTheMissingSubscriptionState(t *testing.T) {
 	require.Contains(t, body, "/demo/ehr/patients/"+anna.Key+"/subscribe")
 }
 
-// The inverse, and the case the whole reconciliation exists to produce: a lost
-// POST, the user returns, the lookup finds the subscription after all, and the
-// record must stop offering a retry.
-//
-// Asserting the presence of "Shared via GF" cannot show this, because that text
-// is a prefix of all three chips. Only the absence of the missing state and of
-// the retry form distinguishes it.
+// The inverse, and the case the reconciliation exists to produce: a lost POST,
+// the user returns, the lookup finds the subscription after all, and the record
+// must stop offering a retry. "Shared via GF" is a prefix of all three chips, so
+// only the absence of the missing state and of the retry form shows this.
 func TestPatientRecord_SubscribedShowsNoRetry(t *testing.T) {
 	anna := pool.Patients()[0]
 	cfg, _, _ := fakeConfig()
 	cfg.nviLookup = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
 	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return true, nil }
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key)
 
@@ -272,17 +278,16 @@ func TestPatientRecord_SubscribedShowsNoRetry(t *testing.T) {
 }
 
 // With no mock configured the sandbox cannot ask, and "cannot ask" must not
-// render as "not subscribed" — that state offers a retry, and against a real
-// Mitz retrying an existing subscription would duplicate it. MITZMOCK_URL is
-// unset in every deployment that has not wired the mock, so this is the default
-// path, not an edge case.
+// render as "not subscribed": that state offers a retry, and against a real Mitz
+// retrying an existing subscription would duplicate it. MITZMOCK_URL is unset in
+// every deployment without the mock wired, so this is the default path.
 func TestPatientRecord_UnconfiguredLookupShowsUnknownNotMissing(t *testing.T) {
 	anna := pool.Patients()[0]
 	cfg, _, _ := fakeConfig()
 	cfg.nviLookup = categoriesByBSN(map[string][]string{anna.BSN: {nvi.CategoryCondition}}, nil)
 	cfg.mitzSubscribed = nil
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key)
 
@@ -307,7 +312,7 @@ func TestSubscribe_RetriesOnlyTheMitzStep(t *testing.T) {
 	var registered int
 	cfg.nviRegister = func(context.Context, string, []string) error { registered++; return nil }
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/subscribe", nil)
 	defer res.Body.Close()
@@ -316,8 +321,7 @@ func TestSubscribe_RetriesOnlyTheMitzStep(t *testing.T) {
 	require.Equal(t, []string{anna.BSN}, subscribed)
 	require.Zero(t, registered, "the retry must not redo the NVI work")
 	// The redirect target, not just its status: the notice is the only thing the
-	// practitioner reads, so a success that redirects to the failure or unknown
-	// notice is the demo asserting something that did not happen.
+	// practitioner reads.
 	require.Equal(t, "/demo/ehr/patients/"+anna.Key+"?notice=mitz-retry-done",
 		res.Header.Get("Location"), "a successful retry must report success")
 }
@@ -328,10 +332,9 @@ func TestSubscribe_RetriesOnlyTheMitzStep(t *testing.T) {
 // whose own subtext says a retry may duplicate against the national Mitz.
 func TestSubscribe_RetryOutcomesFollowTheLookup(t *testing.T) {
 	// Two answers per case, in order: the preflight before the write and the
-	// reconciliation after it. They have to be separable, because the notice
-	// turns on the difference between them. A fake answering both from one value
-	// cannot tell "absent, then present" (this call committed) from "present,
-	// then present" (it was already there and the write established nothing).
+	// reconciliation after it. The notice turns on the difference between them,
+	// so a fake answering both from one value cannot tell "absent, then present"
+	// (this call committed) from "present, then present" (it was already there).
 	type answer struct {
 		subscribed bool
 		err        error
@@ -373,7 +376,7 @@ func TestSubscribe_RetryOutcomesFollowTheLookup(t *testing.T) {
 				}
 			}
 			srv, client := demoServer(t, cfg)
-			postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+			openPatient(t, client, srv, anna.Key)
 
 			res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/subscribe", nil)
 			defer res.Body.Close()
@@ -429,13 +432,8 @@ func shareConfig(t *testing.T) (Config, *shareCalls, pool.PoolPatient) {
 func openAndShare(t *testing.T, cfg Config, key string) (int, string) {
 	t.Helper()
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+key+"/open", nil).Body.Close()
-
-	res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/share", nil)
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	require.NoError(t, err)
-	return res.StatusCode, string(body)
+	openPatient(t, client, srv, key)
+	return postAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/share")
 }
 
 func TestShare_RegistersTheDerivedCategoriesAndConfirmsBothSteps(t *testing.T) {
@@ -458,8 +456,7 @@ func TestShare_RegistersTheDerivedCategoriesAndConfirmsBothSteps(t *testing.T) {
 
 // The publish succeeded and the read that follows it failed. The header is built
 // from that read, so without the write's own outcome overriding it the response
-// carries the green "Localization records published" card above prose telling the
-// presenter the record never left the building.
+// carries the green card above prose saying the record never left the building.
 func TestShare_SuccessIsNotContradictedByAFailedFollowUpRead(t *testing.T) {
 	cfg, _, anna := shareConfig(t)
 	cfg.nviLookup = func(context.Context, string) (nviRecords, error) {
@@ -482,7 +479,7 @@ func TestShareForm_UnknownNVIIsNotRenderedAsLocalOnly(t *testing.T) {
 		return nviRecords{}, errors.New("connection refused")
 	}
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
 
@@ -498,10 +495,8 @@ func TestShare_CardNamesTheRegisteredCategories(t *testing.T) {
 	_, body := openAndShare(t, cfg, anna.Key)
 
 	// The card's own row, not just "somewhere on the page": the share form above
-	// the cards renders the same categories on every response, so a bare
-	// Contains stays green with the card's row deleted entirely. The comma-joined
-	// form can only come from the card — the form block wraps each category in
-	// its own span.
+	// the cards renders the same categories on every response, each in its own
+	// span, so only the comma-joined form can come from the card.
 	require.Contains(t, body,
 		`<span class="k">Data categories</span><span class="v">`+strings.Join(anna.PlataanCategories(), ", ")+`</span>`,
 		"the NVI card must name the categories itself")
@@ -539,12 +534,11 @@ func TestShare_AFailedPreflightFallsBackToTheNeutralCard(t *testing.T) {
 // The NVI holds records this build cannot name. The share form replaces the
 // category list with what it proposes to publish, so without carrying that state
 // separately it presents a stored legacy record as the same set it is about to
-// write, under copy promising convergence on one per category.
+// write, under copy promising convergence on one per category. Both shapes,
+// because the mixed one is the trap: derived from an empty recognized set, three
+// records this client wrote alongside one it cannot name reads as "all
+// recognized".
 func TestShareForm_UnrecognizedCategoriesAreNotDescribedAsTheSameRecords(t *testing.T) {
-	// Both shapes, because the mixed one is the trap: derived from an empty
-	// recognized set, three records this client wrote alongside one it cannot
-	// name reads as "all recognized" and falls into the copy promising that a
-	// repeat republishes the same records and converges on one per category.
 	for name, records := range map[string]nviRecords{
 		"only unrecognized": {Count: 1, Unnamed: 1},
 		"mixed with recognized": {
@@ -555,7 +549,7 @@ func TestShareForm_UnrecognizedCategoriesAreNotDescribedAsTheSameRecords(t *test
 			cfg, _, anna := shareConfig(t)
 			cfg.nviLookup = func(context.Context, string) (nviRecords, error) { return records, nil }
 			srv, client := demoServer(t, cfg)
-			postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+			openPatient(t, client, srv, anna.Key)
 
 			status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
 
@@ -579,7 +573,7 @@ func TestSubscribe_ExistingSubscriptionIsNotReportedAsStarted(t *testing.T) {
 	cfg.mitzSubscribe = func(context.Context, string) error { return nil }
 	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return true, nil }
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/subscribe", nil)
 	defer res.Body.Close()
@@ -594,7 +588,7 @@ func TestSubscribe_WithoutALookupReportsRegisteredNotStarted(t *testing.T) {
 	cfg.mitzSubscribe = func(context.Context, string) error { return nil }
 	cfg.mitzSubscribed = nil
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/subscribe", nil)
 	defer res.Body.Close()
@@ -603,14 +597,14 @@ func TestSubscribe_WithoutALookupReportsRegisteredNotStarted(t *testing.T) {
 		res.Header.Get("Location"))
 }
 
-// The route the record page's Share button points at. Nine tests exercise the
-// POST, none the GET, so deleting the mux registration would leave the build and
-// the whole suite green while the demo's front door 404s. It also covers the one
-// branch the POST never reaches: the template with no cards yet.
+// The GET the record page's Share button points at. Every other share test
+// exercises the POST, so without this the mux registration could go and the
+// suite would stay green while the demo's front door 404s. It is also the only
+// test of the template with no cards yet.
 func TestShare_FormRendersBeforeAnythingIsShared(t *testing.T) {
 	cfg, _, anna := shareConfig(t)
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
 
@@ -635,10 +629,10 @@ func TestShare_MitzFailureIsShownWithoutFakingTheNVIResult(t *testing.T) {
 // failure, and must not invite a retry that could duplicate against real Mitz.
 func TestShare_LostMitzResponseIsReportedAsStartedNotFailed(t *testing.T) {
 	cfg, _, anna := shareConfig(t)
-	// Stateful, because the handler asks twice and the two answers differ: not
+	// Stateful, because the handler asks twice and the answers differ: not
 	// subscribed on the way in, subscribed once the call has committed. A fake
-	// answering "yes" to both would make the card report a subscription that was
-	// already there, which is a different claim from the one under test.
+	// answering "yes" to both would report a subscription that was already
+	// there, which is a different claim from the one under test.
 	committed := false
 	cfg.mitzSubscribe = func(context.Context, string) error { committed = true; return context.DeadlineExceeded }
 	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return committed, nil }
@@ -652,8 +646,8 @@ func TestShare_LostMitzResponseIsReportedAsStartedNotFailed(t *testing.T) {
 
 // The third outcome. A failed call the sandbox cannot reconcile is not a failed
 // subscription: MITZMOCK_URL is unset in the base compose profile, so this is the
-// shipped behaviour there, and a red cross over it would tell the presenter that
-// Mitz refused when nothing established that.
+// shipped behaviour there, and a red cross would tell the presenter that Mitz
+// refused when nothing established that.
 func TestShare_UnreconcilableMitzFailureIsUnknownNotFailed(t *testing.T) {
 	cfg, _, anna := shareConfig(t)
 	cfg.mitzSubscribe = func(context.Context, string) error { return context.DeadlineExceeded }
@@ -711,7 +705,7 @@ func TestShare_RejectsASubmissionForADifferentPatient(t *testing.T) {
 	cfg, calls, _ := shareConfig(t)
 	first, second := pool.Patients()[0].Key, pool.Patients()[1].Key
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+first+"/open", nil).Body.Close()
+	openPatient(t, client, srv, first)
 
 	res := postForm(t, client, srv, "/demo/ehr/patients/"+second+"/share", nil)
 	defer res.Body.Close()
@@ -723,7 +717,7 @@ func TestShare_RejectsASubmissionForADifferentPatient(t *testing.T) {
 func TestShare_RejectsASubmissionAfterTheLeaseExpired(t *testing.T) {
 	cfg, calls, anna := shareConfig(t)
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	// The presenter walked away; the lease ran out while the page stayed open.
 	cfg.Locks.ReleaseAll()
@@ -736,10 +730,8 @@ func TestShare_RejectsASubmissionAfterTheLeaseExpired(t *testing.T) {
 }
 
 // Held by someone else, not merely held. Every other rejection test arranges for
-// nobody to hold the patient, so "locked by anyone" and "locked by me" answer the
-// same there and the ownership half of the guard is unpinned: a check that only
-// asked whether the patient is locked would let this session write to a patient
-// another demo is running.
+// nobody to hold the patient, where "locked by anyone" and "locked by me" answer
+// the same, so the ownership half of the guard is pinned only here.
 func TestWriteRoutes_RejectAPatientHeldByAnotherSession(t *testing.T) {
 	for name, path := range map[string]string{"share": "/share", "subscribe": "/subscribe"} {
 		t.Run(name, func(t *testing.T) {
@@ -766,7 +758,7 @@ func TestWriteRoutes_RejectAPatientHeldByAnotherSession(t *testing.T) {
 func TestPatientList_DoesNotMarkThisSessionsOwnPatientBusy(t *testing.T) {
 	cfg, _, anna := shareConfig(t)
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	status, body := getBody(t, client, srv, "/demo/ehr")
 
@@ -779,7 +771,7 @@ func TestPatientList_DoesNotMarkThisSessionsOwnPatientBusy(t *testing.T) {
 func TestShare_RejectsCrossSiteSubmissions(t *testing.T) {
 	cfg, calls, anna := shareConfig(t)
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/demo/ehr/patients/"+anna.Key+"/share", nil)
 	require.NoError(t, err)
@@ -795,22 +787,20 @@ func TestShare_RejectsCrossSiteSubmissions(t *testing.T) {
 // Two submits for the same patient must serialize rather than interleave.
 func TestShare_ConcurrentSubmitsSerialize(t *testing.T) {
 	cfg, _, anna := shareConfig(t)
-	// Every shared counter goes atomic and nothing calls require off the test
-	// goroutine: shareConfig's nviRegister AND mitzSubscribe closures both
-	// increment plain ints, and postForm calls require, all of which race when
-	// two handlers run at once.
-	// The mock's behaviour, because that is what makes the claim falsifiable: one
-	// subscription per provider and patient, a repeat answered with the existing
-	// one, and no way for the caller to tell the two apart from the response.
+	// Every shared counter is atomic and nothing calls require off the test
+	// goroutine: shareConfig's closures increment plain ints and postForm calls
+	// require, both of which race when two handlers run at once.
+	//
+	// The fakes copy the mock's behaviour, because that is what makes the claim
+	// falsifiable: one subscription per provider and patient, a repeat answered
+	// with the existing one, and nothing in the response to tell the two apart.
 	var mitzMu sync.Mutex
 	subscriptionExists := false
-	// A barrier, not a sleep. The claim under test is about the interval between
-	// reading "no subscription" and creating one, so both preflights have to be
-	// given every chance to land inside it: each waits here until the other
-	// arrives, or briefly. With the lock released before the Mitz step both
-	// arrive and both read "absent"; with it spanning both steps the second
-	// cannot start until the first has finished, so the first waits out its
-	// deadline alone and the race the old arrangement produced cannot occur.
+	// A barrier, not a sleep: both preflights must get every chance to land in
+	// the gap between reading "no subscription" and creating one, so each waits
+	// here until the other arrives, or briefly. With the lock released before the
+	// Mitz step both arrive and read absent; with it spanning both steps the
+	// second cannot start until the first has finished.
 	var arrived int32
 	cfg.mitzSubscribed = func(context.Context, string) (bool, error) {
 		mitzMu.Lock()
@@ -844,7 +834,7 @@ func TestShare_ConcurrentSubmitsSerialize(t *testing.T) {
 		return nil
 	}
 	srv, client := demoServer(t, cfg)
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 
 	bodies := make([]string, 2)
 	var wg sync.WaitGroup
@@ -872,9 +862,9 @@ func TestShare_ConcurrentSubmitsSerialize(t *testing.T) {
 		"the per-patient mutex must keep two share submits from overlapping")
 
 	// What the two responses claimed, which serialization of the NVI call alone
-	// does not establish. Exactly one request created the subscription; if the
-	// lock ends before the Mitz step, both read "not subscribed" first and both
-	// render the green card saying they started it.
+	// does not establish: exactly one request created the subscription, and if
+	// the lock ended before the Mitz step both would read "not subscribed" first
+	// and both would render the card saying they started it.
 	started, existing := 0, 0
 	for _, body := range bodies {
 		if strings.Contains(body, "Consent subscription started") {

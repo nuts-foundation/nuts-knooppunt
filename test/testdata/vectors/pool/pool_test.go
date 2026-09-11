@@ -37,10 +37,9 @@ func TestCategories_DerivedFromResources(t *testing.T) {
 	}
 }
 
-// categoriesOf is a type switch with no default, so a resource type nobody
-// mapped contributes nothing and silently vanishes from the registration. This
-// is the guard that turns that into a failure the moment the pool seeds a new
-// type.
+// categoriesOf's type switch has no default, so a resource type nobody mapped
+// vanishes from the registration silently. This turns that into a failure the
+// moment the pool seeds a new type.
 func TestCategoriesOf_MapsEveryPooledResourceType(t *testing.T) {
 	for _, p := range Patients() {
 		for _, resource := range append(p.PlataanResources(), p.ZonnebloemResources()...) {

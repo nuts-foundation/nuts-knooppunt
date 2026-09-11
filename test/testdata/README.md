@@ -174,8 +174,9 @@ subject's wallet, which is empty until the credential is stored.
   consent state there would be untrue. Reaching a configured mock and failing is
   the same answer for the same reason: cleanup must not depend on a mock's
   availability, and it must not claim a clean slate it did not produce.
-- **NVI delete-then-create is not atomic.** Acceptable for a single-writer seed
-  (boot/reset only); concurrent seed + live registration could interleave.
+- **NVI delete-then-create is not atomic.** The seed is a single writer (boot and
+  reset). The sandbox's live registration is serialized per patient within one
+  process (see `sandbox/app/README.md`); two processes can still interleave.
 - **The composed PDP is single-data-holder.** `KNPT_PDP_PIP_URL` points at
   `sunflower-patients`, because the PIP is a data-holder-side lookup and the
   composed Knooppunt acts as Zonnebloem's PDP. Once both demo organizations serve

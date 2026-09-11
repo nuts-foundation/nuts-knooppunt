@@ -29,18 +29,24 @@ import (
 
 func zonnebloemURA() string { return *sunflower.Organization().Identifier[0].Value }
 
-// sharePlataan publishes De Plataan's localization records for one patient, which
-// is what a demo run does and what "restored to the seeded fixtures" has to undo.
-func sharePlataan(t *testing.T, h harness.Details, p pool.PoolPatient) {
+// sharePlataanAs publishes De Plataan's localization records for one patient
+// under clientID, which is what a demo run does and what "restored to the seeded
+// fixtures" has to undo, and requires the share to be visible before returning.
+func sharePlataanAs(t *testing.T, h harness.Details, p pool.PoolPatient, clientID string) {
 	t.Helper()
 	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
 	require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
-		CustodianURA: plataan.URA, BSN: p.BSN,
-		ClientID: pool.PlataanClientID, Categories: p.PlataanCategories(),
+		CustodianURA: plataan.URA, BSN: p.BSN, ClientID: clientID, Categories: p.PlataanCategories(),
 	}))
 	before, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, p.BSN)
 	require.NoError(t, err)
-	require.NotEmptyf(t, before, "precondition: %s is shared", p.Key)
+	require.NotEmptyf(t, before, "precondition: %s is shared under client %s", p.Key, clientID)
+}
+
+// sharePlataan is sharePlataanAs under the client id the sandbox publishes with.
+func sharePlataan(t *testing.T, h harness.Details, p pool.PoolPatient) {
+	t.Helper()
+	sharePlataanAs(t, h, p, pool.PlataanClientID)
 }
 
 // requireUnshared asserts the patient went back to the pool unshared.
@@ -50,6 +56,46 @@ func requireUnshared(t *testing.T, h harness.Details, p pool.PoolPatient) {
 		plataan.URA, p.BSN)
 	require.NoError(t, err)
 	require.Emptyf(t, after, "the notice says %s was restored, so the share must be gone", p.Key)
+}
+
+// requireZonnebloemSeeded asserts the source side holds exactly the seeded
+// registration, which E4 depends on.
+func requireZonnebloemSeeded(t *testing.T, h harness.Details, p pool.PoolPatient, msgAndArgs ...any) {
+	t.Helper()
+	lists, err := nvi.ListsForCustodian(t.Context(), h.KnooppuntInternalBaseURL.JoinPath("nvi"),
+		zonnebloemURA(), p.BSN)
+	require.NoError(t, err)
+	if len(msgAndArgs) == 0 {
+		msgAndArgs = []any{"the source side must hold %s's seeded registration", p.Key}
+	}
+	require.Equal(t, p.ZonnebloemCategories(), nvi.CategoriesOf(lists), msgAndArgs...)
+}
+
+// seededAllergyID is the fixed id of the patient's seeded De Zonnebloem allergy.
+// Pool resource ids are deterministic: pool-<key>-<side>-<suffix>.
+func seededAllergyID(p pool.PoolPatient) string { return "pool-" + p.Key + "-zonnebloem-allergy" }
+
+// deleteSeededAllergy removes one of the patient's seeded De Zonnebloem fixtures,
+// so that "restored" afterwards means something a no-op cannot satisfy. A leaf
+// resource, because HAPI refuses to delete the Patient while its children still
+// reference it.
+func deleteSeededAllergy(t *testing.T, h harness.Details, p pool.PoolPatient) {
+	t.Helper()
+	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL)
+	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+seededAllergyID(p)))
+}
+
+// requireSeededAllergyRestored asserts the fixture deleteSeededAllergy removed is
+// back, by its fixed id.
+func requireSeededAllergyRestored(t *testing.T, h harness.Details, p pool.PoolPatient, msgAndArgs ...any) {
+	t.Helper()
+	var allergy fhir.AllergyIntolerance
+	err := sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL).ReadWithContext(
+		t.Context(), "AllergyIntolerance/"+seededAllergyID(p), &allergy)
+	if len(msgAndArgs) == 0 {
+		msgAndArgs = []any{"%s's seeded allergy must be restored", p.Key}
+	}
+	require.NoError(t, err, msgAndArgs...)
 }
 
 // sandboxTarget points reset and recycle at the harness, mock Mitz included.
@@ -196,12 +242,7 @@ func TestResetGlobal_RemovesUserCreatedRecordsAndRestoresFixtures(t *testing.T) 
 		Subject: fhir.Reference{Reference: to.Ptr("Patient/" + anna.ZonnebloemPatientID)},
 	}, &created))
 	require.NotNil(t, created.Id, "precondition: the marker got a server-assigned id")
-
-	// Delete a seeded leaf resource (HAPI refuses to delete the Patient itself
-	// while its children still reference it).
-	// Pool resource ids are deterministic: pool-<key>-<side>-<suffix>.
-	allergyID := "pool-" + anna.Key + "-zonnebloem-allergy"
-	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+allergyID))
+	deleteSeededAllergy(t, h, anna)
 
 	require.NoError(t, vectors.ResetGlobal(t.Context(), sandboxTarget(t, h)))
 
@@ -210,11 +251,8 @@ func TestResetGlobal_RemovesUserCreatedRecordsAndRestoresFixtures(t *testing.T) 
 	err := zonnebloem.ReadWithContext(t.Context(), "Procedure/"+*created.Id, &gone)
 	require.Error(t, err, "user-created marker %s should be removed by ResetGlobal", *created.Id)
 
-	// ...and the deleted fixture is restored.
-	var allergy fhir.AllergyIntolerance
-	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "AllergyIntolerance/"+allergyID, &allergy))
-
-	// ...along with the pool patient itself.
+	// ...and the deleted fixture is restored, along with the pool patient itself.
+	requireSeededAllergyRestored(t, h, anna)
 	var patient fhir.Patient
 	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "Patient/"+anna.ZonnebloemPatientID, &patient))
 	require.Equal(t, anna.BSN, *patient.Identifier[0].Value)
@@ -227,16 +265,14 @@ func TestResetGlobal_RestoresEvenWhenMitzCleanupFails(t *testing.T) {
 	unreachable, err := url.Parse("http://127.0.0.1:1")
 	require.NoError(t, err)
 
-	// Delete a seeded fixture first. Asserting only an untouched registration
-	// afterwards cannot tell restoration from a reset that skipped it: an
-	// implementation that ran the cleanup between clearing the tenants and
-	// reloading them, then returned its warning, empties both stores and leaves
-	// that registration exactly where it was.
+	// A shared patient and a deleted fixture first. Asserting only an untouched
+	// registration afterwards cannot tell restoration from a reset that skipped
+	// it: a cleanup returning its warning between clearing the tenants and
+	// reloading them empties both stores and leaves that registration exactly
+	// where it was.
 	anna := pool.Patients()[0]
 	sharePlataan(t, h, anna)
-	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL)
-	allergyID := "pool-" + anna.Key + "-zonnebloem-allergy"
-	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+allergyID))
+	deleteSeededAllergy(t, h, anna)
 
 	target := sandboxTarget(t, h)
 	target.MitzMockBaseURL = unreachable
@@ -244,77 +280,44 @@ func TestResetGlobal_RestoresEvenWhenMitzCleanupFails(t *testing.T) {
 
 	require.ErrorIs(t, err, vectors.ErrPartialReset)
 
-	// Both halves of "restored", because they are separate steps: the reload and
-	// the unshare. A cleanup that returned its warning between them satisfies
-	// whichever one is left unasserted.
-	var allergy fhir.AllergyIntolerance
-	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "AllergyIntolerance/"+allergyID, &allergy),
-		"the cleanup warning must not stand in for a dataset that was never restored")
+	// Both halves of "restored", the reload and the unshare, because they are
+	// separate steps and a cleanup that warned between them satisfies whichever
+	// one is left unasserted.
+	requireSeededAllergyRestored(t, h, anna, "the cleanup warning must not stand in for a dataset that was never restored")
 	requireUnshared(t, h, anna)
-
-	lists, listErr := nvi.ListsForCustodian(t.Context(), h.KnooppuntInternalBaseURL.JoinPath("nvi"),
-		zonnebloemURA(), anna.BSN)
-	require.NoError(t, listErr)
-	require.Equal(t, anna.ZonnebloemCategories(), nvi.CategoriesOf(lists),
-		"the fixtures must be restored even when the optional cleanup warned")
+	requireZonnebloemSeeded(t, h, anna, "the fixtures must be restored even when the optional cleanup warned")
 }
 
 // A reset must return every patient to the pool unshared, which is what its own
-// notice tells the presenter it did.
-//
-// Nothing before this test covered it: the reset tests all run against a harness
-// where nothing was ever shared, so the Plataan side was empty either way. The
-// seed used to register both custodians with a custodian-wide delete, which
-// cleaned up De Plataan's side as a side effect. Narrowing that delete to the
-// registering client removed the side effect, and nothing replaced it.
+// notice tells the presenter it did. Nothing covered this before: the reset tests
+// ran against a harness where nothing was ever shared, and the seed's earlier
+// custodian-wide delete cleaned up De Plataan's side as a side effect, which
+// narrowing that delete to the registering client removed.
 func TestResetGlobal_UnsharesAPatientSharedDuringADemo(t *testing.T) {
 	h := harness.Start(t)
 	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
-	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
 	// Two patients, not one: a fix that unshared only the patient it was handed
 	// would satisfy a single-patient assertion.
-	shared := pool.Patients()[:2]
-	for _, p := range shared {
-		// What the sandbox does when a practitioner shares a patient.
-		require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
-			CustodianURA: plataan.URA,
-			BSN:          p.BSN,
-			ClientID:     pool.PlataanClientID,
-			Categories:   p.PlataanCategories(),
-		}))
-		before, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, p.BSN)
-		require.NoError(t, err)
-		require.NotEmptyf(t, before, "precondition: %s is shared", p.Key)
+	for _, p := range pool.Patients()[:2] {
+		sharePlataan(t, h, p)
 	}
 
 	require.NoError(t, vectors.ResetGlobal(t.Context(), sandboxTarget(t, h)))
 
 	for _, p := range pool.Patients() {
-		after, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, p.BSN)
-		require.NoError(t, err)
-		require.Emptyf(t, after,
-			"reset says the dataset is restored to the seeded fixtures, so %s must be unshared again", p.Key)
-
+		requireUnshared(t, h, p)
 		// And the source side is still there, or the reset broke what E4 needs.
-		zonnebloem, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), p.BSN)
-		require.NoError(t, err)
-		require.Equalf(t, p.ZonnebloemCategories(), nvi.CategoriesOf(zonnebloem),
-			"the source side must survive for %s", p.Key)
+		requireZonnebloemSeeded(t, h, p)
 	}
 }
 
 // The other half of "cleanup runs last": its warning must not stand in for a
-// real failure above it.
-//
-// The test above cannot see this. An implementation that ran the cleanup first,
-// kept its error, then restored while swallowing the restore errors, and
-// returned the kept error would satisfy both of its assertions. Here restoration
-// itself is broken, so a reset that returns ErrPartialReset is reporting a mock
-// it could not reach while silently swallowing a dataset it could not restore.
-//
-// What this pins is exactly that substitution, not the call order. Moving the
-// cleanup earlier while leaving each restore step's early return intact is not
-// caught, and does not need to be: the restore error still surfaces.
+// real failure above it. The test above cannot see this: an implementation that
+// ran the cleanup first, kept its error, then restored while swallowing the
+// restore errors, and returned the kept error would satisfy both of its
+// assertions. Here restoration itself is broken, so a reset that returns
+// ErrPartialReset is reporting a mock it could not reach over a dataset it could
+// not restore.
 func TestResetGlobal_ACleanupWarningDoesNotMaskARestoreFailure(t *testing.T) {
 	h := harness.Start(t)
 	unreachableMitz, err := url.Parse("http://127.0.0.1:1")
@@ -337,38 +340,25 @@ func TestResetGlobal_ACleanupWarningDoesNotMaskARestoreFailure(t *testing.T) {
 // upgraded stack still holds records the client-scoped delete cannot see.
 func TestResetGlobal_ReportsPartialWhenAForeignClientRegistrationSurvives(t *testing.T) {
 	h := harness.Start(t)
-	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
 	anna := pool.Patients()[0]
-
 	// Another client's registration for the same custodian and patient.
-	require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
-		CustodianURA: plataan.URA, BSN: anna.BSN,
-		ClientID: "PLATAAN-EHR-legacy", Categories: []string{nvi.CategoryCondition},
-	}))
+	sharePlataanAs(t, h, anna, "PLATAAN-EHR-legacy")
 
 	err := vectors.ResetGlobal(t.Context(), sandboxTarget(t, h))
 
 	require.ErrorIs(t, err, vectors.ErrPartialReset,
 		"a patient still findable under De Plataan is not a restored dataset")
 	require.Contains(t, err.Error(), anna.Key)
-
 	// The rest of the restore still happened: the warning is not an early exit.
-	zonnebloem, listErr := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), anna.BSN)
-	require.NoError(t, listErr)
-	require.Equal(t, anna.ZonnebloemCategories(), nvi.CategoriesOf(zonnebloem))
+	requireZonnebloemSeeded(t, h, anna)
 }
 
 // The same for one patient.
 func TestRecyclePatient_ReportsPartialWhenAForeignClientRegistrationSurvives(t *testing.T) {
 	h := harness.Start(t)
 	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
-	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
 	anna := pool.Patients()[0]
-
-	require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
-		CustodianURA: plataan.URA, BSN: anna.BSN,
-		ClientID: "PLATAAN-EHR-legacy", Categories: []string{nvi.CategoryCondition},
-	}))
+	sharePlataanAs(t, h, anna, "PLATAAN-EHR-legacy")
 
 	err := vectors.RecyclePatient(t.Context(), sandboxTarget(t, h), anna.Key)
 
@@ -382,45 +372,31 @@ func TestRecyclePatient_ReportsPartialWhenAForeignClientRegistrationSurvives(t *
 // reports that the dataset was restored, so the id has to travel with the target.
 func TestResetGlobal_UnsharesUnderTheConfiguredClientID(t *testing.T) {
 	h := harness.Start(t)
-	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
 	const overrideClientID = "gf-sandbox-plataan-override"
-
 	anna := pool.Patients()[0]
-	require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
-		CustodianURA: plataan.URA, BSN: anna.BSN,
-		ClientID: overrideClientID, Categories: anna.PlataanCategories(),
-	}))
-	before, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, anna.BSN)
-	require.NoError(t, err)
-	require.NotEmpty(t, before, "precondition: anna is shared under the override client")
+	sharePlataanAs(t, h, anna, overrideClientID)
 
 	target := sandboxTarget(t, h)
 	target.NVIClientID = overrideClientID
 	require.NoError(t, vectors.ResetGlobal(t.Context(), target))
 
-	after, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, anna.BSN)
-	require.NoError(t, err)
-	require.Empty(t, after,
-		"reset says the dataset is restored, so records published under the configured client must be gone")
+	requireUnshared(t, h, anna)
 }
 
-// Reset without a mock Mitz cannot clear consent subscriptions, and must say so.
-// The base compose profile runs the sandbox with MITZMOCK_URL unset while the
-// subscription itself still reaches Mitz through the Knooppunt, so a silent
-// success here is the demo's own cleanup button reporting a clean consent state
-// it never touched.
+// Reset without a mock Mitz cannot clear consent subscriptions, and must say so:
+// the base compose profile runs the sandbox with MITZMOCK_URL unset while the
+// subscription still reaches Mitz through the Knooppunt, so a silent success is
+// the cleanup button reporting a clean consent state it never touched.
 func TestResetGlobal_WithoutAMockReportsPartialNotClean(t *testing.T) {
 	h := harness.Start(t)
 	target := sandboxTarget(t, h)
 	target.MitzMockBaseURL = nil
 
-	// Deleted first, so "restored" means something a nil-only early return cannot
-	// satisfy.
+	// Shared and with a fixture deleted first, so "restored" means something a
+	// nil-only early return cannot satisfy.
 	anna := pool.Patients()[0]
 	sharePlataan(t, h, anna)
-	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL)
-	allergyID := "pool-" + anna.Key + "-zonnebloem-allergy"
-	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+allergyID))
+	deleteSeededAllergy(t, h, anna)
 
 	err := vectors.ResetGlobal(t.Context(), target)
 
@@ -429,18 +405,14 @@ func TestResetGlobal_WithoutAMockReportsPartialNotClean(t *testing.T) {
 
 	// And the dataset was still restored: the warning is about the mock, not a
 	// reason to skip the work.
-	var allergy fhir.AllergyIntolerance
-	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "AllergyIntolerance/"+allergyID, &allergy))
+	requireSeededAllergyRestored(t, h, anna)
 	requireUnshared(t, h, anna)
-	lists, listErr := nvi.ListsForCustodian(t.Context(), h.KnooppuntInternalBaseURL.JoinPath("nvi"),
-		zonnebloemURA(), anna.BSN)
-	require.NoError(t, listErr)
-	require.Equal(t, anna.ZonnebloemCategories(), nvi.CategoriesOf(lists))
+	requireZonnebloemSeeded(t, h, anna)
 }
 
-// The same for recycle: its cleanup runs last so a warning cannot stand in for a
-// patient that was never restored, and that ordering has to be pinned or moving
-// the cleanup to the front leaves every recycle test green.
+// The same for recycle: its cleanup runs after the restore steps so a warning
+// cannot stand in for a patient that was never restored, and that ordering has to
+// be pinned or moving the cleanup to the front leaves every recycle test green.
 func TestRecyclePatient_ACleanupWarningDoesNotMaskAFailedRestore(t *testing.T) {
 	h := harness.Start(t)
 	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
@@ -449,9 +421,7 @@ func TestRecyclePatient_ACleanupWarningDoesNotMaskAFailedRestore(t *testing.T) {
 
 	anna := pool.Patients()[0]
 	sharePlataan(t, h, anna)
-	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL)
-	allergyID := "pool-" + anna.Key + "-zonnebloem-allergy"
-	require.NoError(t, zonnebloem.DeleteWithContext(t.Context(), "AllergyIntolerance/"+allergyID))
+	deleteSeededAllergy(t, h, anna)
 
 	target := sandboxTarget(t, h)
 	target.MitzMockBaseURL = unreachable
@@ -459,10 +429,7 @@ func TestRecyclePatient_ACleanupWarningDoesNotMaskAFailedRestore(t *testing.T) {
 
 	require.ErrorIs(t, err, vectors.ErrPartialReset,
 		"an uncleared subscription is a warning, not a failed recycle")
-
-	var allergy fhir.AllergyIntolerance
-	require.NoError(t, zonnebloem.ReadWithContext(t.Context(), "AllergyIntolerance/"+allergyID, &allergy),
-		"the warning must not stand in for a patient that was never restored")
+	requireSeededAllergyRestored(t, h, anna, "the warning must not stand in for a patient that was never restored")
 	requireUnshared(t, h, anna)
 }
 
@@ -470,30 +437,20 @@ func TestRecyclePatient_ACleanupWarningDoesNotMaskAFailedRestore(t *testing.T) {
 func TestRecyclePatient_UnsharesUnderTheConfiguredClientID(t *testing.T) {
 	h := harness.Start(t)
 	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
-	nviBaseURL := h.KnooppuntInternalBaseURL.JoinPath("nvi")
 	const overrideClientID = "gf-sandbox-plataan-override"
-
 	anna := pool.Patients()[0]
-	require.NoError(t, nvi.Register(t.Context(), nviBaseURL, nvi.Registration{
-		CustodianURA: plataan.URA, BSN: anna.BSN,
-		ClientID: overrideClientID, Categories: anna.PlataanCategories(),
-	}))
+	sharePlataanAs(t, h, anna, overrideClientID)
 
 	target := sandboxTarget(t, h)
 	target.NVIClientID = overrideClientID
 	require.NoError(t, vectors.RecyclePatient(t.Context(), target, anna.Key))
 
-	after, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, anna.BSN)
-	require.NoError(t, err)
-	require.Empty(t, after,
-		"recycle says the patient is back in the pool unshared, so records under the configured client must be gone")
+	requireUnshared(t, h, anna)
 }
 
-// A recycled patient goes back to the pool unshared, and the consent
-// subscription is part of that: leaving it behind returns a patient who is
-// unshared in the NVI and still subscribed at Mitz, so the next share finds the
-// existing subscription instead of creating one. Scoped, because a recycle must
-// not disturb a concurrent demo.
+// A recycled patient goes back to the pool unshared, and the consent subscription
+// is part of that: left behind, the next share finds it instead of creating one.
+// Scoped, because a recycle must not disturb a concurrent demo.
 func TestRecyclePatient_ClearsOnlyThatPatientsSubscription(t *testing.T) {
 	h := harness.Start(t)
 	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
@@ -551,17 +508,11 @@ func TestRecyclePatient_RestoresTargetLeavesOthersIntact(t *testing.T) {
 	require.NoError(t, vectors.RecyclePatient(t.Context(), sandboxTarget(t, h), target.Key))
 
 	// The target is restored on the source side and unshared on Plataan's...
-	restored, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), target.BSN)
-	require.NoError(t, err)
-	require.Equal(t, target.ZonnebloemCategories(), nvi.CategoriesOf(restored))
-	plataanLists, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, plataan.URA, target.BSN)
-	require.NoError(t, err)
-	require.Empty(t, plataanLists, "recycle returns a patient to the pool unshared")
+	requireZonnebloemSeeded(t, h, target)
+	requireUnshared(t, h, target)
 
 	// ...and another patient is untouched.
-	otherLists, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), other.BSN)
-	require.NoError(t, err)
-	require.Equal(t, other.ZonnebloemCategories(), nvi.CategoriesOf(otherLists))
+	requireZonnebloemSeeded(t, h, other)
 
 	// The target's Plataan-side Patient resource is restored (by fixed id).
 	plataanPatients := fhirclient.New(plataan.PatientsHAPITenant().BaseURL(h.HAPIBaseURL), http.DefaultClient, nil)

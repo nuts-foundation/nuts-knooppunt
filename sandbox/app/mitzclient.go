@@ -16,13 +16,11 @@ import (
 const mitzCallTimeout = 10 * time.Second
 
 // mitzSubscribeFunc builds the call that starts a consent subscription for a
-// patient at De Plataan.
-//
-// providertype comes from the same SANDBOX_FACILITY_TYPE that feeds
-// organization_facility_type in the access token, rather than a second constant
-// that could drift from it. Z3 as the hospital provider type is a convention
-// this repository documents (docs/INTEGRATION.md); it has not been checked
-// against the Mitz register.
+// patient at De Plataan. providertype comes from the same SANDBOX_FACILITY_TYPE
+// that feeds organization_facility_type in the access token, so the two cannot
+// drift. Z3 as the hospital provider type is a convention this repository
+// documents (docs/INTEGRATION.md); it has not been checked against the Mitz
+// register.
 func mitzSubscribeFunc(knooppuntInternalURL *url.URL, providerURA, providerType string) func(context.Context, string) error {
 	endpoint := knooppuntInternalURL.JoinPath("mitz", "Subscription").String()
 	client := &http.Client{Timeout: mitzCallTimeout}
@@ -63,14 +61,11 @@ func mitzSubscribeFunc(knooppuntInternalURL *url.URL, providerURA, providerType 
 }
 
 // mitzSubscribedFunc builds the reconciliation query: does a subscription for
-// this provider/patient pair exist?
-//
-// It reads the mock directly rather than going through the Knooppunt, because
-// the Knooppunt exposes only POST /mitz/Subscription and the national Mitz offers
-// no such lookup either. This is a demo affordance: it is what lets the sandbox
-// answer "did that subscription actually get created?" after a response it never
-// received, and it disappears against a real Mitz. Returns nil when no mock is
-// configured, so the caller renders unknown instead of a false negative.
+// this provider/patient pair exist? It reads the mock directly, because neither
+// the Knooppunt (POST /mitz/Subscription only) nor the national Mitz offers a
+// lookup; it is a demo affordance that disappears against a real Mitz. Returns
+// nil when no mock is configured, so the caller renders unknown instead of a
+// false negative.
 func mitzSubscribedFunc(mitzMockBaseURL *url.URL, providerURA string) func(context.Context, string) (bool, error) {
 	if mitzMockBaseURL == nil {
 		return nil

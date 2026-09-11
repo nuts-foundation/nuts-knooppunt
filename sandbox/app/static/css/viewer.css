@@ -188,16 +188,9 @@
   .quick-add { display: inline-flex; gap: 7px; align-items: center; border: 1px dashed var(--line2); background: transparent; color: var(--text2); border-radius: 999px; padding: 6px 15px; font-size: 11px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; margin-top: 10px; transition: border 0.15s, color 0.15s, background 0.15s; }
   .quick-add:hover { border-color: var(--teal); color: var(--teal-deep); background: var(--teal-soft); }
 
-  /* The patient-row and status-chip rules that used to sit here are gone.
-     None of them were dead. They came over from the wireframe for a panel
-     widget that was never built, but they were written unscoped, so they
-     matched the live patient list instead: this file loads after ehr.css, so
-     .stat-chip and its .local/.gf variants won the cascade outright, and
-     .prow .pav beat ehr.css's bare .pav on specificity regardless of order,
-     which is why the avatar rendered at 38px instead of 50. They now live in
-     ehr.css alone.
-     (The .gf-tab below does render a bare .chev; that is styled by
-     .gf-tab .chev here and by the bare .chev in ehr.css, both untouched.) */
+  /* Patient-row and status-chip rules belong in ehr.css. Unscoped copies here
+     load after it and win the cascade, which once recoloured the chips and
+     shrank the avatar. */
 
   .hd-idle { font-size: 11.5px; line-height: 1.6; color: rgba(240,235,225,0.72); margin-bottom: 10px; }
 

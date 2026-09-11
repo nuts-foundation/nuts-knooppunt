@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -44,7 +43,7 @@ func acceptanceServer(t *testing.T) (harness.Details, *httptest.Server, *http.Cl
 //
 // Reading back through the same component that wrote would let a consistently
 // wrong tokenization find itself and pass. The store holds a pseudonym; the
-// interceptor converts a search token to that pseudonym and mints a token again
+// interceptor converts a search token to that pseudonym and issues a new token
 // on read, so searching with a freshly derived token finds what was written.
 // "nvi" is the audience the harness configures (test/e2e/harness/entrypoint.go);
 // the fake pseudonymizer derives the token from the BSN and that recipient.
@@ -68,35 +67,17 @@ func rawNVILists(t *testing.T, h harness.Details, bsn string) []fhir.List {
 	return lists
 }
 
-func postAndRead(t *testing.T, client *http.Client, srv *httptest.Server, path string) (int, string) {
+// sharePublished shares the patient through the UI and requires the NVI card to
+// report the publish, returning the page for further assertions. A failed
+// registration also answers 200, with a Failed card and nothing written, so
+// without this an assertion about the store proves nothing: three Lists read as
+// convergence whether both shares ran or only one did.
+func sharePublished(t *testing.T, client *http.Client, srv *httptest.Server, key string) string {
 	t.Helper()
-	res := postForm(t, client, srv, path, nil)
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	require.NoError(t, err)
-	return res.StatusCode, string(body)
-}
-
-// filterByCustodian keeps the Lists carrying one custodian in their localization
-// extension. nvi.custodianOf does the same thing but is unexported.
-func filterByCustodian(lists []fhir.List, custodianURA string) []fhir.List {
-	var mine []fhir.List
-	for _, list := range lists {
-		for _, ext := range list.Extension {
-			if ext.Url != "http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian" {
-				continue
-			}
-			if ext.ValueReference != nil && ext.ValueReference.Identifier != nil &&
-				ext.ValueReference.Identifier.Value != nil &&
-				*ext.ValueReference.Identifier.Value == custodianURA {
-				mine = append(mine, list)
-				// One match is enough: a List carrying the extension twice would
-				// otherwise be counted twice and read as a delete that missed.
-				break
-			}
-		}
-	}
-	return mine
+	status, body := postAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/share")
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, "Localization records published", "the share must have run, or the store proves nothing")
+	return body
 }
 
 // AC1, AC2 and AC3: sharing through the UI publishes one localization record per
@@ -106,15 +87,14 @@ func TestAcceptance_ShareRegistersBothAndConfirms(t *testing.T) {
 	anna, ok := pool.PatientByKey("anna")
 	require.True(t, ok)
 
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 	status, body := postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
 
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "Localization records published")
 	require.Contains(t, body, "Consent subscription started")
 
-	lists := rawNVILists(t, h, anna.BSN)
-	plataanLists := filterByCustodian(lists, plataanURA)
+	plataanLists := nvi.FilterByCustodian(rawNVILists(t, h, anna.BSN), plataanURA)
 	require.Equal(t, anna.PlataanCategories(), nvi.CategoriesOf(plataanLists))
 	for _, list := range plataanLists {
 		require.Equal(t, nvi.DataCategorySystem, *list.Code.Coding[0].System)
@@ -125,12 +105,17 @@ func TestAcceptance_ShareRegistersBothAndConfirms(t *testing.T) {
 		// TestAcceptance_SharingTwiceIsSafe: a delete that missed would leave
 		// six Lists instead of three.
 		require.NotNil(t, list.Source, "the profile requires a source")
-		// Deliberately nothing about the subject here. The interceptor re-mints
-		// the identifier on every read with a hardcoded system, so asserting that
-		// system only restates what the search having matched already implies,
-		// and comparing the re-minted value against the BSN says nothing about
-		// what is stored. That the NVI holds a pseudonym is proved where it is
-		// observable, in component/nvi's tokenization tests.
+		// Deliberately nothing about the subject here. The interceptor issues a
+		// fresh identifier on every read with a hardcoded system, so asserting
+		// that system only restates what the search having matched already
+		// implies, and comparing the returned value against the BSN says nothing
+		// about what is stored.
+		//
+		// Nor does anything else in this repository prove it. component/nvi's
+		// tokenization tests run against a generated MockPseudonymizer, and this
+		// harness leaves prsurl unset so the component falls back to the XOR
+		// fake in lib/bsnutil. The mock PRS added in PR #561 is what makes a real
+		// pseudonym observable; see docs/prs-contract.md and mock-components/prs.
 	}
 
 	subs := h.MockMitzXACML.GetSubscriptions()
@@ -146,34 +131,20 @@ func TestAcceptance_SharingTwiceIsSafe(t *testing.T) {
 	anna, ok := pool.PatientByKey("anna")
 	require.True(t, ok)
 
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
-	firstStatus, firstBody := postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
-	status, body := postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+	openPatient(t, client, srv, anna.Key)
+	firstBody := sharePublished(t, client, srv, anna.Key)
+	body := sharePublished(t, client, srv, anna.Key)
 
-	// Both shares, for the same reason. A first share that failed and wrote
-	// nothing would leave the second one's fresh create at the same three-List
-	// count, which reads as convergence just as convincingly.
-	require.Equal(t, http.StatusOK, firstStatus)
-	require.Contains(t, firstBody, "Localization records published")
-
-	// The second share has to have succeeded, or the count below proves nothing:
-	// a failed registration answers 200 with a Failed card and writes nothing,
-	// leaving exactly the three Lists the first share created. That is
-	// indistinguishable from convergence unless the success is asserted. The
-	// title is unique to the success branch.
-	require.Equal(t, http.StatusOK, status)
-	require.Contains(t, body, "Localization records published")
-
-	// What each share actually did with the subscription, which the count below
-	// cannot show: one subscription is the same number whether the second share
-	// created it or found it. The mock answers a repeat with the existing
-	// subscription and still returns 201, so a card reading "started" on the
-	// second share would be the demo claiming an action Mitz did not take.
+	// What each share did with the subscription, which the count below cannot
+	// show: one subscription is the same number whether the second share created
+	// it or found it. The mock answers a repeat with the existing subscription and
+	// still returns 201, so "started" on the second share would claim an action
+	// Mitz did not take.
 	require.Contains(t, firstBody, "Consent subscription started")
 	require.Contains(t, body, "Consent subscription already registered")
 	require.NotContains(t, body, "Consent subscription started")
 
-	plataanLists := filterByCustodian(rawNVILists(t, h, anna.BSN), plataanURA)
+	plataanLists := nvi.FilterByCustodian(rawNVILists(t, h, anna.BSN), plataanURA)
 	require.Len(t, plataanLists, len(anna.PlataanCategories()),
 		"two shares must leave one List per category, not two")
 	require.Len(t, h.MockMitzXACML.GetSubscriptions(), 1)
@@ -224,20 +195,14 @@ func TestAcceptance_ADuplicateCategoryIsNotReportedAsUnnamed(t *testing.T) {
 	}, nvi.CategoryCondition)
 	postRawNVIList(t, h, duplicate)
 
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
-	shareStatus, shareBody := postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+	openPatient(t, client, srv, anna.Key)
+	sharePublished(t, client, srv, anna.Key)
 
-	// The share has to have run, or the assertions below hold over the single
-	// preloaded fixture and prove nothing: a failed registration answers 200 with
-	// a Failed card and writes nothing.
-	require.Equal(t, http.StatusOK, shareStatus)
-	require.Contains(t, shareBody, "Localization records published")
-
-	// And what the scoped write actually leaves behind: this client's three
-	// categories plus the foreign client's Condition, which it cannot delete. Two
-	// Condition Lists, not one, which is why the share screen must not promise
-	// convergence on one per category.
-	plataanLists := filterByCustodian(rawNVILists(t, h, anna.BSN), plataanURA)
+	// What the scoped write leaves behind: this client's three categories plus
+	// the foreign client's Condition, which it cannot delete. Two Condition
+	// Lists, not one, which is why the share screen must not promise convergence
+	// on one per category.
+	plataanLists := nvi.FilterByCustodian(rawNVILists(t, h, anna.BSN), plataanURA)
 	require.Len(t, plataanLists, len(anna.PlataanCategories())+1,
 		"the foreign client's List survives a scoped delete")
 	conditions := 0
@@ -281,15 +246,10 @@ func TestAcceptance_ShareLeavesZonnebloemIntact(t *testing.T) {
 	anna, ok := pool.PatientByKey("anna")
 	require.True(t, ok)
 
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
-	status, body := postAndRead(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/share")
+	openPatient(t, client, srv, anna.Key)
+	sharePublished(t, client, srv, anna.Key)
 
-	// Without this the test passes when the share never ran: a 409 or a 500
-	// leaves Zonnebloem exactly as seeded, which is what it asserts below.
-	require.Equal(t, http.StatusOK, status)
-	require.Contains(t, body, "Localization records published")
-
-	zonnebloem := filterByCustodian(rawNVILists(t, h, anna.BSN), h.SunflowerURA)
+	zonnebloem := nvi.FilterByCustodian(rawNVILists(t, h, anna.BSN), h.SunflowerURA)
 	require.Equal(t, anna.ZonnebloemCategories(), nvi.CategoriesOf(zonnebloem))
 }
 
@@ -300,7 +260,7 @@ func TestAcceptance_ASecondSessionCannotOpenALockedPatient(t *testing.T) {
 	require.True(t, ok)
 	other := signInViaDezi(t, srv)
 
-	postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil).Body.Close()
+	openPatient(t, client, srv, anna.Key)
 	res := postForm(t, other, srv, "/demo/ehr/patients/"+anna.Key+"/open", nil)
 	defer res.Body.Close()
 

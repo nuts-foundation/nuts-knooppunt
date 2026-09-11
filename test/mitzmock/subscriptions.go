@@ -119,14 +119,10 @@ func (m *SubscriptionService) Stop(t *testing.T) {
 }
 
 // subscriptionStore holds captured Mitz consent subscriptions, keyed by the
-// (providerid, patientid) pair from the criteria string.
-//
-// Keyed rather than appended so that a demo which shares the same patient twice
-// leaves one subscription, and so the acceptance criterion ("the mock contains a
-// subscription for De Plataan and the selected patient", singular) is checkable.
-// This is a property of the mock, chosen for deterministic demos. Revision 2 of
-// the design is explicit that the same guarantee does not hold against the
-// national Mitz.
+// (providerid, patientid) pair from the criteria string. Keyed rather than
+// appended so a demo that shares the same patient twice leaves one subscription.
+// That is a property of this mock, chosen for deterministic demos; the national
+// Mitz makes no such promise.
 type subscriptionStore struct {
 	mu       sync.Mutex
 	byKey    map[string]fhir.Subscription
@@ -282,11 +278,9 @@ func (m *ClosedQuestionService) handleSearchSubscriptions(w http.ResponseWriter,
 
 // handleClearSubscriptions drops everything, so a demo reset restores a clean
 // consent state (DESIGN §5.6). With providerid and patientid it drops just that
-// pair, which is what a per-patient recycle needs: clearing the store would
-// cancel a concurrent demo's subscription along with this patient's.
-//
-// Both parameters or neither. Half a pair cannot address a subscription this
-// store keys on both, and deleting everything because one was missing is the
+// pair, which a per-patient recycle needs so as not to cancel a concurrent
+// demo's subscription. Both parameters or neither: half a pair cannot address a
+// subscription keyed on both, and deleting everything for it would be the
 // destructive reading of an ambiguous request.
 func (m *ClosedQuestionService) handleClearSubscriptions(w http.ResponseWriter, r *http.Request) {
 	provider, patient := r.URL.Query().Get("providerid"), r.URL.Query().Get("patientid")

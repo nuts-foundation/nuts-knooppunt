@@ -47,24 +47,18 @@ type Config struct {
 	recyclePatient func(ctx context.Context, patientKey string) error
 
 	// The NVI half of the share flow, wired in NewConfigFromEnv and injectable so
-	// handler tests need no live NVI. nviLookup answers with the record count as
-	// well as the categories, because a List this build cannot decode still makes
-	// the patient findable (see nviRecords).
+	// handler tests need no live NVI.
 	nviLookup   func(ctx context.Context, bsn string) (nviRecords, error)
 	nviRegister func(ctx context.Context, bsn string, categories []string) error
 
-	// mitzSubscribe starts a consent subscription for a shared patient: the
-	// second remote call the share flow makes, alongside nviRegister above.
-	// mitzSubscribed is the mock-only reconciliation query (mitzclient.go) that
-	// answers whether one already exists, for the record screen and the retry
-	// route. Both are wired in NewConfigFromEnv; mitzSubscribed stays nil when
-	// MITZMOCK_URL is unset, and callers must render that as unknown, not "not
-	// subscribed".
+	// The Mitz half. mitzSubscribed is the mock-only reconciliation query
+	// (mitzclient.go); it stays nil when MITZMOCK_URL is unset, and callers must
+	// render nil as unknown, not as "not subscribed".
 	mitzSubscribe  func(ctx context.Context, bsn string) error
 	mitzSubscribed func(ctx context.Context, bsn string) (bool, error)
 
-	// mitzMockURL is the mock's own base URL, used for reconciliation here and
-	// for reset cleanup in Task 10. Nil when MITZMOCK_URL is unset.
+	// mitzMockURL is the mock's base URL, handed to reset and recycle for
+	// subscription cleanup. Nil when MITZMOCK_URL is unset.
 	mitzMockURL *url.URL
 
 	// sessions and secureCookie carry the session half of reset, which E2 owns.
@@ -84,12 +78,11 @@ func (c Config) configured() bool {
 // NewConfigFromEnv builds a Config from the KNOOPPUNT_INTERNAL_URL and
 // HAPI_BASE_URL environment variables.
 //
-// The two features have different needs and are wired separately. The NVI
-// client talks only to the Knooppunt, so it comes up as soon as
-// KNOOPPUNT_INTERNAL_URL is set. Reset and recycle also rewrite the FHIR store
-// directly and need HAPI_BASE_URL as well. Gating both on both would disable the
-// NVI over a variable it never reads, and the only symptom would be every
-// patient reading "status unknown" with nothing to say why.
+// The NVI client talks only to the Knooppunt, so it comes up as soon as
+// KNOOPPUNT_INTERNAL_URL is set; reset and recycle also rewrite the FHIR store
+// and need HAPI_BASE_URL as well. Gating both on both disabled the NVI over a
+// variable it never reads, and the only symptom was every patient reading
+// "status unknown".
 func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 	cfg := Config{
 		KnooppuntInternalURL: getenv("KNOOPPUNT_INTERNAL_URL"),
@@ -111,9 +104,8 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 	}
 	cfg.nviLookup, cfg.nviRegister = nviFuncs(knooppuntURL, clientID)
 
-	// Read through the injected getenv, not envOr: NewConfigFromEnv takes the
-	// lookup as a parameter so tests can drive it, and envOr goes straight to
-	// os.Getenv.
+	// Through the injected getenv, not envOr, which reads os.Getenv directly and
+	// would bypass what a test injects.
 	facilityType := getenv("SANDBOX_FACILITY_TYPE")
 	if facilityType == "" {
 		facilityType = "Z3"
@@ -136,9 +128,7 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		return Config{}, fmt.Errorf("invalid HAPI_BASE_URL: %w", err)
 	}
 	// One target for both, carrying the client id the share flow publishes
-	// under. Passing the compiled-in default instead would make every cleanup a
-	// no-op whenever SANDBOX_NVI_CLIENT_ID is set, while both notices still
-	// reported that the dataset was restored.
+	// under; SandboxTarget says why the id has to travel with the URLs.
 	target := vectors.SandboxTarget{
 		HAPIBaseURL:              hapiURL,
 		KnooppuntInternalBaseURL: knooppuntURL,
@@ -502,11 +492,10 @@ func (c Config) handleRecycle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := c.recyclePatient(r.Context(), key); err != nil {
-		// Same split as handleReset: the patient's fixtures were restored and
-		// something optional was not cleared. Reporting that as a failed recycle
-		// would send the presenter to a working patient they were told is broken,
-		// and reporting it as clean would hide a subscription that outlived the
-		// demo it belongs to.
+		// Partial is neither failed nor clean, as in handleReset: the fixtures
+		// were restored and something optional was not cleared. Reporting a
+		// failure sends the presenter away from a working patient; reporting
+		// clean hides a subscription that outlived its demo.
 		if errors.Is(err, vectors.ErrPartialReset) {
 			slog.Warn("recycle completed with warnings", "patient", key, "error", err)
 			http.Redirect(w, r, "/demo?notice=recycle-partial", http.StatusSeeOther)

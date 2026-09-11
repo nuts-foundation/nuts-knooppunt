@@ -47,6 +47,26 @@ func searchSetOf(lists ...fhir.List) fhir.Bundle {
 	return bundle
 }
 
+// fakeNVI serves handler as the NVI and returns its base URL.
+func fakeNVI(t *testing.T, handler http.HandlerFunc) *url.URL {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	base, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return base
+}
+
+// answerSearch writes a searchset of the given Lists to every request.
+func answerSearch(lists ...fhir.List) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_ = json.NewEncoder(w).Encode(searchSetOf(lists...))
+	}
+}
+
 func TestBuildList_IsProfileConformant(t *testing.T) {
 	reg := Registration{CustodianURA: "00000010", BSN: "999900006", ClientID: "gf-sandbox-plataan"}
 
@@ -83,16 +103,12 @@ func TestBuildList_IsProfileConformant(t *testing.T) {
 }
 
 // A guard on the vocabulary, not on BuildList: nothing validates List.code at
-// runtime, so the defence against reintroducing an aggregate code is that no
-// such constant exists to reach for.
-//
-// Two rules, because a denylist alone is only as good as the names someone
-// thinks to forbid. The shape rule is the general one: every member of
-// nl-gf-zorgcontext-vs is a FHIR resource type, so a code carrying a digit or a
-// hyphen is from some other system by construction. That is what catches
-// 55188-7, the aggregate LOINC "Patient data Document" this per-category model
-// replaced, which the previous spelling of this test let through. The denylist
-// then covers the aggregates that do have a resource-type shape.
+// runtime, so the defence against an aggregate code is that no such constant
+// exists to reach for. Two rules, because a denylist is only as good as the names
+// someone thinks to forbid: every member of nl-gf-zorgcontext-vs is a FHIR
+// resource type, so a code with a digit or a hyphen is foreign by construction
+// (that catches 55188-7, the aggregate LOINC code this per-category model
+// replaced), and the denylist covers aggregates shaped like a resource type.
 func TestCategoryConstants_ContainNoAggregateCode(t *testing.T) {
 	aggregates := []string{"MEDAFSPRAAK", "55188-7"}
 	for _, category := range []string{CategoryPatient, CategoryCondition, CategoryMedicationRequest, CategoryAllergyIntolerance} {
@@ -158,13 +174,11 @@ func TestCategoriesOf_IgnoresOtherCodeSystems(t *testing.T) {
 }
 
 // The client scope has to reach the NVI as a search parameter. Filtering the
-// results instead silently deletes nothing: the pseudonymization interceptor
-// rewrites List.source.identifier into a Device reference on storage, so a List
-// read back has no source.identifier to compare, and every count still looks
-// plausible.
+// results instead silently deletes nothing: the store rewrites source.identifier
+// into a Device reference, so a List read back has nothing to compare.
 func TestDeleteForClientSearchesBySourceIdentifier(t *testing.T) {
 	var query url.Values
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := fakeNVI(t, func(w http.ResponseWriter, r *http.Request) {
 		// The client's DefaultConfig sets UsePostSearch, so a search is
 		// POST List/_search with the parameters form-encoded in the body, not in
 		// the URL (go-fhir-client client.go, SearchWithContext).
@@ -172,14 +186,8 @@ func TestDeleteForClientSearchesBySourceIdentifier(t *testing.T) {
 			t.Errorf("parse search body: %v", err)
 		}
 		query = r.PostForm
-		w.Header().Set("Content-Type", "application/fhir+json")
-		_ = json.NewEncoder(w).Encode(searchSetOf())
-	}))
-	t.Cleanup(srv.Close)
-	base, err := url.Parse(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
+		answerSearch()(w, r)
+	})
 
 	if err := deleteForClient(context.Background(), fhirclient.New(base, http.DefaultClient, nil),
 		"00000010", "999900006", "gf-sandbox-plataan"); err != nil {
@@ -198,23 +206,14 @@ func TestDeleteForClientSearchesBySourceIdentifier(t *testing.T) {
 // belonging to another organization must survive.
 func TestDeleteForClientLeavesOtherCustodiansAlone(t *testing.T) {
 	var deleted []string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := fakeNVI(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
 			deleted = append(deleted, strings.TrimPrefix(r.URL.Path, "/List/"))
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		w.Header().Set("Content-Type", "application/fhir+json")
-		_ = json.NewEncoder(w).Encode(searchSetOf(
-			listFor("plataan-list", "00000010"),
-			listFor("zonnebloem-list", "00000020"),
-		))
-	}))
-	t.Cleanup(srv.Close)
-	base, err := url.Parse(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
+		answerSearch(listFor("plataan-list", "00000010"), listFor("zonnebloem-list", "00000020"))(w, r)
+	})
 
 	if err := deleteForClient(context.Background(), fhirclient.New(base, http.DefaultClient, nil),
 		"00000020", "999900006", "zorgdossier-zonnebloem"); err != nil {
@@ -249,43 +248,30 @@ func TestCustodianOfHandlesMissingAndMalformedExtensions(t *testing.T) {
 	}
 }
 
-// CountLists reports one custodian's registrations, not the subject's. The
-// search behind it is by subject, so a patient registered at both De Plataan
-// and De Zonnebloem comes back twice; counting the raw result would report two
-// registrations for each custodian and make a double-seed look like a duplicate.
-func TestCountListsCountsOneCustodian(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/fhir+json")
-		_ = json.NewEncoder(w).Encode(searchSetOf(
-			listFor("plataan-list", "00000010"),
-			listFor("zonnebloem-list", "00000020"),
-		))
-	}))
-	t.Cleanup(srv.Close)
+// ListsForCustodian returns one custodian's registrations, not the subject's. The
+// search behind it is by subject, so a patient registered at both De Plataan and
+// De Zonnebloem comes back twice; returning the raw result would report two
+// registrations for each custodian and make a double seed look like a duplicate.
+func TestListsForCustodianReturnsOneCustodian(t *testing.T) {
+	base := fakeNVI(t, answerSearch(listFor("plataan-list", "00000010"), listFor("zonnebloem-list", "00000020")))
 
-	base, err := url.Parse(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, custodian := range []string{"00000010", "00000020"} {
-		got, err := CountLists(context.Background(), base, custodian, "999900006")
+		got, err := ListsForCustodian(context.Background(), base, custodian, "999900006")
 		if err != nil {
-			t.Fatalf("CountLists(%s): %v", custodian, err)
+			t.Fatalf("ListsForCustodian(%s): %v", custodian, err)
 		}
-		if got != 1 {
-			t.Fatalf("custodian %s: expected 1 registration, got %d", custodian, got)
+		if len(got) != 1 {
+			t.Fatalf("custodian %s: expected 1 registration, got %d", custodian, len(got))
 		}
 	}
 }
 
-// An empty custodian or client must not be usable as a wildcard: an unguarded
-// empty value would widen the search instead of narrowing it.
-// The guard has to refuse before it reaches the NVI, so the test has to be able
-// to tell "refused" from "the request failed". Pointing an unreachable address
-// at it and asserting only that an error came back cannot: delete the guard and
-// connection-refused returns an error too, and the test still passes. This
-// server fails the test on any request at all, which is the thing being
-// protected — a search missing one of the three scopes is a wildcard delete.
+// An empty custodian, client or BSN must not act as a wildcard: an unguarded
+// empty value widens the search instead of narrowing it. The guard has to refuse
+// before anything reaches the NVI, and the test has to tell "refused" from "the
+// request failed": with an unreachable address, deleting the guard still yields
+// an error (connection refused) and the test still passes. So this server counts
+// requests, and any request at all is the failure.
 func TestDeleteForClientRefusesAnEmptyScope(t *testing.T) {
 	for name, tc := range map[string]struct{ custodian, bsn, clientID string }{
 		"empty custodian": {"", "999900006", "gf-sandbox-plataan"},
@@ -294,18 +280,12 @@ func TestDeleteForClientRefusesAnEmptyScope(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			var requests int
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			base := fakeNVI(t, func(w http.ResponseWriter, r *http.Request) {
 				requests++
-				w.Header().Set("Content-Type", "application/fhir+json")
-				_ = json.NewEncoder(w).Encode(searchSetOf())
-			}))
-			t.Cleanup(srv.Close)
-			base, err := url.Parse(srv.URL)
-			if err != nil {
-				t.Fatal(err)
-			}
+				answerSearch()(w, r)
+			})
 
-			err = deleteForClient(context.Background(),
+			err := deleteForClient(context.Background(),
 				fhirclient.New(base, http.DefaultClient, nil), tc.custodian, tc.bsn, tc.clientID)
 
 			if err == nil {

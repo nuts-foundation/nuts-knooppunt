@@ -9,11 +9,22 @@ import (
 	"testing"
 )
 
+// mitzMock serves handler as the mock Mitz and returns its base URL.
+func mitzMock(t *testing.T, handler http.HandlerFunc) *url.URL {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	base, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return base
+}
+
 // No mock configured is not a clean slate. The sandbox subscribes through the
 // Knooppunt, which reaches Mitz whether or not MITZMOCK_URL was ever set, so a
-// subscription can exist that this has no way to remove. Returning nil here made
-// the reset notice claim the seeded fixtures were restored over a consent state
-// nothing had touched.
+// subscription can exist that this cannot remove, and nil here made the reset
+// notice claim a restored consent state nothing had touched.
 func TestClearMitzSubscriptions_NilURLIsAPartialReset(t *testing.T) {
 	err := clearMitzSubscriptions(context.Background(), nil, url.Values{})
 	if !errors.Is(err, ErrPartialReset) {
@@ -23,15 +34,10 @@ func TestClearMitzSubscriptions_NilURLIsAPartialReset(t *testing.T) {
 
 func TestClearMitzSubscriptions_CallsDelete(t *testing.T) {
 	var method, path, query string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := mitzMock(t, func(w http.ResponseWriter, r *http.Request) {
 		method, path, query = r.Method, r.URL.Path, r.URL.RawQuery
 		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer server.Close()
-	base, err := url.Parse(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	})
 
 	if err := clearMitzSubscriptions(context.Background(), base, url.Values{}); err != nil {
 		t.Fatalf("clearMitzSubscriptions: %v", err)
@@ -49,15 +55,10 @@ func TestClearMitzSubscriptions_CallsDelete(t *testing.T) {
 // subscription while reporting that it restored one patient.
 func TestClearMitzSubscriptions_ScopeIsSentAsQueryParameters(t *testing.T) {
 	var query string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := mitzMock(t, func(w http.ResponseWriter, r *http.Request) {
 		query = r.URL.RawQuery
 		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer server.Close()
-	base, err := url.Parse(server.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
+	})
 
 	scope := url.Values{"providerid": {"00000010"}, "patientid": {"999900006"}}
 	if err := clearMitzSubscriptions(context.Background(), base, scope); err != nil {
@@ -82,11 +83,9 @@ func TestClearMitzSubscriptions_UnreachableIsAPartialReset(t *testing.T) {
 }
 
 func TestClearMitzSubscriptions_UnexpectedStatusIsAPartialReset(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	base := mitzMock(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-	base, _ := url.Parse(server.URL)
+	})
 
 	if err := clearMitzSubscriptions(context.Background(), base, url.Values{}); !errors.Is(err, ErrPartialReset) {
 		t.Fatalf("got %v, want ErrPartialReset", err)

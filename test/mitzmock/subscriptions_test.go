@@ -99,9 +99,7 @@ func TestStandaloneService_ServesSubscriptions(t *testing.T) {
 	require.Contains(t, post.Header.Get("Location"), "Subscription/")
 
 	// A second POST for the same pair must not add a second subscription.
-	repeat, err := http.Post(endpoint, "application/fhir+json", bytes.NewReader(body))
-	require.NoError(t, err)
-	require.NoError(t, repeat.Body.Close())
+	postSubscription(t, service, "00000010", "999900006")
 
 	get, err := http.Get(endpoint)
 	require.NoError(t, err)
@@ -111,12 +109,7 @@ func TestStandaloneService_ServesSubscriptions(t *testing.T) {
 	require.NoError(t, json.NewDecoder(get.Body).Decode(&bundle))
 	require.Len(t, bundle.Entry, 1)
 
-	req, err := http.NewRequest(http.MethodDelete, endpoint, nil)
-	require.NoError(t, err)
-	del, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer del.Body.Close()
-	require.Equal(t, http.StatusNoContent, del.StatusCode)
+	deleteSubscriptions(t, service, nil)
 }
 
 // A scoped DELETE removes one pair and leaves the rest. The per-patient recycle
@@ -156,12 +149,7 @@ func TestClosedQuestionService_HalfAScopeIsRejectedRatherThanClearingAll(t *test
 
 func postSubscription(t *testing.T, service *ClosedQuestionService, providerURA, bsn string) {
 	t.Helper()
-	body, err := json.Marshal(map[string]any{
-		"resourceType": "Subscription",
-		"status":       "requested",
-		"criteria":     "Consent?_query=otv&patientid=" + bsn + "&providerid=" + providerURA,
-		"channel":      map[string]any{"type": "rest-hook"},
-	})
+	body, err := json.Marshal(subscription(providerURA, bsn))
 	require.NoError(t, err)
 	res, err := http.Post(service.GetURL()+"/abonnementen/fhir/Subscription",
 		"application/fhir+json", bytes.NewReader(body))

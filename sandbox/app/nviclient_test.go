@@ -41,11 +41,10 @@ func TestPatientShareStatus_LocalOnlyWhenNoCategories(t *testing.T) {
 }
 
 // A List this build cannot decode is still a List. Deriving "shared" from the
-// recognized categories would tell the presenter the patient is local-only while
-// other providers can find them, which is the demo denying a registration that
-// exists. Reachable on a stack whose NVI still holds records from an earlier
-// seed: compose reuses an unchanged hapi-fhir container, and the client-scoped
-// delete only removes what this build wrote.
+// recognized categories would tell the presenter a findable patient is
+// local-only. Reachable on a stack whose NVI still holds records from an earlier
+// seed: compose reuses the hapi-fhir container, and the client-scoped delete
+// only removes what this build wrote.
 func TestPatientShareStatus_SharedWhenAListHasNoRecognizedCategory(t *testing.T) {
 	cfg := Config{nviLookup: func(context.Context, string) (nviRecords, error) {
 		return nviRecords{Count: 1, Unnamed: 1}, nil
@@ -108,17 +107,16 @@ func TestRegisterPatient_ErrorsWhenUnconfigured(t *testing.T) {
 	require.Error(t, Config{}.registerPatient(t.Context(), pool.Patients()[0]))
 }
 
+// envOf returns a getenv over a fixed set of variables, everything else unset.
+func envOf(vars map[string]string) func(string) string {
+	return func(key string) string { return vars[key] }
+}
+
 // The NVI client talks only to the Knooppunt, so it must come up on
-// KNOOPPUNT_INTERNAL_URL alone. Gating it on HAPI_BASE_URL as well disabled it
-// over a variable it never reads, and the only symptom was every patient row
-// reading "status unknown" with nothing to say why.
+// KNOOPPUNT_INTERNAL_URL alone. Gating it on HAPI_BASE_URL as well left every
+// patient row reading "status unknown" with nothing to say why.
 func TestNewConfigFromEnv_WiresTheNVIWithoutHAPI(t *testing.T) {
-	cfg, err := NewConfigFromEnv(func(key string) string {
-		if key == "KNOOPPUNT_INTERNAL_URL" {
-			return "http://knooppunt:8081"
-		}
-		return ""
-	})
+	cfg, err := NewConfigFromEnv(envOf(map[string]string{"KNOOPPUNT_INTERNAL_URL": "http://knooppunt:8081"}))
 
 	require.NoError(t, err)
 	require.True(t, cfg.nviConfigured(), "the NVI needs only the Knooppunt URL")
@@ -126,15 +124,10 @@ func TestNewConfigFromEnv_WiresTheNVIWithoutHAPI(t *testing.T) {
 }
 
 func TestNewConfigFromEnv_WiresResetWhenBothAreSet(t *testing.T) {
-	cfg, err := NewConfigFromEnv(func(key string) string {
-		switch key {
-		case "KNOOPPUNT_INTERNAL_URL":
-			return "http://knooppunt:8081"
-		case "HAPI_BASE_URL":
-			return "http://hapi:7050/fhir"
-		}
-		return ""
-	})
+	cfg, err := NewConfigFromEnv(envOf(map[string]string{
+		"KNOOPPUNT_INTERNAL_URL": "http://knooppunt:8081",
+		"HAPI_BASE_URL":          "http://hapi:7050/fhir",
+	}))
 
 	require.NoError(t, err)
 	require.True(t, cfg.nviConfigured())
@@ -142,20 +135,19 @@ func TestNewConfigFromEnv_WiresResetWhenBothAreSet(t *testing.T) {
 }
 
 func TestNewConfigFromEnv_NothingIsWiredWithoutTheKnooppunt(t *testing.T) {
-	cfg, err := NewConfigFromEnv(func(string) string { return "" })
+	cfg, err := NewConfigFromEnv(envOf(nil))
 
 	require.NoError(t, err)
 	require.False(t, cfg.nviConfigured())
 	require.False(t, cfg.configured())
 }
 
-// SANDBOX_NVI_CLIENT_ID has to reach publication and cleanup as one value. The
-// client id is the scope a registration is deleted by, so an override that moves
-// only the publishing half leaves recycle deleting under an id nothing was
-// written with, while its notice still says the patient was restored.
-//
-// Observed at the wire, not at the wiring: both paths are closures, and asserting
-// that they were assigned says nothing about which id they carry.
+// SANDBOX_NVI_CLIENT_ID has to reach publication and cleanup as one value: the
+// client id is the scope a registration is deleted by, so an override that moved
+// only the publishing half would leave recycle deleting under an id nothing was
+// written with, while its notice still said the patient was restored. Observed at
+// the wire, because both paths are closures and asserting that they were assigned
+// says nothing about which id they carry.
 func TestNewConfigFromEnv_TheOverriddenClientIDReachesPublicationAndCleanup(t *testing.T) {
 	const override = "gf-sandbox-plataan-override"
 	var mu sync.Mutex
@@ -173,20 +165,14 @@ func TestNewConfigFromEnv_TheOverriddenClientIDReachesPublicationAndCleanup(t *t
 	}))
 	defer nviFake.Close()
 
-	cfg, err := NewConfigFromEnv(func(key string) string {
-		switch key {
-		case "KNOOPPUNT_INTERNAL_URL":
-			return nviFake.URL
-		case "HAPI_BASE_URL":
-			// Unreachable on purpose: recycle deletes De Plataan's NVI records
-			// before it touches HAPI, so the client id is already on the wire by
-			// the time this fails, and nothing here needs a FHIR store.
-			return "http://127.0.0.1:1/fhir"
-		case "SANDBOX_NVI_CLIENT_ID":
-			return override
-		}
-		return ""
-	})
+	cfg, err := NewConfigFromEnv(envOf(map[string]string{
+		"KNOOPPUNT_INTERNAL_URL": nviFake.URL,
+		"SANDBOX_NVI_CLIENT_ID":  override,
+		// Unreachable on purpose: recycle deletes De Plataan's NVI records before
+		// it touches HAPI, so the client id is already on the wire by the time
+		// this fails, and nothing here needs a FHIR store.
+		"HAPI_BASE_URL": "http://127.0.0.1:1/fhir",
+	}))
 	require.NoError(t, err)
 
 	anna := pool.Patients()[0]
@@ -209,9 +195,8 @@ func TestNewConfigFromEnv_TheOverriddenClientIDReachesPublicationAndCleanup(t *t
 
 // The adapter is where the unnamed count is produced, and every other test in
 // this file injects an already-populated nviRecords, so none of them can see it
-// stop being produced. Returning a constant zero there makes a mixed real
-// response lose its warning and select the "same records" copy, with the helper's
-// own test still green because it only exercises the producer.
+// stop being produced: a constant zero there would cost a mixed real response its
+// warning while the helper's own test stays green.
 func TestNVIFuncs_CarriesTheUnnamedCountFromTheRealResponse(t *testing.T) {
 	reg := nvi.Registration{CustodianURA: plataan.URA, BSN: "999900006", ClientID: "c"}
 	recognized := nvi.BuildList(reg, nvi.CategoryCondition)

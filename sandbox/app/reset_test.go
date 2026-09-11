@@ -120,10 +120,8 @@ func TestReset_PartialResetIsReportedNotFailed(t *testing.T) {
 	require.Equal(t, "/demo?notice=reset-partial", res.Header.Get("Location"))
 }
 
-// A recycle whose Mitz cleanup could not run restored the patient's fixtures and
-// left a consent subscription behind. Reporting that as a failure sends the
-// presenter away from a working patient; reporting it as clean hides a
-// subscription that outlived the demo it belongs to.
+// The recycle half of the split handleRecycle makes: fixtures restored, the
+// consent subscription not cleared, which is neither a failure nor a clean run.
 func TestRecycle_PartialRecycleIsReportedNotFailed(t *testing.T) {
 	cfg, _, _ := fakeConfig()
 	cfg.recyclePatient = func(context.Context, string) error {

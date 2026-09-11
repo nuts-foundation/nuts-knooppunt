@@ -97,22 +97,20 @@ func tenantHeader(custodianURA string) fhirclient.PreRequestOption {
 
 // Register publishes a Registration: it removes the records this installation
 // previously registered for this subject and custodian, then creates one List
-// per category. "This installation" is enforced by searching on
-// source:identifier, not by inspecting the records that come back; see
-// deleteForClient.
+// per category.
 //
-// Scoped to this client id, not to the whole custodian. Deleting every List
-// under the custodian would erase records another installation of the
-// same organization published. That was tolerable while this was a seed-only
-// helper with one writer; it is not, now that the sandbox calls it live.
+// The delete is scoped to this client id, not to the whole custodian: deleting
+// every List under the custodian would erase records another installation of
+// the same organization published, which was tolerable for a seed with one
+// writer and is not now that the sandbox calls this live.
 //
 // Delete-then-create is what the GF Localization spec prescribes for correcting
 // a record, and the NVI exposes no PUT, so there is no upsert. The sequence is
-// NOT atomic: a transaction Bundle's conditional operations would be, but the
+// not atomic: a transaction Bundle's conditional operations would be, but the
 // Knooppunt does not pseudonymize entry.request.url and the fake NVI rejects the
-// ":identifier" modifier on a conditional delete. Repeat registration therefore
-// converges when serialized, which the sandbox arranges with a per-patient mutex
-// and the demo lock; two processes can still duplicate.
+// ":identifier" modifier on a conditional delete. Repeat registration converges
+// when serialized, which the sandbox arranges per process; two processes can
+// still duplicate.
 func Register(ctx context.Context, nviBaseURL *url.URL, reg Registration) error {
 	client := fhirclient.New(nviBaseURL, http.DefaultClient, nil)
 
@@ -138,33 +136,24 @@ func DeleteForClient(ctx context.Context, nviBaseURL *url.URL, custodianURA, bsn
 }
 
 func deleteForClient(ctx context.Context, client fhirclient.Client, custodianURA, bsn, clientID string) error {
-	// Every one of the three narrows the delete, and an empty value for any of
-	// them widens it instead.
-	//
-	// The custodian filter below reports a missing or malformed extension as ""
-	// too, so an empty custodian matches records that are not ours. An empty
-	// client id does the same through the source scope. And an empty BSN is the
-	// least obvious of the three: it makes the subject parameter
-	// "<bsn-system>|", which FHIR R4 token search reads as "any element whose
-	// system property matches" rather than as an empty match, so a delete meant
-	// for one patient would take every List this custodian and client hold.
+	// All three narrow the delete, and an empty value for any of them widens it
+	// instead. custodianOf reports a missing extension as "", so an empty
+	// custodian matches records that are not ours; an empty client id does the
+	// same through the source scope; and an empty BSN makes the subject
+	// parameter "<bsn-system>|", which FHIR R4 token search reads as "any value
+	// in this system", so a delete meant for one patient would take every List
+	// this custodian and client hold.
 	if custodianURA == "" || clientID == "" || bsn == "" {
 		return fmt.Errorf("refusing to delete NVI Lists without all three of custodian, client and BSN (custodian=%q, client=%q, bsn ending %s)",
-			custodianURA, clientID, lastFour(bsn))
+			custodianURA, clientID, LastFourOfBSN(bsn))
 	}
 
-	// The client scope is a search parameter, not a filter on the results.
-	//
-	// This is the IG's own query for "records this installation registered"
-	// (GET [base]/List?source:identifier=<oauth-client-id>|<client>), and it has
-	// to be done this way: the store does not return List.source in the shape it
-	// was written. The NVI's pseudonymization interceptor rewrites
-	// source.identifier into a Device *reference* on storage, precisely so that
-	// a source:identifier search can be answered ("we'll just modify :identifier
-	// modifier to a reference param search ... without letting 'the client' know
-	// of this workaround"). Reading the records back and comparing
-	// source.identifier client-side finds nil every time and deletes nothing,
-	// while every count in sight still looks plausible.
+	// The client scope is a search parameter, not a filter on the results. The
+	// NVI's pseudonymization interceptor rewrites source.identifier into a Device
+	// reference on storage, precisely so that a source:identifier search can be
+	// answered, so a List read back has no source.identifier to compare: a
+	// client-side filter matches nothing and deletes nothing while every count
+	// still looks plausible.
 	var searchSet fhir.Bundle
 	err := client.SearchWithContext(ctx, "List", url.Values{
 		"subject:identifier": {bsnNamingSystem + "|" + bsn},
@@ -191,11 +180,9 @@ func deleteForClient(ctx context.Context, client fhirclient.Client, custodianURA
 	return nil
 }
 
-// ListsForCustodian returns a subject's Lists under one custodian.
-//
-// The search is by subject only. The tenant header scopes pseudonymization, not
-// the result set, and the custodian lives in an extension the NVI does not
-// index, so the custodian is a filter applied here.
+// ListsForCustodian returns a subject's Lists under one custodian. The search is
+// by subject only: the tenant header scopes pseudonymization, not the result set,
+// so the custodian is applied afterwards by FilterByCustodian.
 func ListsForCustodian(ctx context.Context, nviBaseURL *url.URL, custodianURA, bsn string) ([]fhir.List, error) {
 	return listsForCustodian(ctx, fhirclient.New(nviBaseURL, http.DefaultClient, nil), custodianURA, bsn)
 }
@@ -209,17 +196,29 @@ func listsForCustodian(ctx context.Context, client fhirclient.Client, custodianU
 		return nil, fmt.Errorf("search NVI Lists (custodian=%s): %w", custodianURA, err)
 	}
 
-	var mine []fhir.List
+	lists := make([]fhir.List, 0, len(searchSet.Entry))
 	for _, entry := range searchSet.Entry {
 		var list fhir.List
 		if err := json.Unmarshal(entry.Resource, &list); err != nil {
 			return nil, fmt.Errorf("parse NVI List (custodian=%s): %w", custodianURA, err)
 		}
+		lists = append(lists, list)
+	}
+	return FilterByCustodian(lists, custodianURA), nil
+}
+
+// FilterByCustodian keeps the Lists whose localization extension names
+// custodianURA. The NVI does not index that extension, so this is how a subject's
+// Lists are scoped to one custodian, here and in a test that reads the store
+// directly.
+func FilterByCustodian(lists []fhir.List, custodianURA string) []fhir.List {
+	var mine []fhir.List
+	for _, list := range lists {
 		if custodianOf(list) == custodianURA {
 			mine = append(mine, list)
 		}
 	}
-	return mine, nil
+	return mine
 }
 
 // CategoriesOf returns the sorted, deduplicated data categories a set of Lists
@@ -240,12 +239,9 @@ func CategoriesOf(lists []fhir.List) []string {
 }
 
 // UnnamedListCount counts the Lists carrying no data category this build
-// recognizes.
-//
-// Not derivable by subtracting CategoriesOf's result from the number of Lists.
-// That set is deduplicated, so two Lists of the same recognized category would
-// come out as one recognized and one unnamed, and a screen would report a plain
-// duplicate as a record whose category it cannot name.
+// recognizes. Not derivable by subtracting CategoriesOf from the number of
+// Lists: that set is deduplicated, so the subtraction reports a second List of
+// the same category as one whose category cannot be named.
 func UnnamedListCount(lists []fhir.List) int {
 	unnamed := 0
 	for _, list := range lists {
@@ -270,9 +266,9 @@ func categoryOf(list fhir.List) (string, bool) {
 	return "", false
 }
 
-// lastFour renders just enough of a BSN to correlate an error with a record
-// without putting a national identifier in a log line.
-func lastFour(bsn string) string {
+// LastFourOfBSN renders just enough of a BSN to correlate an error or log line
+// with a record without recording a national identifier.
+func LastFourOfBSN(bsn string) string {
 	if len(bsn) <= 4 {
 		return "****"
 	}
@@ -291,12 +287,4 @@ func custodianOf(list fhir.List) string {
 		}
 	}
 	return ""
-}
-
-// CountLists returns the number of NVI Lists registered for a subject under a
-// custodian, as seen through the Knooppunt (pseudonymized). Used by tests to
-// assert idempotency.
-func CountLists(ctx context.Context, nviBaseURL *url.URL, custodianURA, bsn string) (int, error) {
-	lists, err := ListsForCustodian(ctx, nviBaseURL, custodianURA, bsn)
-	return len(lists), err
 }

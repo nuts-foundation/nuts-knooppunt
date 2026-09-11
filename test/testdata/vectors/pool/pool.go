@@ -331,12 +331,9 @@ func (p PoolPatient) ZonnebloemResources() []fhir.HasId {
 }
 
 // categoriesOf maps FHIR resources to NVI data categories, deduplicated and
-// sorted so a re-seed produces the same registration every time.
-//
-// A type switch rather than reflection: the set of seeded types is small, fixed
-// and visible here. It has no default case, so an unmapped type contributes
-// nothing; TestCategoriesOf_MapsEveryPooledResourceType is what turns that into
-// a failure instead of a silent gap.
+// sorted so a re-seed produces the same registration every time. The switch has
+// no default case, so an unmapped type would contribute nothing;
+// TestCategoriesOf_MapsEveryPooledResourceType turns that into a failure.
 func categoriesOf(resources []fhir.HasId) []string {
 	seen := map[string]bool{}
 	for _, resource := range resources {

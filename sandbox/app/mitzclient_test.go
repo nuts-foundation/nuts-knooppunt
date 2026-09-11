@@ -12,19 +12,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// mitzServer serves handler as the Knooppunt's Mitz endpoint or as the mock, and
+// returns its base URL.
+func mitzServer(t *testing.T, handler http.HandlerFunc) *url.URL {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	base, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	return base
+}
+
 func TestMitzSubscribe_PostsAConformantSubscription(t *testing.T) {
 	var gotPath, gotTenant, gotContentType string
 	var body map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := mitzServer(t, func(w http.ResponseWriter, r *http.Request) {
 		gotPath, gotTenant = r.URL.Path, r.Header.Get("X-Tenant-ID")
 		gotContentType = r.Header.Get("Content-Type")
 		raw, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(raw, &body)
 		w.WriteHeader(http.StatusCreated)
-	}))
-	defer server.Close()
-	base, err := url.Parse(server.URL)
-	require.NoError(t, err)
+	})
 
 	require.NoError(t, mitzSubscribeFunc(base, "00000010", "Z3")(t.Context(), "999900006"))
 
@@ -40,24 +48,20 @@ func TestMitzSubscribe_PostsAConformantSubscription(t *testing.T) {
 }
 
 func TestMitzSubscribe_NonCreatedIsAnError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	base := mitzServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
-	defer server.Close()
-	base, _ := url.Parse(server.URL)
+	})
 
 	require.Error(t, mitzSubscribeFunc(base, "00000010", "Z3")(t.Context(), "999900006"))
 }
 
 func TestMitzSubscribed_ReadsTheMock(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	base := mitzServer(t, func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/abonnementen/fhir/Subscription", r.URL.Path)
 		require.Equal(t, "00000010", r.URL.Query().Get("providerid"))
 		require.Equal(t, "999900006", r.URL.Query().Get("patientid"))
 		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","total":1,"entry":[{"resource":{"resourceType":"Subscription"}}]}`))
-	}))
-	defer server.Close()
-	base, _ := url.Parse(server.URL)
+	})
 
 	subscribed, err := mitzSubscribedFunc(base, "00000010")(t.Context(), "999900006")
 
@@ -66,11 +70,9 @@ func TestMitzSubscribed_ReadsTheMock(t *testing.T) {
 }
 
 func TestMitzSubscribed_EmptyBundleMeansNotSubscribed(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	base := mitzServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","total":0}`))
-	}))
-	defer server.Close()
-	base, _ := url.Parse(server.URL)
+	})
 
 	subscribed, err := mitzSubscribedFunc(base, "00000010")(t.Context(), "999900006")
 

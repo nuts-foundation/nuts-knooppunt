@@ -13,40 +13,33 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 )
 
-// plataanURA is the requesting hospital, and the custodian under which the
-// sandbox publishes localization records when a patient is shared.
-//
-// Derived rather than restated: the seed registers and recycles against
-// plataan.URA, so a second literal here would desync silently and leave the
-// sandbox querying one custodian while the seed wrote another.
+// plataanURA is the custodian the sandbox publishes under. Taken from the seed
+// rather than restated, so the sandbox cannot query one custodian while the seed
+// registers and recycles another.
 const plataanURA = plataan.URA
 
 // nviCallTimeout bounds a single NVI read. The list issues one per patient, so a
 // slow NVI degrades individual rows to unknown instead of hanging the page.
 const nviCallTimeout = 5 * time.Second
 
-// nviRegisterTimeout bounds the whole registration, which is not one call: a
-// search, then a delete per record already there, then a create per category.
-// Budgeting that at nviCallTimeout would show the red "may be incomplete" card
-// over a working but cold stack, which is the demo asserting a failure that did
-// not happen.
+// nviRegisterTimeout bounds the whole registration, which is not one call but a
+// search, a delete per existing record and a create per category. Budgeting it
+// at nviCallTimeout showed the red "may be incomplete" card over a working but
+// cold stack.
 const nviRegisterTimeout = 20 * time.Second
 
 // shareStatus is what the UI knows about a patient's localization and Mitz
-// consent subscription state. NVIUnknown is a third state on purpose: "we
-// could not ask" is not "not shared", and rendering the latter would be a lie
-// the presenter acts on. SubscriptionUnknown carries the same reasoning for
-// Mitz: it is distinct from Subscribed being false, which would invite a
-// retry that could duplicate against a real Mitz.
+// consent subscription. NVIUnknown is a third state on purpose: "we could not
+// ask" is not "not shared", and rendering the latter is a lie the presenter acts
+// on. SubscriptionUnknown is the same for Mitz: distinct from Subscribed being
+// false, which would invite a retry that could duplicate against a real Mitz.
 type shareStatus struct {
 	Shared     bool
 	Categories []string
 
-	// UnnamedRecords counts the Lists whose data category this build cannot name.
-	// Derived rather than inferred from an empty category set, because the two
-	// kinds coexist: a patient can hold three records this client wrote and one
-	// left by an earlier seed, and treating that as "all recognized" would let a
-	// screen describe the stranger as one of ours.
+	// UnnamedRecords is a count, not a flag inferred from an empty category set:
+	// recognized and unnamed records coexist, and the mixed case is where a
+	// screen would describe a stranger's record as one of ours.
 	UnnamedRecords int
 
 	NVIUnknown          bool
@@ -54,24 +47,19 @@ type shareStatus struct {
 	SubscriptionUnknown bool
 }
 
-// nviRecords is what the NVI holds for one patient at De Plataan: how many
-// localization records exist, and which data categories they name.
+// nviRecords is what the NVI holds for one patient at De Plataan.
 //
-// The count is not derivable from the categories, which is the whole reason this
-// is a struct. A List whose code is missing, or carries a code from another
-// system, is a record other providers can find and a category this build does
-// not recognize. Deriving "shared" from the recognized categories would report
-// that patient as local-only while they are findable, which is the demo denying
-// a registration that exists.
+// Count is not derivable from Categories: a List with a missing or foreign code
+// is a record other providers can find and a category this build cannot name,
+// and deriving "shared" from the categories reported such a patient as
+// local-only while they were findable.
 type nviRecords struct {
 	Count      int
 	Categories []string
 
-	// Unnamed counts the Lists carrying no category this build recognizes,
-	// reported by the NVI helper rather than derived here. Count minus the
-	// number of categories is not that number: the category set is
-	// deduplicated, so a second List of the same category would read as a
-	// record whose category cannot be named.
+	// Unnamed is counted by the NVI helper, not derived as Count minus the
+	// number of categories: that set is deduplicated, so the subtraction reads a
+	// second List of the same category as one whose category cannot be named.
 	Unnamed int
 }
 
@@ -79,19 +67,15 @@ func (c Config) patientShareStatus(ctx context.Context, bsn string) shareStatus 
 	if c.nviLookup == nil {
 		return shareStatus{NVIUnknown: true}
 	}
-	records, err := withTimeout(ctx, nviCallTimeout, func(callCtx context.Context) (nviRecords, error) {
-		return c.nviLookup(callCtx, bsn)
-	})
+	callCtx, cancel := context.WithTimeout(ctx, nviCallTimeout)
+	records, err := c.nviLookup(callCtx, bsn)
+	cancel()
 	if err != nil {
-		// Logged, because the screen tells the presenter the log carries the
-		// reason. Without this the unknown state is silent and that instruction
-		// sends them looking for something that was never written.
-		//
-		// The patient is correlated by the last four digits of the BSN, which is
-		// what the NVI helper's own errors use: enough to match a row on screen
-		// to a line in the log, without putting a national identifier in it.
+		// Logged because the screen tells the presenter the log carries the
+		// reason. The last four digits of the BSN are enough to match a row to a
+		// line without recording a national identifier.
 		slog.WarnContext(ctx, "NVI lookup failed; reporting the patient's share status as unknown",
-			"patient", lastFourOfBSN(bsn), "error", err)
+			"patient", nvi.LastFourOfBSN(bsn), "error", err)
 		return shareStatus{NVIUnknown: true}
 	}
 
@@ -120,26 +104,6 @@ func (c Config) patientShareStatus(ctx context.Context, bsn string) shareStatus 
 	return status
 }
 
-// lastFourOfBSN renders just enough of a BSN to correlate a log line with a row
-// on screen without recording a national identifier.
-func lastFourOfBSN(bsn string) string {
-	if len(bsn) <= 4 {
-		return "****"
-	}
-	return "****" + bsn[len(bsn)-4:]
-}
-
-// withTimeout derives d from ctx rather than from whatever time another call
-// left on it, so two independent remote calls in the same request (NVI, then
-// Mitz) each get their own budget instead of the second inheriting the
-// first's leftovers.
-func withTimeout[T any](ctx context.Context, d time.Duration,
-	call func(context.Context) (T, error)) (T, error) {
-	ctx, cancel := context.WithTimeout(ctx, d)
-	defer cancel()
-	return call(ctx)
-}
-
 // nviFuncs builds the real NVI calls against the Knooppunt's internal API.
 func nviFuncs(knooppuntInternalURL *url.URL, clientID string) (
 	func(context.Context, string) (nviRecords, error),
@@ -152,9 +116,6 @@ func nviFuncs(knooppuntInternalURL *url.URL, clientID string) (
 		if err != nil {
 			return nviRecords{}, err
 		}
-		// Count the Lists, name the categories this build recognizes. The two
-		// can differ, and the difference is what the record screen reports as
-		// "findable, categories not recognized" rather than as local-only.
 		return nviRecords{
 			Count: len(lists), Categories: nvi.CategoriesOf(lists), Unnamed: nvi.UnnamedListCount(lists),
 		}, nil
@@ -177,14 +138,11 @@ func lockPatientWrites(key string) (unlock func()) {
 	return mu.Unlock
 }
 
-// registerPatient publishes De Plataan's localization records.
-//
-// nvi.Register is search-delete-create and is not atomic: the NVI exposes no PUT
-// and no usable conditional operation, so a double submit must not interleave.
-// The caller holds the patient write lock for that; it is taken there rather
-// than here because the Mitz step needs the same critical section, and a lock
-// released between the two lets two handlers both read "no subscription" and
-// both report that they started the one that exists.
+// registerPatient publishes De Plataan's localization records. nvi.Register is
+// search-delete-create and not atomic (the NVI exposes no PUT and no usable
+// conditional operation), so a double submit must not interleave. The caller
+// holds the patient write lock, taken in handleShare so that the Mitz step sits
+// in the same critical section.
 func (c Config) registerPatient(ctx context.Context, patient pool.PoolPatient) error {
 	if c.nviRegister == nil {
 		return fmt.Errorf("the sandbox is not wired to the Knooppunt in this environment")
