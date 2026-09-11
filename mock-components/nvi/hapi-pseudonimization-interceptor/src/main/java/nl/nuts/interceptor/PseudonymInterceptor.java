@@ -12,6 +12,7 @@ import ca.uhn.fhir.rest.server.servlet.ServletRequestDetails;
 import ca.uhn.fhir.rest.server.util.ICachedSearchDetails;
 import lombok.extern.slf4j.Slf4j;
 import nl.nuts.util.BsnUtil;
+import nl.nuts.util.PrsMockBsnUtil;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.hl7.fhir.instance.model.api.IIdType;
 import org.hl7.fhir.r4.model.*;
@@ -37,11 +38,20 @@ public class PseudonymInterceptor {
             "NVI_TENANT", "nvi");
     private static final String LIST_EXTENSION_CUSTODIAN_URL = "http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian";
 
+    /**
+     * Where the mock PRS's sandbox helper listens. When set, tokens are the Knooppunt's real
+     * blinded values and the mock de-blinds them for this server; when unset, the XOR fake of
+     * lib/bsnutil is reversed locally, as the e2e harness expects.
+     */
+    private static final String PRS_MOCK_URL = System.getenv("PRS_MOCK_URL");
+
     private final BsnUtil bsnUtil;
 
     public PseudonymInterceptor() {
-        this.bsnUtil = new BsnUtil();
+        this.bsnUtil = PRS_MOCK_URL == null || PRS_MOCK_URL.isBlank() ? new BsnUtil() : new PrsMockBsnUtil(PRS_MOCK_URL);
+        log.info("Pseudonym resolution: {}", this.bsnUtil instanceof PrsMockBsnUtil ? "mock PRS at " + PRS_MOCK_URL : "XOR fake");
     }
+
 
     private boolean isEnabled(final ServletRequestDetails servletRequestDetails) {
         log.info("Tenant: {}", servletRequestDetails.getTenantId());

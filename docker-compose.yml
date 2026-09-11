@@ -514,6 +514,7 @@ services:
 
     profiles:
       - sandbox
+
   # Aspire Dashboard - unified observability for traces, logs, and metrics
   # UI available at http://localhost:18888
   aspire-dashboard:

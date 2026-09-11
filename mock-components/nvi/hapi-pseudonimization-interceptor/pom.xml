@@ -87,6 +87,12 @@
     <build>
         <plugins>
             <!-- Compiler plugin for Java 11+ -->
+            <!-- The Maven default (2.12.4) predates JUnit 5 and runs no test at all. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
