@@ -54,6 +54,12 @@ type queryOutcome struct {
 	// answer, and folding the two together made a truncation discard every page
 	// that had already been read.
 	Truncated string
+
+	// Note explains a served result the reader would otherwise misread, such as
+	// a search that matched nothing. Also kept apart from Error: putting an
+	// explanation there made a complete, empty answer count as a retrieval that
+	// fell short.
+	Note string
 }
 
 // chainOutcome is what the source's answer established about the request as a
@@ -206,12 +212,10 @@ func retrieveBGZ(ctx context.Context, source sourceAddress, token, bsn string, c
 
 	patientID, found := firstResourceID(patientBundle, "Patient")
 	if !found {
-		// Appended, not assigned over the existing Error: this branch is only
-		// reached on a body we could read, so there is nothing to overwrite here
-		// today, but assigning would have hidden a parse failure behind a claim
-		// about the source's records the moment the guard above loosened.
-		result.Queries[0].Error = joinNonEmpty(" · ", result.Queries[0].Error,
-			"the source served the request but holds no patient with this BSN")
+		// A Note, not an Error. The source answered in full; it simply holds
+		// nobody with this BSN, and there is nothing further to ask. Writing this
+		// into Error made a complete answer read as a retrieval that fell short.
+		result.Queries[0].Note = "the source served the request but holds no patient with this BSN"
 		return result, nil
 	}
 	result.PatientID = patientID
@@ -297,7 +301,26 @@ func sameOrigin(base *url.URL, candidate string) bool {
 	if err != nil {
 		return false
 	}
-	return parsed.Scheme == base.Scheme && parsed.Host == base.Host
+	return parsed.Scheme == base.Scheme &&
+		strings.EqualFold(parsed.Hostname(), base.Hostname()) &&
+		effectivePort(parsed) == effectivePort(base)
+}
+
+// effectivePort resolves the port the way RFC 6454 section 4 compares origins:
+// an absent port is the scheme's default, so https://host and https://host:443
+// are the same origin. Comparing the raw host string instead rejected those, and
+// dropped pages for no benefit.
+func effectivePort(u *url.URL) string {
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch u.Scheme {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	}
+	return ""
 }
 
 // nextPageURL returns the server-supplied continuation link, if any.

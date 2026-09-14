@@ -62,6 +62,15 @@
   </div>
   {{end}}
 
+  {{with .Retrieval}}{{if .Incomplete}}
+  <div class="confirm-card unknown">
+    <h2><span class="unk-ic">!</span>This overview is not the whole picture</h2>
+    <div class="cc-detail">{{.Source.Name}} authorized the request, but not everything it authorized
+    came back. What is below is what did arrive; the authorization screen lists which searches fell
+    short.</div>
+  </div>
+  {{end}}{{end}}
+
   <div class="rec-grid">
     {{range .Sections}}
     <div class="card">

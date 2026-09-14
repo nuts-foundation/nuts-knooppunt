@@ -121,7 +121,7 @@ func (c Config) handlePatientRecord(w http.ResponseWriter, r *http.Request, sess
 		return
 	}
 	row := c.rowFor(patient, c.patientShareStatus(r.Context(), patient.BSN), session)
-	sections, sourceNames := c.recordSections(patient, session)
+	sections, sourceNames, retrieved := c.recordSections(patient, session)
 	view := session.view()
 	render(w, "ehr-record.html", page{
 		Title: row.Name + " · Plataan EHR", Guise: "ehr",
@@ -129,7 +129,7 @@ func (c Config) handlePatientRecord(w http.ResponseWriter, r *http.Request, sess
 		BodyClass: "hood-open", BodyAttrs: viewerBodyAttrs(true),
 		Active: "dossier", TopTitle: "Patient record", ViewerOpen: true,
 		Session: &view, Patient: &row, Notice: demoNotice(r),
-		Sections: sections, SourceNames: sourceNames,
+		Sections: sections, SourceNames: sourceNames, Retrieval: retrieved,
 	})
 }
 

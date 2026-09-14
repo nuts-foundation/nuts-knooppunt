@@ -380,3 +380,47 @@ func TestRetrieve_SaysWhenTheRetrievalWasIncomplete(t *testing.T) {
 	// Nothing came back, so there is nothing to go and look at.
 	require.NotContains(t, body, `href="/demo/ehr/patients/`+key+`"`)
 }
+
+// The warning has to survive the click. Retained pages reach the record, so
+// without carrying the incompleteness with them "View the retrieved data" opens
+// an ordinary-looking record holding only part of what the source has, with
+// nothing on screen saying so.
+func TestRecord_KeepsTheIncompleteWarningWithTheData(t *testing.T) {
+	cfg := retrievalConfig(t)
+	cfg.retrieveFromSource = func(_ context.Context, _ authSession, source sourceAddress, _ string, _ []string) (sourceRetrieval, error) {
+		return sourceRetrieval{
+			Source: source, Outcome: chainGranted, PatientID: "zb-anna",
+			Queries: []queryOutcome{
+				{Label: "Patient", Status: http.StatusOK},
+				{Label: "Conditions", Status: http.StatusOK, Truncated: "this result is incomplete"},
+			},
+			Items: []recordItem{{Section: "Conditions", Title: "Diabetes mellitus type 2", Source: source.Name}},
+		}, nil
+	}
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+
+	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, "Diabetes mellitus type 2", "the part that did arrive is shown")
+	require.Contains(t, body, "not everything", "and the record says it is not the whole picture")
+}
+
+// A retrieval that came back whole must not carry a warning.
+func TestRecord_SaysNothingAboutCompletenessWhenItIsComplete(t *testing.T) {
+	cfg := retrievalConfig(t)
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+
+	require.Contains(t, body, "Metoprolol")
+	require.NotContains(t, body, "not everything")
+}

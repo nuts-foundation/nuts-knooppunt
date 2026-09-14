@@ -189,7 +189,8 @@ func TestRetrieveBGZ_NoPatientAtTheSourceIsNotADenial(t *testing.T) {
 	assert.Empty(t, result.PatientID)
 	assert.Empty(t, result.Items)
 	require.Len(t, got, 1, "no follow-up search can be scoped without a local patient id")
-	assert.Contains(t, result.Queries[0].Error, "no patient")
+	assert.Contains(t, result.Queries[0].Note, "no patient")
+	assert.Empty(t, result.Queries[0].Error, "an empty result is not an error")
 }
 
 // Every retrieved element has to name where it came from, which is the whole
@@ -559,4 +560,47 @@ func TestRetrieveBGZ_SaysSoWhenTheClinicalSearchesFailed(t *testing.T) {
 	assert.Equal(t, chainGranted, result.Outcome, "the source did authorize the request")
 	assert.Empty(t, result.Items)
 	assert.True(t, result.Incomplete(), "but nothing it authorized could be retrieved")
+}
+
+// A source that answered in full and simply holds no such patient retrieved
+// everything there was. Reporting that as "not everything came back" invents a
+// problem, and the note explaining the empty result is what caused it: it was
+// being written into Error, which classifies failures.
+func TestRetrieveBGZ_AnEmptyResultIsCompleteNotIncomplete(t *testing.T) {
+	var got []sourceRequest
+	source := fakeSource(t, &got, map[string]string{"Patient": bundleOf()})
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	assert.Equal(t, chainGranted, result.Outcome)
+	assert.False(t, result.Incomplete(), "nothing failed and nothing was cut short")
+	require.Len(t, result.Queries, 1)
+	assert.Empty(t, result.Queries[0].Error, "an empty result is not an error")
+	assert.Contains(t, result.Queries[0].Note, "no patient", "but the screen still has to explain it")
+}
+
+// The origin check must not reject the same origin written differently. RFC 6454
+// makes a default port and the absent port equivalent, and the host
+// case-insensitive, so being stricter than that drops pages for no benefit.
+func TestSameOrigin_NormalisesPortAndCase(t *testing.T) {
+	for _, tc := range []struct {
+		base, candidate string
+		same            bool
+	}{
+		{"https://source.example/fhir", "https://source.example:443/fhir?page=2", true},
+		{"https://source.example:443/fhir", "https://source.example/fhir?page=2", true},
+		{"http://source.example/fhir", "http://SOURCE.example:80/fhir?page=2", true},
+		{"http://source.example:8080/fhir", "http://source.example:8080/fhir?page=2", true},
+		{"https://source.example/fhir", "http://source.example/fhir?page=2", false},
+		{"https://source.example/fhir", "https://elsewhere.example/fhir?page=2", false},
+		{"https://source.example/fhir", "https://source.example:8443/fhir?page=2", false},
+	} {
+		t.Run(tc.base+" vs "+tc.candidate, func(t *testing.T) {
+			base, err := url.Parse(tc.base)
+			require.NoError(t, err)
+			assert.Equal(t, tc.same, sameOrigin(base, tc.candidate))
+		})
+	}
 }

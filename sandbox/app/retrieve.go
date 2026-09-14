@@ -256,13 +256,18 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 // retrieved, every line carrying the organization it came from. A denied
 // retrieval contributes nothing, which is what keeps the record from claiming a
 // second source it was refused.
-func (c Config) recordSections(patient pool.PoolPatient, session *authSession) ([]recordSection, []string) {
+func (c Config) recordSections(patient pool.PoolPatient, session *authSession) ([]recordSection, []string, *sourceRetrieval) {
 	items := localItems(patient)
 	sourceNames := []string{plataanName()}
 
+	// The retrieval travels with its data. Passing only the items would drop the
+	// fact that they are part of a larger answer, and the record would look whole
+	// while holding one page of a search that was cut short.
+	var retrieved *sourceRetrieval
 	if retrieval, ok := c.Retrievals.get(lockOwner(session), patient.Key); ok && len(retrieval.Items) > 0 {
 		items = append(items, retrieval.Items...)
 		sourceNames = append(sourceNames, retrieval.Source.Name)
+		retrieved = &retrieval
 	}
 
 	byName := map[string][]recordItem{}
@@ -275,7 +280,7 @@ func (c Config) recordSections(patient pool.PoolPatient, session *authSession) (
 			sections = append(sections, recordSection{Name: name, Items: grouped})
 		}
 	}
-	return sections, sourceNames
+	return sections, sourceNames, retrieved
 }
 
 // localItems renders De Plataan's own resources as record lines, so that "every

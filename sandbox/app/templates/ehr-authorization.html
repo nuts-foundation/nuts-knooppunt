@@ -90,7 +90,8 @@
           <td><span class="mono">{{.Request}}</span>
             {{if .Status}} &middot; <b>{{.Status}}</b>{{end}}
             {{with .Error}} &middot; {{.}}{{end}}
-            {{with .Truncated}} &middot; {{.}}{{end}}</td>
+            {{with .Truncated}} &middot; {{.}}{{end}}
+            {{with .Note}} &middot; {{.}}{{end}}</td>
         </tr>
         {{end}}
       </tbody>
