@@ -49,18 +49,56 @@ type queryOutcome struct {
 	Error   string
 }
 
+// chainOutcome is what the source's answer established about the request as a
+// whole. Three states rather than a boolean, because "it said no" and "it did
+// not answer" are different facts with different next actions, and a screen that
+// renders the second as the first tells the presenter the source refused them
+// when it was merely down.
+type chainOutcome int
+
+const (
+	// chainFailed: nothing was established. A transport error, a timeout, a 5xx,
+	// a 429, or a body that could not be read as a FHIR Bundle. It says nothing
+	// about whether access would have been granted.
+	chainFailed chainOutcome = iota
+	// chainRefused: the source answered, and its answer was no. 401 or 403, the
+	// two statuses its policy enforcement point uses to decline.
+	chainRefused
+	// chainGranted: the source answered and served the request.
+	chainGranted
+)
+
 // sourceRetrieval is everything one source returned for one patient.
 //
-// Allowed and PatientID answer different questions and the screens must not
-// conflate them: Allowed reports that the source authorized the chain, PatientID
-// that it actually holds this patient. A source can permit a request and hold
+// Outcome and PatientID answer different questions and the screens must not
+// conflate them: Outcome reports what the source's answer established, PatientID
+// whether it actually holds this patient. A source can serve a request and hold
 // nothing.
 type sourceRetrieval struct {
 	Source    sourceAddress
-	Allowed   bool
+	Outcome   chainOutcome
 	PatientID string
 	Queries   []queryOutcome
 	Items     []recordItem
+}
+
+// The three states the templates branch on. Methods rather than exported
+// constants, because html/template cannot compare against a typed constant.
+func (r sourceRetrieval) Granted() bool { return r.Outcome == chainGranted }
+func (r sourceRetrieval) Refused() bool { return r.Outcome == chainRefused }
+func (r sourceRetrieval) Failed() bool  { return r.Outcome == chainFailed }
+
+// outcomeOf classifies one answer. Only the statuses a policy enforcement point
+// uses to decline count as a refusal; everything else that is not a served
+// response is a failure, including a 200 whose body could not be read.
+func outcomeOf(outcome queryOutcome) chainOutcome {
+	switch {
+	case outcome.Status == http.StatusUnauthorized || outcome.Status == http.StatusForbidden:
+		return chainRefused
+	case outcome.Status == http.StatusOK && outcome.Error == "":
+		return chainGranted
+	}
+	return chainFailed
 }
 
 // bgzSearch is the BGZ query that retrieves one localized data category.
@@ -119,14 +157,19 @@ func retrieveBGZ(ctx context.Context, source sourceAddress, token, bsn string, c
 		},
 	})
 	result.Queries = append(result.Queries, outcome)
-	if outcome.Status != http.StatusOK {
+	result.Outcome = outcomeOf(outcome)
+	if result.Outcome != chainGranted {
 		return result, nil
 	}
-	result.Allowed = true
 
 	patientID, found := firstResourceID(patientBundle, "Patient")
 	if !found {
-		result.Queries[0].Error = "the source authorized the request but holds no patient with this BSN"
+		// Appended, not assigned over the existing Error: this branch is only
+		// reached on a body we could read, so there is nothing to overwrite here
+		// today, but assigning would have hidden a parse failure behind a claim
+		// about the source's records the moment the guard above loosened.
+		result.Queries[0].Error = joinNonEmpty(" · ", result.Queries[0].Error,
+			"the source served the request but holds no patient with this BSN")
 		return result, nil
 	}
 	result.PatientID = patientID

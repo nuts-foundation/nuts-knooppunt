@@ -33,7 +33,7 @@ func retrievalConfig(t *testing.T) Config {
 	}
 	cfg.retrieveFromSource = func(_ context.Context, _ authSession, source sourceAddress, _ string, _ []string) (sourceRetrieval, error) {
 		return sourceRetrieval{
-			Source: source, Allowed: true, PatientID: "zb-anna",
+			Source: source, Outcome: chainGranted, PatientID: "zb-anna",
 			Queries: []queryOutcome{{Label: "Patient", Status: http.StatusOK}},
 			Items: []recordItem{
 				{Section: "Allergies", Title: "Penicilline", Detail: "2019", Source: source.Name},
@@ -162,7 +162,7 @@ func TestRetrieve_RendersADenialWithoutData(t *testing.T) {
 	cfg := retrievalConfig(t)
 	cfg.retrieveFromSource = func(_ context.Context, _ authSession, source sourceAddress, _ string, _ []string) (sourceRetrieval, error) {
 		return sourceRetrieval{
-			Source: source, Allowed: false,
+			Source: source, Outcome: chainRefused,
 			Queries: []queryOutcome{{Label: "Patient", Status: http.StatusForbidden}},
 		}, nil
 	}
@@ -205,7 +205,7 @@ func TestRecord_ShowsRetrievedDataAttributedToItsSource(t *testing.T) {
 func TestRecord_ShowsNoRetrievedDataAfterADenial(t *testing.T) {
 	cfg := retrievalConfig(t)
 	cfg.retrieveFromSource = func(_ context.Context, _ authSession, source sourceAddress, _ string, _ []string) (sourceRetrieval, error) {
-		return sourceRetrieval{Source: source, Allowed: false,
+		return sourceRetrieval{Source: source, Outcome: chainRefused,
 			Queries: []queryOutcome{{Label: "Patient", Status: http.StatusForbidden}}}, nil
 	}
 	srv, client := demoServer(t, cfg)
@@ -232,4 +232,51 @@ func TestRecord_RetrievedDataIsScopedToTheSessionThatFetchedIt(t *testing.T) {
 	_, body := getBody(t, other, srv, "/demo/ehr/patients/"+key)
 
 	require.NotContains(t, body, "Metoprolol")
+}
+
+// A source that failed to answer did not refuse. Rendering a 502 or a timeout as
+// "the source refused the request" asserts a decision nobody took, and sends the
+// presenter looking at consent and credentials instead of at a source that is
+// down. This is the same rule the share cards follow.
+func TestRetrieve_AFailureIsNotRenderedAsADenial(t *testing.T) {
+	cfg := retrievalConfig(t)
+	cfg.retrieveFromSource = func(_ context.Context, _ authSession, source sourceAddress, _ string, _ []string) (sourceRetrieval, error) {
+		return sourceRetrieval{
+			Source: source, Outcome: chainFailed,
+			Queries: []queryOutcome{{Label: "Patient", Status: http.StatusBadGateway}},
+		}, nil
+	}
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+
+	status, body := postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+
+	require.Equal(t, http.StatusOK, status)
+	require.NotContains(t, body, "Access denied", "nothing was refused")
+	require.NotContains(t, body, "Access granted", "and nothing was served")
+	require.Contains(t, body, "could not be established")
+	require.NotContains(t, body, "Penicilline")
+	// No way on to the record: there is nothing there, and offering the link
+	// would suggest the retrieval produced something.
+	require.NotContains(t, body, `href="/demo/ehr/patients/`+key+`"`)
+}
+
+// And the record must not claim a second source after a failure either.
+func TestRecord_ShowsNoRetrievedDataAfterAFailure(t *testing.T) {
+	cfg := retrievalConfig(t)
+	cfg.retrieveFromSource = func(_ context.Context, _ authSession, source sourceAddress, _ string, _ []string) (sourceRetrieval, error) {
+		return sourceRetrieval{Source: source, Outcome: chainFailed,
+			Queries: []queryOutcome{{Label: "Patient", Status: http.StatusBadGateway}}}, nil
+	}
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+
+	require.NotContains(t, body, "Zorgcentrum De Zonnebloem")
 }

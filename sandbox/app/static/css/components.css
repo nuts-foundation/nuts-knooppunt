@@ -126,6 +126,11 @@
 .auth-hero .asub { font-size: 11.5px; color: var(--text2); margin-top: 4px; }
 .auth-hero.denied .vbig { background: var(--red); box-shadow: 0 8px 20px rgba(185,28,28,0.28); }
 .auth-hero.denied h1 { color: var(--red); }
+/* The sand palette the share cards already use for "could not be established".
+   Deliberately neither green nor red: a source that failed to answer neither
+   granted nor refused, and colouring it as either would state a decision. */
+.auth-hero.undetermined .vbig { background: var(--sand-soft); color: var(--sand-ink); border: 1px solid var(--sand-line); box-shadow: none; }
+.auth-hero.undetermined h1 { color: var(--sand-ink); }
 .chk { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 18px; border-top: 1px solid #f1ece3; }
 .chk:first-child { border-top: none; }
 .chk .tile { width: 36px; height: 36px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }

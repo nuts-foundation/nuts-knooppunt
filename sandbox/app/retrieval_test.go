@@ -109,7 +109,7 @@ func TestRetrieveBGZ_IssuesTheAuthorizedQueries(t *testing.T) {
 	assert.Equal(t, "MedicationRequest:medication",
 		byPath["/fhir/MedicationRequest"].Query.Get("_include"))
 
-	assert.True(t, result.Allowed)
+	assert.Equal(t, chainGranted, result.Outcome)
 	for _, outcome := range result.Queries {
 		assert.Equal(t, http.StatusOK, outcome.Status, outcome.Label)
 	}
@@ -131,7 +131,7 @@ func TestRetrieveBGZ_AsksOnlyForLocalizedCategories(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 2)
 	assert.Equal(t, "/fhir/Condition", got[1].Path)
-	assert.True(t, result.Allowed)
+	assert.Equal(t, chainGranted, result.Outcome)
 }
 
 // A denial at the source must leave the screen with nothing to render. Carrying
@@ -151,7 +151,7 @@ func TestRetrieveBGZ_ADeniedPatientSearchStopsTheChain(t *testing.T) {
 		[]string{nvi.CategoryPatient, nvi.CategoryCondition, nvi.CategoryMedicationRequest})
 
 	require.NoError(t, err, "a denial is an outcome to render, not a transport failure")
-	assert.False(t, result.Allowed)
+	assert.Equal(t, chainRefused, result.Outcome)
 	assert.Empty(t, result.Items, "a denied chain exposes no data")
 	require.Len(t, got, 1, "nothing is asked after the source refuses")
 	require.Len(t, result.Queries, 1)
@@ -171,7 +171,7 @@ func TestRetrieveBGZ_NoPatientAtTheSourceIsNotADenial(t *testing.T) {
 		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
 
 	require.NoError(t, err)
-	assert.True(t, result.Allowed, "the source authorized the request; it just held no match")
+	assert.Equal(t, chainGranted, result.Outcome, "the source answered and served the request; it just held no match")
 	assert.Empty(t, result.PatientID)
 	assert.Empty(t, result.Items)
 	require.Len(t, got, 1, "no follow-up search can be scoped without a local patient id")
@@ -225,4 +225,80 @@ func TestRetrieveBGZ_FlagsTheDemoMarker(t *testing.T) {
 	require.Len(t, result.Items, 1)
 	assert.True(t, result.Items[0].Marker, "an entry with a DEMO- note is the marker proof")
 	assert.Contains(t, result.Items[0].Detail, "DEMO-BLUE-BUTTERFLY-42")
+}
+
+// answering serves one canned status and body to every request.
+func answering(t *testing.T, got *[]sourceRequest, status int, body string) sourceAddress {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		*got = append(*got, sourceRequest{Path: r.URL.Path, Query: r.URL.Query()})
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+	return sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+}
+
+// A source that breaks did not refuse. Rendering a 502 as a denial tells the
+// presenter the source said no, which it never did, and sends them looking at
+// consent and credentials instead of at the source being down.
+func TestRetrieveBGZ_AServerErrorIsAFailureNotARefusal(t *testing.T) {
+	var got []sourceRequest
+	source := answering(t, &got, http.StatusBadGateway, "")
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	assert.Equal(t, chainFailed, result.Outcome)
+	assert.Empty(t, result.Items)
+	require.Len(t, got, 1, "nothing is asked after the first call fails")
+}
+
+func TestRetrieveBGZ_RateLimitingIsAFailureNotARefusal(t *testing.T) {
+	var got []sourceRequest
+	source := answering(t, &got, http.StatusTooManyRequests, "")
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient})
+
+	require.NoError(t, err)
+	assert.Equal(t, chainFailed, result.Outcome)
+}
+
+// An unreachable source establishes nothing at all.
+func TestRetrieveBGZ_AnUnreachableSourceIsAFailure(t *testing.T) {
+	var got []sourceRequest
+	source := answering(t, &got, http.StatusOK, "")
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	source.Address = server.URL + "/fhir"
+	server.Close() // nothing is listening now
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient})
+
+	require.NoError(t, err, "an unreachable source is an outcome to render")
+	assert.Equal(t, chainFailed, result.Outcome)
+	require.Len(t, result.Queries, 1)
+	assert.NotEmpty(t, result.Queries[0].Error)
+}
+
+// A 200 carrying something that is not a Bundle means the answer could not be
+// read. It is not evidence about what the source holds, and the screen must not
+// turn it into one: the old behaviour reported "access granted" and then
+// overwrote the parse error with a claim that the source holds no such patient.
+func TestRetrieveBGZ_AnUnreadableBodyIsAFailureAndKeepsItsReason(t *testing.T) {
+	var got []sourceRequest
+	source := answering(t, &got, http.StatusOK, "not json at all")
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	assert.Equal(t, chainFailed, result.Outcome)
+	assert.Empty(t, result.Items)
+	require.Len(t, result.Queries, 1)
+	assert.Contains(t, result.Queries[0].Error, "Bundle")
+	assert.NotContains(t, result.Queries[0].Error, "no patient",
+		"a body we could not read says nothing about which patients the source has")
 }

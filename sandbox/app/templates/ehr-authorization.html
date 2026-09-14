@@ -12,7 +12,7 @@
   </div>
 
   {{with .Retrieval}}
-  {{if .Allowed}}
+  {{if .Granted}}
   <div class="page-header auth-hero">
     <span class="vbig">&check;</span>
     <div>
@@ -21,7 +21,7 @@
       fail-closed.</div>
     </div>
   </div>
-  {{else}}
+  {{else if .Refused}}
   <div class="page-header auth-hero denied">
     <span class="vbig">&times;</span>
     <div>
@@ -30,8 +30,22 @@
       screen has none to show.</div>
     </div>
   </div>
+  {{else}}
+  <div class="page-header auth-hero undetermined">
+    <span class="vbig">?</span>
+    <div>
+      <h1>The outcome could not be established</h1>
+      <div class="asub">{{.Source.Name}} did not answer in a way this application could read, so
+      whether it would have granted access is unknown. That is not a refusal, and it is not
+      evidence about what the source holds. The row below carries what came back.</div>
+    </div>
+  </div>
   {{end}}
 
+  {{/* The narration below describes a chain that ran to a decision. After a
+       failure there was no decision to narrate, and claiming the consent check
+       happened would assert exactly what this screen could not establish. */}}
+  {{if not .Failed}}
   <div class="check-card">
     <div class="chk ok">
       <span class="tile"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="5.5" r="3"/><path d="M8.3,7.7 L2.5,13.5 M4.3,11.7 L5.8,13.2 M6.3,9.7 L7.8,11.2"/></svg></span>
@@ -61,6 +75,7 @@
       <span class="tag">Carried</span>
     </div>
   </div>
+  {{end}}
 
   <div class="card">
     <h2>What was asked, and what came back</h2>
@@ -81,7 +96,7 @@
   </div>
 
   <div class="actions">
-    {{if .Allowed}}
+    {{if .Granted}}
     <a class="btn solid big" href="/demo/ehr/patients/{{$.Patient.Key}}">View the retrieved data</a>
     {{end}}
     <a class="btn ghost" href="/demo/ehr/patients/{{$.Patient.Key}}/retrieve">Back</a>
