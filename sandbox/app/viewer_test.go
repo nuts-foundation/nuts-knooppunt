@@ -13,6 +13,11 @@ func TestViewerShellStructure(t *testing.T) {
 		require.Contains(t, open, s)
 	}
 	require.Contains(t, open, `class="hood-dock on"`)
+	require.Contains(t, open, `data-on:click="$hood.open = !$hood.open"`)
+	require.Contains(t, open, `aria-controls="hood-content"`)
+	require.Contains(t, open, `data-attr:aria-expanded="$hood.open ? 'true' : 'false'"`)
+	require.Contains(t, open, `aria-label="Close GF viewer"`)
+	require.Contains(t, open, `data-attr:inert="!$hood.open"`)
 	collapsed := renderPartialForTest(t, "viewer", page{ViewerOpen: false}, "_viewer.html", "_journey_svg.html")
 	require.Contains(t, collapsed, `class="hood-dock peek"`)
 }

@@ -59,7 +59,7 @@ type claim struct {
 func (p page) Stylesheets() []string {
 	base := []string{"fonts", "tokens", "base", "shell"}
 	if p.Guise == "ehr" {
-		return append(base, "ehr", "viewer")
+		return append(base, "components", "ehr", "viewer")
 	}
 	return base
 }

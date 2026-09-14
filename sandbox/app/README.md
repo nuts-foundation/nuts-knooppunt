@@ -218,6 +218,12 @@ materially).
 Datastar's event-attribute grammar is `data-on:click` (colon-separated), not `data-on-click`, as verified against
 the vendored v1.0.2 bundle. Keep this form when adding interactivity.
 
+## EHR component library
+
+See [EHR components](COMPONENTS.md) for the shared shell, layout and component
+contracts, responsive behavior, and the browser regression check. New EHR screens
+should compose these primitives and partials.
+
 ## Integration points
 
 - Dezi sign-in (E2): `POST /demo/login` starts the flow against `mock-components/dezi`,

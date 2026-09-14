@@ -1,9 +1,9 @@
   .sb-bar { background: var(--rv-blauw); color: #fff; font-family: 'Fira Sans', sans-serif; }
-  .sb-inner { margin: 0 auto; padding: 6px 18px; display: flex; align-items: center; gap: 11px; font-size: 12px; }
+  .sb-inner { flex-wrap: wrap; margin: 0 auto; padding: 6px 18px; display: flex; align-items: center; gap: 11px; font-size: 12px; }
   .sb-mark { width: 20px; height: 20px; border-radius: 4px; background: #fff; color: var(--rv-blauw); display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 9.5px; flex-shrink: 0; }
-  .sb-name { font-weight: 600; }
+  .sb-name { white-space: nowrap; font-weight: 600; }
   .sb-badge { font-family: 'Fira Mono', monospace; font-size: 8.5px; letter-spacing: 0.12em; background: rgba(255,255,255,0.13); border: 1px solid rgba(255,255,255,0.35); border-radius: 3px; padding: 1px 7px; }
-  .sb-scenario { opacity: 0.8; }
+  .sb-scenario { flex: 1 1 300px; opacity: 0.8; }
   .sb-right { margin-left: auto; display: flex; gap: 16px; }
   .sb-link { color: #fff; opacity: 0.8; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; background: none; border: none; font-family: 'Fira Sans', sans-serif; font-size: 12px; }
   .sb-link:hover { opacity: 1; }

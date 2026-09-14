@@ -146,6 +146,8 @@ func TestRetrieve_RendersTheGrantedDecision(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "Access granted")
+	require.Contains(t, body, `<table class="kv-table">`)
+	require.Contains(t, body, `<th scope="row">Patient</th>`)
 	require.Contains(t, body, "Zorgcentrum De Zonnebloem")
 	// The disclaimer is an acceptance criterion, not decoration: the breakdown
 	// below it is narration, and the screen has to say so.
@@ -173,6 +175,7 @@ func TestRetrieve_RendersADenialWithoutData(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "Access denied")
+	require.Contains(t, body, `class="page-header auth-hero denied"`, "a refusal must use the denied visual state")
 	require.NotContains(t, body, "Penicilline")
 	require.NotContains(t, body, "Metoprolol")
 }

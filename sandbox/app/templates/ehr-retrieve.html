@@ -1,82 +1,79 @@
-{{define "content"}}
-{{template "demobar" .}}
-<div class="app">
-  {{template "sidebar" .}}
-  <div class="main-col">
-    {{template "topbar" .}}
-    <main class="content content-narrow">
-      {{with .Patient}}
-      <div class="card">
-        <div class="m2-eyebrow">Nuts BGZ retrieval</div>
-        <h3>Where can {{.Name}}'s data be found?</h3>
-        <div class="h-sub">The national referral index is searched on a pseudonym, so the BSN itself
-        never travels. Nothing has been retrieved yet: that needs your explicit confirmation below.</div>
-        <div class="kv"><span class="k">Patient</span><span class="v">{{.Name}} ({{.BirthDate}})</span></div>
-      </div>
-      {{end}}
+{{define "content"}}{{template "ehr-layout" .}}{{end}}
 
-      {{with .LocalizeErr}}
-      <div class="confirm-card failed">
-        <h4><span class="fail-ic">&times;</span>Localization failed</h4>
-        <div class="cc-detail">{{.}}</div>
-        <div class="cc-detail">Nothing was asked of any source. Nothing is known about where this
-        patient's data is held; that is not the same as there being none.</div>
-      </div>
-      {{end}}
-
-      {{range .Sources}}
-      <div class="src-card">
-        <div class="src-top">
-          <span class="src-av">{{.Initial}}</span>
-          <div>
-            <div class="src-name">{{.DisplayName}}</div>
-            <div class="src-sub">External care provider</div>
-          </div>
-        </div>
-        <div class="src-chips">
-          <span class="mchip mono">URA {{.URA}}</span>
-          {{range .Categories}}<span class="mchip blue mono">{{.}}</span>{{end}}
-        </div>
-        <div class="src-div"></div>
-        <div class="src-line">
-          <span class="ic nvi"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5,10.5 L14,14"/></svg></span>
-          <div><b>NVI</b> found this holder in the national referral index: who holds data about this
-          patient, and in which data categories. The index carries pointers only, never an address
-          and never clinical data.</div>
-        </div>
-        <div class="src-line">
-          <span class="ic adr"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8,14.5 C8,14.5 13,10.2 13,6.5 A5,5 0 0 0 3,6.5 C3,10.2 8,14.5 8,14.5 Z"/><circle cx="8" cy="6.5" r="1.8"/></svg></span>
-          {{if .Addressable}}
-          <div><b>GF Addressing</b> resolved the endpoint in the mCSD directory:
-          <span class="mono">{{.Address}}</span>.</div>
-          {{else}}
-          <div><b>GF Addressing</b> could not be addressed: {{.AddressErr}}. The index names this
-          holder, so the finding stands; there is no endpoint to retrieve from.</div>
-          {{end}}
-        </div>
-        {{if .Addressable}}
-        <form method="post" action="/demo/ehr/patients/{{$.Patient.Key}}/retrieve">
-          <input type="hidden" name="ura" value="{{.URA}}">
-          <button class="btn solid big" type="submit">Retrieve from {{.DisplayName}}</button>
-        </form>
-        <div class="btn-sub">Requests an access token at {{.DisplayName}} and asks for the data
-        categories listed above. The source decides whether to answer.</div>
-        {{end}}
-      </div>
-      {{else}}
-      {{if not .LocalizeErr}}
-      <div class="card">
-        <div class="data-empty">The referral index holds no records for this patient at any other
-        care provider. Only De Plataan's own data is available.</div>
-      </div>
-      {{end}}
-      {{end}}
-
-      <div class="card-action">
-        <a class="btn ghost" href="/demo/ehr/patients/{{.Patient.Key}}">Back to the record</a>
-      </div>
-    </main>
+{{define "ehr-content"}}
+<main class="content content-narrow">
+  {{with .Patient}}
+  <div class="card">
+    <header class="page-header">
+      <div class="eyebrow">Nuts BGZ retrieval</div>
+      <h1>Where can {{.Name}}'s data be found?</h1>
+    </header>
+    <div class="h-sub">The national referral index is searched on a pseudonym, so the BSN itself
+    never travels. Nothing has been retrieved yet: that needs your explicit confirmation below.</div>
+    {{template "patient-facts" .}}
   </div>
-  {{template "viewer" .}}
-</div>
+  {{end}}
+
+  {{with .LocalizeErr}}
+  <div class="confirm-card failed">
+    <h2><span class="fail-ic">&times;</span>Localization failed</h2>
+    <div class="cc-detail">{{.}}</div>
+    <div class="cc-detail">Nothing was asked of any source. Nothing is known about where this
+    patient's data is held; that is not the same as there being none.</div>
+  </div>
+  {{end}}
+
+  {{range .Sources}}
+  <div class="src-card">
+    <div class="src-top">
+      <span class="src-av">{{.Initial}}</span>
+      <div>
+        <div class="src-name">{{.DisplayName}}</div>
+        <div class="src-sub">External care provider</div>
+      </div>
+    </div>
+    <div class="chip-row">
+      <span class="chip mono">URA {{.URA}}</span>
+      {{range .Categories}}<span class="chip blue mono">{{.}}</span>{{end}}
+    </div>
+    <div class="src-line">
+      <span class="ic nvi"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5,10.5 L14,14"/></svg></span>
+      <div><b>NVI</b> found this holder in the national referral index: who holds data about this
+      patient, and in which data categories. The index carries pointers only, never an address
+      and never clinical data.</div>
+    </div>
+    <div class="src-line">
+      <span class="ic adr"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8,14.5 C8,14.5 13,10.2 13,6.5 A5,5 0 0 0 3,6.5 C3,10.2 8,14.5 8,14.5 Z"/><circle cx="8" cy="6.5" r="1.8"/></svg></span>
+      {{if .Addressable}}
+      <div><b>GF Addressing</b> resolved the endpoint in the mCSD directory:
+      <span class="mono">{{.Address}}</span>.</div>
+      {{else}}
+      <div><b>GF Addressing</b> could not be addressed: {{.AddressErr}}. The index names this
+      holder, so the finding stands; there is no endpoint to retrieve from.</div>
+      {{end}}
+    </div>
+    {{if .Addressable}}
+    <div class="action-group card-action">
+      <form method="post" action="/demo/ehr/patients/{{$.Patient.Key}}/retrieve">
+        <input type="hidden" name="ura" value="{{.URA}}">
+        <button class="btn solid big" type="submit">Retrieve from {{.DisplayName}}</button>
+      </form>
+      <div class="btn-sub">Requests an access token at {{.DisplayName}} and asks for the data
+      categories listed above. The source decides whether to answer.</div>
+    </div>
+    {{end}}
+  </div>
+  {{else}}
+  {{if not .LocalizeErr}}
+  <div class="card">
+    <div class="data-empty">The referral index holds no records for this patient at any other
+    care provider. Only De Plataan's own data is available.</div>
+  </div>
+  {{end}}
+  {{end}}
+
+  <div class="actions">
+    <a class="btn ghost" href="/demo/ehr/patients/{{.Patient.Key}}">Back to the record</a>
+  </div>
+</main>
 {{end}}
