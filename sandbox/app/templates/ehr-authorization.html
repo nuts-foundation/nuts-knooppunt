@@ -18,7 +18,8 @@
     <div>
       <h1>Access granted by {{.Source.Name}}</h1>
       <div class="asub">Decided at the source and enforced by its policy enforcement point,
-      fail-closed.</div>
+      fail-closed.{{if $.Retrieval.Incomplete}} The source authorized the request, but not
+      everything it authorized came back: the rows below say which searches fell short.{{end}}</div>
     </div>
   </div>
   {{else if .Refused}}
@@ -88,7 +89,8 @@
           <th scope="row">{{.Label}}</th>
           <td><span class="mono">{{.Request}}</span>
             {{if .Status}} &middot; <b>{{.Status}}</b>{{end}}
-            {{with .Error}} &middot; {{.}}{{end}}</td>
+            {{with .Error}} &middot; {{.}}{{end}}
+            {{with .Truncated}} &middot; {{.}}{{end}}</td>
         </tr>
         {{end}}
       </tbody>
@@ -96,7 +98,7 @@
   </div>
 
   <div class="actions">
-    {{if .Granted}}
+    {{if and .Granted .Items}}
     <a class="btn solid big" href="/demo/ehr/patients/{{$.Patient.Key}}">View the retrieved data</a>
     {{end}}
     <a class="btn ghost" href="/demo/ehr/patients/{{$.Patient.Key}}/retrieve">Back</a>

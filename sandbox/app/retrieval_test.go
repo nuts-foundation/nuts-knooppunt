@@ -393,8 +393,13 @@ func TestRetrieveBGZ_BoundsPagingAndSaysSoWhenItStops(t *testing.T) {
 			conditions = outcome
 		}
 	}
-	assert.Contains(t, conditions.Error, "incomplete",
+	assert.Contains(t, conditions.Truncated, "incomplete",
 		"a truncated result must say so rather than look complete")
+	assert.Empty(t, conditions.Error, "being cut short is not the same as failing")
+	// The assertion this test was missing: stopping must not throw away what was
+	// already read, which is what folding truncation into Error used to do.
+	assert.NotEmpty(t, result.Items, "the pages already read are kept")
+	assert.True(t, result.Incomplete())
 }
 
 // FHIR allows a MedicationRequest to name its medication by reference instead of
@@ -419,4 +424,139 @@ func TestRetrieveBGZ_ResolvesAnIncludedMedicationReference(t *testing.T) {
 	require.Len(t, result.Items, 1, "the medication must reach the record")
 	assert.Equal(t, "Metoprolol", result.Items[0].Title)
 	assert.Equal(t, "Metoprolol 50 mg 1dd", result.Items[0].Detail)
+}
+
+// A next link is a URL the source chose. Following it with the access token
+// attached lets any source redirect that token to an origin of its choosing, and
+// one request is enough to lose it: bounding the number of pages bounds requests,
+// not exposure.
+func TestRetrieveBGZ_NeverSendsTheTokenToAnotherOrigin(t *testing.T) {
+	var elsewhereSawToken bool
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		elsewhereSawToken = r.Header.Get("Authorization") != ""
+		_, _ = w.Write([]byte(bundleOf(diabetes)))
+	}))
+	t.Cleanup(elsewhere.Close)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/fhir/Patient") {
+			_, _ = w.Write([]byte(bundleOf(zonnebloemPatient)))
+			return
+		}
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[{"resource":` + diabetes +
+			`}],"link":[{"relation":"next","url":"` + elsewhere.URL + `/fhir/Condition?page=2"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	assert.False(t, elsewhereSawToken, "the access token must never reach another origin")
+	assert.Len(t, result.Items, 1, "the page we did read is still shown")
+	assert.True(t, result.Incomplete(), "and the screen has to say the result was cut short")
+}
+
+// A page that fails must not discard the pages already read. Dropping them turns
+// a partial answer into no answer, which is a bigger loss than the truncation.
+func TestRetrieveBGZ_KeepsThePagesItAlreadyRead(t *testing.T) {
+	var pages int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/fhir/Patient") {
+			_, _ = w.Write([]byte(bundleOf(zonnebloemPatient)))
+			return
+		}
+		pages++
+		if pages > 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[{"resource":` + diabetes +
+			`}],"link":[{"relation":"next","url":"http://` + r.Host + `/fhir/Condition?page=2"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	assert.Len(t, result.Items, 1, "the first page survives a failure on the second")
+	assert.True(t, result.Incomplete())
+}
+
+// FHIR allows a reference to be absolute, matched against the entry's fullUrl.
+func TestRetrieveBGZ_ResolvesAnAbsoluteMedicationReference(t *testing.T) {
+	const byAbsoluteRef = `{"resourceType":"MedicationRequest","id":"zb-ref","status":"active","intent":"order",
+	  "medicationReference":{"reference":"http://zonnebloem.example/fhir/Medication/med-1"},
+	  "dosageInstruction":[{"text":"Metoprolol 50 mg 1dd"}]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/fhir/Patient") {
+			_, _ = w.Write([]byte(bundleOf(zonnebloemPatient)))
+			return
+		}
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[
+		  {"resource":` + byAbsoluteRef + `},
+		  {"fullUrl":"http://zonnebloem.example/fhir/Medication/med-1",
+		   "resource":{"resourceType":"Medication","id":"med-1","code":{"text":"Metoprolol"}}}]}`))
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryMedicationRequest})
+
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1)
+	assert.Equal(t, "Metoprolol", result.Items[0].Title)
+}
+
+// Decoding without error is not the same as being a search result. null, an
+// empty object, an OperationOutcome and a Bundle of another type all unmarshal
+// happily, and each was reported as a served request that found no patient.
+func TestRetrieveBGZ_RequiresASearchsetBundle(t *testing.T) {
+	for _, body := range []string{
+		`null`,
+		`{}`,
+		`{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"processing"}]}`,
+		`{"resourceType":"Bundle","type":"collection","entry":[]}`,
+	} {
+		t.Run(body[:min(len(body), 28)], func(t *testing.T) {
+			var got []sourceRequest
+			source := answering(t, &got, http.StatusOK, body)
+
+			result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+				[]string{nvi.CategoryPatient})
+
+			require.NoError(t, err)
+			assert.Equal(t, chainFailed, result.Outcome)
+			assert.NotContains(t, result.Queries[0].Error, "no patient",
+				"a response we could not recognise says nothing about the source's records")
+		})
+	}
+}
+
+// The verdict is about authorization, which the Patient search did establish.
+// But a screen that says access was granted, narrates four passed checks and
+// offers a link to the data, while every clinical query failed, overstates what
+// happened.
+func TestRetrieveBGZ_SaysSoWhenTheClinicalSearchesFailed(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/fhir/Patient") {
+			_, _ = w.Write([]byte(bundleOf(zonnebloemPatient)))
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition, nvi.CategoryAllergyIntolerance})
+
+	require.NoError(t, err)
+	assert.Equal(t, chainGranted, result.Outcome, "the source did authorize the request")
+	assert.Empty(t, result.Items)
+	assert.True(t, result.Incomplete(), "but nothing it authorized could be retrieved")
 }

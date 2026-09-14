@@ -352,3 +352,31 @@ func TestRetrieve_ARetrievalInFlightAtLogoutIsNotKept(t *testing.T) {
 	require.Empty(t, cfg.Retrievals.byOwner,
 		"a retrieval that finished after its session ended must not be stored")
 }
+
+// Authorization succeeding is not the same as the retrieval succeeding. A screen
+// that says access was granted, narrates four passed checks and links to the
+// data, while nothing could actually be fetched, overstates the run.
+func TestRetrieve_SaysWhenTheRetrievalWasIncomplete(t *testing.T) {
+	cfg := retrievalConfig(t)
+	cfg.retrieveFromSource = func(_ context.Context, _ authSession, source sourceAddress, _ string, _ []string) (sourceRetrieval, error) {
+		return sourceRetrieval{
+			Source: source, Outcome: chainGranted, PatientID: "zb-anna",
+			Queries: []queryOutcome{
+				{Label: "Patient", Status: http.StatusOK},
+				{Label: "Conditions", Status: http.StatusServiceUnavailable},
+			},
+		}, nil
+	}
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+
+	status, body := postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, "Access granted", "the source did authorize the request")
+	require.Contains(t, body, "everything it authorized came back")
+	// Nothing came back, so there is nothing to go and look at.
+	require.NotContains(t, body, `href="/demo/ehr/patients/`+key+`"`)
+}

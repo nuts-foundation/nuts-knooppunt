@@ -48,6 +48,12 @@ type queryOutcome struct {
 	Request string
 	Status  int
 	Error   string
+
+	// Truncated says the source served this search but more of it exists than
+	// was read. Kept apart from Error on purpose: a partial answer is still an
+	// answer, and folding the two together made a truncation discard every page
+	// that had already been read.
+	Truncated string
 }
 
 // chainOutcome is what the source's answer established about the request as a
@@ -88,6 +94,23 @@ type sourceRetrieval struct {
 func (r sourceRetrieval) Granted() bool { return r.Outcome == chainGranted }
 func (r sourceRetrieval) Refused() bool { return r.Outcome == chainRefused }
 func (r sourceRetrieval) Failed() bool  { return r.Outcome == chainFailed }
+
+// Incomplete reports that something the source authorized was not retrieved: a
+// search that failed, or one that was served only in part.
+//
+// Separate from Outcome because they answer different questions. Outcome is the
+// authorization verdict, which the Patient search establishes; this is about
+// what came back afterwards. Without it a chain whose every clinical search
+// returned 503 still rendered "access granted", four passed checks and a link to
+// data that was not there.
+func (r sourceRetrieval) Incomplete() bool {
+	for _, outcome := range r.Queries {
+		if outcome.Truncated != "" || outcomeOf(outcome) != chainGranted {
+			return true
+		}
+	}
+	return false
+}
 
 // outcomeOf classifies one answer. Only the statuses a policy enforcement point
 // uses to decline count as a refusal; everything else that is not a served
@@ -153,7 +176,16 @@ func retrieveBGZ(ctx context.Context, source sourceAddress, token, bsn string, c
 	if err != nil {
 		return sourceRetrieval{}, fmt.Errorf("the directory gave an unusable address %q: %w", source.Address, err)
 	}
-	client := &http.Client{Timeout: bgzCallTimeout}
+	// Redirects are refused rather than followed. A FHIR search has no reason to
+	// redirect, and following one would put the access token on a hop the
+	// directory never resolved. The standard library strips the Authorization
+	// header across hosts, but relying on that leaves the decision implicit.
+	client := &http.Client{
+		Timeout: bgzCallTimeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	result := sourceRetrieval{Source: source}
 
 	// The patient scope travels as the BSN here and as a local reference in every
@@ -233,19 +265,39 @@ func runPagedBGZSearch(ctx context.Context, client *http.Client, base *url.URL, 
 			return bundles, outcome
 		}
 		if pages >= maxSearchPages {
-			outcome.Error = joinNonEmpty(" · ", outcome.Error, fmt.Sprintf(
-				"the source offered more than %d pages; this result is incomplete", maxSearchPages))
+			outcome.Truncated = fmt.Sprintf(
+				"the source offered more than %d pages, so this result is incomplete", maxSearchPages)
+			return bundles, outcome
+		}
+		// A next link is a URL the source chose, and this request carries the
+		// access token. Following it anywhere would let a source redirect that
+		// token to an origin of its own naming, and one request is enough to lose
+		// it, so bounding the page count is not a defence. Only the origin the
+		// directory resolved is followed.
+		if !sameOrigin(base, next) {
+			outcome.Truncated = "the source offered a continuation on another origin, which was not followed, " +
+				"so this result is incomplete"
 			return bundles, outcome
 		}
 		page, pageOutcome := runPageAt(ctx, client, token, next)
 		if outcomeOf(pageOutcome) != chainGranted {
-			outcome.Error = joinNonEmpty(" · ", outcome.Error,
-				"a later page could not be read, so this result is incomplete: "+
-					joinNonEmpty(" ", pageOutcome.Error, http.StatusText(pageOutcome.Status)))
+			outcome.Truncated = "a later page could not be read, so this result is incomplete: " +
+				joinNonEmpty(" ", pageOutcome.Error, http.StatusText(pageOutcome.Status))
 			return bundles, outcome
 		}
 		bundles = append(bundles, page)
 	}
+}
+
+// sameOrigin reports whether candidate has the scheme and host the directory
+// resolved. A scheme downgrade counts as a different origin: it would put the
+// token on the wire in the clear.
+func sameOrigin(base *url.URL, candidate string) bool {
+	parsed, err := url.Parse(candidate)
+	if err != nil {
+		return false
+	}
+	return parsed.Scheme == base.Scheme && parsed.Host == base.Host
 }
 
 // nextPageURL returns the server-supplied continuation link, if any.
@@ -283,9 +335,9 @@ func runPageAt(ctx context.Context, client *http.Client, token, pageURL string) 
 	if res.StatusCode != http.StatusOK {
 		return fhir.Bundle{}, outcome
 	}
-	var bundle fhir.Bundle
-	if err := json.NewDecoder(res.Body).Decode(&bundle); err != nil {
-		outcome.Error = "the source returned something that is not a FHIR Bundle: " + err.Error()
+	bundle, err := decodeSearchset(res.Body)
+	if err != nil {
+		outcome.Error = err.Error()
 	}
 	return bundle, outcome
 }
@@ -338,11 +390,51 @@ func runBGZSearch(ctx context.Context, client *http.Client, base *url.URL, token
 		return fhir.Bundle{}, outcome
 	}
 
-	var bundle fhir.Bundle
-	if err := json.NewDecoder(res.Body).Decode(&bundle); err != nil {
-		outcome.Error = "the source returned something that is not a FHIR Bundle: " + err.Error()
+	bundle, err := decodeSearchset(res.Body)
+	if err != nil {
+		outcome.Error = err.Error()
 	}
 	return bundle, outcome
+}
+
+// decodeSearchset reads a search response and insists it really is one. Decoding
+// without error is not the same as being a search result: null, an empty object,
+// an OperationOutcome and a Bundle of another type all unmarshal happily into
+// fhir.Bundle, and each was being reported as a served request that simply found
+// nothing. FHIR requires a successful search to answer with a searchset Bundle
+// (https://hl7.org/fhir/R4/http.html#search).
+func decodeSearchset(body io.Reader) (fhir.Bundle, error) {
+	raw, err := io.ReadAll(body)
+	if err != nil {
+		return fhir.Bundle{}, fmt.Errorf("the source's response could not be read: %w", err)
+	}
+	var envelope struct {
+		ResourceType string `json:"resourceType"`
+		Type         string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return fhir.Bundle{}, fmt.Errorf("the source returned something that is not a FHIR Bundle: %w", err)
+	}
+	if envelope.ResourceType != "Bundle" {
+		return fhir.Bundle{}, fmt.Errorf(
+			"the source answered with %s where a searchset Bundle was expected", describeResource(envelope.ResourceType))
+	}
+	if envelope.Type != "searchset" {
+		return fhir.Bundle{}, fmt.Errorf(
+			"the source answered with a Bundle of type %q where a searchset was expected", envelope.Type)
+	}
+	var bundle fhir.Bundle
+	if err := json.Unmarshal(raw, &bundle); err != nil {
+		return fhir.Bundle{}, fmt.Errorf("the source's Bundle could not be read: %w", err)
+	}
+	return bundle, nil
+}
+
+func describeResource(resourceType string) string {
+	if resourceType == "" {
+		return "no FHIR resource"
+	}
+	return "a " + resourceType
 }
 
 // firstResourceID returns the id of the first resource of the given type. The
@@ -401,15 +493,24 @@ func includedNames(bundle fhir.Bundle) map[string]string {
 			Code         *fhir.CodeableConcept `json:"code"`
 			Name         *string               `json:"name"`
 		}
-		if err := json.Unmarshal(entry.Resource, &resource); err != nil || resource.Id == "" {
+		if err := json.Unmarshal(entry.Resource, &resource); err != nil {
 			continue
 		}
 		name := codeableText(resource.Code)
 		if name == "" && resource.Name != nil {
 			name = *resource.Name
 		}
-		if name != "" {
+		if name == "" {
+			continue
+		}
+		if resource.Id != "" {
 			names[resource.ResourceType+"/"+resource.Id] = name
+		}
+		// A reference may also be absolute, in which case it matches the entry's
+		// fullUrl rather than a relative Type/id
+		// (https://hl7.org/fhir/R4/references.html#literal).
+		if entry.FullUrl != nil && *entry.FullUrl != "" {
+			names[*entry.FullUrl] = name
 		}
 	}
 	return names
