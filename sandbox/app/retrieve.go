@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/plataan"
@@ -16,6 +17,12 @@ import (
 // sectionOrder is the order the record screen lists its sections in, following
 // the wireframe rather than whatever order the categories arrive in.
 var sectionOrder = []string{"Allergies", "Medication", "Conditions"}
+
+// nviLocalizeTimeout bounds the localization query. Looser than the per-patient
+// lookup the list screen makes: this one runs once, on a screen the practitioner
+// is waiting on, and returns every holder rather than one custodian's records.
+// A var rather than a const so a test can shorten it; nothing else reassigns it.
+var nviLocalizeTimeout = 15 * time.Second
 
 // localizedRecord is what the NVI answered about one organization: it holds data
 // about this patient, in these data categories.
@@ -107,7 +114,13 @@ func (c Config) localizeSources(ctx context.Context, bsn string) ([]localizedSou
 	if c.nviLocalize == nil {
 		return nil, errors.New("the sandbox is not wired to the Knooppunt in this environment")
 	}
-	records, err := c.nviLocalize(ctx, bsn)
+	// Bounded for the same reason the patient list bounds its NVI calls: an index
+	// that accepts the connection and never answers would otherwise hold the
+	// retrieve screen open past any useful demo instead of reaching the failure
+	// state that screen is built to render.
+	localizeCtx, cancel := context.WithTimeout(ctx, nviLocalizeTimeout)
+	defer cancel()
+	records, err := c.nviLocalize(localizeCtx, bsn)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +229,17 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
-	c.Retrievals.put(lockOwner(session), patient.Key, retrieval)
+	// Stored only if the session that authorized it is still there. A sign-out
+	// during a retrieval clears the store, and a write landing after that would
+	// leave another organization's clinical data behind an owner nothing can
+	// reach. sessionStore.storeIfLive says why the check has to happen under the
+	// session lock rather than before it.
+	if c.sessions != nil && !c.sessions.storeIfLive(session.ID, func() {
+		c.Retrievals.put(lockOwner(session), patient.Key, retrieval)
+	}) {
+		http.Redirect(w, r, "/demo/login", http.StatusSeeOther)
+		return
+	}
 
 	row := c.rowFor(patient, c.patientShareStatus(r.Context(), patient.BSN), session)
 	view := session.view()
@@ -277,7 +300,7 @@ func localItems(patient pool.PoolPatient) []recordItem {
 		if err != nil {
 			continue
 		}
-		item, ok := itemFrom(raw, bgzSearches[category])
+		item, ok := itemFrom(raw, bgzSearches[category], nil)
 		if !ok {
 			continue
 		}

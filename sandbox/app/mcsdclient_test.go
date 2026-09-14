@@ -144,3 +144,40 @@ func TestMCSDResolve_NonOKIsAnError(t *testing.T) {
 
 	require.ErrorContains(t, err, "502")
 }
+
+// FHIR dateTime allows less precision than a full timestamp, and a Period bound
+// written as a date is the common case in a directory. Reading only RFC 3339 and
+// treating everything else as absent meant an endpoint that was taken out of
+// service years ago still looked valid, which is the opposite of what the
+// period is for.
+func TestMCSDResolve_HonoursDateOnlyPeriodBounds(t *testing.T) {
+	for _, tc := range []struct {
+		name, period string
+		usable       bool
+	}{
+		{"ended years ago, date only", `{"start":"2020-01-01","end":"2021-01-01"}`, false},
+		{"ended years ago, year only", `{"start":"2020","end":"2021"}`, false},
+		{"ended years ago, month only", `{"start":"2020-01","end":"2021-01"}`, false},
+		{"starts far in the future", `{"start":"2099-01-01"}`, false},
+		{"started long ago, open ended", `{"start":"2020-01-01"}`, true},
+		{"ends far in the future", `{"start":"2020-01-01","end":"2099-01-01"}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			endpoint := `{"resourceType":"Endpoint","id":"zb-fhir","status":"active",
+			  "address":"http://pep-zonnebloem:8080/fhir",
+			  "connectionType":{"system":"http://fhir.nl/fhir/NamingSystem/endpoint-connection-type","code":"fhir"},
+			  "period":` + tc.period + `}`
+			base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(organizationBundle(endpoint)))
+			})
+
+			_, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+
+			if tc.usable {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, "no usable endpoint")
+		})
+	}
+}

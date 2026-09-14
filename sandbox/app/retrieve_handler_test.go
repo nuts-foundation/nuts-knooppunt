@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
@@ -19,6 +20,10 @@ const zonnebloemURA = "00000020"
 func retrievalConfig(t *testing.T) Config {
 	t.Helper()
 	cfg, _, _ := fakeConfig()
+	// Set here rather than left to NewMux, which takes Config by value: without
+	// this the test and the running mux would hold different stores and a test
+	// could not see what the handlers stored.
+	cfg.Retrievals = newRetrievalStore()
 	cfg.nviLookup = categoriesByBSN(nil, nil)
 	cfg.nviLocalize = func(context.Context, string) ([]localizedRecord, error) {
 		return []localizedRecord{{
@@ -279,4 +284,71 @@ func TestRecord_ShowsNoRetrievedDataAfterAFailure(t *testing.T) {
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 
 	require.NotContains(t, body, "Zorgcentrum De Zonnebloem")
+}
+
+// The patient list bounds every NVI call so one slow round trip costs a chip
+// rather than the page. Localization runs on the same index from the retrieval
+// screens and had no deadline at all, so a source that accepts a connection and
+// never answers held the screen open indefinitely instead of reaching the
+// failure state the screen is built to render.
+func TestLocalizeSources_IsBounded(t *testing.T) {
+	cfg := retrievalConfig(t)
+	previous := nviLocalizeTimeout
+	nviLocalizeTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { nviLocalizeTimeout = previous })
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	cfg.nviLocalize = func(ctx context.Context, _ string) ([]localizedRecord, error) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-release:
+			return nil, nil
+		}
+	}
+
+	start := time.Now()
+	_, err := cfg.localizeSources(t.Context(), "999900006")
+
+	require.Error(t, err, "an index that never answers must fail, not hang")
+	require.Less(t, time.Since(start), 5*time.Second,
+		"and it must fail on its own deadline rather than the caller's")
+}
+
+// Signing out discards what the session retrieved. A retrieval still in flight
+// at that moment used to write its result back afterwards, into an owner that no
+// longer exists, where no later sweep could reach it: clinical data from another
+// organization, kept past the session that was authorized to see it, with
+// nothing left to clear it.
+func TestRetrieve_ARetrievalInFlightAtLogoutIsNotKept(t *testing.T) {
+	cfg := retrievalConfig(t)
+	reachedSource := make(chan struct{})
+	release := make(chan struct{})
+	inner := cfg.retrieveFromSource
+	cfg.retrieveFromSource = func(ctx context.Context, s authSession, source sourceAddress, bsn string, cats []string) (sourceRetrieval, error) {
+		close(reachedSource)
+		<-release
+		return inner(ctx, s, source, bsn, cats)
+	}
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve", url.Values{"ura": {zonnebloemURA}})
+		_ = res.Body.Close()
+	}()
+
+	<-reachedSource
+	res := postForm(t, client, srv, "/demo/logout", nil)
+	require.NoError(t, res.Body.Close())
+	close(release)
+	<-done
+
+	cfg.Retrievals.mu.Lock()
+	defer cfg.Retrievals.mu.Unlock()
+	require.Empty(t, cfg.Retrievals.byOwner,
+		"a retrieval that finished after its session ended must not be stored")
 }

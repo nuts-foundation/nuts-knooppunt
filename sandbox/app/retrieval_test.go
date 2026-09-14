@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
@@ -13,10 +14,16 @@ import (
 
 // sourceRequest is one call the fake source received.
 type sourceRequest struct {
-	Path  string
-	Query url.Values
-	Auth  string
+	Method string
+	Path   string
+	Query  url.Values
+	Form   url.Values
+	Auth   string
 }
+
+// all returns every value the request carried, wherever it carried it, so a test
+// can assert that something is absent from the request as a whole.
+func (r sourceRequest) all() string { return r.Path + "?" + r.Query.Encode() + "&" + r.Form.Encode() }
 
 // fakeSource stands in for De Zonnebloem's PEP. routes is keyed by FHIR resource
 // type; anything not in it answers 404, so a query the chain should not have
@@ -24,10 +31,12 @@ type sourceRequest struct {
 func fakeSource(t *testing.T, got *[]sourceRequest, routes map[string]string) sourceAddress {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
 		*got = append(*got, sourceRequest{
-			Path: r.URL.Path, Query: r.URL.Query(), Auth: r.Header.Get("Authorization"),
+			Method: r.Method, Path: r.URL.Path, Query: r.URL.Query(),
+			Form: r.PostForm, Auth: r.Header.Get("Authorization"),
 		})
-		resourceType := r.URL.Path[len("/fhir/"):]
+		resourceType := strings.TrimSuffix(r.URL.Path[len("/fhir/"):], "/_search")
 		body, ok := routes[resourceType]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
@@ -87,10 +96,15 @@ func TestRetrieveBGZ_IssuesTheAuthorizedQueries(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 4, "one Patient search plus one per retrievable category")
 
+	// A POST _search, not a GET. The BSN is the one identifier on this path that
+	// must not reach a URL: the PEP logs $request, so a query-string BSN lands in
+	// an access log outside anything this application can clear.
 	patientSearch := got[0]
-	assert.Equal(t, "/fhir/Patient", patientSearch.Path)
-	assert.Equal(t, "http://fhir.nl/fhir/NamingSystem/bsn|999900006", patientSearch.Query.Get("identifier"))
-	assert.Equal(t, "Patient:general-practitioner", patientSearch.Query.Get("_include"))
+	assert.Equal(t, http.MethodPost, patientSearch.Method)
+	assert.Equal(t, "/fhir/Patient/_search", patientSearch.Path)
+	assert.Equal(t, "http://fhir.nl/fhir/NamingSystem/bsn|999900006", patientSearch.Form.Get("identifier"))
+	assert.Equal(t, "Patient:general-practitioner", patientSearch.Form.Get("_include"))
+	assert.NotContains(t, patientSearch.Query.Encode(), "999900006", "no BSN in the URL")
 	assert.Equal(t, "Bearer the-token", patientSearch.Auth, "the PEP rejects anything else")
 
 	byPath := map[string]sourceRequest{}
@@ -231,7 +245,8 @@ func TestRetrieveBGZ_FlagsTheDemoMarker(t *testing.T) {
 func answering(t *testing.T, got *[]sourceRequest, status int, body string) sourceAddress {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		*got = append(*got, sourceRequest{Path: r.URL.Path, Query: r.URL.Query()})
+		_ = r.ParseForm()
+		*got = append(*got, sourceRequest{Method: r.Method, Path: r.URL.Path, Query: r.URL.Query(), Form: r.PostForm})
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
 	}))
@@ -301,4 +316,107 @@ func TestRetrieveBGZ_AnUnreadableBodyIsAFailureAndKeepsItsReason(t *testing.T) {
 	assert.Contains(t, result.Queries[0].Error, "Bundle")
 	assert.NotContains(t, result.Queries[0].Error, "no patient",
 		"a body we could not read says nothing about which patients the source has")
+}
+
+// The request line the authorization screen renders is kept in memory and shown
+// on a projector. It must not carry the BSN either.
+func TestRetrieveBGZ_TheRenderedRequestCarriesNoBSN(t *testing.T) {
+	var got []sourceRequest
+	source := fakeSource(t, &got, map[string]string{
+		"Patient":   bundleOf(zonnebloemPatient),
+		"Condition": bundleOf(diabetes),
+	})
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, result.Queries)
+	for _, outcome := range result.Queries {
+		assert.NotContains(t, outcome.Request, "999900006", outcome.Label)
+		assert.NotContains(t, outcome.Error, "999900006", outcome.Label)
+	}
+	// It still has to say what was asked, or the screen loses its point.
+	assert.Contains(t, result.Queries[0].Request, "Patient/_search")
+}
+
+// FHIR servers page search results. Reading only the first page and saying
+// nothing renders a partial record as a complete one, which on a clinical
+// overview is the worst kind of wrong.
+func TestRetrieveBGZ_FollowsPagingAndReportsWhatItCannotFinish(t *testing.T) {
+	var pages int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/fhir/Patient") {
+			_, _ = w.Write([]byte(bundleOf(zonnebloemPatient)))
+			return
+		}
+		pages++
+		next := ""
+		if pages < 3 {
+			next = `,"link":[{"relation":"next","url":"` + "http://" + r.Host + `/fhir/Condition?page=` + string(rune('0'+pages)) + `"}]`
+		}
+		body := `{"resourceType":"Bundle","type":"searchset","entry":[{"resource":` + diabetes + `}]` + next + `}`
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, pages, "every page the source offered is fetched")
+	assert.Len(t, result.Items, 3, "and every page's entries reach the record")
+}
+
+// A source that keeps offering pages must not be followed forever, and the
+// screen has to say the result was cut short rather than present it as whole.
+func TestRetrieveBGZ_BoundsPagingAndSaysSoWhenItStops(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/fhir/Patient") {
+			_, _ = w.Write([]byte(bundleOf(zonnebloemPatient)))
+			return
+		}
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[{"resource":` + diabetes +
+			`}],"link":[{"relation":"next","url":"http://` + r.Host + `/fhir/Condition?more=1"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	var conditions queryOutcome
+	for _, outcome := range result.Queries {
+		if outcome.Label == "Conditions" {
+			conditions = outcome
+		}
+	}
+	assert.Contains(t, conditions.Error, "incomplete",
+		"a truncated result must say so rather than look complete")
+}
+
+// FHIR allows a MedicationRequest to name its medication by reference instead of
+// inline, which is why the search asks for _include. Reading only the inline
+// form silently drops the medication from the record.
+func TestRetrieveBGZ_ResolvesAnIncludedMedicationReference(t *testing.T) {
+	const byReference = `{"resourceType":"MedicationRequest","id":"zb-ref","status":"active","intent":"order",
+	  "medicationReference":{"reference":"Medication/med-1"},
+	  "dosageInstruction":[{"text":"Metoprolol 50 mg 1dd"}]}`
+	const included = `{"resourceType":"Medication","id":"med-1",
+	  "code":{"text":"Metoprolol","coding":[{"system":"http://snomed.info/sct","code":"372826007"}]}}`
+	var got []sourceRequest
+	source := fakeSource(t, &got, map[string]string{
+		"Patient":           bundleOf(zonnebloemPatient),
+		"MedicationRequest": bundleOf(byReference, included),
+	})
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryMedicationRequest})
+
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1, "the medication must reach the record")
+	assert.Equal(t, "Metoprolol", result.Items[0].Title)
+	assert.Equal(t, "Metoprolol 50 mg 1dd", result.Items[0].Detail)
 }

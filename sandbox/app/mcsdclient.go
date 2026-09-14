@@ -144,28 +144,53 @@ func endpointUsable(endpoint fhir.Endpoint) bool {
 		return true
 	}
 	now := time.Now()
-	if start, ok := parseFHIRInstant(endpoint.Period.Start); ok && now.Before(start) {
+	if start, ok := parseFHIRDateTime(endpoint.Period.Start, false); ok && now.Before(start) {
 		return false
 	}
-	if end, ok := parseFHIRInstant(endpoint.Period.End); ok && now.After(end) {
+	if end, ok := parseFHIRDateTime(endpoint.Period.End, true); ok && now.After(end) {
 		return false
 	}
 	return true
 }
 
-// parseFHIRInstant reads a period bound. FHIR dateTime admits shorter forms than
-// RFC 3339 ("2025", "2025-01"), and a bound this cannot read is reported absent
-// rather than assumed expired: refusing an endpoint over an unparsed date would
-// fail the retrieval for a registration that is very likely still valid.
-func parseFHIRInstant(value *string) (time.Time, bool) {
+// fhirDateTimeLayouts are the forms FHIR dateTime admits, longest first
+// (https://hl7.org/fhir/R4/datatypes.html#dateTime). A directory commonly writes
+// a period bound as a plain date, so accepting only RFC 3339 left an endpoint
+// that went out of service years ago looking valid.
+var fhirDateTimeLayouts = []struct {
+	layout string
+	// until advances a bound to the last instant its precision covers. A
+	// period.end of "2021" runs to the end of 2021, not to its first instant.
+	until func(time.Time) time.Time
+}{
+	{time.RFC3339, func(t time.Time) time.Time { return t }},
+	{"2006-01-02", func(t time.Time) time.Time { return t.AddDate(0, 0, 1).Add(-time.Nanosecond) }},
+	{"2006-01", func(t time.Time) time.Time { return t.AddDate(0, 1, 0).Add(-time.Nanosecond) }},
+	{"2006", func(t time.Time) time.Time { return t.AddDate(1, 0, 0).Add(-time.Nanosecond) }},
+}
+
+// parseFHIRDateTime reads a period bound at whatever precision it was written.
+// inclusiveEnd extends a coarse bound to the end of the period it names, so a
+// date-only end is honoured through that whole day rather than from midnight.
+//
+// A bound this cannot read at all is reported absent rather than assumed
+// expired: refusing an endpoint over an unparseable date would fail the
+// retrieval for a registration that is very likely still valid.
+func parseFHIRDateTime(value *string, inclusiveEnd bool) (time.Time, bool) {
 	if value == nil {
 		return time.Time{}, false
 	}
-	parsed, err := time.Parse(time.RFC3339, *value)
-	if err != nil {
-		return time.Time{}, false
+	for _, form := range fhirDateTimeLayouts {
+		parsed, err := time.Parse(form.layout, *value)
+		if err != nil {
+			continue
+		}
+		if inclusiveEnd {
+			return form.until(parsed), true
+		}
+		return parsed, true
 	}
-	return parsed, true
+	return time.Time{}, false
 }
 
 func organizationName(organization fhir.Organization) string {

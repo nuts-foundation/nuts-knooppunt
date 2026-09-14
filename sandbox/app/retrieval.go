@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -112,6 +113,15 @@ type bgzSearch struct {
 	Section  string
 	Resource string
 	Params   url.Values
+
+	// InBody sends the parameters as a form-encoded POST to [type]/_search
+	// instead of a query string. Used for the one search that carries the BSN:
+	// the PEP's access log records $request, so a BSN in the URL is written to a
+	// file outside anything this application can clear or expire. The PDP reads
+	// search parameters from the body for a search-type interaction with this
+	// content type (component/pdp/fhirreq.go), so the policy decision is
+	// unchanged.
+	InBody bool
 }
 
 var bgzSearches = map[string]bgzSearch{
@@ -150,7 +160,7 @@ func retrieveBGZ(ctx context.Context, source sourceAddress, token, bsn string, c
 	// later search. The source is the only party that knows its own id for this
 	// patient, so the chain has to ask before it can scope anything else.
 	patientBundle, outcome := runBGZSearch(ctx, client, base, token, bgzSearch{
-		Label: "Patient", Section: "", Resource: "Patient",
+		Label: "Patient", Section: "", Resource: "Patient", InBody: true,
 		Params: url.Values{
 			"identifier": {coding.BSNNamingSystem + "|" + bsn},
 			"_include":   {"Patient:general-practitioner"},
@@ -187,33 +197,135 @@ func retrieveBGZ(ctx context.Context, source sourceAddress, token, bsn string, c
 		}
 		search.Params = params
 
-		bundle, outcome := runBGZSearch(ctx, client, base, token, search)
+		bundles, outcome := runPagedBGZSearch(ctx, client, base, token, search)
 		result.Queries = append(result.Queries, outcome)
-		if outcome.Status != http.StatusOK {
+		if outcomeOf(outcome) != chainGranted {
 			continue
 		}
-		result.Items = append(result.Items, itemsFrom(bundle, search, source.Name)...)
+		for _, bundle := range bundles {
+			result.Items = append(result.Items, itemsFrom(bundle, search, source.Name)...)
+		}
 	}
 	return result, nil
 }
 
-// runBGZSearch issues one search and reports what came back. A transport failure
-// lands in Error with a zero Status, which the screens render as "could not be
-// established" rather than as a refusal.
-func runBGZSearch(ctx context.Context, client *http.Client, base *url.URL, token string, search bgzSearch) (fhir.Bundle, queryOutcome) {
-	target := base.JoinPath(search.Resource)
-	target.RawQuery = search.Params.Encode()
-	outcome := queryOutcome{Label: search.Label, Request: "GET " + target.Path + "?" + target.RawQuery}
+// maxSearchPages bounds how far a paged result is followed. A source that keeps
+// offering a next link cannot hold the demo open indefinitely, and stopping is
+// reported rather than hidden.
+const maxSearchPages = 20
 
+// runPagedBGZSearch runs one search and follows the server-supplied next links.
+// FHIR R4 pages search results (https://hl7.org/fhir/R4/http.html#paging), so
+// reading only the first page would render a partial clinical record as a whole
+// one. The outcome reported is the first page's: a later page that fails leaves
+// the result incomplete, which is recorded in Error rather than turning the
+// whole search into a failure.
+func runPagedBGZSearch(ctx context.Context, client *http.Client, base *url.URL, token string, search bgzSearch) ([]fhir.Bundle, queryOutcome) {
+	bundle, outcome := runBGZSearch(ctx, client, base, token, search)
+	bundles := []fhir.Bundle{bundle}
+	if outcomeOf(outcome) != chainGranted {
+		return bundles, outcome
+	}
+
+	for pages := 1; ; pages++ {
+		next := nextPageURL(bundles[len(bundles)-1])
+		if next == "" {
+			return bundles, outcome
+		}
+		if pages >= maxSearchPages {
+			outcome.Error = joinNonEmpty(" · ", outcome.Error, fmt.Sprintf(
+				"the source offered more than %d pages; this result is incomplete", maxSearchPages))
+			return bundles, outcome
+		}
+		page, pageOutcome := runPageAt(ctx, client, token, next)
+		if outcomeOf(pageOutcome) != chainGranted {
+			outcome.Error = joinNonEmpty(" · ", outcome.Error,
+				"a later page could not be read, so this result is incomplete: "+
+					joinNonEmpty(" ", pageOutcome.Error, http.StatusText(pageOutcome.Status)))
+			return bundles, outcome
+		}
+		bundles = append(bundles, page)
+	}
+}
+
+// nextPageURL returns the server-supplied continuation link, if any.
+func nextPageURL(bundle fhir.Bundle) string {
+	for _, link := range bundle.Link {
+		if link.Relation == "next" && link.Url != "" {
+			return link.Url
+		}
+	}
+	return ""
+}
+
+// runPageAt follows one continuation link. The URL comes from the source, so it
+// is used as given rather than rebuilt; it carries the source's own cursor.
+func runPageAt(ctx context.Context, client *http.Client, token, pageURL string) (fhir.Bundle, queryOutcome) {
+	outcome := queryOutcome{Label: "page", Request: "GET " + pageURL}
 	ctx, cancel := context.WithTimeout(ctx, bgzCallTimeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pageURL, nil)
 	if err != nil {
 		outcome.Error = err.Error()
 		return fhir.Bundle{}, outcome
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/fhir+json")
+
+	res, err := client.Do(req)
+	if err != nil {
+		outcome.Error = err.Error()
+		return fhir.Bundle{}, outcome
+	}
+	defer res.Body.Close()
+	outcome.Status = res.StatusCode
+	if res.StatusCode != http.StatusOK {
+		return fhir.Bundle{}, outcome
+	}
+	var bundle fhir.Bundle
+	if err := json.NewDecoder(res.Body).Decode(&bundle); err != nil {
+		outcome.Error = "the source returned something that is not a FHIR Bundle: " + err.Error()
+	}
+	return bundle, outcome
+}
+
+// runBGZSearch issues one search and reports what came back. A transport failure
+// lands in Error with a zero Status, which the screens render as "could not be
+// established" rather than as a refusal.
+func runBGZSearch(ctx context.Context, client *http.Client, base *url.URL, token string, search bgzSearch) (fhir.Bundle, queryOutcome) {
+	method, body := http.MethodGet, io.Reader(nil)
+	target := base.JoinPath(search.Resource)
+	rendered := search.Params
+
+	if search.InBody {
+		method = http.MethodPost
+		target = target.JoinPath("_search")
+		body = strings.NewReader(search.Params.Encode())
+		// What the screen shows. The parameters travelled in the body precisely
+		// so they would not be logged, and this string is rendered on a
+		// projector, so it names them without their values.
+		rendered = url.Values{}
+		for name := range search.Params {
+			rendered[name] = []string{"[sent in the request body]"}
+		}
+	} else {
+		target.RawQuery = search.Params.Encode()
+	}
+	outcome := queryOutcome{Label: search.Label, Request: method + " " + target.Path + "?" + rendered.Encode()}
+
+	ctx, cancel := context.WithTimeout(ctx, bgzCallTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, method, target.String(), body)
+	if err != nil {
+		outcome.Error = err.Error()
+		return fhir.Bundle{}, outcome
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/fhir+json")
+	if search.InBody {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -257,6 +369,7 @@ func firstResourceID(bundle fhir.Bundle, resourceType string) (string, bool) {
 // Medication carried in for MedicationRequest:medication is not a record line of
 // its own.
 func itemsFrom(bundle fhir.Bundle, search bgzSearch, sourceName string) []recordItem {
+	included := includedNames(bundle)
 	var items []recordItem
 	for _, entry := range bundle.Entry {
 		var peek struct {
@@ -265,7 +378,7 @@ func itemsFrom(bundle fhir.Bundle, search bgzSearch, sourceName string) []record
 		if err := json.Unmarshal(entry.Resource, &peek); err != nil || peek.ResourceType != search.Resource {
 			continue
 		}
-		item, ok := itemFrom(entry.Resource, search)
+		item, ok := itemFrom(entry.Resource, search, included)
 		if !ok {
 			continue
 		}
@@ -275,7 +388,34 @@ func itemsFrom(bundle fhir.Bundle, search bgzSearch, sourceName string) []record
 	return items
 }
 
-func itemFrom(resource json.RawMessage, search bgzSearch) (recordItem, bool) {
+// includedNames indexes the display name of every resource in the bundle by
+// "Type/id", so a resource that names another by reference can be rendered. The
+// searches ask for the companions they need through _include; without this the
+// answer arrives and is thrown away.
+func includedNames(bundle fhir.Bundle) map[string]string {
+	names := map[string]string{}
+	for _, entry := range bundle.Entry {
+		var resource struct {
+			ResourceType string                `json:"resourceType"`
+			Id           string                `json:"id"`
+			Code         *fhir.CodeableConcept `json:"code"`
+			Name         *string               `json:"name"`
+		}
+		if err := json.Unmarshal(entry.Resource, &resource); err != nil || resource.Id == "" {
+			continue
+		}
+		name := codeableText(resource.Code)
+		if name == "" && resource.Name != nil {
+			name = *resource.Name
+		}
+		if name != "" {
+			names[resource.ResourceType+"/"+resource.Id] = name
+		}
+	}
+	return names
+}
+
+func itemFrom(resource json.RawMessage, search bgzSearch, included map[string]string) (recordItem, bool) {
 	item := recordItem{Section: search.Section}
 	switch search.Resource {
 	case "AllergyIntolerance":
@@ -292,6 +432,14 @@ func itemFrom(resource json.RawMessage, search bgzSearch) (recordItem, bool) {
 			return item, false
 		}
 		item.Title = codeableText(medication.MedicationCodeableConcept)
+		// FHIR allows the medication inline or by reference
+		// (https://hl7.org/fhir/R4/medicationrequest-definitions.html). The search
+		// asks for MedicationRequest:medication precisely so the referenced
+		// Medication travels with it; reading only the inline form dropped the
+		// whole line from the record.
+		if item.Title == "" && medication.MedicationReference != nil && medication.MedicationReference.Reference != nil {
+			item.Title = included[*medication.MedicationReference.Reference]
+		}
 		if len(medication.DosageInstruction) > 0 {
 			item.Detail = stringOrEmpty(medication.DosageInstruction[0].Text)
 		}
