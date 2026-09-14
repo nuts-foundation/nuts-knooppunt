@@ -173,10 +173,10 @@ no SSE: the step-event stream stays with E6.
 Nothing is retrieved before the practitioner confirms a source, and the confirmed URA is re-checked
 against a fresh localization rather than trusted from the form.
 
-Four limitations are carried deliberately:
+Five limitations are carried deliberately:
 
-- **Endpoint selection is narrower than the spec.** It honours `status` and `period`, both SHALLs, but
-  does not match on `connectionType` and `payloadType`. The seeded Endpoints carry neither in the form
+- **Endpoint selection is narrower than the spec.** It honours `status` and `period` at the precision
+  FHIR dateTime allows, both SHALLs, but does not match on `connectionType` and `payloadType`. The seeded Endpoints carry neither in the form
   the spec's value sets define: `connectionType` uses a system outside NL GF Connection Types, and
   `payloadType` is absent although the profile makes it `1..*`. Matching on them would reject every
   endpoint in this demo.
@@ -188,7 +188,11 @@ Four limitations are carried deliberately:
   answers with a status and nothing else. The verdict and the per-query statuses on that screen are
   real; the four checks above them describe what the chain carried, and the screen says so.
 - **Retrieved data lives in memory, scoped to the session that fetched it.** It is discarded when that
-  session ends, along with its locks. Nothing is written to a store.
+  session ends, along with its locks, and a retrieval that finishes after its session ended is not
+  stored at all. One window remains: a session that expires and is never looked at again keeps its
+  data until the next read or sign-in sweeps it, because the store has no timer of its own.
+- **Paged results are followed to a bound.** A search that offers more than twenty pages stops there
+  and the row says the result is incomplete, rather than rendering a partial record as a whole one.
 
 ## Architecture
 

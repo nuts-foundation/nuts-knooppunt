@@ -68,7 +68,12 @@
       <h2>{{.Name}}</h2>
       {{range .Items}}
       <div class="data-item{{if .Marker}} hl{{end}}">
-        {{if .Marker}}<span class="hl-chip">&#9733; Just entered by you in ZorgDossier</span>{{end}}
+        {{/* The marker convention says a human typed this note in the source
+             system. It does not say who, or when: nothing retrieved carries an
+             author, a timestamp or a session this application could check
+             against the practitioner reading the screen. So the chip reports
+             the marker, not its authorship. */}}
+        {{if .Marker}}<span class="hl-chip">&#9733; Carries a demo marker from the source system</span>{{end}}
         <div><b>{{.Title}}</b>{{with .Detail}}<div class="meta">{{.}}</div>{{end}}</div>
         <span class="src {{if .External}}zb{{else}}zmc{{end}}">{{.Source}}</span>
       </div>

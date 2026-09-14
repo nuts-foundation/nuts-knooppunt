@@ -79,7 +79,7 @@ alongside the human's compose stack.
 
 For browser regression checks, sign in at `http://localhost:8091/demo`, then open
 an unused pool patient. Pass the absolute path of
-[the browser check](../../test/sandbox-ehr-layout.js) to Playwright MCP's
+[the browser check](./layout-check.js) to Playwright MCP's
 `browser_run_code_unsafe` tool as `filename`. It uses the supplied browser page,
 without npm or an app build step. It shares and retrieves that synthetic patient,
 so choose the patient deliberately. It checks all five screens, both POST results,
