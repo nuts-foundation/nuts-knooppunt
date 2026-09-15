@@ -8,13 +8,19 @@
 # credential-issuance pipeline (nuts-knooppunt#572) hasn't been ported to
 # Kubernetes yet either, so there's no demo data.
 #
-# No ingress/hostname decided yet - everything is ClusterIP, reached via
-# kubectl port-forward for this first pass. The chart defaults ingress to
-# enabled with a placeholder host, which is worse than nothing without a
-# real domain (nuts-knooppunt#563) or a confirmed ingress controller on the
-# cluster, so it's off here.
+# No real domain decided yet (nuts-knooppunt#563 is still open), so this
+# uses nip.io against the ingress-nginx controller's LoadBalancer IP
+# (57.129.23.152) already running on this cluster - the same pattern an
+# earlier smoke-test release on this cluster already proved works. Swap
+# these hosts for the real *.test.gf.nuts.nl domain once #563 lands.
 ingress:
-  enabled: false
+  enabled: true
+  className: nginx
+  hosts:
+    - host: knooppunt.57.129.23.152.nip.io
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
 
 # The chart's own appVersion ("0.0.0") is a placeholder only ever filled in
 # correctly by the release CI (see helm/README.md); it was never published as
@@ -60,6 +66,14 @@ fhir:
 
 nutsadmin:
   enabled: true
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: nutsadmin.57.129.23.152.nip.io
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
 
 mock-vc-issuer:
   enabled: true
