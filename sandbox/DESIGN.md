@@ -272,7 +272,7 @@ HAPI guarantee), user-created records and their NVI registrations are gone, and 
 Two gaps against that as implemented, both recorded in `test/testdata/README.md`:
 
 - Reset performs no Mitz cleanup. That has no subscription-state effect yet, because the composed `mitzmock` is the
-  closed-question consent responder and holds no subscriptions (`test/mitzmock/cmd/main.go` starts only that service);
+  closed-question consent responder and holds no subscriptions (`mock-components/mitz/cmd/main.go` starts only that service);
   it does accumulate raw XACML request bodies, which reset leaves in place. It becomes a real gap the moment a mock
   holds subscriptions.
 - NVI Lists registered under a BSN outside the pool survive, because the NVI tenant's pseudonymization interceptor
@@ -542,13 +542,12 @@ rule as the sandbox, without sharing visual components or branding.
 
 ### E8 Consent revocation (GF Consent)
 
-Promote `test/mitzmock` from an e2e-test helper to a standalone compose service with a consent toggle and the
-subscription/notification flow: flipping consent notifies subscribers (the E3 subscription), the EHR shows the Mitz
-notification and removes De Zonnebloem's data from the overview, and a new retrieval independently triggers a fresh
-closed question and fails on the consent sub-check (fail-closed) with the deny breakdown. Notification processing is
-demo UX plumbing, not an authorization dependency.
+Give `mock-components/mitz` a consent toggle and the subscription/notification flow: flipping consent notifies
+subscribers (the E3 subscription), the EHR shows the Mitz notification and removes De Zonnebloem's data from the
+overview, and a new retrieval independently triggers a fresh closed question and fails on the consent sub-check
+(fail-closed) with the deny breakdown. Notification processing is demo UX plumbing, not an authorization dependency.
 
-- Extends: `test/mitzmock`, the Knooppunt's `/mitz/notify` handler (which today logs the notification and discards the
+- Extends: `mock-components/mitz`, the Knooppunt's `/mitz/notify` handler (which today logs the notification and discards the
   body), sandbox backend (notification intake and correlation to the patient), the bell/notification UI.
 - Acceptance: the #532 revocation criteria hold: notification received, source data removed from the overview,
   re-retrieval blocked by a fresh consent check even if the notification is delayed or lost; restoring consent restores
