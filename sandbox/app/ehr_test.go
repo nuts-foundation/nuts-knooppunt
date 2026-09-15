@@ -357,14 +357,14 @@ func TestSubscribe_RetryOutcomesFollowTheLookup(t *testing.T) {
 			"This retry did not create a second one.", 0,
 		},
 		"preflight failed, reconciliation found one: exists, since when unknown": {
-			[]answer{{false, unreachable}, {true, nil}}, "mitz-retry-registered",
-			"A consent subscription for this patient exists at Mitz. Whether it already existed or resulted from this retry could not be established.",
-			"Mitz accepted the subscription.", 1,
+			[]answer{{false, unreachable}, {true, nil}}, "mitz-retry-reconciled",
+			"The retry failed, but the lookup afterwards found a consent subscription for this patient.",
+			"The Knooppunt accepted the registration request.", 1,
 		},
 		"true preflight with an error is still unknown, then reconciliation finds one": {
-			[]answer{{true, unreachable}, {true, nil}}, "mitz-retry-registered",
-			"A consent subscription for this patient exists at Mitz. Whether it already existed or resulted from this retry could not be established.",
-			"Mitz accepted the subscription.", 1,
+			[]answer{{true, unreachable}, {true, nil}}, "mitz-retry-reconciled",
+			"The retry failed, but the lookup afterwards found a consent subscription for this patient.",
+			"The Knooppunt accepted the registration request.", 1,
 		},
 		"reconciliation confirms it did not": {
 			[]answer{{false, nil}, {false, nil}}, "mitz-retry-failed",
@@ -540,10 +540,17 @@ func TestShare_WithoutALookupTheSuccessCardClaimsNoCreation(t *testing.T) {
 
 	_, body := openAndShare(t, cfg, anna.Key)
 
-	require.Contains(t, body, "Consent subscription exists")
-	require.Contains(t, body, "A consent subscription for this patient exists at Mitz.")
+	require.Contains(t, body, "Registration request accepted")
+	require.Contains(t, body, "The Knooppunt accepted the registration request.")
 	require.NotContains(t, body, "Consent subscription started")
-	require.NotContains(t, body, "Mitz accepted the subscription")
+	// The Knooppunt answers 201 over a request Mitz never received, so neither a
+	// subscription nor Mitz having accepted one is established here.
+	require.NotContains(t, body, "exists at Mitz")
+	require.NotContains(t, body, "Mitz accepted")
+	// Escaped on purpose: this sentence reaches the page through {{.Detail}}, and
+	// html/template turns the apostrophe into &#39;, so searching for the raw
+	// form would pass whatever the card says.
+	require.NotContains(t, body, "Mitz holds it against this patient&#39;s consent")
 	require.NotContains(t, body, "confirm-card failed")
 	require.Equal(t, 1, calls.subscribeCount)
 }
@@ -560,10 +567,10 @@ func TestShare_AFailedPreflightFallsBackToTheNeutralCard(t *testing.T) {
 
 			_, body := openAndShare(t, cfg, anna.Key)
 
-			require.Contains(t, body, "Consent subscription exists")
+			require.Contains(t, body, "Registration request accepted")
 			require.NotContains(t, body, "Consent subscription started")
 			require.NotContains(t, body, "Consent subscription already registered")
-			require.NotContains(t, body, "Mitz accepted the subscription")
+			require.NotContains(t, body, "exists at Mitz")
 			require.Equal(t, 1, calls.subscribeCount)
 		})
 	}
@@ -586,8 +593,8 @@ func TestShare_PositiveReconciliationUsesExistenceWording(t *testing.T) {
 
 	_, body := openAndShare(t, cfg, anna.Key)
 
-	require.Contains(t, body, "A consent subscription for this patient exists at Mitz. Whether it already existed or this request created it could not be established.")
-	require.NotContains(t, body, "Mitz accepted the subscription.")
+	require.Contains(t, body, "The registration request failed, but the lookup afterwards found a subscription for this patient at Mitz. Whether it already existed or this request created it could not be established.")
+	require.NotContains(t, body, "Mitz accepted the registration request.")
 }
 
 func TestShare_ExistingSubscriptionSkipsRegistrationRequest(t *testing.T) {
@@ -654,8 +661,8 @@ func TestSubscribe_ExistingSubscriptionIsNotReportedAsStarted(t *testing.T) {
 	require.Zero(t, subscribeCalls)
 }
 
-// And with no lookup at all, neither claim is available.
-func TestSubscribe_WithoutALookupReportsRegisteredNotStarted(t *testing.T) {
+// And with no lookup at all, the accepted call is all there is to report.
+func TestSubscribe_WithoutALookupReportsAcceptanceNotCreation(t *testing.T) {
 	cfg, anna := sharedNotSubscribed(t)
 	cfg.mitzSubscribe = func(context.Context, string) error { return nil }
 	cfg.mitzSubscribed = nil
@@ -665,8 +672,12 @@ func TestSubscribe_WithoutALookupReportsRegisteredNotStarted(t *testing.T) {
 	res := postForm(t, client, srv, "/demo/ehr/patients/"+anna.Key+"/subscribe", nil)
 	defer res.Body.Close()
 
-	require.Equal(t, "/demo/ehr/patients/"+anna.Key+"?notice=mitz-retry-registered",
+	require.Equal(t, "/demo/ehr/patients/"+anna.Key+"?notice=mitz-retry-acknowledged",
 		res.Header.Get("Location"))
+	_, body := getBody(t, client, srv, res.Header.Get("Location"))
+	require.Contains(t, body, "The Knooppunt accepted the registration request. No lookup is "+
+		"available here to confirm that a subscription now exists.")
+	require.NotContains(t, body, "the lookup afterwards found")
 }
 
 // The GET the record page's Share button points at. Every other share test

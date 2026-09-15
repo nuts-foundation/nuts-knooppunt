@@ -185,9 +185,15 @@ const (
 	// mitzStarted: absent before the call and present after it, so this request
 	// created the subscription.
 	mitzStarted mitzOutcome = iota
-	// mitzRegistered: present after the attempt, but whether it existed before
-	// could not be established.
-	mitzRegistered
+	// mitzReconciled: the call failed and the lookup afterwards found a
+	// subscription, so one exists. Which request created it is unknown, because
+	// the preflight could not say what was there before.
+	mitzReconciled
+	// mitzAcknowledged: the call was accepted and no lookup could be asked, so
+	// acceptance is the whole of what was established. The Knooppunt answers 201
+	// even when its own request to Mitz failed (DESIGN 5.6), so this is not an
+	// existence claim.
+	mitzAcknowledged
 	// mitzExisting: found by the successful preflight. No registration request
 	// was sent.
 	mitzExisting
@@ -203,8 +209,10 @@ func (o mitzOutcome) notice() string {
 	switch o {
 	case mitzStarted:
 		return "mitz-retry-done"
-	case mitzRegistered:
-		return "mitz-retry-registered"
+	case mitzReconciled:
+		return "mitz-retry-reconciled"
+	case mitzAcknowledged:
+		return "mitz-retry-acknowledged"
 	case mitzExisting:
 		return "mitz-retry-existing"
 	case mitzFailed:
@@ -240,6 +248,7 @@ func (c Config) subscribe(ctx context.Context, bsn string) mitzAttempt {
 	}
 	knewBefore := preflightErr == nil
 
+	reconciled := false
 	if err := c.mitzSubscribe(ctx, bsn); err != nil {
 		subscribed, lookupErr := c.subscriptionExists(ctx, bsn)
 		switch {
@@ -250,11 +259,17 @@ func (c Config) subscribe(ctx context.Context, bsn string) mitzAttempt {
 		}
 		// A subscription exists after the failed call. A successful negative
 		// preflight is the only evidence that this attempt created it.
+		reconciled = true
 	}
-	if !knewBefore {
-		return mitzAttempt{outcome: mitzRegistered}
+	switch {
+	case knewBefore:
+		return mitzAttempt{outcome: mitzStarted}
+	case reconciled:
+		return mitzAttempt{outcome: mitzReconciled}
 	}
-	return mitzAttempt{outcome: mitzStarted}
+	// Nothing was looked up, so the accepted call is the whole of the evidence,
+	// and an accepted call is not a subscription.
+	return mitzAttempt{outcome: mitzAcknowledged}
 }
 
 // subscriptionExists answers the reconciliation question, distinguishing "no
@@ -373,6 +388,11 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 
 	attempt := c.subscribe(ctx, patient.BSN)
 	title, detail := "Consent subscription started", "This request registered the subscription at Mitz."
+	// What the subscription is, not what will arrive: the sandbox configures no
+	// notification endpoint and nothing listens for one, so promising delivery
+	// would assert a message the stack cannot send.
+	tail := " Mitz holds it against this patient's consent; delivering the notifications themselves " +
+		"is not wired up in the sandbox, so nothing arrives here when consent changes."
 	switch attempt.outcome {
 	case mitzUnknown:
 		return &cardResult{
@@ -391,10 +411,21 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 				". Mitz confirms there is none, so nothing was created and a retry cannot " +
 				"duplicate. The record page keeps this visible and offers a retry of this step alone.",
 		}
-	case mitzRegistered:
+	case mitzReconciled:
 		title = "Consent subscription exists"
-		detail = "A consent subscription for this patient exists at Mitz. Whether it already " +
-			"existed or this request created it could not be established."
+		detail = "The registration request failed, but the lookup afterwards found a subscription " +
+			"for this patient at Mitz. Whether it already existed or this request created it could " +
+			"not be established."
+	case mitzAcknowledged:
+		// Not an existence claim, and the Knooppunt rather than Mitz is the one
+		// that accepted: with no lookup to ask, the 201 is the whole of the
+		// evidence, and the Knooppunt returns it over a request Mitz never saw.
+		title = "Registration request accepted"
+		detail = "The Knooppunt accepted the registration request. No lookup is available here to " +
+			"confirm that a subscription now exists, or whether one already did."
+		tail = " Any subscription Mitz holds is held against this patient's consent; delivering the " +
+			"notifications themselves is not wired up in the sandbox, so nothing arrives here when " +
+			"consent changes."
 	case mitzExisting:
 		// Registered, not active: the sandbox sends status "requested", the mock
 		// stores it unchanged, and the lookup only asks whether a Subscription
@@ -404,13 +435,9 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 			"no registration request was sent."
 	}
 	return &cardResult{
-		OK:    true,
-		Title: title,
-		// What the subscription is, not what will arrive: the sandbox configures
-		// no notification endpoint and nothing listens for one, so promising
-		// delivery would assert a message the stack cannot send.
-		Detail: detail + " Mitz holds it against this patient's consent; delivering the notifications " +
-			"themselves is not wired up in the sandbox, so nothing arrives here when consent changes.",
+		OK:     true,
+		Title:  title,
+		Detail: detail + tail,
 		Rows: []cardRow{
 			{Key: "Subscriber", Value: "Ziekenhuis De Plataan"},
 			{Key: "Registry", Value: "Mitz (simulated)"},
