@@ -825,7 +825,7 @@
         <main class="content" style="max-width:840px;">
           <div class="card">
             <h3><span class="cic-sq teal"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="5.5" r="2.6"/><path d="M2,13.5 C2,10.9 4,9.5 6.5,9.5 C7.6,9.5 8.6,9.8 9.4,10.3 M12,9.5 L12,13.5 M10,11.5 L14,11.5"/></svg></span>Share patient via the generic functions</h3>
-            <div class="h-sub">Anna's record exists only in De Plataan's own store. Sharing publishes a localization record (this hospital holds BGZ data on her) and subscribes to her consent changes, within the use case <b>Nuts BGZ retrieval</b>. Her data itself stays at the source.</div>
+            <div class="h-sub">Anna's record exists only in De Plataan's own store. Sharing publishes one localization record per data category this hospital holds on her, and subscribes to her consent changes, within the use case <b>Nuts BGZ retrieval</b>. Her data itself stays at the source.</div>
             <div style="display:grid; grid-template-columns:220px 1fr; gap:14px; max-width:560px;">
               <div class="form-row"><label>BSN <span class="hint">· test number</span></label><input class="input mono" value="999911120"></div>
               <div class="form-row"><label>Name <span class="hint">· prefilled</span></label><input class="input" value="Jansen, Anna (1944)"></div>
@@ -837,12 +837,12 @@
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px;">
               <div class="confirm-card" id="cc-nvi">
                 <div class="cc-load">
-                  <h4><span class="spinner"></span>Publishing localization record (NVI)…</h4>
+                  <h4><span class="spinner"></span>Publishing localization records (NVI)…</h4>
                   <div class="skl w85"></div><div class="skl w70"></div><div class="skl w50"></div>
                 </div>
                 <div class="cc-done hidden">
-                  <h4><span class="ok-ic">✓</span>Localization record published (NVI)</h4>
-                  <div class="kv"><span class="k">Data type</span><span class="v">BGZ (patient summary)</span></div>
+                  <h4><span class="ok-ic">✓</span>Localization records published (NVI)</h4>
+                  <div class="kv"><span class="k">Data categories</span><span class="v">Condition, MedicationRequest, Patient</span></div>
                   <div class="kv"><span class="k">Holder</span><span class="v">Ziekenhuis De Plataan · URA <span class="v mono">00000010</span></span></div>
                   <div class="kv"><span class="k">Patient</span><span class="v">as a pseudonym, via the pseudonym service</span></div>
                   <div class="kv"><span class="k">Registered</span><span class="v">just now</span></div>
@@ -854,13 +854,14 @@
                   <div class="skl w85"></div><div class="skl w70"></div><div class="skl w50"></div>
                 </div>
                 <div class="cc-done hidden">
-                  <h4><span class="ok-ic">✓</span>Mitz subscription started</h4>
-                  <div class="kv" style="display:block; margin-bottom:5px;"><span class="v">You will be notified of every change this patient makes to her consents.</span></div>
+                  <h4><span class="ok-ic">✓</span>Consent subscription started</h4>
+                  <div class="kv" style="display:block; margin-bottom:5px;"><span class="v">Mitz holds the subscription against this patient's consent. Delivering the notifications themselves is not wired up in the sandbox, so nothing arrives here when consent changes.</span></div>
                   <div class="kv"><span class="k">Subscriber</span><span class="v">Ziekenhuis De Plataan</span></div>
                   <div class="kv"><span class="k">Registry</span><span class="v">Mitz (simulated)</span></div>
                 </div>
               </div>
             </div>
+            <div class="btn-sub hidden" id="cc-nvi-note">There is no BGZ code. A patient summary is registered as the set of data categories it contains, which is what the NVI card above names.</div>
             <button class="btn solid big hidden" id="btn-openrec" onclick="go('scr-dossier')">Open patient record
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2,8 L12,8 M8.5,4 L12.5,8 L8.5,12"/></svg>
             </button>
@@ -1600,14 +1601,14 @@
             </div>
             <div class="hnode plan">
               <span class="hicon n1">1</span>
-              <div><b>Publish localization · NVI</b><div class="hd">De Plataan will declare: we hold BGZ data on this patient.</div>
+              <div><b>Publish localization · NVI</b><div class="hd">De Plataan will declare, per data category: we hold this kind of data on this patient.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/nvi/List</span><span class="s pend">—</span></div></div>
               </div>
               <div class="hstat"><span class="pend">— ms</span><br><span class="cap-chip plan">planned</span></div>
             </div>
             <div class="hnode plan">
               <span class="hicon n5">2</span>
-              <div><b>Subscribe · Mitz</b><div class="hd">De Plataan will be notified of consent changes by this patient.</div>
+              <div><b>Subscribe · Mitz</b><div class="hd">De Plataan subscribes to consent changes by this patient. Delivery of the notifications lands with E8.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/mitz/subscriptions</span><span class="s pend">—</span></div></div>
               </div>
               <div class="hstat"><span class="pend">— ms</span><br><span class="cap-chip plan">planned</span></div>
@@ -1627,14 +1628,14 @@
             </div>
             <div class="hnode">
               <span class="hicon n1">1</span>
-              <div><b>Publish localization · NVI</b><div class="hd">De Plataan declared: we hold BGZ data on this patient.</div>
+              <div><b>Publish localization · NVI</b><div class="hd">De Plataan declared, per data category: we hold this kind of data on this patient.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/nvi/List</span><span class="s">201</span></div></div>
               </div>
               <div class="hstat"><span class="ok">✓ 96 ms</span><br><span class="cap-chip ev">step event</span></div>
             </div>
             <div class="hnode">
               <span class="hicon n5">2</span>
-              <div><b>Subscribe · Mitz</b><div class="hd">De Plataan will be notified of consent changes by this patient.</div>
+              <div><b>Subscribe · Mitz</b><div class="hd">De Plataan subscribes to consent changes by this patient. Delivery of the notifications lands with E8.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/mitz/subscriptions</span><span class="s">201</span></div></div>
               </div>
               <div class="hstat"><span class="ok">✓ 44 ms</span><br><span class="cap-chip ev">step event</span></div>
@@ -1657,34 +1658,34 @@
           <div class="hflow">
             <div class="hnode plan">
               <span class="hicon n1">1</span>
-              <div><b>Publish localization · NVI</b><div class="hd">De Plataan declares: we hold BGZ data on this patient.</div>
+              <div><b>Publish localization · NVI</b><div class="hd">De Plataan declares, per data category: we hold this kind of data on this patient.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/nvi/List</span><span class="s pend">—</span></div></div>
               </div>
               <div class="hstat"><span class="pend">— ms</span><br><span class="cap-chip plan">planned</span></div>
             </div>
             <div class="hnode plan">
               <span class="hicon n5">2</span>
-              <div><b>Subscribe · Mitz</b><div class="hd">Get notified of consent changes by this patient.</div>
+              <div><b>Subscribe · Mitz</b><div class="hd">Subscribe to consent changes by this patient. Delivery of the notifications lands with E8.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/mitz/subscriptions</span><span class="s pend">—</span></div></div>
               </div>
               <div class="hstat"><span class="pend">— ms</span><br><span class="cap-chip plan">planned</span></div>
             </div>
           </div>
-          <div class="hd-note">Sharing publishes a pointer, not data: the record itself never leaves De Plataan.</div>
+          <div class="hd-note">Sharing publishes pointers, not data: one per data category, and the record itself never leaves De Plataan. There is no aggregate BGZ code to publish; a patient summary is the set of categories it contains.</div>
         </div>
         <div class="hd-post">
           <div class="lane-lbl">Shared just now</div>
           <div class="hflow">
             <div class="hnode">
               <span class="hicon n1">✓</span>
-              <div><b>Localization published · NVI</b><div class="hd">Other providers can now find that De Plataan holds BGZ data on Anna.</div>
+              <div><b>Localization published · NVI</b><div class="hd">Other providers can now find which categories of data De Plataan holds on Anna.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/nvi/List</span><span class="s">201</span></div></div>
               </div>
               <div class="hstat"><span class="ok">✓ 96 ms</span><br><span class="cap-chip ev">step event</span></div>
             </div>
             <div class="hnode">
               <span class="hicon n5">✓</span>
-              <div><b>Mitz subscription active</b><div class="hd">De Plataan is notified of consent changes by this patient.</div>
+              <div><b>Mitz subscription active</b><div class="hd">Mitz holds De Plataan's subscription for this patient. No notification is delivered until E8 builds the receiving side.</div>
                 <div class="hreq"><div class="rq"><span class="m">POST</span><span class="p">/mitz/subscriptions</span><span class="s">201</span></div></div>
               </div>
               <div class="hstat"><span class="ok">✓ 44 ms</span><br><span class="cap-chip ev">step event</span></div>
@@ -2271,6 +2272,7 @@
       document.getElementById('aanmeld-result').classList.toggle('hidden', !done);
       document.querySelectorAll('#aanmeld-result .cc-load').forEach(function (e) { e.classList.toggle('hidden', done); });
       document.querySelectorAll('#aanmeld-result .cc-done').forEach(function (e) { e.classList.toggle('hidden', !done); });
+      document.getElementById('cc-nvi-note').classList.toggle('hidden', !done);
       document.getElementById('btn-openrec').classList.toggle('hidden', !done);
       document.getElementById('btn-openrec-sub').classList.toggle('hidden', !done);
       var b = document.getElementById('btn-aanmeld');
@@ -2566,6 +2568,7 @@
     later(function () {
       document.querySelector('#cc-nvi .cc-load').classList.add('hidden');
       document.querySelector('#cc-nvi .cc-done').classList.remove('hidden');
+      document.getElementById('cc-nvi-note').classList.remove('hidden');
       setBadge(4);
     }, 3200);
     later(function () {

@@ -77,3 +77,58 @@ func TestRegistry_ActiveSorted(t *testing.T) {
 
 	require.Equal(t, []string{"anna", "pool-02", "pool-03"}, r.Active())
 }
+
+func TestRegistry_SwitchReleasesTheOwnersPreviousKey(t *testing.T) {
+	r, _ := newTestRegistry(time.Minute)
+
+	require.True(t, r.Switch("anna", "session-a"))
+	require.True(t, r.Switch("pool-02", "session-a"))
+
+	require.False(t, r.IsLocked("anna"), "switching away releases the previous patient")
+	require.Equal(t, []string{"pool-02"}, r.Active())
+}
+
+// The order matters: establish that the target is free BEFORE releasing what you
+// hold. Releasing first loses a valid lock to a failed acquire.
+func TestRegistry_SwitchKeepsTheHeldKeyWhenTheTargetIsTaken(t *testing.T) {
+	r, _ := newTestRegistry(time.Minute)
+	require.True(t, r.Lock("anna", "session-a"))
+	require.True(t, r.Lock("pool-02", "session-b"))
+
+	require.False(t, r.Switch("pool-02", "session-a"))
+	require.True(t, r.IsLocked("anna"), "the failed switch must not cost session-a its own lock")
+	require.True(t, r.HeldBy("anna", "session-a"))
+}
+
+func TestRegistry_SwitchToTheSameKeyExtendsTheLease(t *testing.T) {
+	r, now := newTestRegistry(time.Minute)
+	require.True(t, r.Switch("anna", "session-a"))
+
+	*now = now.Add(45 * time.Second)
+	require.True(t, r.Switch("anna", "session-a"))
+	*now = now.Add(45 * time.Second)
+
+	require.True(t, r.IsLocked("anna"), "the second switch refreshed the lease")
+}
+
+func TestRegistry_ReleaseOwnerDropsEverythingThatOwnerHolds(t *testing.T) {
+	r, _ := newTestRegistry(time.Minute)
+	require.True(t, r.Lock("anna", "session-a"))
+	require.True(t, r.Lock("pool-02", "session-a"))
+	require.True(t, r.Lock("pool-03", "session-b"))
+
+	require.ElementsMatch(t, []string{"anna", "pool-02"}, r.ReleaseOwner("session-a"))
+	require.Equal(t, []string{"pool-03"}, r.Active())
+}
+
+func TestRegistry_HeldBy(t *testing.T) {
+	r, now := newTestRegistry(time.Minute)
+	require.True(t, r.Lock("anna", "session-a"))
+
+	require.True(t, r.HeldBy("anna", "session-a"))
+	require.False(t, r.HeldBy("anna", "session-b"))
+	require.False(t, r.HeldBy("pool-02", "session-a"))
+
+	*now = now.Add(2 * time.Minute)
+	require.False(t, r.HeldBy("anna", "session-a"), "an expired lease is not held")
+}

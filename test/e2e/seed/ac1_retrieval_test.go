@@ -14,6 +14,7 @@ import (
 	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/plataan"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 	"github.com/stretchr/testify/assert"
@@ -73,7 +74,8 @@ func TestAC1_FindableAddressableRetrievable(t *testing.T) {
 		nviBaseURL, err := url.Parse(composeKnooppuntInternal + "/nvi")
 		require.NoError(t, err)
 
-		entries := searchNVIByBSN(t, nviBaseURL, zonnebloemURA(), anna.BSN)
+		entries, err := nvi.ListsForCustodian(t.Context(), nviBaseURL, zonnebloemURA(), anna.BSN)
+		require.NoError(t, err)
 		require.NotEmpty(t, entries,
 			"NVI should return a localization List for BSN %s under custodian %s", anna.BSN, zonnebloemURA())
 	})

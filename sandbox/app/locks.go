@@ -6,9 +6,8 @@ import (
 	"time"
 )
 
-// defaultLockTTL is how long a demo lock survives without a refresh. A running
-// demo refreshes on activity; an abandoned run expires so the patient returns
-// to the pool.
+// defaultLockTTL is how long a demo lock survives after the patient is opened.
+// Opening the same patient again renews it; ordinary page activity does not.
 const defaultLockTTL = 15 * time.Minute
 
 // lockInfo is a single held lock.
@@ -119,4 +118,56 @@ func (r *Registry) Active() []string {
 	}
 	sort.Strings(active)
 	return active
+}
+
+// Switch acquires key for owner and releases every other key that owner held, so
+// one session holds at most one patient.
+//
+// It establishes that key is acquirable before releasing anything: "release mine,
+// then lock the target" loses a valid lock whenever the target turns out to be
+// taken, which is exactly when the user most wants the one they had.
+func (r *Registry) Switch(key, owner string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	now := r.now()
+	if existing, ok := r.locks[key]; ok && existing.expiresAt.After(now) && existing.owner != owner {
+		return false
+	}
+	for held, info := range r.locks {
+		if held != key && info.owner == owner {
+			delete(r.locks, held)
+		}
+	}
+	r.locks[key] = lockInfo{owner: owner, expiresAt: now.Add(r.ttl)}
+	return true
+}
+
+// ReleaseOwner drops every lock held by owner and returns the keys released. It
+// exists for the end of a session: ownership derives from the session id, so once
+// the session is gone nobody can release its locks, which would block recycle and
+// non-override reset until the TTL expired, and the same practitioner signing
+// back in gets a new owner and cannot reclaim their own patient.
+func (r *Registry) ReleaseOwner(owner string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var released []string
+	for key, info := range r.locks {
+		if info.owner == owner {
+			released = append(released, key)
+			delete(r.locks, key)
+		}
+	}
+	return released
+}
+
+// HeldBy reports whether key has a live lock held by owner. The list needs it to
+// tell "someone else is running a demo on this patient" from "this is mine", and
+// the share POST needs it to reject a stale page.
+func (r *Registry) HeldBy(key, owner string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	existing, ok := r.locks[key]
+	return ok && existing.owner == owner && existing.expiresAt.After(r.now())
 }
