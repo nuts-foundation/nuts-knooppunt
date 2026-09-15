@@ -11,7 +11,7 @@ on:
     branches:
       - main
     paths:
-      - test/mitzmock/**
+      - mock-components/mitz/**
       - .github/workflows/build-mock-mitz-image.yaml
 
 # cancel build action if superseded by new commit on same branch
@@ -76,7 +76,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: test/mitzmock/Dockerfile
+          file: mock-components/mitz/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
