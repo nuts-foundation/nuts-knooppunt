@@ -126,6 +126,14 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
 
+# Extra container env vars, e.g. NUTS_URL (the embedded nuts-node's own
+# public base URL, used for did:web identifiers - the nutsnode component
+# sets several other NUTS_* vars itself, but not this one) or sandbox-only
+# settings like NUTS_VCR_DEZI_ALLOWEDJKU / SSL_CERT_FILE.
+extraEnv: []
+# - name: NUTS_URL
+#   value: "https://knooppunt.example.com"
+
 # Additional volumes on the output Deployment definition.
 volumes: []
 # - name: foo
@@ -200,6 +208,12 @@ config:
   # PDP (Policy Decision Point) configuration
   # pdp:
   #   enabled: true
+
+  # Nuts node configuration. Enabled by default, matching config/knooppunt.yml:
+  # without this the embedded nuts-node never starts, and everything under
+  # /nuts/* (including nutsadmin's identities API) 404s.
+  nuts:
+    enabled: true
 
   # OpenTelemetry tracing configuration
   # Set otlpendpoint to enable tracing.
