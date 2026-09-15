@@ -1,5 +1,7 @@
 # --- Build stage: compile the React app ---
-FROM node:18-alpine AS build
+# Runs on the build host platform: the webpack output is platform-independent,
+# so there's no need to emulate this stage for the target platform.
+FROM --platform=$BUILDPLATFORM node:18-alpine AS build
 WORKDIR /app
 # PUBLIC_URL=. makes CRA emit relative asset paths (./static/...). server.js
 # then injects a <base href> at runtime so those paths resolve correctly under

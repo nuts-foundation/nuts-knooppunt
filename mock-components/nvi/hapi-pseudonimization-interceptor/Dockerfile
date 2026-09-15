@@ -1,4 +1,6 @@
-FROM maven:3.8.3-openjdk-17 AS builder
+# Runs on the build host platform: the packaged jar is architecture-independent
+# JVM bytecode, so there's no need to emulate the Maven build per target platform.
+FROM --platform=$BUILDPLATFORM maven:3.8.3-openjdk-17 AS builder
 
 WORKDIR /app
 COPY ./pom.xml /app/pom.xml
