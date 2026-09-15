@@ -13,8 +13,7 @@ on:
     # gf-sandbox pulls in a growing set of internal packages beyond its own
     # directory (test/testdata/vectors/*, and more over time - see review
     # discussion on PR #582), so an allow-list of paths goes stale. Same
-    # paths-ignore approach as build-nuts-knooppunt-image.yaml, for the same
-    # reason: both are root-module binaries.
+    # paths-ignore approach as build-nuts-knooppunt-image.yaml.
     paths-ignore:
       - '**.md'
       - 'docs/**'
