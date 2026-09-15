@@ -1,5 +1,8 @@
 # Build context must be the repo root: this service is part of the root Go module.
-FROM golang:1.26.1-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.1-alpine AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /src
 
@@ -15,7 +18,7 @@ RUN go mod download && go mod verify
 # in the context into a reusable builder layer. An allowlist keeps new key
 # locations out by default instead of requiring a matching .dockerignore rule.
 COPY ./mock-components/dezi ./mock-components/dezi
-RUN CGO_ENABLED=0 go build -o /mock-dezi ./mock-components/dezi
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /mock-dezi ./mock-components/dezi
 
 FROM alpine:3.22.0
 COPY --from=builder /mock-dezi /mock-dezi

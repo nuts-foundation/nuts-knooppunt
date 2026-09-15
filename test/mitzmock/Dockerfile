@@ -4,7 +4,10 @@
 # go.mod/go.sum at the root are needed to build it.
 #
 #   docker build -f test/mitzmock/Dockerfile .
-FROM golang:1.26.1-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.1-alpine AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /src
 
@@ -17,7 +20,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -o /out/mitzmock ./test/mitzmock/cmd
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/mitzmock ./test/mitzmock/cmd
 
 FROM alpine:3.22.0
 
