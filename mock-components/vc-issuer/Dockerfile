@@ -1,7 +1,13 @@
 FROM node:20-alpine AS base
 
+# Build-time base: deps/builder only produce platform-independent JS output
+# (Prisma generates every configured binaryTarget regardless of host arch —
+# see schema.prisma), so they run on the build host platform instead of
+# being emulated per target platform.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS base-build
+
 # Dependencies stage
-FROM base AS deps
+FROM base-build AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
@@ -11,7 +17,7 @@ RUN npm ci
 RUN npx prisma generate
 
 # Builder stage
-FROM base AS builder
+FROM base-build AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

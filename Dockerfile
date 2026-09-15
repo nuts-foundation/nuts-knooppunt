@@ -1,4 +1,4 @@
-FROM golang:1.26.1-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.1-alpine AS builder
 
 ARG TARGETARCH
 ARG TARGETOS
@@ -17,7 +17,7 @@ RUN go mod download && go mod verify
 COPY . .
 
 RUN mkdir /app
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-w -s -X 'github.com/nuts-foundation/nuts-knooppunt/component/status.GitCommit=${GIT_COMMIT}' -X 'github.com/nuts-foundation/nuts-knooppunt/component/status.GitBranch=${GIT_BRANCH}' -X 'github.com/nuts-foundation/nuts-knooppunt/component/status.GitVersion=${GIT_VERSION}'" -o /app/bin .
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-w -s -X 'github.com/nuts-foundation/nuts-knooppunt/component/status.GitCommit=${GIT_COMMIT}' -X 'github.com/nuts-foundation/nuts-knooppunt/component/status.GitBranch=${GIT_BRANCH}' -X 'github.com/nuts-foundation/nuts-knooppunt/component/status.GitVersion=${GIT_VERSION}'" -o /app/bin .
 
 # alpine
 FROM alpine:3.22.0
