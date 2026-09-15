@@ -10,9 +10,16 @@ on:
   pull_request:
     branches:
       - main
-    paths:
-      - sandbox/app/**
-      - .github/workflows/build-gf-sandbox-image.yaml
+    # gf-sandbox pulls in a growing set of internal packages beyond its own
+    # directory (test/testdata/vectors/*, and more over time - see review
+    # discussion on PR #582), so an allow-list of paths goes stale. Same
+    # paths-ignore approach as build-nuts-knooppunt-image.yaml, for the same
+    # reason: both are root-module binaries.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'helm/**'
+      - 'mock-components/**'
 
 # cancel build action if superseded by new commit on same branch
 concurrency:
