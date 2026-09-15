@@ -13,7 +13,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/nuts-foundation/nuts-knooppunt/test/mitzmock"
+	"github.com/nuts-foundation/nuts-knooppunt/mock-components/mitz"
 )
 
 func main() {

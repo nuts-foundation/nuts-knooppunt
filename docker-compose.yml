@@ -237,11 +237,11 @@ services:
   # Mock MITZ closed-question (consent) service. The real Mitz is a national
   # service that is not reachable from a local deployment, but the BGZ policy
   # will not permit a retrieval without a consent decision — so AC1 needs one
-  # locally. Answers Permit by default; see test/mitzmock/cmd/main.go.
+  # locally. Answers Permit by default; see mock-components/mitz/cmd/main.go.
   mitzmock:
     build:
       context: .
-      dockerfile: test/mitzmock/Dockerfile
+      dockerfile: mock-components/mitz/Dockerfile
     container_name: knooppunt-mitzmock
     ports:
       - "8087:8080"

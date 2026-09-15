@@ -3,8 +3,11 @@
 # Build context is the repository root: mitzmock lives in the main Go module, so
 # go.mod/go.sum at the root are needed to build it.
 #
-#   docker build -f test/mitzmock/Dockerfile .
-FROM golang:1.26.1-alpine AS builder
+#   docker build -f mock-components/mitz/Dockerfile .
+FROM --platform=$BUILDPLATFORM golang:1.26.1-alpine AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /src
 
@@ -17,7 +20,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -o /out/mitzmock ./test/mitzmock/cmd
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/mitzmock ./mock-components/mitz/cmd
 
 FROM alpine:3.22.0
 

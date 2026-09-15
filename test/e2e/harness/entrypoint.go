@@ -14,7 +14,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
-	"github.com/nuts-foundation/nuts-knooppunt/test/mitzmock"
+	"github.com/nuts-foundation/nuts-knooppunt/mock-components/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"

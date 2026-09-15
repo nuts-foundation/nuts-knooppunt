@@ -3,7 +3,7 @@ package mitz
 import (
 	"testing"
 
-	"github.com/nuts-foundation/nuts-knooppunt/test/mitzmock"
+	"github.com/nuts-foundation/nuts-knooppunt/mock-components/mitz"
 	"github.com/stretchr/testify/require"
 )
 
