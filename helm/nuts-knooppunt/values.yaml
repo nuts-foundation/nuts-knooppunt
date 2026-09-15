@@ -19,7 +19,10 @@ image:
 imagePullSecrets: []
 # This is to override the chart name.
 nameOverride: ""
-fullnameOverride: ""
+# Pinned so the other subcharts (pep-zonnebloem, pep-plataan, nutsadmin) can
+# reference this service by a fixed hostname regardless of release name -
+# same reasoning as fhir/nuts/mock-vc-issuer's own fullnameOverride below.
+fullnameOverride: "nuts-knooppunt"
 
 # This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
 serviceAccount:
@@ -229,6 +232,50 @@ fhir:
     "server.tomcat.relaxed-query-chars": "|"
     # The FHIR version to use
     "hapi.fhir.version": "R4"
+
+# Policy Enforcement Point for Zorgcentrum De Zonnebloem (data holder on the
+# AC1 demo path - the seeded pool patients live in its tenant).
+# Set enabled: true to deploy it.
+pep-zonnebloem:
+  enabled: false
+  fullnameOverride: pep-zonnebloem
+  env:
+    fhirBackendHost: "fhir"
+    fhirBackendPort: "8080"
+    fhirBasePath: "/fhir"
+    knooppuntPdpHost: "nuts-knooppunt"
+    knooppuntPdpPort: "8081"
+    nutsNodeHost: "nuts-knooppunt"
+    nutsNodeInternalPort: "8081"
+    dataHolderOrganizationUra: "00000020"
+    dataHolderFacilityType: "Z3"
+
+# Policy Enforcement Point for Ziekenhuis De Plataan (requester on the AC1
+# demo path). Set enabled: true to deploy it.
+pep-plataan:
+  enabled: false
+  fullnameOverride: pep-plataan
+  env:
+    fhirBackendHost: "fhir"
+    fhirBackendPort: "8080"
+    fhirBasePath: "/fhir"
+    knooppuntPdpHost: "nuts-knooppunt"
+    knooppuntPdpPort: "8081"
+    nutsNodeHost: "nuts-knooppunt"
+    nutsNodeInternalPort: "8081"
+    dataHolderOrganizationUra: "00000010"
+    dataHolderFacilityType: "Z3"
+
+# nuts-admin management UI. Set enabled: true to deploy it.
+nutsadmin:
+  enabled: false
+  fullnameOverride: nutsadmin
+  env:
+    nutsNodeAddress: "http://nuts-knooppunt:8081/nuts"
+  config:
+    credentialprofiles:
+      - type: HealthcareProviderRoleTypeCredential
+        issuer: "http://mock-vc-issuer:3000"
 
 # NUTS Node configuration
 # Set enabled: true to enable NUTS node deployment

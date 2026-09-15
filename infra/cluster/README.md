@@ -28,9 +28,10 @@ export OVH_APPLICATION_SECRET=...
 export OVH_CONSUMER_KEY=...
 ```
 
-**Current status**: no credential with write access to `/cloud/project/*`
-exists yet — `plan` works, `apply` doesn't. Register one via
-`api.ovh.com/createApp` with write access to that path.
+**Current status**: cluster and node pool are applied and running
+(`gf-test`, region DE1, 2x `d2-4`). A credential with write access to
+`/cloud/project/*` exists; get one via `api.ovh.com/createToken` scoped to
+that path if you need your own.
 
 State backend (S3-compatible, separate bucket/credentials from
 `infra-identity`'s state — don't reuse):
