@@ -185,11 +185,11 @@ const (
 	// mitzStarted: absent before the call and present after it, so this request
 	// created the subscription.
 	mitzStarted mitzOutcome = iota
-	// mitzRegistered: present after the call, but whether it existed before could
-	// not be established, so this request may have found rather than created it.
+	// mitzRegistered: present after the attempt, but whether it existed before
+	// could not be established.
 	mitzRegistered
-	// mitzExisting: present before and after. The call created nothing, whether
-	// it succeeded or failed.
+	// mitzExisting: found by the successful preflight. No registration request
+	// was sent.
 	mitzExisting
 	// mitzFailed: the call failed and the lookup confirms there is no
 	// subscription, so nothing was created and a retry cannot duplicate.
@@ -225,11 +225,9 @@ type mitzAttempt struct {
 // caller holds the patient write lock: the gap between reading "no subscription"
 // and creating one is where two requests can both conclude that they started it.
 //
-// The lookup is asked before the call so the outcome can say whether this request
-// created the subscription or found one already there. The mock keys one
-// subscription per provider and patient and answers a repeat with the existing
-// one, so without the preflight a second share reports that it started something
-// it did not.
+// The lookup is asked before the call so an existing subscription can be left
+// unchanged. The mock keys one subscription per provider and patient; a positive
+// preflight returns immediately without sending a registration request.
 //
 // It is asked again after a failed call, because a timeout or dropped connection
 // can follow a commit. Reporting a committed subscription as failed invites a
@@ -237,6 +235,9 @@ type mitzAttempt struct {
 // deduplicate. With no lookup at all the outcome is unknown, not failed.
 func (c Config) subscribe(ctx context.Context, bsn string) mitzAttempt {
 	existedBefore, preflightErr := c.subscriptionExists(ctx, bsn)
+	if preflightErr == nil && existedBefore {
+		return mitzAttempt{outcome: mitzExisting}
+	}
 	knewBefore := preflightErr == nil
 
 	if err := c.mitzSubscribe(ctx, bsn); err != nil {
@@ -247,13 +248,11 @@ func (c Config) subscribe(ctx context.Context, bsn string) mitzAttempt {
 		case !subscribed:
 			return mitzAttempt{outcome: mitzFailed, callErr: err}
 		}
-		// It committed after all; only its response went missing.
+		// A subscription exists after the failed call. A successful negative
+		// preflight is the only evidence that this attempt created it.
 	}
-	switch {
-	case !knewBefore:
+	if !knewBefore {
 		return mitzAttempt{outcome: mitzRegistered}
-	case existedBefore:
-		return mitzAttempt{outcome: mitzExisting}
 	}
 	return mitzAttempt{outcome: mitzStarted}
 }
@@ -393,16 +392,16 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 				"duplicate. The record page keeps this visible and offers a retry of this step alone.",
 		}
 	case mitzRegistered:
-		title = "Consent subscription registered"
-		detail = "Mitz accepted the subscription. Whether one already existed could not be " +
-			"established here, so this may have found rather than created it."
+		title = "Consent subscription exists"
+		detail = "A consent subscription for this patient exists at Mitz. Whether it already " +
+			"existed or this request created it could not be established."
 	case mitzExisting:
 		// Registered, not active: the sandbox sends status "requested", the mock
 		// stores it unchanged, and the lookup only asks whether a Subscription
 		// exists, which says nothing about the FHIR lifecycle.
 		title = "Consent subscription already registered"
-		detail = "A subscription for this patient at De Plataan was already registered at Mitz, so " +
-			"this request did not create a second one."
+		detail = "The Mitz lookup found an existing subscription for this patient at De Plataan, so " +
+			"no registration request was sent."
 	}
 	return &cardResult{
 		OK:    true,

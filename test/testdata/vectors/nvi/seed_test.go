@@ -200,6 +200,9 @@ func TestDeleteForClientSearchesBySourceIdentifier(t *testing.T) {
 	if got := query.Get("subject:identifier"); got != bsnNamingSystem+"|999900006" {
 		t.Errorf("subject:identifier = %q", got)
 	}
+	if got := query.Get("_count"); got != "1000" {
+		t.Errorf("_count = %q, want 1000", got)
+	}
 }
 
 // The custodian is not a search parameter, so it stays a filter, and a record
@@ -253,7 +256,14 @@ func TestCustodianOfHandlesMissingAndMalformedExtensions(t *testing.T) {
 // De Zonnebloem comes back twice; returning the raw result would report two
 // registrations for each custodian and make a double seed look like a duplicate.
 func TestListsForCustodianReturnsOneCustodian(t *testing.T) {
-	base := fakeNVI(t, answerSearch(listFor("plataan-list", "00000010"), listFor("zonnebloem-list", "00000020")))
+	var query url.Values
+	base := fakeNVI(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("parse search body: %v", err)
+		}
+		query = r.PostForm
+		answerSearch(listFor("plataan-list", "00000010"), listFor("zonnebloem-list", "00000020"))(w, r)
+	})
 
 	for _, custodian := range []string{"00000010", "00000020"} {
 		got, err := ListsForCustodian(context.Background(), base, custodian, "999900006")
@@ -263,6 +273,9 @@ func TestListsForCustodianReturnsOneCustodian(t *testing.T) {
 		if len(got) != 1 {
 			t.Fatalf("custodian %s: expected 1 registration, got %d", custodian, len(got))
 		}
+	}
+	if got := query.Get("_count"); got != "1000" {
+		t.Errorf("_count = %q, want 1000", got)
 	}
 }
 

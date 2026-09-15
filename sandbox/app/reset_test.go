@@ -134,6 +134,9 @@ func TestRecycle_PartialRecycleIsReportedNotFailed(t *testing.T) {
 
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
 	require.Equal(t, "/demo?notice=recycle-partial", res.Header.Get("Location"))
+	_, body := getBody(t, client, srv, res.Header.Get("Location"))
+	require.Contains(t, body, "Patient restored, but some state could not be cleared. Check the sandbox logs.")
+	require.NotContains(t, body, "the consent subscription could not be cleared")
 }
 
 func TestRecycle_RefusesLockedPatient(t *testing.T) {

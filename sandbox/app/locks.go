@@ -6,9 +6,8 @@ import (
 	"time"
 )
 
-// defaultLockTTL is how long a demo lock survives without a refresh. A running
-// demo refreshes on activity; an abandoned run expires so the patient returns
-// to the pool.
+// defaultLockTTL is how long a demo lock survives after the patient is opened.
+// Opening the same patient again renews it; ordinary page activity does not.
 const defaultLockTTL = 15 * time.Minute
 
 // lockInfo is a single held lock.

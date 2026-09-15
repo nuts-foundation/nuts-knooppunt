@@ -19,11 +19,13 @@
           depends on which client registered them, which this screen cannot see: the delete is scoped
           by client, and the stored records do not report theirs.
           {{else if .Shared}}This patient is already shared. Sharing again republishes the records
-          this installation published, converging on one per data category, and retries the consent
-          subscription. Records another client registered are not visible here and are not replaced,
+          this installation published, converging on one per data category. When the mock lookup is
+          available, sharing checks whether the consent subscription already exists before sending a
+          registration request, and a positive lookup leaves it unchanged. Without the lookup a
+          request is sent, and the national Mitz gives no deduplication guarantee. Records another
+          client registered are not visible here and are not replaced,
           because the delete that precedes the write is scoped to this installation's client id. The
-          consent subscription does not duplicate against the mock, which keys one per provider and
-          patient; the national Mitz makes no such promise.
+          data itself stays here.
           {{else}}This record exists only in De Plataan's own store. Sharing publishes one
           localization record per data category, so other providers can find that this hospital holds
           data about this patient, and subscribes to their consent changes. The data itself stays here.

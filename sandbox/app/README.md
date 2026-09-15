@@ -136,6 +136,13 @@ Three limitations are carried deliberately:
 - **Reconciliation is a mock-only affordance.** The "was that subscription actually created?" query
   reads the mock directly; neither the Knooppunt nor the national Mitz offers such a lookup.
 
+`POST /demo/ehr/patients/{key}/open` reserves a patient for the session. A successful switch releases
+the session's previous holdings; a refused switch preserves them. GET views do not take locks, and
+share and subscribe check ownership when each request begins. Opening the same patient renews its
+15-minute advisory, process-local lease, while ordinary page activity does not renew it (`Refresh`
+has no application callers). One-patient-per-session describes this open/switch flow: the manual
+Lock control can acquire several patients. Removing a session releases all of its holdings.
+
 One more is inherited rather than chosen. The Knooppunt's `component/mitz` reports a subscription as
 created when its request to Mitz fails without a parseable `OperationOutcome` (a dial failure, a
 deadline, a gateway 502, an empty 401): it answers 201, the share screen renders "Consent subscription
@@ -192,8 +199,8 @@ the vendored v1.0.2 bundle. Keep this form when adding interactivity.
   `POST /demo/patients/{key}/recycle` (per-patient, 409 if locked), `POST /demo/patients/{key}/lock` and
   `/release` (manual lock control), and `GET /demo/patients` (pool + lock status JSON). These call
   `vectors.ResetGlobal` / `vectors.RecyclePatient`; they are enabled only when `KNOOPPUNT_INTERNAL_URL` and
-  `HAPI_BASE_URL` are set (see `docker-compose.yml`), otherwise reset reports "disabled". The lock trigger on
-  scenario-run start is E4/E6; E5 ships the registry, reset-side enforcement and the manual controls.
+  `HAPI_BASE_URL` are set (see `docker-compose.yml`), otherwise reset reports "disabled". The E3 patient
+  open/switch route reserves the patient; the manual controls remain available for reset demonstrations.
 - The `#gf-viewer-steps` container and `window.GFJourney.apply(stepEvent)` / `.reset()`, consuming the DESIGN.md §7
   step-event schema (E6).
 

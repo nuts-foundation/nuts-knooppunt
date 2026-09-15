@@ -46,7 +46,6 @@ func mitzSubscribeFunc(knooppuntInternalURL *url.URL, providerURA, providerType 
 			return fmt.Errorf("build Mitz subscription request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/fhir+json")
-		req.Header.Set("X-Tenant-ID", "http://fhir.nl/fhir/NamingSystem/ura|"+providerURA)
 
 		res, err := client.Do(req)
 		if err != nil {

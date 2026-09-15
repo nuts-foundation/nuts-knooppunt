@@ -25,10 +25,10 @@ func mitzServer(t *testing.T, handler http.HandlerFunc) *url.URL {
 }
 
 func TestMitzSubscribe_PostsAConformantSubscription(t *testing.T) {
-	var gotPath, gotTenant, gotContentType string
+	var gotPath, gotContentType string
 	var body map[string]any
 	base := mitzServer(t, func(w http.ResponseWriter, r *http.Request) {
-		gotPath, gotTenant = r.URL.Path, r.Header.Get("X-Tenant-ID")
+		gotPath = r.URL.Path
 		gotContentType = r.Header.Get("Content-Type")
 		raw, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(raw, &body)
@@ -38,7 +38,6 @@ func TestMitzSubscribe_PostsAConformantSubscription(t *testing.T) {
 	require.NoError(t, mitzSubscribeFunc(base, "00000010", "Z3")(t.Context(), "999900006"))
 
 	require.Equal(t, "/mitz/Subscription", gotPath)
-	require.Equal(t, "http://fhir.nl/fhir/NamingSystem/ura|00000010", gotTenant)
 	require.Equal(t, "application/fhir+json", gotContentType)
 	require.Equal(t, "Subscription", body["resourceType"])
 	require.Equal(t, "requested", body["status"])

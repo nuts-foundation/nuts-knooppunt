@@ -31,6 +31,13 @@ const (
 	// in the localization List profile: the source is the OAuth client id of the
 	// installation that registered the record, not a Device identifier.
 	OAuthClientIDSystem = "http://minvws.github.io/generiekefuncties-docs/NamingSystem/oauth-client-id"
+
+	// searchCount asks for a finite upper bound in one non-paginated request. A
+	// server may return fewer matches than requested. If it still returns a next
+	// link, the Knooppunt reports TooCostly and the existing error paths expose a
+	// failure instead of continuing with incomplete results.
+	// FHIR R4: https://hl7.org/fhir/R4/search.html#count
+	searchCount = "1000"
 )
 
 // Data categories used by this demo, all members of nl-gf-zorgcontext-vs.
@@ -158,6 +165,7 @@ func deleteForClient(ctx context.Context, client fhirclient.Client, custodianURA
 	err := client.SearchWithContext(ctx, "List", url.Values{
 		"subject:identifier": {bsnNamingSystem + "|" + bsn},
 		"source:identifier":  {OAuthClientIDSystem + "|" + clientID},
+		"_count":             {searchCount},
 	}, &searchSet, tenantHeader(custodianURA))
 	if err != nil {
 		return fmt.Errorf("search NVI Lists to delete (custodian=%s): %w", custodianURA, err)
@@ -191,6 +199,7 @@ func listsForCustodian(ctx context.Context, client fhirclient.Client, custodianU
 	var searchSet fhir.Bundle
 	err := client.SearchWithContext(ctx, "List", url.Values{
 		"subject:identifier": {bsnNamingSystem + "|" + bsn},
+		"_count":             {searchCount},
 	}, &searchSet, tenantHeader(custodianURA))
 	if err != nil {
 		return nil, fmt.Errorf("search NVI Lists (custodian=%s): %w", custodianURA, err)

@@ -341,29 +341,51 @@ func TestSubscribe_RetryOutcomesFollowTheLookup(t *testing.T) {
 	}
 	unreachable := errors.New("unreachable")
 	for name, tc := range map[string]struct {
-		answers []answer
-		want    string
+		answers        []answer
+		want           string
+		wantNotice     string
+		rejectNotice   string
+		wantSubscribes int
 	}{
 		"absent before, present after: this call committed": {
 			[]answer{{false, nil}, {true, nil}}, "mitz-retry-done",
+			"Consent subscription started.", "", 1,
 		},
-		"present before and after: the write failed and changed nothing": {
-			[]answer{{true, nil}, {true, nil}}, "mitz-retry-existing",
+		"present before: no registration request is sent": {
+			[]answer{{true, nil}}, "mitz-retry-existing",
+			"The Mitz lookup found an existing consent subscription for this patient. No registration request was sent.",
+			"This retry did not create a second one.", 0,
 		},
 		"preflight failed, reconciliation found one: exists, since when unknown": {
 			[]answer{{false, unreachable}, {true, nil}}, "mitz-retry-registered",
+			"A consent subscription for this patient exists at Mitz. Whether it already existed or resulted from this retry could not be established.",
+			"Mitz accepted the subscription.", 1,
+		},
+		"true preflight with an error is still unknown, then reconciliation finds one": {
+			[]answer{{true, unreachable}, {true, nil}}, "mitz-retry-registered",
+			"A consent subscription for this patient exists at Mitz. Whether it already existed or resulted from this retry could not be established.",
+			"Mitz accepted the subscription.", 1,
 		},
 		"reconciliation confirms it did not": {
 			[]answer{{false, nil}, {false, nil}}, "mitz-retry-failed",
+			"Mitz confirms there is still no subscription. The call failed; try again.", "", 1,
 		},
 		"lookup itself failed": {
 			[]answer{{false, unreachable}, {false, unreachable}}, "mitz-retry-unknown",
+			"The call failed and Mitz could not be asked whether it went through anyway.", "", 1,
 		},
-		"no lookup configured": {nil, "mitz-retry-unknown"},
+		"no lookup configured": {
+			nil, "mitz-retry-unknown",
+			"The call failed and Mitz could not be asked whether it went through anyway.", "", 1,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cfg, anna := sharedNotSubscribed(t)
-			cfg.mitzSubscribe = func(context.Context, string) error { return errors.New("timeout") }
+			subscribeCalls := 0
+			cfg.mitzSubscribe = func(context.Context, string) error {
+				subscribeCalls++
+				return errors.New("timeout")
+			}
 			cfg.mitzSubscribed = nil
 			if tc.answers != nil {
 				answers := tc.answers
@@ -382,6 +404,12 @@ func TestSubscribe_RetryOutcomesFollowTheLookup(t *testing.T) {
 			defer res.Body.Close()
 
 			require.Equal(t, "/demo/ehr/patients/"+anna.Key+"?notice="+tc.want, res.Header.Get("Location"))
+			require.Equal(t, tc.wantSubscribes, subscribeCalls)
+			_, body := getBody(t, client, srv, res.Header.Get("Location"))
+			require.Contains(t, body, tc.wantNotice)
+			if tc.rejectNotice != "" {
+				require.NotContains(t, body, tc.rejectNotice)
+			}
 		})
 	}
 }
@@ -444,6 +472,7 @@ func TestShare_RegistersTheDerivedCategoriesAndConfirmsBothSteps(t *testing.T) {
 	require.Equal(t, anna.BSN, calls.registeredBSN)
 	require.Equal(t, anna.PlataanCategories(), calls.registeredCats,
 		"the handler must send exactly the categories De Plataan holds")
+	require.Equal(t, 1, calls.subscribeCount)
 	require.Contains(t, body, "Localization records published")
 	require.Contains(t, body, "Consent subscription started")
 	// State, not just title: a card carrying Failed alongside a success title
@@ -506,29 +535,70 @@ func TestShare_CardNamesTheRegisteredCategories(t *testing.T) {
 // The base --profile sandbox deployment sets no MITZMOCK_URL, so the preflight
 // cannot run there and the card must not claim this request created anything.
 func TestShare_WithoutALookupTheSuccessCardClaimsNoCreation(t *testing.T) {
-	cfg, _, anna := shareConfig(t)
+	cfg, calls, anna := shareConfig(t)
 	cfg.mitzSubscribed = nil
 
 	_, body := openAndShare(t, cfg, anna.Key)
 
-	require.Contains(t, body, "Consent subscription registered")
+	require.Contains(t, body, "Consent subscription exists")
+	require.Contains(t, body, "A consent subscription for this patient exists at Mitz.")
 	require.NotContains(t, body, "Consent subscription started")
+	require.NotContains(t, body, "Mitz accepted the subscription")
 	require.NotContains(t, body, "confirm-card failed")
+	require.Equal(t, 1, calls.subscribeCount)
 }
 
 // A preflight that errors is the same state as not having one: nothing was
 // established, so neither "started" nor "already registered" is available.
 func TestShare_AFailedPreflightFallsBackToTheNeutralCard(t *testing.T) {
-	cfg, _, anna := shareConfig(t)
-	cfg.mitzSubscribed = func(context.Context, string) (bool, error) {
-		return false, errors.New("mock unreachable")
+	for name, subscribed := range map[string]bool{"false with error": false, "true with error": true} {
+		t.Run(name, func(t *testing.T) {
+			cfg, calls, anna := shareConfig(t)
+			cfg.mitzSubscribed = func(context.Context, string) (bool, error) {
+				return subscribed, errors.New("mock unreachable")
+			}
+
+			_, body := openAndShare(t, cfg, anna.Key)
+
+			require.Contains(t, body, "Consent subscription exists")
+			require.NotContains(t, body, "Consent subscription started")
+			require.NotContains(t, body, "Consent subscription already registered")
+			require.NotContains(t, body, "Mitz accepted the subscription")
+			require.Equal(t, 1, calls.subscribeCount)
+		})
 	}
+}
+
+func TestShare_PositiveReconciliationUsesExistenceWording(t *testing.T) {
+	cfg, _, anna := shareConfig(t)
+	answers := []struct {
+		subscribed bool
+		err        error
+	}{{false, errors.New("preflight failed")}, {true, nil}}
+	cfg.mitzSubscribed = func(context.Context, string) (bool, error) {
+		next := answers[0]
+		if len(answers) > 1 {
+			answers = answers[1:]
+		}
+		return next.subscribed, next.err
+	}
+	cfg.mitzSubscribe = func(context.Context, string) error { return errors.New("write failed") }
 
 	_, body := openAndShare(t, cfg, anna.Key)
 
-	require.Contains(t, body, "Consent subscription registered")
-	require.NotContains(t, body, "Consent subscription started")
-	require.NotContains(t, body, "Consent subscription already registered")
+	require.Contains(t, body, "A consent subscription for this patient exists at Mitz. Whether it already existed or this request created it could not be established.")
+	require.NotContains(t, body, "Mitz accepted the subscription.")
+}
+
+func TestShare_ExistingSubscriptionSkipsRegistrationRequest(t *testing.T) {
+	cfg, calls, anna := shareConfig(t)
+	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return true, nil }
+
+	_, body := openAndShare(t, cfg, anna.Key)
+
+	require.Zero(t, calls.subscribeCount)
+	require.Contains(t, body, "The Mitz lookup found an existing subscription for this patient at De Plataan, so no registration request was sent.")
+	require.NotContains(t, body, "this request did not create a second one")
 }
 
 // The NVI holds records this build cannot name. The share form replaces the
@@ -570,7 +640,8 @@ func TestShareForm_UnrecognizedCategoriesAreNotDescribedAsTheSameRecords(t *test
 // "started" here contradicts the warning on the button that produced the click.
 func TestSubscribe_ExistingSubscriptionIsNotReportedAsStarted(t *testing.T) {
 	cfg, anna := sharedNotSubscribed(t)
-	cfg.mitzSubscribe = func(context.Context, string) error { return nil }
+	subscribeCalls := 0
+	cfg.mitzSubscribe = func(context.Context, string) error { subscribeCalls++; return nil }
 	cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return true, nil }
 	srv, client := demoServer(t, cfg)
 	openPatient(t, client, srv, anna.Key)
@@ -580,6 +651,7 @@ func TestSubscribe_ExistingSubscriptionIsNotReportedAsStarted(t *testing.T) {
 
 	require.Equal(t, "/demo/ehr/patients/"+anna.Key+"?notice=mitz-retry-existing",
 		res.Header.Get("Location"))
+	require.Zero(t, subscribeCalls)
 }
 
 // And with no lookup at all, neither claim is available.
