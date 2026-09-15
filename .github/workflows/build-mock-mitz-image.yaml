@@ -1,5 +1,5 @@
 ---
-name: 'Build mitzmock Docker image'
+name: 'Build mock-mitz Docker image'
 
 on:
   push:
@@ -12,7 +12,7 @@ on:
       - main
     paths:
       - test/mitzmock/**
-      - .github/workflows/build-mitzmock-image.yaml
+      - .github/workflows/build-mock-mitz-image.yaml
 
 # cancel build action if superseded by new commit on same branch
 concurrency:
@@ -51,7 +51,7 @@ jobs:
         id: docker_meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/nuts-foundation/mitzmock
+          images: ghcr.io/nuts-foundation/mock-mitz
           tags: |
             type=ref,event=branch,enable={{is_default_branch}},prefix=
             type=semver,pattern={{version}}
