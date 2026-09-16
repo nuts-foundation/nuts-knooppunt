@@ -234,9 +234,6 @@ fhir:
     enabled: true
   gateway:
     enabled: false
-  database:
-    storage:
-      size: 5Gi
   configExtra:
     # Lets the server generate UUIDs for resources instead of integers
     "hapi.fhir.server_id_strategy": "UUID"
