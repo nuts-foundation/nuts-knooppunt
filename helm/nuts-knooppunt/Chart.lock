@@ -14,11 +14,20 @@ dependencies:
 - name: helm-mock-vc-issuer
   repository: file://../mock-vc-issuer
   version: 0.1.0
+- name: helm-mock-mitz
+  repository: file://../mock-mitz
+  version: 0.1.0
+- name: helm-mock-dezi
+  repository: file://../mock-dezi
+  version: 0.1.0
+- name: helm-gf-sandbox
+  repository: file://../gf-sandbox
+  version: 0.1.0
 - name: nuts-node-chart
   repository: https://nuts-foundation.github.io/nuts-node/
   version: 0.0.6
 - name: jaeger
   repository: https://jaegertracing.github.io/helm-charts
   version: 3.4.1
-digest: sha256:321ace7b200cd373312dc4307d3ca8fe592ee4525818ef4fbb03ef41f296923a
-generated: "2026-09-15T10:22:00.695733+02:00"
+digest: sha256:43ffbb81bc39ec8b93ef3af62772d285e584fc5abb23390ced47b08dcb23527b
+generated: "2026-09-16T07:02:50.431037+02:00"

@@ -59,6 +59,21 @@ dependencies:
     condition: mock-vc-issuer.enabled
     repository: file://../mock-vc-issuer
     version: "0.1.0"
+  - name: helm-mock-mitz
+    alias: mock-mitz
+    condition: mock-mitz.enabled
+    repository: file://../mock-mitz
+    version: "0.1.0"
+  - name: helm-mock-dezi
+    alias: mock-dezi
+    condition: mock-dezi.enabled
+    repository: file://../mock-dezi
+    version: "0.1.0"
+  - name: helm-gf-sandbox
+    alias: gf-sandbox
+    condition: gf-sandbox.enabled
+    repository: file://../gf-sandbox
+    version: "0.1.0"
   - name: nuts-node-chart
     alias: nuts
     condition: nuts.enabled

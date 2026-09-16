@@ -1,12 +1,10 @@
 # Environment values for the OVHcloud MKS "gf-test" cluster (infra/cluster).
 #
-# First-pass scope: knooppunt, hapi-fhir (as fake-nvi), both PEPs, nutsadmin,
-# and the mock VC issuer. Deliberately excludes mitzmock, gf-sandbox, and
-# mock-dezi - those images aren't published yet (nuts-knooppunt#565) and
-# their charts aren't written yet (nuts-knooppunt#567). Without them this
-# deploys the plumbing but not the full sandbox demo flow, and the seed/
-# credential-issuance pipeline (nuts-knooppunt#572) hasn't been ported to
-# Kubernetes yet either, so there's no demo data.
+# Deploys the full sandbox stack: knooppunt, hapi-fhir (as fake-nvi), both
+# PEPs, nutsadmin, mock-vc-issuer, mock-mitz, mock-dezi, and gf-sandbox. The
+# seed/credential-issuance pipeline (nuts-knooppunt#572) hasn't been ported
+# to Kubernetes yet, so there's no demo data - the stack runs but the demo
+# flow has nothing to show yet.
 #
 # No real domain decided yet (nuts-knooppunt#563 is still open), so this
 # uses nip.io against the ingress-nginx controller's LoadBalancer IP
@@ -93,3 +91,34 @@ mock-vc-issuer:
   # "unable to open database file" until this was set.
   podSecurityContext:
     fsGroup: 1001
+
+mock-mitz:
+  enabled: true
+
+mock-dezi:
+  enabled: true
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: mock-dezi.57.129.23.152.nip.io
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+  env:
+    # Must match gf-sandbox's public callback below.
+    deziAllowedRedirectUris: "http://gf-sandbox.57.129.23.152.nip.io/demo/auth/callback"
+
+gf-sandbox:
+  enabled: true
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: gf-sandbox.57.129.23.152.nip.io
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+  env:
+    deziPublicAuthorizeUrl: "http://mock-dezi.57.129.23.152.nip.io/authorize"
+    sandboxPublicUrl: "http://gf-sandbox.57.129.23.152.nip.io"
