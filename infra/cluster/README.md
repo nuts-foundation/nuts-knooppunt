@@ -55,5 +55,13 @@ matching the cluster).
 
 No kubeconfig output here on purpose — it's self-served per person from
 the Control Panel (admins via their role, ops via the
-`kube/kubeconfig/create` IAM action), not a single shared credential
-sitting in Terraform state.
+`kube/kubeconfig/create` IAM action), and that stays the intended
+day-to-day path.
+
+That said, omitting the output does **not** keep the kubeconfig out of
+Terraform state. The OVH provider stores the full kubeconfig, including
+the client's private key, as attributes on the `ovh_cloud_project_kube`
+resource regardless of whether any output references them ([provider
+source](https://github.com/ovh/terraform-provider-ovh/blob/v2.19.0/ovh/resource_cloud_project_kube.go#L982-L1000)).
+Anyone with read access to this state (the S3 backend bucket) already has
+a working cluster credential — treat access to that bucket accordingly.
