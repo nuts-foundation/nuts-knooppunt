@@ -51,6 +51,8 @@ spec:
               value: {{ .Values.env.knooppuntInternalUrl | quote }}
             - name: HAPI_BASE_URL
               value: {{ .Values.env.hapiBaseUrl | quote }}
+            - name: SANDBOX_AUTH_SERVER
+              value: {{ .Values.env.sandboxAuthServer | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}

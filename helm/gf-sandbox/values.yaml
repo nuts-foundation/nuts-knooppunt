@@ -60,6 +60,11 @@ env:
   sandboxPublicUrl: "http://localhost:8091"
   knooppuntInternalUrl: "http://knooppunt:8081"
   hapiBaseUrl: "http://fhir:8080/fhir"
+  # Must equal the issuer the node advertises for this subject, and be
+  # reachable by the node (it fetches /.well-known/oauth-authorization-server
+  # from it) - see sandbox/app/README.md. Placeholder matches sandbox/app's
+  # own default; override per environment.
+  sandboxAuthServer: "http://localhost:8080/nuts/oauth2/plataan"
 
 volumes: []
 volumeMounts: []

@@ -24,7 +24,7 @@ ingress:
 # identifiers, must match the public ingress host above.
 extraEnv:
   - name: NUTS_URL
-    value: "http://knooppunt.57.129.23.152.nip.io"
+    value: "http://knooppunt.57.129.23.152.nip.io/nuts"
 
 # The NVI component is disabled unless baseurl is set
 # (component/nvi/component.go: Enabled() is FHIRBaseURL != ""). Matches
@@ -138,3 +138,7 @@ gf-sandbox:
   env:
     deziPublicAuthorizeUrl: "http://mock-dezi.57.129.23.152.nip.io/authorize"
     sandboxPublicUrl: "http://gf-sandbox.57.129.23.152.nip.io"
+    # Must match NUTS_URL above (knooppunt's own subchart) plus the
+    # per-subject oauth2 path - PR review comment
+    # https://github.com/nuts-foundation/nuts-knooppunt/pull/581#discussion_r4026416792
+    sandboxAuthServer: "http://knooppunt.57.129.23.152.nip.io/nuts/oauth2/plataan"
