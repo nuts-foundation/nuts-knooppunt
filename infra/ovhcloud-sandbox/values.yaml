@@ -34,6 +34,13 @@ config:
   nvi:
     baseurl: "http://fhir:8080/fhir/nvi"
     audience: "nvi"
+  # Same gap, same fix: component/mitz.Enabled() requires mitzbase, and it
+  # was never set. Needed for BGZ authorization (its policy requires Mitz
+  # consent - mock-mitz's closed-question endpoint supplies that answer).
+  # The separate subscription flow (/abonnementen/fhir) mock-mitz doesn't
+  # implement yet - sandbox/DESIGN.md E8, not a config problem.
+  mitz:
+    mitzbase: "http://mock-mitz:8080"
 
 # The chart's own appVersion ("0.0.0") is a placeholder only ever filled in
 # correctly by the release CI (see helm/README.md); it was never published as
