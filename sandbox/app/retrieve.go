@@ -42,6 +42,12 @@ type localizedSource struct {
 	Name       string
 	Address    string
 	AddressErr string
+
+	// AuthorizationServer is carried from the directory to the retrieval rather
+	// than resolved twice. Dropping it here is not a missing value later: the
+	// retrieval reads it as "the directory publishes none" and refuses a holder
+	// that in fact published one.
+	AuthorizationServer string
 }
 
 // Addressable reports whether the directory produced an address to retrieve
@@ -185,6 +191,7 @@ func (c Config) localizeSources(ctx context.Context, bsn string) ([]localizedSou
 				source.AddressErr = err.Error()
 			} else {
 				source.Name, source.Address = resolved.Name, resolved.Address
+				source.AuthorizationServer = resolved.AuthorizationServer
 			}
 		}
 		sources = append(sources, source)
@@ -272,7 +279,8 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 	generation := c.Retrievals.generationOf(patient.Key)
 
 	retrieval, err := c.retrieveFromSource(r.Context(), *session,
-		sourceAddress{URA: chosen.URA, Name: chosen.Name, Address: chosen.Address},
+		sourceAddress{URA: chosen.URA, Name: chosen.Name, Address: chosen.Address,
+			AuthorizationServer: chosen.AuthorizationServer},
 		patient.BSN, chosen.Categories)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)

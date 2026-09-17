@@ -207,7 +207,12 @@ func NewMux(cfg Config) *http.ServeMux {
 	if cfg.retrieveFromSource == nil {
 		cfg.retrieveFromSource = func(ctx context.Context, session authSession, source sourceAddress,
 			bsn string, categories []string) (sourceRetrieval, error) {
-			token, err := nuts.requestTokenForSource(ctx, session, source.URA)
+			if source.AuthorizationServer == "" {
+				return sourceRetrieval{}, fmt.Errorf(
+					"the directory publishes no authorization server for %s, so no token can be requested",
+					source.Name)
+			}
+			token, err := nuts.requestTokenForSource(ctx, session, source.AuthorizationServer)
 			if err != nil {
 				return sourceRetrieval{}, err
 			}

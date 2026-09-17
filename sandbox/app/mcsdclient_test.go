@@ -25,6 +25,24 @@ func mcsdServer(t *testing.T, handler http.HandlerFunc) *url.URL {
 // organizationBundle is a searchset holding De Zonnebloem and, as an _include,
 // one Endpoint. endpointJSON is spliced in so a test can vary the Endpoint alone.
 func organizationBundle(endpointJSON string) string {
+	return organizationBundleWith([]string{"Endpoint/zb-fhir"}, endpointJSON)
+}
+
+// organizationBundleWith is the same searchset with the Organization pointing at
+// several endpoints, which is the shape once a holder publishes both where its
+// data is and where its authorization server is.
+func organizationBundleWith(references []string, endpointsJSON ...string) string {
+	refs := ""
+	for i, reference := range references {
+		if i > 0 {
+			refs += ","
+		}
+		refs += `{"reference": "` + reference + `", "type": "Endpoint"}`
+	}
+	included := ""
+	for _, endpoint := range endpointsJSON {
+		included += `,{"search": {"mode": "include"}, "resource": ` + endpoint + `}`
+	}
 	return `{
 	  "resourceType": "Bundle",
 	  "type": "searchset",
@@ -36,13 +54,21 @@ func organizationBundle(endpointJSON string) string {
 	        "id": "zonnebloem",
 	        "name": "Zorgcentrum De Zonnebloem",
 	        "identifier": [{"system": "http://fhir.nl/fhir/NamingSystem/ura", "value": "00000020"}],
-	        "endpoint": [{"reference": "Endpoint/zb-fhir", "type": "Endpoint"}]
+	        "endpoint": [` + refs + `]
 	      }
-	    },
-	    {"search": {"mode": "include"}, "resource": ` + endpointJSON + `}
+	    }` + included + `
 	  ]
 	}`
 }
+
+const authServerEndpoint = `{
+  "resourceType": "Endpoint",
+  "id": "zb-oauth",
+  "status": "active",
+  "address": "http://localhost:8080/nuts/oauth2/00000020",
+  "connectionType": {"system": "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-authorization-server-cs", "code": "oauth-nuts"},
+  "period": {"start": "2025-01-01T00:00:00Z"}
+}`
 
 const activeEndpoint = `{
   "resourceType": "Endpoint",
@@ -215,4 +241,126 @@ func TestMCSDResolve_ResolvesAnEndpointReferencedByAbsoluteURL(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "http://pep-zonnebloem:8080/fhir", source.Address)
+}
+
+// The authorization server is a published endpoint, not something to build out
+// of a URA. The GF connection types value set has oauth-nuts for exactly this
+// (CodeSystem/nl-gf-authorization-server-cs), so the directory answers both
+// halves of "where do I reach this holder": the data, and the server that
+// authorizes access to it.
+func TestMCSDResolve_ReadsTheAuthorizationServerFromTheDirectory(t *testing.T) {
+	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(organizationBundleWith(
+			[]string{"Endpoint/zb-fhir", "Endpoint/zb-oauth"}, activeEndpoint, authServerEndpoint)))
+	})
+
+	source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+
+	require.NoError(t, err)
+	assert.Equal(t, "http://pep-zonnebloem:8080/fhir", source.Address,
+		"the data address may not be taken from the authorization endpoint")
+	assert.Equal(t, "http://localhost:8080/nuts/oauth2/00000020", source.AuthorizationServer)
+}
+
+// The order the directory happens to return them in is not a selection rule.
+func TestMCSDResolve_TellsTheTwoEndpointsApartInEitherOrder(t *testing.T) {
+	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(organizationBundleWith(
+			[]string{"Endpoint/zb-oauth", "Endpoint/zb-fhir"}, authServerEndpoint, activeEndpoint)))
+	})
+
+	source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+
+	require.NoError(t, err)
+	assert.Equal(t, "http://pep-zonnebloem:8080/fhir", source.Address)
+	assert.Equal(t, "http://localhost:8080/nuts/oauth2/00000020", source.AuthorizationServer)
+}
+
+// A holder that publishes where its data is but not what authorizes access to it
+// is still addressable, and the screen says what is missing rather than the
+// retrieval inventing a server to ask.
+func TestMCSDResolve_LeavesTheAuthorizationServerEmptyWhenNonePublished(t *testing.T) {
+	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(organizationBundle(activeEndpoint)))
+	})
+
+	source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+
+	require.NoError(t, err)
+	assert.Equal(t, "http://pep-zonnebloem:8080/fhir", source.Address)
+	assert.Empty(t, source.AuthorizationServer)
+}
+
+// An authorization endpoint that is out of service is not an address either.
+func TestMCSDResolve_IgnoresAnAuthorizationEndpointThatIsNotUsable(t *testing.T) {
+	suspended := `{
+	  "resourceType": "Endpoint", "id": "zb-oauth", "status": "suspended",
+	  "address": "http://localhost:8080/nuts/oauth2/00000020",
+	  "connectionType": {"system": "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-authorization-server-cs", "code": "oauth-nuts"}
+	}`
+	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(organizationBundleWith(
+			[]string{"Endpoint/zb-fhir", "Endpoint/zb-oauth"}, activeEndpoint, suspended)))
+	})
+
+	source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+
+	require.NoError(t, err)
+	assert.Equal(t, "http://pep-zonnebloem:8080/fhir", source.Address)
+	assert.Empty(t, source.AuthorizationServer)
+}
+
+// A directory entry is not limited to the two kinds this chain knows. Treating
+// everything that is not an authorization server as the place to read data from
+// hands the bearer token and the patient search, BSN and all, to whatever
+// service the organization happened to list first.
+func TestMCSDResolve_IgnoresAnEndpointKindItCannotUse(t *testing.T) {
+	imaging := `{
+	  "resourceType": "Endpoint", "id": "zb-imaging", "status": "active",
+	  "address": "http://pacs-zonnebloem:8080/wado",
+	  "connectionType": {"system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type", "code": "dicom-wado-rs"}
+	}`
+	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(organizationBundleWith(
+			[]string{"Endpoint/zb-imaging", "Endpoint/zb-fhir", "Endpoint/zb-oauth"},
+			imaging, activeEndpoint, authServerEndpoint)))
+	})
+
+	source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+
+	require.NoError(t, err)
+	assert.Equal(t, "http://pep-zonnebloem:8080/fhir", source.Address,
+		"an imaging service is not where this reads a patient summary")
+	assert.Equal(t, "http://localhost:8080/nuts/oauth2/00000020", source.AuthorizationServer)
+}
+
+// The spec's connection types draw FHIR REST from the HL7 code system; the
+// seeded endpoints in this repo use a system that is in neither value set. Both
+// are accepted so the demo keeps working while the seed is what it is.
+func TestMCSDResolve_AcceptsTheSpecFHIRConnectionType(t *testing.T) {
+	spec := `{
+	  "resourceType": "Endpoint", "id": "zb-fhir", "status": "active",
+	  "address": "http://pep-zonnebloem:8080/fhir",
+	  "connectionType": {"system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type", "code": "hl7-fhir-rest"}
+	}`
+	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(organizationBundle(spec)))
+	})
+
+	source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+
+	require.NoError(t, err)
+	assert.Equal(t, "http://pep-zonnebloem:8080/fhir", source.Address)
+}
+
+// An organization publishing only an authorization server is not addressable for
+// data, and saying so is different from silently using that server as a FHIR base.
+func TestMCSDResolve_RefusesWhenOnlyAnAuthorizationServerIsPublished(t *testing.T) {
+	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(organizationBundleWith([]string{"Endpoint/zb-oauth"}, authServerEndpoint)))
+	})
+
+	_, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+
+	require.ErrorContains(t, err, "no usable endpoint")
 }

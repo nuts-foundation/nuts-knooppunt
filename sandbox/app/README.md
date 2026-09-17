@@ -96,8 +96,7 @@ defaults instead of extending them.
 | `KNOOPPUNT_INTERNAL_URL` | `http://localhost:8081` | the knooppunt's internal mux. The backend reaches the Nuts node through it (proxied under `/nuts`) for the token request, and the same address enables reset/recycle when `HAPI_BASE_URL` is set too. One variable because it is one address: it was spelled `NUTS_INTERNAL_BASE_URL` here and `KNOOPPUNT_INTERNAL_URL` for reset, and `NUTS_` is the node's own configuration prefix, so that name read as node config the node never sees |
 | `SANDBOX_NUTS_SUBJECT` | `plataan` | the Nuts subject the token is requested for. Must name the subject `sandbox/bootstrap-nuts.sh` creates, whose wallet holds the `X509Credential` |
 | `SANDBOX_BGZ_SCOPE` | `bgz` | the scope requested. Must be a key in the definition the node loads, which the sandbox renders to `sandbox/.certs/policy/bgz.json` from `sandbox/policy/bgz.json.template`, or the node answers `invalid_scope` |
-| `SANDBOX_AUTH_SERVER` | `http://localhost:8080/nuts/oauth2/plataan` | the authorization server the token is requested from. It has to satisfy two requirements at once: equal the issuer the node advertises, and be reachable **by the node**, which fetches `/.well-known/oauth-authorization-server` from it before requesting a token (nuts-node `auth/client/iam/openid4vp.go`, `RequestRFC021AccessToken` to `AuthorizationServerMetadata`). Both hold here because the node dials it from inside its own container, where port 8080 is its own public listener. A split deployment has to find one address that satisfies both |
-| `SANDBOX_AUTH_SERVER_BASE` | `http://localhost:8080/nuts/oauth2` | where a **source's** authorization server is built from. Retrieval requests its token from the organization holding the data, not from De Plataan's own server, and a source's Nuts subject is its URA, so the address is this base plus the URA the directory step resolved. Separate from `SANDBOX_AUTH_SERVER` because that one names this installation's own subject, which is not a URA. The same two requirements apply to it |
+| `SANDBOX_AUTH_SERVER` | `http://localhost:8080/nuts/oauth2/plataan` | this installation's **own** authorization server, used by `POST /demo/authorize` to request a token and introspect its claims. Not the one a retrieval asks: that address comes from the source's `oauth-nuts` Endpoint in the directory. It stays configuration because it names a different server from the one protecting De Plataan's own data: the seeded directory publishes `/nuts/oauth2/00000010` for that, following the convention that a data holder's subject is its URA, while this one issues for `plataan`. Which wallet the request comes from is not what picks it: that is `SANDBOX_NUTS_SUBJECT`, in the path of the internal token call, independent of the `authorization_server` field. So this is the self-demo's chosen issuer rather than a requirement, and publishing it as De Plataan's authorization server would name the wrong one. It has to satisfy two requirements at once: equal the issuer the node advertises, and be reachable **by the node**, which fetches `/.well-known/oauth-authorization-server` from it before requesting a token (nuts-node `auth/client/iam/openid4vp.go`, `RequestRFC021AccessToken` to `AuthorizationServerMetadata`). Both hold here because the node dials it from inside its own container, where port 8080 is its own public listener. A split deployment has to find one address that satisfies both |
 | `SANDBOX_FACILITY_TYPE` | `Z3` | the facility type asserted in the organization context credential, the only thing on this path that carries one |
 | `SANDBOX_NVI_CLIENT_ID` | `gf-sandbox-plataan` | `List.source.identifier` on published localization records. Synthetic: no NVI OAuth client is registered for the demo, and this is not the `gf-sandbox` client id used on the Dezi flow. The client id is the scope a registration is deleted by, so recycle and the global reset receive this same value in `vectors.SandboxTarget` rather than reaching for the compiled-in default; overriding it here therefore also moves what those clean up. |
 | `MITZMOCK_URL` | unset | Base URL of the mock Mitz. Enables subscription reconciliation and the consent-subscription cleanup in reset and recycle. Unset means the share flow reports an unreconciled Mitz error as unknown rather than failed, and both cleanup paths report a partial restore rather than a clean one. The sandbox compose overlay sets it; the base `--profile sandbox` invocation does not. |
@@ -173,16 +172,16 @@ no SSE: the step-event stream stays with E6.
 Nothing is retrieved before the practitioner confirms a source, and the confirmed URA is re-checked
 against a fresh localization rather than trusted from the form.
 
-Six limitations are carried deliberately:
+Five limitations are carried deliberately:
 
-- **Endpoint selection is narrower than the spec.** It honours `status` and `period` at the precision
-  FHIR dateTime allows, both SHALLs, but does not match on `connectionType` and `payloadType`. The seeded Endpoints carry neither in the form
-  the spec's value sets define: `connectionType` uses a system outside NL GF Connection Types, and
-  `payloadType` is absent although the profile makes it `1..*`. Matching on them would reject every
-  endpoint in this demo.
-- **The authorization server is constructed, not discovered.** The spec has an `oauth-nuts` Endpoint
-  connection type for exactly this, but none is seeded, so the address is the configured base plus the
-  source's URA.
+- **Endpoint selection matches `connectionType` but not `payloadType`.** It honours `status` and
+  `period` at the precision FHIR dateTime allows, both SHALLs. An `oauth-nuts` Endpoint is
+  the authorization server, and a data endpoint has to carry one of two codings: the spec's
+  `http://terminology.hl7.org/CodeSystem/endpoint-connection-type|hl7-fhir-rest`, or
+  `http://fhir.nl/fhir/NamingSystem/endpoint-connection-type|fhir`, which is what this repo seeds and
+  is in neither GF value set. Every other kind is ignored rather than treated as a FHIR base.
+  `payloadType` is not matched at all: the seeded endpoints carry none, although the profile makes it
+  `1..*`, so matching on it would reject every data endpoint in this demo.
 - **The sub-check breakdown is narration.** The authorization specification makes the decision a single
   `allow` boolean and everything else informational, and the sandbox talks to the source's PEP, which
   answers with a status and nothing else. The verdict and the per-query statuses on that screen are
@@ -201,6 +200,12 @@ Six limitations are carried deliberately:
   that text is stored and rendered. It needs a source that both echoes the identifier into a redirect
   and makes that redirect malformed. Mapping transport errors to fixed messages would close it, at the
   cost of the diagnostics this screen exists to show.
+
+Changing the seeded directory needs more than a restart: the sandbox's own reset reloads the fixtures
+but does not update the query directory, so an existing deployment has to re-run the seed and then
+`POST /mcsd/update` before a retrieval can find the new endpoint. Compose's `init` does both. A seed
+run reports success on HTTP 200 without reading the update report, and a per-directory failure can sit
+inside a 200, so "seed complete" is not proof that the endpoint reached `knpt-mcsd-query`.
 
 ## Architecture
 

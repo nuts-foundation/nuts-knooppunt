@@ -645,3 +645,56 @@ func TestRecord_WarnsAboutAnAnswerThatYieldedNoItems(t *testing.T) {
 	require.NotContains(t, body, "Zorgcentrum De Zonnebloem</b>",
 		"and it may not list a source it drew no data from")
 }
+
+// A holder the directory can address but publishes no authorization server for
+// cannot be asked for a token. Building one out of the URA is what this replaced:
+// it guesses an address, and a guess that happens to resolve asks a server nobody
+// said was the right one.
+func TestRetrieve_RefusesASourceWithNoPublishedAuthorizationServer(t *testing.T) {
+	cfg := retrievalConfig(t)
+	cfg.mcsdResolve = func(_ context.Context, ura string) (sourceAddress, error) {
+		return sourceAddress{URA: ura, Name: "Zorgcentrum De Zonnebloem",
+			Address: "http://pep-zonnebloem:8080/fhir"}, nil
+	}
+	cfg.retrieveFromSource = nil
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+
+	status, body := postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+
+	require.Equal(t, http.StatusBadGateway, status)
+	require.Contains(t, body, "authorization server",
+		"the reason has to name what the directory did not publish")
+}
+
+// The address the directory published has to survive the trip from the
+// addressing step to the token request. Every other test on this path replaces
+// retrieveFromSource with a fake, so the one closure that reads the resolved
+// address was covered nowhere: it dropped the field between localization and
+// retrieval and the whole chain failed with "the directory publishes no
+// authorization server" against a directory that published one.
+func TestRetrieve_AsksTheAuthorizationServerTheDirectoryPublished(t *testing.T) {
+	node, recorded := recordingNode(t, http.StatusOK, `{"access_token":"the-token"}`)
+	t.Setenv("KNOOPPUNT_INTERNAL_URL", node.URL)
+
+	cfg := retrievalConfig(t)
+	cfg.mcsdResolve = func(_ context.Context, ura string) (sourceAddress, error) {
+		return sourceAddress{URA: ura, Name: "Zorgcentrum De Zonnebloem",
+			Address:             "http://pep-zonnebloem:8080/fhir",
+			AuthorizationServer: "http://published.example/nuts/oauth2/" + ura}, nil
+	}
+	// nil so NewMux assembles the production closure: that is the code under test.
+	cfg.retrieveFromSource = nil
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+
+	require.Equal(t, "http://published.example/nuts/oauth2/"+zonnebloemURA,
+		recorded.body["authorization_server"],
+		"the token has to be requested from the address the directory gave")
+}

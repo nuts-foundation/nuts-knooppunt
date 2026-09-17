@@ -22,14 +22,6 @@ type nutsConfig struct {
 	Scope               string
 	AuthorizationServer string
 	FacilityType        string
-
-	// AuthorizationServerBase is where a source's authorization server is built
-	// from. Retrieval requests its token from the organization holding the data,
-	// not from De Plataan's own server, and a source's Nuts subject is its URA,
-	// so the address is the base plus the URA the directory step resolved. It is
-	// separate from AuthorizationServer because that one names this installation's
-	// own subject, which is not a URA.
-	AuthorizationServerBase string
 }
 
 func nutsConfigFromEnv() nutsConfig {
@@ -45,11 +37,6 @@ func nutsConfigFromEnv() nutsConfig {
 		Scope:               envOr("SANDBOX_BGZ_SCOPE", "bgz"),
 		AuthorizationServer: envOr("SANDBOX_AUTH_SERVER", "http://localhost:8080/nuts/oauth2/plataan"),
 		FacilityType:        envOr("SANDBOX_FACILITY_TYPE", "Z3"),
-		// Same listener as the default above, and for the same reason: the node
-		// fetches the authorization server's metadata itself before requesting a
-		// token, so the address has to resolve from inside the node's own
-		// container as well as equal the issuer it advertises.
-		AuthorizationServerBase: envOr("SANDBOX_AUTH_SERVER_BASE", "http://localhost:8080/nuts/oauth2"),
 	}
 }
 
@@ -93,9 +80,13 @@ func (c *nutsClient) requestToken(ctx context.Context, session authSession) (str
 // token to read that holder's data. The requester stays this installation's
 // subject, which is the wallet holding the credential the source's presentation
 // definition asks for; only the server being asked changes.
-func (c *nutsClient) requestTokenForSource(ctx context.Context, session authSession, sourceURA string) (string, error) {
-	return c.requestTokenFrom(ctx, session,
-		strings.TrimSuffix(c.cfg.AuthorizationServerBase, "/")+"/"+sourceURA)
+//
+// The address comes from the directory rather than from the URA, because the GF
+// connection types have oauth-nuts for exactly this and a constructed address is
+// a guess: one that resolves asks a server nobody said was the right one, and
+// one that does not fails without saying the directory is what is incomplete.
+func (c *nutsClient) requestTokenForSource(ctx context.Context, session authSession, authorizationServer string) (string, error) {
+	return c.requestTokenFrom(ctx, session, authorizationServer)
 }
 
 func (c *nutsClient) requestTokenFrom(ctx context.Context, session authSession, authorizationServer string) (string, error) {

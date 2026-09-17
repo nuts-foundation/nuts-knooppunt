@@ -386,35 +386,29 @@ func TestIntrospectRejectsAMalformedResponseBody(t *testing.T) {
 
 // Retrieval asks the SOURCE's authorization server for a token, not De Plataan's
 // own. The token has to be bound to the organization whose data is being read,
-// and a source's Nuts subject is its URA, so the server is derived from the URA
-// the directory step resolved rather than from configuration.
+// and the address comes from the oauth-nuts Endpoint the directory step
+// resolved, so nothing here builds one out of a URA.
 func TestRequestTokenForSource_TargetsTheSourceAuthorizationServer(t *testing.T) {
 	node, recorded := recordingNode(t, http.StatusOK, `{"access_token":"the-token"}`)
 	session, err := sessionFromAttestation(fixtureAttestation)
 	require.NoError(t, err)
 	client := newNutsClient(nutsConfig{
-		InternalBaseURL:         node.URL,
-		Subject:                 "sentinel-subject",
-		Scope:                   "sentinel-scope",
-		AuthorizationServer:     "http://own-server.example/nuts/oauth2/sentinel-subject",
-		AuthorizationServerBase: "http://sentinel-base.example/nuts/oauth2",
-		FacilityType:            "Z3",
+		InternalBaseURL:     node.URL,
+		Subject:             "sentinel-subject",
+		Scope:               "sentinel-scope",
+		AuthorizationServer: "http://own-server.example/nuts/oauth2/sentinel-subject",
+		FacilityType:        "Z3",
 	})
 
-	_, err = client.requestTokenForSource(context.Background(), session, "00000020")
+	_, err = client.requestTokenForSource(context.Background(), session,
+		"http://sentinel-source.example/nuts/oauth2/00000020")
 	require.NoError(t, err)
 
 	// Requested BY De Plataan's subject, which is the wallet holding the
 	// credential the source's presentation definition asks for.
 	require.Equal(t, "/nuts/internal/auth/v2/sentinel-subject/request-service-access-token", recorded.path)
-	// FROM the source's own authorization server, never the requester's.
-	require.Equal(t, "http://sentinel-base.example/nuts/oauth2/00000020", recorded.body["authorization_server"])
+	// FROM the address the directory published, never the requester's own server
+	// and never one composed here.
+	require.Equal(t, "http://sentinel-source.example/nuts/oauth2/00000020", recorded.body["authorization_server"])
 	require.Equal(t, "Bearer", recorded.body["token_type"], "omitting this yields DPoP")
-}
-
-// The default has to name the node's own public listener, because the node
-// fetches the authorization server's metadata itself before requesting a token.
-func TestNutsConfigFromEnv_DefaultsTheSourceAuthorizationServerBase(t *testing.T) {
-	t.Setenv("SANDBOX_AUTH_SERVER_BASE", "")
-	require.Equal(t, "http://localhost:8080/nuts/oauth2", nutsConfigFromEnv().AuthorizationServerBase)
 }
