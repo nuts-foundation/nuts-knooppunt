@@ -52,7 +52,7 @@ services:
   # the subject exists, which only needs to matter for call order within one
   # process, not a file handoff between containers.
   init:
-    image: golang:1.26.1-alpine
+    image: golang:1.25-alpine
     depends_on:
       hapi-fhir-healthcheck:
         condition: service_completed_successfully

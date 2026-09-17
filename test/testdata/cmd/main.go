@@ -18,6 +18,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/x509"
@@ -102,6 +103,9 @@ func main() {
 	for _, org := range organizations() {
 		// The seed is re-runnable against a node that already has the
 		// subject: creation fails and the existing DID is read back instead.
+		// Every failure in this loop panics rather than skipping to the next
+		// organization: the seed is meant to be re-run wholesale on failure,
+		// not resumed per-organization.
 		did, err := createNutsSubject(internalAPI, org.subject)
 		if err != nil {
 			println("Note: could not create Nuts subject " + org.subject + " (" + err.Error() + "); looking up existing subject")
@@ -277,6 +281,8 @@ func resolveSubjectDID(internalAPI, subject string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer httpResponse.Body.Close()
+
 	dids, err := readJSONResponse[[]string](httpResponse, http.StatusOK)
 	if err != nil {
 		return "", fmt.Errorf("failed to look up Nuts subject: %w", err)
@@ -293,6 +299,7 @@ func createNutsSubject(internalAPI string, subject string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer httpResponse.Body.Close()
 
 	type ResultDocument struct {
 		ID string `json:"id"`
@@ -313,12 +320,10 @@ func createNutsSubject(internalAPI string, subject string) (string, error) {
 // storeCredential loads a Verifiable Credential into a subject's wallet. The
 // credential is a JWT, and the endpoint takes it as a bare JSON string.
 func storeCredential(internalAPI, subject, credential string) error {
-	body := []byte(`"` + credential + `"`)
-
 	httpResponse, err := http.Post(
 		internalAPI+"/nuts/internal/vcr/v2/holder/"+subject+"/vc",
 		"application/json",
-		strings.NewReader(string(body)),
+		strings.NewReader(`"`+credential+`"`),
 	)
 	if err != nil {
 		return err
@@ -336,16 +341,19 @@ func storeCredential(internalAPI, subject, credential string) error {
 // registerOnDiscovery activates the discovery service for the subject, so it
 // is findable by other participants.
 func registerOnDiscovery(internalAPI, subject, fhirBaseURL string) error {
-	body, _ := json.Marshal(map[string]any{
+	body, err := json.Marshal(map[string]any{
 		"registrationParameters": map[string]string{
 			"fhirBaseURL": fhirBaseURL,
 		},
 	})
+	if err != nil {
+		return fmt.Errorf("marshal discovery registration request: %w", err)
+	}
 
 	httpResponse, err := http.Post(
 		internalAPI+"/nuts/internal/discovery/v1/"+discoveryServiceID+"/"+subject,
 		"application/json",
-		strings.NewReader(string(body)),
+		bytes.NewReader(body),
 	)
 	if err != nil {
 		return err
@@ -366,9 +374,8 @@ func expectStatus(httpResponse *http.Response, expectedStatus int) error {
 
 func readJSONResponse[T any](httpResponse *http.Response, expectedStatus int) (T, error) {
 	var result T
-	if httpResponse.StatusCode != expectedStatus {
-		responseData, _ := io.ReadAll(httpResponse.Body)
-		return result, fmt.Errorf("unexpected status code (status=%s, expected=%d, url=%s)\nResponse data:\n----------------\n%s\n----------------", httpResponse.Status, expectedStatus, httpResponse.Request.URL, strings.TrimSpace(string(responseData)))
+	if err := expectStatus(httpResponse, expectedStatus); err != nil {
+		return result, err
 	}
 	if err := json.NewDecoder(httpResponse.Body).Decode(&result); err != nil {
 		return result, fmt.Errorf("failed to decode response body: %w", err)
