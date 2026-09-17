@@ -1,10 +1,8 @@
 # Environment values for the OVHcloud MKS "gf-test" cluster (infra/cluster).
 #
 # Deploys the full sandbox stack: knooppunt, hapi-fhir (as fake-nvi), both
-# PEPs, nutsadmin, mock-vc-issuer, mock-mitz, mock-dezi, and gf-sandbox. The
-# seed/credential-issuance pipeline (nuts-knooppunt#572) hasn't been ported
-# to Kubernetes yet, so there's no demo data - the stack runs but the demo
-# flow has nothing to show yet.
+# PEPs, nutsadmin, mock-vc-issuer, mock-mitz, mock-dezi, gf-sandbox, and the
+# seed Job (nuts-knooppunt#572) that populates it with demo data.
 #
 # No real domain decided yet (nuts-knooppunt#563 is still open), so this
 # uses nip.io against the ingress-nginx controller's LoadBalancer IP
@@ -149,3 +147,9 @@ gf-sandbox:
     # https://github.com/nuts-foundation/nuts-knooppunt/pull/581#discussion_r4026416792
     sandboxAuthServer: "http://knooppunt.57.129.23.152.nip.io/nuts/oauth2/plataan"
 
+seed:
+  enabled: true
+  # Same appVersion-placeholder issue as the other components above - "0.0.0"
+  # was never published for ghcr.io/nuts-foundation/seed.
+  image:
+    tag: main
