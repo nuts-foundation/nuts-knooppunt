@@ -116,10 +116,9 @@ func Endpoints() []fhir.Endpoint {
 // own data, whose Nuts subject is its URA, matching the PEP in front of it
 // (DATA_HOLDER_ORGANIZATION_URA in docker-compose.yml).
 //
-// It is deliberately not the server the sandbox requests its own tokens from:
-// that one issues for the subject holding this installation's wallet, which is
-// named for the installation and not for the URA. The two answer different
-// questions and only this one belongs in a directory.
+// It is also the server the sandbox asks for its own access token, which reads
+// this entry under De Plataan's URA. Which wallet that request is made from is a
+// separate choice and a different name: SANDBOX_NUTS_SUBJECT.
 func AuthorizationServerAddress() string {
 	if v := os.Getenv(AuthorizationServerEnvVar); v != "" {
 		return v

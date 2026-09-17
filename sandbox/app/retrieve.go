@@ -187,9 +187,16 @@ func (c Config) localizeSources(ctx context.Context, bsn string) ([]localizedSou
 			source.AddressErr = "the directory is not configured in this environment"
 		default:
 			resolved, err := c.mcsdResolve(ctx, record.CustodianURA)
-			if err != nil {
+			switch {
+			case err != nil:
 				source.AddressErr = err.Error()
-			} else {
+			case resolved.Address == "":
+				// The lookup succeeded and the answer is not enough to retrieve
+				// from. That is this screen's requirement, not the directory's
+				// verdict, so it is applied here.
+				source.Name = resolved.Name
+				source.AddressErr = "it publishes no endpoint to read data from"
+			default:
 				source.Name, source.Address = resolved.Name, resolved.Address
 				source.AuthorizationServer = resolved.AuthorizationServer
 			}

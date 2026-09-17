@@ -414,8 +414,8 @@ func TestRetrieveBGZ_BoundsPagingAndSaysSoWhenItStops(t *testing.T) {
 	assert.Contains(t, conditions.Truncated, "incomplete",
 		"a truncated result must say so rather than look complete")
 	assert.Empty(t, conditions.Error, "being cut short is not the same as failing")
-	// The assertion this test was missing: stopping must not throw away what was
-	// already read, which is what folding truncation into Error used to do.
+	// Stopping keeps what was already read; a truncation reported as an error
+	// would discard it.
 	assert.NotEmpty(t, result.Items, "the pages already read are kept")
 	assert.True(t, result.Incomplete())
 }

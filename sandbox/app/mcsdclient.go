@@ -61,8 +61,8 @@ var fhirDataConnectionTypes = map[string]string{
 	"http://terminology.hl7.org/CodeSystem/endpoint-connection-type": "hl7-fhir-rest",
 }
 
-// mcsdResolveFunc builds the addressing step: a URA in, a reachable FHIR address
-// out.
+// mcsdResolveFunc builds the addressing step: a URA in, the addresses the
+// directory publishes for it out.
 //
 // Endpoint selection is narrower than the Addressing spec requires. It honours
 // status and period, and matches connectionType against fhirDataConnectionTypes
@@ -107,7 +107,12 @@ func mcsdResolveFunc(hapiBaseURL *url.URL) func(context.Context, string) (source
 	}
 }
 
-// selectSource picks the organization and the endpoint to address it on.
+// selectSource reports what the directory publishes for one organization: the
+// address its data is at, and the authorization server that guards it. Either
+// can come back empty, because whether that is enough depends on the caller:
+// retrieval needs both, showing the claims in an access token needs only the
+// second, and a directory that answers "I have one of the two" is not a failed
+// lookup.
 func selectSource(bundle fhir.Bundle, ura string) (sourceAddress, error) {
 	organization, endpoints := splitDirectoryBundle(bundle)
 	if organization == nil {
@@ -139,9 +144,6 @@ func selectSource(bundle fhir.Bundle, ura string) (sourceAddress, error) {
 		if source.Address == "" && servesFHIRData(endpoint) {
 			source.Address = endpoint.Address
 		}
-	}
-	if source.Address == "" {
-		return sourceAddress{}, fmt.Errorf("organization %s publishes no usable endpoint", ura)
 	}
 	return source, nil
 }

@@ -212,7 +212,7 @@ func NewMux(cfg Config) *http.ServeMux {
 					"the directory publishes no authorization server for %s, so no token can be requested",
 					source.Name)
 			}
-			token, err := nuts.requestTokenForSource(ctx, session, source.AuthorizationServer)
+			token, err := nuts.requestToken(ctx, session, source.AuthorizationServer)
 			if err != nil {
 				return sourceRetrieval{}, err
 			}
@@ -345,7 +345,24 @@ func NewMux(cfg Config) *http.ServeMux {
 			http.Error(w, "cross-site authorization is not allowed", http.StatusForbidden)
 			return
 		}
-		token, err := nuts.requestToken(r.Context(), *session)
+		// This installation's own authorization server, read from the directory
+		// like every other address on this path. Its own URA, because a holder's
+		// Nuts subject is its URA and that is what the seeded directory publishes.
+		if cfg.mcsdResolve == nil {
+			http.Error(w, "the directory is not configured in this environment", http.StatusBadGateway)
+			return
+		}
+		own, err := cfg.mcsdResolve(r.Context(), plataanURA)
+		if err != nil {
+			http.Error(w, "resolve this organization in the directory: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		if own.AuthorizationServer == "" {
+			http.Error(w, "the directory publishes no authorization server for this organization",
+				http.StatusBadGateway)
+			return
+		}
+		token, err := nuts.requestToken(r.Context(), *session, own.AuthorizationServer)
 		if err != nil {
 			// The error already names its step; surfacing it verbatim is the
 			// point of this route.

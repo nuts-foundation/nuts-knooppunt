@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -124,6 +125,28 @@ func TestRetrieveForm_ReportsASourceItCannotAddress(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, zonnebloemURA, "the NVI did find the holder")
 	require.Contains(t, body, "could not be addressed")
+	require.NotContains(t, body, "Retrieve from")
+}
+
+// A holder can publish an authorization server and nothing to read data from.
+// The directory answered, so nothing failed; what is missing is the half this
+// screen needs, and saying "could not be addressed" is the difference between a
+// holder that cannot be reached and one the index never named.
+func TestRetrieveForm_ReportsASourceThatPublishesNoDataEndpoint(t *testing.T) {
+	cfg := retrievalConfig(t)
+	cfg.mcsdResolve = func(_ context.Context, ura string) (sourceAddress, error) {
+		return sourceAddress{URA: ura, Name: "Zorgcentrum De Zonnebloem",
+			AuthorizationServer: "http://published.example/nuts/oauth2/" + ura}, nil
+	}
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+
+	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve")
+
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, zonnebloemURA, "the NVI did find the holder")
+	require.Contains(t, body, "publishes no endpoint to read data from")
 	require.NotContains(t, body, "Retrieve from")
 }
 
@@ -697,4 +720,84 @@ func TestRetrieve_AsksTheAuthorizationServerTheDirectoryPublished(t *testing.T) 
 	require.Equal(t, "http://published.example/nuts/oauth2/"+zonnebloemURA,
 		recorded.body["authorization_server"],
 		"the token has to be requested from the address the directory gave")
+}
+
+// The sign-in demo asks a token of an authorization server too, and reads that
+// address from the directory under this installation's own URA. The wallet the
+// request is made from is a separate choice, the subject in the path of the
+// internal call, so the two differ here without either being wrong.
+func TestAuthorize_AsksTheAuthorizationServerTheDirectoryPublished(t *testing.T) {
+	var tokenRequest map[string]any
+	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/request-service-access-token") {
+			_ = json.NewDecoder(r.Body).Decode(&tokenRequest)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"the-token"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"active":true,"organization_ura":"00000010"}`))
+	}))
+	t.Cleanup(node.Close)
+	t.Setenv("KNOOPPUNT_INTERNAL_URL", node.URL)
+
+	cfg := retrievalConfig(t)
+	cfg.mcsdResolve = func(_ context.Context, ura string) (sourceAddress, error) {
+		return sourceAddress{URA: ura, Name: "Ziekenhuis De Plataan",
+			Address:             "http://pep-plataan:8080/fhir",
+			AuthorizationServer: "http://published.example/nuts/oauth2/" + ura}, nil
+	}
+	srv, client := demoServer(t, cfg)
+
+	postForm(t, client, srv, "/demo/authorize", nil).Body.Close()
+
+	require.Equal(t, "http://published.example/nuts/oauth2/"+plataanURA,
+		tokenRequest["authorization_server"],
+		"the sign-in demo has to ask the address published for this installation's own URA")
+}
+
+// Showing what is in the access token needs an authorization server and nothing
+// else: this screen reads no data, so a holder's FHIR endpoint being out of
+// service has no bearing on it. The real directory resolver is wired in rather
+// than a hand-built sourceAddress, because that independence is a property of
+// the selector and an injected address cannot exercise it.
+func TestAuthorize_NeedsNoDataEndpointOfItsOwn(t *testing.T) {
+	var tokenRequest map[string]any
+	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/request-service-access-token") {
+			_ = json.NewDecoder(r.Body).Decode(&tokenRequest)
+			_, _ = w.Write([]byte(`{"access_token":"the-token"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"active":true,"organization_ura":"00000010"}`))
+	}))
+	t.Cleanup(node.Close)
+	t.Setenv("KNOOPPUNT_INTERNAL_URL", node.URL)
+
+	// A directory entry holding an authorization server and no data endpoint.
+	directory := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[
+		  {"search":{"mode":"match"},"resource":{"resourceType":"Organization","id":"plataan",
+		    "name":"Ziekenhuis De Plataan",
+		    "identifier":[{"system":"http://fhir.nl/fhir/NamingSystem/ura","value":"00000010"}],
+		    "endpoint":[{"reference":"Endpoint/pl-oauth","type":"Endpoint"}]}},
+		  {"search":{"mode":"include"},"resource":{"resourceType":"Endpoint","id":"pl-oauth",
+		    "status":"active","address":"http://published.example/nuts/oauth2/00000010",
+		    "connectionType":{"system":"http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-authorization-server-cs","code":"oauth-nuts"}}}
+		]}`))
+	}))
+	t.Cleanup(directory.Close)
+	base, err := url.Parse(directory.URL + "/fhir")
+	require.NoError(t, err)
+
+	cfg := retrievalConfig(t)
+	cfg.mcsdResolve = mcsdResolveFunc(base)
+	srv, client := demoServer(t, cfg)
+
+	postForm(t, client, srv, "/demo/authorize", nil).Body.Close()
+
+	require.Equal(t, "http://published.example/nuts/oauth2/00000010",
+		tokenRequest["authorization_server"],
+		"the token request goes out on the published address, with no data endpoint in sight")
 }

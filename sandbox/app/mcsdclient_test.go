@@ -100,7 +100,7 @@ func TestMCSDResolve_SearchesTheQueryDirectoryByURA(t *testing.T) {
 
 // An Endpoint that is not active is not an address, and using it anyway would
 // send the retrieval at a system its operator has taken out of service.
-func TestMCSDResolve_RefusesAnEndpointThatIsNotActive(t *testing.T) {
+func TestMCSDResolve_DoesNotAddressAnEndpointThatIsNotActive(t *testing.T) {
 	suspended := `{
 	  "resourceType": "Endpoint", "id": "zb-fhir", "status": "suspended",
 	  "address": "http://pep-zonnebloem:8080/fhir",
@@ -110,15 +110,16 @@ func TestMCSDResolve_RefusesAnEndpointThatIsNotActive(t *testing.T) {
 		_, _ = w.Write([]byte(organizationBundle(suspended)))
 	})
 
-	_, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+	source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
 
-	require.ErrorContains(t, err, "no usable endpoint")
+	require.NoError(t, err, "the organization was found; what it publishes is the answer")
+	require.Empty(t, source.Address)
 }
 
 // Endpoint.period is how a migration between systems is expressed: the old
 // endpoint keeps a period.end at the cutover moment. Ignoring it would keep
 // sending retrievals at the decommissioned system.
-func TestMCSDResolve_RefusesAnEndpointWhosePeriodHasEnded(t *testing.T) {
+func TestMCSDResolve_DoesNotAddressAnEndpointWhosePeriodHasEnded(t *testing.T) {
 	expired := `{
 	  "resourceType": "Endpoint", "id": "zb-fhir", "status": "active",
 	  "address": "http://pep-zonnebloem:8080/fhir",
@@ -129,9 +130,10 @@ func TestMCSDResolve_RefusesAnEndpointWhosePeriodHasEnded(t *testing.T) {
 		_, _ = w.Write([]byte(organizationBundle(expired)))
 	})
 
-	_, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+	source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
 
-	require.ErrorContains(t, err, "no usable endpoint")
+	require.NoError(t, err, "the organization was found; what it publishes is the answer")
+	require.Empty(t, source.Address)
 }
 
 // An Endpoint the Organization does not point at belongs to somebody else. The
@@ -146,9 +148,10 @@ func TestMCSDResolve_IgnoresAnEndpointTheOrganizationDoesNotReference(t *testing
 		_, _ = w.Write([]byte(organizationBundle(stranger)))
 	})
 
-	_, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+	source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
 
-	require.ErrorContains(t, err, "no usable endpoint")
+	require.NoError(t, err, "the organization was found; what it publishes is the answer")
+	require.Empty(t, source.Address)
 }
 
 func TestMCSDResolve_UnknownOrganizationIsAnError(t *testing.T) {
@@ -197,13 +200,14 @@ func TestMCSDResolve_HonoursDateOnlyPeriodBounds(t *testing.T) {
 				_, _ = w.Write([]byte(organizationBundle(endpoint)))
 			})
 
-			_, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+			source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
 
+			require.NoError(t, err)
 			if tc.usable {
-				require.NoError(t, err)
+				require.NotEmpty(t, source.Address)
 				return
 			}
-			require.ErrorContains(t, err, "no usable endpoint")
+			require.Empty(t, source.Address)
 		})
 	}
 }
@@ -355,12 +359,15 @@ func TestMCSDResolve_AcceptsTheSpecFHIRConnectionType(t *testing.T) {
 
 // An organization publishing only an authorization server is not addressable for
 // data, and saying so is different from silently using that server as a FHIR base.
-func TestMCSDResolve_RefusesWhenOnlyAnAuthorizationServerIsPublished(t *testing.T) {
+func TestMCSDResolve_ReportsAnAuthorizationServerWithoutADataAddress(t *testing.T) {
 	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(organizationBundleWith([]string{"Endpoint/zb-oauth"}, authServerEndpoint)))
 	})
 
-	_, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+	source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
 
-	require.ErrorContains(t, err, "no usable endpoint")
+	require.NoError(t, err, "the organization was found; what it publishes is the answer")
+	require.Empty(t, source.Address)
+	require.Equal(t, "http://localhost:8080/nuts/oauth2/00000020", source.AuthorizationServer,
+		"and the half it does publish has to come back, or an empty answer would satisfy this too")
 }

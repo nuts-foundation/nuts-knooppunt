@@ -12,16 +12,14 @@ import (
 	"time"
 )
 
-// nutsConfig separates the URL this process calls from the URL the node
-// advertises as its own issuer. In compose they differ: the sandbox reaches
-// the node by service name, while the issuer must stay exactly what the node
-// publishes, because the audience check compares the two strings verbatim.
+// nutsConfig is what this process needs to talk to its own node: where to reach
+// it, which subject's wallet to act from, and what to ask for. The authorization
+// servers it asks are not here; those come from the directory.
 type nutsConfig struct {
-	InternalBaseURL     string
-	Subject             string
-	Scope               string
-	AuthorizationServer string
-	FacilityType        string
+	InternalBaseURL string
+	Subject         string
+	Scope           string
+	FacilityType    string
 }
 
 func nutsConfigFromEnv() nutsConfig {
@@ -32,11 +30,10 @@ func nutsConfigFromEnv() nutsConfig {
 		// the survivor because NUTS_ is the node's own configuration prefix
 		// (NUTS_POLICY_DIRECTORY and friends), and a sandbox setting wearing it
 		// reads as node config that the node never sees.
-		InternalBaseURL:     envOr("KNOOPPUNT_INTERNAL_URL", "http://localhost:8081"),
-		Subject:             envOr("SANDBOX_NUTS_SUBJECT", "plataan"),
-		Scope:               envOr("SANDBOX_BGZ_SCOPE", "bgz"),
-		AuthorizationServer: envOr("SANDBOX_AUTH_SERVER", "http://localhost:8080/nuts/oauth2/plataan"),
-		FacilityType:        envOr("SANDBOX_FACILITY_TYPE", "Z3"),
+		InternalBaseURL: envOr("KNOOPPUNT_INTERNAL_URL", "http://localhost:8081"),
+		Subject:         envOr("SANDBOX_NUTS_SUBJECT", "plataan"),
+		Scope:           envOr("SANDBOX_BGZ_SCOPE", "bgz"),
+		FacilityType:    envOr("SANDBOX_FACILITY_TYPE", "Z3"),
 	}
 }
 
@@ -68,28 +65,16 @@ func newNutsClient(cfg nutsConfig) *nutsClient {
 	return &nutsClient{cfg: cfg, http: &http.Client{Timeout: 15 * time.Second}}
 }
 
-// requestToken exchanges the practitioner's session for a service access
-// token. The attestation goes in as id_token, from which the node builds the
-// Dezi credential itself; the practitioner and role are therefore not
-// restated here.
-func (c *nutsClient) requestToken(ctx context.Context, session authSession) (string, error) {
-	return c.requestTokenFrom(ctx, session, c.cfg.AuthorizationServer)
-}
-
-// requestTokenForSource asks the data holder's own authorization server for a
-// token to read that holder's data. The requester stays this installation's
-// subject, which is the wallet holding the credential the source's presentation
-// definition asks for; only the server being asked changes.
+// requestToken exchanges the practitioner's session for a service access token
+// at the given authorization server. The attestation goes in as id_token, from
+// which the node builds the Dezi credential itself; the practitioner and role are
+// therefore not restated here.
 //
-// The address comes from the directory rather than from the URA, because the GF
-// connection types have oauth-nuts for exactly this and a constructed address is
-// a guess: one that resolves asks a server nobody said was the right one, and
-// one that does not fails without saying the directory is what is incomplete.
-func (c *nutsClient) requestTokenForSource(ctx context.Context, session authSession, authorizationServer string) (string, error) {
-	return c.requestTokenFrom(ctx, session, authorizationServer)
-}
-
-func (c *nutsClient) requestTokenFrom(ctx context.Context, session authSession, authorizationServer string) (string, error) {
+// The server is an address the directory published. The wallet the request is
+// made from is a separate choice, the subject in the path below, which is what
+// lets this installation ask a holder's own authorization server, including the
+// one published for itself.
+func (c *nutsClient) requestToken(ctx context.Context, session authSession, authorizationServer string) (string, error) {
 	body, err := json.Marshal(map[string]any{
 		"authorization_server": authorizationServer,
 		"scope":                c.cfg.Scope,

@@ -96,7 +96,6 @@ defaults instead of extending them.
 | `KNOOPPUNT_INTERNAL_URL` | `http://localhost:8081` | the knooppunt's internal mux. The backend reaches the Nuts node through it (proxied under `/nuts`) for the token request, and the same address enables reset/recycle when `HAPI_BASE_URL` is set too. One variable because it is one address: it was spelled `NUTS_INTERNAL_BASE_URL` here and `KNOOPPUNT_INTERNAL_URL` for reset, and `NUTS_` is the node's own configuration prefix, so that name read as node config the node never sees |
 | `SANDBOX_NUTS_SUBJECT` | `plataan` | the Nuts subject the token is requested for. Must name the subject `sandbox/bootstrap-nuts.sh` creates, whose wallet holds the `X509Credential` |
 | `SANDBOX_BGZ_SCOPE` | `bgz` | the scope requested. Must be a key in the definition the node loads, which the sandbox renders to `sandbox/.certs/policy/bgz.json` from `sandbox/policy/bgz.json.template`, or the node answers `invalid_scope` |
-| `SANDBOX_AUTH_SERVER` | `http://localhost:8080/nuts/oauth2/plataan` | this installation's **own** authorization server, used by `POST /demo/authorize` to request a token and introspect its claims. Not the one a retrieval asks: that address comes from the source's `oauth-nuts` Endpoint in the directory. It stays configuration because it names a different server from the one protecting De Plataan's own data: the seeded directory publishes `/nuts/oauth2/00000010` for that, following the convention that a data holder's subject is its URA, while this one issues for `plataan`. Which wallet the request comes from is not what picks it: that is `SANDBOX_NUTS_SUBJECT`, in the path of the internal token call, independent of the `authorization_server` field. So this is the self-demo's chosen issuer rather than a requirement, and publishing it as De Plataan's authorization server would name the wrong one. It has to satisfy two requirements at once: equal the issuer the node advertises, and be reachable **by the node**, which fetches `/.well-known/oauth-authorization-server` from it before requesting a token (nuts-node `auth/client/iam/openid4vp.go`, `RequestRFC021AccessToken` to `AuthorizationServerMetadata`). Both hold here because the node dials it from inside its own container, where port 8080 is its own public listener. A split deployment has to find one address that satisfies both |
 | `SANDBOX_FACILITY_TYPE` | `Z3` | the facility type asserted in the organization context credential, the only thing on this path that carries one |
 | `SANDBOX_NVI_CLIENT_ID` | `gf-sandbox-plataan` | `List.source.identifier` on published localization records. Synthetic: no NVI OAuth client is registered for the demo, and this is not the `gf-sandbox` client id used on the Dezi flow. The client id is the scope a registration is deleted by, so recycle and the global reset receive this same value in `vectors.SandboxTarget` rather than reaching for the compiled-in default; overriding it here therefore also moves what those clean up. |
 | `MITZMOCK_URL` | unset | Base URL of the mock Mitz. Enables subscription reconciliation and the consent-subscription cleanup in reset and recycle. Unset means the share flow reports an unreconciled Mitz error as unknown rather than failed, and both cleanup paths report a partial restore rather than a clean one. The sandbox compose overlay sets it; the base `--profile sandbox` invocation does not. |
@@ -104,8 +103,8 @@ defaults instead of extending them.
 The public and internal URLs are separate on purpose. Under compose the browser cannot resolve the
 `mock-dezi` service name, and the sandbox container resolving `localhost` would reach itself.
 
-Of the five Nuts settings, `docker-compose.yml` overrides only `KNOOPPUNT_INTERNAL_URL`, to
-`http://knooppunt:8081`. It is the only one this topology changes; the other four already default to
+Of the four Nuts settings, `docker-compose.yml` overrides only `KNOOPPUNT_INTERNAL_URL`, to
+`http://knooppunt:8081`. It is the only one this topology changes; the other three already default to
 the values that are correct there. This table describes what the application reads, which is not the
 same question as what compose sets.
 
@@ -201,11 +200,17 @@ Five limitations are carried deliberately:
   and makes that redirect malformed. Mapping transport errors to fixed messages would close it, at the
   cost of the diagnostics this screen exists to show.
 
-Changing the seeded directory needs more than a restart: the sandbox's own reset reloads the fixtures
-but does not update the query directory, so an existing deployment has to re-run the seed and then
-`POST /mcsd/update` before a retrieval can find the new endpoint. Compose's `init` does both. A seed
-run reports success on HTTP 200 without reading the update report, and a per-directory failure can sit
-inside a 200, so "seed complete" is not proof that the endpoint reached `knpt-mcsd-query`.
+Both token requests read their authorization server from the directory: the retrieval under the
+source's URA, `POST /demo/authorize` under De Plataan's own. Which wallet the request is made from is a
+separate question, answered by `SANDBOX_NUTS_SUBJECT` in the path of the internal call, so the two
+differ here: the wallet is `plataan` while the server published for De Plataan's own data is the one
+under `00000010`.
+
+Editing the seeded directory takes a re-seed and a `POST /mcsd/update` before the sandbox sees it. The
+sandbox's own reset reloads the fixtures without touching the query directory; compose's `init` does
+both. A seed run reports success on HTTP 200 without reading the update report, and a per-directory
+failure can sit inside a 200, so "seed complete" is not proof that an endpoint reached
+`knpt-mcsd-query`.
 
 ## Architecture
 
