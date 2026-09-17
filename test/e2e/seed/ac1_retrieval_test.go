@@ -126,7 +126,7 @@ func TestAC1_FindableAddressableRetrievable(t *testing.T) {
 
 		require.Equalf(t, http.StatusOK, resp.StatusCode,
 			"authorized retrieval must succeed.\n"+
-				"401 → the seed did not store De Plataan's credential (check the init-credentials logs)\n"+
+				"401 → the seed did not store De Plataan's credential (check the init service logs)\n"+
 				"403 → the PDP denied: check KNPT_PDP_PIP_URL points at the tenant holding the patient, and that mitzmock is up\n"+
 				"response: %s", string(body))
 
@@ -203,7 +203,7 @@ func requestPlataanAccessToken(t *testing.T, patientBSN string) string {
 	require.NoError(t, err)
 	require.Equalf(t, http.StatusOK, resp.StatusCode,
 		"failed to get an access token as De Plataan.\n"+
-			"This usually means the seed did not store the X509Credential or did not register on discovery — check the init-credentials service logs.\n"+
+			"This usually means the seed did not store the X509Credential or did not register on discovery — check the init service logs.\n"+
 			"response: %s", string(respBody))
 
 	var result struct {

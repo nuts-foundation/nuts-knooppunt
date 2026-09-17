@@ -11,7 +11,6 @@ require (
 	github.com/beevik/etree v1.6.0
 	github.com/cloudflare/circl v1.6.3
 	github.com/docker/docker v28.2.2+incompatible
-	github.com/getkin/kin-openapi v0.142.0
 	github.com/google/uuid v1.6.0
 	github.com/gowebpki/jcs v1.0.1
 	github.com/knadh/koanf/parsers/yaml v1.1.0
@@ -21,6 +20,7 @@ require (
 	github.com/knadh/koanf/v2 v2.3.4
 	github.com/lestrrat-go/jwx/v2 v2.1.6
 	github.com/mitchellh/copystructure v1.2.0
+	github.com/nuts-foundation/go-did v0.19.0
 	github.com/nuts-foundation/nuts-node v1.0.1-0.20260417134758-22ceb753a1f5
 	github.com/oapi-codegen/runtime v1.6.0
 	github.com/open-policy-agent/opa v1.12.3
@@ -121,6 +121,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor v1.5.1 // indirect
+	github.com/getkin/kin-openapi v0.142.0 // indirect
 	github.com/go-chi/chi/v5 v5.2.3 // indirect
 	github.com/go-co-op/gocron v1.28.3 // indirect
 	github.com/go-errors/errors v1.4.2 // indirect
@@ -222,7 +223,6 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/nightlyone/lockfile v1.0.0 // indirect
 	github.com/nuts-foundation/crypto-ecies v0.0.0-20211207143025-5b84f9efce2b // indirect
-	github.com/nuts-foundation/go-did v0.18.1 // indirect
 	github.com/nuts-foundation/go-leia/v4 v4.3.0 // indirect
 	github.com/nuts-foundation/go-stoabs v1.11.1 // indirect
 	github.com/nuts-foundation/sqlite v1.0.0 // indirect
