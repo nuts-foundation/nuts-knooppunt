@@ -801,3 +801,109 @@ func TestAuthorize_NeedsNoDataEndpointOfItsOwn(t *testing.T) {
 		tokenRequest["authorization_server"],
 		"the token request goes out on the published address, with no data endpoint in sight")
 }
+
+// The share status and the retrieved data sit on one screen, so the status has
+// to be a statement about findability and not about where this patient's data
+// lives. "This record exists only in De Plataan's own store" read as a claim
+// about the list underneath it, which by then held three items from another
+// care provider.
+func TestRecord_DoesNotDenyTheDataItIsShowing(t *testing.T) {
+	cfg := retrievalConfig(t)
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+
+	require.Contains(t, body, "Metoprolol", "the retrieval has to be on screen for this to mean anything")
+	require.Contains(t, body, "Not findable yet",
+		"and the patient is still unshared, so the status itself is right")
+	require.NotContains(t, body, "exists only in De Plataan's own store",
+		"which is not a thing this screen can say while showing another provider's data")
+}
+
+// A retrieval that never reaches the source is still an attempt that replaced
+// the last one. When the chain answers with a failed outcome the record is
+// cleared; when it answers with a Go error, because the token could not be
+// obtained or the directory published no authorization server, the handler used
+// to return 502 and leave the previous answer in place. The record then showed
+// another provider's clinical data as the current result of an attempt that
+// produced nothing.
+func TestRecord_ShowsNoRetrievedDataAfterATokenFailure(t *testing.T) {
+	cfg := retrievalConfig(t)
+	inner := cfg.retrieveFromSource
+	failing := false
+	cfg.retrieveFromSource = func(ctx context.Context, s authSession, source sourceAddress, bsn string, cats []string) (sourceRetrieval, error) {
+		if failing {
+			return sourceRetrieval{}, errors.New("request service access token: 503 Service Unavailable")
+		}
+		return inner(ctx, s, source, bsn, cats)
+	}
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+	_, granted := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+	require.Contains(t, granted, "Metoprolol", "the first run has to have put data on the record")
+
+	failing = true
+	status, _ := postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+	require.Equal(t, http.StatusBadGateway, status)
+
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+	require.NotContains(t, body, "Metoprolol",
+		"what the failed attempt replaced must be gone with it")
+	require.NotContains(t, body, "Zorgcentrum De Zonnebloem",
+		"and the record may not name a source it drew nothing from")
+}
+
+// A failed attempt discards what it replaced, but only if what it finds is still
+// its own to discard. An attempt that started before a recycle and fails after
+// one has nothing to say about the answer retrieved since: that one describes
+// the restored data and was published under a later generation.
+func TestRetrieve_AFailureFromBeforeARecycleLeavesTheFreshAnswerAlone(t *testing.T) {
+	cfg := retrievalConfig(t)
+	inner := cfg.retrieveFromSource
+	reachedSource := make(chan struct{})
+	release := make(chan struct{})
+	var calls int
+	cfg.retrieveFromSource = func(ctx context.Context, s authSession, source sourceAddress, bsn string, cats []string) (sourceRetrieval, error) {
+		calls++
+		if calls == 1 {
+			close(reachedSource)
+			<-release
+			return sourceRetrieval{}, errors.New("request service access token: 503 Service Unavailable")
+		}
+		return inner(ctx, s, source, bsn, cats)
+	}
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve", url.Values{"ura": {zonnebloemURA}})
+		_ = res.Body.Close()
+	}()
+	<-reachedSource
+
+	// The patient is reset and retrieved again while the first attempt hangs.
+	postForm(t, client, srv, "/demo/patients/"+key+"/release", nil).Body.Close()
+	postForm(t, client, srv, "/demo/patients/"+key+"/recycle", nil).Body.Close()
+	openPatient(t, client, srv, key)
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+	require.NotZero(t, retrievalsHeld(cfg.Retrievals), "the second retrieval has to be stored")
+
+	close(release)
+	<-done
+
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+	require.Contains(t, body, "Metoprolol",
+		"the answer retrieved after the recycle is not the failed attempt's to discard")
+}

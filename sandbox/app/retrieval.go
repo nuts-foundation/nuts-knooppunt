@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -239,16 +240,21 @@ func retrieveBGZ(ctx context.Context, source sourceAddress, token, bsn string, c
 		}
 		addTruncated(&result.Queries[0], reason)
 		return result, nil
-	case len(patientIDs) == 0 && outcome.Truncated != "":
-		// The search did not finish, so its silence is not an answer. The reason
-		// runPagedBGZSearch recorded is already on the outcome and says the result
-		// is incomplete; adding an absence claim on top would assert something
-		// this chain never established.
+	case outcome.Truncated != "":
+		// The search did not finish. With no id that makes its silence not an
+		// answer; with one it makes "one match" not an answer either, because a
+		// second record for this BSN can sit on the page that was never read.
+		// Either way the reason is already on the outcome and says the result is
+		// incomplete.
+		if len(patientIDs) > 0 {
+			addTruncated(&result.Queries[0], "so whether this BSN matches more than one record at "+
+				"this source was not established, and nothing further was asked")
+		}
 		return result, nil
 	case len(patientIDs) == 0:
 		// A Note, not an Error. The source answered in full; it simply holds
-		// nobody with this BSN, and there is nothing further to ask. Writing this
-		// into Error made a complete answer read as a retrieval that fell short.
+		// nobody with this BSN, and there is nothing further to ask, so the row
+		// reads as a complete answer rather than as a retrieval that fell short.
 		result.Queries[0].Note = "the source served the request but holds no patient with this BSN"
 		return result, nil
 	}
@@ -324,8 +330,9 @@ const maxSearchPages = 20
 // FHIR R4 pages search results (https://hl7.org/fhir/R4/http.html#paging), so
 // reading only the first page would render a partial clinical record as a whole
 // one. The outcome reported is the first page's: a later page that fails leaves
-// the result incomplete, which is recorded in Error rather than turning the
-// whole search into a failure.
+// the result incomplete, which is recorded in Truncated. Error is what outcomeOf
+// reads as a failed search, and a failed search discards the pages already in
+// hand.
 func runPagedBGZSearch(ctx context.Context, client *http.Client, base *url.URL, token, redact string, search bgzSearch) ([]fhir.Bundle, queryOutcome) {
 	bundle, outcome := runBGZSearch(ctx, client, base, token, search)
 	bundles := []fhir.Bundle{bundle}
@@ -432,8 +439,8 @@ func urlCarries(raw string, parsed *url.URL, value string) (carries, readable bo
 
 // effectivePort resolves the port the way RFC 6454 section 4 compares origins:
 // an absent port is the scheme's default, so https://host and https://host:443
-// are the same origin. Comparing the raw host string instead rejected those, and
-// dropped pages for no benefit.
+// are the same origin. A raw host comparison would call those different and drop
+// the page for no benefit.
 func effectivePort(u *url.URL) string {
 	if port := u.Port(); port != "" {
 		return port
@@ -495,23 +502,34 @@ func runPageAt(ctx context.Context, client *http.Client, token, pageURL string) 
 func runBGZSearch(ctx context.Context, client *http.Client, base *url.URL, token string, search bgzSearch) (fhir.Bundle, queryOutcome) {
 	method, body := http.MethodGet, io.Reader(nil)
 	target := base.JoinPath(search.Resource)
-	rendered := search.Params
+	rendered := search.Params.Encode()
 
 	if search.InBody {
 		method = http.MethodPost
 		target = target.JoinPath("_search")
 		body = strings.NewReader(search.Params.Encode())
 		// What the screen shows. The parameters travelled in the body precisely
-		// so they would not be logged, and this string is rendered on a
-		// projector, so it names them without their values.
-		rendered = url.Values{}
+		// so they would not be logged, and this string is read off a projector,
+		// so it names them without their values. Assembled rather than encoded:
+		// the placeholder is prose, and percent-encoding it renders the one part
+		// of the row a reader is meant to understand as %5Bsent+in+...%5D.
+		names := make([]string, 0, len(search.Params))
 		for name := range search.Params {
-			rendered[name] = []string{"[sent in the request body]"}
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for i, name := range names {
+			if i > 0 {
+				rendered += "&"
+			} else {
+				rendered = ""
+			}
+			rendered += name + "=[sent in the request body]"
 		}
 	} else {
-		target.RawQuery = search.Params.Encode()
+		target.RawQuery = rendered
 	}
-	outcome := queryOutcome{Label: search.Label, Request: method + " " + target.Path + "?" + rendered.Encode()}
+	outcome := queryOutcome{Label: search.Label, Request: method + " " + target.Path + "?" + rendered}
 
 	ctx, cancel := context.WithTimeout(ctx, bgzCallTimeout)
 	defer cancel()

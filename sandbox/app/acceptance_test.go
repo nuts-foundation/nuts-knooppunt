@@ -176,7 +176,7 @@ func TestAcceptance_AnUnrecognizedListStillReadsAsShared(t *testing.T) {
 	require.Contains(t, body, "data category this build recognizes",
 		"a findable patient whose categories cannot be named must say so")
 	require.NotContains(t, body, "Not findable yet")
-	require.NotContains(t, body, "exists only in De Plataan's own store")
+	require.NotContains(t, body, "has published nothing about this patient")
 }
 
 // A duplicate is not a stranger. Two Lists of the same recognized category, which

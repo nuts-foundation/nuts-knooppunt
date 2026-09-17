@@ -110,8 +110,10 @@ func (s *retrievalStore) generationOf(patientKey string) uint64 {
 
 // putIfCurrent stores the retrieval unless this patient's retrievals were
 // discarded while it was running, and reports whether it did. The lease does not
-// cover the network call: it admits the retrieval and is released the moment the
-// handler asks for it, so a recycle can land in between. Comparing under the
+// cover the network call: it admits the retrieval and is not held across it, so
+// a recycle can land in between. HeldBy releases the registry mutex and returns;
+// the lease itself runs on until release, a switch to another patient, or its
+// own expiry, and none of those cancels a retrieval already in flight. Comparing under the
 // same lock the counter is raised under is what makes the check meaningful; a
 // check before the write would leave the window it is meant to close.
 func (s *retrievalStore) putIfCurrent(owner, patientKey string, generation uint64, retrieval sourceRetrieval) bool {
@@ -132,6 +134,23 @@ func (s *retrievalStore) get(owner, patientKey string) (sourceRetrieval, bool) {
 	defer s.mu.Unlock()
 	retrieval, ok := s.byOwner[owner][patientKey]
 	return retrieval, ok
+}
+
+// forgetIfCurrent drops what one session retrieved about one patient, unless
+// this patient's retrievals were discarded since generation was read. An attempt
+// that failed before it reached the source replaced the previous answer just as
+// a refused or failed chain does, so the record stops showing an earlier answer
+// as the current one. Scoped to the caller, because another session's retrieval
+// is not this attempt's to discard, and compared against the generation for the
+// same reason putIfCurrent is: an attempt that started before a recycle has
+// nothing to say about an answer retrieved after it.
+func (s *retrievalStore) forgetIfCurrent(owner, patientKey string, generation uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.discarded[patientKey] != generation {
+		return
+	}
+	delete(s.byOwner[owner], patientKey)
 }
 
 func (s *retrievalStore) clearOwner(owner string) {
@@ -290,6 +309,10 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 			AuthorizationServer: chosen.AuthorizationServer},
 		patient.BSN, chosen.Categories)
 	if err != nil {
+		// The attempt is over and it produced nothing. Leaving the previous
+		// answer in place would present it as the result of this one, which is
+		// the same claim a refused or failed chain is not allowed to make.
+		c.Retrievals.forgetIfCurrent(lockOwner(session), patient.Key, generation)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}

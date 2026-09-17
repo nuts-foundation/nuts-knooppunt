@@ -989,3 +989,62 @@ func TestRetrieveBGZ_SaysAnUnreadableContinuationIsUnreadable(t *testing.T) {
 	assert.Contains(t, result.Queries[0].Truncated, "continuation whose URL could not be read",
 		"what did happen is that the link was unusable")
 }
+
+// The request line is read off a projector. For the searches that travel in the
+// body, the placeholder standing in for the value is not a value, so encoding it
+// as one turns "[sent in the request body]" into %5Bsent+in+the+request+body%5D
+// and the reader learns nothing from a row that exists to be read.
+func TestRetrieveBGZ_RendersTheBodyPlaceholderReadably(t *testing.T) {
+	var got []sourceRequest
+	source := fakeSource(t, &got, map[string]string{"Patient": bundleOf(zonnebloemPatient)})
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006", []string{nvi.CategoryPatient})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, result.Queries)
+	assert.Contains(t, result.Queries[0].Request, "identifier=[sent in the request body]")
+	assert.NotContains(t, result.Queries[0].Request, "%5B", "the placeholder is prose, not a value to encode")
+}
+
+// One readable match on a page that had a continuation is not one match. A
+// second record for this BSN can sit on the page that was never read, and
+// committing to the first turns "the source answered partially" into "this is
+// the patient", which is the selection by entry order the ambiguity stop exists
+// to refuse.
+func TestRetrieveBGZ_DoesNotCommitToAPatientFromAnUnfinishedSearch(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		if r.URL.Query().Get("page") == "2" {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[{"resource":` +
+			zonnebloemPatient + `}],"link":[{"relation":"next","url":"http://` + r.Host +
+			`/fhir/Patient?page=2"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	require.Len(t, result.Queries, 1, "no clinical search may go out on a patient that was not settled")
+	// Without these the test also passes when the first search never reached the
+	// source: that too yields one query, no id, no items and an incomplete
+	// result, and would mask the guard being removed.
+	require.Equal(t, http.StatusOK, result.Queries[0].Status,
+		"the first page was served; the continuation after it is what failed")
+	require.Empty(t, result.Queries[0].Error)
+	require.Contains(t, result.Queries[0].Truncated, "later page")
+	require.Contains(t, result.Queries[0].Truncated, "more than one record",
+		"and the chain has to say the identity was not settled, not only that a page was missed")
+	require.Len(t, paths, 2, "page two was requested; it is its failure that stops the chain")
+	require.Empty(t, result.PatientID)
+	require.Empty(t, result.Items)
+	require.True(t, result.Incomplete())
+	for _, path := range paths {
+		require.NotContains(t, path, "Condition", "and nothing may be asked about that patient")
+	}
+}
