@@ -171,7 +171,7 @@ no SSE: the step-event stream stays with E6.
 Nothing is retrieved before the practitioner confirms a source, and the confirmed URA is re-checked
 against a fresh localization rather than trusted from the form.
 
-Five limitations are carried deliberately:
+Six limitations are carried deliberately:
 
 - **Endpoint selection matches `connectionType` but not `payloadType`.** It honours `status` and
   `period` at the precision FHIR dateTime allows, both SHALLs. An `oauth-nuts` Endpoint is
@@ -191,6 +191,12 @@ Five limitations are carried deliberately:
   data until the next read or sign-in sweeps it, because the store has no timer of its own.
 - **Paged results are followed to a bound.** A search that offers more than twenty pages stops there
   and the row says the result is incomplete, rather than rendering a partial record as a whole one.
+- **A searchset's own warning is not surfaced.** FHIR lets a server put an `OperationOutcome` in a
+  searchset with `search.mode=outcome` to report that a result is partial or that a parameter was
+  ignored (https://hl7.org/fhir/R4/search.html#errors). Those entries are filtered out along with
+  everything that is not the resource the search asked for, so a 200 carrying one renders as a complete
+  answer. Reading them would mean deciding which outcomes make a result incomplete and which are
+  informational, which is a question this build has not settled.
 - **Continuation links are bounded, transport errors are not sanitized.** `continuationProblem` refuses
   a next link that cannot be parsed, carries userinfo, points at another origin, or says the BSN in any
   of its decoded components, so a request line this application composes cannot carry the identifier.
