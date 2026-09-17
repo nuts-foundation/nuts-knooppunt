@@ -1,0 +1,74 @@
+# Default values for gf-sandbox.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/nuts-foundation/gf-sandbox
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion ("main" -
+  # this image only ever gets a "main" tag today, no semver releases yet).
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 8091
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+resources: {}
+
+livenessProbe: {}
+readinessProbe: {}
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+# gf-sandbox's own environment. All of these are placeholders for standalone
+# use of this chart - the nuts-knooppunt umbrella chart overrides them to
+# the actual in-cluster service addresses and public ingress hostnames.
+env:
+  deziPublicAuthorizeUrl: "http://localhost:8092/authorize"
+  deziInternalBaseUrl: "http://mock-dezi:8092"
+  sandboxPublicUrl: "http://localhost:8091"
+  knooppuntInternalUrl: "http://knooppunt:8081"
+  hapiBaseUrl: "http://fhir:8080/fhir"
+  # Must equal the issuer the node advertises for this subject, and be
+  # reachable by the node (it fetches /.well-known/oauth-authorization-server
+  # from it) - see sandbox/app/README.md. Placeholder matches sandbox/app's
+  # own default; override per environment.
+  sandboxAuthServer: "http://localhost:8080/nuts/oauth2/plataan"
+
+volumes: []
+volumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

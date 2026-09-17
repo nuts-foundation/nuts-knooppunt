@@ -1,0 +1,144 @@
+# Environment values for the OVHcloud MKS "gf-test" cluster (infra/cluster).
+#
+# Deploys the full sandbox stack: knooppunt, hapi-fhir (as fake-nvi), both
+# PEPs, nutsadmin, mock-vc-issuer, mock-mitz, mock-dezi, and gf-sandbox. The
+# seed/credential-issuance pipeline (nuts-knooppunt#572) hasn't been ported
+# to Kubernetes yet, so there's no demo data - the stack runs but the demo
+# flow has nothing to show yet.
+#
+# No real domain decided yet (nuts-knooppunt#563 is still open), so this
+# uses nip.io against the ingress-nginx controller's LoadBalancer IP
+# (57.129.23.152) already running on this cluster - the same pattern an
+# earlier smoke-test release on this cluster already proved works. Swap
+# these hosts for the real *.test.gf.nuts.nl domain once #563 lands.
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: knooppunt.57.129.23.152.nip.io
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+
+# The embedded nuts-node's own public base URL - used for did:web
+# identifiers, must match the public ingress host above.
+extraEnv:
+  - name: NUTS_URL
+    value: "http://knooppunt.57.129.23.152.nip.io/nuts"
+
+# The NVI component is disabled unless baseurl is set
+# (component/nvi/component.go: Enabled() is FHIRBaseURL != ""). Matches
+# docker-compose.yml's KNPT_NVI_BASEURL: http://hapi-fhir:7050/fhir/nvi -
+# same "/fhir/<tenant>" shape, our fhir service instead of hapi-fhir.
+config:
+  nvi:
+    baseurl: "http://fhir:8080/fhir/nvi"
+    audience: "nvi"
+  # Same gap, same fix: component/mitz.Enabled() requires mitzbase, and it
+  # was never set. Needed for BGZ authorization (its policy requires Mitz
+  # consent - mock-mitz's closed-question endpoint supplies that answer).
+  # The separate subscription flow (/abonnementen/fhir) mock-mitz doesn't
+  # implement yet - sandbox/DESIGN.md E8, not a config problem.
+  mitz:
+    mitzbase: "http://mock-mitz:8080"
+
+# The chart's own appVersion ("0.0.0") is a placeholder only ever filled in
+# correctly by the release CI (see helm/README.md); it was never published as
+# an image tag, so installing without this override 404s on image pull.
+image:
+  tag: main
+
+pep-zonnebloem:
+  enabled: true
+  # Same appVersion-placeholder issue as the root chart - "1.16.0" was never
+  # published for ghcr.io/nuts-foundation/knooppunt-pep.
+  image:
+    tag: main
+
+pep-plataan:
+  enabled: true
+  image:
+    tag: main
+
+fhir:
+  enabled: true
+  # The sandbox runs a HAPI build with our NVI pseudonymization interceptor
+  # baked in, not stock HAPI (see docker-compose.yml's hapi-fhir comment on
+  # why :main specifically, not :latest).
+  image:
+    repository: ghcr.io/nuts-foundation/fake-nvi
+    tag: main
+  # Matches docker-compose.yml, which runs HAPI without Postgres (its
+  # postgres block is commented out there). Keeping this off avoids adding
+  # the CloudNativePG operator as a cluster prerequisite for no benefit in a
+  # throwaway test environment; data doesn't survive a pod restart either
+  # way right now.
+  postgres:
+    enabled: false
+  configExtra:
+    NVI_AUDIENCE: "nvi"
+    NVI_TENANT: "nvi"
+    "hapi.fhir.allow_cascading_deletes": "true"
+    "hapi.fhir.client_id_strategy": "ANY"
+    "hapi.fhir.delete_expunge_enabled": "true"
+    "hapi.fhir.allow_multiple_delete": "true"
+    "hapi.fhir.partitioning.allow_references_across_partitions": "false"
+
+nutsadmin:
+  enabled: true
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: nutsadmin.57.129.23.152.nip.io
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+
+mock-vc-issuer:
+  enabled: true
+  # Same appVersion-placeholder issue as above - "0.1.0" was never published
+  # for ghcr.io/nuts-foundation/mock-vc-issuer.
+  image:
+    tag: main
+  # OVH's CSI-backed PVC mounts owned by root by default; the image runs as
+  # uid 1001 (mock-components/vc-issuer/Dockerfile: `USER nextjs`), which
+  # can't write /app/data without this - Prisma's migration step failed with
+  # "unable to open database file" until this was set.
+  podSecurityContext:
+    fsGroup: 1001
+
+mock-mitz:
+  enabled: true
+
+mock-dezi:
+  enabled: true
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: mock-dezi.57.129.23.152.nip.io
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+  env:
+    # Must match gf-sandbox's public callback below.
+    deziAllowedRedirectUris: "http://gf-sandbox.57.129.23.152.nip.io/demo/auth/callback"
+
+gf-sandbox:
+  enabled: true
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: gf-sandbox.57.129.23.152.nip.io
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+  env:
+    deziPublicAuthorizeUrl: "http://mock-dezi.57.129.23.152.nip.io/authorize"
+    sandboxPublicUrl: "http://gf-sandbox.57.129.23.152.nip.io"
+    # Must match NUTS_URL above (knooppunt's own subchart) plus the
+    # per-subject oauth2 path - PR review comment
+    # https://github.com/nuts-foundation/nuts-knooppunt/pull/581#discussion_r4026416792
+    sandboxAuthServer: "http://knooppunt.57.129.23.152.nip.io/nuts/oauth2/plataan"

@@ -28,3 +28,15 @@ helm/**/charts/*.tgz
 
 # GF Sandbox demo PKI and signing key (generated, never committed)
 sandbox/.certs/
+
+# Terraform (infra/)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+backend.hcl
+crash.log
+crash.*.log
+override.tf
+override.tf.json

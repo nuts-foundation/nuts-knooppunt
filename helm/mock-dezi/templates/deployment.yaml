@@ -1,25 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "nuts-knooppunt.fullname" . }}
+  name: {{ include "mock-dezi.fullname" . }}
   labels:
-    {{- include "nuts-knooppunt.labels" . | nindent 4 }}
+    {{- include "mock-dezi.labels" . | nindent 4 }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   selector:
     matchLabels:
-      {{- include "nuts-knooppunt.selectorLabels" . | nindent 6 }}
+      {{- include "mock-dezi.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      {{- with .Values.podAnnotations }}
       annotations:
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
-        {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-        {{- end }}
+      {{- end }}
       labels:
-        {{- include "nuts-knooppunt.labels" . | nindent 8 }}
+        {{- include "mock-dezi.labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -28,7 +27,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "nuts-knooppunt.serviceAccountName" . }}
+      serviceAccountName: {{ include "mock-dezi.serviceAccountName" . }}
       {{- with .Values.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -41,16 +40,23 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- with .Values.extraEnv }}
           env:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
+            - name: TLS_CERT_FILE
+              value: /certs/mock-dezi.pem
+            - name: TLS_KEY_FILE
+              value: /certs/mock-dezi.key
+            - name: DEZI_SIGNING_KEY_FILE
+              value: /certs/dezi-signing.key
+            - name: DEZI_JKU
+              value: {{ .Values.env.deziJku | quote }}
+            - name: DEZI_ALLOWED_REDIRECT_URIS
+              value: {{ .Values.env.deziAllowedRedirectUris | quote }}
           ports:
-            - name: internal
-              containerPort: {{ .Values.service.internalPort }}
+            - name: http
+              containerPort: {{ .Values.service.httpPort }}
               protocol: TCP
-            - name: public
-              containerPort: {{ .Values.service.port }}
+            - name: https
+              containerPort: {{ .Values.service.httpsPort }}
               protocol: TCP
           {{- with .Values.livenessProbe }}
           livenessProbe:
@@ -65,16 +71,16 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           volumeMounts:
-            - name: config
-              mountPath: /app/config
+            - name: certs
+              mountPath: /certs
               readOnly: true
           {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
       volumes:
-        - name: config
-          configMap:
-            name: {{ include "nuts-knooppunt.fullname" . }}-config
+        - name: certs
+          secret:
+            secretName: {{ .Values.certsSecretName }}
       {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
