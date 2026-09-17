@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -206,22 +208,48 @@ func TestRecord_ShowsRetrievedDataAttributedToItsSource(t *testing.T) {
 	require.Contains(t, body, "Ziekenhuis De Plataan")
 }
 
-// A denied retrieval must not leave the record claiming a second source.
+// A denied retrieval must not leave the record claiming a second source, and
+// that has to hold when there is something to replace. Starting from an empty
+// store proves only that a denial adds nothing; consent can be withdrawn between
+// two runs of the same demo, and the data from before it must not survive the
+// refusal that follows.
 func TestRecord_ShowsNoRetrievedDataAfterADenial(t *testing.T) {
+	srv, client, key, refuse := retrievalThatCanTurn(t, chainRefused, http.StatusForbidden)
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+	_, granted := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+	require.Contains(t, granted, "Metoprolol", "the first run has to have put data on the record")
+
+	refuse()
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+
+	require.NotContains(t, body, "Zorgcentrum De Zonnebloem")
+	require.NotContains(t, body, "Metoprolol", "what the refusal replaced must be gone with it")
+}
+
+// retrievalThatCanTurn starts a sandbox whose source answers normally until the
+// returned function is called, after which it answers with outcome and status.
+// The patient is open and the caller holds its lease.
+func retrievalThatCanTurn(t *testing.T, outcome chainOutcome, status int) (
+	*httptest.Server, *http.Client, string, func()) {
+	t.Helper()
 	cfg := retrievalConfig(t)
-	cfg.retrieveFromSource = func(_ context.Context, _ authSession, source sourceAddress, _ string, _ []string) (sourceRetrieval, error) {
-		return sourceRetrieval{Source: source, Outcome: chainRefused,
-			Queries: []queryOutcome{{Label: "Patient", Status: http.StatusForbidden}}}, nil
+	serves := cfg.retrieveFromSource
+	turned := false
+	cfg.retrieveFromSource = func(ctx context.Context, session authSession, source sourceAddress,
+		bsn string, categories []string) (sourceRetrieval, error) {
+		if turned {
+			return sourceRetrieval{Source: source, Outcome: outcome,
+				Queries: []queryOutcome{{Label: "Patient", Status: status}}}, nil
+		}
+		return serves(ctx, session, source, bsn, categories)
 	}
 	srv, client := demoServer(t, cfg)
 	key := annaKey(t)
 	openPatient(t, client, srv, key)
-	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
-
-	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
-
-	require.NotContains(t, body, "Zorgcentrum De Zonnebloem")
+	return srv, client, key, func() { turned = true }
 }
 
 // Another practitioner's run must not see what this one retrieved.
@@ -268,22 +296,23 @@ func TestRetrieve_AFailureIsNotRenderedAsADenial(t *testing.T) {
 	require.NotContains(t, body, `href="/demo/ehr/patients/`+key+`"`)
 }
 
-// And the record must not claim a second source after a failure either.
+// And the record must not claim a second source after a failure either, with the
+// same replacement question: a source that answered a minute ago and is down now
+// leaves stale clinical data on screen if the failure does not clear it.
 func TestRecord_ShowsNoRetrievedDataAfterAFailure(t *testing.T) {
-	cfg := retrievalConfig(t)
-	cfg.retrieveFromSource = func(_ context.Context, _ authSession, source sourceAddress, _ string, _ []string) (sourceRetrieval, error) {
-		return sourceRetrieval{Source: source, Outcome: chainFailed,
-			Queries: []queryOutcome{{Label: "Patient", Status: http.StatusBadGateway}}}, nil
-	}
-	srv, client := demoServer(t, cfg)
-	key := annaKey(t)
-	openPatient(t, client, srv, key)
+	srv, client, key, fail := retrievalThatCanTurn(t, chainFailed, http.StatusBadGateway)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
 		url.Values{"ura": {zonnebloemURA}})
+	_, granted := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+	require.Contains(t, granted, "Metoprolol", "the first run has to have put data on the record")
 
+	fail()
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 
 	require.NotContains(t, body, "Zorgcentrum De Zonnebloem")
+	require.NotContains(t, body, "Metoprolol", "a source that is down does not keep answering from memory")
 }
 
 // The patient list bounds every NVI call so one slow round trip costs a chip
@@ -376,7 +405,9 @@ func TestRetrieve_SaysWhenTheRetrievalWasIncomplete(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "Access granted", "the source did authorize the request")
-	require.Contains(t, body, "everything it authorized came back")
+	// The negation is the claim, so it has to be inside the asserted string: an
+	// assertion on the tail alone still passed with the "not" taken out.
+	require.Contains(t, body, "not everything it authorized came back")
 	// Nothing came back, so there is nothing to go and look at.
 	require.NotContains(t, body, `href="/demo/ehr/patients/`+key+`"`)
 }
@@ -423,4 +454,194 @@ func TestRecord_SaysNothingAboutCompletenessWhenItIsComplete(t *testing.T) {
 
 	require.Contains(t, body, "Metoprolol")
 	require.NotContains(t, body, "not everything")
+}
+
+// Recycle is how a presenter starts the scenario over: it puts the seeded
+// resources back at both providers. A retrieval this session already made is a
+// copy of what the source held before that, so leaving it in place means the
+// record screen keeps serving data the recycle just replaced, and the run that
+// follows is not the clean one it claims to be.
+func TestRecycle_DiscardsWhatWasRetrievedForThatPatient(t *testing.T) {
+	cfg := retrievalConfig(t)
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+	_, before := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+	require.Contains(t, before, "Metoprolol", "the retrieval has to be on the record for this test to mean anything")
+
+	// Recycle refuses a locked patient, which is the state a demo is in while the
+	// record is open, so the lease is released first exactly as the presenter would.
+	postForm(t, client, srv, "/demo/patients/"+key+"/release", nil).Body.Close()
+	res := postForm(t, client, srv, "/demo/patients/"+key+"/recycle", nil)
+	res.Body.Close()
+	require.Equal(t, "/demo?notice=recycle-done", res.Header.Get("Location"))
+
+	openPatient(t, client, srv, key)
+	_, after := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+
+	require.NotContains(t, after, "Metoprolol",
+		"the retrieved copy was replaced by the recycle and must not survive it")
+	require.NotContains(t, after, "Zorgcentrum De Zonnebloem",
+		"and the source must no longer be listed as one this record draws on")
+}
+
+// The same question for the global reset, but it cannot be asked of the screen:
+// a reset ends every session, and the store is keyed by session, so the next
+// sign-in sees nothing either way. What has to hold is that the data is gone
+// rather than merely unreachable, so this reads the store. Another
+// organization's clinical data sitting behind an owner that no longer exists is
+// exactly what the reset is there to prevent.
+func TestReset_LeavesNoRetrievedDataBehind(t *testing.T) {
+	cfg := retrievalConfig(t)
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+	require.NotZero(t, retrievalsHeld(cfg.Retrievals),
+		"the retrieval has to be in the store for this test to mean anything")
+
+	// Override, because the record this session has open holds the lease and a
+	// plain reset refuses to run past an active one.
+	postForm(t, client, srv, "/demo/reset", url.Values{"override": {"true"}}).Body.Close()
+
+	require.Zero(t, retrievalsHeld(cfg.Retrievals),
+		"a reset restores the whole pool, so no retrieved copy may outlive it")
+}
+
+// retrievalsHeld counts what the store is holding, across owners.
+func retrievalsHeld(store *retrievalStore) int {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	held := 0
+	for _, byPatient := range store.byOwner {
+		held += len(byPatient)
+	}
+	return held
+}
+
+// The screen explains the privacy property of the localization step, and it has
+// to describe the one this stack actually has. The BSN does travel: the
+// application sends it to the Knooppunt, which converts it to a pseudonym before
+// the index sees it, and it goes to the source as well once a retrieval is
+// confirmed. Claiming it never leaves overstates a real protection into one
+// nobody implemented.
+func TestRetrieveForm_DescribesThePseudonymisationItActuallyPerforms(t *testing.T) {
+	cfg := retrievalConfig(t)
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve")
+
+	require.NotContains(t, body, "never travels",
+		"the BSN does travel; what it does not reach is the index")
+	// The whole clause, not a fragment of it: asserting on a few words let the
+	// sentence be negated or narrowed around them while the test stayed green.
+	// Whitespace is normalized because the template wraps this paragraph.
+	require.Contains(t, whitespaceNormalized(body),
+		"The Knooppunt converts the BSN into a pseudonym, and the national referral index is "+
+			"searched on that pseudonym rather than on the BSN itself.",
+		"the screen has to describe the pseudonymisation this build performs")
+}
+
+// whitespaceNormalized collapses runs of whitespace to single spaces, so an
+// assertion can name a whole sentence that the template wraps across lines.
+func whitespaceNormalized(body string) string {
+	return strings.Join(strings.Fields(body), " ")
+}
+
+// Recycle is not transactional: vectors.RecyclePatient PUTs the fixtures back in
+// sequence and verifies afterwards, so an ordinary error can follow resources
+// that were already replaced. Clearing only on a clean or partial result left
+// the pre-recycle answer on the record screen while the data behind it had
+// changed, which is the state recycle exists to leave behind.
+func TestRecycle_DiscardsRetrievalsEvenWhenItReportsFailure(t *testing.T) {
+	cfg := retrievalConfig(t)
+	cfg.recyclePatient = func(context.Context, string) error {
+		return errors.New("the NVI verification after the restore failed")
+	}
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+	require.NotZero(t, retrievalsHeld(cfg.Retrievals),
+		"the retrieval has to be in the store for this test to mean anything")
+
+	postForm(t, client, srv, "/demo/patients/"+key+"/release", nil).Body.Close()
+	res := postForm(t, client, srv, "/demo/patients/"+key+"/recycle", nil)
+	res.Body.Close()
+
+	require.Equal(t, http.StatusInternalServerError, res.StatusCode)
+	require.Zero(t, retrievalsHeld(cfg.Retrievals),
+		"the restore had already run, so the retrieved copy may not survive the error")
+}
+
+// The lease admits a retrieval; it is not held across the network call, and
+// releasing it or letting it expire does not cancel one already running. So a
+// recycle can clear the store while a retrieval of the pre-recycle data is still
+// on its way back, and the publication puts exactly what recycle removed back in
+// place.
+func TestRecycle_ARetrievalInFlightIsNotStoredAfterwards(t *testing.T) {
+	cfg := retrievalConfig(t)
+	reachedSource := make(chan struct{})
+	release := make(chan struct{})
+	inner := cfg.retrieveFromSource
+	cfg.retrieveFromSource = func(ctx context.Context, s authSession, source sourceAddress, bsn string, cats []string) (sourceRetrieval, error) {
+		close(reachedSource)
+		<-release
+		return inner(ctx, s, source, bsn, cats)
+	}
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve", url.Values{"ura": {zonnebloemURA}})
+		_ = res.Body.Close()
+	}()
+
+	<-reachedSource
+	// What a presenter does while the spinner runs: move on, which drops the
+	// lease, and then reset the patient.
+	postForm(t, client, srv, "/demo/patients/"+key+"/release", nil).Body.Close()
+	postForm(t, client, srv, "/demo/patients/"+key+"/recycle", nil).Body.Close()
+	close(release)
+	<-done
+
+	require.Zero(t, retrievalsHeld(cfg.Retrievals),
+		"a retrieval of the pre-recycle data must not land in a store the recycle just cleared")
+}
+
+// A retrieval that was granted and produced nothing renderable is still a
+// retrieval, and the reason it produced nothing is the only thing worth showing.
+// Carrying the outcome only when items came with it meant the emptiest results,
+// the ones a reader is most likely to misread as "this source had nothing", were
+// exactly the ones that reached the record screen with nothing to say.
+func TestRecord_WarnsAboutAnAnswerThatYieldedNoItems(t *testing.T) {
+	cfg := retrievalConfig(t)
+	cfg.retrieveFromSource = func(_ context.Context, _ authSession, source sourceAddress, _ string, _ []string) (sourceRetrieval, error) {
+		return sourceRetrieval{
+			Source: source, Outcome: chainGranted,
+			Queries: []queryOutcome{{Label: "Condition", Status: http.StatusOK,
+				Truncated: "1 resource(s) in this answer could not be rendered, so this result is incomplete"}},
+		}, nil
+	}
+	srv, client := demoServer(t, cfg)
+	key := annaKey(t)
+	openPatient(t, client, srv, key)
+	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
+		url.Values{"ura": {zonnebloemURA}})
+
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
+
+	require.Contains(t, body, "but not everything it authorized",
+		"the record has to carry the warning even when the retrieval put nothing on it")
+	require.NotContains(t, body, "Zorgcentrum De Zonnebloem</b>",
+		"and it may not list a source it drew no data from")
 }

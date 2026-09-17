@@ -125,8 +125,17 @@ func splitDirectoryBundle(bundle fhir.Bundle) (*fhir.Organization, map[string]fh
 			}
 		case "Endpoint":
 			var endpoint fhir.Endpoint
-			if err := json.Unmarshal(entry.Resource, &endpoint); err == nil && endpoint.Id != nil {
+			if err := json.Unmarshal(entry.Resource, &endpoint); err != nil {
+				continue
+			}
+			if endpoint.Id != nil {
 				endpoints["Endpoint/"+*endpoint.Id] = endpoint
+			}
+			// A reference may also be absolute, in which case it matches the
+			// entry's fullUrl rather than a relative Type/id
+			// (https://hl7.org/fhir/R4/references.html#literal).
+			if entry.FullUrl != nil && *entry.FullUrl != "" {
+				endpoints[*entry.FullUrl] = endpoint
 			}
 		}
 	}

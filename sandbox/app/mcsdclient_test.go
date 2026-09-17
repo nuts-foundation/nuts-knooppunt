@@ -181,3 +181,38 @@ func TestMCSDResolve_HonoursDateOnlyPeriodBounds(t *testing.T) {
 		})
 	}
 }
+
+// A literal reference may be absolute rather than relative
+// (https://hl7.org/fhir/R4/references.html#literal), in which case it matches
+// the included entry's fullUrl and not a Type/id. Keying only on Type/id
+// reported a directory that answered perfectly well as holding no endpoint, and
+// the retrieval this addressing step feeds never ran. The medication resolver in
+// retrieval.go already indexes both.
+func TestMCSDResolve_ResolvesAnEndpointReferencedByAbsoluteURL(t *testing.T) {
+	const absolute = "https://directory.example/fhir/Endpoint/zb-fhir"
+	bundle := `{
+	  "resourceType": "Bundle",
+	  "type": "searchset",
+	  "entry": [
+	    {
+	      "search": {"mode": "match"},
+	      "resource": {
+	        "resourceType": "Organization",
+	        "id": "zonnebloem",
+	        "name": "Zorgcentrum De Zonnebloem",
+	        "identifier": [{"system": "http://fhir.nl/fhir/NamingSystem/ura", "value": "00000020"}],
+	        "endpoint": [{"reference": "` + absolute + `", "type": "Endpoint"}]
+	      }
+	    },
+	    {"search": {"mode": "include"}, "fullUrl": "` + absolute + `", "resource": ` + activeEndpoint + `}
+	  ]
+	}`
+	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(bundle))
+	})
+
+	source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
+
+	require.NoError(t, err)
+	assert.Equal(t, "http://pep-zonnebloem:8080/fhir", source.Address)
+}

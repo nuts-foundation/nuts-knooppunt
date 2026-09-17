@@ -32,10 +32,12 @@ func fakeSource(t *testing.T, got *[]sourceRequest, routes map[string]string) so
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
-		*got = append(*got, sourceRequest{
-			Method: r.Method, Path: r.URL.Path, Query: r.URL.Query(),
-			Form: r.PostForm, Auth: r.Header.Get("Authorization"),
-		})
+		if got != nil {
+			*got = append(*got, sourceRequest{
+				Method: r.Method, Path: r.URL.Path, Query: r.URL.Query(),
+				Form: r.PostForm, Auth: r.Header.Get("Authorization"),
+			})
+		}
 		resourceType := strings.TrimSuffix(r.URL.Path[len("/fhir/"):], "/_search")
 		body, ok := routes[resourceType]
 		if !ok {
@@ -320,22 +322,37 @@ func TestRetrieveBGZ_AnUnreadableBodyIsAFailureAndKeepsItsReason(t *testing.T) {
 }
 
 // The request line the authorization screen renders is kept in memory and shown
-// on a projector. It must not carry the BSN either.
-func TestRetrieveBGZ_TheRenderedRequestCarriesNoBSN(t *testing.T) {
-	var got []sourceRequest
-	source := fakeSource(t, &got, map[string]string{
-		"Patient":   bundleOf(zonnebloemPatient),
-		"Condition": bundleOf(diabetes),
-	})
+// on a projector. It must not carry the BSN either, and neither must the error
+// text beside it: Go's HTTP client puts the whole request URL in the error it
+// returns, so a failing query is where a leaked identifier would surface. One
+// query here is therefore made to fail at transport level, because asserting
+// that an empty string holds no BSN proves nothing at all.
+func TestRetrieveBGZ_TheRenderedRequestAndItsErrorCarryNoBSN(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/fhir/Patient") {
+			_, _ = w.Write([]byte(bundleOf(zonnebloemPatient)))
+			return
+		}
+		// Drop the connection mid-response, which is what a source going away
+		// looks like from here and what populates Error with the request URL.
+		conn, _, err := w.(http.Hijacker).Hijack()
+		require.NoError(t, err)
+		require.NoError(t, conn.Close())
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
 
 	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
 		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
 
 	require.NoError(t, err)
-	require.NotEmpty(t, result.Queries)
+	require.Len(t, result.Queries, 2)
+	require.NotEmpty(t, result.Queries[1].Error,
+		"the failing query has to have produced error text for this test to check anything")
 	for _, outcome := range result.Queries {
 		assert.NotContains(t, outcome.Request, "999900006", outcome.Label)
 		assert.NotContains(t, outcome.Error, "999900006", outcome.Label)
+		assert.NotContains(t, outcome.Truncated, "999900006", outcome.Label)
 	}
 	// It still has to say what was asked, or the screen loses its point.
 	assert.Contains(t, result.Queries[0].Request, "Patient/_search")
@@ -531,7 +548,11 @@ func TestRetrieveBGZ_RequiresASearchsetBundle(t *testing.T) {
 				[]string{nvi.CategoryPatient})
 
 			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, result.Queries[0].Status,
+				"the source served this body; recognising it is what has to fail")
 			assert.Equal(t, chainFailed, result.Outcome)
+			assert.Contains(t, result.Queries[0].Error, "searchset",
+				"and the reason has to name the envelope, so this stays a decoder test")
 			assert.NotContains(t, result.Queries[0].Error, "no patient",
 				"a response we could not recognise says nothing about the source's records")
 		})
@@ -603,4 +624,368 @@ func TestSameOrigin_NormalisesPortAndCase(t *testing.T) {
 			assert.Equal(t, tc.same, sameOrigin(base, tc.candidate))
 		})
 	}
+}
+
+// Both CodeableConcept.text and Coding.display are optional in FHIR R4
+// (https://hl7.org/fhir/R4/datatypes-definitions.html#CodeableConcept.text), so
+// a source is entitled to answer with the code alone. Rendering nothing for such
+// a resource removed a diagnosis from a clinical overview without saying so,
+// which is worse than an ugly line: the screen looked complete.
+func TestRetrieveBGZ_ShowsAResourceCarryingOnlyACode(t *testing.T) {
+	codeOnly := `{"resourceType":"Condition","id":"zb-coded",
+	  "code":{"coding":[{"system":"http://snomed.info/sct","code":"44054006"}]},
+	  "onsetDateTime":"2012"}`
+	var got []sourceRequest
+	source := fakeSource(t, &got, map[string]string{
+		"Patient":   bundleOf(zonnebloemPatient),
+		"Condition": bundleOf(codeOnly),
+	})
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1, "the condition must survive, coded or not")
+	assert.Contains(t, result.Items[0].Title, "44054006",
+		"and must carry the code, which is the only identification the source gave")
+	assert.False(t, result.Incomplete(),
+		"nothing was dropped, so the retrieval is not partial")
+}
+
+// The other half: a resource this build genuinely cannot render is dropped, and
+// dropping it silently is the thing to avoid. The record then holds less than
+// the source sent while every query reads as a clean 200.
+func TestRetrieveBGZ_ReportsResourcesItCouldNotRender(t *testing.T) {
+	unreadable := `{"resourceType":"Condition","id":"zb-broken","code":{"coding":"not-an-array"}}`
+	var got []sourceRequest
+	source := fakeSource(t, &got, map[string]string{
+		"Patient":   bundleOf(zonnebloemPatient),
+		"Condition": bundleOf(diabetes, unreadable),
+	})
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	require.Len(t, result.Items, 1, "the readable one is still shown")
+	assert.True(t, result.Incomplete(),
+		"and the screen has to say the overview is not everything the source sent")
+}
+
+// The BSN is kept out of request URLs by sending it in the body of the Patient
+// search, but the id that search returns is the source's to choose, and FHIR
+// permits any id syntax (https://hl7.org/fhir/R4/datatypes.html#id). A source
+// that identifies its patients by BSN would put it straight back into the query
+// string of every clinical search, and from there into the PEP's access log and
+// onto the authorization screen. The chain has to notice rather than comply.
+func TestRetrieveBGZ_RefusesToScopeOnAnIDThatCarriesTheBSN(t *testing.T) {
+	selfIdentifying := `{"resourceType":"Patient","id":"999900006",
+	  "identifier":[{"system":"http://fhir.nl/fhir/NamingSystem/bsn","value":"999900006"}]}`
+	var got []sourceRequest
+	source := fakeSource(t, &got, map[string]string{
+		"Patient":   bundleOf(selfIdentifying),
+		"Condition": bundleOf(diabetes),
+	})
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	require.Len(t, got, 1, "the Patient search was answered; nothing after it may be sent")
+	require.Equal(t, http.StatusOK, result.Queries[0].Status,
+		"the source served the search; its answer is what this refuses to act on")
+	require.Contains(t, result.Queries[0].Truncated, "containing the BSN",
+		"and the reason has to be the identifier rather than any other stop")
+	for _, request := range got {
+		assert.NotContains(t, request.Path+"?"+request.Query.Encode(), "999900006",
+			"no request line may carry the BSN")
+	}
+	assert.Empty(t, result.Items, "the clinical searches were not sent, so nothing came back")
+	assert.True(t, result.Incomplete(),
+		"and the screen has to say why the overview is empty rather than imply the source holds nothing")
+}
+
+// The Patient search is where the chain decides whether the source knows this
+// patient at all, and that answer stops everything else. Reading one page and
+// treating "no Patient here" as "no Patient anywhere" turns an unfinished search
+// into an absence claim, which is the one thing this screen must never invent.
+func TestRetrieveBGZ_DoesNotClaimAbsenceFromAnUnfinishedPatientSearch(t *testing.T) {
+	practitioner := `{"resourceType":"Practitioner","id":"zb-gp","name":[{"family":"Bakker"}]}`
+	var patientPages int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/fhir/Patient") {
+			_, _ = w.Write([]byte(bundleOf(diabetes)))
+			return
+		}
+		patientPages++
+		if patientPages == 1 {
+			// A first page carrying only the _include companion, and a link
+			// saying the match is further on.
+			_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[{"resource":` +
+				practitioner + `}],"link":[{"relation":"next","url":"http://` + r.Host + `/fhir/Patient?page=2"}]}`))
+			return
+		}
+		_, _ = w.Write([]byte(bundleOf(zonnebloemPatient)))
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	assert.Equal(t, "zb-anna", result.PatientID, "the match on the second page is the patient")
+	assert.NotContains(t, result.Queries[0].Note, "holds no patient",
+		"the source does hold this patient; it just did not fit on one page")
+	assert.NotEmpty(t, result.Items, "and the clinical searches ran on that id")
+}
+
+// The same search, cut short for real: the continuation cannot be read. Saying
+// the source holds nobody would be an answer this chain never got.
+func TestRetrieveBGZ_SaysThePatientSearchWasCutShortRatherThanEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") == "2" {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[],` +
+			`"link":[{"relation":"next","url":"http://` + r.Host + `/fhir/Patient?page=2"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, result.Queries[0].Status,
+		"the first page was served; the continuation after it is what failed")
+	require.Contains(t, result.Queries[0].Truncated, "later page",
+		"and the reason has to be the page that could not be read")
+	assert.NotContains(t, result.Queries[0].Note, "holds no patient",
+		"an unread continuation is not an answer that the patient is unknown here")
+	assert.True(t, result.Incomplete(), "and the screen has to say the search did not finish")
+}
+
+// Two reasons for an incomplete result can hold at once: a page that could not
+// be fetched and a resource that arrived but could not be rendered. Writing the
+// second over the first told the reader about one line while an unknown number
+// of further resources was never asked for at all.
+func TestRetrieveBGZ_KeepsEveryReasonAResultIsIncomplete(t *testing.T) {
+	const nameless = `{"resourceType":"Condition","id":"zb-nameless","code":{"coding":[{}]}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/fhir/Patient"):
+			_, _ = w.Write([]byte(bundleOf(zonnebloemPatient)))
+		case r.URL.Query().Get("page") == "2":
+			w.WriteHeader(http.StatusBadGateway)
+		default:
+			_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[{"resource":` +
+				diabetes + `},{"resource":` + nameless + `}],"link":[{"relation":"next","url":"http://` +
+				r.Host + `/fhir/Condition?page=2"}]}`))
+		}
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	require.Len(t, result.Queries, 2)
+	assert.Contains(t, result.Queries[1].Truncated, "later page",
+		"the page that could not be read has to survive")
+	assert.Contains(t, result.Queries[1].Truncated, "could not be rendered",
+		"and so does the resource that arrived but could not be shown")
+}
+
+// A continuation link is a URL the source composed, and a server that echoes the
+// search into it puts the BSN in a request line: the same leak the POST body was
+// chosen to avoid, reintroduced by following the link. The page is worth less
+// than the identifier, so the chain stops and says the result is incomplete.
+func TestRetrieveBGZ_RefusesAContinuationCarryingTheBSN(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.String())
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[{"resource":` +
+			zonnebloemPatient + `}],"link":[{"relation":"next","url":"http://` + r.Host +
+			`/fhir/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|999900006&page=2"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006", []string{nvi.CategoryPatient})
+
+	require.NoError(t, err)
+	for _, path := range paths {
+		assert.NotContains(t, path, "999900006", "no request line may carry the BSN")
+	}
+	require.NotEmpty(t, result.Queries)
+	assert.NotEmpty(t, result.Queries[0].Truncated, "and refusing the page leaves the result incomplete")
+	assert.NotContains(t, result.Queries[0].Truncated, "999900006",
+		"the reason must not repeat what it refused to send")
+}
+
+// An entry the source meant as a match but this chain cannot read is not an
+// empty answer. Reporting "holds no patient with this BSN" over it states
+// something the search never established, and stops the chain on that basis.
+func TestRetrieveBGZ_DoesNotCallAnUnreadableMatchAnAbsence(t *testing.T) {
+	var got []sourceRequest
+	source := fakeSource(t, &got, map[string]string{
+		"Patient": `{"resourceType":"Bundle","type":"searchset","entry":[` +
+			`{"resource":{"resourceType":"Patient","id":123}}]}`,
+	})
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006", []string{nvi.CategoryPatient})
+
+	require.NoError(t, err)
+	require.NotEmpty(t, result.Queries)
+	require.Equal(t, http.StatusOK, result.Queries[0].Status,
+		"the source served this answer; the entry in it is what could not be read")
+	assert.Empty(t, result.Queries[0].Note, "an unreadable match is not an answer that the patient is absent")
+	assert.True(t, result.Incomplete(), "and the result has to say it fell short")
+}
+
+// A source holding two records for one BSN has an identity question this
+// application cannot settle. Taking the first entry picks one person's clinical
+// record by the order the server happened to serve it in, and shows it as theirs.
+func TestRetrieveBGZ_StopsWhenTheBSNMatchesTwoPatients(t *testing.T) {
+	const second = `{"resourceType":"Patient","id":"zb-anna-2",
+	  "identifier":[{"system":"http://fhir.nl/fhir/NamingSystem/bsn","value":"999900006"}]}`
+	var got []sourceRequest
+	source := fakeSource(t, &got, map[string]string{
+		"Patient":   bundleOf(zonnebloemPatient, second),
+		"Condition": bundleOf(diabetes),
+	})
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	require.Len(t, result.Queries, 1, "nothing may be asked about a patient that was not identified")
+	require.Equal(t, http.StatusOK, result.Queries[0].Status,
+		"the source served this answer; holding two patients is what stops the chain")
+	require.Empty(t, result.Queries[0].Error)
+	require.Contains(t, result.Queries[0].Truncated, "2 patients with this BSN",
+		"and the reason has to be the ambiguity rather than any other stop")
+	assert.True(t, result.Incomplete())
+	assert.Empty(t, result.Items)
+}
+
+// Percent-encoding a digit changes the bytes in the URL and not what the URL
+// says: RFC 3986 section 2.3 makes %39 and 9 the same character. A check on the
+// raw link therefore reads as safe a URL that carries the BSN into the source's
+// access log the moment it is requested.
+func TestRetrieveBGZ_RefusesAContinuationCarryingAnEncodedBSN(t *testing.T) {
+	const encoded = "%39%39%39%39%30%30%30%30%36"
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.String())
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[{"resource":` +
+			zonnebloemPatient + `}],"link":[{"relation":"next","url":"http://` + r.Host +
+			`/fhir/Patient?identifier=http://fhir.nl/fhir/NamingSystem/bsn|` + encoded + `"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006", []string{nvi.CategoryPatient})
+
+	require.NoError(t, err)
+	// One request, the initial search. Counting matters: following the link until
+	// the page cap also leaves a nonempty Truncated, so a test that only checks
+	// for a reason would pass while every one of those pages was sent.
+	require.Len(t, paths, 1, "the continuation may not be requested at all")
+	require.NotEmpty(t, result.Queries)
+	require.Contains(t, result.Queries[0].Truncated, "patient identifier in its URL",
+		"and the reason has to be the identifier, not the page cap")
+}
+
+// One entry decoded and another did not. The one that did not may be a second
+// patient, so how many the source matched is unknown, and picking the readable
+// one presents a possibly-wrong person's record as this patient's.
+func TestRetrieveBGZ_StopsWhenOnlySomeMatchesCouldBeRead(t *testing.T) {
+	var got []sourceRequest
+	source := fakeSource(t, &got, map[string]string{
+		"Patient": `{"resourceType":"Bundle","type":"searchset","entry":[` +
+			`{"resource":` + zonnebloemPatient + `},` +
+			`{"resource":{"resourceType":"Patient","id":123}}]}`,
+		"Condition": bundleOf(diabetes),
+	})
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryPatient, nvi.CategoryCondition})
+
+	require.NoError(t, err)
+	require.Len(t, result.Queries, 1, "nothing may be asked about a patient that was not identified")
+	require.Equal(t, http.StatusOK, result.Queries[0].Status,
+		"the source served this answer; an entry in it is what could not be read")
+	require.Empty(t, result.Queries[0].Error)
+	require.Contains(t, result.Queries[0].Truncated, "could not be read")
+	require.Empty(t, result.Items)
+}
+
+// A URL can carry the identifier somewhere a path-and-query check never looks.
+// Go decodes userinfo while parsing and keeps the username when it formats a
+// transport error, so a link nobody inspected there puts the plain BSN into the
+// text this application stores and renders. Credentials in a paging link are not
+// a thing this chain has any use for, so the shape is refused rather than the
+// spelling chased.
+func TestRetrieveBGZ_RefusesAContinuationWithCredentials(t *testing.T) {
+	const encoded = "%39%39%39%39%30%30%30%30%36"
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.String())
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[{"resource":` +
+			zonnebloemPatient + `}],"link":[{"relation":"next","url":"http://` + encoded + `@` +
+			r.Host + `/fhir/Patient?page=2"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006", []string{nvi.CategoryPatient})
+
+	require.NoError(t, err)
+	require.Len(t, paths, 1, "the continuation may not be requested at all")
+	require.NotEmpty(t, result.Queries)
+	// Without these two the test also passes when the first request never
+	// succeeds: one recorded path, an incomplete result, and no identifier
+	// anywhere, established by nothing.
+	require.Equal(t, http.StatusOK, result.Queries[0].Status,
+		"the first search was served; the link it offered is what this refuses")
+	require.Contains(t, result.Queries[0].Truncated, "carrying credentials",
+		"and the reason has to be the credentials rather than any other stop")
+	for _, outcome := range result.Queries {
+		for _, text := range []string{outcome.Truncated, outcome.Error, outcome.Request} {
+			assert.NotContains(t, text, "999900006", "neither spelling may be retained")
+			assert.NotContains(t, text, encoded)
+		}
+	}
+	assert.True(t, result.Incomplete(), "and refusing the page leaves the result incomplete")
+}
+
+// Refusing a link this build cannot read is right; saying it carried the patient
+// identifier is a claim about a URL nobody could parse. The screen reports what
+// was established, which is that the link was unusable.
+func TestRetrieveBGZ_SaysAnUnreadableContinuationIsUnreadable(t *testing.T) {
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.String())
+		_, _ = w.Write([]byte(`{"resourceType":"Bundle","type":"searchset","entry":[{"resource":` +
+			zonnebloemPatient + `}],"link":[{"relation":"next","url":"http://` + r.Host +
+			`/fhir/Patient?cursor=%ZZ"}]}`))
+	}))
+	t.Cleanup(server.Close)
+	source := sourceAddress{URA: "00000020", Name: "Zorgcentrum De Zonnebloem", Address: server.URL + "/fhir"}
+
+	result, err := retrieveBGZ(t.Context(), source, "the-token", "999900006", []string{nvi.CategoryPatient})
+
+	require.NoError(t, err)
+	require.Len(t, paths, 1, "the link is refused before it is requested, not after it fails")
+	require.NotEmpty(t, result.Queries)
+	assert.NotContains(t, result.Queries[0].Truncated, "patient identifier",
+		"nothing established that this link carried an identifier")
+	// The whole guard reason, because "could not be read" on its own also matches
+	// the message for a page that was fetched and failed.
+	assert.Contains(t, result.Queries[0].Truncated, "continuation whose URL could not be read",
+		"what did happen is that the link was unusable")
 }

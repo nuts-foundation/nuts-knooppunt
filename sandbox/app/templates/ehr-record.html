@@ -62,7 +62,7 @@
   </div>
   {{end}}
 
-  {{with .Retrieval}}{{if .Incomplete}}
+  {{with .Retrieval}}{{if and .Granted .Incomplete}}
   <div class="confirm-card unknown">
     <h2><span class="unk-ic">!</span>This overview is not the whole picture</h2>
     <div class="cc-detail">{{.Source.Name}} authorized the request, but not everything it authorized

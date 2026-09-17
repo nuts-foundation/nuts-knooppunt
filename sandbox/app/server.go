@@ -19,6 +19,7 @@ var notices = map[string]string{
 	"reset-done":              "Dataset restored to the seeded fixtures.",
 	"reset-partial":           "Dataset restored, but some state could not be cleared. Check the sandbox logs.",
 	"recycle-done":            "Patient restored to the seeded state.",
+	"retrieval-stale":         "A reset was attempted for this patient while the retrieval was running, so its answer may describe data that has since been replaced and was discarded. Retrieve again.",
 	"recycle-partial":         "Patient restored, but some state could not be cleared. Check the sandbox logs.",
 	"reset-disabled":          "Reset is unavailable: it needs both KNOOPPUNT_INTERNAL_URL and HAPI_BASE_URL, and one of them is unset. Sharing only needs the first, so it can work while this does not.",
 	"signed-out":              "Signed out. The Dezi session has been cleared.",
@@ -534,7 +535,14 @@ func (c Config) handleRecycle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "patient "+key+" is locked (demo in progress)", http.StatusConflict)
 		return
 	}
-	if err := c.recyclePatient(r.Context(), key); err != nil {
+	err := c.recyclePatient(r.Context(), key)
+	// Unconditionally, including on an ordinary error. RecyclePatient is not
+	// transactional: it PUTs the fixtures back one at a time and verifies
+	// afterwards, so a failure can follow resources it already replaced. An error
+	// response is not a rollback, and a cached answer that may describe replaced
+	// data is not worth keeping either way.
+	c.Retrievals.clearPatient(key)
+	if err != nil {
 		// Partial is neither failed nor clean, as in handleReset: the fixtures
 		// were restored and something optional was not cleared. Reporting a
 		// failure sends the presenter away from a working patient; reporting

@@ -18,8 +18,8 @@
     <div>
       <h1>Access granted by {{.Source.Name}}</h1>
       <div class="asub">Decided at the source and enforced by its policy enforcement point,
-      fail-closed.{{if $.Retrieval.Incomplete}} The source authorized the request, but not
-      everything it authorized came back: the rows below say which searches fell short.{{end}}</div>
+      fail-closed.{{if $.Retrieval.Incomplete}} The source authorized the request, but
+      not everything it authorized came back: the rows below say which searches fell short.{{end}}</div>
     </div>
   </div>
   {{else if .Refused}}

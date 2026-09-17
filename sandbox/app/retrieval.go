@@ -197,7 +197,11 @@ func retrieveBGZ(ctx context.Context, source sourceAddress, token, bsn string, c
 	// The patient scope travels as the BSN here and as a local reference in every
 	// later search. The source is the only party that knows its own id for this
 	// patient, so the chain has to ask before it can scope anything else.
-	patientBundle, outcome := runBGZSearch(ctx, client, base, token, bgzSearch{
+	// Paged like the clinical searches. The match can sit behind a continuation
+	// link, and the answer to this one search decides whether the source knows
+	// this patient at all: reading a single page would turn "not on page one"
+	// into "not here" (https://hl7.org/fhir/R4/http.html#paging).
+	patientBundles, outcome := runPagedBGZSearch(ctx, client, base, token, bsn, bgzSearch{
 		Label: "Patient", Section: "", Resource: "Patient", InBody: true,
 		Params: url.Values{
 			"identifier": {coding.BSNNamingSystem + "|" + bsn},
@@ -210,12 +214,55 @@ func retrieveBGZ(ctx context.Context, source sourceAddress, token, bsn string, c
 		return result, nil
 	}
 
-	patientID, found := firstResourceID(patientBundle, "Patient")
-	if !found {
+	patientIDs, unreadable := resourceIDs(patientBundles, "Patient")
+	switch {
+	case len(patientIDs) > 1:
+		// Which of them is the patient on screen is a question the source has to
+		// answer. Taking the first would let the order the server happened to
+		// serve its entries in decide whose clinical record is shown as this
+		// patient's.
+		addTruncated(&result.Queries[0], fmt.Sprintf(
+			"the source holds %d patients with this BSN, so which record is this patient's "+
+				"was not established and nothing further was asked", len(patientIDs)))
+		return result, nil
+	case unreadable > 0:
+		// The source meant these entries as matches. One of them could be a second
+		// patient, so a readable entry beside them settles nothing: picking it
+		// would show one person's record as this patient's on the strength of
+		// which entry happened to decode.
+		reason := fmt.Sprintf("%d patient record(s) in this answer could not be read, so whether "+
+			"the source holds this patient was not established", unreadable)
+		if len(patientIDs) > 0 {
+			reason = fmt.Sprintf("%d patient record(s) in this answer could not be read alongside %d "+
+				"that could, so how many patients match this BSN was not established, and nothing "+
+				"further was asked", unreadable, len(patientIDs))
+		}
+		addTruncated(&result.Queries[0], reason)
+		return result, nil
+	case len(patientIDs) == 0 && outcome.Truncated != "":
+		// The search did not finish, so its silence is not an answer. The reason
+		// runPagedBGZSearch recorded is already on the outcome and says the result
+		// is incomplete; adding an absence claim on top would assert something
+		// this chain never established.
+		return result, nil
+	case len(patientIDs) == 0:
 		// A Note, not an Error. The source answered in full; it simply holds
 		// nobody with this BSN, and there is nothing further to ask. Writing this
 		// into Error made a complete answer read as a retrieval that fell short.
 		result.Queries[0].Note = "the source served the request but holds no patient with this BSN"
+		return result, nil
+	}
+	patientID := patientIDs[0]
+	// The BSN travels in the body of the search above precisely so it stays out
+	// of request lines. The id that search returns goes into the query string of
+	// every search after it, and FHIR puts no constraint on what a server uses
+	// as an id (https://hl7.org/fhir/R4/datatypes.html#id). A source that
+	// identifies its patients by BSN would undo the whole arrangement, at the
+	// source's PEP access log and on the screen that renders these requests, so
+	// the chain stops instead of complying.
+	if strings.Contains(patientID, bsn) {
+		addTruncated(&result.Queries[0], "the source identifies this patient by a value containing the BSN, "+
+			"which every following request would carry in its URL, so nothing further was asked")
 		return result, nil
 	}
 	result.PatientID = patientID
@@ -233,16 +280,39 @@ func retrieveBGZ(ctx context.Context, source sourceAddress, token, bsn string, c
 		}
 		search.Params = params
 
-		bundles, outcome := runPagedBGZSearch(ctx, client, base, token, search)
+		bundles, outcome := runPagedBGZSearch(ctx, client, base, token, bsn, search)
 		result.Queries = append(result.Queries, outcome)
 		if outcomeOf(outcome) != chainGranted {
 			continue
 		}
+		unrendered := 0
 		for _, bundle := range bundles {
-			result.Items = append(result.Items, itemsFrom(bundle, search, source.Name)...)
+			items, skipped := itemsFrom(bundle, search, source.Name)
+			result.Items = append(result.Items, items...)
+			unrendered += skipped
+		}
+		if unrendered > 0 {
+			// Served, complete, and not all of it made the screen: exactly what
+			// Truncated is for. Silently rendering fewer lines than the source
+			// sent is the failure this reports, because the overview then looks
+			// whole while the reader has no way to know it is not.
+			addTruncated(&result.Queries[len(result.Queries)-1], fmt.Sprintf(
+				"%d resource(s) in this answer could not be rendered, so this result is incomplete", unrendered))
 		}
 	}
 	return result, nil
+}
+
+// addTruncated records one more reason a result is incomplete. Reasons
+// accumulate rather than replace: a page that was never fetched and a resource
+// that arrived unreadable are different losses, and writing one over the other
+// tells the reader about the smaller one while the larger goes unmentioned.
+func addTruncated(outcome *queryOutcome, reason string) {
+	if outcome.Truncated == "" {
+		outcome.Truncated = reason
+		return
+	}
+	outcome.Truncated += "; " + reason
 }
 
 // maxSearchPages bounds how far a paged result is followed. A source that keeps
@@ -256,7 +326,7 @@ const maxSearchPages = 20
 // one. The outcome reported is the first page's: a later page that fails leaves
 // the result incomplete, which is recorded in Error rather than turning the
 // whole search into a failure.
-func runPagedBGZSearch(ctx context.Context, client *http.Client, base *url.URL, token string, search bgzSearch) ([]fhir.Bundle, queryOutcome) {
+func runPagedBGZSearch(ctx context.Context, client *http.Client, base *url.URL, token, redact string, search bgzSearch) ([]fhir.Bundle, queryOutcome) {
 	bundle, outcome := runBGZSearch(ctx, client, base, token, search)
 	bundles := []fhir.Bundle{bundle}
 	if outcomeOf(outcome) != chainGranted {
@@ -269,24 +339,18 @@ func runPagedBGZSearch(ctx context.Context, client *http.Client, base *url.URL, 
 			return bundles, outcome
 		}
 		if pages >= maxSearchPages {
-			outcome.Truncated = fmt.Sprintf(
-				"the source offered more than %d pages, so this result is incomplete", maxSearchPages)
+			addTruncated(&outcome, fmt.Sprintf(
+				"the source offered more than %d pages, so this result is incomplete", maxSearchPages))
 			return bundles, outcome
 		}
-		// A next link is a URL the source chose, and this request carries the
-		// access token. Following it anywhere would let a source redirect that
-		// token to an origin of its own naming, and one request is enough to lose
-		// it, so bounding the page count is not a defence. Only the origin the
-		// directory resolved is followed.
-		if !sameOrigin(base, next) {
-			outcome.Truncated = "the source offered a continuation on another origin, which was not followed, " +
-				"so this result is incomplete"
+		if problem := continuationProblem(base, next, redact); problem != "" {
+			addTruncated(&outcome, problem)
 			return bundles, outcome
 		}
 		page, pageOutcome := runPageAt(ctx, client, token, next)
 		if outcomeOf(pageOutcome) != chainGranted {
-			outcome.Truncated = "a later page could not be read, so this result is incomplete: " +
-				joinNonEmpty(" ", pageOutcome.Error, http.StatusText(pageOutcome.Status))
+			addTruncated(&outcome, "a later page could not be read, so this result is incomplete: "+
+				joinNonEmpty(" ", pageOutcome.Error, http.StatusText(pageOutcome.Status)))
 			return bundles, outcome
 		}
 		bundles = append(bundles, page)
@@ -304,6 +368,66 @@ func sameOrigin(base *url.URL, candidate string) bool {
 	return parsed.Scheme == base.Scheme &&
 		strings.EqualFold(parsed.Hostname(), base.Hostname()) &&
 		effectivePort(parsed) == effectivePort(base)
+}
+
+// continuationProblem reports why a continuation link must not be requested, or
+// "" when it may be. One place for the question, because the answers are three
+// different reasons to stop and the screen has to name the right one: the reader
+// draws a different conclusion from "the source pointed somewhere else" than
+// from "the link was unusable".
+//
+// The shape is bounded rather than sanitized. A paging link is a cursor
+// (https://hl7.org/fhir/R4/http.html#paging); credentials in one have no use
+// here, and Go keeps the username when it formats a transport error, so anything
+// carried there ends up in text this application stores and renders.
+func continuationProblem(base *url.URL, next, identifier string) string {
+	const notFollowed = ", which was not followed, so this result is incomplete"
+
+	parsed, err := url.Parse(next)
+	if err != nil {
+		return "the source offered a continuation whose URL could not be read" + notFollowed
+	}
+	if parsed.User != nil {
+		return "the source offered a continuation carrying credentials in its URL" + notFollowed
+	}
+	if !sameOrigin(base, next) {
+		return "the source offered a continuation on another origin" + notFollowed
+	}
+	carries, readable := urlCarries(next, parsed, identifier)
+	if !readable {
+		return "the source offered a continuation whose URL could not be read" + notFollowed
+	}
+	if carries {
+		return "the source offered a continuation carrying the patient identifier in its URL" + notFollowed
+	}
+	return ""
+}
+
+// urlCarries reports whether a URL says the given value anywhere, in any of the
+// spellings a URL can say it in, and whether that question could be answered at
+// all. Percent-encoding a digit changes the bytes and not the meaning (RFC 3986
+// section 2.3), so a source can put an identifier in a request line in a form
+// that no substring search of the raw link finds. Path and fragment arrive
+// decoded from url.Parse; the query is decoded here.
+//
+// A query that cannot be decoded is reported as unreadable rather than as clean,
+// because this decides whether to send a request and an unreadable link is not
+// one this code can vouch for.
+func urlCarries(raw string, parsed *url.URL, value string) (carries, readable bool) {
+	if value == "" {
+		return false, true
+	}
+	if strings.Contains(raw, value) ||
+		strings.Contains(parsed.Path, value) ||
+		strings.Contains(parsed.Opaque, value) ||
+		strings.Contains(parsed.Fragment, value) {
+		return true, true
+	}
+	unescaped, err := url.QueryUnescape(parsed.RawQuery)
+	if err != nil {
+		return false, false
+	}
+	return strings.Contains(unescaped, value), true
 }
 
 // effectivePort resolves the port the way RFC 6454 section 4 compares origins:
@@ -460,32 +584,67 @@ func describeResource(resourceType string) string {
 	return "a " + resourceType
 }
 
-// firstResourceID returns the id of the first resource of the given type. The
-// type check matters: _include puts other resources in the same bundle, and the
-// general-practitioner include means a Practitioner can precede the Patient.
-func firstResourceID(bundle fhir.Bundle, resourceType string) (string, bool) {
-	for _, entry := range bundle.Entry {
-		var resource struct {
-			ResourceType string `json:"resourceType"`
-			Id           string `json:"id"`
-		}
-		if err := json.Unmarshal(entry.Resource, &resource); err != nil {
-			continue
-		}
-		if resource.ResourceType == resourceType && resource.Id != "" {
-			return resource.Id, true
+// resourceIDs returns the distinct ids of the given type across every page read,
+// and how many entries of that type it could not read one from. The type check
+// matters: _include puts other resources in the same bundle, and the
+// general-practitioner include means a Practitioner can precede the Patient, on
+// its own page or otherwise.
+//
+// Both return values are answers. One id is an identification; several is an
+// identity question this application cannot settle; none with unreadable entries
+// is a search whose result was not understood, which is not the same as a search
+// that found nothing.
+func resourceIDs(bundles []fhir.Bundle, resourceType string) (ids []string, unreadable int) {
+	seen := map[string]bool{}
+	for _, bundle := range bundles {
+		for _, entry := range bundle.Entry {
+			var resource struct {
+				ResourceType string `json:"resourceType"`
+				Id           string `json:"id"`
+			}
+			// Typed decoding can fail on an entry that is still recognizably of
+			// this type, so the type is read first and separately: an id of the
+			// wrong JSON type would otherwise make the whole entry invisible
+			// rather than reported.
+			if !entryIsOfType(entry.Resource, resourceType) {
+				continue
+			}
+			if err := json.Unmarshal(entry.Resource, &resource); err != nil || resource.Id == "" {
+				unreadable++
+				continue
+			}
+			if !seen[resource.Id] {
+				seen[resource.Id] = true
+				ids = append(ids, resource.Id)
+			}
 		}
 	}
-	return "", false
+	return ids, unreadable
+}
+
+// entryIsOfType reads only the resourceType, so an entry this chain cannot
+// otherwise decode is still attributed to the search that asked for it.
+func entryIsOfType(resource json.RawMessage, resourceType string) bool {
+	var peek struct {
+		ResourceType string `json:"resourceType"`
+	}
+	if err := json.Unmarshal(resource, &peek); err != nil {
+		return false
+	}
+	return peek.ResourceType == resourceType
 }
 
 // itemsFrom turns one search result into record items, skipping anything that is
 // not the resource the search asked for: _include brings companions along, and a
 // Medication carried in for MedicationRequest:medication is not a record line of
 // its own.
-func itemsFrom(bundle fhir.Bundle, search bgzSearch, sourceName string) []recordItem {
+// It also reports how many matches of the searched-for type it could not turn
+// into a line, so the caller can say the overview holds less than the answer
+// did. Companions are not counted: they are not record lines to begin with.
+func itemsFrom(bundle fhir.Bundle, search bgzSearch, sourceName string) ([]recordItem, int) {
 	included := includedNames(bundle)
 	var items []recordItem
+	skipped := 0
 	for _, entry := range bundle.Entry {
 		var peek struct {
 			ResourceType string `json:"resourceType"`
@@ -495,12 +654,13 @@ func itemsFrom(bundle fhir.Bundle, search bgzSearch, sourceName string) []record
 		}
 		item, ok := itemFrom(entry.Resource, search, included)
 		if !ok {
+			skipped++
 			continue
 		}
 		item.Source = sourceName
 		items = append(items, item)
 	}
-	return items
+	return items, skipped
 }
 
 // includedNames indexes the display name of every resource in the bundle by
@@ -594,6 +754,15 @@ func codeableText(concept *fhir.CodeableConcept) string {
 	for _, coding := range concept.Coding {
 		if coding.Display != nil && *coding.Display != "" {
 			return *coding.Display
+		}
+	}
+	// Both are optional (https://hl7.org/fhir/R4/datatypes-definitions.html#CodeableConcept.text),
+	// so a source may answer with the code alone. Rendering the token form keeps
+	// the resource on the record: a line a reader has to look up beats a
+	// diagnosis that silently is not there.
+	for _, coding := range concept.Coding {
+		if coding.Code != nil && *coding.Code != "" {
+			return stringOrEmpty(coding.System) + "|" + *coding.Code
 		}
 	}
 	return ""

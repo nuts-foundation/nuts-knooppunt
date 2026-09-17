@@ -173,7 +173,7 @@ no SSE: the step-event stream stays with E6.
 Nothing is retrieved before the practitioner confirms a source, and the confirmed URA is re-checked
 against a fresh localization rather than trusted from the form.
 
-Five limitations are carried deliberately:
+Six limitations are carried deliberately:
 
 - **Endpoint selection is narrower than the spec.** It honours `status` and `period` at the precision
   FHIR dateTime allows, both SHALLs, but does not match on `connectionType` and `payloadType`. The seeded Endpoints carry neither in the form
@@ -193,6 +193,14 @@ Five limitations are carried deliberately:
   data until the next read or sign-in sweeps it, because the store has no timer of its own.
 - **Paged results are followed to a bound.** A search that offers more than twenty pages stops there
   and the row says the result is incomplete, rather than rendering a partial record as a whole one.
+- **Continuation links are bounded, transport errors are not sanitized.** `continuationProblem` refuses
+  a next link that cannot be parsed, carries userinfo, points at another origin, or says the BSN in any
+  of its decoded components, so a request line this application composes cannot carry the identifier.
+  What is not covered is what a source puts in a response: Go parses a `Location` header before
+  `CheckRedirect` runs, so an unparsable redirect that echoes the BSN produces an error naming it, and
+  that text is stored and rendered. It needs a source that both echoes the identifier into a redirect
+  and makes that redirect malformed. Mapping transport errors to fixed messages would close it, at the
+  cost of the diagnostics this screen exists to show.
 
 ## Architecture
 

@@ -78,19 +78,47 @@ type recordSection struct {
 type retrievalStore struct {
 	mu      sync.Mutex
 	byOwner map[string]map[string]sourceRetrieval
+
+	// discarded counts, per patient, how often this patient's retrievals have
+	// been thrown away. A retrieval reads it before it starts and publishes only
+	// if it has not moved, which is what keeps a recycle from being undone by an
+	// answer that was already on its way back. A counter rather than a flag: two
+	// recycles during one retrieval must not look like none.
+	discarded map[string]uint64
 }
 
 func newRetrievalStore() *retrievalStore {
-	return &retrievalStore{byOwner: map[string]map[string]sourceRetrieval{}}
+	return &retrievalStore{
+		byOwner:   map[string]map[string]sourceRetrieval{},
+		discarded: map[string]uint64{},
+	}
 }
 
-func (s *retrievalStore) put(owner, patientKey string, retrieval sourceRetrieval) {
+// generationOf reports how often this patient's retrievals have been discarded.
+// Read before a retrieval starts and handed back to putIfCurrent.
+func (s *retrievalStore) generationOf(patientKey string) uint64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.discarded[patientKey]
+}
+
+// putIfCurrent stores the retrieval unless this patient's retrievals were
+// discarded while it was running, and reports whether it did. The lease does not
+// cover the network call: it admits the retrieval and is released the moment the
+// handler asks for it, so a recycle can land in between. Comparing under the
+// same lock the counter is raised under is what makes the check meaningful; a
+// check before the write would leave the window it is meant to close.
+func (s *retrievalStore) putIfCurrent(owner, patientKey string, generation uint64, retrieval sourceRetrieval) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.discarded[patientKey] != generation {
+		return false
+	}
 	if s.byOwner[owner] == nil {
 		s.byOwner[owner] = map[string]sourceRetrieval{}
 	}
 	s.byOwner[owner][patientKey] = retrieval
+	return true
 }
 
 func (s *retrievalStore) get(owner, patientKey string) (sourceRetrieval, bool) {
@@ -104,6 +132,21 @@ func (s *retrievalStore) clearOwner(owner string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.byOwner, owner)
+}
+
+// clearPatient drops what every session retrieved about one patient. Recycle
+// restores that patient's resources at both providers, so a retrieval made
+// before it is a copy of data that no longer exists; keeping it would let the
+// record screen serve the old data as the source's current answer. Across owners
+// rather than the caller's own, because recycle is a demo-wide action and the
+// session that ran the retrieval is not necessarily the one resetting it.
+func (s *retrievalStore) clearPatient(patientKey string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, byPatient := range s.byOwner {
+		delete(byPatient, patientKey)
+	}
+	s.discarded[patientKey]++
 }
 
 // localizeSources runs the two lookup legs of the chain: the NVI says which
@@ -222,6 +265,12 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 		return
 	}
 
+	// Read before the call, compared after it. Everything this retrieval is about
+	// to copy is the source's answer as of now, and a recycle in the meantime
+	// replaces it; publishing afterwards would put back exactly what the recycle
+	// removed.
+	generation := c.Retrievals.generationOf(patient.Key)
+
 	retrieval, err := c.retrieveFromSource(r.Context(), *session,
 		sourceAddress{URA: chosen.URA, Name: chosen.Name, Address: chosen.Address},
 		patient.BSN, chosen.Categories)
@@ -234,10 +283,21 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 	// leave another organization's clinical data behind an owner nothing can
 	// reach. sessionStore.storeIfLive says why the check has to happen under the
 	// session lock rather than before it.
+	current := false
 	if c.sessions != nil && !c.sessions.storeIfLive(session.ID, func() {
-		c.Retrievals.put(lockOwner(session), patient.Key, retrieval)
+		current = c.Retrievals.putIfCurrent(lockOwner(session), patient.Key, generation, retrieval)
 	}) {
 		http.Redirect(w, r, "/demo/login", http.StatusSeeOther)
+		return
+	}
+	if !current {
+		// The answer describes the source as it was before the reset, and the
+		// reset is not known to have succeeded: it clears the cache on an error
+		// too, because a failed recycle can still have replaced resources.
+		// Rendering the authorization screen over it would offer a link to data
+		// the record cannot show, so the run starts again from the record
+		// instead, saying what happened rather than what was restored.
+		http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice=retrieval-stale", http.StatusSeeOther)
 		return
 	}
 
@@ -264,10 +324,17 @@ func (c Config) recordSections(patient pool.PoolPatient, session *authSession) (
 	// fact that they are part of a larger answer, and the record would look whole
 	// while holding one page of a search that was cut short.
 	var retrieved *sourceRetrieval
-	if retrieval, ok := c.Retrievals.get(lockOwner(session), patient.Key); ok && len(retrieval.Items) > 0 {
-		items = append(items, retrieval.Items...)
-		sourceNames = append(sourceNames, retrieval.Source.Name)
+	if retrieval, ok := c.Retrievals.get(lockOwner(session), patient.Key); ok {
+		// The outcome is kept whether or not anything renderable came with it. An
+		// answer that yielded no items is the one a reader is most likely to read
+		// as "that source had nothing", so it is the one that most needs to say
+		// why. The source itself is only listed when the record actually draws on
+		// it, because that list explains where the lines below came from.
 		retrieved = &retrieval
+		if len(retrieval.Items) > 0 {
+			items = append(items, retrieval.Items...)
+			sourceNames = append(sourceNames, retrieval.Source.Name)
+		}
 	}
 
 	byName := map[string][]recordItem{}
