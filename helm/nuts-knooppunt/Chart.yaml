@@ -49,16 +49,10 @@ dependencies:
     condition: pep-plataan.enabled
     repository: oci://ghcr.io/nuts-foundation
     version: "0.1.1"
-  # TODO: replace with the official chart once nuts-admin#330 merges and
-  # publishes it (via chart-releaser to gh-pages, same pattern as
-  # nuts-node-chart below - see https://github.com/nuts-foundation/nuts-admin/pull/330).
-  # Tested working end-to-end against this repo's umbrella chart already
-  # (file:// against a local checkout) - just not published anywhere yet, so
-  # not something a fresh clone or CI could depend on.
-  - name: helm-nutsadmin
+  - name: helm-nuts-admin
     alias: nutsadmin
     condition: nutsadmin.enabled
-    repository: file://../nutsadmin
+    repository: oci://ghcr.io/nuts-foundation
     version: "0.1.0"
   - name: helm-mock-vc-issuer
     alias: mock-vc-issuer
