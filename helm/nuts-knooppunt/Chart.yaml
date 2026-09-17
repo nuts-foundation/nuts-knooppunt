@@ -29,12 +29,7 @@ dependencies:
   - name: helm-fhir
     alias: fhir
     condition: fhir.enabled
-    # TEMPORARY: pinned to the local chart, not the OCI registry, because
-    # this version fixes a configmap.yaml bug (empty .Values.config broke
-    # rendering whenever configExtra was also set) that isn't published yet.
-    # Switch back to `repository: oci://ghcr.io/nuts-foundation` once CI
-    # publishes helm-fhir:0.1.1 off this change.
-    repository: file://../fhir
+    repository: oci://ghcr.io/nuts-foundation
     version: "0.1.1"
   # Compose runs one PEP per demo organization (pep-zonnebloem, pep-plataan) -
   # same image, different config - so this chart is depended on twice under
