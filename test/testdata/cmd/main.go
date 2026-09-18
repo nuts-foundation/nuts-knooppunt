@@ -32,6 +32,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/nuts-foundation/go-didx509-toolkit/credential_issuer"
 	"github.com/nuts-foundation/go-didx509-toolkit/x509_cert"
@@ -43,6 +44,12 @@ import (
 // discoveryServiceID is the Nuts discovery service the demo organizations
 // register on. It must match a definition in config/discovery/.
 const discoveryServiceID = "bgz-test"
+
+// httpClient bounds every request this program makes. As a Kubernetes
+// post-install/post-upgrade hook, a hung request (e.g. the target service
+// not up yet) would otherwise block until Helm's own timeout, with no
+// indication of what actually stalled.
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // caFingerprintDN is the subject DN of the CA that issued every demo
 // organization's certificate (see test/e2e/pep/certs/README.md). Pinned in
@@ -107,6 +114,7 @@ func main() {
 		// organization: the seed is meant to be re-run wholesale on failure,
 		// not resumed per-organization.
 		did, err := createNutsSubject(internalAPI, org.subject)
+		isNewSubject := err == nil
 		if err != nil {
 			println("Note: could not create Nuts subject " + org.subject + " (" + err.Error() + "); looking up existing subject")
 			did, err = resolveSubjectDID(internalAPI, org.subject)
@@ -118,15 +126,22 @@ func main() {
 			println("Created Nuts subject " + org.subject + " (" + did + ")")
 		}
 
-		credential, err := issueX509Credential(certsDir, org.certKey, did)
-		if err != nil {
-			panic("unable to issue X509Credential for " + org.subject + ": " + err.Error())
-		}
+		// Only issue a credential for a subject created just now: an existing
+		// subject already got one from whichever run created it. Issuance
+		// mints a fresh JWT ID every call, so storeCredential's 409-means-
+		// already-stored check never fires on a re-issued credential - without
+		// this guard, every re-run adds another credential to the wallet.
+		if isNewSubject {
+			credential, err := issueX509Credential(certsDir, org.certKey, did)
+			if err != nil {
+				panic("unable to issue X509Credential for " + org.subject + ": " + err.Error())
+			}
 
-		if err := storeCredential(internalAPI, org.subject, credential); err != nil {
-			panic("unable to store credential for " + org.subject + ": " + err.Error())
+			if err := storeCredential(internalAPI, org.subject, credential); err != nil {
+				panic("unable to store credential for " + org.subject + ": " + err.Error())
+			}
+			println("Stored X509Credential in wallet of " + org.subject)
 		}
-		println("Stored X509Credential in wallet of " + org.subject)
 
 		if err := registerOnDiscovery(internalAPI, org.subject, org.fhirBaseURL); err != nil {
 			panic("unable to register " + org.subject + " on discovery '" + discoveryServiceID + "': " + err.Error())
@@ -261,7 +276,7 @@ func loadPrivateKey(path string) (crypto.Signer, error) {
 // administration directories into the query directory. The sync is
 // request-driven (there is no background timer), so the seed has to ask for it.
 func invokeMCSDUpdate(internalAPI string) error {
-	httpResponse, err := http.Post(internalAPI+"/mcsd/update", "application/json", nil)
+	httpResponse, err := httpClient.Post(internalAPI+"/mcsd/update", "application/json", nil)
 	if err != nil {
 		return err
 	}
@@ -277,7 +292,7 @@ func invokeMCSDUpdate(internalAPI string) error {
 
 // resolveSubjectDID returns the preferred DID of an existing Nuts subject.
 func resolveSubjectDID(internalAPI, subject string) (string, error) {
-	httpResponse, err := http.Get(internalAPI + "/nuts/internal/vdr/v2/subject/" + subject)
+	httpResponse, err := httpClient.Get(internalAPI + "/nuts/internal/vdr/v2/subject/" + subject)
 	if err != nil {
 		return "", err
 	}
@@ -295,7 +310,12 @@ func resolveSubjectDID(internalAPI, subject string) (string, error) {
 
 // createNutsSubject creates a Nuts subject, returning its preferred DID.
 func createNutsSubject(internalAPI string, subject string) (string, error) {
-	httpResponse, err := http.Post(internalAPI+"/nuts/internal/vdr/v2/subject", "application/json", strings.NewReader(`{"subject":"`+subject+`"}`))
+	body, err := json.Marshal(map[string]string{"subject": subject})
+	if err != nil {
+		return "", fmt.Errorf("marshal create-subject request: %w", err)
+	}
+
+	httpResponse, err := httpClient.Post(internalAPI+"/nuts/internal/vdr/v2/subject", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -314,13 +334,13 @@ func createNutsSubject(internalAPI string, subject string) (string, error) {
 	if len(result.Documents) == 0 {
 		return "", fmt.Errorf("subject created but no documents returned")
 	}
-	return result.Documents[0].ID, err
+	return result.Documents[0].ID, nil
 }
 
 // storeCredential loads a Verifiable Credential into a subject's wallet. The
 // credential is a JWT, and the endpoint takes it as a bare JSON string.
 func storeCredential(internalAPI, subject, credential string) error {
-	httpResponse, err := http.Post(
+	httpResponse, err := httpClient.Post(
 		internalAPI+"/nuts/internal/vcr/v2/holder/"+subject+"/vc",
 		"application/json",
 		strings.NewReader(`"`+credential+`"`),
@@ -350,7 +370,7 @@ func registerOnDiscovery(internalAPI, subject, fhirBaseURL string) error {
 		return fmt.Errorf("marshal discovery registration request: %w", err)
 	}
 
-	httpResponse, err := http.Post(
+	httpResponse, err := httpClient.Post(
 		internalAPI+"/nuts/internal/discovery/v1/"+discoveryServiceID+"/"+subject,
 		"application/json",
 		bytes.NewReader(body),

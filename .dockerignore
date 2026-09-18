@@ -22,6 +22,9 @@ sandbox/.certs/
 data/
 
 # Test UZI keys the seed image (test/testdata/Dockerfile) bakes in to issue
-# demo X509Credentials. Fake, committed deliberately (see
-# test/e2e/pep/certs/README.md) — not real key material.
-!test/e2e/pep/certs/*.key
+# demo X509Credentials, for the two organizations it actually seeds. Fake,
+# committed deliberately (see test/e2e/pep/certs/README.md) — not real key
+# material. Narrower than the whole directory - not the CA key or the
+# requester key, a different test's fixture.
+!test/e2e/pep/certs/plataan.key
+!test/e2e/pep/certs/zonnebloem.key

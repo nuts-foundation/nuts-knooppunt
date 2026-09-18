@@ -13,6 +13,7 @@ on:
     paths:
       - test/testdata/**
       - test/e2e/pep/certs/**
+      - .dockerignore
       - .github/workflows/build-seed-image.yaml
   workflow_dispatch:
 

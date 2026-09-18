@@ -27,6 +27,9 @@ RUN adduser -D -u 10000 seed
 USER seed
 
 COPY --from=builder /out/seed /usr/local/bin/seed
-COPY test/e2e/pep/certs /certs
+# Only the two organizations' key/chain pairs organizations() actually reads
+# - not the CA key, the requester key (a different test's fixture), or the
+# cert-generation scripts/README, none of which the seed program uses.
+COPY test/e2e/pep/certs/plataan.key test/e2e/pep/certs/plataan-chain.pem test/e2e/pep/certs/zonnebloem.key test/e2e/pep/certs/zonnebloem-chain.pem /certs/
 
 ENTRYPOINT ["/usr/local/bin/seed"]
