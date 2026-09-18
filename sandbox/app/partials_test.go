@@ -44,6 +44,9 @@ func TestTopbarSessionSlot(t *testing.T) {
 	}}, "_topbar.html")
 	require.Contains(t, signed, "S. el Amrani")
 	require.Contains(t, signed, "Dezi ✓")
+	require.Contains(t, signed, `class="session-details"`)
+	require.Contains(t, signed, `class="session-description"`)
+	require.Contains(t, signed, "Klinisch geriater · UZI 900001234 · Ziekenhuis De Plataan")
 }
 
 func TestTopbarSignOutControlOnlyWhenSignedIn(t *testing.T) {

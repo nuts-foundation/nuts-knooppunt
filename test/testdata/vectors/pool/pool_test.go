@@ -67,3 +67,34 @@ func TestNVIRegistrations_ZonnebloemMatchesItsData(t *testing.T) {
 		t.Errorf("client/bsn = %q/%q", regs[0].ClientID, regs[0].BSN)
 	}
 }
+
+// The BGZ policy authorizes a MedicationRequest search only when it carries
+// category=http://snomed.info/sct|16076005 (component/pdp/policies/bgz/policy.rego).
+// A seeded MedicationRequest without that category is invisible to every query
+// the policy permits, so the demo's medication section would come back empty
+// while each call in the chain reported success.
+func TestMedicationRequests_CarryTheBGZCategory(t *testing.T) {
+	for _, p := range Patients() {
+		for _, resource := range append(p.PlataanResources(), p.ZonnebloemResources()...) {
+			request, isMedication := resource.(*fhir.MedicationRequest)
+			if !isMedication {
+				continue
+			}
+			if !hasCoding(request.Category, snomedSystem, bgzMedicationCategory) {
+				t.Errorf("patient %s: MedicationRequest %s carries no %s|%s category, so the authorized BGZ query cannot find it",
+					p.Key, *request.Id, snomedSystem, bgzMedicationCategory)
+			}
+		}
+	}
+}
+
+func hasCoding(concepts []fhir.CodeableConcept, system, code string) bool {
+	for _, concept := range concepts {
+		for _, coding := range concept.Coding {
+			if coding.System != nil && *coding.System == system && coding.Code != nil && *coding.Code == code {
+				return true
+			}
+		}
+	}
+	return false
+}

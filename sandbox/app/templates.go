@@ -39,6 +39,15 @@ type page struct {
 	Patient    *patientRow
 	NVICard    *cardResult
 	MitzCard   *cardResult
+
+	// Retrieval (E4). Sources is what the index and the directory together
+	// established; LocalizeErr is set when that could not be asked at all.
+	// Retrieval is one confirmed chain, Sections the merged record it feeds.
+	Sources     []localizedSource
+	LocalizeErr string
+	Retrieval   *sourceRetrieval
+	Sections    []recordSection
+	SourceNames []string
 }
 
 // claim is one introspected value, rendered on the authorization page.
@@ -50,7 +59,7 @@ type claim struct {
 func (p page) Stylesheets() []string {
 	base := []string{"fonts", "tokens", "base", "shell"}
 	if p.Guise == "ehr" {
-		return append(base, "ehr", "viewer")
+		return append(base, "components", "ehr", "viewer")
 	}
 	return base
 }

@@ -128,6 +128,29 @@ func nviFuncs(knooppuntInternalURL *url.URL, clientID string) (
 	return lookup, register
 }
 
+// nviLocalizeFunc builds the localization query: which organizations hold data
+// about this patient. Unlike the lookup above it does not filter to one
+// custodian, because that is the question. The tenant it searches under is still
+// De Plataan's, which scopes the pseudonymization rather than the result.
+func nviLocalizeFunc(knooppuntInternalURL *url.URL) func(context.Context, string) ([]localizedRecord, error) {
+	base := knooppuntInternalURL.JoinPath("nvi")
+
+	return func(ctx context.Context, bsn string) ([]localizedRecord, error) {
+		lists, err := nvi.ListsForPatient(ctx, base, plataanURA, bsn)
+		if err != nil {
+			return nil, err
+		}
+		records := make([]localizedRecord, 0, len(lists))
+		for _, custodian := range nvi.CustodiansOf(lists) {
+			records = append(records, localizedRecord{
+				CustodianURA: custodian,
+				Categories:   nvi.CategoriesOf(nvi.FilterByCustodian(lists, custodian)),
+			})
+		}
+		return records, nil
+	}
+}
+
 var patientWriteMu sync.Map // patient key -> *sync.Mutex
 
 // lockPatientWrites serializes registration for one patient within this process.
