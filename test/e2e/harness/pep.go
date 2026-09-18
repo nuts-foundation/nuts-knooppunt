@@ -2,6 +2,7 @@ package harness
 
 import (
 	"net/url"
+	"path/filepath"
 	"testing"
 
 	"github.com/docker/docker/api/types/container"
@@ -51,7 +52,9 @@ func StartPEPContainer(t *testing.T, config PEPConfig) PEPContainerResult {
 
 	pepReq := testcontainers.ContainerRequest{
 		FromDockerfile: testcontainers.FromDockerfile{
-			Context:    "../../../pep/nginx",
+			// Resolved from this source file rather than from the working
+			// directory, so a package outside test/e2e can start a PEP too.
+			Context:    filepath.Join(repoRoot(t), "pep", "nginx"),
 			Dockerfile: "Dockerfile",
 		},
 		ExposedPorts: []string{"8080/tcp"},
