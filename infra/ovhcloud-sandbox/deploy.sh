@@ -16,7 +16,7 @@ set_file_args=()
 for f in discovery/*.json; do
   [ -e "$f" ] || continue
   id="$(basename "$f" .json)"
-  set_file_args+=(--set-file "discoveryDefinitions.${id}=${f}")
+  set_file_args+=(--set-file "discoveryDefinitions.${id//./\\.}=${f}")
 done
 for f in policy/*.json; do
   [ -e "$f" ] || continue
