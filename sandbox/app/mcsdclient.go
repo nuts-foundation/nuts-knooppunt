@@ -68,8 +68,10 @@ var fhirDataConnectionTypes = map[string]string{
 // status and period, and matches connectionType against fhirDataConnectionTypes
 // and the authorization-server coding, but it does not match payloadType at all:
 // the seeded endpoints carry none, although the profile makes it 1..*, so
-// matching on it would reject every data endpoint in this demo. Recorded in
-// sandbox/app/README.md as a known deviation rather than worked around silently.
+// matching on it would reject every data endpoint in this demo. The cost is that
+// an endpoint serving a payload this retrieval cannot use is accepted as readily
+// as one that can. Recorded in sandbox/app/README.md as a known deviation rather
+// than worked around silently.
 func mcsdResolveFunc(hapiBaseURL *url.URL) func(context.Context, string) (sourceAddress, error) {
 	directory := hapiBaseURL.JoinPath(mcsdQueryTenant, "Organization")
 	client := &http.Client{Timeout: mcsdCallTimeout}

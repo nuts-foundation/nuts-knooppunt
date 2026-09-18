@@ -180,7 +180,10 @@ Six limitations are carried deliberately:
   `http://fhir.nl/fhir/NamingSystem/endpoint-connection-type|fhir`, which is what this repo seeds and
   is in neither GF value set. Every other kind is ignored rather than treated as a FHIR base.
   `payloadType` is not matched at all: the seeded endpoints carry none, although the profile makes it
-  `1..*`, so matching on it would reject every data endpoint in this demo.
+  `1..*`, so matching on it would reject every data endpoint in this demo. That cuts both ways. It
+  recognizes fewer kinds of service than the spec, and it will also accept a FHIR endpoint serving a
+  payload this retrieval cannot use, because nothing here reads what an endpoint says it serves. Where
+  several endpoints qualify it takes the first, and an unreadable `period` bound reads as no bound.
 - **The sub-check breakdown is narration.** The authorization specification makes the decision a single
   `allow` boolean and everything else informational, and the sandbox talks to the source's PEP, which
   answers with a status and nothing else. The verdict and the per-query statuses on that screen are
