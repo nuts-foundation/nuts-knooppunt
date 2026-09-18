@@ -42,11 +42,6 @@ config:
   mitz:
     mitzbase: "http://mock-mitz:8080"
 
-# This node hosts the bgz-test discovery service itself (the demo
-# organizations register on it, via deploy.sh's discoveryDefinitions.bgz-test
-# --set-file), not just query it - hence server.ids, on top of the
-# definition file. See nutsConfig's own comment in the chart's values.yaml
-# for why these are two separate things.
 nutsConfig:
   discovery:
     server:

@@ -229,13 +229,6 @@ config:
 # knooppunt.yml above). policy.directory and discovery.definitions.directory
 # point at where this chart mounts policyDocuments/discoveryDefinitions below
 # - leave them as-is.
-#
-# discovery.server.ids does NOT follow from discoveryDefinitions below:
-# loading a definition makes this node a discovery *client*, able to
-# register on and query that service - being a *server* for it (accepting
-# other nodes' registrations) is a separate, explicit opt-in. An environment
-# that wants to host a discovery service sets its ID here as well as
-# supplying its definition file.
 nutsConfig:
   didmethods:
     - web
