@@ -75,6 +75,17 @@ spec:
         - name: config
           configMap:
             name: {{ include "nuts-knooppunt.fullname" . }}-config
+            items:
+              - key: knooppunt.yml
+                path: knooppunt.yml
+              - key: nuts.yml
+                path: nuts.yml
+              - key: discovery-bgz-test.json
+                path: discovery/bgz-test.json
+              - key: policy-accesspolicy.json
+                path: policy/accesspolicy.json
+              - key: policy-policy.json
+                path: policy/policy.json
       {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

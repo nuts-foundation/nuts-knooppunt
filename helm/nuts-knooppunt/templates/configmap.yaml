@@ -7,3 +7,15 @@ metadata:
 data:
   knooppunt.yml: |
     {{ .Values.config | toYaml | nindent 4 }}
+  # The embedded Nuts node's own config file (component/nutsnode/component.go
+  # reads it from the hardcoded path config/nuts.yml), plus the discovery
+  # service definitions and policy files it references - see
+  # files/config/README.md for why these are chart-local copies.
+  nuts.yml: |-
+    {{- .Files.Get "files/config/nuts.yml" | nindent 4 }}
+  discovery-bgz-test.json: |-
+    {{- .Files.Get "files/config/discovery/bgz-test.json" | nindent 4 }}
+  policy-accesspolicy.json: |-
+    {{- .Files.Get "files/config/policy/accesspolicy.json" | nindent 4 }}
+  policy-policy.json: |-
+    {{- .Files.Get "files/config/policy/policy.json" | nindent 4 }}
