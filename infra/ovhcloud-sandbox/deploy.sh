@@ -26,5 +26,5 @@ done
 
 helm upgrade sandbox ../../helm/nuts-knooppunt \
   -f values.yaml \
-  "${set_file_args[@]}" \
+  ${set_file_args[@]+"${set_file_args[@]}"} \
   "$@"
