@@ -75,6 +75,19 @@ spec:
         - name: config
           configMap:
             name: {{ include "nuts-knooppunt.fullname" . }}-config
+            items:
+              - key: knooppunt.yml
+                path: knooppunt.yml
+              - key: nuts.yml
+                path: nuts.yml
+              {{- range $id, $definition := .Values.discoveryDefinitions }}
+              - key: discovery-{{ $id }}.json
+                path: discovery/{{ $id }}.json
+              {{- end }}
+              {{- range $filename, $document := .Values.policyDocuments }}
+              - key: policy-{{ $filename }}
+                path: policy/{{ $filename }}
+              {{- end }}
       {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

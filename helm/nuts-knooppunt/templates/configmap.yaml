@@ -7,3 +7,15 @@ metadata:
 data:
   knooppunt.yml: |
     {{ .Values.config | toYaml | nindent 4 }}
+  # The embedded Nuts node's own config file (component/nutsnode/component.go
+  # reads it from the hardcoded path config/nuts.yml).
+  nuts.yml: |
+    {{ .Values.nutsConfig | toYaml | nindent 4 }}
+  {{- range $id, $definition := .Values.discoveryDefinitions }}
+  discovery-{{ $id }}.json: |-
+    {{- $definition | nindent 4 }}
+  {{- end }}
+  {{- range $filename, $document := .Values.policyDocuments }}
+  policy-{{ $filename }}: |-
+    {{- $document | nindent 4 }}
+  {{- end }}

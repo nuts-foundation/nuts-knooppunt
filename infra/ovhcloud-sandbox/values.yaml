@@ -42,6 +42,12 @@ config:
   mitz:
     mitzbase: "http://mock-mitz:8080"
 
+nutsConfig:
+  discovery:
+    server:
+      ids:
+        - bgz-test
+
 # The chart's own appVersion ("0.0.0") is a placeholder only ever filled in
 # correctly by the release CI (see helm/README.md); it was never published as
 # an image tag, so installing without this override 404s on image pull.
@@ -142,3 +148,4 @@ gf-sandbox:
     # per-subject oauth2 path - PR review comment
     # https://github.com/nuts-foundation/nuts-knooppunt/pull/581#discussion_r4026416792
     sandboxAuthServer: "http://knooppunt.57.129.23.152.nip.io/nuts/oauth2/plataan"
+
