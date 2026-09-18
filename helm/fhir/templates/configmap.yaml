@@ -3,7 +3,9 @@ kind: ConfigMap
 metadata:
   name: {{ include "fhir.fullname" . }}-config
 data:
+  {{- if .Values.config }}
   {{- toYaml .Values.config | nindent 2 }}
+  {{- end }}
   {{- if .Values.configExtra }}
   {{- toYaml .Values.configExtra | nindent 2 }}
   {{- end }}

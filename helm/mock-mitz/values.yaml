@@ -1,0 +1,48 @@
+# Default values for mock-mitz.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/nuts-foundation/mock-mitz
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion ("main" -
+  # this image only ever gets a "main" tag today, no semver releases yet).
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources: {}
+
+livenessProbe: {}
+readinessProbe: {}
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+volumes: []
+volumeMounts: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
