@@ -148,7 +148,11 @@ gf-sandbox:
     sandboxAuthServer: "http://knooppunt.57.129.23.152.nip.io/nuts/oauth2/plataan"
 
 seed:
-  enabled: true
+  # Left disabled: the seed Job's discovery registration step 404s here.
+  # config/nuts.yml (didmethods, discovery service defs, policy directory)
+  # isn't wired into this chart at all - only knooppunt.yml is. See
+  # nuts-knooppunt#592. Flip to true once that's fixed.
+  enabled: false
   # Same appVersion-placeholder issue as the other components above - "0.0.0"
   # was never published for ghcr.io/nuts-foundation/seed.
   image:
