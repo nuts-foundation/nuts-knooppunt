@@ -2,15 +2,9 @@
 // resources, a Nuts subject and X509Credential per demo organization, and
 // NVI localization records.
 //
-// This used to be three separate containers/steps: a data seed (create
-// subjects, write each one's DID to a shared directory), per-organization
-// credential issuance via an external go-didx509-toolkit container reading
-// those DID files, and a third step storing the resulting credentials and
-// registering discovery. The split existed because a did:web DID gets a
-// fresh UUID per subject creation, so a credential can't be minted before
-// the subject exists - across separate containers that meant a file-based
-// handoff. Consolidated into one process, it's just call order: create the
-// subject, then mint its credential, in the same function.
+// A did:web DID gets a fresh UUID per subject creation, so a credential
+// can't be minted before the subject exists - hence the call order below:
+// create the subject, then mint its credential.
 //
 // go-didx509-toolkit's credential_issuer package is imported directly
 // (credential_issuer.IssueX509Credential) instead of shelling out to its
