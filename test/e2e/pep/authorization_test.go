@@ -59,12 +59,12 @@ func Test_PEPAuthorization(t *testing.T) {
 	createTestPatient(t, pep.HAPIBaseURL, "patient-123", "900186021")
 
 	subjectName := "requester"
-	subjectDID := createSubject(t, pep.NutsAPI, subjectName)
+	subjectDID := harness.CreateSubject(t, pep.NutsAPI, subjectName)
 	t.Logf("Created subject DID: %s", subjectDID)
 
-	x509Credential := issueX509Credential(t, chainPath, keyPath, subjectDID)
-	storeCredential(t, pep.NutsAPI, subjectName, x509Credential)
-	registerOnDiscovery(t, pep.NutsAPI, subjectName)
+	x509Credential := harness.IssueX509Credential(t, chainPath, keyPath, subjectDID)
+	harness.StoreCredential(t, pep.NutsAPI, subjectName, x509Credential)
+	harness.RegisterOnDiscovery(t, pep.NutsAPI, subjectName)
 
 	pepConfig := harness.PEPConfig{
 		FHIRBackendHost:           "host.docker.internal",
@@ -272,90 +272,6 @@ func Test_PEPAuthorization(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode,
 			"empty body means no patient context; policy must deny")
 	})
-}
-
-func createSubject(t *testing.T, nutsAPI func(string) string, subject string) string {
-	t.Helper()
-	reqBody := map[string]string{"subject": subject}
-	body, _ := json.Marshal(reqBody)
-
-	resp, err := http.Post(
-		nutsAPI("/internal/vdr/v2/subject"),
-		"application/json",
-		bytes.NewReader(body),
-	)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-	require.Equal(t, http.StatusOK, resp.StatusCode, "Failed to create subject: %s", string(respBody))
-
-	var result map[string]any
-	require.NoError(t, json.Unmarshal(respBody, &result))
-
-	documents := result["documents"].([]any)
-	doc := documents[0].(map[string]any)
-	return doc["id"].(string)
-}
-
-func issueX509Credential(t *testing.T, chainPath, keyPath, subjectDID string) string {
-	t.Helper()
-
-	cmd := exec.Command("docker", "run", "--rm",
-		"-v", chainPath+":/cert-chain.pem:ro",
-		"-v", keyPath+":/cert-key.key:ro",
-		"nutsfoundation/go-didx509-toolkit:main",
-		"vc", "/cert-chain.pem", "/cert-key.key", "CN=Fake UZI Root CA", subjectDID,
-	)
-
-	output, err := cmd.Output()
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			t.Fatalf("go-didx509-toolkit failed: %s\nstderr: %s", err, string(exitErr.Stderr))
-		}
-		t.Fatalf("go-didx509-toolkit failed: %s", err)
-	}
-
-	return strings.TrimSpace(string(output))
-}
-
-func storeCredential(t *testing.T, nutsAPI func(string) string, holder, credential string) {
-	t.Helper()
-
-	body := []byte(`"` + credential + `"`)
-
-	resp, err := http.Post(
-		nutsAPI("/internal/vcr/v2/holder/"+holder+"/vc"),
-		"application/json",
-		bytes.NewReader(body),
-	)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-	require.Equal(t, http.StatusNoContent, resp.StatusCode, "Failed to store credential: %s", string(respBody))
-}
-
-func registerOnDiscovery(t *testing.T, nutsAPI func(string) string, subject string) {
-	t.Helper()
-
-	reqBody := map[string]any{
-		"registrationParameters": map[string]string{
-			"fhirBaseURL": "http://example.com/fhir",
-		},
-	}
-	body, _ := json.Marshal(reqBody)
-
-	resp, err := http.Post(
-		nutsAPI("/internal/discovery/v1/bgz-test/"+subject),
-		"application/json",
-		bytes.NewReader(body),
-	)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-	require.Equal(t, http.StatusOK, resp.StatusCode, "Failed to register on discovery: %s", string(respBody))
 }
 
 type tokenResult struct {
