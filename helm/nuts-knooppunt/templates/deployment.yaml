@@ -80,12 +80,14 @@ spec:
                 path: knooppunt.yml
               - key: nuts.yml
                 path: nuts.yml
-              - key: discovery-bgz-test.json
-                path: discovery/bgz-test.json
-              - key: policy-accesspolicy.json
-                path: policy/accesspolicy.json
-              - key: policy-policy.json
-                path: policy/policy.json
+              {{- range $id, $definition := .Values.discoveryDefinitions }}
+              - key: discovery-{{ $id }}.json
+                path: discovery/{{ $id }}.json
+              {{- end }}
+              {{- range $filename, $document := .Values.policyDocuments }}
+              - key: policy-{{ $filename }}
+                path: policy/{{ $filename }}
+              {{- end }}
       {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
