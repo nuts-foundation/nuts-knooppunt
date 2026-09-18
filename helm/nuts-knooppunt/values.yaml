@@ -407,7 +407,7 @@ gf-sandbox:
 seed:
   enabled: false
   image:
-    repository: ghcr.io/nuts-foundation/seed
+    repository: ghcr.io/nuts-foundation/knooppunt-sandbox-seed
     pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion.
     tag: ""

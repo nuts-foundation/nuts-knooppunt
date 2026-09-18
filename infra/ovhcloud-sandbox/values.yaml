@@ -150,6 +150,6 @@ gf-sandbox:
 seed:
   enabled: true
   # Same appVersion-placeholder issue as the other components above - "0.0.0"
-  # was never published for ghcr.io/nuts-foundation/seed.
+  # was never published for ghcr.io/nuts-foundation/knooppunt-sandbox-seed.
   image:
     tag: main
