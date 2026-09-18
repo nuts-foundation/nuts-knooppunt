@@ -14,10 +14,10 @@ data:
     {{- $_ := set $nutsConfig.discovery.server "ids" (keys .Values.discoveryDefinitions | sortAlpha) }}
     {{ $nutsConfig | toYaml | nindent 4 }}
   {{- range $id, $definition := .Values.discoveryDefinitions }}
-  discovery-{{ $id }}.json: |
-    {{ $definition | toJson }}
+  discovery-{{ $id }}.json: |-
+    {{- $definition | nindent 4 }}
   {{- end }}
   {{- range $filename, $document := .Values.policyDocuments }}
-  policy-{{ $filename }}: |
-    {{ $document | toJson }}
+  policy-{{ $filename }}: |-
+    {{- $document | nindent 4 }}
   {{- end }}

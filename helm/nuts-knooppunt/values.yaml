@@ -244,14 +244,16 @@ nutsConfig:
     server: {}
 
 # Discovery service definitions this node serves, keyed by service ID (each
-# becomes discovery/<id>.json). Environment- and use-case-specific - an
-# environment values file supplies these, e.g. the sandbox's bgz-test
-# service. See infra/ovhcloud-sandbox/values.yaml.
+# becomes discovery/<id>.json) - values are raw JSON text, not parsed
+# objects. Environment- and use-case-specific: there can be any number of
+# them (including zero), so an environment supplies these via
+# `--set-file discoveryDefinitions.<id>=path/to/<id>.json` for each file it
+# has, rather than inlining them here. See infra/ovhcloud-sandbox/deploy.sh.
 discoveryDefinitions: {}
 
 # Access policy documents for nutsConfig.policy.directory above, keyed by
-# filename (each becomes policy/<filename>). Environment- and use-case-
-# specific, same reasoning as discoveryDefinitions.
+# filename (each becomes policy/<filename>) - same reasoning and --set-file
+# mechanism as discoveryDefinitions.
 policyDocuments: {}
 
 # Hapi FHIR configuration
