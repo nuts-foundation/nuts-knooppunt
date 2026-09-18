@@ -228,8 +228,14 @@ config:
 # reads it from the hardcoded path config/nuts.yml, separate from
 # knooppunt.yml above). policy.directory and discovery.definitions.directory
 # point at where this chart mounts policyDocuments/discoveryDefinitions below
-# - leave them as-is. discovery.server.ids is derived automatically from
-# discoveryDefinitions' keys, so it isn't set here.
+# - leave them as-is.
+#
+# discovery.server.ids does NOT follow from discoveryDefinitions below:
+# loading a definition makes this node a discovery *client*, able to
+# register on and query that service - being a *server* for it (accepting
+# other nodes' registrations) is a separate, explicit opt-in. An environment
+# that wants to host a discovery service sets its ID here as well as
+# supplying its definition file.
 nutsConfig:
   didmethods:
     - web
@@ -241,10 +247,11 @@ nutsConfig:
   discovery:
     definitions:
       directory: "./config/discovery"
-    server: {}
+    server:
+      ids: []
 
-# Discovery service definitions this node serves, keyed by service ID (each
-# becomes discovery/<id>.json) - values are raw JSON text, not parsed
+# Discovery service definitions this node is a client of, keyed by service ID
+# (each becomes discovery/<id>.json) - values are raw JSON text, not parsed
 # objects. Environment- and use-case-specific: there can be any number of
 # them (including zero), so an environment supplies these via
 # `--set-file discoveryDefinitions.<id>=path/to/<id>.json` for each file it
