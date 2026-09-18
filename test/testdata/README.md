@@ -104,18 +104,16 @@ an mCSD update. The update matters: the sync is request-driven (`POST
 /mcsd/update`) with no background timer, so without it the seeded organizations
 never reach the query directory and the patient is findable but not addressable.
 
-### The compose credential pipeline
+### Credential issuance
 
 `did:web` DIDs embed a fresh UUID per subject creation, so an `X509Credential` —
 which binds `credentialSubject.id` to a DID — cannot be generated ahead of time
-and committed. Credentials therefore have to be issued *after* the subjects
-exist, which is why the compose seed is three ordered services:
-
-| Service | Does |
-|---|---|
-| `init` | seeds FHIR data, creates a Nuts subject per organization, writes `/shared/<org>.did` |
-| `credential-issuer-{plataan,zonnebloem}` | runs `go-didx509-toolkit` against the committed test certificates, writes `/shared/<org>.jwt` |
-| `init-credentials` | stores each credential in its subject's wallet, then registers the subject on the `bgz-test` discovery service |
+and committed. Credentials therefore have to be issued *after* the subject
+exists. The single `init` service (`test/testdata/cmd`) does this in order,
+per organization: create the Nuts subject, mint its `X509Credential` (via a
+direct import of `go-didx509-toolkit`'s `credential_issuer` package against
+the committed test certificates), store it in the subject's wallet, then
+register on the `bgz-test` discovery service.
 
 Registration must come last: it builds a Verifiable Presentation from the
 subject's wallet, which is empty until the credential is stored.
@@ -321,7 +319,7 @@ above proved nothing.
 
 | Symptom | Likely cause | Where to look |
 |---|---|---|
-| Token request fails | The seed never stored De Plataan's credential, or never registered it on discovery | `docker compose logs init-credentials` and `init`; check `/shared/*.jwt` exists |
+| Token request fails | The seed never stored De Plataan's credential, or never registered it on discovery | `docker compose logs init` |
 | `401` on an authorized read | Token was not accepted — expired or malformed credential | `docker compose logs pep-zonnebloem`; check the certs have not expired (`test/e2e/pep/certs/README.md`) |
 | `403` on an authorized read | PDP denied. Most often the PIP cannot resolve the patient's BSN, so no consent is asked and the policy fails closed | `KNPT_PDP_PIP_URL` must point at the tenant holding the patient (`sunflower-patients`); check `mitzmock` is up |
 | `502` from the PEP | Upstream tenant path wrong | `FHIR_UPSTREAM_PATH` on the PEP service |

@@ -398,6 +398,30 @@ gf-sandbox:
   env:
     knooppuntInternalUrl: "http://nuts-knooppunt:8081"
 
+# Seed Job configuration. Populates a fresh deployment with demo data (FHIR
+# test resources, a Nuts subject and X509Credential per demo organization,
+# NVI localization records) as a post-install/post-upgrade hook. Re-loads the
+# FHIR test fixtures on every run, so hand-made edits to the demo resources
+# don't survive an upgrade. For sandbox and demo deployments only - leave
+# disabled for production.
+seed:
+  enabled: false
+  image:
+    repository: ghcr.io/nuts-foundation/knooppunt-sandbox-seed
+    pullPolicy: IfNotPresent
+    # Overrides the image tag whose default is the chart appVersion.
+    tag: ""
+  # FHIR base URL the seed loads test data into. Matches
+  # config.mcsd.query.fhirbaseurl above.
+  fhirBaseURL: "http://fhir:8080/fhir"
+  # Addresses advertised on discovery and in the mCSD directory for each demo
+  # organization - the PEPs, so a resolved address leads through the
+  # authorization chain instead of bypassing it (matches docker-compose.yml's
+  # SEED_ZONNEBLOEM_ENDPOINT_ADDRESS/SEED_PLATAAN_ENDPOINT_ADDRESS). Fixed
+  # internal service names, not environment-specific.
+  zonnebloemEndpointAddress: "http://pep-zonnebloem:8080/fhir"
+  plataanEndpointAddress: "http://pep-plataan:8080/fhir"
+
 # Jaeger configuration for distributed tracing
 # Set enabled: true to deploy Jaeger for trace collection and visualization
 jaeger:
