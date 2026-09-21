@@ -579,9 +579,14 @@ subscription. The open question on the authorization breakdown source (section 1
   confusion; prefer a BSN unused in public fixtures.
 - No BGZ test dataset exists yet; ask in COT (per the issue author) and swap the synthetic set of 5.3 for it when
   available.
-- The authorization sub-check breakdown (step 5) needs a source: in production the PDP returns yes/no. Decide at the
-  start of E4 whether the demo derives the breakdown from PDP debug output or scripts it alongside the real top-level
-  decision, and keep the disclaimer either way.
+- ~~The authorization sub-check breakdown (step 5) needs a source.~~ Settled by E4: there is no source, and the screen
+  says so. The GF Authorization specification (Stichting Nuts IG, Policy Output) makes the decision the `allow` boolean
+  and states that "any other output SHALL be considered as informational and SHALL NOT be used for the decision";
+  reasons are explicitly non-normative. The sandbox talks to the source's PEP, which answers with an HTTP status and
+  nothing else, so no per-check result is observable here at all. The screen renders the real verdict and the real
+  per-query statuses, and labels the four checks above them as narration of what the chain carried. Deriving them from
+  a second, sandbox-issued PDP call was considered and rejected: it would duplicate a decision the PEP already made and
+  could disagree with the one actually enforced.
 - Scope of the mock Dezi login: which claims the stub issues (name, role, UZI, URA) and how they flow into the token/PDP
   input.
 - Mitz subscription and notification shape in the mock: no national spec is implemented in `mitzmock` yet, and the
@@ -604,6 +609,12 @@ subscription. The open question on the authorization breakdown source (section 1
   `MEDAFSPRAAK` the e2e vector uses is not a member of that value set at all.
 - Demo-lock details (section 5.7 sketches the intent): the exact lock trigger (record open versus share), the TTL, and
   whether the global-reset override needs more friction than a confirmation dialog.
-- The BGZ retrieval contract: the PDP's BGZ policy authorizes resource-level FHIR searches (and is itself marked "to be
-  formalized", including a temporary BSN workaround); pin down the exact query set, aggregation behavior and the Nuts
-  policy/presentation definition for the BGZ use case at the start of E4.
+- ~~The BGZ retrieval contract: pin down the exact query set and aggregation behavior.~~ Settled by E4, as two axes that
+  do not compete. GF Localization says *which* data a holder has, in data categories; the BGZ 2017 information standard
+  says *which query* retrieves one, and `component/pdp/policies/bgz/policy.rego` is what enforces that. So the NVI
+  result drives which queries run and the policy fixes their shape. The demo runs four: `Patient` by BSN identifier
+  (which also resolves the source's own patient id), `Condition`, `AllergyIntolerance`, and `MedicationRequest` with the
+  category and include the policy requires. The published data-categories CodeSystem carries a `fhir-resourcetype-params`
+  property that maps a category to a bare FHIR query; that is the localization mapping, not a retrieval mandate, and it
+  is deliberately not used as one. The policy itself remains "to be formalized" and is this repository's reading of the
+  Nictiz standard rather than a VWS-published artifact.

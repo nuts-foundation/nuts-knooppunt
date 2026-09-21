@@ -27,6 +27,13 @@ const (
 	// snomedSystem is used for the clinical codes. Real values are structured as
 	// BGZ sections so a real BGZ dataset can replace them (DESIGN §5.3).
 	snomedSystem = "http://snomed.info/sct"
+
+	// bgzMedicationCategory is the SNOMED code the BGZ policy requires on a
+	// MedicationRequest search (component/pdp/policies/bgz/policy.rego). It is a
+	// property of the resource rather than of who holds it, so both sides of the
+	// fixture carry it: a MedicationRequest without it cannot be retrieved by any
+	// query that policy permits.
+	bgzMedicationCategory = "16076005"
 )
 
 // Client ids identifying the registering installation, used as
@@ -218,6 +225,20 @@ func codeableConcept(system, code, display string) *fhir.CodeableConcept {
 	}
 }
 
+// medicationCategory is the BGZ category every seeded MedicationRequest carries,
+// so that the one MedicationRequest query the BGZ policy authorizes actually
+// matches the fixture. System and code only: this code is what the BGZ standard
+// uses as its medication-agreement category, and its SNOMED preferred term has
+// not been checked here, so no display is asserted.
+func medicationCategory() []fhir.CodeableConcept {
+	return []fhir.CodeableConcept{{
+		Coding: []fhir.Coding{{
+			System: to.Ptr(snomedSystem),
+			Code:   to.Ptr(bgzMedicationCategory),
+		}},
+	}}
+}
+
 func clinicalStatusActive() *fhir.CodeableConcept {
 	return codeableConcept("http://terminology.hl7.org/CodeSystem/condition-clinical", "active", "Active")
 }
@@ -244,6 +265,7 @@ func (p PoolPatient) PlataanResources() []fhir.HasId {
 		Id:                        to.Ptr(p.resourceID("plataan", "medication-apixaban")),
 		Status:                    "active",
 		Intent:                    "order",
+		Category:                  medicationCategory(),
 		MedicationCodeableConcept: codeableConcept(snomedSystem, "764141005", "Apixaban"),
 		Subject:                   subject,
 		DosageInstruction: []fhir.Dosage{
@@ -284,6 +306,7 @@ func (p PoolPatient) ZonnebloemResources() []fhir.HasId {
 		Id:                        to.Ptr(p.resourceID("zonnebloem", "medication-metoprolol")),
 		Status:                    "active",
 		Intent:                    "order",
+		Category:                  medicationCategory(),
 		MedicationCodeableConcept: codeableConcept(snomedSystem, "372826007", "Metoprolol"),
 		Subject:                   subject,
 		DosageInstruction: []fhir.Dosage{
@@ -295,6 +318,7 @@ func (p PoolPatient) ZonnebloemResources() []fhir.HasId {
 		Id:                        to.Ptr(p.resourceID("zonnebloem", "medication-metformin")),
 		Status:                    "active",
 		Intent:                    "order",
+		Category:                  medicationCategory(),
 		MedicationCodeableConcept: codeableConcept(snomedSystem, "372567009", "Metformine"),
 		Subject:                   subject,
 		DosageInstruction: []fhir.Dosage{

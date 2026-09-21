@@ -1,0 +1,11 @@
+{{define "ehr-layout"}}
+{{template "demobar" .}}
+<div class="app">
+  {{template "sidebar" .}}
+  <div class="main-col">
+    {{template "topbar" .}}
+    {{template "ehr-content" .}}
+  </div>
+  {{template "viewer" .}}
+</div>
+{{end}}

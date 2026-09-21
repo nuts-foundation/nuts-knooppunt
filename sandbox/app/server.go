@@ -19,6 +19,7 @@ var notices = map[string]string{
 	"reset-done":              "Dataset restored to the seeded fixtures.",
 	"reset-partial":           "Dataset restored, but some state could not be cleared. Check the sandbox logs.",
 	"recycle-done":            "Patient restored to the seeded state.",
+	"retrieval-stale":         "A reset was attempted for this patient while the retrieval was running, so its answer may describe data that has since been replaced and was discarded. Retrieve again.",
 	"recycle-partial":         "Patient restored, but some state could not be cleared. Check the sandbox logs.",
 	"reset-disabled":          "Reset is unavailable: it needs both KNOOPPUNT_INTERNAL_URL and HAPI_BASE_URL, and one of them is unset. Sharing only needs the first, so it can work while this does not.",
 	"signed-out":              "Signed out. The Dezi session has been cleared.",
@@ -57,6 +58,20 @@ type Config struct {
 	// render nil as unknown, not as "not subscribed".
 	mitzSubscribe  func(ctx context.Context, bsn string) error
 	mitzSubscribed func(ctx context.Context, bsn string) (bool, error)
+
+	// The three legs of retrieval (E4), injectable for the same reason the others
+	// are. nviLocalize is not nviLookup: publishing is scoped to our own
+	// custodian, finding deliberately is not.
+	nviLocalize func(ctx context.Context, bsn string) ([]localizedRecord, error)
+	mcsdResolve func(ctx context.Context, ura string) (sourceAddress, error)
+
+	// retrieveFromSource needs an access token bound to the source, so NewMux
+	// fills it in from the Nuts client it owns rather than NewConfigFromEnv.
+	retrieveFromSource func(ctx context.Context, session authSession, source sourceAddress,
+		bsn string, categories []string) (sourceRetrieval, error)
+
+	// Retrievals holds what each session pulled, for the enriched record.
+	Retrievals *retrievalStore
 
 	// mitzMockURL is the mock's base URL, handed to reset and recycle for
 	// subscription cleanup. Nil when MITZMOCK_URL is unset.
@@ -104,6 +119,7 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		clientID = pool.PlataanClientID
 	}
 	cfg.nviLookup, cfg.nviRegister = nviFuncs(knooppuntURL, clientID)
+	cfg.nviLocalize = nviLocalizeFunc(knooppuntURL)
 
 	// Through the injected getenv, not envOr, which reads os.Getenv directly and
 	// would bypass what a test injects.
@@ -128,6 +144,9 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("invalid HAPI_BASE_URL: %w", err)
 	}
+	// Addressing reads the mCSD query directory, which is a HAPI tenant rather
+	// than a Knooppunt route, so it comes up with HAPI_BASE_URL and not before.
+	cfg.mcsdResolve = mcsdResolveFunc(hapiURL)
 	// One target for both, carrying the client id the share flow publishes
 	// under; SandboxTarget says why the id has to travel with the URLs.
 	target := vectors.SandboxTarget{
@@ -166,13 +185,40 @@ func NewMux(cfg Config) *http.ServeMux {
 		cfg.Locks = NewRegistry()
 	}
 
+	if cfg.Retrievals == nil {
+		cfg.Retrievals = newRetrievalStore()
+	}
+
 	sessions := newSessionStore()
-	// A session ending releases whatever patient it held.
+	// A session ending releases whatever patient it held, and discards what it
+	// retrieved: the data came from another organization under this
+	// practitioner's authorization, so it has no business outliving the session.
 	sessions.onDrop = func(sessionID string) {
-		cfg.Locks.ReleaseOwner(lockOwner(&authSession{ID: sessionID}))
+		owner := lockOwner(&authSession{ID: sessionID})
+		cfg.Locks.ReleaseOwner(owner)
+		cfg.Retrievals.clearOwner(owner)
 	}
 	client := newDeziClient(deziConfigFromEnv())
 	nuts := newNutsClient(nutsConfigFromEnv())
+
+	// The retrieval leg needs a token bound to the source, which only the Nuts
+	// client this function owns can request, so it is assembled here rather than
+	// in NewConfigFromEnv. A test that injected its own is left alone.
+	if cfg.retrieveFromSource == nil {
+		cfg.retrieveFromSource = func(ctx context.Context, session authSession, source sourceAddress,
+			bsn string, categories []string) (sourceRetrieval, error) {
+			if source.AuthorizationServer == "" {
+				return sourceRetrieval{}, fmt.Errorf(
+					"the directory publishes no authorization server for %s, so no token can be requested",
+					source.Name)
+			}
+			token, err := nuts.requestToken(ctx, session, source.AuthorizationServer)
+			if err != nil {
+				return sourceRetrieval{}, err
+			}
+			return retrieveBGZ(ctx, source, token, bsn, categories)
+		}
+	}
 	clientStates := newClientStateStore()
 	secure := secureCookies()
 
@@ -299,7 +345,24 @@ func NewMux(cfg Config) *http.ServeMux {
 			http.Error(w, "cross-site authorization is not allowed", http.StatusForbidden)
 			return
 		}
-		token, err := nuts.requestToken(r.Context(), *session)
+		// This installation's own authorization server, read from the directory
+		// like every other address on this path. Its own URA, because a holder's
+		// Nuts subject is its URA and that is what the seeded directory publishes.
+		if cfg.mcsdResolve == nil {
+			http.Error(w, "the directory is not configured in this environment", http.StatusBadGateway)
+			return
+		}
+		own, err := cfg.mcsdResolve(r.Context(), plataanURA)
+		if err != nil {
+			http.Error(w, "resolve this organization in the directory: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		if own.AuthorizationServer == "" {
+			http.Error(w, "the directory publishes no authorization server for this organization",
+				http.StatusBadGateway)
+			return
+		}
+		token, err := nuts.requestToken(r.Context(), *session, own.AuthorizationServer)
 		if err != nil {
 			// The error already names its step; surfacing it verbatim is the
 			// point of this route.
@@ -398,6 +461,8 @@ func NewMux(cfg Config) *http.ServeMux {
 	mux.HandleFunc("POST /demo/ehr/patients/{key}/subscribe", requireSession(signedIn, cfg.handleSubscribe))
 	mux.HandleFunc("GET /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.handleShareForm))
 	mux.HandleFunc("POST /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.handleShare))
+	mux.HandleFunc("GET /demo/ehr/patients/{key}/retrieve", requireSession(signedIn, cfg.handleRetrieveForm))
+	mux.HandleFunc("POST /demo/ehr/patients/{key}/retrieve", requireSession(signedIn, cfg.handleRetrieve))
 	return mux
 }
 
@@ -492,7 +557,14 @@ func (c Config) handleRecycle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "patient "+key+" is locked (demo in progress)", http.StatusConflict)
 		return
 	}
-	if err := c.recyclePatient(r.Context(), key); err != nil {
+	err := c.recyclePatient(r.Context(), key)
+	// Unconditionally, including on an ordinary error. RecyclePatient is not
+	// transactional: it PUTs the fixtures back one at a time and verifies
+	// afterwards, so a failure can follow resources it already replaced. An error
+	// response is not a rollback, and a cached answer that may describe replaced
+	// data is not worth keeping either way.
+	c.Retrievals.clearPatient(key)
+	if err != nil {
 		// Partial is neither failed nor clean, as in handleReset: the fixtures
 		// were restored and something optional was not cleared. Reporting a
 		// failure sends the presenter away from a working patient; reporting

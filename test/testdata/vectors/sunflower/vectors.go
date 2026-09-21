@@ -60,6 +60,10 @@ func Organization() fhir.Organization {
 				Reference: to.Ptr("Endpoint/f8a9c2d1-4567-489a-bcde-123456789abc"),
 				Type:      to.Ptr("Endpoint"),
 			},
+			{
+				Reference: to.Ptr("Endpoint/3c1f0b6e-2d84-4a15-9f77-6b0e2a5c8d31"),
+				Type:      to.Ptr("Endpoint"),
+			},
 		},
 	}
 }
@@ -81,8 +85,40 @@ func Endpoints() []fhir.Endpoint {
 				Start: to.Ptr("2025-01-01T00:00:00Z"),
 			},
 		},
+		{
+			Id:      to.Ptr("3c1f0b6e-2d84-4a15-9f77-6b0e2a5c8d31"),
+			Address: AuthorizationServerAddress(),
+			Meta: &fhir.Meta{
+				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
+			},
+			Status: fhir.EndpointStatusActive,
+			ConnectionType: fhir.Coding{
+				System: to.Ptr("http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-authorization-server-cs"),
+				Code:   to.Ptr("oauth-nuts"),
+			},
+			Period: &fhir.Period{
+				Start: to.Ptr("2025-01-01T00:00:00Z"),
+			},
+		},
 	}
 }
+
+// AuthorizationServerAddress is the authorization server protecting Zonnebloem's
+// data, published so a consumer reads it from Addressing instead of building it
+// out of the URA. The Nuts subject is the URA, and the address is the one the
+// node advertises as its issuer, which it also has to be able to fetch metadata
+// from itself: inside the node's own container that is its public listener on
+// 8080.
+func AuthorizationServerAddress() string {
+	if v := os.Getenv(AuthorizationServerEnvVar); v != "" {
+		return v
+	}
+	return "http://localhost:8080/nuts/oauth2/00000020"
+}
+
+// AuthorizationServerEnvVar overrides the published authorization server, for a
+// deployment whose node is not reachable at the default.
+const AuthorizationServerEnvVar = "SEED_ZONNEBLOEM_AUTH_SERVER_ADDRESS"
 
 func Patients() []fhir.Patient {
 	return []fhir.Patient{

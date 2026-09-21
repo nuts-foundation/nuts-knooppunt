@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -52,6 +53,17 @@ func postForm(t *testing.T, client *http.Client, srv *httptest.Server, path stri
 	res, err := client.Post(srv.URL+path, "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
 	require.NoError(t, err)
 	return res
+}
+
+// postFormAndRead is postForm for the routes that render a page rather than
+// redirect.
+func postFormAndRead(t *testing.T, client *http.Client, srv *httptest.Server, path string, form url.Values) (int, string) {
+	t.Helper()
+	res := postForm(t, client, srv, path, form)
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	return res.StatusCode, string(body)
 }
 
 func TestReset_RunsWhenUnlocked(t *testing.T) {

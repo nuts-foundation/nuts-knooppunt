@@ -178,6 +178,30 @@ func (s *sessionStore) create(a authSession) string {
 	return id
 }
 
+// storeIfLive runs store while holding the session lock, and only if the session
+// still exists and has not expired. It reports whether store ran.
+//
+// This is how anything derived from a session is kept in step with it. A
+// retrieval runs for as long as the source takes, and a sign-out in the meantime
+// clears what that session held; without this the finishing request would write
+// its result back afterwards, under an owner that no longer exists, where no
+// later sweep can reach it. Checking liveness separately before storing would
+// not close that window, because the session can end between the check and the
+// write. Holding s.mu across both is what closes it.
+//
+// store must not take the session lock again, and must not call into anything
+// that does.
+func (s *sessionStore) storeIfLive(id string, store func()) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[id]
+	if !ok || s.now().After(session.ExpiresAt) {
+		return false
+	}
+	store()
+	return true
+}
+
 func (s *sessionStore) get(id string) (authSession, bool) {
 	s.mu.Lock()
 	a, ok := s.sessions[id]

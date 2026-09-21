@@ -605,14 +605,22 @@ func authorizeSandbox(t *testing.T, nodeBaseURL string) (*httptest.Server, *http
 	for _, key := range []string{
 		"SANDBOX_NUTS_SUBJECT",
 		"SANDBOX_BGZ_SCOPE",
-		"SANDBOX_AUTH_SERVER",
 		"SANDBOX_FACILITY_TYPE",
 	} {
 		t.Setenv(key, "")
 	}
 	t.Setenv("DEZI_INTERNAL_BASE_URL", fakeDezi(t).URL)
 	t.Setenv("KNOOPPUNT_INTERNAL_URL", nodeBaseURL)
-	srv := httptest.NewServer(NewMux(testConfig()))
+	// /demo/authorize reads its authorization server from the directory, so these
+	// tests supply one. The address is the one fakeNode asserts on, which is what
+	// makes the token request checkable.
+	cfg := testConfig()
+	cfg.mcsdResolve = func(_ context.Context, ura string) (sourceAddress, error) {
+		return sourceAddress{URA: ura, Name: "Ziekenhuis De Plataan",
+			Address:             "http://pep-plataan:8080/fhir",
+			AuthorizationServer: fakeNodeAuthorizationServer}, nil
+	}
+	srv := httptest.NewServer(NewMux(cfg))
 	t.Cleanup(srv.Close)
 	return srv, signInViaDezi(t, srv)
 }

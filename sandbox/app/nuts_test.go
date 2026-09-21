@@ -45,7 +45,6 @@ func TestNutsConfigDefaultsAreDevelopmentLocal(t *testing.T) {
 		"KNOOPPUNT_INTERNAL_URL",
 		"SANDBOX_NUTS_SUBJECT",
 		"SANDBOX_BGZ_SCOPE",
-		"SANDBOX_AUTH_SERVER",
 		"SANDBOX_FACILITY_TYPE",
 	} {
 		t.Setenv(key, "")
@@ -56,14 +55,11 @@ func TestNutsConfigDefaultsAreDevelopmentLocal(t *testing.T) {
 	require.Equal(t, "http://localhost:8081", cfg.InternalBaseURL)
 	require.Equal(t, "plataan", cfg.Subject)
 	require.Equal(t, "bgz", cfg.Scope)
-	// The audience check compares this string to the node's advertised issuer
-	// byte for byte, so a Docker hostname here fails even though it resolves.
-	require.Equal(t, "http://localhost:8080/nuts/oauth2/plataan", cfg.AuthorizationServer)
 	require.Equal(t, "Z3", cfg.FacilityType)
 }
 
 // The defaults test above never sets an environment variable, so it only
-// exercises envOr's fallback branch. These five names are the contract with
+// exercises envOr's fallback branch. These four names are the contract with
 // the compose file a later task writes: a renamed key, or a field reading
 // another key while keeping its own default, would leave the default value
 // in place and go uncaught there. Distinct sentinel values per key catch
@@ -72,7 +68,6 @@ func TestNutsConfigFromEnvReadsEachVariable(t *testing.T) {
 	t.Setenv("KNOOPPUNT_INTERNAL_URL", "http://internal-base-url.example")
 	t.Setenv("SANDBOX_NUTS_SUBJECT", "sentinel-subject")
 	t.Setenv("SANDBOX_BGZ_SCOPE", "sentinel-scope")
-	t.Setenv("SANDBOX_AUTH_SERVER", "http://auth-server.example")
 	t.Setenv("SANDBOX_FACILITY_TYPE", "sentinel-facility-type")
 
 	cfg := nutsConfigFromEnv()
@@ -80,7 +75,6 @@ func TestNutsConfigFromEnvReadsEachVariable(t *testing.T) {
 	require.Equal(t, "http://internal-base-url.example", cfg.InternalBaseURL)
 	require.Equal(t, "sentinel-subject", cfg.Subject)
 	require.Equal(t, "sentinel-scope", cfg.Scope)
-	require.Equal(t, "http://auth-server.example", cfg.AuthorizationServer)
 	require.Equal(t, "sentinel-facility-type", cfg.FacilityType)
 }
 
@@ -148,7 +142,7 @@ func fakeNode(t *testing.T) *httptest.Server {
 				Credentials         []map[string]any `json:"credentials"`
 			}
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-			require.Equal(t, "http://localhost:8080/nuts/oauth2/plataan", body.AuthorizationServer)
+			require.Equal(t, fakeNodeAuthorizationServer, body.AuthorizationServer)
 			require.Equal(t, "bgz", body.Scope)
 			require.Equal(t, "Bearer", body.TokenType, "omitting this yields DPoP")
 			require.Equal(t, fixtureAttestation, body.IdToken)
@@ -179,6 +173,11 @@ func fakeNode(t *testing.T) *httptest.Server {
 	return srv
 }
 
+// fakeNodeAuthorizationServer is the address these tests ask a token of, and
+// what fakeNode checks the request carries. A value of this fixture: the caller
+// supplies the address, so nothing reads it from configuration.
+const fakeNodeAuthorizationServer = "http://localhost:8080/nuts/oauth2/plataan"
+
 func testNutsClient(t *testing.T, base string) *nutsClient {
 	t.Helper()
 	// Isolate from the ambient environment, for the same reason
@@ -189,7 +188,6 @@ func testNutsClient(t *testing.T, base string) *nutsClient {
 	for _, key := range []string{
 		"SANDBOX_NUTS_SUBJECT",
 		"SANDBOX_BGZ_SCOPE",
-		"SANDBOX_AUTH_SERVER",
 		"SANDBOX_FACILITY_TYPE",
 	} {
 		t.Setenv(key, "")
@@ -205,7 +203,7 @@ func TestRequestTokenSendsTheAttestationAsIdToken(t *testing.T) {
 	session, err := sessionFromAttestation(fixtureAttestation)
 	require.NoError(t, err)
 
-	token, err := testNutsClient(t, node.URL).requestToken(context.Background(), session)
+	token, err := testNutsClient(t, node.URL).requestToken(context.Background(), session, fakeNodeAuthorizationServer)
 	require.NoError(t, err)
 	require.Equal(t, "the-token", token)
 }
@@ -230,7 +228,7 @@ func TestNutsErrorsNameTheirStep(t *testing.T) {
 	session, err := sessionFromAttestation(fixtureAttestation)
 	require.NoError(t, err)
 
-	_, err = unreachable.requestToken(context.Background(), session)
+	_, err = unreachable.requestToken(context.Background(), session, fakeNodeAuthorizationServer)
 	require.ErrorContains(t, err, "request service access token")
 
 	_, err = unreachable.introspect(context.Background(), "the-token")
@@ -247,7 +245,7 @@ func TestNutsRejectsAMalformedBaseURL(t *testing.T) {
 	cfg.InternalBaseURL = "http://\x7f-control-char"
 	client := newNutsClient(cfg)
 
-	_, err := client.requestToken(context.Background(), authSession{Attestation: fixtureAttestation})
+	_, err := client.requestToken(context.Background(), authSession{Attestation: fixtureAttestation}, fakeNodeAuthorizationServer)
 	require.ErrorContains(t, err, "request service access token")
 
 	_, err = client.introspect(context.Background(), "the-token")
@@ -291,14 +289,13 @@ func TestRequestTokenSendsTheConfiguredValues(t *testing.T) {
 	session, err := sessionFromAttestation(fixtureAttestation)
 	require.NoError(t, err)
 	client := newNutsClient(nutsConfig{
-		InternalBaseURL:     node.URL,
-		Subject:             "sentinel-subject",
-		Scope:               "sentinel-scope",
-		AuthorizationServer: "http://sentinel-auth-server.example/oauth2",
-		FacilityType:        "sentinel-facility-type",
+		InternalBaseURL: node.URL,
+		Subject:         "sentinel-subject",
+		Scope:           "sentinel-scope",
+		FacilityType:    "sentinel-facility-type",
 	})
 
-	_, err = client.requestToken(context.Background(), session)
+	_, err = client.requestToken(context.Background(), session, "http://sentinel-auth-server.example/oauth2")
 	require.NoError(t, err)
 
 	require.Equal(t, "/nuts/internal/auth/v2/sentinel-subject/request-service-access-token", recorded.path)
@@ -325,7 +322,7 @@ func TestRequestTokenRejectsANonOKStatus(t *testing.T) {
 	session, err := sessionFromAttestation(fixtureAttestation)
 	require.NoError(t, err)
 
-	_, err = testNutsClient(t, node.URL).requestToken(context.Background(), session)
+	_, err = testNutsClient(t, node.URL).requestToken(context.Background(), session, fakeNodeAuthorizationServer)
 	require.ErrorContains(t, err, "request service access token")
 	require.ErrorContains(t, err, "status 412")
 	require.ErrorContains(t, err, "no matching credentials",
@@ -340,7 +337,7 @@ func TestRequestTokenRejectsAnEmptyAccessToken(t *testing.T) {
 	session, err := sessionFromAttestation(fixtureAttestation)
 	require.NoError(t, err)
 
-	_, err = testNutsClient(t, node.URL).requestToken(context.Background(), session)
+	_, err = testNutsClient(t, node.URL).requestToken(context.Background(), session, fakeNodeAuthorizationServer)
 	require.ErrorContains(t, err, "request service access token")
 	require.ErrorContains(t, err, "no access_token")
 }
@@ -355,7 +352,7 @@ func TestRequestTokenRejectsAMalformedResponseBody(t *testing.T) {
 	session, err := sessionFromAttestation(fixtureAttestation)
 	require.NoError(t, err)
 
-	_, err = testNutsClient(t, node.URL).requestToken(context.Background(), session)
+	_, err = testNutsClient(t, node.URL).requestToken(context.Background(), session, fakeNodeAuthorizationServer)
 	require.ErrorContains(t, err, "request service access token")
 	require.ErrorContains(t, err, "decode response")
 }
@@ -382,4 +379,32 @@ func TestIntrospectRejectsAMalformedResponseBody(t *testing.T) {
 	require.ErrorContains(t, err, "introspect access token")
 	require.ErrorContains(t, err, "decode response")
 	require.Nil(t, claims)
+}
+
+// Retrieval asks the SOURCE's authorization server for a token, not De Plataan's
+// own. The token has to be bound to the organization whose data is being read,
+// and the address comes from the oauth-nuts Endpoint the directory step
+// resolved, so nothing here builds one out of a URA.
+func TestRequestTokenForSource_TargetsTheSourceAuthorizationServer(t *testing.T) {
+	node, recorded := recordingNode(t, http.StatusOK, `{"access_token":"the-token"}`)
+	session, err := sessionFromAttestation(fixtureAttestation)
+	require.NoError(t, err)
+	client := newNutsClient(nutsConfig{
+		InternalBaseURL: node.URL,
+		Subject:         "sentinel-subject",
+		Scope:           "sentinel-scope",
+		FacilityType:    "Z3",
+	})
+
+	_, err = client.requestToken(context.Background(), session,
+		"http://sentinel-source.example/nuts/oauth2/00000020")
+	require.NoError(t, err)
+
+	// Requested BY De Plataan's subject, which is the wallet holding the
+	// credential the source's presentation definition asks for.
+	require.Equal(t, "/nuts/internal/auth/v2/sentinel-subject/request-service-access-token", recorded.path)
+	// FROM the address the directory published, never the requester's own server
+	// and never one composed here.
+	require.Equal(t, "http://sentinel-source.example/nuts/oauth2/00000020", recorded.body["authorization_server"])
+	require.Equal(t, "Bearer", recorded.body["token_type"], "omitting this yields DPoP")
 }

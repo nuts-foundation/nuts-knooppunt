@@ -195,25 +195,63 @@ func ListsForCustodian(ctx context.Context, nviBaseURL *url.URL, custodianURA, b
 	return listsForCustodian(ctx, fhirclient.New(nviBaseURL, http.DefaultClient, nil), custodianURA, bsn)
 }
 
+// listsForCustodian is the same search scoped to one publisher. The NVI has no
+// custodian search parameter, so the narrowing is a filter on the result rather
+// than a narrower query.
 func listsForCustodian(ctx context.Context, client fhirclient.Client, custodianURA, bsn string) ([]fhir.List, error) {
+	lists, err := listsForPatient(ctx, client, custodianURA, bsn)
+	if err != nil {
+		return nil, err
+	}
+	return FilterByCustodian(lists, custodianURA), nil
+}
+
+// ListsForPatient returns every localization record the NVI holds for a BSN,
+// whichever organization published it. This is the localization query: the
+// question is which organizations hold data, so unlike ListsForCustodian it
+// cannot filter to one. tenantURA scopes the pseudonymization, not the result.
+func ListsForPatient(ctx context.Context, nviBaseURL *url.URL, tenantURA, bsn string) ([]fhir.List, error) {
+	return listsForPatient(ctx, fhirclient.New(nviBaseURL, http.DefaultClient, nil), tenantURA, bsn)
+}
+
+func listsForPatient(ctx context.Context, client fhirclient.Client, tenantURA, bsn string) ([]fhir.List, error) {
 	var searchSet fhir.Bundle
 	err := client.SearchWithContext(ctx, "List", url.Values{
 		"subject:identifier": {bsnNamingSystem + "|" + bsn},
 		"_count":             {searchCount},
-	}, &searchSet, tenantHeader(custodianURA))
+	}, &searchSet, tenantHeader(tenantURA))
 	if err != nil {
-		return nil, fmt.Errorf("search NVI Lists (custodian=%s): %w", custodianURA, err)
+		return nil, fmt.Errorf("search NVI Lists (tenant=%s): %w", tenantURA, err)
 	}
 
 	lists := make([]fhir.List, 0, len(searchSet.Entry))
 	for _, entry := range searchSet.Entry {
 		var list fhir.List
 		if err := json.Unmarshal(entry.Resource, &list); err != nil {
-			return nil, fmt.Errorf("parse NVI List (custodian=%s): %w", custodianURA, err)
+			return nil, fmt.Errorf("parse NVI List (tenant=%s): %w", tenantURA, err)
 		}
 		lists = append(lists, list)
 	}
-	return FilterByCustodian(lists, custodianURA), nil
+	return lists, nil
+}
+
+// CustodiansOf returns the sorted, deduplicated URAs of the organizations that
+// published a set of Lists. A List carrying no readable custodian is skipped
+// rather than reported as an organization with an empty URA, which no
+// addressing step could resolve.
+func CustodiansOf(lists []fhir.List) []string {
+	seen := map[string]bool{}
+	for _, list := range lists {
+		if custodian := custodianOf(list); custodian != "" {
+			seen[custodian] = true
+		}
+	}
+	custodians := make([]string, 0, len(seen))
+	for custodian := range seen {
+		custodians = append(custodians, custodian)
+	}
+	sort.Strings(custodians)
+	return custodians
 }
 
 // FilterByCustodian keeps the Lists whose localization extension names

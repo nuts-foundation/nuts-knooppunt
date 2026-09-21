@@ -201,6 +201,10 @@
             {
               "type": "token",
               "name": "_id"
+            },
+            {
+              "type": "token",
+              "name": "identifier"
             }
           ]
         },

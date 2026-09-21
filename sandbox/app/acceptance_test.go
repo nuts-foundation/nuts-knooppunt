@@ -176,7 +176,7 @@ func TestAcceptance_AnUnrecognizedListStillReadsAsShared(t *testing.T) {
 	require.Contains(t, body, "data category this build recognizes",
 		"a findable patient whose categories cannot be named must say so")
 	require.NotContains(t, body, "Not findable yet")
-	require.NotContains(t, body, "exists only in De Plataan's own store")
+	require.NotContains(t, body, "has published nothing about this patient")
 }
 
 // A duplicate is not a stranger. Two Lists of the same recognized category, which
@@ -265,4 +265,50 @@ func TestAcceptance_ASecondSessionCannotOpenALockedPatient(t *testing.T) {
 	defer res.Body.Close()
 
 	require.Equal(t, "/demo/ehr?notice=patient-busy", res.Header.Get("Location"))
+}
+
+// syncMCSD runs the Knooppunt's directory sync, which is what populates the
+// query directory the addressing step reads. Without it the replica is empty and
+// every holder the index names is unaddressable.
+func syncMCSD(t *testing.T, h harness.Details) {
+	t.Helper()
+	res, err := http.Post(h.KnooppuntInternalBaseURL.JoinPath("mcsd", "update").String(), "application/json", nil)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode, "the mCSD sync must succeed for the directory to hold anything")
+}
+
+// The localization and addressing legs against the real components rather than
+// fakes: the Knooppunt answers the NVI search and the synced query directory
+// answers the lookup, which is the only place the tenant scoping, the search
+// parameters, the custodian extension and the endpoint selection are exercised
+// together.
+//
+// The patient is shared first, so De Plataan has localization records of its own
+// in the index. That is what makes the exclusion meaningful: it is tested
+// against records this application really wrote, not against their absence.
+func TestAcceptance_LocalizationFindsTheSourceAndSkipsOurOwnRecords(t *testing.T) {
+	h, srv, client := acceptanceServer(t)
+	anna, ok := pool.PatientByKey("anna")
+	require.True(t, ok)
+	syncMCSD(t, h)
+
+	openPatient(t, client, srv, anna.Key)
+	sharePublished(t, client, srv, anna.Key)
+
+	cfg := Config{
+		nviLocalize: nviLocalizeFunc(h.KnooppuntInternalBaseURL),
+		mcsdResolve: mcsdResolveFunc(h.HAPIBaseURL),
+	}
+	sources, err := cfg.localizeSources(t.Context(), anna.BSN)
+
+	require.NoError(t, err)
+	require.Len(t, sources, 1,
+		"De Zonnebloem is the only other holder, and our own registration is not a source to retrieve from")
+	require.Equal(t, h.SunflowerURA, sources[0].URA)
+	require.Equal(t, anna.ZonnebloemCategories(), sources[0].Categories,
+		"the categories offered for retrieval are the ones the index reports at that holder")
+	require.Truef(t, sources[0].Addressable(),
+		"the synced directory must resolve the holder to an endpoint: %s", sources[0].AddressErr)
+	require.Contains(t, sources[0].Address, "sunflower-patients")
 }

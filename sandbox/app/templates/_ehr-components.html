@@ -1,0 +1,25 @@
+{{define "patient-facts"}}
+<dl class="facts">
+  <div class="kv"><dt>Patient</dt><dd>{{.Name}} ({{.BirthDate}})</dd></div>
+  <div class="kv"><dt>BSN</dt><dd class="mono">{{.BSN}}</dd></div>
+</dl>
+{{end}}
+
+{{define "facts"}}
+<dl class="facts">
+  {{range .}}<div class="kv"><dt>{{.Key}}</dt><dd>{{.Value}}</dd></div>{{end}}
+</dl>
+{{end}}
+
+{{define "sharecard"}}
+<div class="confirm-card {{if .Failed}}failed{{else if .Unknown}}unknown{{else if .Skipped}}skipped{{end}}">
+  <h2>
+    {{if .OK}}<span class="ok-ic">&check;</span>
+    {{else if .Failed}}<span class="fail-ic">&times;</span>
+    {{else if .Unknown}}<span class="unk-ic">?</span>
+    {{else}}<span class="skip-ic">&ndash;</span>{{end}}{{.Title}}
+  </h2>
+  <p class="cc-detail">{{.Detail}}</p>
+  {{template "facts" .Rows}}
+</div>
+{{end}}
