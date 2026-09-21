@@ -1,0 +1,99 @@
+@startuml
+
+title TTA Notifications v0.6 — In-band subscription (receiver-initiated), event notification, follow-up pull\nPOC implementation: component/subscription (docs/tta-notifications-v06/)
+
+box "Receiving organisation — Zonnebloem (Subscription Client)" #E8F4FD
+    participant xis_r as "XIS / EHR\n(vendor)"
+    participant kp_r as "Knooppunt\n[subscription client]"
+end box
+
+box "Addressing"
+    participant mcsd as "mCSD Query Directory"
+end box
+
+box "Sending organisation — Plataan (Subscription Server)" #FDF2E8
+    participant kp_s as "Knooppunt\n[subscription server]"
+    participant pdp as "Knooppunt PDP\n+ PIP (local consent records)"
+    participant fhir_s as "FHIR store\n(HAPI tenant)"
+    participant xis_s as "XIS / EHR\n(vendor)"
+end box
+
+== Step 0: agreements (design time, out of band) ==
+note over xis_r, xis_s
+Pre-agreed between the parties, configured on both knooppunten:
+- SubscriptionTopic canonical (http://fhir.nl/SubscriptionTopic/nl-task-notified-pull)
+- allowed payload modes (empty, id-only)
+- heartbeat terms
+Discoverable read-only at GET /fhir/SubscriptionTopic/{id}
+end note
+
+== Step 1: authorization basis (sender side) — the vendor supplies it, the knooppunt enforces it ==
+alt POC as built: dedicated vendor endpoint
+    xis_s -> kp_s : POST /subscription/authorizations\n{receiverUra, topic, patientBsn?, validUntil?}
+    note right of kp_s : the "who may be notified of what" record;\nlooked up by the authz hook before activation\nand before every send (POC: stub, logs, always allows)
+else alternative: reuse GF Authorization (PDP / PIP)
+    xis_s -> pdp : record local consent record on the resource\n(for COW: the Coordination Task naming Task.owner\ncan itself be the record)
+    note right of pdp : one basis governs both the notification\nand the follow-up pull; no separate registration.\nThe authz hook then asks the PDP instead of\nits own table — the hook placement stays the same
+end
+
+== Step 2: subscription intent (receiver side, in-band creation) ==
+xis_r -> kp_r : POST /subscription/intents\n{partnerUra, topic, payloadMode=id-only, heartbeatPeriodSeconds}
+activate kp_r
+opt no per-partner configuration for {partnerUra}
+    kp_r -> mcsd : Organization?identifier=ura|{partnerUra}\n-> Endpoint (payloadType = tta-subscription)
+    mcsd --> kp_r : partner FHIR base
+end
+note right of kp_r : resolution order in the POC:\nper-partner config first, mCSD only as fallback\n(compose and e2e use config)
+kp_r -> kp_r : build backport Subscription\n(criteria/_criteria topic-canonical + filter Task.owner=ura|own,\nchannel rest-hook + endpoint + _payload id-only,\nheartbeat-period ext)
+kp_r -> kp_s : POST {partnerBase}/Subscription\n[application/fhir+json]
+activate kp_s
+kp_s -> kp_s : validate: topic in agreed list, mode in allowed modes,\nrest-hook, fhir+json (400 / 422 OperationOutcome)
+kp_s -> kp_s : store status=requested
+kp_s --> kp_r : 201 Created (Subscription, status=requested)
+kp_r -> kp_r : record client subscription (status=requested)
+kp_r --> xis_r : 201 {reference, status=requested}
+deactivate kp_r
+
+== Step 3: handshake ==
+kp_s -> kp_s : authz hook (checkpoint: activation)
+kp_s -> kp_r : POST {channel.endpoint}\nBundle(history) / Parameters type=handshake-notification
+kp_r --> kp_s : 200 OK
+kp_s -> kp_s : status=active
+deactivate kp_s
+note over kp_s, kp_r : on 4xx/5xx: exponential backoff retry;\npersistent failure -> status=error
+
+== Step 4: event at the sender ==
+alt event feed via poller
+    xis_s -> fhir_s : POST /Task (COW Coordination Task,\ncode fulfill + use-case code, owner=ura|{receiver})
+    kp_s -> fhir_s : GET Task/_history?_since=...  (every pollintervalseconds)
+    fhir_s --> kp_s : history Bundle
+else event feed via ingest API
+    xis_s -> kp_s : POST /subscription/events\n{resourceType=Task, resourceId, interaction, ownerUra}
+end
+activate kp_s
+kp_s -> kp_s : match topic + filter (Task, create/update, owner URA)
+kp_s -> kp_s : authz hook + consent hook\n(checkpoint: notification-send)
+note right of kp_s : alternative: the hook evaluates\n"may {receiver} be notified of {topic} for {patient}?"\nvia the PDP against the PIP record (see step 1);\nconsent via the Mitz component. Withdrawal = record removed
+kp_s -> kp_s : allocate event-number (monotonic, per subscription)\nalias focus: Task/4711 -> Task/<HMAC alias>\nappend to event log
+kp_s -> kp_r : POST {channel.endpoint}\nBundle(history) / Parameters type=event-notification\nnotification-event { event-number, timestamp, focus=Task/<alias> }
+activate kp_r
+kp_r -> kp_r : continuity check (event-number == highest+1)\nidempotency (subscription, event-number)
+kp_r -> kp_r : normalise -> inbox entry\n{type=event, eventNumber, focus, topic}
+kp_r --> kp_s : 200 OK
+deactivate kp_r
+deactivate kp_s
+
+== Step 5: follow-up pull (receiver side) ==
+xis_r -> kp_r : GET /subscription/inbox
+kp_r --> xis_r : [{id, type=event, subscriptionReference, eventNumber, focus=Task/<alias>}]
+xis_r -> kp_s : GET {senderBase}/fhir/Task/<alias>
+activate kp_s
+kp_s -> kp_s : de-alias -> Task/4711
+kp_s -> fhir_s : GET Task/4711
+fhir_s --> kp_s : Task
+kp_s --> xis_r : Task (id rewritten to alias)
+deactivate kp_s
+note over xis_r, kp_s : the knooppunt is now in the pull/data path —\nthe price of aliasing non-compliant ids (RQ 8)
+xis_r -> kp_r : POST /subscription/inbox/{id}/ack
+
+@enduml

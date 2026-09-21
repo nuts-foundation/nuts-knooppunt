@@ -13,6 +13,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
+	"github.com/nuts-foundation/nuts-knooppunt/component/subscription"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 )
@@ -50,11 +51,12 @@ var errComponentDisabled = errors.New("component disabled")
 // like any other component, so it goes through the same RegisterHttpHandlers/Start/Stop loop
 // instead of a separate call — Start and Stop are no-ops since it owns no resources of its own.
 type strictAPIServer struct {
-	status *status.Component
-	lrza   *lrza.Component
-	pdp    *pdp.Component
-	nvi    *nvi.Component
-	mitz   *mitz.Component
+	status       *status.Component
+	lrza         *lrza.Component
+	pdp          *pdp.Component
+	nvi          *nvi.Component
+	mitz         *mitz.Component
+	subscription *subscription.Component
 }
 
 func (s *strictAPIServer) GetStatus(ctx context.Context, r api.GetStatusRequestObject) (api.GetStatusResponseObject, error) {
@@ -154,6 +156,62 @@ func (s *strictAPIServer) CreateMitzSubscription(ctx context.Context, r api.Crea
 		return nil, errComponentDisabled
 	}
 	return s.mitz.CreateMitzSubscription(ctx, r)
+}
+
+func (s *strictAPIServer) IngestSubscriptionEvent(ctx context.Context, r api.IngestSubscriptionEventRequestObject) (api.IngestSubscriptionEventResponseObject, error) {
+	if s.subscription == nil {
+		return nil, errComponentDisabled
+	}
+	return s.subscription.IngestSubscriptionEvent(ctx, r)
+}
+
+func (s *strictAPIServer) CreateOutOfBandSubscription(ctx context.Context, r api.CreateOutOfBandSubscriptionRequestObject) (api.CreateOutOfBandSubscriptionResponseObject, error) {
+	if s.subscription == nil {
+		return nil, errComponentDisabled
+	}
+	return s.subscription.CreateOutOfBandSubscription(ctx, r)
+}
+
+func (s *strictAPIServer) ListSubscriptions(ctx context.Context, r api.ListSubscriptionsRequestObject) (api.ListSubscriptionsResponseObject, error) {
+	if s.subscription == nil {
+		return nil, errComponentDisabled
+	}
+	return s.subscription.ListSubscriptions(ctx, r)
+}
+
+func (s *strictAPIServer) RegisterSubscriptionAuthorization(ctx context.Context, r api.RegisterSubscriptionAuthorizationRequestObject) (api.RegisterSubscriptionAuthorizationResponseObject, error) {
+	if s.subscription == nil {
+		return nil, errComponentDisabled
+	}
+	return s.subscription.RegisterSubscriptionAuthorization(ctx, r)
+}
+
+func (s *strictAPIServer) CreateSubscriptionIntent(ctx context.Context, r api.CreateSubscriptionIntentRequestObject) (api.CreateSubscriptionIntentResponseObject, error) {
+	if s.subscription == nil {
+		return nil, errComponentDisabled
+	}
+	return s.subscription.CreateSubscriptionIntent(ctx, r)
+}
+
+func (s *strictAPIServer) ListSubscriptionInbox(ctx context.Context, r api.ListSubscriptionInboxRequestObject) (api.ListSubscriptionInboxResponseObject, error) {
+	if s.subscription == nil {
+		return nil, errComponentDisabled
+	}
+	return s.subscription.ListSubscriptionInbox(ctx, r)
+}
+
+func (s *strictAPIServer) AckSubscriptionInboxEvent(ctx context.Context, r api.AckSubscriptionInboxEventRequestObject) (api.AckSubscriptionInboxEventResponseObject, error) {
+	if s.subscription == nil {
+		return nil, errComponentDisabled
+	}
+	return s.subscription.AckSubscriptionInboxEvent(ctx, r)
+}
+
+func (s *strictAPIServer) ListSubscriptionLog(ctx context.Context, r api.ListSubscriptionLogRequestObject) (api.ListSubscriptionLogResponseObject, error) {
+	if s.subscription == nil {
+		return nil, errComponentDisabled
+	}
+	return s.subscription.ListSubscriptionLog(ctx, r)
 }
 
 var _ api.StrictServerInterface = (*strictAPIServer)(nil)

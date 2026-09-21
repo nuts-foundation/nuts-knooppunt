@@ -12,11 +12,72 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tenants"
 	"github.com/oapi-codegen/runtime"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
+
+// Defines values for ClientSubscriptionInfoOrigin.
+const (
+	ClientSubscriptionInfoOriginInBand    ClientSubscriptionInfoOrigin = "in-band"
+	ClientSubscriptionInfoOriginOutOfBand ClientSubscriptionInfoOrigin = "out-of-band"
+)
+
+// Valid indicates whether the value is a known member of the ClientSubscriptionInfoOrigin enum.
+func (e ClientSubscriptionInfoOrigin) Valid() bool {
+	switch e {
+	case ClientSubscriptionInfoOriginInBand:
+		return true
+	case ClientSubscriptionInfoOriginOutOfBand:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ClientSubscriptionInfoStatus.
+const (
+	ClientSubscriptionInfoStatusActive    ClientSubscriptionInfoStatus = "active"
+	ClientSubscriptionInfoStatusError     ClientSubscriptionInfoStatus = "error"
+	ClientSubscriptionInfoStatusOff       ClientSubscriptionInfoStatus = "off"
+	ClientSubscriptionInfoStatusRequested ClientSubscriptionInfoStatus = "requested"
+)
+
+// Valid indicates whether the value is a known member of the ClientSubscriptionInfoStatus enum.
+func (e ClientSubscriptionInfoStatus) Valid() bool {
+	switch e {
+	case ClientSubscriptionInfoStatusActive:
+		return true
+	case ClientSubscriptionInfoStatusError:
+		return true
+	case ClientSubscriptionInfoStatusOff:
+		return true
+	case ClientSubscriptionInfoStatusRequested:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for OutOfBandSubscriptionRequestPayloadMode.
+const (
+	OutOfBandSubscriptionRequestPayloadModeEmpty  OutOfBandSubscriptionRequestPayloadMode = "empty"
+	OutOfBandSubscriptionRequestPayloadModeIdOnly OutOfBandSubscriptionRequestPayloadMode = "id-only"
+)
+
+// Valid indicates whether the value is a known member of the OutOfBandSubscriptionRequestPayloadMode enum.
+func (e OutOfBandSubscriptionRequestPayloadMode) Valid() bool {
+	switch e {
+	case OutOfBandSubscriptionRequestPayloadModeEmpty:
+		return true
+	case OutOfBandSubscriptionRequestPayloadModeIdOnly:
+		return true
+	default:
+		return false
+	}
+}
 
 // Defines values for PDPAuthzResponsePoliciesReasonsCode.
 const (
@@ -47,6 +108,149 @@ func (e PDPAuthzResponsePoliciesReasonsCode) Valid() bool {
 		return false
 	}
 }
+
+// Defines values for ServerSubscriptionInfoCreatedVia.
+const (
+	ServerSubscriptionInfoCreatedViaInBand    ServerSubscriptionInfoCreatedVia = "in-band"
+	ServerSubscriptionInfoCreatedViaOutOfBand ServerSubscriptionInfoCreatedVia = "out-of-band"
+)
+
+// Valid indicates whether the value is a known member of the ServerSubscriptionInfoCreatedVia enum.
+func (e ServerSubscriptionInfoCreatedVia) Valid() bool {
+	switch e {
+	case ServerSubscriptionInfoCreatedViaInBand:
+		return true
+	case ServerSubscriptionInfoCreatedViaOutOfBand:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ServerSubscriptionInfoStatus.
+const (
+	ServerSubscriptionInfoStatusActive    ServerSubscriptionInfoStatus = "active"
+	ServerSubscriptionInfoStatusError     ServerSubscriptionInfoStatus = "error"
+	ServerSubscriptionInfoStatusOff       ServerSubscriptionInfoStatus = "off"
+	ServerSubscriptionInfoStatusRequested ServerSubscriptionInfoStatus = "requested"
+)
+
+// Valid indicates whether the value is a known member of the ServerSubscriptionInfoStatus enum.
+func (e ServerSubscriptionInfoStatus) Valid() bool {
+	switch e {
+	case ServerSubscriptionInfoStatusActive:
+		return true
+	case ServerSubscriptionInfoStatusError:
+		return true
+	case ServerSubscriptionInfoStatusOff:
+		return true
+	case ServerSubscriptionInfoStatusRequested:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SubscriptionEventIngestInteraction.
+const (
+	Create SubscriptionEventIngestInteraction = "create"
+	Delete SubscriptionEventIngestInteraction = "delete"
+	Update SubscriptionEventIngestInteraction = "update"
+)
+
+// Valid indicates whether the value is a known member of the SubscriptionEventIngestInteraction enum.
+func (e SubscriptionEventIngestInteraction) Valid() bool {
+	switch e {
+	case Create:
+		return true
+	case Delete:
+		return true
+	case Update:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SubscriptionInboxEventType.
+const (
+	Event SubscriptionInboxEventType = "event"
+	Gap   SubscriptionInboxEventType = "gap"
+)
+
+// Valid indicates whether the value is a known member of the SubscriptionInboxEventType enum.
+func (e SubscriptionInboxEventType) Valid() bool {
+	switch e {
+	case Event:
+		return true
+	case Gap:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SubscriptionIntentRequestPayloadMode.
+const (
+	SubscriptionIntentRequestPayloadModeEmpty  SubscriptionIntentRequestPayloadMode = "empty"
+	SubscriptionIntentRequestPayloadModeIdOnly SubscriptionIntentRequestPayloadMode = "id-only"
+)
+
+// Valid indicates whether the value is a known member of the SubscriptionIntentRequestPayloadMode enum.
+func (e SubscriptionIntentRequestPayloadMode) Valid() bool {
+	switch e {
+	case SubscriptionIntentRequestPayloadModeEmpty:
+		return true
+	case SubscriptionIntentRequestPayloadModeIdOnly:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SubscriptionTransportLogEntryDirection.
+const (
+	Received SubscriptionTransportLogEntryDirection = "received"
+	Sent     SubscriptionTransportLogEntryDirection = "sent"
+)
+
+// Valid indicates whether the value is a known member of the SubscriptionTransportLogEntryDirection enum.
+func (e SubscriptionTransportLogEntryDirection) Valid() bool {
+	switch e {
+	case Received:
+		return true
+	case Sent:
+		return true
+	default:
+		return false
+	}
+}
+
+// ClientSubscriptionInfo defines model for ClientSubscriptionInfo.
+type ClientSubscriptionInfo struct {
+	HeartbeatPeriodSeconds *int   `json:"heartbeatPeriodSeconds,omitempty"`
+	HighestEventNumber     *int64 `json:"highestEventNumber,omitempty"`
+
+	// Id The Subscription's logical id at the partner.
+	Id          *string                      `json:"id,omitempty"`
+	Origin      ClientSubscriptionInfoOrigin `json:"origin"`
+	PartnerUra  *string                      `json:"partnerUra,omitempty"`
+	PayloadMode string                       `json:"payloadMode"`
+
+	// Reference Absolute reference of the Subscription at the partner.
+	Reference string `json:"reference"`
+
+	// ServerFhirBaseUrl Partner base used for `$status`/`$events` recovery.
+	ServerFhirBaseUrl *string                      `json:"serverFhirBaseUrl,omitempty"`
+	Status            ClientSubscriptionInfoStatus `json:"status"`
+	Topic             string                       `json:"topic"`
+}
+
+// ClientSubscriptionInfoOrigin defines model for ClientSubscriptionInfo.Origin.
+type ClientSubscriptionInfoOrigin string
+
+// ClientSubscriptionInfoStatus defines model for ClientSubscriptionInfo.Status.
+type ClientSubscriptionInfoStatus string
 
 // DirectoryUpdateReport Result of one LRZA sync cycle.
 //
@@ -93,6 +297,29 @@ type FHIROperationOutcome = fhir.OperationOutcome
 
 // FHIRSubscription A FHIR R4 Subscription resource. See https://hl7.org/fhir/R4/subscription.html for its schema; not redefined here.
 type FHIRSubscription = fhir.Subscription
+
+// OutOfBandSubscriptionRequest defines model for OutOfBandSubscriptionRequest.
+type OutOfBandSubscriptionRequest struct {
+	// HeartbeatPeriodSeconds Heartbeat interval to agree; omit for no heartbeat.
+	HeartbeatPeriodSeconds *int `json:"heartbeatPeriodSeconds,omitempty"`
+
+	// NotificationEndpoint Partner's notification endpoint. Normally omitted — the Knooppunt resolves it from the mCSD Query Directory (GF Adressing) or per-partner configuration.
+	NotificationEndpoint *string `json:"notificationEndpoint,omitempty"`
+
+	// PartnerUra URA of the partner organisation to notify.
+	//
+	// Example: 00000020
+	PartnerUra  string                                   `json:"partnerUra"`
+	PayloadMode *OutOfBandSubscriptionRequestPayloadMode `json:"payloadMode,omitempty"`
+
+	// Topic Canonical URL of the pre-agreed SubscriptionTopic.
+	//
+	// Example: http://fhir.nl/SubscriptionTopic/nl-task-notified-pull
+	Topic string `json:"topic"`
+}
+
+// OutOfBandSubscriptionRequestPayloadMode defines model for OutOfBandSubscriptionRequest.PayloadMode.
+type OutOfBandSubscriptionRequestPayloadMode string
 
 // PDPAuthzRequest defines model for PDPAuthzRequest.
 type PDPAuthzRequest struct {
@@ -257,6 +484,174 @@ type PDPAuthzResponse struct {
 // Example: info
 type PDPAuthzResponsePoliciesReasonsCode string
 
+// ServerSubscriptionInfo defines model for ServerSubscriptionInfo.
+type ServerSubscriptionInfo struct {
+	CreatedVia ServerSubscriptionInfoCreatedVia `json:"createdVia"`
+
+	// Endpoint The partner's notification endpoint.
+	Endpoint *string `json:"endpoint,omitempty"`
+
+	// EventCounter Highest event number allocated so far.
+	EventCounter           *int64                       `json:"eventCounter,omitempty"`
+	HeartbeatPeriodSeconds *int                         `json:"heartbeatPeriodSeconds,omitempty"`
+	Id                     string                       `json:"id"`
+	PartnerUra             *string                      `json:"partnerUra,omitempty"`
+	PayloadMode            string                       `json:"payloadMode"`
+	Status                 ServerSubscriptionInfoStatus `json:"status"`
+	Topic                  string                       `json:"topic"`
+}
+
+// ServerSubscriptionInfoCreatedVia defines model for ServerSubscriptionInfo.CreatedVia.
+type ServerSubscriptionInfoCreatedVia string
+
+// ServerSubscriptionInfoStatus defines model for ServerSubscriptionInfo.Status.
+type ServerSubscriptionInfoStatus string
+
+// SubscriptionAPIError defines model for SubscriptionAPIError.
+type SubscriptionAPIError struct {
+	// Error Human-readable explanation of the rejection.
+	//
+	// Example: topic http://example.org/other-topic is not in the agreed topic list
+	Error string `json:"error"`
+}
+
+// SubscriptionAuthorizationRequest defines model for SubscriptionAuthorizationRequest.
+type SubscriptionAuthorizationRequest struct {
+	// PatientBsn BSN scoping the authorization to one patient; omit for partner-wide.
+	PatientBsn *string `json:"patientBsn,omitempty"`
+
+	// ReceiverUra URA of the organisation authorized to be notified.
+	ReceiverUra string `json:"receiverUra"`
+
+	// Topic Canonical URL of the SubscriptionTopic the authorization covers.
+	Topic string `json:"topic"`
+
+	// ValidUntil End of the authorization's validity; omit for open-ended.
+	ValidUntil *time.Time `json:"validUntil,omitempty"`
+}
+
+// SubscriptionEventIngest defines model for SubscriptionEventIngest.
+type SubscriptionEventIngest struct {
+	// Interaction The interaction that changed the resource.
+	Interaction *SubscriptionEventIngestInteraction `json:"interaction,omitempty"`
+
+	// OwnerUra URA of the partner organisation the resource addresses (for Task: `Task.owner`). Used for topic filter matching; when omitted, every subscription on the topic matches.
+	//
+	//
+	// Example: 00000020
+	OwnerUra *string `json:"ownerUra,omitempty"`
+
+	// ResourceId The resource's logical id in the organisation's own system.
+	//
+	// Example: 4711
+	ResourceId string `json:"resourceId"`
+
+	// ResourceType FHIR resource type of the changed resource.
+	//
+	// Example: Task
+	ResourceType string `json:"resourceType"`
+
+	// SuppressDelivery Demo/test facility: allocate the event number and log the event, but do not deliver the notification — simulates a lost notification so gap detection and `$events`/`$status` recovery can be exercised.
+	SuppressDelivery *bool `json:"suppressDelivery,omitempty"`
+
+	// UseCaseCode Use-case code carried on the resource (for the COW profile: the second `Task.code` coding, e.g. an eOverdracht code).
+	//
+	//
+	// Example: 308292007
+	UseCaseCode *string `json:"useCaseCode,omitempty"`
+}
+
+// SubscriptionEventIngestInteraction The interaction that changed the resource.
+type SubscriptionEventIngestInteraction string
+
+// SubscriptionEventIngestReport defines model for SubscriptionEventIngestReport.
+type SubscriptionEventIngestReport struct {
+	// Matches One entry per subscription the event matched.
+	Matches []struct {
+		EventNumber    int64  `json:"eventNumber"`
+		SubscriptionId string `json:"subscriptionId"`
+
+		// Suppressed True when delivery was suppressed on request.
+		Suppressed *bool `json:"suppressed,omitempty"`
+	} `json:"matches"`
+}
+
+// SubscriptionInboxEvent defines model for SubscriptionInboxEvent.
+type SubscriptionInboxEvent struct {
+	Acknowledged bool   `json:"acknowledged"`
+	EventNumber  *int64 `json:"eventNumber,omitempty"`
+
+	// Focus Opaque reference to the affected resource (id-only mode only). Treat as an opaque string per the TTA identifier requirements.
+	Focus   *string `json:"focus,omitempty"`
+	GapFrom *int64  `json:"gapFrom,omitempty"`
+	GapTo   *int64  `json:"gapTo,omitempty"`
+
+	// Id Monotonic inbox sequence number (per Knooppunt).
+	Id                    int64     `json:"id"`
+	ReceivedAt            time.Time `json:"receivedAt"`
+	SubscriptionReference string    `json:"subscriptionReference"`
+	Topic                 *string   `json:"topic,omitempty"`
+
+	// Type `event`: a normalised notification event. `gap`: events `gapFrom`..`gapTo` could not be recovered (server offers no `$events` or the range is gone) — the vendor should resync.
+	Type SubscriptionInboxEventType `json:"type"`
+}
+
+// SubscriptionInboxEventType `event`: a normalised notification event. `gap`: events `gapFrom`..`gapTo` could not be recovered (server offers no `$events` or the range is gone) — the vendor should resync.
+type SubscriptionInboxEventType string
+
+// SubscriptionIntentRequest defines model for SubscriptionIntentRequest.
+type SubscriptionIntentRequest struct {
+	// HeartbeatPeriodSeconds Heartbeat interval to request; omit for no heartbeat.
+	HeartbeatPeriodSeconds *int `json:"heartbeatPeriodSeconds,omitempty"`
+
+	// PartnerFhirBaseUrl Partner's public FHIR base URL (where `/Subscription` lives). Normally omitted — resolved via the mCSD Query Directory or per-partner configuration.
+	PartnerFhirBaseUrl *string `json:"partnerFhirBaseUrl,omitempty"`
+
+	// PartnerUra URA of the partner organisation to subscribe at.
+	//
+	// Example: 00000010
+	PartnerUra  string                                `json:"partnerUra"`
+	PayloadMode *SubscriptionIntentRequestPayloadMode `json:"payloadMode,omitempty"`
+
+	// Topic Canonical URL of the pre-agreed SubscriptionTopic.
+	//
+	// Example: http://fhir.nl/SubscriptionTopic/nl-task-notified-pull
+	Topic string `json:"topic"`
+}
+
+// SubscriptionIntentRequestPayloadMode defines model for SubscriptionIntentRequest.PayloadMode.
+type SubscriptionIntentRequestPayloadMode string
+
+// SubscriptionListing defines model for SubscriptionListing.
+type SubscriptionListing struct {
+	// Client Subscriptions held at partners (Subscription Client role).
+	Client []ClientSubscriptionInfo `json:"client"`
+
+	// Server Subscriptions this Knooppunt serves (Subscription Server role).
+	Server []ServerSubscriptionInfo `json:"server"`
+}
+
+// SubscriptionTransportLogEntry defines model for SubscriptionTransportLogEntry.
+type SubscriptionTransportLogEntry struct {
+	Detail      *string                                `json:"detail,omitempty"`
+	Direction   SubscriptionTransportLogEntryDirection `json:"direction"`
+	EventNumber *int64                                 `json:"eventNumber,omitempty"`
+
+	// Outcome e.g. "201", "200", "422 rejected", "delivery failed after 5 attempts"
+	Outcome     string  `json:"outcome"`
+	PayloadMode *string `json:"payloadMode,omitempty"`
+
+	// Subscription Subscription id or reference.
+	Subscription *string   `json:"subscription,omitempty"`
+	Time         time.Time `json:"time"`
+
+	// Type subscription-create, handshake, event, heartbeat, status-query, events-query, ...
+	Type string `json:"type"`
+}
+
+// SubscriptionTransportLogEntryDirection defines model for SubscriptionTransportLogEntry.Direction.
+type SubscriptionTransportLogEntryDirection string
+
 // Count defines model for Count.
 type Count = int
 
@@ -267,6 +662,9 @@ type TenantID = tenants.ID
 //
 // Example: {"issue":[{"code":"value","diagnostics":"missing tenant request header: X-Tenant-ID","severity":"error"}],"resourceType":"OperationOutcome"}
 type OperationOutcomeError = FHIROperationOutcome
+
+// SubscriptionError defines model for SubscriptionError.
+type SubscriptionError = SubscriptionAPIError
 
 // RegisterNVIListBundleParams defines parameters for RegisterNVIListBundle.
 type RegisterNVIListBundleParams struct {
@@ -347,6 +745,15 @@ type GetNVIListParams struct {
 	XTenantID TenantID `json:"X-Tenant-ID"`
 }
 
+// ListSubscriptionInboxParams defines parameters for ListSubscriptionInbox.
+type ListSubscriptionInboxParams struct {
+	// Since Only return entries with an id greater than this.
+	Since *int64 `form:"since,omitempty" json:"since,omitempty"`
+
+	// All Include acknowledged entries too.
+	All *bool `form:"all,omitempty" json:"all,omitempty"`
+}
+
 // CreateMitzSubscriptionApplicationFhirPlusJSONRequestBody defines body for CreateMitzSubscription for application/fhir+json ContentType.
 type CreateMitzSubscriptionApplicationFhirPlusJSONRequestBody = FHIRSubscription
 
@@ -364,6 +771,18 @@ type EvaluateDefaultAuthorizationJSONRequestBody = PDPAuthzRequest
 
 // EvaluateAuthorizationJSONRequestBody defines body for EvaluateAuthorization for application/json ContentType.
 type EvaluateAuthorizationJSONRequestBody = PDPAuthzRequest
+
+// RegisterSubscriptionAuthorizationJSONRequestBody defines body for RegisterSubscriptionAuthorization for application/json ContentType.
+type RegisterSubscriptionAuthorizationJSONRequestBody = SubscriptionAuthorizationRequest
+
+// IngestSubscriptionEventJSONRequestBody defines body for IngestSubscriptionEvent for application/json ContentType.
+type IngestSubscriptionEventJSONRequestBody = SubscriptionEventIngest
+
+// CreateSubscriptionIntentJSONRequestBody defines body for CreateSubscriptionIntent for application/json ContentType.
+type CreateSubscriptionIntentJSONRequestBody = SubscriptionIntentRequest
+
+// CreateOutOfBandSubscriptionJSONRequestBody defines body for CreateOutOfBandSubscription for application/json ContentType.
+type CreateOutOfBandSubscriptionJSONRequestBody = OutOfBandSubscriptionRequest
 
 // Getter for additional properties for PDPAuthzRequest_Input_Subject. Returns the specified
 // element and whether it was found
@@ -582,6 +1001,30 @@ type ServerInterface interface {
 	// GetStatus Readiness check
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
+	// RegisterSubscriptionAuthorization Register an authorization basis (Subscription Server role)
+	// (POST /subscription/authorizations)
+	RegisterSubscriptionAuthorization(w http.ResponseWriter, r *http.Request)
+	// IngestSubscriptionEvent Ingest an application event (Subscription Server role)
+	// (POST /subscription/events)
+	IngestSubscriptionEvent(w http.ResponseWriter, r *http.Request)
+	// ListSubscriptionInbox Read the normalised event inbox (Subscription Client role)
+	// (GET /subscription/inbox)
+	ListSubscriptionInbox(w http.ResponseWriter, r *http.Request, params ListSubscriptionInboxParams)
+	// AckSubscriptionInboxEvent Acknowledge an inbox entry (Subscription Client role)
+	// (POST /subscription/inbox/{id}/ack)
+	AckSubscriptionInboxEvent(w http.ResponseWriter, r *http.Request, id int64)
+	// CreateSubscriptionIntent Subscribe at a partner (Subscription Client role)
+	// (POST /subscription/intents)
+	CreateSubscriptionIntent(w http.ResponseWriter, r *http.Request)
+	// ListSubscriptionLog Read the transport log (both roles)
+	// (GET /subscription/log)
+	ListSubscriptionLog(w http.ResponseWriter, r *http.Request)
+	// ListSubscriptions List subscriptions (both roles)
+	// (GET /subscription/subscriptions)
+	ListSubscriptions(w http.ResponseWriter, r *http.Request)
+	// CreateOutOfBandSubscription Create an out-of-band subscription towards a partner (Subscription Server role)
+	// (POST /subscription/subscriptions)
+	CreateOutOfBandSubscription(w http.ResponseWriter, r *http.Request)
 	// GetVersion Build version info
 	// (GET /version)
 	GetVersion(w http.ResponseWriter, r *http.Request)
@@ -1143,6 +1586,162 @@ func (siw *ServerInterfaceWrapper) GetStatus(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// RegisterSubscriptionAuthorization operation middleware
+func (siw *ServerInterfaceWrapper) RegisterSubscriptionAuthorization(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RegisterSubscriptionAuthorization(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// IngestSubscriptionEvent operation middleware
+func (siw *ServerInterfaceWrapper) IngestSubscriptionEvent(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.IngestSubscriptionEvent(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSubscriptionInbox operation middleware
+func (siw *ServerInterfaceWrapper) ListSubscriptionInbox(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSubscriptionInboxParams
+
+	// ------------- Optional query parameter "since" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "since", r.URL.Query(), &params.Since, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "since"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "since", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "all" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "all", r.URL.Query(), &params.All, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "all"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "all", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSubscriptionInbox(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AckSubscriptionInboxEvent operation middleware
+func (siw *ServerInterfaceWrapper) AckSubscriptionInboxEvent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id int64
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AckSubscriptionInboxEvent(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSubscriptionIntent operation middleware
+func (siw *ServerInterfaceWrapper) CreateSubscriptionIntent(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSubscriptionIntent(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSubscriptionLog operation middleware
+func (siw *ServerInterfaceWrapper) ListSubscriptionLog(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSubscriptionLog(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSubscriptions operation middleware
+func (siw *ServerInterfaceWrapper) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSubscriptions(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOutOfBandSubscription operation middleware
+func (siw *ServerInterfaceWrapper) CreateOutOfBandSubscription(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOutOfBandSubscription(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetVersion operation middleware
 func (siw *ServerInterfaceWrapper) GetVersion(w http.ResponseWriter, r *http.Request) {
 
@@ -1292,11 +1891,21 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/nvi/List/{id}", wrapper.DeleteNVIList)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/nvi/List/{id}", wrapper.GetNVIList)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/mitz/Subscription", wrapper.CreateMitzSubscription)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/subscription/events", wrapper.IngestSubscriptionEvent)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/subscription/subscriptions", wrapper.ListSubscriptions)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/subscription/subscriptions", wrapper.CreateOutOfBandSubscription)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/subscription/authorizations", wrapper.RegisterSubscriptionAuthorization)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/subscription/intents", wrapper.CreateSubscriptionIntent)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/subscription/inbox", wrapper.ListSubscriptionInbox)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/subscription/inbox/{id}/ack", wrapper.AckSubscriptionInboxEvent)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/subscription/log", wrapper.ListSubscriptionLog)
 
 	return m
 }
 
 type OperationOutcomeErrorApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+type SubscriptionErrorJSONResponse SubscriptionAPIError
 
 type TriggerLrzaSyncRequestObject struct {
 }
@@ -2030,6 +2639,272 @@ func (response GetStatus503TextResponse) VisitGetStatusResponse(w http.ResponseW
 	return err
 }
 
+type RegisterSubscriptionAuthorizationRequestObject struct {
+	Body *RegisterSubscriptionAuthorizationJSONRequestBody
+}
+
+type RegisterSubscriptionAuthorizationResponseObject interface {
+	VisitRegisterSubscriptionAuthorizationResponse(w http.ResponseWriter) error
+}
+
+type RegisterSubscriptionAuthorization201JSONResponse SubscriptionAuthorizationRequest
+
+func (response RegisterSubscriptionAuthorization201JSONResponse) VisitRegisterSubscriptionAuthorizationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterSubscriptionAuthorization400JSONResponse struct{ SubscriptionErrorJSONResponse }
+
+func (response RegisterSubscriptionAuthorization400JSONResponse) VisitRegisterSubscriptionAuthorizationResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type IngestSubscriptionEventRequestObject struct {
+	Body *IngestSubscriptionEventJSONRequestBody
+}
+
+type IngestSubscriptionEventResponseObject interface {
+	VisitIngestSubscriptionEventResponse(w http.ResponseWriter) error
+}
+
+type IngestSubscriptionEvent200JSONResponse SubscriptionEventIngestReport
+
+func (response IngestSubscriptionEvent200JSONResponse) VisitIngestSubscriptionEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type IngestSubscriptionEvent400JSONResponse struct{ SubscriptionErrorJSONResponse }
+
+func (response IngestSubscriptionEvent400JSONResponse) VisitIngestSubscriptionEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSubscriptionInboxRequestObject struct {
+	Params ListSubscriptionInboxParams
+}
+
+type ListSubscriptionInboxResponseObject interface {
+	VisitListSubscriptionInboxResponse(w http.ResponseWriter) error
+}
+
+type ListSubscriptionInbox200JSONResponse []SubscriptionInboxEvent
+
+func (response ListSubscriptionInbox200JSONResponse) VisitListSubscriptionInboxResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AckSubscriptionInboxEventRequestObject struct {
+	Id int64 `json:"id"`
+}
+
+type AckSubscriptionInboxEventResponseObject interface {
+	VisitAckSubscriptionInboxEventResponse(w http.ResponseWriter) error
+}
+
+type AckSubscriptionInboxEvent204Response struct {
+}
+
+func (response AckSubscriptionInboxEvent204Response) VisitAckSubscriptionInboxEventResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type AckSubscriptionInboxEvent404JSONResponse struct{ SubscriptionErrorJSONResponse }
+
+func (response AckSubscriptionInboxEvent404JSONResponse) VisitAckSubscriptionInboxEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSubscriptionIntentRequestObject struct {
+	Body *CreateSubscriptionIntentJSONRequestBody
+}
+
+type CreateSubscriptionIntentResponseObject interface {
+	VisitCreateSubscriptionIntentResponse(w http.ResponseWriter) error
+}
+
+type CreateSubscriptionIntent201JSONResponse ClientSubscriptionInfo
+
+func (response CreateSubscriptionIntent201JSONResponse) VisitCreateSubscriptionIntentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSubscriptionIntent400JSONResponse struct{ SubscriptionErrorJSONResponse }
+
+func (response CreateSubscriptionIntent400JSONResponse) VisitCreateSubscriptionIntentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSubscriptionIntent422JSONResponse SubscriptionAPIError
+
+func (response CreateSubscriptionIntent422JSONResponse) VisitCreateSubscriptionIntentResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSubscriptionLogRequestObject struct {
+}
+
+type ListSubscriptionLogResponseObject interface {
+	VisitListSubscriptionLogResponse(w http.ResponseWriter) error
+}
+
+type ListSubscriptionLog200JSONResponse []SubscriptionTransportLogEntry
+
+func (response ListSubscriptionLog200JSONResponse) VisitListSubscriptionLogResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSubscriptionsRequestObject struct {
+}
+
+type ListSubscriptionsResponseObject interface {
+	VisitListSubscriptionsResponse(w http.ResponseWriter) error
+}
+
+type ListSubscriptions200JSONResponse SubscriptionListing
+
+func (response ListSubscriptions200JSONResponse) VisitListSubscriptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateOutOfBandSubscriptionRequestObject struct {
+	Body *CreateOutOfBandSubscriptionJSONRequestBody
+}
+
+type CreateOutOfBandSubscriptionResponseObject interface {
+	VisitCreateOutOfBandSubscriptionResponse(w http.ResponseWriter) error
+}
+
+type CreateOutOfBandSubscription201JSONResponse ServerSubscriptionInfo
+
+func (response CreateOutOfBandSubscription201JSONResponse) VisitCreateOutOfBandSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateOutOfBandSubscription400JSONResponse struct{ SubscriptionErrorJSONResponse }
+
+func (response CreateOutOfBandSubscription400JSONResponse) VisitCreateOutOfBandSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateOutOfBandSubscription422JSONResponse SubscriptionAPIError
+
+func (response CreateOutOfBandSubscription422JSONResponse) VisitCreateOutOfBandSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetVersionRequestObject struct {
 }
 
@@ -2092,6 +2967,30 @@ type StrictServerInterface interface {
 	// GetStatus Readiness check
 	// (GET /status)
 	GetStatus(ctx context.Context, request GetStatusRequestObject) (GetStatusResponseObject, error)
+	// RegisterSubscriptionAuthorization Register an authorization basis (Subscription Server role)
+	// (POST /subscription/authorizations)
+	RegisterSubscriptionAuthorization(ctx context.Context, request RegisterSubscriptionAuthorizationRequestObject) (RegisterSubscriptionAuthorizationResponseObject, error)
+	// IngestSubscriptionEvent Ingest an application event (Subscription Server role)
+	// (POST /subscription/events)
+	IngestSubscriptionEvent(ctx context.Context, request IngestSubscriptionEventRequestObject) (IngestSubscriptionEventResponseObject, error)
+	// ListSubscriptionInbox Read the normalised event inbox (Subscription Client role)
+	// (GET /subscription/inbox)
+	ListSubscriptionInbox(ctx context.Context, request ListSubscriptionInboxRequestObject) (ListSubscriptionInboxResponseObject, error)
+	// AckSubscriptionInboxEvent Acknowledge an inbox entry (Subscription Client role)
+	// (POST /subscription/inbox/{id}/ack)
+	AckSubscriptionInboxEvent(ctx context.Context, request AckSubscriptionInboxEventRequestObject) (AckSubscriptionInboxEventResponseObject, error)
+	// CreateSubscriptionIntent Subscribe at a partner (Subscription Client role)
+	// (POST /subscription/intents)
+	CreateSubscriptionIntent(ctx context.Context, request CreateSubscriptionIntentRequestObject) (CreateSubscriptionIntentResponseObject, error)
+	// ListSubscriptionLog Read the transport log (both roles)
+	// (GET /subscription/log)
+	ListSubscriptionLog(ctx context.Context, request ListSubscriptionLogRequestObject) (ListSubscriptionLogResponseObject, error)
+	// ListSubscriptions List subscriptions (both roles)
+	// (GET /subscription/subscriptions)
+	ListSubscriptions(ctx context.Context, request ListSubscriptionsRequestObject) (ListSubscriptionsResponseObject, error)
+	// CreateOutOfBandSubscription Create an out-of-band subscription towards a partner (Subscription Server role)
+	// (POST /subscription/subscriptions)
+	CreateOutOfBandSubscription(ctx context.Context, request CreateOutOfBandSubscriptionRequestObject) (CreateOutOfBandSubscriptionResponseObject, error)
 	// GetVersion Build version info
 	// (GET /version)
 	GetVersion(ctx context.Context, request GetVersionRequestObject) (GetVersionResponseObject, error)
@@ -2529,6 +3428,230 @@ func (sh *strictHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetStatusResponseObject); ok {
 		if err := validResponse.VisitGetStatusResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RegisterSubscriptionAuthorization operation middleware
+func (sh *strictHandler) RegisterSubscriptionAuthorization(w http.ResponseWriter, r *http.Request) {
+	var request RegisterSubscriptionAuthorizationRequestObject
+
+	var body RegisterSubscriptionAuthorizationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RegisterSubscriptionAuthorization(ctx, request.(RegisterSubscriptionAuthorizationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RegisterSubscriptionAuthorization")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RegisterSubscriptionAuthorizationResponseObject); ok {
+		if err := validResponse.VisitRegisterSubscriptionAuthorizationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// IngestSubscriptionEvent operation middleware
+func (sh *strictHandler) IngestSubscriptionEvent(w http.ResponseWriter, r *http.Request) {
+	var request IngestSubscriptionEventRequestObject
+
+	var body IngestSubscriptionEventJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.IngestSubscriptionEvent(ctx, request.(IngestSubscriptionEventRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "IngestSubscriptionEvent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(IngestSubscriptionEventResponseObject); ok {
+		if err := validResponse.VisitIngestSubscriptionEventResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSubscriptionInbox operation middleware
+func (sh *strictHandler) ListSubscriptionInbox(w http.ResponseWriter, r *http.Request, params ListSubscriptionInboxParams) {
+	var request ListSubscriptionInboxRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSubscriptionInbox(ctx, request.(ListSubscriptionInboxRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSubscriptionInbox")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSubscriptionInboxResponseObject); ok {
+		if err := validResponse.VisitListSubscriptionInboxResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AckSubscriptionInboxEvent operation middleware
+func (sh *strictHandler) AckSubscriptionInboxEvent(w http.ResponseWriter, r *http.Request, id int64) {
+	var request AckSubscriptionInboxEventRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AckSubscriptionInboxEvent(ctx, request.(AckSubscriptionInboxEventRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AckSubscriptionInboxEvent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AckSubscriptionInboxEventResponseObject); ok {
+		if err := validResponse.VisitAckSubscriptionInboxEventResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateSubscriptionIntent operation middleware
+func (sh *strictHandler) CreateSubscriptionIntent(w http.ResponseWriter, r *http.Request) {
+	var request CreateSubscriptionIntentRequestObject
+
+	var body CreateSubscriptionIntentJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateSubscriptionIntent(ctx, request.(CreateSubscriptionIntentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateSubscriptionIntent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateSubscriptionIntentResponseObject); ok {
+		if err := validResponse.VisitCreateSubscriptionIntentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSubscriptionLog operation middleware
+func (sh *strictHandler) ListSubscriptionLog(w http.ResponseWriter, r *http.Request) {
+	var request ListSubscriptionLogRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSubscriptionLog(ctx, request.(ListSubscriptionLogRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSubscriptionLog")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSubscriptionLogResponseObject); ok {
+		if err := validResponse.VisitListSubscriptionLogResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSubscriptions operation middleware
+func (sh *strictHandler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
+	var request ListSubscriptionsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSubscriptions(ctx, request.(ListSubscriptionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSubscriptions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSubscriptionsResponseObject); ok {
+		if err := validResponse.VisitListSubscriptionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateOutOfBandSubscription operation middleware
+func (sh *strictHandler) CreateOutOfBandSubscription(w http.ResponseWriter, r *http.Request) {
+	var request CreateOutOfBandSubscriptionRequestObject
+
+	var body CreateOutOfBandSubscriptionJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateOutOfBandSubscription(ctx, request.(CreateOutOfBandSubscriptionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateOutOfBandSubscription")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateOutOfBandSubscriptionResponseObject); ok {
+		if err := validResponse.VisitCreateOutOfBandSubscriptionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

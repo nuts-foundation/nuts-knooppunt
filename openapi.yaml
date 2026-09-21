@@ -57,6 +57,18 @@ tags:
       Function (PDP) queries to check patient consent. Subscribe here to
       be notified when a patient's consent for a given care provider
       changes.
+  - name: subscription
+    description: >
+      TTA Notifications v0.6 POC (docs/tta-notifications-v06/): the
+      vendor-facing contract of the notification function. The Knooppunt
+      owns the entire cross-organisation protocol (subscription lifecycle,
+      handshake, event numbering, heartbeats, recovery, retries,
+      payload-mode enforcement, transport logging) on its public
+      interface; a vendor/XIS integrates against these internal endpoints
+      only — event ingest, authorization-basis registration, subscription
+      intents, and a normalised-event inbox with acknowledgement — without
+      touching the FHIR Subscriptions Backport wire format. See
+      docs/tta-notifications-v06/09-knooppunt-vendor-split.md.
 paths:
   /status:
     get:
@@ -758,6 +770,215 @@ paths:
         "500":
           $ref: "#/components/responses/OperationOutcomeError"
 
+  /subscription/events:
+    post:
+      tags: [subscription]
+      summary: Ingest an application event (Subscription Server role)
+      operationId: ingestSubscriptionEvent
+      description: >
+        The vendor's event feed: report that a resource changed in the
+        organisation's system. The Knooppunt matches the event against the
+        active subscriptions' topics and filters, allocates event numbers,
+        and delivers notifications per each subscription's payload mode —
+        the vendor never builds a notification Bundle. Alternative to this
+        endpoint: configure `subscription.server.fhirbaseurl` +
+        `pollintervalseconds` and the Knooppunt polls the FHIR store's
+        `Task/_history` itself.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscriptionEventIngest"
+      responses:
+        "200":
+          description: Matching report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionEventIngestReport"
+        "400":
+          $ref: "#/components/responses/SubscriptionError"
+
+  /subscription/subscriptions:
+    post:
+      tags: [subscription]
+      summary: Create an out-of-band subscription towards a partner (Subscription Server role)
+      operationId: createOutOfBandSubscription
+      description: >
+        Source-initiated (out-of-band) subscription creation: the
+        organisation's own system asks its Knooppunt to set up a
+        subscription that will notify a partner organisation. The partner's
+        notification endpoint is resolved via the mCSD Query Directory (GF
+        Adressing) or, as a fallback, per-partner configuration; the
+        Knooppunt then constructs the Subscription and performs the
+        handshake.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OutOfBandSubscriptionRequest"
+      responses:
+        "201":
+          description: Subscription created; handshake in progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerSubscriptionInfo"
+        "400":
+          $ref: "#/components/responses/SubscriptionError"
+        "422":
+          $ref: "#/components/responses/SubscriptionError"
+    get:
+      tags: [subscription]
+      summary: List subscriptions (both roles)
+      operationId: listSubscriptions
+      description: >
+        State inspection: subscriptions this Knooppunt serves as a
+        Subscription Server, and subscriptions it holds at partners as a
+        Subscription Client.
+      responses:
+        "200":
+          description: Subscriptions per role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionListing"
+
+  /subscription/authorizations:
+    post:
+      tags: [subscription]
+      summary: Register an authorization basis (Subscription Server role)
+      operationId: registerSubscriptionAuthorization
+      description: >
+        The vendor registers who may be notified of what when the care
+        relationship/order is created; the Knooppunt's authorization hook
+        verifies against it before activating a subscription and before
+        each notification send. POC: recorded and logged only — real GF
+        Authorization/Mitz evaluation is out of scope, the hook placement
+        is the research answer (research question 5).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscriptionAuthorizationRequest"
+      responses:
+        "201":
+          description: Authorization basis registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionAuthorizationRequest"
+        "400":
+          $ref: "#/components/responses/SubscriptionError"
+
+  /subscription/intents:
+    post:
+      tags: [subscription]
+      summary: Subscribe at a partner (Subscription Client role)
+      operationId: createSubscriptionIntent
+      description: >
+        Receiver-initiated (in-band) subscription: one internal call
+        replaces the whole in-band creation transaction. The Knooppunt
+        resolves the partner's Subscription endpoint, builds the backport
+        Subscription resource with its own notification endpoint, POSTs
+        it, and tracks the handshake and subsequent event stream.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscriptionIntentRequest"
+      responses:
+        "201":
+          description: Subscription requested at the partner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientSubscriptionInfo"
+        "400":
+          $ref: "#/components/responses/SubscriptionError"
+        "422":
+          $ref: "#/components/responses/SubscriptionError"
+
+  /subscription/inbox:
+    get:
+      tags: [subscription]
+      summary: Read the normalised event inbox (Subscription Client role)
+      operationId: listSubscriptionInbox
+      description: >
+        Pull-based delivery of normalised events. Whatever the remote
+        server chose (in-band/out-of-band, heartbeat or not, $events or
+        not, empty or id-only), entries here have one uniform shape:
+        subscription, event number, focus (if any), in order,
+        deduplicated. Unrecoverable gaps surface as entries of type `gap`
+        so the vendor knows a resync is needed.
+      parameters:
+        - name: since
+          in: query
+          required: false
+          description: Only return entries with an id greater than this.
+          schema:
+            type: integer
+            format: int64
+        - name: all
+          in: query
+          required: false
+          description: Include acknowledged entries too.
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Inbox entries, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubscriptionInboxEvent"
+
+  /subscription/inbox/{id}/ack:
+    post:
+      tags: [subscription]
+      summary: Acknowledge an inbox entry (Subscription Client role)
+      operationId: ackSubscriptionInboxEvent
+      description: >
+        At-least-once semantics on the internal hop: an entry stays in the
+        default inbox view until acknowledged.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "204":
+          description: Acknowledged
+        "404":
+          $ref: "#/components/responses/SubscriptionError"
+
+  /subscription/log:
+    get:
+      tags: [subscription]
+      summary: Read the transport log (both roles)
+      operationId: listSubscriptionLog
+      description: >
+        All sent and received subscriptions and notifications (handshake,
+        heartbeat, event, recovery operations) with outcome — the spec's
+        logging obligation, queryable for demo and audit.
+      responses:
+        "200":
+          description: Transport log entries, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubscriptionTransportLogEntry"
+
 components:
   parameters:
     TenantID:
@@ -793,6 +1014,16 @@ components:
         application/fhir+json:
           schema:
             $ref: "#/components/schemas/FHIROperationOutcome"
+
+    SubscriptionError:
+      description: >
+        Request rejected. Deliberately plain JSON, not a FHIR
+        OperationOutcome: the vendor-facing subscription contract requires
+        no FHIR knowledge.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SubscriptionAPIError"
 
   schemas:
     FHIRBundle:
@@ -1097,3 +1328,283 @@ components:
                       type: string
                       description: Human-readable explanation of the reason code.
                       example: MITZ consent granted
+
+    SubscriptionAPIError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable explanation of the rejection.
+          example: "topic http://example.org/other-topic is not in the agreed topic list"
+
+    SubscriptionEventIngest:
+      type: object
+      required: [resourceType, resourceId]
+      properties:
+        resourceType:
+          type: string
+          description: FHIR resource type of the changed resource.
+          example: Task
+        resourceId:
+          type: string
+          description: The resource's logical id in the organisation's own system.
+          example: "4711"
+        interaction:
+          type: string
+          description: The interaction that changed the resource.
+          enum: [create, update, delete]
+          default: update
+        ownerUra:
+          type: string
+          description: >
+            URA of the partner organisation the resource addresses (for
+            Task: `Task.owner`). Used for topic filter matching; when
+            omitted, every subscription on the topic matches.
+          example: "00000020"
+        useCaseCode:
+          type: string
+          description: >
+            Use-case code carried on the resource (for the COW profile:
+            the second `Task.code` coding, e.g. an eOverdracht code).
+          example: "308292007"
+        suppressDelivery:
+          type: boolean
+          description: >
+            Demo/test facility: allocate the event number and log the
+            event, but do not deliver the notification — simulates a lost
+            notification so gap detection and `$events`/`$status` recovery
+            can be exercised.
+          default: false
+
+    SubscriptionEventIngestReport:
+      type: object
+      required: [matches]
+      properties:
+        matches:
+          type: array
+          description: One entry per subscription the event matched.
+          items:
+            type: object
+            required: [subscriptionId, eventNumber]
+            properties:
+              subscriptionId:
+                type: string
+              eventNumber:
+                type: integer
+                format: int64
+              suppressed:
+                type: boolean
+                description: True when delivery was suppressed on request.
+
+    OutOfBandSubscriptionRequest:
+      type: object
+      required: [partnerUra, topic]
+      properties:
+        partnerUra:
+          type: string
+          description: URA of the partner organisation to notify.
+          example: "00000020"
+        topic:
+          type: string
+          description: Canonical URL of the pre-agreed SubscriptionTopic.
+          example: "http://fhir.nl/SubscriptionTopic/nl-task-notified-pull"
+        payloadMode:
+          type: string
+          enum: [empty, id-only]
+          default: id-only
+        heartbeatPeriodSeconds:
+          type: integer
+          description: Heartbeat interval to agree; omit for no heartbeat.
+        notificationEndpoint:
+          type: string
+          description: >
+            Partner's notification endpoint. Normally omitted — the
+            Knooppunt resolves it from the mCSD Query Directory (GF
+            Adressing) or per-partner configuration.
+
+    SubscriptionIntentRequest:
+      type: object
+      required: [partnerUra, topic]
+      properties:
+        partnerUra:
+          type: string
+          description: URA of the partner organisation to subscribe at.
+          example: "00000010"
+        topic:
+          type: string
+          description: Canonical URL of the pre-agreed SubscriptionTopic.
+          example: "http://fhir.nl/SubscriptionTopic/nl-task-notified-pull"
+        payloadMode:
+          type: string
+          enum: [empty, id-only]
+          default: id-only
+        heartbeatPeriodSeconds:
+          type: integer
+          description: Heartbeat interval to request; omit for no heartbeat.
+        partnerFhirBaseUrl:
+          type: string
+          description: >
+            Partner's public FHIR base URL (where `/Subscription` lives).
+            Normally omitted — resolved via the mCSD Query Directory or
+            per-partner configuration.
+
+    SubscriptionAuthorizationRequest:
+      type: object
+      required: [receiverUra, topic]
+      properties:
+        receiverUra:
+          type: string
+          description: URA of the organisation authorized to be notified.
+        topic:
+          type: string
+          description: Canonical URL of the SubscriptionTopic the authorization covers.
+        patientBsn:
+          type: string
+          description: BSN scoping the authorization to one patient; omit for partner-wide.
+        validUntil:
+          type: string
+          format: date-time
+          description: End of the authorization's validity; omit for open-ended.
+
+    ServerSubscriptionInfo:
+      type: object
+      required: [id, topic, payloadMode, status, createdVia]
+      properties:
+        id:
+          type: string
+        topic:
+          type: string
+        partnerUra:
+          type: string
+        payloadMode:
+          type: string
+        endpoint:
+          type: string
+          description: The partner's notification endpoint.
+        heartbeatPeriodSeconds:
+          type: integer
+        status:
+          type: string
+          enum: [requested, active, error, "off"]
+        createdVia:
+          type: string
+          enum: [in-band, out-of-band]
+        eventCounter:
+          type: integer
+          format: int64
+          description: Highest event number allocated so far.
+
+    ClientSubscriptionInfo:
+      type: object
+      required: [reference, topic, payloadMode, status, origin]
+      properties:
+        reference:
+          type: string
+          description: Absolute reference of the Subscription at the partner.
+        id:
+          type: string
+          description: The Subscription's logical id at the partner.
+        topic:
+          type: string
+        partnerUra:
+          type: string
+        payloadMode:
+          type: string
+        serverFhirBaseUrl:
+          type: string
+          description: Partner base used for `$status`/`$events` recovery.
+        heartbeatPeriodSeconds:
+          type: integer
+        status:
+          type: string
+          enum: [requested, active, error, "off"]
+        origin:
+          type: string
+          enum: [in-band, out-of-band]
+        highestEventNumber:
+          type: integer
+          format: int64
+
+    SubscriptionInboxEvent:
+      type: object
+      required: [id, type, subscriptionReference, receivedAt, acknowledged]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Monotonic inbox sequence number (per Knooppunt).
+        type:
+          type: string
+          enum: [event, gap]
+          description: >
+            `event`: a normalised notification event. `gap`: events
+            `gapFrom`..`gapTo` could not be recovered (server offers no
+            `$events` or the range is gone) — the vendor should resync.
+        subscriptionReference:
+          type: string
+        topic:
+          type: string
+        eventNumber:
+          type: integer
+          format: int64
+        focus:
+          type: string
+          description: >
+            Opaque reference to the affected resource (id-only mode only).
+            Treat as an opaque string per the TTA identifier requirements.
+        gapFrom:
+          type: integer
+          format: int64
+        gapTo:
+          type: integer
+          format: int64
+        receivedAt:
+          type: string
+          format: date-time
+        acknowledged:
+          type: boolean
+
+    SubscriptionTransportLogEntry:
+      type: object
+      required: [time, direction, type, outcome]
+      properties:
+        time:
+          type: string
+          format: date-time
+        direction:
+          type: string
+          enum: [sent, received]
+        type:
+          type: string
+          description: >
+            subscription-create, handshake, event, heartbeat,
+            status-query, events-query, ...
+        subscription:
+          type: string
+          description: Subscription id or reference.
+        eventNumber:
+          type: integer
+          format: int64
+        payloadMode:
+          type: string
+        outcome:
+          type: string
+          description: e.g. "201", "200", "422 rejected", "delivery failed after 5 attempts"
+        detail:
+          type: string
+
+    SubscriptionListing:
+      type: object
+      required: [server, client]
+      properties:
+        server:
+          type: array
+          description: Subscriptions this Knooppunt serves (Subscription Server role).
+          items:
+            $ref: "#/components/schemas/ServerSubscriptionInfo"
+        client:
+          type: array
+          description: Subscriptions held at partners (Subscription Client role).
+          items:
+            $ref: "#/components/schemas/ClientSubscriptionInfo"

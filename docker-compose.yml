@@ -39,9 +39,44 @@ services:
       # Empty disables the LRZa sync client (see lrza.Config.Enabled).
       KNPT_LRZA_LRZABASEURL: ""
       KNPT_MITZ_MITZBASE: http://mitzmock:8080
+      # ------------------------------------------------------------------
+      # TTA Notifications v0.6 POC (docs/tta-notifications-v06/): this node
+      # plays Ziekenhuis De Plataan (URA 00000010) in the Subscription
+      # Server role. It polls Plataan's patient tenant for Task changes and
+      # notifies Zonnebloem's knooppunt (service below). The partner's
+      # notification endpoint is configured directly; resolving it from the
+      # mCSD Query Directory would require seeding Endpoints with the
+      # (POC-proposed) tta-notification payload type.
+      # ------------------------------------------------------------------
+      KNPT_SUBSCRIPTION_PUBLICBASEURL: http://knooppunt:8080
+      KNPT_SUBSCRIPTION_SERVER_ENABLED: "true"
+      KNPT_SUBSCRIPTION_SERVER_URA: "00000010"
+      KNPT_SUBSCRIPTION_SERVER_FHIRBASEURL: http://hapi-fhir:7050/fhir/plataan-patients
+      KNPT_SUBSCRIPTION_SERVER_POLLINTERVALSECONDS: "5"
+      KNPT_SUBSCRIPTION_SERVER_PARTNERS_00000020_NOTIFICATIONENDPOINT: http://knooppunt-zonnebloem:8080/fhir/notifications
     volumes:
       - ./config:/app/config:ro
       - ./test/e2e/pep/certs/ca.pem:/app/certs/ca.pem:ro
+
+  # Second knooppunt for the TTA Notifications v0.6 POC demo: Zorgcentrum De
+  # Zonnebloem (URA 00000020) as Subscription Client / receiver, a genuinely
+  # separate node rather than a second tenant of the main one. From the host:
+  # internal API on http://localhost:8181, public interface on
+  # http://localhost:8180. See docs/test-scripts/tta-notifications.http for
+  # the demo walkthrough.
+  knooppunt-zonnebloem:
+    build: .
+    ports:
+      - "8180:8080"
+      - "8181:8081"
+    environment:
+      # Everything except the subscription client role is disabled: this node
+      # exists to receive notifications.
+      KNPT_LRZA_LRZABASEURL: ""
+      KNPT_SUBSCRIPTION_PUBLICBASEURL: http://knooppunt-zonnebloem:8080
+      KNPT_SUBSCRIPTION_CLIENT_ENABLED: "true"
+      KNPT_SUBSCRIPTION_CLIENT_URA: "00000020"
+      KNPT_SUBSCRIPTION_CLIENT_PARTNERS_00000010_FHIRBASEURL: http://knooppunt:8080/fhir
 
   # Seeds FHIR test data, creates a Nuts subject per demo organization and writes
   # each subject's DID to the shared scratch volume for the credential issuers.

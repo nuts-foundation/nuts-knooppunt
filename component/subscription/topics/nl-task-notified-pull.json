@@ -1,0 +1,32 @@
+{
+  "resourceType": "SubscriptionTopic",
+  "id": "nl-task-notified-pull",
+  "url": "http://fhir.nl/SubscriptionTopic/nl-task-notified-pull",
+  "version": "0.1.0-poc",
+  "title": "NL Task Notified Pull (eOverdracht alignment, POC)",
+  "status": "draft",
+  "description": "Broad, long-lived per-partner subscription on COW Coordination Task changes, per the GF Clinical Workflow profile: each Task change at the Placer notifies the Fulfiller named in Task.owner. Payload mode id-only; the notification carries only the (opaque) Task reference — meaning, retrieval and permission live in the workflow and data layers. Placeholder canonical: topic ownership and base URL are an open working-group question.",
+  "resourceTrigger": [
+    {
+      "description": "Create or update of a COW Coordination Task carrying task-code fulfill plus a use-case code (e.g. the eOverdracht nursing handoff code), addressed to a partner via Task.owner.",
+      "resource": "Task",
+      "supportedInteraction": ["create", "update"],
+      "queryCriteria": {
+        "current": "code=http://hl7.org/fhir/CodeSystem/task-code|fulfill",
+        "resultForCreate": "test-passes"
+      }
+    }
+  ],
+  "canFilterBy": [
+    {
+      "description": "The Fulfiller organisation the Task addresses (URA identifier on Task.owner). Sender-addressed interest direction: one permanent subscription per partner, filtered on owner.",
+      "resource": "Task",
+      "filterParameter": "Task.owner"
+    },
+    {
+      "description": "The use-case code on Task.code (second coding next to task-code fulfill), e.g. an eOverdracht/SNOMED code.",
+      "resource": "Task",
+      "filterParameter": "Task.code"
+    }
+  ]
+}

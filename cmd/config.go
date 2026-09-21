@@ -21,6 +21,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonymisation"
+	"github.com/nuts-foundation/nuts-knooppunt/component/subscription"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 )
 
@@ -37,6 +38,7 @@ type Config struct {
 	AuthN            authn.Config            `koanf:"authn"`
 	Tracing          tracing.Config          `koanf:"tracing"`
 	Pseudonymisation pseudonymisation.Config `koanf:"pseudo"`
+	Subscription     subscription.Config     `koanf:"subscription"`
 }
 
 func DefaultConfig() Config {
@@ -47,12 +49,13 @@ func DefaultConfig() Config {
 		Nuts: nutsnode.Config{
 			Enabled: false,
 		},
-		MCSDAdmin: mcsdadmin.Config{},
-		NVI:       nvi.DefaultConfig(),
-		PDP:       pdp.DefaultConfig(),
-		MITZ:      mitz.Config{},
-		HTTP:      http.DefaultConfig(),
-		Tracing:   tracing.DefaultConfig(),
+		MCSDAdmin:    mcsdadmin.Config{},
+		NVI:          nvi.DefaultConfig(),
+		PDP:          pdp.DefaultConfig(),
+		MITZ:         mitz.Config{},
+		HTTP:         http.DefaultConfig(),
+		Tracing:      tracing.DefaultConfig(),
+		Subscription: subscription.DefaultConfig(),
 	}
 }
 

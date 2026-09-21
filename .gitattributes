@@ -1,0 +1,14 @@
+# Normalize line endings.
+#
+# Shell scripts MUST be checked out with LF, even on Windows / with
+# core.autocrlf=true. A CRLF shebang makes the kernel look for an interpreter
+# literally named "/bin/sh\r", which fails at exec time with a misleading
+# "not found" (the script itself exists and is executable). This bites hardest
+# when the script is COPY'd into a container image, e.g.
+# mock-components/vc-issuer/docker-entrypoint.sh.
+*.sh text eol=lf
+
+# Same reasoning: these are consumed by Linux containers and tooling.
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
+docker-entrypoint.sh text eol=lf

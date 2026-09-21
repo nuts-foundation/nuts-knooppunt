@@ -1,0 +1,292 @@
+openapi: 3.0.3
+info:
+  title: Nuts Knooppunt TTA Notifications Public API
+  description: >
+    The cross-organisation FHIR surface of the TTA Notifications v0.6 POC
+    (docs/tta-notifications-v06/), served on the Knooppunt's public
+    interface (default `:8080`) and called by other organisations'
+    knooppunten — not by Knooppunt users. Kept separate from `openapi.yaml`
+    (the internal interface) for the same reason `mitz-public.openapi.yaml`
+    is.
+
+    Subscription Server role: in-band Subscription creation, Subscription
+    read, `$status`, `$events`, SubscriptionTopic discovery, and the
+    de-aliased Task read for the follow-up pull. Subscription Client role:
+    the rest-hook notification endpoint.
+
+    FHIR resource bodies are not redefined here — see
+    https://hl7.org/fhir/R4/ and
+    https://hl7.org/fhir/uv/subscriptions-backport/ for their schemas.
+  version: "1.0"
+security: []
+# Spec precondition 4 requires mutual TLS on these endpoints. The Knooppunt has
+# no inbound mTLS anywhere (neither in Go nor in the nginx PEP), so the POC
+# serves them plain — recorded as a finding (research question 5), not solved.
+servers:
+  - url: http://localhost:8080
+    description: Public interface
+tags:
+  - name: subscription-server
+    description: Subscription Server role (sending organisation)
+  - name: subscription-client
+    description: Subscription Client role (receiving organisation)
+paths:
+  /fhir/Subscription:
+    post:
+      tags: [subscription-server]
+      operationId: createSubscription
+      summary: Create a Subscription (in-band)
+      description: >
+        In-band subscription creation per TTA Notifications v0.6: the
+        receiving organisation registers a Subscription for a pre-agreed
+        SubscriptionTopic. Arbitrary subscription requests are rejected —
+        only agreed topics and payload modes are accepted. On success the
+        Subscription is stored with status `requested` and a handshake
+        notification is sent to the channel endpoint; the status becomes
+        `active` only after a successful handshake.
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: "#/components/schemas/BackportSubscription"
+      responses:
+        "201":
+          description: Subscription created with status `requested`
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/BackportSubscription"
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "422":
+          $ref: "#/components/responses/OperationOutcomeError"
+  /fhir/Subscription/{id}:
+    get:
+      tags: [subscription-server]
+      operationId: getSubscription
+      summary: Read a Subscription
+      description: >
+        Used by out-of-band receivers to inspect the Subscription (payload
+        mode, topic, heartbeat) the sender created for them.
+      parameters:
+        - $ref: "#/components/parameters/SubscriptionID"
+      responses:
+        "200":
+          description: The Subscription resource
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/BackportSubscription"
+        "404":
+          $ref: "#/components/responses/OperationOutcomeError"
+  /fhir/Subscription/{id}/$status:
+    get:
+      tags: [subscription-server]
+      operationId: getSubscriptionStatus
+      summary: Query subscription status ($status)
+      description: >
+        The Subscriptions Backport IG `$status` operation: returns a
+        `searchset` Bundle containing the SubscriptionStatus `Parameters`
+        (profile backport-subscription-status), including
+        `events-since-subscription-start` so a client can learn the latest
+        event number after a missed heartbeat or a detected gap. Note TTA
+        v0.6's text says "SubscriptionStatus Parameters"; the IG it mandates
+        conformance to returns a Bundle of them — this POC follows the IG.
+      parameters:
+        - $ref: "#/components/parameters/SubscriptionID"
+      responses:
+        "200":
+          description: searchset Bundle with one SubscriptionStatus Parameters entry
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRBundle"
+        "404":
+          $ref: "#/components/responses/OperationOutcomeError"
+  /fhir/Subscription/{id}/$events:
+    get:
+      tags: [subscription-server]
+      operationId: getSubscriptionEvents
+      summary: Replay events ($events)
+      description: >
+        The Subscriptions Backport IG `$events` operation (optional in TTA
+        v0.6): replays previously sent notification-events by range as a
+        notification Bundle of type `query-event`. Parameter names follow
+        the IG's OperationDefinition (`eventsSinceNumber`,
+        `eventsUntilNumber`); the `content` parameter is not supported —
+        replay always uses the subscription's registered payload mode.
+        Returns 422 when the requested range is invalid or no longer
+        retained.
+      parameters:
+        - $ref: "#/components/parameters/SubscriptionID"
+        - name: eventsSinceNumber
+          in: query
+          required: false
+          description: First event number to replay (inclusive). Defaults to 1.
+          schema:
+            type: integer
+            format: int64
+        - name: eventsUntilNumber
+          in: query
+          required: false
+          description: Last event number to replay (inclusive). Defaults to the latest.
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Notification Bundle replaying the requested events
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRBundle"
+        "404":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "422":
+          $ref: "#/components/responses/OperationOutcomeError"
+  /fhir/SubscriptionTopic/{id}:
+    get:
+      tags: [subscription-server]
+      operationId: getSubscriptionTopic
+      summary: Read an agreed SubscriptionTopic
+      description: >
+        Serves the pre-agreed SubscriptionTopic definitions (R4B-format
+        JSON) read-only for discoverability. Topics are design-time
+        contracts; this endpoint only republishes them.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Logical id of the SubscriptionTopic.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The SubscriptionTopic (R4B-format JSON)
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionTopic"
+        "404":
+          $ref: "#/components/responses/OperationOutcomeError"
+  /fhir/Task/{id}:
+    get:
+      tags: [subscription-server]
+      operationId: readAliasedTask
+      summary: Read a Task by its aliased (opaque) id
+      description: >
+        The follow-up pull endpoint for id-only notifications. Focus
+        references in notifications carry an HMAC alias of the internal
+        Task id (HAPI's ids fail the spec's opacity/unpredictability
+        requirements — research question 8), so the pull must come back
+        through the Knooppunt, which de-aliases the id and reads the Task
+        from the organisation's FHIR store. This pulls the Knooppunt into
+        the data path — an explicit POC finding, see
+        docs/tta-notifications-v06/09-knooppunt-vendor-split.md.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The aliased Task id as received in a notification focus.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The Task resource
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "404":
+          $ref: "#/components/responses/OperationOutcomeError"
+  /fhir/notifications:
+    post:
+      tags: [subscription-client]
+      operationId: receiveNotification
+      summary: Receive a notification Bundle (rest-hook endpoint)
+      description: >
+        The Subscription Client notification endpoint. Accepts handshake,
+        heartbeat and event notification Bundles; classifies, logs, checks
+        event-number continuity, deduplicates (idempotent processing) and
+        forwards normalised events to the internal inbox. Rejects
+        handshakes for out-of-band subscriptions whose payload mode is
+        outside the configured agreement (422).
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: "#/components/schemas/FHIRBundle"
+      responses:
+        "200":
+          description: Notification received and accepted
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "422":
+          $ref: "#/components/responses/OperationOutcomeError"
+
+components:
+  parameters:
+    SubscriptionID:
+      name: id
+      in: path
+      required: true
+      description: Logical id of the Subscription at this server.
+      schema:
+        type: string
+
+  responses:
+    OperationOutcomeError:
+      description: Request rejected; body is a FHIR OperationOutcome.
+      content:
+        application/fhir+json:
+          schema:
+            $ref: "#/components/schemas/FHIROperationOutcome"
+
+  schemas:
+    BackportSubscription:
+      type: object
+      description: >
+        An R4 Subscription profiled per the Subscriptions R5 Backport IG:
+        `_criteria` carries backport-topic-canonical and
+        backport-filter-criteria, `channel._payload` carries
+        backport-payload-content, `channel.extension` may carry
+        backport-heartbeat-period. Not redefined here.
+      additionalProperties: true
+
+    SubscriptionTopic:
+      type: object
+      description: >
+        An R4B/R5-format SubscriptionTopic served as a design-time
+        artifact. Not redefined here.
+      additionalProperties: true
+
+    FHIRBundle:
+      type: object
+      description: >
+        A FHIR R4 Bundle; notification Bundles conform to
+        backport-subscription-notification (type `history`). Not redefined
+        here.
+      additionalProperties: true
+
+    FHIRParameters:
+      type: object
+      description: >
+        A FHIR R4 Parameters resource; `$status` responses conform to
+        backport-subscription-status. Not redefined here.
+      additionalProperties: true
+
+    FHIRResource:
+      type: object
+      description: >
+        An arbitrary FHIR R4 resource, passed through verbatim. See
+        https://hl7.org/fhir/R4/ for schemas; not redefined here.
+      additionalProperties: true
+
+    FHIROperationOutcome:
+      type: object
+      description: >
+        A FHIR R4 OperationOutcome resource, returned for error responses.
+        Not redefined here.
+      additionalProperties: true

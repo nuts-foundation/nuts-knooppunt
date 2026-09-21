@@ -1,0 +1,149 @@
+#
+# TTA Notifications v0.6 POC demo (docs/tta-notifications-v06/)
+#
+# Two knooppunten from docker compose:
+#   - Plataan (URA 00000010), Subscription Server / sender:
+#       internal http://localhost:8081, public http://localhost:8080
+#   - Zonnebloem (URA 00000020), Subscription Client / receiver:
+#       internal http://localhost:8181, public http://localhost:8180
+#
+# The "vendor"/XIS side of both organisations is these plain-JSON internal
+# calls — note that nothing below except step 6 (deliberately showing the
+# wire) requires any knowledge of the FHIR Subscriptions Backport format.
+#
+# IntelliJ IDEA HTTP Client docs: https://www.jetbrains.com/help/idea/http-client-in-product-code-editor.html
+#
+
+### Step 0: the agreed SubscriptionTopic, discoverable at the server (design-time contract)
+GET http://localhost:8080/fhir/SubscriptionTopic/nl-task-notified-pull
+Accept: application/fhir+json
+
+### Step 1: Plataan's XIS registers the authorization basis when the care
+### relationship is created (who may be notified of what). POC: recorded and
+### logged by the stub hook; real GF Authorization is out of scope.
+POST http://localhost:8081/subscription/authorizations
+Content-Type: application/json
+
+{
+  "receiverUra": "00000020",
+  "topic": "http://fhir.nl/SubscriptionTopic/nl-task-notified-pull"
+}
+
+### Step 2: Zonnebloem's XIS subscribes at Plataan — in-band creation via one
+### internal call (the knooppunt builds the backport Subscription, resolves the
+### partner endpoint, POSTs it and handles the handshake).
+POST http://localhost:8181/subscription/intents
+Content-Type: application/json
+
+{
+  "partnerUra": "00000010",
+  "topic": "http://fhir.nl/SubscriptionTopic/nl-task-notified-pull",
+  "payloadMode": "id-only",
+  "heartbeatPeriodSeconds": 60
+}
+
+### Step 2b: subscription state on both sides — wait for status "active"
+### (handshake done). Run on Plataan:
+GET http://localhost:8081/subscription/subscriptions
+
+### ...and on Zonnebloem:
+GET http://localhost:8181/subscription/subscriptions
+
+### Step 3 (option A): seed a COW Coordination Task in Plataan's tenant; the
+### knooppunt's poller (5s interval) detects it and notifies Zonnebloem.
+POST http://localhost:7050/fhir/plataan-patients/Task
+Content-Type: application/fhir+json
+
+{
+  "resourceType": "Task",
+  "status": "requested",
+  "intent": "order",
+  "code": {
+    "coding": [
+      { "system": "http://hl7.org/fhir/CodeSystem/task-code", "code": "fulfill" },
+      { "system": "http://snomed.info/sct", "code": "308292007", "display": "Transfer of care" }
+    ]
+  },
+  "owner": {
+    "identifier": { "system": "http://fhir.nl/fhir/NamingSystem/ura", "value": "00000020" }
+  },
+  "requester": {
+    "identifier": { "system": "http://fhir.nl/fhir/NamingSystem/ura", "value": "00000010" }
+  }
+}
+
+### Step 3 (option B): or report the event through the vendor ingest API
+### directly (no FHIR store needed):
+POST http://localhost:8081/subscription/events
+Content-Type: application/json
+
+{
+  "resourceType": "Task",
+  "resourceId": "demo-task-1",
+  "interaction": "create",
+  "ownerUra": "00000020",
+  "useCaseCode": "308292007"
+}
+
+### Step 4: the notification arrives at Zonnebloem, normalised into the inbox.
+### The focus is an OPAQUE alias (HMAC of the internal id) — HAPI's own ids
+### fail the spec's id-only requirements (research question 8).
+GET http://localhost:8181/subscription/inbox
+
+### Step 5: follow-up pull — read the Task via its alias at Plataan's public
+### FHIR surface (the knooppunt de-aliases and reads the tenant store; it is
+### now in the data path — that is the finding, not an accident).
+### Replace {{alias}} with the id from the inbox focus ("Task/<alias>").
+GET http://localhost:8080/fhir/Task/{{alias}}
+Accept: application/fhir+json
+
+### Step 5b: acknowledge the inbox entry (at-least-once internal delivery).
+### Replace 1 with the inbox entry id.
+POST http://localhost:8181/subscription/inbox/1/ack
+
+### Step 6: what actually travelled — the transport logs on both sides
+### (the spec's logging obligation, queryable):
+GET http://localhost:8081/subscription/log
+
+###
+GET http://localhost:8181/subscription/log
+
+### Extra: gap recovery demo — lose an event on purpose (delivery suppressed),
+### then send another; Zonnebloem detects the gap and recovers via $events.
+POST http://localhost:8081/subscription/events
+Content-Type: application/json
+
+{
+  "resourceType": "Task",
+  "resourceId": "demo-task-1",
+  "interaction": "update",
+  "ownerUra": "00000020",
+  "suppressDelivery": true
+}
+
+###
+POST http://localhost:8081/subscription/events
+Content-Type: application/json
+
+{
+  "resourceType": "Task",
+  "resourceId": "demo-task-1",
+  "interaction": "update",
+  "ownerUra": "00000020"
+}
+
+### The inbox now shows all events, in order, gap filled ("recovered" in the log):
+GET http://localhost:8181/subscription/inbox?all=true
+
+### Extra: the wire-level server surface, for the curious (this is the part a
+### vendor never has to touch):
+GET http://localhost:8080/fhir/Subscription/{{subscriptionId}}
+Accept: application/fhir+json
+
+###
+GET http://localhost:8080/fhir/Subscription/{{subscriptionId}}/$status
+Accept: application/fhir+json
+
+###
+GET http://localhost:8080/fhir/Subscription/{{subscriptionId}}/$events?eventsSinceNumber=1&eventsUntilNumber=3
+Accept: application/fhir+json

@@ -1,0 +1,62 @@
+@startuml
+
+title TTA Notifications v0.6 — Heartbeats, missed heartbeat, event-number gap recovery ($events / $status)
+
+box "Receiving organisation — Zonnebloem (Subscription Client)" #E8F4FD
+    participant xis_r as "XIS / EHR\n(vendor)"
+    participant kp_r as "Knooppunt\n[subscription client]"
+end box
+
+box "Sending organisation — Plataan (Subscription Server)" #FDF2E8
+    participant kp_s as "Knooppunt\n[subscription server]"
+end box
+
+== Heartbeats (optional, agreed at creation) ==
+loop every heartbeat period, when nothing else was sent
+    kp_s -> kp_r : POST {endpoint}\nheartbeat-notification
+    kp_r -> kp_r : reset missed-heartbeat timer
+    kp_r --> kp_s : 200 OK
+end
+note over kp_r : a client that ignores heartbeats still\nacknowledges them (permutation 3: harmless)
+
+== Missed heartbeat ==
+... no notification for > 1.5 x heartbeat period ...
+kp_r -> kp_r : miss detected (log: heartbeat missed)
+kp_r -> kp_s : GET /fhir/Subscription/{id}/$status
+kp_s --> kp_r : 200 Bundle(searchset) / Parameters\n{subscription, status, type=query-status,\nevents-since-subscription-start=N}\n(reply shape per the backport IG)
+kp_r -> kp_r : log N and server status; adopt server status\n(POC gap: N is logged but not yet used to\ntrigger $events recovery from a heartbeat miss —\nonly an arriving event triggers gap recovery)
+note over kp_r, kp_s : permutation 4: client requested a heartbeat the\nserver does not honour -> this loop fires forever,\n$status always says "active" (busywork, not failure) [SPEC]
+
+== Event-number gap (a notification was lost) ==
+kp_s -> kp_s : event 2 allocated but delivery fails / is lost
+kp_s -> kp_r : event-notification event-number=3
+activate kp_r
+kp_r -> kp_r : highest processed = 1, received 3 -> gap 2..2
+alt server supports $events
+    kp_r -> kp_s : GET /fhir/Subscription/{id}/$events\n?eventsSinceNumber=2&eventsUntilNumber=2
+    kp_s --> kp_r : 200 Bundle(history) / Parameters type=query-event\nnotification-event[event-number=2, focus]
+    kp_r -> kp_r : process replayed event 2 (in order, idempotent)\ninbox: event 2, then event 3
+    note over kp_r : $events is the backport IG operation (parameters,\nreply shape) inherited via v0.6's conformance clause;\nv0.6 restates it loosely rather than referencing it [SPEC, editorial]
+else server has no $events (permutations 2 and 5)
+    kp_r -> kp_s : GET .../$events
+    kp_s --> kp_r : 404 OperationOutcome
+    kp_r -> kp_s : GET .../$status
+    kp_s --> kp_r : 200 (events-since-subscription-start=3)
+    kp_r -> kp_r : mark 2 as unrecoverable, advance highest\ninbox: {type=gap, gapFrom=2, gapTo=2}, then event 3
+    note over kp_r : empty mode ends here by construction:\n"something happened, re-search everything" [SPEC]
+end
+kp_r --> kp_s : 200 OK
+deactivate kp_r
+
+== Duplicate delivery (idempotency) ==
+kp_s -> kp_r : event-notification event-number=3 (re-delivered)
+kp_r -> kp_r : already processed -> no side effects
+kp_r --> kp_s : 200 OK
+note over kp_r, kp_s : [SPEC] the spec never says duplicates get 200;\na 422 here would cause retry storms
+
+== What the vendor sees ==
+xis_r -> kp_r : GET /subscription/inbox
+kp_r --> xis_r : [event 1, event 2 (recovered) | gap 2..2, event 3]\n— in order, deduplicated, one uniform shape
+xis_r -> kp_r : POST /subscription/inbox/{id}/ack
+
+@enduml

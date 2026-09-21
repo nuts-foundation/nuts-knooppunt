@@ -1,0 +1,60 @@
+@startuml
+
+title TTA Notifications v0.6 — Out-of-band subscription (source-initiated), receiver bootstrap and mode enforcement
+
+box "Receiving organisation — Zonnebloem (Subscription Client)" #E8F4FD
+    participant xis_r as "XIS / EHR\n(vendor)"
+    participant kp_r as "Knooppunt\n[subscription client]"
+end box
+
+box "Addressing"
+    participant mcsd as "mCSD Query Directory"
+end box
+
+box "Sending organisation — Plataan (Subscription Server)" #FDF2E8
+    participant kp_s as "Knooppunt\n[subscription server]"
+    participant xis_s as "XIS / EHR\n(vendor)"
+end box
+
+== Step 1: the sender decides the partner should be informed ==
+xis_s -> kp_s : POST /subscription/subscriptions\n{partnerUra, topic, payloadMode, heartbeatPeriodSeconds?}
+activate kp_s
+opt no per-partner configuration for {partnerUra}
+    kp_s -> mcsd : Organization?identifier=ura|{partnerUra}\n-> Endpoint (payloadType = tta-notification)
+    mcsd --> kp_s : partner notification endpoint
+end
+note right of kp_s : per-partner config first,\nmCSD only as fallback
+kp_s -> kp_s : construct Subscription itself\n(filter Task.owner=ura|{partnerUra}), status=requested
+kp_s --> xis_s : 201 {id, status=requested, createdVia=out-of-band}
+note over kp_s : [SPEC] the spec names out-of-band creation\nbut defines no transaction for it
+
+== Step 2: handshake reaches a subscription the receiver never created ==
+kp_s -> kp_s : authz hook (activation)
+note right of kp_s : POC: looks up a basis registered via\nPOST /subscription/authorizations (stub, always allows).\nAlternative: ask the knooppunt PDP against the PIP's\nlocal consent record — same hook, different source
+kp_s -> kp_r : POST {endpoint}\nhandshake-notification\nsubscription = ABSOLUTE reference\n{senderBase}/fhir/Subscription/{id}
+activate kp_r
+kp_r -> kp_r : unknown subscription -> bootstrap
+note over kp_r : [SPEC] with the spec's relative example\nreference (Subscription/{id}) there is\nnothing to dereference: bootstrap impossible
+kp_r -> kp_s : GET {senderBase}/fhir/Subscription/{id}
+kp_s --> kp_r : 200 Subscription\n(topic, _payload mode, heartbeat)
+kp_r -> kp_r : check against agreement:\ntopic in agreed list AND mode in allowed modes
+alt mode/topic within agreement
+    kp_r -> kp_r : record client subscription\n(origin=out-of-band, status=active)
+    kp_r --> kp_s : 200 OK
+    kp_s -> kp_s : status=active
+else mode outside agreement (permutation 6)
+    kp_r --> kp_s : 422 OperationOutcome\n"payload mode outside the exchange agreement — handshake refused"
+    kp_s -> kp_s : 4xx is definitive: no retry\nstatus=error
+    note over kp_r : nothing tracked; later notifications for\nthis subscription are rejected the same way
+end
+deactivate kp_r
+deactivate kp_s
+
+== Step 3: events flow exactly as in the in-band case ==
+xis_s -> kp_s : POST /subscription/events (or poller)
+kp_s -> kp_r : event-notification (event-number N)
+kp_r --> kp_s : 200 OK
+xis_r -> kp_r : GET /subscription/inbox
+kp_r --> xis_r : identical inbox shape — the vendor cannot tell\nin-band from out-of-band (RQ 6)
+
+@enduml

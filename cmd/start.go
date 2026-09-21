@@ -18,6 +18,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonymisation"
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
+	"github.com/nuts-foundation/nuts-knooppunt/component/subscription"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/pkg/errors"
@@ -122,12 +123,28 @@ func Start(ctx context.Context, config Config) error {
 		slog.InfoContext(ctx, "NVI component is disabled")
 	}
 
+	// Create TTA Notifications subscription component (POC, docs/tta-notifications-v06/)
+	var subscriptionComponent *subscription.Component
+	if config.Subscription.Enabled() {
+		if config.Subscription.PublicBaseURL == "" {
+			config.Subscription.PublicBaseURL = config.HTTP.PublicInterface.URL().String()
+		}
+		subscriptionComponent, err = subscription.New(config.Subscription)
+		if err != nil {
+			return errors.Wrap(err, "failed to create subscription component")
+		}
+		components = append(components, subscriptionComponent)
+	} else {
+		slog.InfoContext(ctx, "Subscription (TTA Notifications) component is disabled")
+	}
+
 	components = append(components, &strictAPIServer{
-		status: statusComponent,
-		lrza:   lrzaClient,
-		pdp:    pdpComponent,
-		nvi:    nviComponent,
-		mitz:   mitzComponent,
+		status:       statusComponent,
+		lrza:         lrzaClient,
+		pdp:          pdpComponent,
+		nvi:          nviComponent,
+		mitz:         mitzComponent,
+		subscription: subscriptionComponent,
 	})
 
 	// Components: RegisterHandlers()
