@@ -302,6 +302,7 @@ func TestEvaluate_Integration(t *testing.T) {
 		scope             string
 		httpRequest       string
 		httpRequestBody   string
+		contentType       string // defaults to application/fhir+json
 		decision          bool
 		properties        map[string]any
 		error             string
@@ -310,6 +311,10 @@ func TestEvaluate_Integration(t *testing.T) {
 	}
 	runTest := func(t *testing.T, tc testCase) {
 		t.Helper()
+		contentType := tc.contentType
+		if contentType == "" {
+			contentType = "application/fhir+json"
+		}
 		httpReqParts := strings.Split(tc.httpRequest, " ")
 		httpReqURL, err := url.Parse("http://localhost" + httpReqParts[1])
 		require.NoError(t, err)
@@ -330,7 +335,7 @@ func TestEvaluate_Integration(t *testing.T) {
 					Path:     httpReqURL.Path,
 					Query:    httpReqURL.RawQuery,
 					Header: http.Header{
-						"Content-Type": {"application/fhir+json"},
+						"Content-Type": {contentType},
 					},
 				},
 				Context: APIContext{
@@ -422,6 +427,27 @@ func TestEvaluate_Integration(t *testing.T) {
 				scope:       "bgz",
 				httpRequest: `GET /Patient?_include=Patient:general-practitioner&_id=1000`,
 				decision:    true,
+			},
+			{
+				// The identifier search parameter on Patient, which the indexed
+				// pull needs: it starts from a BSN and has no local patient id to
+				// search by yet. Without the capability entry the request is
+				// refused before any policy runs.
+				name:        "allow - correct Patient query by BSN identifier",
+				scope:       "bgz",
+				httpRequest: `GET /Patient?_include=Patient:general-practitioner&identifier=http://fhir.nl/fhir/NamingSystem/bsn|999900006`,
+				decision:    true,
+			},
+			{
+				// The shape a consumer actually sends it in. A search that must
+				// not put a BSN in a request line travels as a form-encoded POST
+				// to _search, and the parameters are read from the body.
+				name:            "allow - Patient _search by BSN identifier in the body",
+				scope:           "bgz",
+				httpRequest:     `POST /Patient/_search`,
+				httpRequestBody: "_include=Patient%3Ageneral-practitioner&identifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn%7C999900006",
+				contentType:     "application/x-www-form-urlencoded",
+				decision:        true,
 			},
 			{
 				name:        "allow - correct MedicationDispense query with category and _include",
