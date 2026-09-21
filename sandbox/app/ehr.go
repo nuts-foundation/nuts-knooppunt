@@ -24,6 +24,7 @@ type patientRow struct {
 	SubscriptionUnknown bool
 	Locked              bool // held by another session: "demo in progress"
 	Mine                bool // held by this session
+	RunID               string
 	Categories          []string
 
 	// UnnamedRecords counts NVI records this build cannot name. The share screen
@@ -105,7 +106,15 @@ func (c Config) handleOpenPatient(w http.ResponseWriter, r *http.Request, sessio
 		http.Error(w, "unknown patient: "+key, http.StatusNotFound)
 		return
 	}
-	if !c.Locks.Switch(key, lockOwner(session)) {
+	if err := c.startPatientRun(session, key, true); err != nil {
+		if errors.Is(err, errRunUnavailable) {
+			http.Redirect(w, r, "/demo/login", http.StatusSeeOther)
+			return
+		}
+		if errors.Is(err, errRunCapacity) {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
 		http.Redirect(w, r, "/demo/ehr?notice=patient-busy", http.StatusSeeOther)
 		return
 	}
@@ -137,8 +146,13 @@ func (c Config) handlePatientRecord(w http.ResponseWriter, r *http.Request, sess
 // patient.
 func (c Config) rowFor(patient pool.PoolPatient, status shareStatus, session *authSession) patientRow {
 	mine := c.Locks.HeldBy(patient.Key, lockOwner(session))
+	var runID string
+	if c.Runs != nil {
+		runID = c.Runs.current(lockOwner(session), patient.Key)
+	}
 	return patientRow{
-		Key: patient.Key, Name: patientDisplayName(patient), BSN: patient.BSN,
+		RunID: runID,
+		Key:   patient.Key, Name: patientDisplayName(patient), BSN: patient.BSN,
 		BirthDate: patient.BirthDate, Initials: patientInitials(patient),
 		Locked: c.Locks.IsLocked(patient.Key) && !mine, Mine: mine,
 		Shared: status.Shared, NVIUnknown: status.NVIUnknown, Categories: status.Categories,
@@ -282,7 +296,7 @@ func (c Config) subscriptionExists(ctx context.Context, bsn string) (bool, error
 	if c.mitzSubscribed == nil {
 		return false, errors.New("Mitz cannot be queried in this environment")
 	}
-	return c.mitzSubscribed(ctx, bsn)
+	return c.mitzSubscribed(withEventPurpose(ctx, "subscription-check"), bsn)
 }
 
 // cardResult is one confirmation card. Skipped and Unknown are states beside OK

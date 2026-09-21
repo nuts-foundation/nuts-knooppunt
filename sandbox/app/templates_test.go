@@ -85,7 +85,7 @@ func TestEhrHomeShowsFullChrome(t *testing.T) {
 
 	status, body := getPageWithClient(t, client, srv.URL+"/demo/ehr")
 	require.Equal(t, http.StatusOK, status)
-	for _, s := range []string{"sb-bar", `class="app"`, `class="side"`, `class="top"`, "hood-dock", "gf-tab", `id="gf-viewer-steps"`, "/static/js/journey-strip.js"} {
+	for _, s := range []string{"sb-bar", `class="app"`, `class="side"`, `class="top"`, "hood-dock", "gf-tab", `id="gf-viewer-steps"`, "/static/js/step-events.js"} {
 		require.Contains(t, body, s)
 	}
 	require.Contains(t, body, "/static/css/components.css")

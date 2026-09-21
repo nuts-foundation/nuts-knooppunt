@@ -346,6 +346,13 @@ stack.
 
 ## 7. Step events (the shared substrate)
 
+E6 implements capture for patient-run outbound calls and the live viewer. The precise implemented
+retention, redaction, ownership and reconnect contract is documented in
+[the application README](app/README.md#step-events-e6). PRS spans are correlated through a private
+OTLP receiver in the sandbox overlay. Other interior-span and inbound-notification producers
+remain separate integrations. The viewer groups requests by action and purpose, with a separate
+playback clock for readable animations of observed calls.
+
 The sandbox backend emits one step event per proxied call:
 
 ```json
@@ -353,6 +360,11 @@ The sandbox backend emits one step event per proxied call:
   "runId": "…",
   // correlation ID per scenario run
   "seq": 3,
+  "actionId": "…",
+  "action": "share",
+  "purpose": "registration",
+  "resourceType": "Condition",
+  "callId": "…",
   "gf": "localization",
   // GF label: pseudonym|localization|addressing|authentication|consent|authorization|exchange
   "actor": "sandbox-backend",
@@ -381,8 +393,8 @@ The sandbox backend emits one step event per proxied call:
 - Secret redaction: capture only allowlisted headers and payload fields. Authorization headers, cookies, access tokens,
   credentials and other secrets are removed before the event object is constructed, so they are neither retained nor
   streamed.
-- Identifier redaction: synthetic test BSNs are plaintext locally and masked on shared deployments (deployment flag, not
-  always-on).
+- Identifier redaction: BSNs are masked by default, including local development. An explicit local deployment flag may
+  reveal identifiers from the fixed synthetic pool; shared deployments keep them masked.
 - Demo consumes `gf`, `outcome`, `durationMs` plus selected response fields (the result screens render real chain
   output); the full records are retained for the deeper inspector level (section 8).
 - Pseudonymization is interior to the Knooppunt (the sandbox backend never calls PRS itself), so `gf: "pseudonym"`
@@ -404,10 +416,10 @@ An opt-in detail level of the same viewer, not a separate capture pipeline or ro
 
 - Per step: the stored request/response bodies from the capture middleware, GF labelling, and the PDP decision with
   reasons (emitted mainly on deny/error today).
-- Interior Knooppunt steps (Mitz XACML call, pseudonymization, PIP lookups, OAuth2/VC exchange) via correlated OTel
-  spans: presence and timing. This requires a queryable trace backend (today spans only export to Aspire, which has no
-  query API); adding Tempo/Jaeger or similar is the one new infrastructure piece, needed when /connect lands, not for
-  /demo v1.
+- Interior Knooppunt steps (Mitz XACML call, PIP lookups, OAuth2/VC exchange) via correlated OTel
+  spans: presence and timing. E6 already projects PRS client spans into live runs through its private
+  receiver. Broader historical trace inspection remains separate work and can use a queryable trace
+  backend; it does not need to change the live event contract.
 - Within /demo the inspector stays scoped to the demo pool patients; cross-system troubleshooting beyond that is
   /connect territory.
 - Because the inspector renders raw payloads, a shared deployment keeps it behind authentication and synthetic data

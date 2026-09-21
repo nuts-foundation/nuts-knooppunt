@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// defaultLockTTL is how long a demo lock survives after the patient is opened.
-// Opening the same patient again renews it; ordinary page activity does not.
+// defaultLockTTL is the inactivity lease. Opening a patient and captured run
+// activity renew it; an idle event-stream connection does not.
 const defaultLockTTL = 15 * time.Minute
 
 // lockInfo is a single held lock.

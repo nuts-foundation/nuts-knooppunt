@@ -188,7 +188,8 @@ func retrieveBGZ(ctx context.Context, source sourceAddress, token, bsn string, c
 	// directory never resolved. The standard library strips the Authorization
 	// header across hosts, but relying on that leaves the decision implicit.
 	client := &http.Client{
-		Timeout: bgzCallTimeout,
+		Transport: newCaptureTransport("exchange", nil),
+		Timeout:   bgzCallTimeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -334,6 +335,7 @@ const maxSearchPages = 20
 // reads as a failed search, and a failed search discards the pages already in
 // hand.
 func runPagedBGZSearch(ctx context.Context, client *http.Client, base *url.URL, token, redact string, search bgzSearch) ([]fhir.Bundle, queryOutcome) {
+	ctx = withEventResourceType(ctx, search.Resource)
 	bundle, outcome := runBGZSearch(ctx, client, base, token, search)
 	bundles := []fhir.Bundle{bundle}
 	if outcomeOf(outcome) != chainGranted {
@@ -500,6 +502,7 @@ func runPageAt(ctx context.Context, client *http.Client, token, pageURL string) 
 // lands in Error with a zero Status, which the screens render as "could not be
 // established" rather than as a refusal.
 func runBGZSearch(ctx context.Context, client *http.Client, base *url.URL, token string, search bgzSearch) (fhir.Bundle, queryOutcome) {
+	ctx = withEventResourceType(ctx, search.Resource)
 	method, body := http.MethodGet, io.Reader(nil)
 	target := base.JoinPath(search.Resource)
 	rendered := search.Params.Encode()
