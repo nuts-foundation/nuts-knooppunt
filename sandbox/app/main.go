@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -26,6 +27,26 @@ func main() {
 	}
 	if !cfg.configured() {
 		log.Printf("gf-sandbox: reset/recycle disabled (set KNOOPPUNT_INTERNAL_URL and HAPI_BASE_URL to enable)")
+	}
+	if cfg.eventTraces != nil {
+		listener, err := net.Listen("tcp", cfg.eventTraceListenAddr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		traceServer := &http.Server{
+			Handler:           cfg.eventTraces.handler(),
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       5 * time.Second,
+			WriteTimeout:      5 * time.Second,
+			IdleTimeout:       30 * time.Second,
+			MaxHeaderBytes:    4096,
+		}
+		go func() {
+			if err := traceServer.Serve(listener); err != nil && err != http.ErrServerClosed {
+				log.Fatal(err)
+			}
+		}()
+		log.Printf("gf-sandbox private PRS trace receiver listening on %s", cfg.eventTraceListenAddr)
 	}
 
 	log.Printf("gf-sandbox listening on :%s", port)

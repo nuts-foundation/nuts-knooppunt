@@ -1,0 +1,51 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        max_request_body_size: 1048576
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 96
+    spike_limit_mib: 24
+  batch:
+    timeout: 100ms
+    send_batch_size: 128
+    send_batch_max_size: 256
+
+exporters:
+  otlphttp/aspire:
+    endpoint: http://aspire-dashboard:18890
+    compression: none
+    timeout: 5s
+    sending_queue:
+      num_consumers: 2
+      queue_size: 64
+    retry_on_failure:
+      max_elapsed_time: 30s
+  otlphttp/viewer:
+    endpoint: http://gf-sandbox:4318
+    compression: none
+    headers:
+      Authorization: "Bearer ${env:SANDBOX_OTLP_TOKEN}"
+    timeout: 2s
+    sending_queue:
+      num_consumers: 2
+      queue_size: 32
+    retry_on_failure:
+      initial_interval: 1s
+      max_interval: 5s
+      max_elapsed_time: 30s
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/aspire, otlphttp/viewer]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/aspire]

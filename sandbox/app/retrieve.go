@@ -234,22 +234,43 @@ func (c Config) handleRetrieveForm(w http.ResponseWriter, r *http.Request, sessi
 		http.Error(w, "unknown patient: "+r.PathValue("key"), http.StatusNotFound)
 		return
 	}
-	row := c.rowFor(patient, c.patientShareStatus(r.Context(), patient.BSN), session)
+	row := c.rowFor(patient, shareStatus{}, session)
+	if row.RunID == "" {
+		http.Error(w, "reopen this patient before finding sources", http.StatusConflict)
+		return
+	}
 
 	sources, err := c.localizeSources(r.Context(), patient.BSN)
-	rendered := page{
+	rendered := retrievalPage(row, session)
+	rendered.Sources = sources
+	if err != nil {
+		rendered.LocalizeErr = err.Error()
+	} else {
+		if c.sessions == nil || !c.sessions.storeIfLive(session.ID, func() {
+			rendered.SourceSelectionID, err = c.Runs.rememberSources(row.RunID, lockOwner(session), sources)
+		}) {
+			http.Redirect(w, r, "/demo/login", http.StatusSeeOther)
+			return
+		}
+		if err != nil {
+			rendered.Sources = nil
+			rendered.SourceSelectionExpired = true
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusConflict)
+		}
+	}
+	render(w, "ehr-retrieve.html", rendered)
+}
+
+func retrievalPage(row patientRow, session *authSession) page {
+	view := session.view()
+	return page{
 		Title: "Retrieve · Plataan EHR", Guise: "ehr",
 		Scenario: scenario, ShowReset: true,
 		BodyClass: "hood-open", BodyAttrs: viewerBodyAttrs(true),
 		Active: "dossier", TopTitle: "Retrieve data", ViewerOpen: true,
-		Patient: &row, Sources: sources,
+		Patient: &row, Session: &view,
 	}
-	if err != nil {
-		rendered.LocalizeErr = err.Error()
-	}
-	view := session.view()
-	rendered.Session = &view
-	render(w, "ehr-retrieve.html", rendered)
 }
 
 // handleRetrieve runs the confirmed chain against one source and renders the
@@ -273,36 +294,21 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 		return
 	}
 
-	// The chain is re-run rather than carried over from the form: the page the
-	// practitioner confirmed from is a claim by the browser, and a URA it names
-	// has to be one the index really reports before anything is asked of it.
-	sources, err := c.localizeSources(r.Context(), patient.BSN)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	var chosen localizedSource
-	for _, source := range sources {
-		if source.URA == r.FormValue("ura") && source.Addressable() {
-			chosen = source
-			break
-		}
-	}
-	if chosen.URA == "" {
-		http.Error(w, "no addressable source with URA "+r.FormValue("ura")+" holds data for this patient",
-			http.StatusConflict)
+	generation := c.Retrievals.generationOf(patient.Key)
+	row := c.rowFor(patient, shareStatus{}, session)
+	chosen, selected := c.Runs.selectedSource(row.RunID, lockOwner(session), r.FormValue("selection"), r.FormValue("ura"))
+	if !selected {
+		rendered := retrievalPage(row, session)
+		rendered.SourceSelectionExpired = true
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusConflict)
+		render(w, "ehr-retrieve.html", rendered)
 		return
 	}
 	if c.retrieveFromSource == nil {
 		http.Error(w, "retrieval is not wired up in this environment", http.StatusBadGateway)
 		return
 	}
-
-	// Read before the call, compared after it. Everything this retrieval is about
-	// to copy is the source's answer as of now, and a recycle in the meantime
-	// replaces it; publishing afterwards would put back exactly what the recycle
-	// removed.
-	generation := c.Retrievals.generationOf(patient.Key)
 
 	retrieval, err := c.retrieveFromSource(r.Context(), *session,
 		sourceAddress{URA: chosen.URA, Name: chosen.Name, Address: chosen.Address,
@@ -339,7 +345,6 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 		return
 	}
 
-	row := c.rowFor(patient, c.patientShareStatus(r.Context(), patient.BSN), session)
 	view := session.view()
 	render(w, "ehr-authorization.html", page{
 		Title: "Authorization · Plataan EHR", Guise: "ehr",

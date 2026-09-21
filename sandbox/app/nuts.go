@@ -62,7 +62,7 @@ type nutsClient struct {
 }
 
 func newNutsClient(cfg nutsConfig) *nutsClient {
-	return &nutsClient{cfg: cfg, http: &http.Client{Timeout: 15 * time.Second}}
+	return &nutsClient{cfg: cfg, http: &http.Client{Transport: newCaptureTransport("authorization", nil), Timeout: 15 * time.Second}}
 }
 
 // requestToken exchanges the practitioner's session for a service access token
@@ -105,10 +105,14 @@ func (c *nutsClient) requestToken(ctx context.Context, session authSession, auth
 		return "", fmt.Errorf("request service access token: status %d: %s", res.StatusCode, detail)
 	}
 
+	responseBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", fmt.Errorf("request service access token: read response: %w", err)
+	}
 	var token struct {
 		AccessToken string `json:"access_token"`
 	}
-	if err := json.NewDecoder(res.Body).Decode(&token); err != nil {
+	if err := json.Unmarshal(responseBody, &token); err != nil {
 		return "", fmt.Errorf("request service access token: decode response: %w", err)
 	}
 	if token.AccessToken == "" {

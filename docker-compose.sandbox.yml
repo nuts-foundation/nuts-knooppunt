@@ -7,10 +7,10 @@
 #
 # Usage, from the repo root. The bootstrap step is not optional and cannot be
 # folded into `up`: it runs on the host, and it needs a node that is already
-# listening, so the knooppunt comes up on its own first.
+# listening. Start the knooppunt and trace collector before bootstrapping.
 #
 #   ./sandbox/generate-demo-certs.sh     # once, writes to the gitignored sandbox/.certs/
-#   docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up -d knooppunt
+#   docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up -d sandbox-otel-collector knooppunt
 #   ./sandbox/bootstrap-nuts.sh
 #   docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up
 #
@@ -29,6 +29,8 @@
 services:
   knooppunt:
     environment:
+      KNPT_TRACING_OTLPENDPOINT: sandbox-otel-collector:4318
+      OTEL_BSP_SCHEDULE_DELAY: "250"
       # Trust the mock Dezi's JWK Set so the node can verify attestations minted
       # by mock-components/dezi. Setting this REPLACES the built-in defaults
       # rather than adding to them (nuts-node vcr/vcr.go:170-184), so both
@@ -185,9 +187,26 @@ services:
       # screen reconcile a subscription whose response never arrived. Unset means
       # both degrade to "unknown" rather than failing.
       MITZMOCK_URL: http://mitzmock:8080
+      SANDBOX_OTLP_LISTEN_ADDR: ":4318"
+      SANDBOX_OTLP_TOKEN: ${SANDBOX_OTLP_TOKEN:-sandbox-local-trace-ingest}
+      SANDBOX_PRS_URL: http://mock-prs:8080
+      SANDBOX_TRACE_SERVICE_NAME: nuts-knooppunt
     depends_on:
       nuts-bootstrap-healthcheck:
         condition: service_completed_successfully
+
+  # No host port: trace ingestion stays on the Compose network. The local
+  # credential must be overridden for any shared or hosted deployment.
+  sandbox-otel-collector:
+    image: otel/opentelemetry-collector:0.123.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    environment:
+      SANDBOX_OTLP_TOKEN: ${SANDBOX_OTLP_TOKEN:-sandbox-local-trace-ingest}
+    volumes:
+      - ./sandbox/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    mem_limit: 128m
+    profiles:
+      - sandbox
 
   # Follows hapi-fhir-healthcheck in docker-compose.yml: wait in a loop, then
   # exit, so a dependant can order itself behind a condition rather than behind

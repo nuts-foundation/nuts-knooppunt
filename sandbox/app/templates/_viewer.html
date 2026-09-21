@@ -1,15 +1,25 @@
-{{define "viewer"}}<aside class="hood-dock {{if .ViewerOpen}}on{{else}}peek{{end}}" id="hood-dock" data-class='{"on":$hood.open,"peek":!$hood.open}'>
+{{define "viewer"}}<aside class="hood-dock {{if .ViewerOpen}}on{{else}}peek{{end}}" id="hood-dock" data-run-id="{{with .Patient}}{{.RunID}}{{end}}" data-class='{"on":$hood.open,"peek":!$hood.open}'>
   <button class="gf-tab" id="gf-tab" type="button" title="Toggle GF viewer" aria-controls="hood-content" aria-expanded="{{.ViewerOpen}}" data-attr:aria-expanded="$hood.open ? 'true' : 'false'" data-on:click="$hood.open = !$hood.open">
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.8,1.5 L3.5,9 L7.4,9 L7.2,14.5 L12.5,7 L8.6,7 Z"/></svg>
     <span class="lblv">GF Viewer</span>
     <span class="chev">❯</span>
   </button>
   <div class="hood-content" id="hood-content" data-attr:inert="!$hood.open">
-    <div class="dock-map">{{template "journeysvg" .}}</div>
+    <div class="dock-map">{{template "journeysvg" .}}
+      <div class="gf-map-caption" aria-live="polite">
+        <p id="gf-stage-caption">Your action, step by step</p>
+        <p id="gf-stage-detail">Select an action in the timeline to replay it.</p>
+      </div>
+      <div class="gf-access-contract" id="gf-access-contract" hidden>
+        <strong>Sunflower’s access requirements</strong>
+        <div class="gf-contract-terms"><span>Identity &amp; organization</span><span>Professional role</span><span>Patient consent</span><span>Permitted BGZ query</span></div>
+        <p id="gf-contract-status"></p>
+      </div>
+    </div>
     <div class="dock-info">
       <div class="hd-head">
         <div>
-          <div class="hd-eyebrow">Under the hood · live</div>
+          <div class="hd-eyebrow">Under the hood</div>
           <h3 id="hd-title">This step</h3>
         </div>
         <button type="button" class="hd-close" aria-label="Close GF viewer" data-on:click="$hood.open = false">✕</button>
@@ -18,16 +28,22 @@
         <button id="hm-f" class="on" data-class='{"on":!$hood.tech}' data-on:click="$hood.tech = false">Functional</button>
         <button id="hm-t" data-class='{"on":$hood.tech}' data-on:click="$hood.tech = true">Technical</button>
       </div>
+      <p class="gf-stream-status" id="gf-stream-status" role="status">{{if .Patient}}{{if .Patient.RunID}}Connecting to this run…{{else}}Open this patient to start a run.{{end}}{{else}}Open a patient to follow its run.{{end}}</p>
+      <div class="gf-playback-controls" aria-label="Playback controls">
+        <button id="gf-pause" type="button">Pause</button>
+        <button id="gf-replay" type="button" disabled>Replay</button>
+        <button id="gf-skip" type="button" disabled>Skip</button>
+        <button id="gf-live" type="button" disabled>Follow latest</button>
+        <span id="gf-playback-status" role="status">Preparing playback</span>
+      </div>
       <div class="hd-body" id="gf-viewer-steps">
         <div class="hd-sec on">
           <div class="lane-lbl">What happens here</div>
-          <p class="hd-idle">The viewer follows the demo step by step. Live step events arrive with
-          the step-event stream (E6); until then this panel shows the journey map in its resting state.</p>
-          <p class="hd-idle" data-show="$hood.tech">Technical mode will add the captured request per
-          step (method, path, status) and the interior OTel spans.</p>
+          <p class="hd-idle">Follow the calls made for this patient's demo. Each completed call appears here with its result.</p>
+          <p class="hd-idle" data-show="$hood.tech">Technical mode shows sanitized request and response details for calls made by the sandbox.</p>
         </div>
       </div>
     </div>
   </div>
 </aside>
-<script type="module" src="/static/js/journey-strip.js"></script>{{end}}
+<script type="module" src="/static/js/step-events.js"></script>{{end}}

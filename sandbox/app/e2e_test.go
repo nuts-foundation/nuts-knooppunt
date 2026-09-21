@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
@@ -126,7 +125,7 @@ func publishEndpoint(t *testing.T, h harness.Details, address string) {
 func (c fullChain) retrieve(t *testing.T) (int, string) {
 	t.Helper()
 	return postFormAndRead(t, c.client, c.server, "/demo/ehr/patients/"+c.key+"/retrieve",
-		url.Values{"ura": {c.SunflowerURA}})
+		sourceConfirmation(t, c.client, c.server, c.key, c.SunflowerURA))
 }
 
 func (c fullChain) record(t *testing.T) string {

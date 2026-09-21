@@ -42,12 +42,19 @@ jobs:
     - name: Run Go tests
       run: go test -p 1 -v ./...
 
+    - name: Run shared NVI client tests
+      run: go test ./vectors/nvi
+      working-directory: test/testdata
+
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
         cache: 'npm'
         cache-dependency-path: pep/nginx/js/package-lock.json
+
+    - name: Run sandbox viewer tests
+      run: node --test sandbox/app/step-events.test.mjs
 
     - name: Install PEP test dependencies
       run: npm ci
