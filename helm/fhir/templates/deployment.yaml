@@ -65,6 +65,9 @@ spec:
             - name: hapi.fhir.partitioning.allow_references_across_partitions
               value: "false"
           {{- end }}
+          {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           envFrom:
             - configMapRef:
                 name: {{ include "fhir.fullname" . }}-config
