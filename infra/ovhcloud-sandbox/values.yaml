@@ -39,6 +39,23 @@ config:
   # implement yet - sandbox/DESIGN.md E8, not a config problem.
   mitz:
     mitzbase: "http://mock-mitz:8080"
+  # Same gap again, for addressing. Matches docker-compose.yml's
+  # KNPT_MCSD_QUERY_FHIRBASEURL / KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL:
+  # - The seeded LRZa tenant is the root administration directory. Without
+  #   it, `POST /mcsd/update` has nothing to walk and the query directory
+  #   stays empty, so the demo organizations are findable but not
+  #   addressable.
+  # - The query directory must be the knpt-mcsd-query tenant: that is where
+  #   gf-sandbox resolves addresses (sandbox/app/mcsdclient.go), not the
+  #   chart's default of HAPI's default partition.
+  mcsd:
+    admin:
+      lrza:
+        fhirbaseurl: "http://fhir:8080/fhir/lrza-mcsd-admin"
+    query:
+      fhirbaseurl: "http://fhir:8080/fhir/knpt-mcsd-query"
+    adminexclude:
+      - "http://fhir:8080/fhir/knpt-mcsd-query"
 
 nutsConfig:
   discovery:
