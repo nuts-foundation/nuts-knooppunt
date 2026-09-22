@@ -527,7 +527,7 @@ func TestShare_CardNamesTheRegisteredCategories(t *testing.T) {
 	// the cards renders the same categories on every response, each in its own
 	// span, so only the comma-joined form can come from the card.
 	require.Contains(t, body,
-		`<span class="k">Data categories</span><span class="v">`+strings.Join(anna.PlataanCategories(), ", ")+`</span>`,
+		`<dt>Data categories</dt><dd>`+strings.Join(anna.PlataanCategories(), ", ")+`</dd>`,
 		"the NVI card must name the categories itself")
 	require.NotContains(t, body, "BGZ (patient summary)")
 }

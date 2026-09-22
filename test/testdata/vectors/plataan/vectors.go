@@ -66,6 +66,10 @@ func Organization() fhir.Organization {
 				Reference: to.Ptr("Endpoint/cb75e784-b658-5a2f-acd7-6d513f9b0b43"),
 				Type:      to.Ptr("Endpoint"),
 			},
+			{
+				Reference: to.Ptr("Endpoint/7f2a6c94-51db-4e33-8a0c-9d4e17b3f605"),
+				Type:      to.Ptr("Endpoint"),
+			},
 		},
 	}
 }
@@ -90,8 +94,41 @@ func Endpoints() []fhir.Endpoint {
 				Start: to.Ptr("2025-01-01T00:00:00Z"),
 			},
 		},
+		{
+			Id:      to.Ptr("7f2a6c94-51db-4e33-8a0c-9d4e17b3f605"),
+			Address: AuthorizationServerAddress(),
+			Meta: &fhir.Meta{
+				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
+			},
+			Status: fhir.EndpointStatusActive,
+			ConnectionType: fhir.Coding{
+				System: to.Ptr("http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-authorization-server-cs"),
+				Code:   to.Ptr("oauth-nuts"),
+			},
+			Period: &fhir.Period{
+				Start: to.Ptr("2025-01-01T00:00:00Z"),
+			},
+		},
 	}
 }
+
+// AuthorizationServerAddress is the authorization server protecting De Plataan's
+// own data, whose Nuts subject is its URA, matching the PEP in front of it
+// (DATA_HOLDER_ORGANIZATION_URA in docker-compose.yml).
+//
+// It is also the server the sandbox asks for its own access token, which reads
+// this entry under De Plataan's URA. Which wallet that request is made from is a
+// separate choice and a different name: SANDBOX_NUTS_SUBJECT.
+func AuthorizationServerAddress() string {
+	if v := os.Getenv(AuthorizationServerEnvVar); v != "" {
+		return v
+	}
+	return "http://localhost:8080/nuts/oauth2/" + URA
+}
+
+// AuthorizationServerEnvVar overrides the published authorization server, for a
+// deployment whose node is not reachable at the default.
+const AuthorizationServerEnvVar = "SEED_PLATAAN_AUTH_SERVER_ADDRESS"
 
 // AdminResources returns the resources for De Plataan's admin directory tenant
 // (Organization + Endpoints), for PUT-by-fixed-id upsert.

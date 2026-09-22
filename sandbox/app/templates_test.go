@@ -88,6 +88,8 @@ func TestEhrHomeShowsFullChrome(t *testing.T) {
 	for _, s := range []string{"sb-bar", `class="app"`, `class="side"`, `class="top"`, "hood-dock", "gf-tab", `id="gf-viewer-steps"`, "/static/js/journey-strip.js"} {
 		require.Contains(t, body, s)
 	}
+	require.Contains(t, body, "/static/css/components.css")
+	require.Contains(t, body, `<header class="page-header"><h1>Patients</h1></header>`)
 	require.Contains(t, body, "S. el Amrani", "the signed-in practitioner's name renders in the top bar")
 	require.Contains(t, body, "Dezi ✓", "the top bar shows the signed-in badge")
 	require.Contains(t, body, `class="hood-dock on"`, "viewer opens by default past login")

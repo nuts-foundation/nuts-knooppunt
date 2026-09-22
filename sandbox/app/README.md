@@ -96,7 +96,6 @@ defaults instead of extending them.
 | `KNOOPPUNT_INTERNAL_URL` | `http://localhost:8081` | the knooppunt's internal mux. The backend reaches the Nuts node through it (proxied under `/nuts`) for the token request, and the same address enables reset/recycle when `HAPI_BASE_URL` is set too. One variable because it is one address: it was spelled `NUTS_INTERNAL_BASE_URL` here and `KNOOPPUNT_INTERNAL_URL` for reset, and `NUTS_` is the node's own configuration prefix, so that name read as node config the node never sees |
 | `SANDBOX_NUTS_SUBJECT` | `plataan` | the Nuts subject the token is requested for. Must name the subject `sandbox/bootstrap-nuts.sh` creates, whose wallet holds the `X509Credential` |
 | `SANDBOX_BGZ_SCOPE` | `bgz` | the scope requested. Must be a key in the definition the node loads, which the sandbox renders to `sandbox/.certs/policy/bgz.json` from `sandbox/policy/bgz.json.template`, or the node answers `invalid_scope` |
-| `SANDBOX_AUTH_SERVER` | `http://localhost:8080/nuts/oauth2/plataan` | the authorization server the token is requested from. It has to satisfy two requirements at once: equal the issuer the node advertises, and be reachable **by the node**, which fetches `/.well-known/oauth-authorization-server` from it before requesting a token (nuts-node `auth/client/iam/openid4vp.go`, `RequestRFC021AccessToken` to `AuthorizationServerMetadata`). Both hold here because the node dials it from inside its own container, where port 8080 is its own public listener. A split deployment has to find one address that satisfies both |
 | `SANDBOX_FACILITY_TYPE` | `Z3` | the facility type asserted in the organization context credential, the only thing on this path that carries one |
 | `SANDBOX_NVI_CLIENT_ID` | `gf-sandbox-plataan` | `List.source.identifier` on published localization records. Synthetic: no NVI OAuth client is registered for the demo, and this is not the `gf-sandbox` client id used on the Dezi flow. The client id is the scope a registration is deleted by, so recycle and the global reset receive this same value in `vectors.SandboxTarget` rather than reaching for the compiled-in default; overriding it here therefore also moves what those clean up. |
 | `MITZMOCK_URL` | unset | Base URL of the mock Mitz. Enables subscription reconciliation and the consent-subscription cleanup in reset and recycle. Unset means the share flow reports an unreconciled Mitz error as unknown rather than failed, and both cleanup paths report a partial restore rather than a clean one. The sandbox compose overlay sets it; the base `--profile sandbox` invocation does not. |
@@ -104,8 +103,8 @@ defaults instead of extending them.
 The public and internal URLs are separate on purpose. Under compose the browser cannot resolve the
 `mock-dezi` service name, and the sandbox container resolving `localhost` would reach itself.
 
-Of the five Nuts settings, `docker-compose.yml` overrides only `KNOOPPUNT_INTERNAL_URL`, to
-`http://knooppunt:8081`. It is the only one this topology changes; the other four already default to
+Of the four Nuts settings, `docker-compose.yml` overrides only `KNOOPPUNT_INTERNAL_URL`, to
+`http://knooppunt:8081`. It is the only one this topology changes; the other three already default to
 the values that are correct there. This table describes what the application reads, which is not the
 same question as what compose sets.
 
@@ -149,6 +148,79 @@ deadline, a gateway 502, an empty 401): it answers 201, the share screen renders
 started", and nothing on this side can tell the difference. `main` records the quirk in a `NOTE` in
 `CreateSubscription`; the fix belongs in its own PR against that component.
 
+## Retrieval (E4)
+
+Retrieving a patient summary runs four steps in one request, server-rendered like the share flow, with
+no SSE: the step-event stream stays with E6.
+
+1. **Localization.** The NVI is searched for every localization record about this patient, not just De
+   Plataan's, and the results are grouped per custodian. Our own registration is dropped: it describes
+   the record already on screen.
+2. **Addressing.** Each remaining custodian is resolved in the mCSD query directory with
+   `Organization?identifier=ura|{URA}&_include=Organization:endpoint`. The Knooppunt syncs that
+   directory but exposes no query API, so the sandbox reads the replica directly, which is what the
+   Addressing spec has a Query Client do.
+3. **Authentication.** An access token is requested from the *source's* authorization server, with the
+   session's Dezi attestation as `id_token`. The requester stays De Plataan's subject, which is the
+   wallet holding the credential the source's presentation definition asks for.
+4. **Retrieval.** The Patient search both opens the BGZ and resolves the source's own id for this
+   patient, which every later search is scoped to. Which categories are asked for comes from the NVI;
+   which query retrieves one comes from BGZ 2017, which is what `component/pdp/policies/bgz/policy.rego`
+   enforces. A refusal is rendered as a refusal, never as an error.
+
+Nothing is retrieved before the practitioner confirms a source, and the confirmed URA is re-checked
+against a fresh localization rather than trusted from the form.
+
+Six limitations are carried deliberately:
+
+- **Endpoint selection matches `connectionType` but not `payloadType`.** It honours `status` and
+  `period` at the precision FHIR dateTime allows, both SHALLs. An `oauth-nuts` Endpoint is
+  the authorization server, and a data endpoint has to carry one of two codings: the spec's
+  `http://terminology.hl7.org/CodeSystem/endpoint-connection-type|hl7-fhir-rest`, or
+  `http://fhir.nl/fhir/NamingSystem/endpoint-connection-type|fhir`, which is what this repo seeds and
+  is in neither GF value set. Every other kind is ignored rather than treated as a FHIR base.
+  `payloadType` is not matched at all: the seeded endpoints carry none, although the profile makes it
+  `1..*`, so matching on it would reject every data endpoint in this demo. That cuts both ways. It
+  recognizes fewer kinds of service than the spec, and it will also accept a FHIR endpoint serving a
+  payload this retrieval cannot use, because nothing here reads what an endpoint says it serves. Where
+  several endpoints qualify it takes the first, and an unreadable `period` bound reads as no bound.
+- **The sub-check breakdown is narration.** The authorization specification makes the decision a single
+  `allow` boolean and everything else informational, and the sandbox talks to the source's PEP, which
+  answers with a status and nothing else. The verdict and the per-query statuses on that screen are
+  real; the four checks above them describe what the chain carried, and the screen says so.
+- **Retrieved data lives in memory, scoped to the session that fetched it.** It is discarded when that
+  session ends, along with its locks, and a retrieval that finishes after its session ended is not
+  stored at all. One window remains: a session that expires and is never looked at again keeps its
+  data until the next read or sign-in sweeps it, because the store has no timer of its own.
+- **Paged results are followed to a bound.** A search that offers more than twenty pages stops there
+  and the row says the result is incomplete, rather than rendering a partial record as a whole one.
+- **A searchset's own warning is not surfaced.** FHIR lets a server put an `OperationOutcome` in a
+  searchset with `search.mode=outcome` to report that a result is partial or that a parameter was
+  ignored (https://hl7.org/fhir/R4/search.html#errors). Those entries are filtered out along with
+  everything that is not the resource the search asked for, so a 200 carrying one renders as a complete
+  answer. Reading them would mean deciding which outcomes make a result incomplete and which are
+  informational, which is a question this build has not settled.
+- **Continuation links are bounded, transport errors are not sanitized.** `continuationProblem` refuses
+  a next link that cannot be parsed, carries userinfo, points at another origin, or says the BSN in any
+  of its decoded components, so a request line this application composes cannot carry the identifier.
+  What is not covered is what a source puts in a response: Go parses a `Location` header before
+  `CheckRedirect` runs, so an unparsable redirect that echoes the BSN produces an error naming it, and
+  that text is stored and rendered. It needs a source that both echoes the identifier into a redirect
+  and makes that redirect malformed. Mapping transport errors to fixed messages would close it, at the
+  cost of the diagnostics this screen exists to show.
+
+Both token requests read their authorization server from the directory: the retrieval under the
+source's URA, `POST /demo/authorize` under De Plataan's own. Which wallet the request is made from is a
+separate question, answered by `SANDBOX_NUTS_SUBJECT` in the path of the internal call, so the two
+differ here: the wallet is `plataan` while the server published for De Plataan's own data is the one
+under `00000010`.
+
+Editing the seeded directory takes a re-seed and a `POST /mcsd/update` before the sandbox sees it. The
+sandbox's own reset reloads the fixtures without touching the query directory; compose's `init` does
+both. A seed run reports success on HTTP 200 without reading the update report, and a per-directory
+failure can sit inside a 200, so "seed complete" is not proof that an endpoint reached
+`knpt-mcsd-query`.
+
 ## Architecture
 
 A standalone Go binary, not a knooppunt component (DESIGN.md standing decision 5: this backend will be the only
@@ -177,6 +249,12 @@ materially).
 Datastar's event-attribute grammar is `data-on:click` (colon-separated), not `data-on-click`, as verified against
 the vendored v1.0.2 bundle. Keep this form when adding interactivity.
 
+## EHR component library
+
+See [EHR components](COMPONENTS.md) for the shared shell, layout and component
+contracts, responsive behavior, and the browser regression check. New EHR screens
+should compose these primitives and partials.
+
 ## Integration points
 
 - Dezi sign-in (E2): `POST /demo/login` starts the flow against `mock-components/dezi`,
@@ -201,6 +279,9 @@ the vendored v1.0.2 bundle. Keep this form when adding interactivity.
   `vectors.ResetGlobal` / `vectors.RecyclePatient`; they are enabled only when `KNOOPPUNT_INTERNAL_URL` and
   `HAPI_BASE_URL` are set (see `docker-compose.yml`), otherwise reset reports "disabled". The E3 patient
   open/switch route reserves the patient; the manual controls remain available for reset demonstrations.
+- Retrieval (E4, landed): `GET /demo/ehr/patients/{key}/retrieve` renders where the data can be
+  found, `POST` the same path runs the confirmed chain and renders the authorization result. Both
+  need a session; the POST additionally needs this session to hold the patient's lock.
 - The `#gf-viewer-steps` container and `window.GFJourney.apply(stepEvent)` / `.reset()`, consuming the DESIGN.md §7
   step-event schema (E6).
 

@@ -310,3 +310,41 @@ func TestDeleteForClientRefusesAnEmptyScope(t *testing.T) {
 		})
 	}
 }
+
+// Localization asks which organizations hold data about a patient, so its search
+// cannot be scoped to one custodian the way the share flow's is. This is the
+// whole difference between publishing and finding.
+func TestListsForPatient_ReturnsEveryCustodian(t *testing.T) {
+	base := fakeNVI(t, answerSearch(
+		listFor("plataan-list", "00000010"),
+		listFor("zonnebloem-list", "00000020"),
+	))
+
+	lists, err := ListsForPatient(context.Background(), base, "00000010", "999900006")
+	if err != nil {
+		t.Fatalf("ListsForPatient: %v", err)
+	}
+
+	if len(lists) != 2 {
+		t.Fatalf("got %d Lists, want both custodians", len(lists))
+	}
+	if got := CustodiansOf(lists); !slices.Equal(got, []string{"00000010", "00000020"}) {
+		t.Errorf("CustodiansOf = %v, want both custodians sorted", got)
+	}
+}
+
+func TestCustodiansOf_SortedDeduplicatedAndWithoutBlanks(t *testing.T) {
+	noCustodian := listFor("stray", "00000020")
+	noCustodian.Extension = nil
+
+	got := CustodiansOf([]fhir.List{
+		listFor("b", "00000020"),
+		listFor("a", "00000010"),
+		listFor("b2", "00000020"),
+		noCustodian,
+	})
+
+	if !slices.Equal(got, []string{"00000010", "00000020"}) {
+		t.Errorf("CustodiansOf = %v, want [00000010 00000020]", got)
+	}
+}

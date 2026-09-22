@@ -1,0 +1,109 @@
+{{define "content"}}{{template "ehr-layout" .}}{{end}}
+
+{{define "ehr-content"}}
+<main class="content">
+  <div class="disclaimer">
+    <span class="notice-icon" aria-hidden="true">&#9888;</span>
+    <span><b>Demo view.</b> In production the source system performs these checks itself and
+    returns only the final result. The breakdown below is shown for demonstration purposes only.
+    It is narration assembled from what this application did, not the source's reasoning: the
+    authorization specification makes the decision a single allow, and anything else
+    informational. The verdict and the per-query results underneath it are real.</span>
+  </div>
+
+  {{with .Retrieval}}
+  {{if .Granted}}
+  <div class="page-header auth-hero">
+    <span class="vbig">&check;</span>
+    <div>
+      <h1>Access granted by {{.Source.Name}}</h1>
+      <div class="asub">Decided at the source and enforced by its policy enforcement point,
+      fail-closed.{{if $.Retrieval.Incomplete}} The source authorized the request, but
+      not everything it authorized came back: the rows below say which searches fell short.{{end}}</div>
+    </div>
+  </div>
+  {{else if .Refused}}
+  <div class="page-header auth-hero denied">
+    <span class="vbig">&times;</span>
+    <div>
+      <h1>Access denied by {{.Source.Name}}</h1>
+      <div class="asub">The source refused the request. No data left {{.Source.Name}}, and this
+      screen has none to show.</div>
+    </div>
+  </div>
+  {{else}}
+  <div class="page-header auth-hero undetermined">
+    <span class="vbig">?</span>
+    <div>
+      <h1>The outcome could not be established</h1>
+      <div class="asub">{{.Source.Name}} did not answer in a way this application could read, so
+      whether it would have granted access is unknown. That is not a refusal, and it is not
+      evidence about what the source holds. The row below carries what came back.</div>
+    </div>
+  </div>
+  {{end}}
+
+  {{/* The narration below describes a chain that ran to a decision. After a
+       failure there was no decision to narrate, and claiming the consent check
+       happened would assert exactly what this screen could not establish. */}}
+  {{if not .Failed}}
+  <div class="check-card">
+    <div class="chk ok">
+      <span class="tile"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="5.5" r="3"/><path d="M8.3,7.7 L2.5,13.5 M4.3,11.7 L5.8,13.2 M6.3,9.7 L7.8,11.2"/></svg></span>
+      <div><b>Authentication</b><div class="cd">The Dezi attestation from this session was
+      exchanged at {{.Source.Name}}'s authorization server for an access token, together with
+      De Plataan's organization credential.</div></div>
+      <span class="tag">Carried</span>
+    </div>
+    <div class="chk ok">
+      <span class="tile"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.2" r="2.7"/><path d="M2.8,13.5 C3.4,10.7 5.4,9.4 8,9.4 C10.6,9.4 12.6,10.7 13.2,13.5"/></svg></span>
+      <div><b>Practitioner role</b><div class="cd">The practitioner's Dezi role travelled inside
+      that token and is what the source's policy reads as the requesting role.</div></div>
+      <span class="tag">Carried</span>
+    </div>
+    <div class="chk ok">
+      <span class="tile"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8,1.8 L13.5,4 L13.5,8 C13.5,11.4 11.3,13.6 8,14.8 C4.7,13.6 2.5,11.4 2.5,8 L2.5,4 Z"/><path d="M5.6,8 L7.3,9.7 L10.6,6.4"/></svg></span>
+      <div><b>Consent</b><div class="cd">Checked at the source: its policy asks Mitz a closed
+      question per decision. The answer never leaves the source, so this application cannot
+      report it separately from the verdict above.</div></div>
+      <span class="tag">At the source</span>
+    </div>
+    <div class="chk ok">
+      <span class="tile"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="4.6"/><circle cx="8" cy="8" r="1.1"/><path d="M8,1.4 L8,3.4 M8,12.6 L8,14.6 M1.4,8 L3.4,8 M12.6,8 L14.6,8"/></svg></span>
+      <div><b>Scope of the request</b><div class="cd">Only the searches the BGZ use case permits
+      were sent, and only for the data categories the referral index reported at this
+      source.</div></div>
+      <span class="tag">Carried</span>
+    </div>
+  </div>
+  {{end}}
+
+  <div class="card">
+    <h2>What was asked, and what came back</h2>
+    <div class="h-sub">One row per authorized query. These statuses are the source's own
+    answers, applied by its policy enforcement point.</div>
+    <table class="kv-table">
+      <tbody>
+        {{range .Queries}}
+        <tr>
+          <th scope="row">{{.Label}}</th>
+          <td><span class="mono">{{.Request}}</span>
+            {{if .Status}} &middot; <b>{{.Status}}</b>{{end}}
+            {{with .Error}} &middot; {{.}}{{end}}
+            {{with .Truncated}} &middot; {{.}}{{end}}
+            {{with .Note}} &middot; {{.}}{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="actions">
+    {{if and .Granted .Items}}
+    <a class="btn solid big" href="/demo/ehr/patients/{{$.Patient.Key}}">View the retrieved data</a>
+    {{end}}
+    <a class="btn ghost" href="/demo/ehr/patients/{{$.Patient.Key}}/retrieve">Back</a>
+  </div>
+  {{end}}
+</main>
+{{end}}
