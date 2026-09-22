@@ -153,3 +153,6 @@ seed:
   # was never published for ghcr.io/nuts-foundation/knooppunt-sandbox-seed.
   image:
     tag: main
+    # A moving tag: without this, a node that already pulled "main" keeps
+    # running the old seed on every upgrade.
+    pullPolicy: Always
