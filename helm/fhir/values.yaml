@@ -105,6 +105,11 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
+# Deployment rollout strategy. Unset means the Kubernetes default
+# (RollingUpdate), which briefly runs two HAPI pods side by side; on small
+# nodes that can exceed memory and evict one. Use `type: Recreate` there.
+strategy: {}
+
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious
   # choice for the user. This also increases chances charts run on environments with little
