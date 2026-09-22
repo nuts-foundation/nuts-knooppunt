@@ -1,0 +1,18 @@
+{{- if .Values.database.enabled }}
+{{- range .Values.database.databases }}
+---
+# A logical database inside the shared server, owned by the role of the same
+# name (declared under managed.roles in cluster.yaml).
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: {{ include "nuts-knooppunt.database.secretName" (dict "ctx" $ "name" .) }}
+  labels:
+    {{- include "nuts-knooppunt.labels" $ | nindent 4 }}
+spec:
+  name: {{ . }}
+  owner: {{ . }}
+  cluster:
+    name: {{ include "nuts-knooppunt.database.clusterName" $ }}
+{{- end }}
+{{- end }}

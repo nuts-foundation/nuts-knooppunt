@@ -8,6 +8,12 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  {{- if .Values.persistence.enabled }}
+  # The data volume is ReadWriteOnce: the old pod must release it before the
+  # new one can mount it.
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       {{- include "nuts-knooppunt.selectorLabels" . | nindent 6 }}
@@ -41,9 +47,18 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- with .Values.extraEnv }}
+          {{- if or .Values.database.enabled .Values.extraEnv }}
           env:
+            {{- if .Values.database.enabled }}
+            - name: NUTS_STORAGE_SQL_CONNECTION
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nuts-knooppunt.database.secretName" (dict "ctx" . "name" "nuts") }}
+                  key: uri
+            {{- end }}
+            {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           ports:
             - name: internal
@@ -68,6 +83,10 @@ spec:
             - name: config
               mountPath: /app/config
               readOnly: true
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: /app/data
+            {{- end }}
           {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -88,6 +107,11 @@ spec:
               - key: policy-{{ $filename }}
                 path: policy/{{ $filename }}
               {{- end }}
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "nuts-knooppunt.fullname" . }}-data
+        {{- end }}
       {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

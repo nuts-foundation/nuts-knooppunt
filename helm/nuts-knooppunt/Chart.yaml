@@ -30,7 +30,7 @@ dependencies:
     alias: fhir
     condition: fhir.enabled
     repository: oci://ghcr.io/nuts-foundation
-    version: "0.1.1"
+    version: "0.1.2"
   # Compose runs one PEP per demo organization (pep-zonnebloem, pep-plataan) -
   # same image, different config - so this chart is depended on twice under
   # different aliases rather than once.
