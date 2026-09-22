@@ -22,6 +22,21 @@ config: {}
 #     HAPI_FHIR_SERVER_ADDRESS: "http://fhir.example.com/fhir"
 # configExtra: {}
 
+# Extra environment variables for the HAPI FHIR container, as Kubernetes env
+# entries (so valueFrom/secretKeyRef works). Use this instead of configExtra
+# for anything that must not live in a ConfigMap, such as a database password
+# when connecting to a Postgres server this chart does not provision itself
+# (postgres.enabled: false). Example:
+#   extraEnv:
+#     - name: spring.datasource.url
+#       value: "jdbc:postgresql://my-db-rw:5432/fhir"
+#     - name: spring.datasource.password
+#       valueFrom:
+#         secretKeyRef:
+#           name: my-db-fhir
+#           key: password
+extraEnv: []
+
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: hapiproject/hapi
@@ -89,6 +104,11 @@ ingress:
   #  - secretName: chart-example-tls
   #    hosts:
   #      - chart-example.local
+
+# Deployment rollout strategy. Unset means the Kubernetes default
+# (RollingUpdate), which briefly runs two HAPI pods side by side; on small
+# nodes that can exceed memory and evict one. Use `type: Recreate` there.
+strategy: {}
 
 resources: {}
   # We usually recommend not to specify default resources and to leave this as a conscious

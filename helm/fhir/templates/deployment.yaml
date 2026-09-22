@@ -8,6 +8,10 @@ spec:
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
+  {{- with .Values.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "fhir.selectorLabels" . | nindent 6 }}
@@ -64,6 +68,9 @@ spec:
             # Enable partitioning and allow string tenant identifiers
             - name: hapi.fhir.partitioning.allow_references_across_partitions
               value: "false"
+          {{- end }}
+          {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           envFrom:
             - configMapRef:
