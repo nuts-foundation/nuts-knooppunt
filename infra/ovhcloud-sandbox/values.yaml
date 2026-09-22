@@ -98,11 +98,18 @@ pep-zonnebloem:
   # published for ghcr.io/nuts-foundation/knooppunt-pep.
   image:
     tag: main
+  # The HAPI tenant this PEP protects, as in docker-compose.yml's
+  # FHIR_UPSTREAM_PATH. Without it the PEP forwards to HAPI's default
+  # partition and every authorized read 400s.
+  env:
+    fhirUpstreamPath: "/fhir/sunflower-patients"
 
 pep-plataan:
   enabled: true
   image:
     tag: main
+  env:
+    fhirUpstreamPath: "/fhir/plataan-patients"
 
 fhir:
   enabled: true
