@@ -112,6 +112,15 @@ fhir:
   image:
     repository: ghcr.io/nuts-foundation/fake-nvi
     tag: main
+  # HAPI uses ~900Mi on a node with ~2Gi allocatable. Without a request the
+  # scheduler packed a rolling update's new pod next to the old one and the
+  # node evicted its way out of it; Recreate makes sure there is never a
+  # second HAPI to place at all.
+  resources:
+    requests:
+      memory: 1Gi
+  strategy:
+    type: Recreate
   # Off on purpose: the subchart would provision a Postgres server of its
   # own. HAPI uses the shared one from `database` above instead, wired here
   # by hand because a subchart's values can't reference the parent chart's
