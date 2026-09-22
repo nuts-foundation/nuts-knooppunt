@@ -19,6 +19,10 @@ env:
   fhirBackendHost: "hapi-fhir"
   fhirBackendPort: "7050"
   fhirBasePath: "/fhir"
+  # Path on the backend that fhirBasePath is rewritten to, e.g. the tenant
+  # of a multi-tenant HAPI ("/fhir/sunflower-patients"). Unset means the
+  # image default: same as fhirBasePath.
+  # fhirUpstreamPath: ""
   # Knooppunt PDP for authorization decisions
   knooppuntPdpHost: "knooppunt"
   knooppuntPdpPort: "8081"

@@ -47,6 +47,10 @@ spec:
             value: {{ .Values.env.fhirBackendPort | quote }}
           - name: FHIR_BASE_PATH
             value: {{ .Values.env.fhirBasePath | quote }}
+          {{- with .Values.env.fhirUpstreamPath }}
+          - name: FHIR_UPSTREAM_PATH
+            value: {{ . | quote }}
+          {{- end }}
           - name: KNOOPPUNT_PDP_HOST
             value: {{ .Values.env.knooppuntPdpHost | quote }}
           - name: KNOOPPUNT_PDP_PORT
