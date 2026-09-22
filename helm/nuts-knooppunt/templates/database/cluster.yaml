@@ -1,0 +1,33 @@
+{{- if .Values.database.enabled }}
+# One shared PostgreSQL server for every component that needs one. Each
+# component gets its own logical database and owning role (see database.yaml
+# and secret.yaml), so they share the server but not the data.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "nuts-knooppunt.database.clusterName" . }}
+  labels:
+    {{- include "nuts-knooppunt.labels" . | nindent 4 }}
+  annotations:
+    # Deleting the Cluster deletes its volumes, so a helm uninstall would
+    # take the data with it. Kept, like the credential Secrets and the data
+    # PVC: persistent storage goes away on an explicit kubectl delete only.
+    "helm.sh/resource-policy": keep
+spec:
+  instances: {{ .Values.database.instances }}
+  primaryUpdateStrategy: unsupervised
+  storage:
+    size: {{ .Values.database.storage.size }}
+    {{- with .Values.database.storage.storageClass }}
+    storageClass: {{ . }}
+    {{- end }}
+  managed:
+    roles:
+      {{- range .Values.database.databases }}
+      - name: {{ . }}
+        ensure: present
+        login: true
+        passwordSecret:
+          name: {{ include "nuts-knooppunt.database.secretName" (dict "ctx" $ "name" .) }}
+      {{- end }}
+{{- end }}

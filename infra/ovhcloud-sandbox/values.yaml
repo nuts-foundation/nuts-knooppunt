@@ -78,17 +78,38 @@ nutsConfig:
 image:
   tag: main
 
+# Persistent storage (nuts-knooppunt#586): one shared Postgres server for
+# HAPI and the embedded nuts-node, plus a volume for the nuts-node's crypto
+# keys. Requires the CloudNativePG operator on the cluster, see
+# helm/nuts-knooppunt/README.md. Before this, HAPI's tenant partitions and
+# every did:web subject were gone on each pod restart.
+database:
+  enabled: true
+persistence:
+  enabled: true
+# Same CSI volume ownership issue as mock-vc-issuer below: the knooppunt
+# image runs as uid 18081 (Dockerfile).
+podSecurityContext:
+  fsGroup: 18081
+
 pep-zonnebloem:
   enabled: true
   # Same appVersion-placeholder issue as the root chart - "1.16.0" was never
   # published for ghcr.io/nuts-foundation/knooppunt-pep.
   image:
     tag: main
+  # The HAPI tenant this PEP protects, as in docker-compose.yml's
+  # FHIR_UPSTREAM_PATH. Without it the PEP forwards to HAPI's default
+  # partition and every authorized read 400s.
+  env:
+    fhirUpstreamPath: "/fhir/sunflower-patients"
 
 pep-plataan:
   enabled: true
   image:
     tag: main
+  env:
+    fhirUpstreamPath: "/fhir/plataan-patients"
 
 fhir:
   enabled: true
@@ -98,13 +119,37 @@ fhir:
   image:
     repository: ghcr.io/nuts-foundation/fake-nvi
     tag: main
-  # Matches docker-compose.yml, which runs HAPI without Postgres (its
-  # postgres block is commented out there). Keeping this off avoids adding
-  # the CloudNativePG operator as a cluster prerequisite for no benefit in a
-  # throwaway test environment; data doesn't survive a pod restart either
-  # way right now.
+  # HAPI uses ~900Mi on a node with ~2Gi allocatable. Without a request the
+  # scheduler packed a rolling update's new pod next to the old one and the
+  # node evicted its way out of it; Recreate makes sure there is never a
+  # second HAPI to place at all.
+  resources:
+    requests:
+      memory: 1Gi
+  strategy:
+    type: Recreate
+  # Off on purpose: the subchart would provision a Postgres server of its
+  # own. HAPI uses the shared one from `database` above instead, wired here
+  # by hand because a subchart's values can't reference the parent chart's
+  # templates. Names follow the chart's fullnameOverride ("nuts-knooppunt")
+  # and database name ("fhir"); the env keys are the ones the subchart sets
+  # itself when postgres.enabled is true.
   postgres:
     enabled: false
+  extraEnv:
+    - name: spring.jpa.properties.hibernate.dialect
+      value: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect
+    - name: spring.datasource.driverClassName
+      value: org.postgresql.Driver
+    - name: spring.datasource.url
+      value: "jdbc:postgresql://nuts-knooppunt-db-rw:5432/fhir"
+    - name: spring.datasource.username
+      value: fhir
+    - name: spring.datasource.password
+      valueFrom:
+        secretKeyRef:
+          name: nuts-knooppunt-db-fhir
+          key: password
   configExtra:
     NVI_AUDIENCE: "nvi"
     NVI_TENANT: "nvi"
