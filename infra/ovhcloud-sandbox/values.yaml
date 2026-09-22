@@ -39,6 +39,15 @@ config:
   # implement yet - sandbox/DESIGN.md E8, not a config problem.
   mitz:
     mitzbase: "http://mock-mitz:8080"
+  # Same gap once more, for authorization: without a PIP the PDP can't
+  # resolve a Patient to a BSN, never asks Mitz for consent, and denies every
+  # request with an opaque 403. Matches docker-compose.yml's
+  # KNPT_PDP_PIP_URL, including its caveat: this makes the PDP
+  # single-data-holder (Zonnebloem), fine while it is the only organization
+  # serving data through a PEP.
+  pdp:
+    pip:
+      url: "http://fhir:8080/fhir/sunflower-patients"
   # Same gap again, for addressing. Matches docker-compose.yml's
   # KNPT_MCSD_QUERY_FHIRBASEURL / KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL:
   # - The seeded LRZa tenant is the root administration directory. Without
