@@ -24,7 +24,11 @@ for f in policy/*.json; do
   set_file_args+=(--set-file "policyDocuments.${name//./\\.}=${f}")
 done
 
+# --wait: the seed Job is a post-upgrade hook that calls knooppunt and HAPI.
+# Without --wait, Helm runs the hook as soon as the manifests are applied,
+# before the Deployments' readiness probes pass, and the seed fails.
 helm upgrade sandbox ../../helm/nuts-knooppunt \
+  --wait \
   -f values.yaml \
   ${set_file_args[@]+"${set_file_args[@]}"} \
   "$@"

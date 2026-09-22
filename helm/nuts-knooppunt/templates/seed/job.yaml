@@ -1,0 +1,32 @@
+{{- if .Values.seed.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "nuts-knooppunt.fullname" . }}-seed-{{ .Release.Revision }}
+  labels:
+    {{- include "nuts-knooppunt.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      name: {{ include "nuts-knooppunt.fullname" . }}-seed
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: seed
+          image: "{{ .Values.seed.image.repository }}:{{ .Values.seed.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.seed.image.pullPolicy }}
+          env:
+            - name: SEED_ZONNEBLOEM_ENDPOINT_ADDRESS
+              value: {{ .Values.seed.zonnebloemEndpointAddress | quote }}
+            - name: SEED_PLATAAN_ENDPOINT_ADDRESS
+              value: {{ .Values.seed.plataanEndpointAddress | quote }}
+          args:
+            - "http://{{ include "nuts-knooppunt.fullname" . }}:{{ .Values.service.internalPort }}"
+            - {{ .Values.seed.fhirBaseURL | quote }}
+            - "/certs"
+{{- end }}

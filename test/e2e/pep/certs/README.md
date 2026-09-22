@@ -12,8 +12,8 @@ without manual setup.
 | File | URA | Organization | Used by |
 |---|---|---|---|
 | `requester.{key,pem}`, `requester-chain.pem` | `87654321` | Test Hospital B.V. | `test/e2e/pep/authorization_test.go` |
-| `plataan.{key,pem}`, `plataan-chain.pem` | `00000010` | Ziekenhuis De Plataan | compose seed (`credential-issuer-plataan`) |
-| `zonnebloem.{key,pem}`, `zonnebloem-chain.pem` | `00000020` | Sunflower Care Home | compose seed (`credential-issuer-zonnebloem`) |
+| `plataan.{key,pem}`, `plataan-chain.pem` | `00000010` | Ziekenhuis De Plataan | compose seed (`test/testdata/cmd`) |
+| `zonnebloem.{key,pem}`, `zonnebloem-chain.pem` | `00000020` | Sunflower Care Home | compose seed (`test/testdata/cmd`) |
 | `ca.{key,pem}`, `ca.srl` | — | Fake UZI Root CA | issuer of all of the above |
 
 ## ⚠️ Do not regenerate the CA

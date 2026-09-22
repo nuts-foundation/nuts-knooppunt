@@ -43,10 +43,16 @@ services:
       - ./config:/app/config:ro
       - ./test/e2e/pep/certs/ca.pem:/app/certs/ca.pem:ro
 
-  # Seeds FHIR test data, creates a Nuts subject per demo organization and writes
-  # each subject's DID to the shared scratch volume for the credential issuers.
+  # Seeds FHIR test data, creates a Nuts subject and X509Credential per demo
+  # organization, stores each credential and registers discovery, then seeds
+  # NVI localization records. See test/testdata/cmd/main.go for why this is
+  # one process rather than the multi-container pipeline (create subjects →
+  # mint credentials → store/register) it used to be: a did:web DID gets a
+  # fresh UUID per subject creation, so a credential can't be minted before
+  # the subject exists, which only needs to matter for call order within one
+  # process, not a file handoff between containers.
   init:
-    image: golang:1.24.4-alpine
+    image: golang:1.25-alpine
     depends_on:
       hapi-fhir-healthcheck:
         condition: service_completed_successfully
@@ -61,12 +67,10 @@ services:
       # use http://localhost:9080/fhir (Zonnebloem) and :9081 (De Plataan).
       SEED_ZONNEBLOEM_ENDPOINT_ADDRESS: http://pep-zonnebloem:8080/fhir
       SEED_PLATAAN_ENDPOINT_ADDRESS: http://pep-plataan:8080/fhir
-      # Where to write the created DIDs for the credential-issuer services.
-      SEED_DID_DIR: /shared
     volumes:
       - ./test/testdata:/app/:ro
-      - seed-shared:/shared
-    command: /bin/sh -c "cd /app && go run main.go http://knooppunt:8081 http://hapi-fhir:7050/fhir"
+      - ./test/e2e/pep/certs:/certs:ro
+    command: /bin/sh -c "cd /app && go run ./cmd http://knooppunt:8081 http://hapi-fhir:7050/fhir /certs"
 
   nutsadmin:
     image: nutsfoundation/nuts-admin:6.2.1
@@ -245,67 +249,6 @@ services:
     container_name: knooppunt-mitzmock
     ports:
       - "8087:8080"
-
-  # ---------------------------------------------------------------------------
-  # Credential issuance
-  #
-  # did:web subject DIDs contain a fresh UUID per subject creation, so an
-  # X509Credential — which binds credentialSubject.id to that DID — cannot be
-  # generated ahead of time and committed. It has to be issued after the subject
-  # exists, which is why this runs as compose services rather than as fixtures.
-  #
-  # Ordering: init (creates subjects, writes DIDs) → credential-issuer-* (mint
-  # the JWT VCs) → init-credentials (store them in the wallets, register on
-  # discovery, seed the NVI).
-  # ---------------------------------------------------------------------------
-  credential-issuer-plataan:
-    image: nutsfoundation/go-didx509-toolkit:main
-    depends_on:
-      init:
-        condition: service_completed_successfully
-    volumes:
-      - ./test/e2e/pep/certs:/certs:ro
-      - seed-shared:/shared
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -e
-        /usr/bin/didx509-toolkit vc /certs/plataan-chain.pem /certs/plataan.key "CN=Fake UZI Root CA" "$$(cat /shared/plataan.did)" > /shared/plataan.jwt
-        echo "issued X509Credential for plataan"
-
-  credential-issuer-zonnebloem:
-    image: nutsfoundation/go-didx509-toolkit:main
-    depends_on:
-      init:
-        condition: service_completed_successfully
-    volumes:
-      - ./test/e2e/pep/certs:/certs:ro
-      - seed-shared:/shared
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -e
-        /usr/bin/didx509-toolkit vc /certs/zonnebloem-chain.pem /certs/zonnebloem.key "CN=Fake UZI Root CA" "$$(cat /shared/zonnebloem.did)" > /shared/zonnebloem.jwt
-        echo "issued X509Credential for zonnebloem"
-
-  # Stores the issued credentials in each subject's wallet, registers both on the
-  # discovery service, then seeds the NVI localization records. NVI seeding runs
-  # last so a failure to authorize is not masked by a half-seeded index.
-  init-credentials:
-    image: golang:1.24.4-alpine
-    depends_on:
-      credential-issuer-plataan:
-        condition: service_completed_successfully
-      credential-issuer-zonnebloem:
-        condition: service_completed_successfully
-    environment:
-      SEED_DID_DIR: /shared
-      SEED_ZONNEBLOEM_ENDPOINT_ADDRESS: http://pep-zonnebloem:8080/fhir
-      SEED_PLATAAN_ENDPOINT_ADDRESS: http://pep-plataan:8080/fhir
-    volumes:
-      - ./test/testdata:/app/:ro
-      - seed-shared:/shared
-    command: /bin/sh -c "cd /app && go run ./cmd/credentials http://knooppunt:8081"
 
   vektis-issuer:
     image: ghcr.io/nuts-foundation/mock-vc-issuer:latest
@@ -530,6 +473,3 @@ services:
 volumes:
   #postgres-data:
   hapi-data:
-  # Scratch space shared by the seed pipeline: init writes <org>.did, the
-  # credential issuers write <org>.jwt, init-credentials consumes both.
-  seed-shared:

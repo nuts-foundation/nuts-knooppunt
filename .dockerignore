@@ -15,9 +15,16 @@ sandbox/.certs/
 
 # Private key material and local runtime state, excluded by shape rather
 # than by location so a new key directory does not silently start shipping.
-# Nothing built from this context needs any of it: no Dockerfile copies a
-# key, and no go:embed pattern matches one. `pki/cacerts/*.crt`, the only
-# certificate material an image does need, is public and unaffected.
+# `pki/cacerts/*.crt`, the only certificate material most images need, is
+# public and unaffected.
 **/*.key
 **/*_private.pem
 data/
+
+# Test UZI keys the seed image (test/testdata/Dockerfile) bakes in to issue
+# demo X509Credentials, for the two organizations it actually seeds. Fake,
+# committed deliberately (see test/e2e/pep/certs/README.md) — not real key
+# material. Narrower than the whole directory - not the CA key or the
+# requester key, a different test's fixture.
+!test/e2e/pep/certs/plataan.key
+!test/e2e/pep/certs/zonnebloem.key
