@@ -1,6 +1,10 @@
 package harness
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/pem"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -52,7 +56,31 @@ type PEPDetails struct {
 }
 
 // Start starts the full test harness with all components (MCSD, NVI, MITZ).
+// Start runs the components an exchange is discovered and addressed through: the
+// directories, the NVI and the policy decision point, with no Nuts node. Tests
+// that need a token ask for StartWithNuts instead.
 func Start(t *testing.T) Details {
+	t.Helper()
+	return start(t, false)
+}
+
+// StartWithNuts is Start plus the embedded Nuts node, which is what makes an
+// authorization server exist to ask a token of. It costs the node's startup on
+// every call, so it is a separate entry point rather than the default.
+func StartWithNuts(t *testing.T) Details {
+	t.Helper()
+	setupNutsEnvironment(t, filepath.Join(PEPCertsDir(t), "ca.pem"))
+	return start(t, true)
+}
+
+// PEPCertsDir is where the committed test certificates live, resolved from this
+// source file rather than the working directory so any package can ask for it.
+func PEPCertsDir(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(repoRoot(t), "test", "e2e", "pep", "certs")
+}
+
+func start(t *testing.T, withNuts bool) Details {
 	t.Helper()
 
 	// Delay container shutdown to improve container reusability
@@ -91,6 +119,8 @@ func Start(t *testing.T) Details {
 			URL: testData.PIP.FHIRBaseURL.String(),
 		},
 	}
+
+	config.Nuts = nutsnode.Config{Enabled: withNuts}
 
 	mockMitz := mitzmock.NewClosedQuestionService(t)
 	config.MITZ = mitz.Config{
@@ -220,6 +250,16 @@ func setupNutsEnvironment(t *testing.T, caPath string) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(policyDir, "accesspolicy.json"), policyData, 0644))
 
+	// The bgz scope is not in config/policy: its presentation definition pins a
+	// certificate authority fingerprint, so it is rendered per deployment rather
+	// than committed. renderBGZPolicy does for this harness what
+	// sandbox/generate-demo-certs.sh does for compose, from the same template,
+	// with the test CA these certificates descend from. Without it the node
+	// serves no bgz definition and a token request fails with invalid_scope two
+	// services away from the cause.
+	require.NoError(t, os.WriteFile(filepath.Join(policyDir, "bgz.json"),
+		renderBGZPolicy(t, caPath), 0644))
+
 	// Copy discovery definition (must be named <service-id>.json)
 	discoveryData, err := os.ReadFile(filepath.Join(repoConfigDir, "discovery", "bgz-test.json"))
 	require.NoError(t, err)
@@ -235,4 +275,30 @@ func setupNutsEnvironment(t *testing.T, caPath string) {
 	os.Setenv("NUTS_INTERNALRATELIMITER", "false")
 	os.Setenv("NUTS_NETWORK_ENABLEDISCOVERY", "false")
 	os.Setenv("SSL_CERT_FILE", caPath)
+}
+
+// bgzFingerprintPlaceholder is what sandbox/policy/bgz.json.template carries
+// where the trusted authority's fingerprint belongs. The template as committed
+// denies everything, which is the point: a placeholder is not 43 base64url
+// characters, so an unrendered definition cannot accidentally trust anyone.
+const bgzFingerprintPlaceholder = "__GF_SANDBOX_DEMO_CA_FINGERPRINT__"
+
+// renderBGZPolicy pins caPath's fingerprint into the bgz presentation
+// definition. The fingerprint is the unpadded base64url SHA-256 of the
+// certificate's DER form, which is how did:x509 names an authority.
+func renderBGZPolicy(t *testing.T, caPath string) []byte {
+	t.Helper()
+	template, err := os.ReadFile(filepath.Join(repoRoot(t), "sandbox", "policy", "bgz.json.template"))
+	require.NoError(t, err, "the bgz presentation definition template is missing")
+
+	pemBytes, err := os.ReadFile(caPath)
+	require.NoError(t, err)
+	block, _ := pem.Decode(pemBytes)
+	require.NotNil(t, block, "%s holds no PEM block", caPath)
+
+	sum := sha256.Sum256(block.Bytes)
+	fingerprint := base64.RawURLEncoding.EncodeToString(sum[:])
+	require.Len(t, fingerprint, 43, "an unpadded base64url SHA-256 is 43 characters")
+
+	return bytes.ReplaceAll(template, []byte(bgzFingerprintPlaceholder), []byte(fingerprint))
 }
