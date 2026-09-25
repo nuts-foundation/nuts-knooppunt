@@ -600,10 +600,9 @@ func (c Config) handleRecycle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "patient "+key+" is locked (demo in progress)", http.StatusConflict)
 		return
 	}
+	// Runs are left alone: the lock check above means none was live, and a run
+	// opened during the restore belongs to the session that opened it.
 	err := c.recyclePatient(r.Context(), key)
-	if c.Runs != nil {
-		c.Runs.clearPatient(key)
-	}
 	// Unconditionally, including on an ordinary error. RecyclePatient is not
 	// transactional: it PUTs the fixtures back one at a time and verifies
 	// afterwards, so a failure can follow resources it already replaced. An error

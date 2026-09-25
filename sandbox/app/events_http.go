@@ -116,6 +116,11 @@ func (c Config) handleEvents(w http.ResponseWriter, r *http.Request, session *au
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Accel-Buffering", "no")
+	// net/http discards body writes for HEAD, so a stream would never see a
+	// write error and would hold the connection until the run ends.
+	if r.Method == http.MethodHead {
+		return
+	}
 	controller := http.NewResponseController(w)
 	write := func(frame string) bool {
 		if err := controller.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil && !errors.Is(err, http.ErrNotSupported) {

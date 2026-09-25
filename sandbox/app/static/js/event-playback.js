@@ -11,6 +11,9 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
   let events = [], groups = [], action = null, stage = null;
   let timer = null, settling = null, due = 0, remaining = stageMs;
   let ready = false, started = false, paused = false, disposed = false, complete = false;
+  // A replayed window (page load, retention gap) is applied once at its snapshot
+  // rather than regrouped and redrawn per event; later live events apply directly.
+  let delivered = false;
   const watched = new Set((Array.isArray(cursor?.callIds) ? cursor.callIds : []).filter(id => typeof id === 'string' && id.length <= 160).slice(-256));
   let replayQueue = null, selected = false;
   const getCursor = () => ({ callIds: [...watched].slice(-256) });
@@ -60,21 +63,26 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
     }
   }
   function resumeClock() { if (stage) schedule(); else advance(); changed(); }
+  function regroup() {
+    groups = buildActionGroups(events);
+    if (action) {
+      const retained = groups.find(group => group.id === action.id);
+      if (!retained) { suspend(); stage = null; replayQueue = null; selected = false; }
+      action = retained || latest() || null;
+    }
+    changed();
+  }
   return {
     add(event) {
       if (disposed || events.some(item => item.seq === event.seq || callIdentity(item) === callIdentity(event))) return false;
       events = [...events, event].slice(-256);
-      groups = buildActionGroups(events);
-      if (action) {
-        const retained = groups.find(group => group.id === action.id);
-        if (!retained) { suspend(); stage = null; replayQueue = null; selected = false; }
-        action = retained || latest() || null;
-      }
-      changed();
+      if (delivered) regroup();
       return true;
     },
     snapshot() {
-      if (disposed || settling !== null) return;
+      if (disposed) return;
+      if (!delivered) { delivered = true; regroup(); }
+      if (settling !== null) return;
       // One grace period per received batch, never reset by a later PRS delivery.
       settling = clock.setTimeout(() => {
         settling = null; ready = true;
@@ -111,7 +119,7 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
     reset() {
       suspend(); if (settling !== null) clock.clearTimeout(settling);
       settling = null; events = []; groups = []; action = null; stage = null;
-      ready = false; started = false; complete = false; replayQueue = null; selected = false;
+      ready = false; started = false; complete = false; replayQueue = null; selected = false; delivered = false;
       changed();
     },
     dispose() {
