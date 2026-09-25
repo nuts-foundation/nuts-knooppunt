@@ -848,7 +848,11 @@ func TestPatientList_DoesNotMarkThisSessionsOwnPatientBusy(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 	require.NotContains(t, body, "Demo in progress",
 		"the row this session holds must stay openable")
-	require.NotContains(t, body, "disabled")
+	_, form, found := strings.Cut(body, `action="/demo/ehr/patients/`+anna.Key+`/open"`)
+	require.True(t, found, "the patient's open form must be present")
+	form, _, found = strings.Cut(form, "</form>")
+	require.True(t, found)
+	require.NotContains(t, form, "disabled", "the patient's open button must stay enabled")
 }
 
 func TestShare_RejectsCrossSiteSubmissions(t *testing.T) {

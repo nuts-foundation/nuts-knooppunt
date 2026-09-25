@@ -159,7 +159,7 @@ func TestRetrieve_RefusesASourceTheIndexDidNotReport(t *testing.T) {
 	openPatient(t, client, srv, key)
 
 	res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {"00009999"}})
+		sourceConfirmation(t, client, srv, key, "00009999"))
 	defer res.Body.Close()
 
 	require.Equal(t, http.StatusConflict, res.StatusCode)
@@ -172,7 +172,7 @@ func TestRetrieve_RendersTheGrantedDecision(t *testing.T) {
 	openPatient(t, client, srv, key)
 
 	status, body := postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "Access granted")
@@ -201,7 +201,7 @@ func TestRetrieve_RendersADenialWithoutData(t *testing.T) {
 	openPatient(t, client, srv, key)
 
 	status, body := postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "Access denied")
@@ -218,7 +218,7 @@ func TestRecord_ShowsRetrievedDataAttributedToItsSource(t *testing.T) {
 	key := annaKey(t)
 	openPatient(t, client, srv, key)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 
 	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 
@@ -239,13 +239,13 @@ func TestRecord_ShowsRetrievedDataAttributedToItsSource(t *testing.T) {
 func TestRecord_ShowsNoRetrievedDataAfterADenial(t *testing.T) {
 	srv, client, key, refuse := retrievalThatCanTurn(t, chainRefused, http.StatusForbidden)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 	_, granted := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 	require.Contains(t, granted, "Metoprolol", "the first run has to have put data on the record")
 
 	refuse()
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 
 	require.NotContains(t, body, "Zorgcentrum De Zonnebloem")
@@ -282,7 +282,7 @@ func TestRecord_RetrievedDataIsScopedToTheSessionThatFetchedIt(t *testing.T) {
 	key := annaKey(t)
 	openPatient(t, client, srv, key)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 
 	other := signInViaDezi(t, srv)
 	_, body := getBody(t, other, srv, "/demo/ehr/patients/"+key)
@@ -307,7 +307,7 @@ func TestRetrieve_AFailureIsNotRenderedAsADenial(t *testing.T) {
 	openPatient(t, client, srv, key)
 
 	status, body := postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 
 	require.Equal(t, http.StatusOK, status)
 	require.NotContains(t, body, "Access denied", "nothing was refused")
@@ -325,13 +325,13 @@ func TestRetrieve_AFailureIsNotRenderedAsADenial(t *testing.T) {
 func TestRecord_ShowsNoRetrievedDataAfterAFailure(t *testing.T) {
 	srv, client, key, fail := retrievalThatCanTurn(t, chainFailed, http.StatusBadGateway)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 	_, granted := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 	require.Contains(t, granted, "Metoprolol", "the first run has to have put data on the record")
 
 	fail()
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 
 	require.NotContains(t, body, "Zorgcentrum De Zonnebloem")
@@ -389,7 +389,7 @@ func TestRetrieve_ARetrievalInFlightAtLogoutIsNotKept(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve", url.Values{"ura": {zonnebloemURA}})
+		res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve", sourceConfirmation(t, client, srv, key, zonnebloemURA))
 		_ = res.Body.Close()
 	}()
 
@@ -424,7 +424,7 @@ func TestRetrieve_SaysWhenTheRetrievalWasIncomplete(t *testing.T) {
 	openPatient(t, client, srv, key)
 
 	status, body := postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "Access granted", "the source did authorize the request")
@@ -455,7 +455,7 @@ func TestRecord_KeepsTheIncompleteWarningWithTheData(t *testing.T) {
 	key := annaKey(t)
 	openPatient(t, client, srv, key)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 
 	status, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 
@@ -471,7 +471,7 @@ func TestRecord_SaysNothingAboutCompletenessWhenItIsComplete(t *testing.T) {
 	key := annaKey(t)
 	openPatient(t, client, srv, key)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 
@@ -490,7 +490,7 @@ func TestRecycle_DiscardsWhatWasRetrievedForThatPatient(t *testing.T) {
 	key := annaKey(t)
 	openPatient(t, client, srv, key)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 	_, before := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 	require.Contains(t, before, "Metoprolol", "the retrieval has to be on the record for this test to mean anything")
 
@@ -522,7 +522,7 @@ func TestReset_LeavesNoRetrievedDataBehind(t *testing.T) {
 	key := annaKey(t)
 	openPatient(t, client, srv, key)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 	require.NotZero(t, retrievalsHeld(cfg.Retrievals),
 		"the retrieval has to be in the store for this test to mean anything")
 
@@ -590,7 +590,7 @@ func TestRecycle_DiscardsRetrievalsEvenWhenItReportsFailure(t *testing.T) {
 	key := annaKey(t)
 	openPatient(t, client, srv, key)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 	require.NotZero(t, retrievalsHeld(cfg.Retrievals),
 		"the retrieval has to be in the store for this test to mean anything")
 
@@ -625,7 +625,7 @@ func TestRecycle_ARetrievalInFlightIsNotStoredAfterwards(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve", url.Values{"ura": {zonnebloemURA}})
+		res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve", sourceConfirmation(t, client, srv, key, zonnebloemURA))
 		_ = res.Body.Close()
 	}()
 
@@ -659,7 +659,7 @@ func TestRecord_WarnsAboutAnAnswerThatYieldedNoItems(t *testing.T) {
 	key := annaKey(t)
 	openPatient(t, client, srv, key)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 
@@ -685,7 +685,7 @@ func TestRetrieve_RefusesASourceWithNoPublishedAuthorizationServer(t *testing.T)
 	openPatient(t, client, srv, key)
 
 	status, body := postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 
 	require.Equal(t, http.StatusBadGateway, status)
 	require.Contains(t, body, "authorization server",
@@ -715,7 +715,7 @@ func TestRetrieve_AsksTheAuthorizationServerTheDirectoryPublished(t *testing.T) 
 	openPatient(t, client, srv, key)
 
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 
 	require.Equal(t, "http://published.example/nuts/oauth2/"+zonnebloemURA,
 		recorded.body["authorization_server"],
@@ -813,7 +813,7 @@ func TestRecord_DoesNotDenyTheDataItIsShowing(t *testing.T) {
 	key := annaKey(t)
 	openPatient(t, client, srv, key)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 
@@ -845,13 +845,13 @@ func TestRecord_ShowsNoRetrievedDataAfterATokenFailure(t *testing.T) {
 	key := annaKey(t)
 	openPatient(t, client, srv, key)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 	_, granted := getBody(t, client, srv, "/demo/ehr/patients/"+key)
 	require.Contains(t, granted, "Metoprolol", "the first run has to have put data on the record")
 
 	failing = true
 	status, _ := postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 	require.Equal(t, http.StatusBadGateway, status)
 
 	_, body := getBody(t, client, srv, "/demo/ehr/patients/"+key)
@@ -887,7 +887,7 @@ func TestRetrieve_AFailureFromBeforeARecycleLeavesTheFreshAnswerAlone(t *testing
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve", url.Values{"ura": {zonnebloemURA}})
+		res := postForm(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve", sourceConfirmation(t, client, srv, key, zonnebloemURA))
 		_ = res.Body.Close()
 	}()
 	<-reachedSource
@@ -897,7 +897,7 @@ func TestRetrieve_AFailureFromBeforeARecycleLeavesTheFreshAnswerAlone(t *testing
 	postForm(t, client, srv, "/demo/patients/"+key+"/recycle", nil).Body.Close()
 	openPatient(t, client, srv, key)
 	_, _ = postFormAndRead(t, client, srv, "/demo/ehr/patients/"+key+"/retrieve",
-		url.Values{"ura": {zonnebloemURA}})
+		sourceConfirmation(t, client, srv, key, zonnebloemURA))
 	require.NotZero(t, retrievalsHeld(cfg.Retrievals), "the second retrieval has to be stored")
 
 	close(release)

@@ -102,6 +102,19 @@ func tenantHeader(custodianURA string) fhirclient.PreRequestOption {
 	})
 }
 
+// Client uses an explicitly supplied HTTP client for every NVI operation.
+// A nil HTTP client preserves the package helpers' default-client behavior.
+type Client struct {
+	client fhirclient.Client
+}
+
+func NewClient(nviBaseURL *url.URL, httpClient *http.Client) *Client {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	return &Client{client: fhirclient.New(nviBaseURL, httpClient, nil)}
+}
+
 // Register publishes a Registration: it removes the records this installation
 // previously registered for this subject and custodian, then creates one List
 // per category.
@@ -119,14 +132,18 @@ func tenantHeader(custodianURA string) fhirclient.PreRequestOption {
 // when serialized, which the sandbox arranges per process; two processes can
 // still duplicate.
 func Register(ctx context.Context, nviBaseURL *url.URL, reg Registration) error {
-	client := fhirclient.New(nviBaseURL, http.DefaultClient, nil)
+	return NewClient(nviBaseURL, nil).Register(ctx, reg)
+}
 
+func (c *Client) Register(ctx context.Context, reg Registration) error {
+	client := c.client
 	if err := deleteForClient(ctx, client, reg.CustodianURA, reg.BSN, reg.ClientID); err != nil {
 		return err
 	}
 	for _, category := range reg.Categories {
 		var result fhir.List
-		err := client.CreateWithContext(ctx, BuildList(reg, category), &result,
+		categoryCtx := context.WithValue(ctx, registrationCategoryKey{}, category)
+		err := client.CreateWithContext(categoryCtx, BuildList(reg, category), &result,
 			fhirclient.AtPath("List"), tenantHeader(reg.CustodianURA))
 		if err != nil {
 			return fmt.Errorf("create NVI List (custodian=%s, category=%s): %w",
@@ -139,7 +156,11 @@ func Register(ctx context.Context, nviBaseURL *url.URL, reg Registration) error 
 // DeleteForClient removes the Lists one installation registered for a subject
 // under a custodian.
 func DeleteForClient(ctx context.Context, nviBaseURL *url.URL, custodianURA, bsn, clientID string) error {
-	return deleteForClient(ctx, fhirclient.New(nviBaseURL, http.DefaultClient, nil), custodianURA, bsn, clientID)
+	return NewClient(nviBaseURL, nil).DeleteForClient(ctx, custodianURA, bsn, clientID)
+}
+
+func (c *Client) DeleteForClient(ctx context.Context, custodianURA, bsn, clientID string) error {
+	return deleteForClient(ctx, c.client, custodianURA, bsn, clientID)
 }
 
 func deleteForClient(ctx context.Context, client fhirclient.Client, custodianURA, bsn, clientID string) error {
@@ -192,7 +213,11 @@ func deleteForClient(ctx context.Context, client fhirclient.Client, custodianURA
 // by subject only: the tenant header scopes pseudonymization, not the result set,
 // so the custodian is applied afterwards by FilterByCustodian.
 func ListsForCustodian(ctx context.Context, nviBaseURL *url.URL, custodianURA, bsn string) ([]fhir.List, error) {
-	return listsForCustodian(ctx, fhirclient.New(nviBaseURL, http.DefaultClient, nil), custodianURA, bsn)
+	return NewClient(nviBaseURL, nil).ListsForCustodian(ctx, custodianURA, bsn)
+}
+
+func (c *Client) ListsForCustodian(ctx context.Context, custodianURA, bsn string) ([]fhir.List, error) {
+	return listsForCustodian(ctx, c.client, custodianURA, bsn)
 }
 
 // listsForCustodian is the same search scoped to one publisher. The NVI has no
@@ -211,7 +236,11 @@ func listsForCustodian(ctx context.Context, client fhirclient.Client, custodianU
 // question is which organizations hold data, so unlike ListsForCustodian it
 // cannot filter to one. tenantURA scopes the pseudonymization, not the result.
 func ListsForPatient(ctx context.Context, nviBaseURL *url.URL, tenantURA, bsn string) ([]fhir.List, error) {
-	return listsForPatient(ctx, fhirclient.New(nviBaseURL, http.DefaultClient, nil), tenantURA, bsn)
+	return NewClient(nviBaseURL, nil).ListsForPatient(ctx, tenantURA, bsn)
+}
+
+func (c *Client) ListsForPatient(ctx context.Context, tenantURA, bsn string) ([]fhir.List, error) {
+	return listsForPatient(ctx, c.client, tenantURA, bsn)
 }
 
 func listsForPatient(ctx context.Context, client fhirclient.Client, tenantURA, bsn string) ([]fhir.List, error) {
