@@ -25,9 +25,11 @@ resource "ovh_cloud_project_kube_nodepool" "test" {
   # still draining (see create_before_destroy below).
   name = "d2-8"
 
-  # d2 not b3: from 2026-10-01, local storage and public IPv4 unbundle from
-  # Gen 3 (b3/c3/r3) pricing. d2 keeps storage included and supports
-  # monthly billing.
+  # d2 not b3: from 2026-10-01, local storage unbundles from Gen 3
+  # (b3/c3/r3) pricing. d2 keeps storage included and supports monthly
+  # billing. Public IPv4 is charged separately for every range from that
+  # date (~EUR 2/month per address): one per node here, plus the ingress
+  # LoadBalancer's floating IP.
   #
   # d2-8 (2 vCPU, 8 GB) rather than d2-4: OVH's managed kubelet reserves
   # about half of a node for itself, leaving a d2-4 with ~1.9 GiB for pods.
