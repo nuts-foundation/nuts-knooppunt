@@ -131,6 +131,48 @@ func TestEventHTTP_AuthorizationAndCursorChecks(t *testing.T) {
 	}
 }
 
+// A GET route also serves HEAD. net/http discards body writes for HEAD, so a
+// handler that streams would never see a write error and would hold the
+// connection until the run ends.
+func TestEventHTTP_HeadAnswersWithoutStreaming(t *testing.T) {
+	_, srv, client, _, id := eventDemo(t)
+	other := signInViaDezi(t, srv)
+	for _, tc := range []struct {
+		name   string
+		client *http.Client
+		status int
+	}{
+		{"owner", client, http.StatusOK},
+		{"another session", other, http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			req := httptest.NewRequestWithContext(ctx, http.MethodHead, "/demo/runs/"+id+"/events", nil)
+			req.AddCookie(&http.Cookie{Name: sessionCookie, Value: sessionCookieValue(t, tc.client, srv.URL)})
+			res := httptest.NewRecorder()
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				srv.Config.Handler.ServeHTTP(res, req)
+			}()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				cancel()
+				<-done
+				t.Fatal("HEAD entered the event stream instead of answering")
+			}
+			require.Equal(t, tc.status, res.Code)
+			if tc.status == http.StatusOK {
+				require.Equal(t, "text/event-stream", res.Header().Get("Content-Type"))
+				require.Equal(t, "no-store", res.Header().Get("Cache-Control"))
+				require.Zero(t, res.Body.Len())
+			}
+		})
+	}
+}
+
 func TestEventHTTP_RetentionGapIsExplicit(t *testing.T) {
 	cfg, srv, client, _, id := eventDemo(t)
 	cfg.Runs.maxEvents = 2

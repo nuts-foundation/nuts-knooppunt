@@ -159,9 +159,11 @@
   .gf-step-heading { display: flex; justify-content: space-between; gap: 12px; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: #7fc7bc; }
   .gf-step-seq { font-family: 'Fira Mono', monospace; color: #8f8578; }
   .gf-step h4 { font-size: 12px; line-height: 1.5; margin-top: 5px; font-weight: 600; color: #f0ebe1; }
-  .gf-step-result { font-size: 10.5px; line-height: 1.5; color: #b3a89a; margin-top: 3px; }
-  .gf-step-deny .gf-step-result { color: #e59ab8; }
-  .gf-step-error .gf-step-result { color: #e9ba72; }
+  /* Actions, stages and calls nest; a result takes the outcome of its nearest owner. */
+  .gf-step-ok { --gf-result-color: #b3a89a; }
+  .gf-step-deny { --gf-result-color: #e59ab8; }
+  .gf-step-error { --gf-result-color: #e9ba72; }
+  .gf-step-result { font-size: 10.5px; line-height: 1.5; color: var(--gf-result-color, #b3a89a); margin-top: 3px; }
   .gf-step .hreq summary { cursor: pointer; overflow-wrap: anywhere; }
   .gf-step .hreq pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 9.5px; line-height: 1.6; margin-top: 8px; }
 

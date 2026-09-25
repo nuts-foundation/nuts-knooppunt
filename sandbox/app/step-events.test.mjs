@@ -466,6 +466,25 @@ test('presenter can pause before the first action arrives', t => {
   mounted.cleanup();
 });
 
+test('a replayed window is drawn once, not once per event', t => {
+  const { mounted, source, nodes } = mountFixture(t);
+  const list = nodes.get('gf-viewer-steps');
+  let draws = 0;
+  const replaceChildren = list.replaceChildren;
+  list.replaceChildren = (...children) => { draws++; replaceChildren.apply(list, children); };
+  for (let seq = 1; seq <= 40; seq++) source.send('step', observed(seq, 'registration'));
+  source.send('snapshot', { lastSeq: 40 });
+  assert.equal(draws, 1, 'every page load replays the retained window; drawing per event is quadratic');
+  assert.equal(mounted.player.state().events.length, 40);
+  draws = 0;
+  source.send('replay-gap', { firstSeq: 100 });
+  for (let seq = 100; seq < 140; seq++) source.send('step', observed(seq, 'registration'));
+  source.send('snapshot', { lastSeq: 139 });
+  assert.equal(draws, 2, 'a gap clears the history once and the retained window is drawn once');
+  assert.equal(mounted.player.state().events.length, 40);
+  mounted.cleanup();
+});
+
 test('token introspection stays inside the local access service', () => {
   const { svg, withClass } = journeyFixture();
   createJourneyStrip(svg).apply({ gf: 'authorization', outcome: 'ok', request: { method: 'POST', path: '/nuts/internal/auth/v2/accesstoken/introspect' }, response: { status: 200 } });

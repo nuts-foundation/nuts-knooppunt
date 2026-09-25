@@ -310,9 +310,11 @@ expired run or extend a session's lifetime.
 At the run limit, a new patient open returns 503; switching an existing session's patient still works.
 State is process-local and does not survive a restart or move between replicas.
 
-Switching patients, releasing a lock, ending a session, recycling a patient or resetting the sandbox
-clears affected runs and wakes their streams. Reset/recycle clear events even if restoring data
-reports a failure. Calls already in flight cannot recreate a deleted run. Locks remain advisory;
+Switching patients, releasing a lock, ending a session or resetting the sandbox clears affected
+runs and wakes their streams. Reset clears events even if restoring data reports a failure. A
+recycle only proceeds for a patient nobody holds, so it has no live run to clear, and a run opened
+while the restore is running stays with its session. Calls already in flight cannot recreate a
+deleted run. Locks remain advisory;
 capture and replay do not add transactional isolation to registration or reset.
 
 `GET /demo/runs/{runId}/events` authorizes the owning session and serves `text/event-stream` with
