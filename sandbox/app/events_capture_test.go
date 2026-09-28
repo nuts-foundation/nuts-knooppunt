@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -229,7 +230,7 @@ func TestCaptureRedactsCredentialsVisibly(t *testing.T) {
 	const jwe = "eyJlbmMiOiJBMjU2R0NNIn0.a2V5.aXY.cHJpdmF0ZS1qd2U.dGFn"
 	requestBody := `{"id_token":"private-1","client_assertion":"private-2","scope":"bgz","token_type":"Bearer",` +
 		`"nested":{"assertion":"private-3"},"list":[{"client_secret":"private-4","password":"private-5"}],` +
-		`"authorization_server":"https://source.example/oauth2","note":"` + jws + `"}`
+		`"authorization_server":"https://source.example/oauth2","note":"` + jws + `","label":"monkeyJump.a.b"}`
 	responseBody := `{"access_token":"private-6","refresh_token":"private-7","token_type":"Bearer","expires_in":900,` +
 		`"jwe":"private-8","blind_factor":"private-9","pseudonym":"` + jwe + `","empty_token":"","access_token_hint":null}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -243,7 +244,7 @@ func TestCaptureRedactsCredentialsVisibly(t *testing.T) {
 	ctx := withEventCapture(context.Background(), func(e stepEvent) { events = append(events, e) }, false)
 	client := &http.Client{Transport: newCaptureTransport("authorization", nil)}
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/token?code=visible&access_token=private-11", strings.NewReader(requestBody))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/token?code=visible&access_token=private-11&hint=a%7C"+jws, strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "DPoP private-12")
 	req.Header.Set("DPoP", jws)
@@ -264,7 +265,7 @@ func TestCaptureRedactsCredentialsVisibly(t *testing.T) {
 
 	require.Len(t, events, 2)
 	call := events[0]
-	require.Equal(t, "/token?code=visible&access_token=[redacted: credential]", call.Request.Path)
+	require.Equal(t, "/token?code=visible&access_token=[redacted: credential]&hint=a%7C[redacted: JWT]", call.Request.Path)
 	require.Equal(t, "DPoP [redacted: credential]", call.Request.Headers["Authorization"])
 	require.Equal(t, "[redacted: credential]", call.Request.Headers["Dpop"])
 	require.Equal(t, "[redacted: credential]", call.Request.Headers["Cookie"])
@@ -272,7 +273,7 @@ func TestCaptureRedactsCredentialsVisibly(t *testing.T) {
 	require.Equal(t, "[redacted: credential]", call.Response.Headers["Set-Cookie"])
 	require.JSONEq(t, `{"id_token":"[redacted: credential]","client_assertion":"[redacted: credential]","scope":"bgz","token_type":"Bearer",`+
 		`"nested":{"assertion":"[redacted: credential]"},"list":[{"client_secret":"[redacted: credential]","password":"[redacted: credential]"}],`+
-		`"authorization_server":"https://source.example/oauth2","note":"[redacted: JWT]"}`, marshalled(t, call.Request.Body))
+		`"authorization_server":"https://source.example/oauth2","note":"[redacted: JWT]","label":"monkeyJump.a.b"}`, marshalled(t, call.Request.Body))
 	require.JSONEq(t, `{"access_token":"[redacted: credential]","refresh_token":"[redacted: credential]","token_type":"Bearer","expires_in":900,`+
 		`"jwe":"[redacted: JWE]","blind_factor":"[redacted: blind_factor]","pseudonym":"[redacted: JWE]","empty_token":"","access_token_hint":null}`,
 		marshalled(t, call.Response.Body))
@@ -770,4 +771,43 @@ func TestCaptureReadsAnAbandonedBodyOnlyUpToTheLimit(t *testing.T) {
 	require.NoError(t, res.Body.Close())
 	require.LessOrEqual(t, read, eventBodyLimit+1)
 	require.Equal(t, "[not captured: body exceeds the 65536-byte capture limit]", event.Response.Body)
+}
+
+// The NVI answers with the transport token the Knooppunt created: base64url
+// JSON carrying the blind_factor and the JWE as evaluated_output, the values
+// the pseudonymisation guide forbids retaining. Other base64 JSON stays.
+func TestCaptureRedactsPseudonymisationTokens(t *testing.T) {
+	encode := func(value string) string { return base64.RawURLEncoding.EncodeToString([]byte(value)) }
+	transport := encode(`{"blind_factor":"cHJpdmF0ZS1ibGluZA==","evaluated_output":"eyJhbGciOiJSU0EtT0FFUC0yNTYifQ.cHJpdmF0ZS1rZXk.aXY.cHJpdmF0ZS1vdXRwdXQ.dGFn"}`)
+	blindFactorOnly := encode(`{"blind_factor":"cHJpdmF0ZS1ibGluZA=="}`)
+	outputOnly := encode(`{"evaluated_output":"eyJhbGciOiJSU0EtT0FFUC0yNTYifQ.cHJpdmF0ZS1rZXk.aXY.cHJpdmF0ZS1vdXRwdXQ.dGFn"}`)
+	harmless := encode(`{"kind":"not a pseudonymisation token"}`)
+	entry := func(value string) string {
+		return `{"resource":{"resourceType":"List","subject":{"identifier":{` +
+			`"system":"http://minvws.github.io/generiekefuncties-docs/NamingSystem/nvi-identifier","value":"` + value + `"}}}}`
+	}
+	// The NVI echoes the tokenized search in its self link, percent-encoded.
+	self := `http://nvi.example/List?subject%3Aidentifier=http%3A%2F%2Fminvws.github.io%2Fgeneriekefuncties-docs%2FNamingSystem%2Fnvi-identifier%7C` + transport
+	response := `{"resourceType":"Bundle","type":"searchset","link":[{"relation":"self","url":"` + self + `"}],"entry":[` +
+		entry(transport) + `,` + entry(blindFactorOnly) + `,` + entry(outputOnly) + `,` + entry(harmless) + `]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		_, _ = io.WriteString(w, response)
+	}))
+	defer server.Close()
+	var event stepEvent
+	ctx := withEventCapture(context.Background(), func(e stepEvent) { event = e }, false)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/nvi/List/_search", nil)
+	res, err := (&http.Client{Transport: newCaptureTransport("localization", nil)}).Do(req)
+	require.NoError(t, err)
+	_, _ = io.ReadAll(res.Body)
+	require.NoError(t, res.Body.Close())
+
+	captured := marshalled(t, event.Response.Body)
+	require.Equal(t, 3, strings.Count(captured, `"value":"[redacted: blind_factor and JWE]"`), captured)
+	require.Contains(t, captured, `nvi-identifier%7C[redacted: blind_factor and JWE]`, "the token inside the self link")
+	for _, secret := range []string{transport, blindFactorOnly, outputOnly} {
+		require.NotContains(t, captured, secret)
+	}
+	require.Contains(t, captured, harmless, "base64 JSON without pseudonymisation values stays as it was")
 }

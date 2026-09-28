@@ -294,7 +294,9 @@ visible marker:
   `id_token`, `client_assertion`, `assertion`, `client_secret`, `password` and `token` wherever they
   appear as a JSON member, form field or query parameter;
 - `[redacted: JWT]` and `[redacted: JWE]` for any compact JWS or JWE in a value;
-- `[redacted: JWE]` and `[redacted: blind_factor]` for the `jwe` and `blind_factor` members, which the
+- `[redacted: JWE]` and `[redacted: blind_factor]` for the `jwe` and `blind_factor` members, and
+  `[redacted: blind_factor and JWE]` for the Knooppunt's transport token that carries both (base64url
+  JSON, which the NVI returns as a List's subject identifier): values the
   [pseudonymisation guide](https://minvws.github.io/generiekefuncties-docs/en/pseudonymisation.html)
   forbids clients to persist beyond the transaction;
 - `[redacted: BSN]` for every nine-digit value that passes the BSN check digit, unless the explicit

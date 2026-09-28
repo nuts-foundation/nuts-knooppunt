@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -294,6 +295,7 @@ const (
 	redactedJWE         = "[redacted: JWE]"
 	redactedBlindFactor = "[redacted: blind_factor]"
 	redactedBSN         = "[redacted: BSN]"
+	redactedTransport   = "[redacted: blind_factor and JWE]"
 	bodyUnread          = "[not captured: the response body was not read to the end]"
 	bodyUnreadable      = "[not captured: the response body could not be read]"
 	requestUnreadable   = "[not captured: the request body could not be read]"
@@ -313,8 +315,13 @@ var redactedKeys = map[string]string{
 
 var (
 	// A compact JWS has three segments, a compact JWE five; both start with a
-	// base64url JSON header, which always encodes to "eyJ".
-	compactTokenPattern = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*){2,4}`)
+	// base64url JSON header, which always encodes to "eyJ". Candidates are
+	// confirmed by decoding rather than by a word boundary, because a token in a
+	// query string follows a percent-escape such as %7C.
+	compactTokenPattern = regexp.MustCompile(`eyJ[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*){2,4}`)
+	// The Knooppunt's transport token is base64url JSON as well, so it also
+	// starts with "eyJ", but it has no dots; what it decodes to identifies it.
+	encodedJSONPattern = regexp.MustCompile(`eyJ[A-Za-z0-9_-]{8,}`)
 	// Percent-escapes are matched on their own so their hex digits never join
 	// the digits that follow them.
 	digitRunPattern = regexp.MustCompile(`%[0-9A-Fa-f]{2}|[0-9]+`)
@@ -442,10 +449,21 @@ func (r eventRedactor) value(key, value string) string {
 
 func (r eventRedactor) text(s string) string {
 	s = compactTokenPattern.ReplaceAllStringFunc(s, func(token string) string {
-		if strings.Count(token, ".") == 4 {
+		header, _, _ := strings.Cut(token, ".")
+		switch {
+		case !decodesToJSONWith(header, "alg", "enc"):
+			return token
+		case strings.Count(token, ".") == 4:
 			return redactedJWE
+		default:
+			return redactedJWT
 		}
-		return redactedJWT
+	})
+	s = encodedJSONPattern.ReplaceAllStringFunc(s, func(encoded string) string {
+		if decodesToJSONWith(encoded, "blind_factor", "evaluated_output") {
+			return redactedTransport
+		}
+		return encoded
 	})
 	return digitRunPattern.ReplaceAllStringFunc(s, func(run string) string {
 		if len(run) != 9 || !validBSN(run) || (r.reveal && syntheticBSN(run)) {
@@ -453,6 +471,27 @@ func (r eventRedactor) text(s string) string {
 		}
 		return redactedBSN
 	})
+}
+
+// decodesToJSONWith reports whether a base64url value decodes to a JSON object
+// with any of the given members: "alg" or "enc" for a JOSE header, and
+// "blind_factor" or "evaluated_output" for the transport token
+// component/pseudonymisation builds around the PRS's JWE.
+func decodesToJSONWith(encoded string, members ...string) bool {
+	data, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		return false
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(data, &fields) != nil {
+		return false
+	}
+	for _, member := range members {
+		if _, found := fields[member]; found {
+			return true
+		}
+	}
+	return false
 }
 
 // validBSN applies the BSN check digit (elfproef) to nine ASCII digits.
