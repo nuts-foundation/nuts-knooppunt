@@ -17,7 +17,7 @@ on:
 
 # cancel build action if superseded by new commit on same branch
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: build-nuts-knooppunt-image-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

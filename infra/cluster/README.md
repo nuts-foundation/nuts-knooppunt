@@ -67,9 +67,9 @@ a working cluster credential — treat access to that bucket accordingly.
 
 ## CI deploy
 
-`.github/workflows/deploy-sandbox.yaml` deploys on every push to `main`
-(the decision on nuts-knooppunt#564: one environment, every commit).
-It's inert until it has a credential - to activate it:
+`.github/workflows/ci.yaml` deploys on every push to `main` (the decision
+on nuts-knooppunt#564: one environment, every commit). It's inert until
+it has a credential - to activate it:
 
 1. Self-serve a kubeconfig for CI the same way a person would (see
    above), scoped as narrowly as the OVH Control Panel allows. Don't

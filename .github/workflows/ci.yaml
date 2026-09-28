@@ -7,8 +7,8 @@ name: 'Build and deploy sandbox'
 # build-*-image.yaml workflows still trigger themselves independently for
 # pull_request (their own path filters keep PR checks scoped and fast) and
 # for version tags (unrelated to this pipeline) - only their push-to-main
-# trigger moved here, since that's the one deploy-sandbox.yaml needs to wait
-# on. See nuts-knooppunt#603's follow-up discussion for why a plain
+# trigger moved here, since that's the one the deploy job below needs to
+# wait on. See nuts-knooppunt#603's follow-up discussion for why a plain
 # `push: main` trigger on the deploy alone wasn't enough: it raced the image
 # builds (deploy could finish in under a minute, image builds take longer),
 # and even a wait wouldn't guarantee every component came from the *same*
