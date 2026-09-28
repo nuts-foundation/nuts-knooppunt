@@ -10,23 +10,26 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCapturePreservesBodiesAndEmitsOnce(t *testing.T) {
-	requestBody := `{"resourceType":"Subscription","status":"requested","reason":"secret"}`
+	requestBody := `{"resourceType":"Subscription","status":"requested","reason":"OTV"}`
 	responseBody := `{"resourceType":"Bundle","type":"searchset","total":0,"entry":[]}`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got, _ := io.ReadAll(r.Body)
 		if string(got) != requestBody {
 			t.Errorf("server body = %s", got)
 		}
-		if r.Header.Get("Authorization") != "Bearer secret" {
+		if r.Header.Get("Authorization") != "Bearer private-credential" {
 			t.Error("authorization was changed")
 		}
 		w.Header().Set("Content-Type", "application/fhir+json")
-		w.Header().Set("Set-Cookie", "secret")
+		w.Header().Set("Set-Cookie", "session=private-cookie")
 		_, _ = io.WriteString(w, responseBody)
 	}))
 	defer server.Close()
@@ -34,7 +37,7 @@ func TestCapturePreservesBodiesAndEmitsOnce(t *testing.T) {
 	ctx := withEventCapture(context.Background(), func(e stepEvent) { events = append(events, e) }, false)
 	req, _ := http.NewRequestWithContext(ctx, "POST", server.URL+"/mitz/Subscription", strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/fhir+json")
-	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set("Authorization", "Bearer private-credential")
 	response, err := (&http.Client{Transport: newCaptureTransport("consent", nil)}).Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -55,12 +58,296 @@ func TestCapturePreservesBodiesAndEmitsOnce(t *testing.T) {
 	if e.GF != "consent" || e.Actor != "sandbox-backend" || e.Outcome != "ok" || e.Response.Status != 200 || e.TS.IsZero() {
 		t.Fatalf("event = %#v", e)
 	}
-	if e.Request.Body == nil || e.Response.Body == nil {
-		t.Fatal("known bodies were omitted")
+	require.JSONEq(t, requestBody, marshalled(t, e.Request.Body))
+	require.JSONEq(t, responseBody, marshalled(t, e.Response.Body))
+	require.Equal(t, "Bearer [redacted: credential]", e.Request.Headers["Authorization"])
+	require.Equal(t, "[redacted: credential]", e.Response.Headers["Set-Cookie"])
+	require.NotContains(t, marshalled(t, e), "private-")
+}
+
+func marshalled(t *testing.T, value any) string {
+	t.Helper()
+	data, err := json.Marshal(value)
+	require.NoError(t, err)
+	return string(data)
+}
+
+// The viewer shows the call as it went over the wire: every query parameter,
+// including repeated ones, every header and the complete body.
+func TestCaptureKeepsTheExactCall(t *testing.T) {
+	const response = `{"resourceType":"Bundle","type":"searchset","total":1,` +
+		`"link":[{"relation":"next","url":"https://source.example/fhir?_getpages=abc&_getpagesoffset=20"}],` +
+		`"entry":[{"fullUrl":"https://source.example/fhir/MedicationRequest/m1","resource":{"resourceType":"MedicationRequest","id":"m1","status":"active","intent":"order",` +
+		`"subject":{"reference":"Patient/p-1"},"medicationReference":{"reference":"Medication/1"},"dosageInstruction":[{"text":"50 mg 1dd"}]}},` +
+		`{"resource":{"resourceType":"Endpoint","id":"e1","status":"active","address":"https://source.example/fhir",` +
+		`"connectionType":{"system":"http://terminology.hl7.org/CodeSystem/endpoint-connection-type","code":"hl7-fhir-rest"},` +
+		`"payloadType":[{"coding":[{"code":"MedicationRequest"}]}]}}]}`
+	const target = "/fhir/MedicationRequest?_include=MedicationRequest%3Amedication&category=http%3A%2F%2Fsnomed.info%2Fsct%7C16076005" +
+		"&patient=Patient%2Fp-1&_include=MedicationRequest%3Arequester"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.RequestURI() != target {
+			t.Errorf("request = %s", r.URL.RequestURI())
+		}
+		w.Header().Set("Content-Type", "application/fhir+json;charset=UTF-8")
+		w.Header().Set("ETag", `W/"1"`)
+		_, _ = io.WriteString(w, response)
+	}))
+	defer server.Close()
+	var event stepEvent
+	ctx := withEventCapture(context.Background(), func(e stepEvent) { event = e }, false)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+target, nil)
+	req.Header.Set("Accept", "application/fhir+json")
+	req.Header["X-Tenant-ID"] = []string{"http://fhir.nl/fhir/NamingSystem/ura|00000010"}
+	res, err := (&http.Client{Transport: newCaptureTransport("exchange", nil)}).Do(req)
+	require.NoError(t, err)
+	_, _ = io.ReadAll(res.Body)
+	require.NoError(t, res.Body.Close())
+
+	require.Equal(t, http.MethodGet, event.Request.Method)
+	require.Equal(t, target, event.Request.Path)
+	require.Equal(t, "application/fhir+json", event.Request.Headers["Accept"])
+	require.Equal(t, "http://fhir.nl/fhir/NamingSystem/ura|00000010", event.Request.Headers["X-Tenant-ID"])
+	require.Nil(t, event.Request.Body, "a GET carries no body")
+	require.Equal(t, "application/fhir+json;charset=UTF-8", event.Response.Headers["Content-Type"])
+	require.Equal(t, `W/"1"`, event.Response.Headers["Etag"])
+	require.JSONEq(t, response, marshalled(t, event.Response.Body))
+}
+
+// go-fhir-client rebuilds its requests without GetBody, so the NVI searches and
+// registrations are exactly the calls whose bodies a GetBody-only capture loses.
+func TestCaptureRecordsRequestBodiesTheClientCannotReplay(t *testing.T) {
+	bsn := pool.Patients()[0].BSN
+	var received []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, _ := io.ReadAll(r.Body)
+		received = append(received, string(data))
+		w.Header().Set("Content-Type", "application/fhir+json")
+		if r.URL.Path == "/nvi/List/_search" {
+			_, _ = io.WriteString(w, `{"resourceType":"Bundle","type":"searchset","entry":[]}`)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write(data)
+	}))
+	defer server.Close()
+	base, _ := url.Parse(server.URL + "/nvi")
+	var events []stepEvent
+	ctx := withEventCapture(context.Background(), func(e stepEvent) { events = append(events, e) }, false)
+	client := nvi.NewClient(base, &http.Client{Transport: newCaptureTransport("localization", nil)})
+	_, err := client.ListsForPatient(ctx, "00000010", bsn)
+	require.NoError(t, err)
+	require.NoError(t, client.Register(ctx, nvi.Registration{CustodianURA: "00000010", BSN: bsn, ClientID: "example", Categories: []string{nvi.CategoryCondition}}))
+	require.Len(t, events, 3, "patient search, cleanup search, registration")
+
+	require.Contains(t, received[0], "subject%3Aidentifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn%7C"+bsn,
+		"the real request still carries the identifier")
+	require.JSONEq(t, `{"_count":["1000"],"subject:identifier":["http://fhir.nl/fhir/NamingSystem/bsn|[redacted: BSN]"]}`,
+		marshalled(t, events[0].Request.Body))
+
+	registration, ok := events[2].Request.Body.(map[string]any)
+	require.True(t, ok, "registration body: %v", events[2].Request.Body)
+	require.Equal(t, "List", registration["resourceType"])
+	require.Contains(t, marshalled(t, registration["code"]), `"code":"Condition"`)
+	require.Contains(t, marshalled(t, registration["subject"]), "[redacted: BSN]")
+	require.Contains(t, received[2], bsn, "the real registration still carries the identifier")
+	require.NotContains(t, marshalled(t, events), bsn)
+}
+
+// Replayable and one-shot request bodies reach the server byte for byte.
+func TestCaptureLeavesTheRealRequestBodyIntact(t *testing.T) {
+	form := "subject%3Aidentifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn%7C999900006&_count=1000"
+	large := strings.Repeat("x", eventBodyLimit+10)
+	for _, tc := range []struct {
+		name, body string
+		oneShot    bool
+	}{
+		{"replayable", form, false},
+		{"one-shot", form, true},
+		{"one-shot beyond the capture limit", large, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				data, _ := io.ReadAll(r.Body)
+				if string(data) != tc.body {
+					t.Errorf("server received %d bytes, want %d", len(data), len(tc.body))
+				}
+				w.WriteHeader(http.StatusNoContent)
+			}))
+			defer server.Close()
+			var event stepEvent
+			ctx := withEventCapture(context.Background(), func(e stepEvent) { event = e }, true)
+			var body io.Reader = strings.NewReader(tc.body)
+			if tc.oneShot {
+				body = io.NopCloser(body)
+			}
+			req, _ := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/nvi/List/_search", body)
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			res, err := (&http.Client{Transport: newCaptureTransport("localization", nil)}).Do(req)
+			require.NoError(t, err)
+			require.NoError(t, res.Body.Close())
+			if tc.body == large {
+				require.Equal(t, "[not captured: body exceeds the 65536-byte capture limit]", event.Request.Body)
+				return
+			}
+			require.JSONEq(t, `{"_count":["1000"],"subject:identifier":["http://fhir.nl/fhir/NamingSystem/bsn|999900006"]}`,
+				marshalled(t, event.Request.Body))
+		})
 	}
-	data, _ := json.Marshal(e)
-	if strings.Contains(string(data), "secret") {
-		t.Fatalf("secret in %s", data)
+}
+
+// captureFailingReader fails once and then reports a clean end, so a replay
+// that dropped the error would send an empty body instead of failing.
+type captureFailingReader struct{ failed bool }
+
+func (r *captureFailingReader) Read([]byte) (int, error) {
+	if r.failed {
+		return 0, io.EOF
+	}
+	r.failed = true
+	return 0, errors.New("request body broke")
+}
+
+// A body the capture could not read is marked, and the real request still
+// fails on it rather than going out with whatever part was read.
+func TestCaptureMarksAnUnreadableRequestBody(t *testing.T) {
+	var event stepEvent
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer server.Close()
+	ctx := withEventCapture(context.Background(), func(e stepEvent) { event = e }, false)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/nvi/List", io.NopCloser(&captureFailingReader{}))
+	req.Header.Set("Content-Type", "application/fhir+json")
+	_, err := (&http.Client{Transport: newCaptureTransport("localization", nil)}).Do(req)
+	require.ErrorContains(t, err, "request body broke")
+	require.Equal(t, "error", event.Outcome)
+	require.Equal(t, "[not captured: the request body could not be read]", event.Request.Body)
+}
+
+// Redaction replaces a value with a visible marker and keeps its key, so the
+// viewer shows where a credential travelled without showing the credential.
+func TestCaptureRedactsCredentialsVisibly(t *testing.T) {
+	const jws = "eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJwcml2YXRlLWp3dCJ9.c2ln"
+	const jwe = "eyJlbmMiOiJBMjU2R0NNIn0.a2V5.aXY.cHJpdmF0ZS1qd2U.dGFn"
+	requestBody := `{"id_token":"private-1","client_assertion":"private-2","scope":"bgz","token_type":"Bearer",` +
+		`"nested":{"assertion":"private-3"},"list":[{"client_secret":"private-4","password":"private-5"}],` +
+		`"authorization_server":"https://source.example/oauth2","note":"` + jws + `"}`
+	responseBody := `{"access_token":"private-6","refresh_token":"private-7","token_type":"Bearer","expires_in":900,` +
+		`"jwe":"private-8","blind_factor":"private-9","pseudonym":"` + jwe + `","empty_token":"","access_token_hint":null}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Set-Cookie", "session=private-10")
+		_, _ = io.WriteString(w, responseBody)
+	}))
+	defer server.Close()
+	var events []stepEvent
+	ctx := withEventCapture(context.Background(), func(e stepEvent) { events = append(events, e) }, false)
+	client := &http.Client{Transport: newCaptureTransport("authorization", nil)}
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/token?code=visible&access_token=private-11", strings.NewReader(requestBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "DPoP private-12")
+	req.Header.Set("DPoP", jws)
+	req.Header.Set("Cookie", "a=private-13")
+	req.Header.Set("X-Request-Id", "visible-request-id")
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	_, _ = io.ReadAll(res.Body)
+	require.NoError(t, res.Body.Close())
+
+	form, _ := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/introspect",
+		strings.NewReader("token=private-14&token_type_hint=access_token"))
+	form.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res, err = client.Do(form)
+	require.NoError(t, err)
+	_, _ = io.ReadAll(res.Body)
+	require.NoError(t, res.Body.Close())
+
+	require.Len(t, events, 2)
+	call := events[0]
+	require.Equal(t, "/token?code=visible&access_token=[redacted: credential]", call.Request.Path)
+	require.Equal(t, "DPoP [redacted: credential]", call.Request.Headers["Authorization"])
+	require.Equal(t, "[redacted: credential]", call.Request.Headers["Dpop"])
+	require.Equal(t, "[redacted: credential]", call.Request.Headers["Cookie"])
+	require.Equal(t, "visible-request-id", call.Request.Headers["X-Request-Id"])
+	require.Equal(t, "[redacted: credential]", call.Response.Headers["Set-Cookie"])
+	require.JSONEq(t, `{"id_token":"[redacted: credential]","client_assertion":"[redacted: credential]","scope":"bgz","token_type":"Bearer",`+
+		`"nested":{"assertion":"[redacted: credential]"},"list":[{"client_secret":"[redacted: credential]","password":"[redacted: credential]"}],`+
+		`"authorization_server":"https://source.example/oauth2","note":"[redacted: JWT]"}`, marshalled(t, call.Request.Body))
+	require.JSONEq(t, `{"access_token":"[redacted: credential]","refresh_token":"[redacted: credential]","token_type":"Bearer","expires_in":900,`+
+		`"jwe":"[redacted: JWE]","blind_factor":"[redacted: blind_factor]","pseudonym":"[redacted: JWE]","empty_token":"","access_token_hint":null}`,
+		marshalled(t, call.Response.Body))
+	require.JSONEq(t, `{"token":["[redacted: credential]"],"token_type_hint":["access_token"]}`, marshalled(t, events[1].Request.Body))
+	require.NotContains(t, marshalled(t, events), "private-")
+}
+
+// Only BSNs are masked: a 9-digit value that fails the BSN check digit is shown,
+// and synthetic mode reveals the demo pool while still masking any other BSN.
+func TestCaptureMasksBSNsUnlessTheSyntheticPoolIsRevealed(t *testing.T) {
+	const poolBSN, otherBSN, notABSN = "999900006", "111222333", "123456789"
+	responseBody := `{"resourceType":"Patient","identifier":[{"system":"http://fhir.nl/fhir/NamingSystem/bsn","value":"` + poolBSN + `"},` +
+		`{"system":"http://fhir.nl/fhir/NamingSystem/bsn","value":"` + otherBSN + `"}],"telecom":[{"value":"` + notABSN + `"}]}`
+	for _, tc := range []struct {
+		reveal                     bool
+		path, header, pool, others string
+	}{
+		{false, "/abonnementen/fhir/Subscription?patientid=[redacted: BSN]&providerid=00000010", "[redacted: BSN]", "[redacted: BSN]", "[redacted: BSN]"},
+		{true, "/abonnementen/fhir/Subscription?patientid=" + poolBSN + "&providerid=00000010", "[redacted: BSN]", poolBSN, "[redacted: BSN]"},
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/fhir+json")
+			_, _ = io.WriteString(w, responseBody)
+		}))
+		var event stepEvent
+		ctx := withEventCapture(context.Background(), func(e stepEvent) { event = e }, tc.reveal)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/abonnementen/fhir/Subscription?patientid="+poolBSN+"&providerid=00000010", nil)
+		req.Header.Set("X-Subject", otherBSN)
+		res, err := (&http.Client{Transport: newCaptureTransport("consent", nil)}).Do(req)
+		require.NoError(t, err)
+		_, _ = io.ReadAll(res.Body)
+		require.NoError(t, res.Body.Close())
+		server.Close()
+
+		require.Equal(t, tc.path, event.Request.Path, "reveal=%v", tc.reveal)
+		require.Equal(t, tc.header, event.Request.Headers["X-Subject"])
+		require.JSONEq(t, `{"resourceType":"Patient","identifier":[{"system":"http://fhir.nl/fhir/NamingSystem/bsn","value":"`+tc.pool+`"},`+
+			`{"system":"http://fhir.nl/fhir/NamingSystem/bsn","value":"`+tc.others+`"}],"telecom":[{"value":"`+notABSN+`"}]}`,
+			marshalled(t, event.Response.Body))
+	}
+}
+
+// A body the viewer cannot show exactly says why, instead of looking empty.
+func TestCaptureMarksBodiesItDidNotCapture(t *testing.T) {
+	for _, tc := range []struct {
+		name, contentType, body string
+		readFully               bool
+		want                    any
+	}{
+		{"oversized", "application/fhir+json", `{"text":"` + strings.Repeat("x", eventBodyLimit) + `"}`, true, "[not captured: body exceeds the 65536-byte capture limit]"},
+		{"partially read", "application/fhir+json", `{"resourceType":"Patient"}`, false, "[not captured: the response body was not read to the end]"},
+		{"binary", "image/png", "\x89PNG\xff\xfe", true, "[not captured: image/png body of 6 bytes]"},
+		{"malformed JSON", "application/json", `{"access_token":"private-credential"`, true, "[not captured: malformed JSON body]"},
+		{"text", "text/plain; charset=utf-8", "upstream said no", true, "upstream said no"},
+		{"empty", "application/fhir+json", "", true, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var event stepEvent
+			base := captureRoundTripFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {tc.contentType}},
+					Body: io.NopCloser(strings.NewReader(tc.body)), ContentLength: -1}, nil
+			})
+			req, _ := http.NewRequestWithContext(withEventCapture(context.Background(), func(e stepEvent) { event = e }, false), "GET", "http://example.invalid/Patient", nil)
+			res, err := newCaptureTransport("exchange", base).RoundTrip(req)
+			require.NoError(t, err)
+			if tc.readFully {
+				_, _ = io.ReadAll(res.Body)
+			} else {
+				_, _ = io.ReadFull(res.Body, make([]byte, 5))
+			}
+			require.NoError(t, res.Body.Close())
+			require.Equal(t, 200, event.Response.Status)
+			require.Equal(t, tc.want, event.Response.Body)
+			require.NotContains(t, marshalled(t, event), "private-")
+		})
 	}
 }
 
@@ -272,119 +559,15 @@ func TestCaptureTransportAndReadErrors(t *testing.T) {
 			}
 			_ = res.Body.Close()
 		}
-		if len(events) != 1 || events[0].Outcome != "error" || events[0].Response.Body != nil {
+		if len(events) != 1 || events[0].Outcome != "error" {
 			t.Fatalf("events = %#v", events)
+		}
+		if !network {
+			require.Equal(t, "[not captured: the response body could not be read]", events[0].Response.Body)
 		}
 		data, _ := json.Marshal(events)
 		if strings.Contains(string(data), "secret") {
 			t.Fatalf("leaked error: %s", data)
-		}
-	}
-}
-
-func TestCaptureFailsClosedForSecrets(t *testing.T) {
-	bsn := pool.Patients()[0].BSN
-	for _, reveal := range []bool{false, true} {
-		for _, body := range []string{
-			`{"resourceType":"Patient","identifier":[{"system":"http://fhir.nl/fhir/NamingSystem/bsn","value":"` + bsn + `"},{"system":"http://fhir.nl/fhir/NamingSystem/bsn","value":"123456789"}],"name":[{"text":"secret"}],"text":{"div":"secret"}}`,
-			`{"resourceType":"List","status":"secret","mode":"secret","subject":{"identifier":{"system":"secret","value":"secret"}},"code":{"coding":[{"system":"secret","code":"secret"}]}}`,
-			`{"resourceType":"Bundle","type":"secret","total":"secret","entry":[{"fullUrl":"secret","resource":{"resourceType":"secret","status":"secret"}}]}`,
-			`{"access_token":"secret","id_token":"secret","scope":"secret","token_type":"secret","active":"secret","expires_in":"secret","credentials":["secret"]}`,
-			`{"resourceType":"OperationOutcome","issue":[{"code":"secret","severity":"secret","diagnostics":"secret","details":{"text":"secret"}}]}`,
-			`{"resourceType":"secret","identifier":"secret"}`,
-			`secret`,
-			`{"resourceType":"Patient","text":"` + strings.Repeat("secret", 12000) + `"}`,
-		} {
-			var events []stepEvent
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				_, _ = io.Copy(io.Discard, r.Body)
-				w.Header().Set("Content-Type", "application/fhir+json; secret=secret")
-				w.Header().Set("X-Secret", "secret")
-				w.Header().Set("Location", "https://secret.invalid")
-				_, _ = io.WriteString(w, body)
-			}))
-			ctx := withEventCapture(context.Background(), func(e stepEvent) { events = append(events, e) }, reveal)
-			req, _ := http.NewRequestWithContext(ctx, "POST", server.URL+"/secret/Patient/secret?token=secret&_count=secret&_include=secret&identifier=secret&patientid="+bsn, strings.NewReader(body))
-			req.Header.Set("Authorization", "Bearer secret")
-			req.Header.Set("Cookie", "secret")
-			req.Header.Set("Content-Type", "application/fhir+json; secret=secret")
-			res, err := (&http.Client{Transport: newCaptureTransport("exchange", nil)}).Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, _ = io.Copy(io.Discard, res.Body)
-			_ = res.Body.Close()
-			server.Close()
-			if len(events) != 1 {
-				t.Fatalf("count = %d", len(events))
-			}
-			data, _ := json.Marshal(events[0])
-			encoded := string(data)
-			if strings.Contains(encoded, "secret") || strings.Contains(encoded, "123456789") {
-				t.Fatalf("leak: %s", encoded)
-			}
-			if strings.Contains(encoded, bsn) != reveal {
-				t.Fatalf("synthetic visibility %v: %s", reveal, encoded)
-			}
-			if (body == "secret" || len(body) > 65536 || strings.Contains(body, `"resourceType":"secret","identifier"`)) && (events[0].Request.Body != nil || events[0].Response.Body != nil) {
-				t.Fatalf("unknown body captured: %s", encoded)
-			}
-		}
-	}
-}
-
-func TestCapturePartialBodyCloseOmitsBody(t *testing.T) {
-	var event stepEvent
-	base := captureRoundTripFunc(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/fhir+json"}}, Body: io.NopCloser(strings.NewReader(`{"resourceType":"Patient"}secret`))}, nil
-	})
-	req, _ := http.NewRequestWithContext(withEventCapture(context.Background(), func(e stepEvent) { event = e }, false), "GET", "http://example.invalid/Patient", nil)
-	res, err := newCaptureTransport("exchange", base).RoundTrip(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	buf := make([]byte, len(`{"resourceType":"Patient"}`))
-	_, _ = io.ReadFull(res.Body, buf)
-	_ = res.Body.Close()
-	if event.Response.Status != 200 || event.Response.Body != nil {
-		t.Fatalf("partial capture = %#v", event)
-	}
-}
-
-func TestCaptureFormAndUnreplayableRequest(t *testing.T) {
-	bsn := pool.Patients()[0].BSN
-	form := "subject%3Aidentifier=http%3A%2F%2Ffhir.nl%2Ffhir%2FNamingSystem%2Fbsn%7C" + bsn + "&_count=1000&token=secret"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		data, _ := io.ReadAll(r.Body)
-		if string(data) != form {
-			t.Errorf("changed form: %s", data)
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer server.Close()
-	for _, replayable := range []bool{true, false} {
-		var events []stepEvent
-		ctx := withEventCapture(context.Background(), func(e stepEvent) { events = append(events, e) }, false)
-		var body io.Reader = strings.NewReader(form)
-		if !replayable {
-			body = io.NopCloser(body)
-		}
-		req, _ := http.NewRequestWithContext(ctx, "POST", server.URL+"/nvi/List/_search", body)
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		res, err := (&http.Client{Transport: newCaptureTransport("localization", nil)}).Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		_ = res.Body.Close()
-		if len(events) != 1 {
-			t.Fatalf("count = %d", len(events))
-		}
-		if (events[0].Request.Body != nil) != replayable {
-			t.Fatalf("replayable=%v body=%v", replayable, events[0].Request.Body)
-		}
-		data, _ := json.Marshal(events[0])
-		if strings.Contains(string(data), bsn) || strings.Contains(string(data), "secret") {
-			t.Fatalf("leak: %s", data)
 		}
 	}
 }
@@ -395,9 +578,9 @@ func TestCaptureRealClientWiring(t *testing.T) {
 		w.Header().Set("Content-Type", "application/fhir+json")
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/request-service-access-token"):
-			_, _ = io.WriteString(w, `{"access_token":"secret"}`)
+			_, _ = io.WriteString(w, `{"access_token":"private-token"}`)
 		case strings.HasSuffix(r.URL.Path, "/introspect"):
-			_, _ = io.WriteString(w, `{"active":true,"subject":"secret"}`)
+			_, _ = io.WriteString(w, `{"active":true,"subject":"visible-subject"}`)
 		case r.URL.Path == "/mitz/Subscription":
 			w.WriteHeader(http.StatusCreated)
 		case r.URL.Path == "/nvi/List":
@@ -432,13 +615,13 @@ func TestCaptureRealClientWiring(t *testing.T) {
 		t.Fatal("expected no matching organization")
 	}
 	nuts := newNutsClient(nutsConfig{InternalBaseURL: server.URL, Subject: "example", Scope: "bgz"})
-	if token, err := nuts.requestToken(ctx, authSession{Attestation: "secret"}, server.URL); err != nil || token != "secret" {
+	if token, err := nuts.requestToken(ctx, authSession{Attestation: "private-attestation"}, server.URL); err != nil || token != "private-token" {
 		t.Fatalf("token = %q, %v", token, err)
 	}
-	if _, err := nuts.introspect(ctx, "secret"); err != nil {
+	if _, err := nuts.introspect(ctx, "private-token"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := retrieveBGZ(ctx, sourceAddress{Address: server.URL}, "secret", bsn, []string{"Patient"}); err != nil {
+	if _, err := retrieveBGZ(ctx, sourceAddress{Address: server.URL}, "private-token", bsn, []string{"Patient"}); err != nil {
 		t.Fatal(err)
 	}
 	counts := map[string]int{}
@@ -451,29 +634,41 @@ func TestCaptureRealClientWiring(t *testing.T) {
 		}
 	}
 	data, _ := json.Marshal(events)
-	if strings.Contains(string(data), bsn) || strings.Contains(string(data), "secret") {
+	if strings.Contains(string(data), bsn) || strings.Contains(string(data), "private-") {
 		t.Fatalf("client wiring leaked: %s", data)
 	}
+	require.Contains(t, string(data), "visible-subject", "introspection claims are shown as returned")
 }
 
-func TestCaptureRejectsMalformedResourceDiscriminator(t *testing.T) {
-	for _, body := range []string{`{"resourceType":false,"active":true}`, `{"resourceType":null,"active":true}`, `{"resourceType":"","active":true}`} {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(w, body)
-		}))
-		var event stepEvent
-		ctx := withEventCapture(context.Background(), func(e stepEvent) { event = e }, false)
-		req, _ := http.NewRequestWithContext(ctx, "GET", server.URL, nil)
-		res, err := (&http.Client{Transport: newCaptureTransport("exchange", nil)}).Do(req)
-		if err != nil {
-			t.Fatal(err)
+// HAPI answers chunked, and a final chunk that arrives after the JSON value is
+// ordinary. A client that stops reading at the closing brace would leave the
+// capture without the end of the body.
+func TestCaptureSeesChunkedAnswersToDecodingClients(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		if strings.HasSuffix(r.URL.Path, "/introspect") {
+			_, _ = io.WriteString(w, `{"active":true}`)
+		} else {
+			_, _ = io.WriteString(w, `{"resourceType":"Bundle","type":"searchset","entry":[]}`)
 		}
-		_, _ = io.Copy(io.Discard, res.Body)
-		_ = res.Body.Close()
-		server.Close()
-		if event.Response.Body != nil {
-			t.Errorf("malformed resource captured as %v", event.Response.Body)
-		}
+		w.(http.Flusher).Flush()
+		time.Sleep(100 * time.Millisecond)
+	}))
+	defer server.Close()
+	base, _ := url.Parse(server.URL)
+	for name, call := range map[string]func(context.Context){
+		"directory lookup": func(ctx context.Context) { _, _ = mcsdResolveFunc(base)(ctx, "00000020") },
+		"Mitz lookup":      func(ctx context.Context) { _, _ = mitzSubscribedFunc(base, "00000010")(ctx, "999900006") },
+		"token introspection": func(ctx context.Context) {
+			_, _ = newNutsClient(nutsConfig{InternalBaseURL: server.URL}).introspect(ctx, "private-token")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var event stepEvent
+			call(withEventCapture(context.Background(), func(e stepEvent) { event = e }, false))
+			require.Equal(t, http.StatusOK, event.Response.Status)
+			_, captured := event.Response.Body.(map[string]any)
+			require.True(t, captured, "body: %v", event.Response.Body)
+		})
 	}
 }

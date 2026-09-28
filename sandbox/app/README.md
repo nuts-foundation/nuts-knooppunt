@@ -192,10 +192,11 @@ No addresses or categories from the browser are trusted. Confirmation does not r
 query unused sharing status. The source still decides access on each actual data request.
 
 A fresh discovery replaces the old selection, including forms still open in another tab.
-Expiry, release, a patient switch, session end or recycle
-makes the old selection unusable. An invalid confirmation returns HTTP 409 with a Refresh source list
-link and performs no discovery, token request or source query. Discovery finishing after its run has
-ended cannot populate a replacement run.
+Expiry, release, a patient switch or session end makes the old selection unusable, and so does a
+recycle that completes after the discovery started. An invalid confirmation returns HTTP 409 with a
+Refresh source list link and performs no discovery, token request or source query. Discovery
+finishing after its run has ended cannot populate a replacement run. Opening Retrieve data for a
+patient this session does not hold sends the practitioner back to the patient list to open it.
 
 The first source query is a `POST /Patient/_search`, a [FHIR search](https://hl7.org/fhir/R4/http.html#search)
 with the patient identifier in its body to keep it out of the URL. It establishes the source's local
@@ -283,27 +284,43 @@ PRS spans use `parentCallId` to identify the NVI call that caused them, inherit 
 and have `actor: "knooppunt"` and `gf: "pseudonym"`. Their timestamps describe the observed call;
 their sequence numbers still describe publication, which can occur later due to trace batching.
 
-Capture constructs only allowlisted projections: normalized methods/paths, recognized media types,
-bounded counts, known enum values, resource types and selected structured identifiers. Headers other
-than `Accept` and `Content-Type` are omitted, as are tokens, cookies, credentials, arbitrary error text,
-URL hosts/userinfo, unknown query parameters, resource IDs and clinical free text. BSNs are masked
-unless the explicit local synthetic mode applies. Bodies are inspected up to 64 KiB; unknown,
-malformed, oversized or incompletely read bodies are null. Request bodies without `GetBody` are also
-null: the [current FHIR client recreates its requests](https://github.com/SanteonNL/go-fhir-client/blob/v0.6.1/client.go#L235), so this includes real NVI search and registration
-request bodies. Response bodies remain available for sanitized projection. Capture never consumes a
-body on behalf of its real caller or changes the bytes that caller receives.
+Capture keeps each call as it went over the wire: the method, the path with its query string, every
+header and the complete body, parsed when it is JSON or a form. The host is left out: the viewer
+draws the service, not the container address. Redaction replaces a value and keeps its key, with a
+visible marker:
+
+- `[redacted: credential]` for the `Authorization` and `Proxy-Authorization` headers (their scheme
+  stays visible), `Cookie`, `Set-Cookie` and `DPoP`, and for `access_token`, `refresh_token`,
+  `id_token`, `client_assertion`, `assertion`, `client_secret`, `password` and `token` wherever they
+  appear as a JSON member, form field or query parameter;
+- `[redacted: JWT]` and `[redacted: JWE]` for any compact JWS or JWE in a value;
+- `[redacted: JWE]` and `[redacted: blind_factor]` for the `jwe` and `blind_factor` members, which the
+  [pseudonymisation guide](https://minvws.github.io/generiekefuncties-docs/en/pseudonymisation.html)
+  forbids clients to persist beyond the transaction;
+- `[redacted: BSN]` for every nine-digit value that passes the BSN check digit, unless the explicit
+  local synthetic mode applies, which reveals the demo pool only.
+
+Request bodies are read ahead and replayed when the client cannot replay them itself, which is how
+the [FHIR client sends every NVI request](https://github.com/SanteonNL/go-fhir-client/blob/v0.6.1/client.go#L235).
+Bodies are kept up to 64 KiB. A body that is larger, binary, malformed JSON, not read to the end or
+unreadable is replaced by a `[not captured: …]` marker that says which; `null` means the call had no
+body. Capture never changes the bytes a caller sends or receives. The clients read JSON responses to
+the end, because a decoder that stops at the closing brace leaves a chunked response, which is how
+HAPI answers, unfinished.
 
 A fully consumed, successful service-access-token response with a nonempty `access_token` sets
 the optional `response.tokenReceived` flag. Only this boolean is retained; the token value is never
 included in an event. A status of 200 alone does not establish that a key was received.
 The token client consumes the complete response before decoding, including chunked responses.
 An outgoing source request carrying a nonempty Bearer credential sets `request.tokenAttached`.
-Only its presence is retained; the Authorization value never enters event headers or bodies.
+Only its presence is retained: the header itself reads `Bearer [redacted: credential]`.
 
-The in-memory window contains at most 32 runs, 256 events per run and 16 KiB per serialized event.
-An event exceeding that byte cap loses its body projections; if its remaining metadata still exceeds
-the cap, it is dropped. Runs expire after 15 minutes without captured activity, or at session expiry,
-whichever is earlier. Expired entries are pruned on store access; an open stream wakes at expiry.
+The in-memory window contains at most 32 runs. Each run keeps at most 256 events and 4 MiB, dropping
+its oldest events first, which the stream reports as a replay gap. An event larger than 144 KiB keeps
+its call with both bodies replaced by `[not captured: event exceeds the retention limit]`; if its
+metadata alone still exceeds that, it is dropped. Runs expire after 15 minutes without captured
+activity, or at session expiry, whichever is earlier. Expired entries are pruned on store access; an
+open stream wakes at expiry.
 Delayed PRS evidence also counts as captured activity and can renew a still-live run's lease.
 Its correlation expires five minutes after the originating request starts; it cannot revive an
 expired run or extend a session's lifetime.
@@ -332,9 +349,10 @@ A connection without a cursor replays the retained window. A reconnect's `Last-E
 continues after event 3. Malformed, foreign-run and future cursors return 400. If older events were
 discarded, `event: replay-gap` with `data: {"firstSeq":17}` precedes the retained window; the viewer
 clears its partial history and shows the gap. An initial replay and each batch of new steps end with
-`event: snapshot` and `data: {"lastSeq":17}`; this has no SSE ID and marks the delivery boundary for
-the viewer. `event: run-ended` closes an active stream when its run
-ends. These are transport control records, separate from GF step records. Fifteen-second keepalive
+`event: snapshot` and `data: {"lastSeq":17,"prsEvidence":true}`; this has no SSE ID and marks the
+delivery boundary for the viewer. `prsEvidence` says whether this deployment correlates PRS spans.
+`event: run-ended` closes an active stream when its run ends. These are transport control records,
+separate from GF step records. Fifteen-second keepalive
 comments do not renew the run lease. Each write has a 10-second deadline, cleared while idle, so a
 slow browser does not retain an unbounded event queue. SSE framing and automatic reconnection follow
 the [WHATWG EventSource contract](https://html.spec.whatwg.org/multipage/server-sent-events.html).
@@ -357,8 +375,8 @@ position alone, so details can be inspected between steps.
 The journey map plays observed stages at about 2.5 seconds each, identifies the selected action and
 current step, and uses the same anchored path for the outgoing request and returning HTTP response.
 An observed error response returns with its status; a transport failure has no invented return.
-Missing bodies are labeled as not captured. A Mitz subscription acknowledgement is not a consent
-decision. This is a presentation clock: backend calls remain fast and displayed request durations
+A body that was not captured says why, and a call without a body says so. A Mitz subscription
+acknowledgement is not a consent decision. This is a presentation clock: backend calls remain fast and displayed request durations
 remain their measured durations. Pause/Resume, Replay and Skip operate on retained events and do not
 repeat requests. Playback pauses when the viewer is closed or the document is hidden, respects
 reduced motion, and remembers an opaque cursor within the tab. Refreshing therefore does not
@@ -376,7 +394,7 @@ Discovery is labeled Find data sources. Confirmed retrieval starts with Request 
 Find patient at Sunflower and separate allergy, condition and medication searches as observed.
 Each source request with captured key-attachment evidence carries the key icon on its outgoing
 packet. Technical mode explains the patient POST search and shows the authorization-presence
-metadata alongside the exact method, path and sanitized body. The icon never follows merely from
+metadata alongside the method, path, headers and body as sent. The icon never follows merely from
 an earlier token response; its evidence belongs to the outgoing request itself.
 
 PRS motion requires an actual correlated span. The map does not infer individual policy decisions
@@ -388,10 +406,12 @@ producers.
 The sandbox Compose overlay adds a pinned OpenTelemetry Collector, keeps forwarding logs/traces to
 Aspire and also sends traces to the sandbox's private listener. Only recognized PRS client spans from
 the configured service and endpoint, with a trace generated for a live patient run, become viewer
-events. The retained projection contains method, fixed path, result, status and duration; it excludes
-bodies, arbitrary attributes, span errors, tokens and identifiers. Duplicate spans emit once. Missing
-or delayed telemetry never changes the actual request result; the viewer allows up to one second for
-initial internal evidence and displays unavailable evidence explicitly.
+events. The retained projection contains method, fixed path, result, status and duration; a span
+carries no bodies, so both are marked as observed through the trace span, and arbitrary attributes,
+span errors, tokens and identifiers are left out. Duplicate spans emit once. Missing or delayed
+telemetry never changes the actual request result; the viewer allows up to one second for initial
+internal evidence and displays unavailable evidence explicitly. Without the receiver, the viewer
+states that the deployment does not trace the PRS call instead of reporting its evidence as missing.
 
 Receiver configuration is separate from the public application listener:
 
@@ -406,13 +426,9 @@ at most 1,024 spans. It retains up to 512 request correlations for five minutes 
 identities per correlation; unrelated or stale spans are ignored. A cleared run cannot be recreated.
 The sandbox overlay sets the Go SDK's `OTEL_BSP_SCHEDULE_DELAY=250` to deliver spans promptly.
 
-The default Compose ingest token is for the local demo only. For a hosted deployment, supply a fresh
-token through a Kubernetes Secret, set the actual PRS acceptance base URL and match the Knooppunt's
-`service.name`. Route the Collector to a private sandbox Service on port 4318; expose only the app's
-8091 port through ingress. The current Helm chart does not provision this additional receiver Service
-or Collector: configure those private resources and environment variables with the deployment overlay.
-Keep the existing Aspire exporter alongside the viewer exporter. The Collector's bounded queues and
-short export timeouts keep viewer outages out of the request path.
+The default Compose ingest token is for the local demo only. The `gf-sandbox` Helm chart sets none of
+these variables and deploys no Collector, so a Kubernetes deployment runs without PRS evidence. The
+Collector's bounded queues and short export timeouts keep viewer outages out of the request path.
 
 Run `go test ./sandbox/...` for the sandbox tests (Docker is required for acceptance tests),
 `go test -race ./sandbox/app -run 'TestRunStore_|TestEventHTTP_|TestCapture|TestTraceBridge'` for event concurrency,
@@ -479,13 +495,16 @@ should compose these primitives and partials.
   open/switch route reserves the patient; the manual controls remain available for reset demonstrations.
 - Retrieval (E4, landed): `GET /demo/ehr/patients/{key}/retrieve` renders where the data can be
   found, `POST` the same path runs the confirmed chain and renders the authorization result. Both
-  need a session; the POST additionally needs this session to hold the patient's lock.
-- The `#gf-viewer-steps` container and `window.GFJourney.apply(stepEvent)` / `.reset()`, consuming the DESIGN.md §7
-  step-event schema (E6).
+  need a session that holds the patient: the GET sends one that does not back to the patient list,
+  the POST answers 409.
+- The GF viewer (E6): `static/js/step-events.js` mounts on `#hood-dock` when it carries a
+  `data-run-id`, reads that run's event stream and renders into `#gf-viewer-steps`; the journey map
+  is driven through `createJourneyStrip` in `static/js/journey-strip.js`. Both consume the DESIGN.md §7
+  step-event schema.
 
-The wireframe's scene choreography is retained in CSS for later producers. E6 activates only observed
-call highlights: refusal is pink and failure amber, applied to the call concerned. It does not infer a
-consent refusal from an unrelated 403, animate unobserved interior calls, or advance the withdrawal scene.
+The journey map highlights observed calls only: refusal is pink and failure amber, applied to the call
+concerned. It does not infer a consent refusal from an unrelated 403, animate unobserved interior
+calls, or play the wireframe's withdrawal scene.
 
 ## Provenance
 

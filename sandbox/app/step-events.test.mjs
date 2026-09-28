@@ -108,9 +108,8 @@ test('unverified HTTP replies never imply consent or token receipt', () => {
   ]) {
     journey.reset(); journey.apply({ gf, outcome, response: { status: outcome === 'ok' ? 200 : 403 } });
     assert.deepEqual(withClass('go'), [...sprites].sort(), `${gf} ${outcome}`);
-    assert.deepEqual(withClass('unlocked'), []);
-    assert.ok(!withClass('go').includes('js-keyback'), 'token HTTP result does not prove a returned key');
-    assert.ok(!withClass('go').includes('js-permit'), 'subscription is not a consent verdict');
+    assert.deepEqual(withClass('token-received'), [], 'an HTTP result alone does not prove a returned key');
+    assert.deepEqual(withClass('vault-open'), [], 'an HTTP result alone does not prove returned data');
     if (gf !== 'pseudonym') assert.ok(!withClass('lit').includes('js-prs'));
   }
   journey.reset(); journey.apply({ gf: 'exchange', outcome: 'ok' }, { reducedMotion: true });
@@ -436,7 +435,8 @@ test('timeline keeps one selectable entry per action with separate request and r
   assert.equal(mounted.player.state().action.id, 'action-one');
   const content = descendants(nodes.get('gf-viewer-steps')).map(element => element.textContent).join(' ');
   assert.match(content, /Request/); assert.match(content, /Response/);
-  assert.match(content, /HTTP 201/); assert.match(content, /Body not captured/);
+  assert.match(content, /HTTP 201/); assert.match(content, /No body/);
+  assert.doesNotMatch(content, /Body not captured/, 'an empty body is not a missing capture');
   assert.doesNotMatch(content, /consent granted/i);
   assert.match(nodes.get('gf-stage-caption').textContent, /Step 1 of 2/);
   mounted.cleanup();
@@ -566,13 +566,36 @@ test('patient and clinical searches have distinct stages even when both use GET'
 
 test('technical requests explain key attachment and the patient search without exposing a key', t => {
   const { mounted, source, clock, nodes } = mountFixture(t);
-  source.send('step', { ...observed(1, 'exchange'), action: 'retrieve', gf: 'exchange', resourceType: 'Patient', request: { method: 'POST', path: '/fhir/Patient/_search', tokenAttached: true } });
+  source.send('step', { ...observed(1, 'exchange'), action: 'retrieve', gf: 'exchange', resourceType: 'Patient',
+    request: { method: 'POST', path: '/fhir/Patient/_search', tokenAttached: true, headers: { Authorization: 'Bearer [redacted: credential]' } },
+    response: { status: 200, body: '[not captured: body exceeds the 65536-byte capture limit]' } });
   source.send('snapshot', {}); clock.tick(1000);
   const content = element => [element.textContent, ...element.children.map(content)].join(' ');
   const text = content(nodes.get('gf-viewer-steps'));
   assert.match(text, /Find patient at Sunflower/);
-  assert.match(text, /Authorization: Bearer \[value not retained\]/);
+  assert.match(text, /Access key attached/);
+  assert.match(text, /"Authorization": "Bearer \[redacted: credential\]"/);
+  assert.ok(text.includes(' [not captured: body exceeds the 65536-byte capture limit]'), 'a marker is shown as text, not as a quoted JSON string');
+  assert.ok(!text.includes('"[not captured'), 'a marker is shown as text, not as a quoted JSON string');
   assert.match(text, /identifier is sent in the request body/);
   assert.match(text, /patient reference scopes the later clinical queries/);
   mounted.cleanup();
+});
+
+test('an NVI action names missing PRS evidence only where PRS calls are traced', t => {
+  for (const [prsEvidence, expected, absent] of [
+    [true, /PRS evidence unavailable for this action/, /does not trace/],
+    [false, /This deployment does not trace the Knooppunt’s internal PRS call/, /PRS evidence unavailable|Waiting briefly/],
+  ]) {
+    const { mounted, source, clock, nodes } = mountFixture(t);
+    const descendants = element => [element, ...element.children.flatMap(descendants)];
+    const text = () => descendants(nodes.get('gf-viewer-steps')).map(element => element.textContent).join(' ');
+    source.send('step', observed(1, 'registration'));
+    source.send('snapshot', { lastSeq: 1, prsEvidence });
+    if (!prsEvidence) assert.doesNotMatch(text(), absent, 'nothing to wait for while settling');
+    clock.tick(1000);
+    assert.match(text(), expected, `prsEvidence=${prsEvidence}`);
+    assert.doesNotMatch(text(), absent, `prsEvidence=${prsEvidence}`);
+    mounted.cleanup();
+  }
 });

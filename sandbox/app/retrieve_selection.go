@@ -7,13 +7,17 @@ import (
 
 const sourceSelectionTTL = 5 * time.Minute
 
+// sourceSelection is one discovery result. Its generation is the patient's
+// retrieval generation when discovery started, so a recycle that replaced the
+// data underneath it invalidates the selection as it invalidates a retrieval.
 type sourceSelection struct {
-	id        string
-	expiresAt time.Time
-	sources   []localizedSource
+	id         string
+	expiresAt  time.Time
+	generation uint64
+	sources    []localizedSource
 }
 
-func (s *runStore) rememberSources(id, owner string, sources []localizedSource) (string, error) {
+func (s *runStore) rememberSources(id, owner string, sources []localizedSource, generation uint64) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()
@@ -22,7 +26,7 @@ func (s *runStore) rememberSources(id, owner string, sources []localizedSource) 
 	if run == nil || run.scope.owner != owner {
 		return "", errRunUnavailable
 	}
-	selection := &sourceSelection{id: randomURLSafe(), expiresAt: now.Add(sourceSelectionTTL)}
+	selection := &sourceSelection{id: randomURLSafe(), expiresAt: now.Add(sourceSelectionTTL), generation: generation}
 	for _, source := range sources {
 		source.Categories = slices.Clone(source.Categories)
 		selection.sources = append(selection.sources, source)
@@ -31,7 +35,7 @@ func (s *runStore) rememberSources(id, owner string, sources []localizedSource) 
 	return selection.id, nil
 }
 
-func (s *runStore) selectedSource(id, owner, selectionID, ura string) (localizedSource, bool) {
+func (s *runStore) selectedSource(id, owner, selectionID, ura string, generation uint64) (localizedSource, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := s.now()
@@ -44,7 +48,7 @@ func (s *runStore) selectedSource(id, owner, selectionID, ura string) (localized
 		run.sources = nil
 		return localizedSource{}, false
 	}
-	if selectionID == "" || run.sources.id != selectionID {
+	if selectionID == "" || run.sources.id != selectionID || run.sources.generation != generation {
 		return localizedSource{}, false
 	}
 	for _, source := range run.sources.sources {

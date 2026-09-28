@@ -12,8 +12,11 @@ const (
 	defaultEventTTL       = 15 * time.Minute
 	defaultMaxRuns        = 32
 	defaultMaxRunEvents   = 256
-	maxRetainedEventBytes = 16 * 1024
+	defaultMaxRunBytes    = 4 << 20
+	maxRetainedEventBytes = 2*eventBodyLimit + 16*1024
 )
+
+const eventTooLarge = "[not captured: event exceeds the retention limit]"
 
 var (
 	errRunUnavailable = errors.New("run is unavailable")
@@ -31,6 +34,7 @@ type eventRun struct {
 	sessionExpires time.Time
 	seq            uint64
 	events         []json.RawMessage
+	bytes          int
 	changed        chan struct{}
 	sources        *sourceSelection
 }
@@ -53,12 +57,13 @@ type runStore struct {
 	ttl       time.Duration
 	maxRuns   int
 	maxEvents int
+	maxBytes  int
 }
 
 func newRunStore(locks *Registry) *runStore {
 	return &runStore{
 		locks: locks, runs: make(map[string]*eventRun), currentID: make(map[runScope]string),
-		now: time.Now, ttl: defaultEventTTL, maxRuns: defaultMaxRuns, maxEvents: defaultMaxRunEvents,
+		now: time.Now, ttl: defaultEventTTL, maxRuns: defaultMaxRuns, maxEvents: defaultMaxRunEvents, maxBytes: defaultMaxRunBytes,
 	}
 }
 
@@ -160,7 +165,7 @@ func (s *runStore) append(id string, event stepEvent) bool {
 		return false
 	}
 	if len(raw) > maxRetainedEventBytes {
-		event.Request.Body, event.Response.Body = nil, nil
+		event.Request.Body, event.Response.Body = eventTooLarge, eventTooLarge
 		raw, err = json.Marshal(event)
 		if err != nil || len(raw) > maxRetainedEventBytes {
 			return false
@@ -172,11 +177,12 @@ func (s *runStore) append(id string, event stepEvent) bool {
 	}
 	run.expiresAt = earlier(now.Add(s.ttl), run.sessionExpires)
 	run.seq++
-	if len(run.events) == s.maxEvents {
-		copy(run.events, run.events[1:])
-		run.events[len(run.events)-1] = raw
-	} else {
-		run.events = append(run.events, raw)
+	run.events = append(run.events, raw)
+	run.bytes += len(raw)
+	for len(run.events) > s.maxEvents || (run.bytes > s.maxBytes && len(run.events) > 1) {
+		run.bytes -= len(run.events[0])
+		run.events[0] = nil
+		run.events = run.events[1:]
 	}
 	close(run.changed)
 	run.changed = make(chan struct{})

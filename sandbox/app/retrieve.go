@@ -236,10 +236,13 @@ func (c Config) handleRetrieveForm(w http.ResponseWriter, r *http.Request, sessi
 	}
 	row := c.rowFor(patient, shareStatus{}, session)
 	if row.RunID == "" {
-		http.Error(w, "reopen this patient before finding sources", http.StatusConflict)
+		http.Redirect(w, r, "/demo/ehr?notice=patient-not-open", http.StatusSeeOther)
 		return
 	}
 
+	// Read before discovery, as in handleRetrieve: a recycle finishing after
+	// this point replaces the answer the discovery is about to read.
+	generation := c.Retrievals.generationOf(patient.Key)
 	sources, err := c.localizeSources(r.Context(), patient.BSN)
 	rendered := retrievalPage(row, session)
 	rendered.Sources = sources
@@ -247,7 +250,7 @@ func (c Config) handleRetrieveForm(w http.ResponseWriter, r *http.Request, sessi
 		rendered.LocalizeErr = err.Error()
 	} else {
 		if c.sessions == nil || !c.sessions.storeIfLive(session.ID, func() {
-			rendered.SourceSelectionID, err = c.Runs.rememberSources(row.RunID, lockOwner(session), sources)
+			rendered.SourceSelectionID, err = c.Runs.rememberSources(row.RunID, lockOwner(session), sources, generation)
 		}) {
 			http.Redirect(w, r, "/demo/login", http.StatusSeeOther)
 			return
@@ -296,7 +299,7 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 
 	generation := c.Retrievals.generationOf(patient.Key)
 	row := c.rowFor(patient, shareStatus{}, session)
-	chosen, selected := c.Runs.selectedSource(row.RunID, lockOwner(session), r.FormValue("selection"), r.FormValue("ura"))
+	chosen, selected := c.Runs.selectedSource(row.RunID, lockOwner(session), r.FormValue("selection"), r.FormValue("ura"), generation)
 	if !selected {
 		rendered := retrievalPage(row, session)
 		rendered.SourceSelectionExpired = true

@@ -25,6 +25,7 @@ var notices = map[string]string{
 	"reset-disabled":          "Reset is unavailable: it needs both KNOOPPUNT_INTERNAL_URL and HAPI_BASE_URL, and one of them is unset. Sharing only needs the first, so it can work while this does not.",
 	"signed-out":              "Signed out. The Dezi session has been cleared.",
 	"patient-busy":            "That patient is in use by another demo run. Pick a different one.",
+	"patient-not-open":        "Open the patient first: finding where its data is held needs the patient open in this session.",
 	"mitz-retry-done":         "Consent subscription started.",
 	"mitz-retry-existing":     "The Mitz lookup found an existing consent subscription for this patient. No registration request was sent.",
 	"mitz-retry-reconciled":   "The retry failed, but the lookup afterwards found a consent subscription for this patient. Whether it already existed or resulted from this retry could not be established.",

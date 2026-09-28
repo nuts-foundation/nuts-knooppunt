@@ -77,7 +77,7 @@ export function mountViewer(dock) {
     const value = JSON.parse(sessionStorage.getItem(storageKey));
     if (value?.runId === runId) saved = value;
   } catch { /* Storage can be unavailable in private browser contexts. */ }
-  let hasGap = false, ended = false;
+  let hasGap = false, ended = false, prsEvidence = true;
   const openDetails = new Set();
   const knownDetails = new Set();
   let activeFunctional, activeTechnical, activeCalls = new Set();
@@ -125,15 +125,16 @@ export function mountViewer(dock) {
       section.append(node('h5', '', direction === 'request' ? 'Request →' : 'Response ←'));
       section.append(node('p', 'gf-http-status', direction === 'request'
         ? `${event.request?.method || ''} ${event.request?.path || ''}` : responseLabel(event)));
-      if (direction === 'request' && event.request?.tokenAttached === true) section.append(node('p', 'gf-step-result', 'Access key attached · Authorization: Bearer [value not retained]'));
+      if (direction === 'request' && event.request?.tokenAttached === true) section.append(node('p', 'gf-step-result', 'Access key attached in the Authorization header.'));
       if (direction === 'request' && event.gf === 'exchange' && event.resourceType === 'Patient' && event.request?.method === 'POST') section.append(node('p', 'gf-step-result', 'Patient search: the identifier is sent in the request body to keep it out of the URL. The returned patient reference scopes the later clinical queries.'));
       if (direction === 'response' && event.response?.tokenReceived) section.append(node('p', 'gf-step-result', 'Captured evidence: access token received. The token value is not retained.'));
       if (direction === 'response' && subscriptionResult(event)) section.append(node('p', 'gf-step-result', subscriptionResult(event)));
       if (message?.headers && Object.keys(message.headers).length) {
-        section.append(node('div', 'gf-http-label', 'Captured headers'), node('pre', '', JSON.stringify(message.headers, null, 2)));
+        section.append(node('div', 'gf-http-label', 'Headers'), node('pre', '', JSON.stringify(message.headers, null, 2)));
       }
-      section.append(node('div', 'gf-http-label', 'Captured body'));
-      section.append(message?.body == null ? node('p', 'gf-step-result', 'Body not captured') : node('pre', '', JSON.stringify(message.body, null, 2)));
+      section.append(node('div', 'gf-http-label', 'Body'));
+      section.append(message?.body == null ? node('p', 'gf-step-result', 'No body')
+        : node('pre', '', typeof message.body === 'string' ? message.body : JSON.stringify(message.body, null, 2)));
       exchange.append(section);
     }
     call.append(exchange);
@@ -164,7 +165,7 @@ export function mountViewer(dock) {
     }
     container.append(calls);
     if (backgroundCalls) container.append(background);
-    container.append(node('p', 'hd-note', 'Details contain captured, sanitized fields only. A Mitz subscription response is not a consent decision.'));
+    container.append(node('p', 'hd-note', 'Requests and responses are shown as sent and received. Credentials, JWE and blind_factor values, and BSNs on shared deployments, are replaced by a [redacted: …] marker. A Mitz subscription response is not a consent decision.'));
     return container;
   }
   function functionalStages(action, state) {
@@ -191,8 +192,9 @@ export function mountViewer(dock) {
       if (current && !activeFunctional) activeFunctional = row;
     }
     container.append(stages);
-    if (action.prsUnavailable) container.append(node('p', 'hd-note', state.status === 'settling'
-      ? 'Waiting briefly for internal PRS evidence…' : 'PRS evidence unavailable for this action.'));
+    if (action.prsUnavailable) container.append(node('p', 'hd-note', !prsEvidence
+      ? 'This deployment does not trace the Knooppunt’s internal PRS call.'
+      : state.status === 'settling' ? 'Waiting briefly for internal PRS evidence…' : 'PRS evidence unavailable for this action.'));
     return container;
   }
   function render(state) {
@@ -327,7 +329,8 @@ export function mountViewer(dock) {
     };
   }
   source.addEventListener('step', receive(event => feed.step(event)), { signal: listeners.signal });
-  source.addEventListener('snapshot', receive(() => {
+  source.addEventListener('snapshot', receive(snapshot => {
+    if (typeof snapshot?.prsEvidence === 'boolean') prsEvidence = snapshot.prsEvidence;
     player.snapshot(); status.textContent = hasGap ? 'Live · earlier events expired' : 'Live · observed calls received';
   }), { signal: listeners.signal });
   source.addEventListener('replay-gap', receive(gap => feed.gap(gap)), { signal: listeners.signal });

@@ -80,19 +80,51 @@ func TestEventHTTP_ReplayLiveDeliveryAndResume(t *testing.T) {
 	require.Equal(t, id, event.RunID)
 	frame = readEventFrame(t, reader)
 	require.Equal(t, "snapshot", frame.event)
-	require.JSONEq(t, `{"lastSeq":2}`, frame.data)
+	require.JSONEq(t, `{"lastSeq":2,"prsEvidence":false}`, frame.data)
 	require.True(t, cfg.Runs.append(id, stepEvent{GF: "exchange", Outcome: "deny"}))
 	frame = readEventFrame(t, reader)
 	require.Equal(t, id+":3", frame.id)
 	require.Contains(t, frame.data, `"outcome":"deny"`)
 	frame = readEventFrame(t, reader)
 	require.Equal(t, "snapshot", frame.event)
-	require.JSONEq(t, `{"lastSeq":3}`, frame.data)
+	require.JSONEq(t, `{"lastSeq":3,"prsEvidence":false}`, frame.data)
 	cfg.Runs.clearPatient("anna")
 	frame = readEventFrame(t, reader)
 	require.Equal(t, "run-ended", frame.event)
 	_, err = reader.ReadString('\n')
 	require.ErrorIs(t, err, io.EOF)
+}
+
+// Without the trace receiver there is no PRS evidence to wait for, and the
+// viewer must not report each NVI call's pseudonymization as missing.
+func TestEventHTTP_SnapshotSaysWhetherPRSEvidenceIsCollected(t *testing.T) {
+	for _, traced := range []bool{false, true} {
+		cfg := testConfig()
+		cfg.Runs = newRunStore(cfg.Locks)
+		if traced {
+			bridge, err := newEventTraceBridge("http://mock-prs:8080", "nuts-knooppunt", "receiver-token")
+			require.NoError(t, err)
+			cfg.eventTraces = bridge
+		}
+		srv, client := demoServer(t, cfg)
+		openPatient(t, client, srv, "anna")
+		id := cfg.Runs.current(lockOwner(&authSession{ID: sessionCookieValue(t, client, srv.URL)}), "anna")
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/demo/runs/"+id+"/events", nil)
+		require.NoError(t, err)
+		res, err := client.Do(req)
+		require.NoError(t, err)
+		frame := readEventFrame(t, bufio.NewReader(res.Body))
+		cancel()
+		_ = res.Body.Close()
+		require.Equal(t, "snapshot", frame.event)
+		var snapshot struct {
+			PRSEvidence *bool `json:"prsEvidence"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(frame.data), &snapshot))
+		require.NotNil(t, snapshot.PRSEvidence)
+		require.Equal(t, traced, *snapshot.PRSEvidence)
+	}
 }
 
 func TestEventHTTP_AuthorizationAndCursorChecks(t *testing.T) {
@@ -287,7 +319,7 @@ func TestEventIdentifierConfig_DefaultsMaskedAndRestrictsSyntheticMode(t *testin
 	}
 }
 
-func TestEventHTTP_ActualPatientCallsAreSanitizedBeforeRetention(t *testing.T) {
+func TestEventHTTP_ActualPatientCallsAreRedactedBeforeRetention(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/nvi/List/_search" || r.Method != http.MethodPost {
 			t.Errorf("unexpected upstream call: %s %s", r.Method, r.URL.Path)
@@ -346,9 +378,10 @@ func TestEventHTTP_ActualPatientCallsAreSanitizedBeforeRetention(t *testing.T) {
 		seenActions[event.ActionID] = true
 	}
 	for _, raw := range snapshot.Events {
-		for _, forbidden := range []string{"secret-token", "secret-cookie", "secret-patient-text", pool.Patients()[0].BSN, sessionCookie} {
+		for _, forbidden := range []string{"secret-token", "secret-cookie", pool.Patients()[0].BSN, sessionCookie} {
 			require.NotContains(t, string(raw), forbidden)
 		}
+		require.Contains(t, string(raw), "secret-patient-text", "the response is retained as returned, narrative included")
 	}
 }
 

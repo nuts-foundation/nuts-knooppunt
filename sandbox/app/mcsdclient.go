@@ -102,7 +102,7 @@ func mcsdResolveFunc(hapiBaseURL *url.URL) func(context.Context, string) (source
 		}
 
 		var bundle fhir.Bundle
-		if err := json.NewDecoder(res.Body).Decode(&bundle); err != nil {
+		if err := readJSON(res.Body, &bundle); err != nil {
 			return sourceAddress{}, fmt.Errorf("parse the mCSD directory response: %w", err)
 		}
 		return selectSource(bundle, ura)

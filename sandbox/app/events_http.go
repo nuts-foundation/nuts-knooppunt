@@ -156,7 +156,7 @@ func (c Config) handleEvents(w http.ResponseWriter, r *http.Request, session *au
 		}
 		after = snapshot.LastSeq
 		if initial || len(snapshot.Events) > 0 {
-			if !write(fmt.Sprintf("event: snapshot\ndata: {\"lastSeq\":%d}\n\n", after)) {
+			if !write(fmt.Sprintf("event: snapshot\ndata: {\"lastSeq\":%d,\"prsEvidence\":%t}\n\n", after, c.eventTraces != nil)) {
 				return
 			}
 			initial = false

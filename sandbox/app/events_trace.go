@@ -33,6 +33,9 @@ const (
 	eventTraceClockSkew       = 5 * time.Second
 )
 
+// A span records that the call happened and how it ended, not what it carried.
+const spanBody = "[not captured: the Knooppunt's internal call is observed through its trace span]"
+
 type eventTraceCorrelation struct {
 	parent  stepEvent
 	emit    func(stepEvent)
@@ -291,7 +294,7 @@ func (b *eventTraceBridge) consume(span *tracepb.Span) {
 	event := stepEvent{
 		GF: "pseudonym", Actor: "knooppunt", ActionID: correlation.parent.ActionID, Action: correlation.parent.Action, ResourceType: correlation.parent.ResourceType,
 		Purpose: "pseudonymization", CallID: "prs-" + hex.EncodeToString(span.TraceId) + "-" + hex.EncodeToString(span.SpanId), ParentCallID: correlation.parent.CallID,
-		Request: eventRequest{Method: "POST", Path: b.endpoint.Path}, Response: eventResponse{Status: int(status)}, Outcome: "error",
+		Request: eventRequest{Method: "POST", Path: b.endpoint.Path, Body: spanBody}, Response: eventResponse{Status: int(status), Body: spanBody}, Outcome: "error",
 		DurationMs: int64((span.EndTimeUnixNano - span.StartTimeUnixNano) / uint64(time.Millisecond)), TS: time.Unix(0, int64(span.EndTimeUnixNano)).UTC(),
 	}
 	switch {

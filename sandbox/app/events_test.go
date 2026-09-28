@@ -127,25 +127,11 @@ func TestRunStore_ActivityCannotOutliveSession(t *testing.T) {
 	require.False(t, store.locks.IsLocked("anna"))
 }
 
-func TestRunStore_OversizedEventDropsBodiesBeforeRetention(t *testing.T) {
+func TestRunStore_OversizedEventKeepsItsCallWithMarkedBodies(t *testing.T) {
 	store, now := eventStoreAt(t)
 	id, err := store.start("one", "anna", now.Add(time.Hour), true)
 	require.NoError(t, err)
-	identifiers := make([]any, 8)
-	for i := range identifiers {
-		identifiers[i] = map[string]any{"system": "http://fhir.nl/fhir/NamingSystem/bsn", "value": "999900006"}
-	}
-	entries := make([]any, 32)
-	for i := range entries {
-		entries[i] = map[string]any{"resource": map[string]any{"resourceType": "Patient", "identifier": identifiers}}
-	}
-	input, err := json.Marshal(map[string]any{"resourceType": "Bundle", "type": "searchset", "entry": entries})
-	require.NoError(t, err)
-	body := eventBody(input, "application/fhir+json", false)
-	require.NotNil(t, body)
-	projection, err := json.Marshal(body)
-	require.NoError(t, err)
-	require.Greater(t, len(projection), maxRetainedEventBytes, "exercise the cap with a real allowlisted projection")
+	body := strings.Repeat("x", maxRetainedEventBytes/2)
 	event := stepEvent{
 		GF: "exchange", Outcome: "ok",
 		Request:  eventRequest{Method: "POST", Path: "/fhir/Patient/_search", Body: body},
@@ -159,8 +145,8 @@ func TestRunStore_OversizedEventDropsBodiesBeforeRetention(t *testing.T) {
 	retained := decodedSteps(t, snapshot)[0]
 	require.Equal(t, "/fhir/Patient/_search", retained.Request.Path)
 	require.Equal(t, 200, retained.Response.Status)
-	require.Nil(t, retained.Request.Body)
-	require.Nil(t, retained.Response.Body)
+	require.Equal(t, "[not captured: event exceeds the retention limit]", retained.Request.Body)
+	require.Equal(t, "[not captured: event exceeds the retention limit]", retained.Response.Body)
 
 	event.Request.Path = strings.Repeat("x", maxRetainedEventBytes)
 	require.False(t, store.append(id, event), "metadata that cannot fit must also be rejected")
@@ -169,6 +155,37 @@ func TestRunStore_OversizedEventDropsBodiesBeforeRetention(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, snapshot.Events, 2)
 	require.Equal(t, uint64(2), snapshot.LastSeq, "rejected events must not consume sequence numbers")
+}
+
+// Exact bodies make event sizes vary by two orders of magnitude, so the window
+// is bounded in bytes as well as in events. The oldest events go first, which
+// the stream reports as a replay gap.
+func TestRunStore_ByteBudgetEvictsTheOldestEvents(t *testing.T) {
+	store, now := eventStoreAt(t)
+	store.maxBytes = 4096
+	id, err := store.start("one", "anna", now.Add(time.Hour), true)
+	require.NoError(t, err)
+	for range 10 {
+		require.True(t, store.append(id, stepEvent{GF: "exchange", Outcome: "ok", Response: eventResponse{Status: 200, Body: strings.Repeat("x", 1000)}}))
+	}
+	snapshot, err := store.snapshot(id, "one", 0)
+	require.NoError(t, err)
+	retained := 0
+	for _, raw := range snapshot.Events {
+		retained += len(raw)
+	}
+	require.LessOrEqual(t, retained, 4096)
+	require.Len(t, snapshot.Events, 3, "three events of about 1.2 KiB fit in 4 KiB")
+	require.Equal(t, uint64(8), snapshot.FirstSeq)
+	require.Equal(t, uint64(10), snapshot.LastSeq)
+	require.True(t, snapshot.Gap)
+	require.Equal(t, uint64(8), decodedSteps(t, snapshot)[0].Seq)
+
+	store.maxBytes = 100
+	require.True(t, store.append(id, stepEvent{GF: "exchange", Outcome: "ok", Response: eventResponse{Status: 200, Body: strings.Repeat("x", 1000)}}))
+	snapshot, err = store.snapshot(id, "one", 0)
+	require.NoError(t, err)
+	require.Len(t, snapshot.Events, 1, "the newest event is kept even when it alone exceeds the budget")
 }
 
 func TestRunStore_ResumeSwitchAndDeniedSwitch(t *testing.T) {

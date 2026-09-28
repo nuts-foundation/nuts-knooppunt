@@ -103,8 +103,13 @@ func TestTraceBridgeProjectsCorrelatedSpanOnce(t *testing.T) {
 		t.Fatalf("wrong observed result: %+v", e)
 	}
 	encoded, _ := json.Marshal(e)
-	if strings.Contains(string(encoded), "do-not-retain") || e.Request.Body != nil || e.Response.Body != nil || len(e.Request.Headers) != 0 || len(e.Response.Headers) != 0 {
+	if strings.Contains(string(encoded), "do-not-retain") || len(e.Request.Headers) != 0 || len(e.Response.Headers) != 0 {
 		t.Fatalf("unsafe projection: %s", encoded)
+	}
+	// A span carries no bodies, and an empty body would claim the call had none.
+	const marker = "[not captured: the Knooppunt's internal call is observed through its trace span]"
+	if e.Request.Body != marker || e.Response.Body != marker {
+		t.Fatalf("span bodies are not marked: %s", encoded)
 	}
 }
 

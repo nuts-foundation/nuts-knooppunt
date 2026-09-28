@@ -93,7 +93,7 @@ func mitzSubscribedFunc(mitzMockBaseURL *url.URL, providerURA string) func(conte
 		var bundle struct {
 			Entry []json.RawMessage `json:"entry"`
 		}
-		if err := json.NewDecoder(res.Body).Decode(&bundle); err != nil {
+		if err := readJSON(res.Body, &bundle); err != nil {
 			return false, fmt.Errorf("parse Mitz subscription bundle: %w", err)
 		}
 		return len(bundle.Entry) > 0, nil

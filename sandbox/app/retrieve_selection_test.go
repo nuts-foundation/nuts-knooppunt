@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -71,7 +73,7 @@ func TestRetrieve_ConfirmationReusesDiscovery(t *testing.T) {
 }
 
 func TestRetrieve_SelectionCannotOutliveItsScope(t *testing.T) {
-	for _, change := range []string{"expiry", "replaced", "released", "switched", "recycled", "another patient", "another session", "forged selection", "forged source"} {
+	for _, change := range []string{"expiry", "replaced", "released", "switched", "another patient", "another session", "forged selection", "forged source"} {
 		t.Run(change, func(t *testing.T) {
 			cfg := retrievalConfig(t)
 			cfg.Runs = newRunStore(cfg.Locks)
@@ -97,18 +99,18 @@ func TestRetrieve_SelectionCannotOutliveItsScope(t *testing.T) {
 				clock.Add(int64(5 * time.Minute))
 			case "replaced":
 				_ = sourceConfirmation(t, client, srv, key, zonnebloemURA)
-			case "released", "recycled":
+			case "released":
 				postForm(t, client, srv, "/demo/patients/"+key+"/release", nil).Body.Close()
-				if change == "recycled" {
-					postForm(t, client, srv, "/demo/patients/"+key+"/recycle", nil).Body.Close()
-				}
 				openPatient(t, client, srv, key)
 			case "switched":
 				openPatient(t, client, srv, "pool-02")
 				openPatient(t, client, srv, key)
 			case "another patient":
+				// Manually locked, so anna's run and its selection stay, and
+				// pool-02 has a discovery of its own for the selection to miss.
+				postForm(t, client, srv, "/demo/patients/pool-02/lock", nil).Body.Close()
 				key = "pool-02"
-				openPatient(t, client, srv, key)
+				_ = sourceConfirmation(t, client, srv, key, zonnebloemURA)
 			case "another session":
 				client = signInViaDezi(t, srv)
 				key = "pool-02"
@@ -166,14 +168,14 @@ func TestSourceSelectionCopiesCategories(t *testing.T) {
 	id, err := store.start("owner", "anna", time.Now().Add(time.Hour), true)
 	require.NoError(t, err)
 	sources := []localizedSource{{URA: zonnebloemURA, Address: "http://source.example/fhir", Categories: []string{"Condition"}}}
-	selection, err := store.rememberSources(id, "owner", sources)
+	selection, err := store.rememberSources(id, "owner", sources, 0)
 	require.NoError(t, err)
 	sources[0].Categories[0] = "MedicationRequest"
-	source, ok := store.selectedSource(id, "owner", selection, zonnebloemURA)
+	source, ok := store.selectedSource(id, "owner", selection, zonnebloemURA, 0)
 	require.True(t, ok)
 	require.Equal(t, []string{"Condition"}, source.Categories)
 	source.Categories[0] = "AllergyIntolerance"
-	again, ok := store.selectedSource(id, "owner", selection, zonnebloemURA)
+	again, ok := store.selectedSource(id, "owner", selection, zonnebloemURA, 0)
 	require.True(t, ok)
 	require.Equal(t, []string{"Condition"}, again.Categories)
 }
@@ -220,4 +222,80 @@ func TestRetrieve_MissingSelectionDoesNotRediscover(t *testing.T) {
 	require.Zero(t, lookups, "a missing selection must prompt an explicit refresh")
 	require.Zero(t, retrievals)
 	require.Contains(t, body, "Refresh source list")
+}
+
+// A recycle proceeds only while nobody holds the patient, but a session can
+// open it and discover sources while the restore runs. That discovery read the
+// index halfway through the restore and must not outlive it.
+func TestRetrieve_RecycleInvalidatesADiscoveryItOverlapped(t *testing.T) {
+	cfg := retrievalConfig(t)
+	cfg.Runs = newRunStore(cfg.Locks)
+	retrievals := 0
+	retrieve := cfg.retrieveFromSource
+	cfg.retrieveFromSource = func(ctx context.Context, s authSession, source sourceAddress, bsn string, cats []string) (sourceRetrieval, error) {
+		retrievals++
+		return retrieve(ctx, s, source, bsn, cats)
+	}
+	var srv *httptest.Server
+	var presenter *http.Client
+	var selection string
+	overlapped := make(chan error, 1)
+	cfg.recyclePatient = func(context.Context, string) error {
+		overlapped <- func() error {
+			res, err := presenter.Post(srv.URL+"/demo/ehr/patients/anna/open", "application/x-www-form-urlencoded", nil)
+			if err != nil {
+				return err
+			}
+			_ = res.Body.Close()
+			res, err = presenter.Get(srv.URL + "/demo/ehr/patients/anna/retrieve")
+			if err != nil {
+				return err
+			}
+			defer res.Body.Close()
+			body, err := io.ReadAll(res.Body)
+			if err != nil {
+				return err
+			}
+			match := selectionInput.FindStringSubmatch(string(body))
+			if len(match) != 2 {
+				return fmt.Errorf("discovery during the restore offered no selection (status %d)", res.StatusCode)
+			}
+			selection = match[1]
+			return nil
+		}()
+		return nil
+	}
+	srv, operator := demoServer(t, cfg)
+	presenter = signInViaDezi(t, srv)
+	res := postForm(t, operator, srv, "/demo/patients/anna/recycle", nil)
+	require.NoError(t, res.Body.Close())
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.NoError(t, <-overlapped)
+
+	status, body := postFormAndRead(t, presenter, srv, "/demo/ehr/patients/anna/retrieve",
+		url.Values{"ura": {zonnebloemURA}, "selection": {selection}})
+	require.Equal(t, http.StatusConflict, status)
+	require.Contains(t, body, "Refresh source list")
+	require.Zero(t, retrievals, "a discovery the recycle overtook cannot request a token or source data")
+}
+
+// A session that does not hold the patient, for instance after its lease ran
+// out, is sent back to the list to open it rather than shown a bare error.
+func TestRetrieveForm_WithoutAnOpenPatientPointsBackToTheList(t *testing.T) {
+	cfg := retrievalConfig(t)
+	lookups := 0
+	localize := cfg.nviLocalize
+	cfg.nviLocalize = func(ctx context.Context, bsn string) ([]localizedRecord, error) {
+		lookups++
+		return localize(ctx, bsn)
+	}
+	srv, client := demoServer(t, cfg)
+	res, err := client.Get(srv.URL + "/demo/ehr/patients/anna/retrieve")
+	require.NoError(t, err)
+	require.NoError(t, res.Body.Close())
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo/ehr?notice=patient-not-open", res.Header.Get("Location"))
+	require.Zero(t, lookups, "nothing is discovered for a patient this session does not hold")
+	_, list := getBody(t, client, srv, "/demo/ehr?notice=patient-not-open")
+	require.Contains(t, list, "Open the patient first")
 }

@@ -143,7 +143,7 @@ func (c *nutsClient) introspect(ctx context.Context, token string) (map[string]a
 	}
 
 	var claims map[string]any
-	if err := json.NewDecoder(res.Body).Decode(&claims); err != nil {
+	if err := readJSON(res.Body, &claims); err != nil {
 		return nil, fmt.Errorf("introspect access token: decode response: %w", err)
 	}
 	return claims, nil

@@ -1,24 +1,24 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"net/url"
-	"strconv"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
-	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 )
 
 const eventBodyLimit = 64 * 1024
-const eventBSNSystem = "http://fhir.nl/fhir/NamingSystem/bsn"
-const eventURASystem = "http://fhir.nl/fhir/NamingSystem/ura"
 
 type stepEvent struct {
 	RunID        string        `json:"runId"`
@@ -86,44 +86,24 @@ func (t *captureTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		return t.base.RoundTrip(req)
 	}
 	started := time.Now()
+	redact := eventRedactor{reveal: capture.revealSynthetic}
 	method := req.Method
 	if method == "" {
 		method = http.MethodGet
 	}
-	if !eventEnum(method, "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS") {
-		method = "OTHER"
-	}
+	requestBody, readable, req := bufferRequestBody(req)
 	event := stepEvent{
 		GF: t.gf, Actor: "sandbox-backend", Outcome: "error",
-		Request:  eventRequest{Method: method, Path: eventPath(req.URL, capture.revealSynthetic), Headers: eventHeaders(req.Header)},
+		Request:  eventRequest{Method: method, Path: redact.uri(req.URL), Body: redact.body(requestBody, req.Header.Get("Content-Type"))},
 		Response: eventResponse{Headers: map[string]string{}},
+	}
+	if !readable {
+		event.Request.Body = requestUnreadable
 	}
 	applyEventAction(req.Context(), &event)
 	credential := strings.Fields(req.Header.Get("Authorization"))
 	event.Request.TokenAttached = t.gf == "exchange" && len(credential) == 2 && strings.EqualFold(credential[0], "Bearer")
-	if req.GetBody != nil {
-		if body, err := req.GetBody(); err == nil {
-			data, readErr := io.ReadAll(io.LimitReader(body, eventBodyLimit+1))
-			_ = body.Close()
-			if readErr == nil {
-				event.Request.Body = eventBody(data, req.Header.Get("Content-Type"), capture.revealSynthetic)
-			}
-		}
-	}
-	finish := func(data []byte, complete bool, failed bool) {
-		if complete {
-			event.Response.Body = eventBody(data, event.Response.Headers["Content-Type"], capture.revealSynthetic)
-			if !failed && t.gf == "authorization" && method == http.MethodPost &&
-				event.Response.Status == http.StatusOK && strings.HasSuffix(req.URL.Path, "/request-service-access-token") {
-				var token struct {
-					AccessToken string `json:"access_token"`
-				}
-				event.Response.TokenReceived = json.Unmarshal(data, &token) == nil && token.AccessToken != ""
-			}
-		}
-		if failed {
-			event.Outcome = "error"
-		}
+	publish := func() {
 		event.DurationMs = time.Since(started).Milliseconds()
 		event.TS = time.Now().UTC()
 		capture.emit(event)
@@ -131,26 +111,107 @@ func (t *captureTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	if capture.traces != nil {
 		req = capture.traces.prepare(req, event, capture.emit, capture.live)
 	}
+	event.Request.Headers = redact.headers(req.Header)
 	response, err := t.base.RoundTrip(req)
 	if err != nil {
-		finish(nil, false, true)
+		publish()
 		return response, err
 	}
 	event.Response.Status = response.StatusCode
-	event.Response.Headers = eventHeaders(response.Header)
+	event.Response.Headers = redact.headers(response.Header)
 	switch {
 	case response.StatusCode == 401 || response.StatusCode == 403:
 		event.Outcome = "deny"
 	case response.StatusCode >= 200 && response.StatusCode < 300:
 		event.Outcome = "ok"
 	}
+	tokenRequest := t.gf == "authorization" && method == http.MethodPost && response.StatusCode == http.StatusOK &&
+		strings.HasSuffix(req.URL.Path, "/request-service-access-token")
+	contentType := response.Header.Get("Content-Type")
+	finish := func(data []byte, state bodyState) {
+		switch state {
+		case bodyFailed:
+			event.Outcome = "error"
+			event.Response.Body = bodyUnreadable
+		case bodyOverflowed:
+			event.Response.Body = bodyTooLarge
+		case bodyIncomplete:
+			event.Response.Body = bodyUnread
+		default:
+			event.Response.Body = redact.body(data, contentType)
+			if tokenRequest {
+				var token struct {
+					AccessToken string `json:"access_token"`
+				}
+				event.Response.TokenReceived = json.Unmarshal(data, &token) == nil && token.AccessToken != ""
+			}
+		}
+		publish()
+	}
 	if response.Body == nil || response.Body == http.NoBody {
-		finish(nil, false, false)
+		finish(nil, bodyComplete)
 	} else {
 		response.Body = &captureBody{body: response.Body, finish: finish, expected: response.ContentLength}
 	}
 	return response, nil
 }
+
+// readJSON decodes a response body read to its end. json.Decoder stops at the
+// end of the value, which leaves a chunked body unfinished and its capture
+// without the body.
+func readJSON(body io.Reader, target any) error {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, target)
+}
+
+// bufferRequestBody returns up to eventBodyLimit+1 bytes of the request body
+// and a request that still sends all of it. A body without GetBody, which is
+// how go-fhir-client sends every NVI request, is read ahead once and replayed in
+// front of the rest; a read error is replayed too, so the real request still
+// fails on it.
+func bufferRequestBody(req *http.Request) ([]byte, bool, *http.Request) {
+	if req.Body == nil || req.Body == http.NoBody {
+		return nil, true, req
+	}
+	if req.GetBody != nil {
+		body, err := req.GetBody()
+		if err != nil {
+			return nil, false, req
+		}
+		defer body.Close()
+		data, err := io.ReadAll(io.LimitReader(body, eventBodyLimit+1))
+		return data, err == nil, req
+	}
+	data, err := io.ReadAll(io.LimitReader(req.Body, eventBodyLimit+1))
+	rest := io.Reader(req.Body)
+	if err != nil {
+		rest = failingReader{err}
+	}
+	clone := req.Clone(req.Context())
+	clone.Body = replayedBody{Reader: io.MultiReader(bytes.NewReader(data), rest), Closer: req.Body}
+	return data, err == nil, clone
+}
+
+type replayedBody struct {
+	io.Reader
+	io.Closer
+}
+
+type failingReader struct{ err error }
+
+func (r failingReader) Read([]byte) (int, error) { return 0, r.err }
+
+type bodyState int
+
+const (
+	bodyComplete bodyState = iota
+	bodyOverflowed
+	bodyIncomplete
+	bodyFailed
+)
 
 type captureBody struct {
 	body     io.ReadCloser
@@ -160,7 +221,7 @@ type captureBody struct {
 	size     int64
 	expected int64
 	overflow bool
-	finish   func([]byte, bool, bool)
+	finish   func([]byte, bodyState)
 }
 
 func (b *captureBody) Read(p []byte) (int, error) {
@@ -176,8 +237,11 @@ func (b *captureBody) Read(p []byte) (int, error) {
 			b.data = append(b.data, p[:n]...)
 		}
 	}
-	if err != nil {
-		b.publish(err == io.EOF, err != io.EOF)
+	switch {
+	case err == io.EOF:
+		b.publish(bodyComplete)
+	case err != nil:
+		b.publish(bodyFailed)
 	}
 	return n, err
 }
@@ -186,12 +250,22 @@ func (b *captureBody) Close() error {
 	err := b.body.Close()
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.publish(err == nil && b.expected > 0 && b.size == b.expected, err != nil)
+	switch {
+	case err != nil:
+		b.publish(bodyFailed)
+	case b.expected > 0 && b.size == b.expected:
+		b.publish(bodyComplete)
+	default:
+		b.publish(bodyIncomplete)
+	}
 	return err
 }
 
-func (b *captureBody) publish(complete, failed bool) {
-	b.once.Do(func() { b.finish(b.data, complete && !b.overflow, failed); b.data = nil })
+func (b *captureBody) publish(state bodyState) {
+	if state == bodyComplete && b.overflow {
+		state = bodyOverflowed
+	}
+	b.once.Do(func() { b.finish(b.data, state); b.data = nil })
 }
 
 func eventEnum(value string, allowed ...string) bool {
@@ -203,285 +277,190 @@ func eventEnum(value string, allowed ...string) bool {
 	return false
 }
 
-func eventHeaders(h http.Header) map[string]string {
-	out := map[string]string{}
-	for _, name := range []string{"Content-Type", "Accept"} {
-		mediaType, _, err := mime.ParseMediaType(h.Get(name))
-		if err == nil && eventEnum(mediaType, "application/json", "application/fhir+json", "application/x-www-form-urlencoded") {
-			out[name] = mediaType
-		}
-	}
-	return out
+// Markers stand in for what an event does not show, so the viewer never
+// presents a redacted or uncaptured value as an absent one.
+const (
+	redactedCredential  = "[redacted: credential]"
+	redactedJWT         = "[redacted: JWT]"
+	redactedJWE         = "[redacted: JWE]"
+	redactedBlindFactor = "[redacted: blind_factor]"
+	redactedBSN         = "[redacted: BSN]"
+	bodyUnread          = "[not captured: the response body was not read to the end]"
+	bodyUnreadable      = "[not captured: the response body could not be read]"
+	requestUnreadable   = "[not captured: the request body could not be read]"
+	bodyMalformedJSON   = "[not captured: malformed JSON body]"
+)
+
+var bodyTooLarge = fmt.Sprintf("[not captured: body exceeds the %d-byte capture limit]", eventBodyLimit)
+
+// redactedKeys are JSON members, form fields and query parameters whose value
+// is a credential or a pseudonymisation value the IG forbids retaining.
+var redactedKeys = map[string]string{
+	"access_token": redactedCredential, "refresh_token": redactedCredential, "id_token": redactedCredential,
+	"client_assertion": redactedCredential, "assertion": redactedCredential, "client_secret": redactedCredential,
+	"password": redactedCredential, "token": redactedCredential,
+	"jwe": redactedJWE, "blind_factor": redactedBlindFactor, "blindFactor": redactedBlindFactor,
 }
 
-func eventPath(u *url.URL, reveal bool) string {
+var (
+	// A compact JWS has three segments, a compact JWE five; both start with a
+	// base64url JSON header, which always encodes to "eyJ".
+	compactTokenPattern = regexp.MustCompile(`\beyJ[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*){2,4}`)
+	// Percent-escapes are matched on their own so their hex digits never join
+	// the digits that follow them.
+	digitRunPattern = regexp.MustCompile(`%[0-9A-Fa-f]{2}|[0-9]+`)
+)
+
+// eventRedactor keeps a captured call exact except for credentials, JWE and
+// blind_factor values, and BSNs. BSNs are recognized by their check digit; in
+// synthetic mode those of the demo pool stay visible.
+type eventRedactor struct{ reveal bool }
+
+func (r eventRedactor) uri(u *url.URL) string {
 	if u == nil {
 		return "/"
 	}
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) > 16 {
-		return "/{path}"
+	uri := u.EscapedPath()
+	if uri == "" {
+		uri = "/"
 	}
-	for i, part := range parts {
-		if !eventEnum(part, "", "nvi", "mitz", "abonnementen", "fhir", "knpt-mcsd-query", "nuts", "internal", "auth", "v2", "accesstoken", "introspect", "request-service-access-token", "List", "Subscription", "Organization", "Endpoint", "Patient", "Condition", "MedicationRequest", "AllergyIntolerance", "_search") {
-			parts[i] = "{id}"
+	if u.RawQuery != "" {
+		parameters := strings.Split(u.RawQuery, "&")
+		for i, parameter := range parameters {
+			name, _, _ := strings.Cut(parameter, "=")
+			if key, err := url.QueryUnescape(name); err == nil {
+				if marker, ok := redactedKeys[key]; ok {
+					parameters[i] = name + "=" + marker
+				}
+			}
 		}
+		uri += "?" + strings.Join(parameters, "&")
 	}
-	path := "/" + strings.Join(parts, "/")
-	query := eventQuery(u.Query(), reveal)
-	if len(query) > 0 {
-		path += "?" + query.Encode()
-	}
-	return path
+	return r.text(uri)
 }
 
-func eventQuery(query url.Values, reveal bool) url.Values {
-	out := url.Values{}
-	for key, values := range query {
-		if len(values) != 1 {
-			continue
+func (r eventRedactor) headers(h http.Header) map[string]string {
+	out := make(map[string]string, len(h))
+	for name, values := range h {
+		value := strings.Join(values, ", ")
+		switch http.CanonicalHeaderKey(name) {
+		case "Authorization", "Proxy-Authorization":
+			if scheme, _, found := strings.Cut(value, " "); found && scheme != "" {
+				value = scheme + " " + redactedCredential
+			} else {
+				value = redactedCredential
+			}
+		case "Cookie", "Set-Cookie", "Dpop":
+			value = redactedCredential
+		default:
+			value = r.text(value)
 		}
-		value := values[0]
-		switch key {
-		case "_count":
-			n, err := strconv.Atoi(value)
-			if err == nil && n >= 1 && n <= 1000 {
-				out.Set(key, strconv.Itoa(n))
-			}
-		case "_include":
-			if eventEnum(value, "Organization:endpoint", "MedicationRequest:medication") {
-				out.Set(key, value)
-			}
-		case "_query":
-			if value == "otv" {
-				out.Set(key, value)
-			}
-		case "patientid":
-			if safe := eventBSN(value, reveal); safe != "" {
-				out.Set(key, safe)
-			}
-		case "identifier", "subject:identifier":
-			system, identifier, ok := strings.Cut(value, "|")
-			if !ok {
-				continue
-			}
-			if safe := eventIdentifier(system, identifier, reveal); safe != nil {
-				out.Set(key, system+"|"+safe["value"].(string))
-			}
-		case "providerid":
-			if eventEnum(value, "00000010", "00000020") {
-				out.Set(key, value)
-			}
-		case "providertype":
-			if eventEnum(value, "Z3") {
-				out.Set(key, value)
-			}
-		case "patient", "subject":
-			if strings.HasPrefix(value, "Patient/") {
-				out.Set(key, "Patient/{id}")
-			}
-		}
+		out[name] = value
 	}
 	return out
 }
 
-func eventBSN(value string, reveal bool) string {
-	if len(value) != 9 {
-		return ""
-	}
-	for _, c := range value {
-		if c < '0' || c > '9' {
-			return ""
-		}
-	}
-	if reveal {
-		for _, patient := range pool.Patients() {
-			if value == patient.BSN {
-				return value
-			}
-		}
-	}
-	return "[redacted]"
-}
-
-func eventIdentifier(system, value string, reveal bool) map[string]any {
-	safe := ""
-	switch system {
-	case eventBSNSystem:
-		safe = eventBSN(value, reveal)
-	case eventURASystem:
-		if eventEnum(value, "00000010", "00000020") {
-			safe = value
-		}
-	}
-	if safe == "" {
+func (r eventRedactor) body(data []byte, contentType string) any {
+	if len(data) == 0 {
 		return nil
 	}
-	return map[string]any{"system": system, "value": safe}
-}
-
-func eventBody(data []byte, contentType string, reveal bool) any {
-	if len(data) == 0 || len(data) > eventBodyLimit {
-		return nil
+	if len(data) > eventBodyLimit {
+		return bodyTooLarge
 	}
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		return nil
-	}
-	if mediaType == "application/x-www-form-urlencoded" {
+	mediaType, _, _ := mime.ParseMediaType(contentType)
+	switch {
+	case mediaType == "application/x-www-form-urlencoded":
 		values, err := url.ParseQuery(string(data))
 		if err != nil {
-			return nil
+			return "[not captured: malformed form body]"
 		}
-		safe := eventQuery(values, reveal)
-		if len(safe) == 0 {
-			return nil
-		}
-		return safe
-	}
-	if !eventEnum(mediaType, "application/json", "application/fhir+json") {
-		return nil
-	}
-	var body map[string]any
-	if err := json.Unmarshal(data, &body); err != nil {
-		return nil
-	}
-	return eventObject(body, reveal, 0)
-}
-
-func eventObject(body map[string]any, reveal bool, depth int) any {
-	if depth > 4 {
-		return nil
-	}
-	kind, _ := body["resourceType"].(string)
-	if _, exists := body["resourceType"]; exists && kind == "" {
-		return nil
-	}
-	out := map[string]any{}
-	if kind == "" {
-		if active, ok := body["active"].(bool); ok {
-			out["active"] = active
-		}
-		eventString(out, body, "token_type", "Bearer", "DPoP")
-		eventString(out, body, "scope", "bgz")
-		eventNumber(out, body, "expires_in", 86400)
-		if len(out) == 0 {
-			return nil
-		}
-		return out
-	}
-	if !eventEnum(kind, "Bundle", "Patient", "List", "Subscription", "Organization", "Endpoint", "Condition", "MedicationRequest", "AllergyIntolerance", "OperationOutcome") {
-		return nil
-	}
-	out["resourceType"] = kind
-	switch kind {
-	case "Bundle":
-		eventString(out, body, "type", "searchset", "collection", "transaction", "transaction-response", "batch", "batch-response", "history", "document", "message")
-		eventNumber(out, body, "total", 1000000)
-		if entries, ok := body["entry"].([]any); ok {
-			projected := []any{}
-			for _, entry := range entries {
-				if len(projected) == 32 {
-					break
-				}
-				if m, ok := entry.(map[string]any); ok {
-					if resource, ok := m["resource"].(map[string]any); ok {
-						if safe := eventObject(resource, reveal, depth+1); safe != nil {
-							projected = append(projected, map[string]any{"resource": safe})
-						}
-					}
-				}
-			}
-			out["entry"] = projected
-		}
-	case "List":
-		eventString(out, body, "status", "current", "retired", "entered-in-error")
-		eventString(out, body, "mode", "working", "snapshot", "changes")
-		if subject, ok := body["subject"].(map[string]any); ok {
-			if safe := eventIdentifierObject(subject["identifier"], reveal); safe != nil {
-				out["subject"] = map[string]any{"identifier": safe}
+		form := make(map[string][]string, len(values))
+		for key, list := range values {
+			for _, value := range list {
+				form[key] = append(form[key], r.value(key, value))
 			}
 		}
-		if code, ok := body["code"].(map[string]any); ok {
-			if codings, ok := code["coding"].([]any); ok {
-				for _, item := range codings {
-					if c, ok := item.(map[string]any); ok && c["system"] == nvi.DataCategorySystem {
-						if value, ok := c["code"].(string); ok && eventEnum(value, "Patient", "Condition", "MedicationRequest", "AllergyIntolerance") {
-							out["code"] = map[string]any{"coding": []any{map[string]any{"system": nvi.DataCategorySystem, "code": value}}}
-							break
-						}
-					}
-				}
-			}
+		return form
+	case json.Valid(data):
+		decoder := json.NewDecoder(bytes.NewReader(data))
+		decoder.UseNumber()
+		var value any
+		if err := decoder.Decode(&value); err != nil {
+			return bodyMalformedJSON
 		}
-	case "Subscription":
-		eventString(out, body, "status", "requested", "active", "error", "off")
-		if channel, ok := body["channel"].(map[string]any); ok {
-			safe := map[string]any{}
-			eventString(safe, channel, "type", "rest-hook", "websocket", "email", "sms", "message")
-			if len(safe) > 0 {
-				out["channel"] = safe
-			}
+		return r.json(value)
+	case mediaType == "application/json" || strings.HasSuffix(mediaType, "+json"):
+		return bodyMalformedJSON
+	case utf8.Valid(data):
+		return r.text(string(data))
+	default:
+		if mediaType == "" {
+			mediaType = "untyped"
 		}
-	case "Patient", "Organization":
-		if ids, ok := body["identifier"].([]any); ok {
-			safe := []any{}
-			for _, id := range ids {
-				if len(safe) == 8 {
-					break
-				}
-				if value := eventIdentifierObject(id, reveal); value != nil {
-					safe = append(safe, value)
-				}
-			}
-			if len(safe) > 0 {
-				out["identifier"] = safe
-			}
-		}
-	case "Endpoint":
-		eventString(out, body, "status", "active", "suspended", "error", "off", "entered-in-error", "test")
-	case "OperationOutcome":
-		if issues, ok := body["issue"].([]any); ok {
-			safe := []any{}
-			for _, issue := range issues {
-				if len(safe) == 8 {
-					break
-				}
-				if m, ok := issue.(map[string]any); ok {
-					projected := map[string]any{}
-					eventString(projected, m, "severity", "fatal", "error", "warning", "information")
-					eventString(projected, m, "code", "invalid", "structure", "required", "value", "invariant", "security", "login", "unknown", "expired", "forbidden", "suppressed", "processing", "not-supported", "duplicate", "multiple-matches", "not-found", "deleted", "too-long", "code-invalid", "extension", "too-costly", "business-rule", "conflict", "transient", "lock-error", "no-store", "exception", "timeout", "incomplete", "throttled", "informational")
-					if len(projected) > 0 {
-						safe = append(safe, projected)
-					}
-				}
-			}
-			if len(safe) > 0 {
-				out["issue"] = safe
-			}
-		}
-	}
-	return out
-}
-
-func eventIdentifierObject(value any, reveal bool) map[string]any {
-	object, ok := value.(map[string]any)
-	if !ok {
-		return nil
-	}
-	system, _ := object["system"].(string)
-	identifier, _ := object["value"].(string)
-	return eventIdentifier(system, identifier, reveal)
-}
-
-func eventString(out, body map[string]any, key string, allowed ...string) {
-	if value, ok := body[key].(string); ok && eventEnum(value, allowed...) {
-		out[key] = value
+		return fmt.Sprintf("[not captured: %s body of %d bytes]", mediaType, len(data))
 	}
 }
 
-func eventNumber(out, body map[string]any, key string, maximum int64) {
-	if value, ok := body[key].(float64); ok && value >= 0 && value <= float64(maximum) && value == float64(int64(value)) {
-		out[key] = int64(value)
+func (r eventRedactor) json(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		for key, item := range v {
+			if marker, ok := redactedKeys[key]; ok && item != nil && item != "" {
+				v[key] = marker
+				continue
+			}
+			v[key] = r.json(item)
+		}
+		return v
+	case []any:
+		for i, item := range v {
+			v[i] = r.json(item)
+		}
+		return v
+	case string:
+		return r.text(v)
+	default:
+		return v
 	}
+}
+
+func (r eventRedactor) value(key, value string) string {
+	if marker, ok := redactedKeys[key]; ok && value != "" {
+		return marker
+	}
+	return r.text(value)
+}
+
+func (r eventRedactor) text(s string) string {
+	s = compactTokenPattern.ReplaceAllStringFunc(s, func(token string) string {
+		if strings.Count(token, ".") == 4 {
+			return redactedJWE
+		}
+		return redactedJWT
+	})
+	return digitRunPattern.ReplaceAllStringFunc(s, func(run string) string {
+		if len(run) != 9 || !validBSN(run) || (r.reveal && syntheticBSN(run)) {
+			return run
+		}
+		return redactedBSN
+	})
+}
+
+// validBSN applies the BSN check digit (elfproef) to nine ASCII digits.
+func validBSN(digits string) bool {
+	sum := 0
+	for i := range 8 {
+		sum += int(digits[i]-'0') * (9 - i)
+	}
+	sum -= int(digits[8] - '0')
+	return sum%11 == 0
+}
+
+func syntheticBSN(value string) bool {
+	for _, patient := range pool.Patients() {
+		if value == patient.BSN {
+			return true
+		}
+	}
+	return false
 }
