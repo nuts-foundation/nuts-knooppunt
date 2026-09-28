@@ -12,11 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The requester side of an exchange: a Nuts subject, an X509 credential in its
-// wallet proving which organization it is, and a registration on the discovery
-// service the scope's presentation definition reads from. A token request fails
-// closed without all three, and the failures name the token endpoint rather than
-// the step that was skipped, so these live together.
+// The requester side of an exchange: a Nuts subject and an X509 credential in
+// its wallet proving which organization it is. A token request fails closed
+// without either, and the failure names the token endpoint rather than the step
+// that was skipped, so these live together.
 
 // CreateSubject creates a Nuts subject and returns the DID of its first
 // document.
@@ -75,8 +74,8 @@ func StoreCredential(t *testing.T, nutsAPI func(string) string, holder, credenti
 }
 
 // RegisterOnDiscovery registers a subject on the bgz-test discovery service,
-// which is the one the scopes in config/policy resolve their presentation
-// definitions against.
+// which makes it findable to other parties. A token request does not need it:
+// the node takes a scope's presentation definition from its policy directory.
 func RegisterOnDiscovery(t *testing.T, nutsAPI func(string) string, subject string) {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{
@@ -93,12 +92,11 @@ func RegisterOnDiscovery(t *testing.T, nutsAPI func(string) string, subject stri
 	require.Equal(t, http.StatusOK, res.StatusCode, "register %s on discovery: %s", subject, responseBody)
 }
 
-// RegisterRequester does the three steps a party needs before it can ask for a
+// RegisterRequester does the two steps a party needs before it can ask for a
 // token, and returns the subject's DID.
 func RegisterRequester(t *testing.T, nutsAPI func(string) string, subject, chainPath, keyPath string) string {
 	t.Helper()
 	did := CreateSubject(t, nutsAPI, subject)
 	StoreCredential(t, nutsAPI, subject, IssueX509Credential(t, chainPath, keyPath, did))
-	RegisterOnDiscovery(t, nutsAPI, subject)
 	return did
 }

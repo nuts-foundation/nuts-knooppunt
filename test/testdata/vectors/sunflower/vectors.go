@@ -13,9 +13,11 @@ import (
 //
 // The seeded address is consumed in two incompatible contexts: docker compose,
 // where a PEP fronts the data and the address must point at it over the compose
-// network, and the e2e harness, where no PEP runs and the address must resolve
-// straight to HAPI. Defaulting to the HAPI-direct address keeps the harness
-// working unchanged; docker compose sets this variable on the seed.
+// network, and the e2e harness, where the address must resolve straight to HAPI
+// unless a test puts a PEP in front of it. Defaulting to the HAPI-direct address
+// keeps the harness working unchanged; docker compose sets this variable on the
+// seed, and sandbox/app's full-chain test sets it and seeds again once its PEP
+// has a port.
 const EndpointAddressEnvVar = "SEED_ZONNEBLOEM_ENDPOINT_ADDRESS"
 
 // EndpointAddress returns the address to publish in the mCSD Endpoint, and to
