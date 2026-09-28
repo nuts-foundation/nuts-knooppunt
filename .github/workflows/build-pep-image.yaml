@@ -3,8 +3,6 @@ name: 'Build PEP Docker image'
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
   pull_request:
@@ -13,6 +11,7 @@ on:
     paths:
       - pep/**
       - .github/workflows/build-pep-image.yaml
+  workflow_call:
 
 # cancel build action if superseded by new commit on same branch
 concurrency:
@@ -53,6 +52,7 @@ jobs:
         with:
           images: ghcr.io/nuts-foundation/knooppunt-pep
           tags: |
+            type=sha,format=short
             type=ref,event=branch,enable={{is_default_branch}},prefix=
             type=semver,pattern={{version}}
           flavor: |

@@ -1,0 +1,103 @@
+---
+name: 'Build and deploy sandbox'
+
+# Orchestrates the sandbox's build-then-deploy pipeline on every push to
+# main: build every image the sandbox stack uses, then deploy only once all
+# of them have finished and published successfully. The individual
+# build-*-image.yaml workflows still trigger themselves independently for
+# pull_request (their own path filters keep PR checks scoped and fast) and
+# for version tags (unrelated to this pipeline) - only their push-to-main
+# trigger moved here, since that's the one deploy-sandbox.yaml needs to wait
+# on. See nuts-knooppunt#603's follow-up discussion for why a plain
+# `push: main` trigger on the deploy alone wasn't enough: it raced the image
+# builds (deploy could finish in under a minute, image builds take longer),
+# and even a wait wouldn't guarantee every component came from the *same*
+# commit - hence pinning every component below to this run's exact commit
+# SHA instead of the moving "main" tag.
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: sandbox-ci
+  cancel-in-progress: false
+
+jobs:
+  build-knooppunt:
+    uses: ./.github/workflows/build-nuts-knooppunt-image.yaml
+    secrets: inherit
+
+  build-pep:
+    uses: ./.github/workflows/build-pep-image.yaml
+    secrets: inherit
+
+  build-mock-vc-issuer:
+    uses: ./.github/workflows/build-mock-vc-issuer-image.yaml
+    secrets: inherit
+
+  build-mock-mitz:
+    uses: ./.github/workflows/build-mock-mitz-image.yaml
+    secrets: inherit
+
+  build-mock-dezi:
+    uses: ./.github/workflows/build-mock-dezi-image.yaml
+    secrets: inherit
+
+  build-gf-sandbox:
+    uses: ./.github/workflows/build-gf-sandbox-image.yaml
+    secrets: inherit
+
+  build-fakenvi:
+    uses: ./.github/workflows/build-fakenvi-image.yaml
+    secrets: inherit
+
+  build-seed:
+    uses: ./.github/workflows/build-seed-image.yaml
+    secrets: inherit
+
+  deploy:
+    needs:
+      - build-knooppunt
+      - build-pep
+      - build-mock-vc-issuer
+      - build-mock-mitz
+      - build-mock-dezi
+      - build-gf-sandbox
+      - build-fakenvi
+      - build-seed
+    runs-on: ubuntu-latest
+    environment: ovhcloud-sandbox
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.OVHCLOUD_SANDBOX_KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Deploy
+        run: |
+          # Matches the docker/metadata-action `type=sha,format=short` tag
+          # rule every build-*-image.yaml above now publishes.
+          tag="sha-$(echo "${{ github.sha }}" | cut -c1-7)"
+          infra/ovhcloud-sandbox/deploy.sh --timeout 10m \
+            --set "image.tag=$tag" \
+            --set "pep-zonnebloem.image.tag=$tag" \
+            --set "pep-plataan.image.tag=$tag" \
+            --set "fhir.image.tag=$tag" \
+            --set "mock-vc-issuer.image.tag=$tag" \
+            --set "mock-mitz.image.tag=$tag" \
+            --set "mock-dezi.image.tag=$tag" \
+            --set "gf-sandbox.image.tag=$tag" \
+            --set "seed.image.tag=$tag"
