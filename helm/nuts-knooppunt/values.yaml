@@ -135,6 +135,56 @@ extraEnv: []
 #   value: "https://knooppunt.example.com"
 
 # Additional volumes on the output Deployment definition.
+# Persistent storage for /app/data. The embedded nuts-node keeps its crypto
+# keys there (nutsConfig crypto.storage: fs); without this they are lost on
+# every pod restart, together with every did:web subject that uses them. The
+# container runs as uid 18081 (Dockerfile), so a CSI-backed volume needs
+# podSecurityContext.fsGroup: 18081 to be writable. Implies a Recreate
+# rollout strategy (and replicaCount: 1): the volume is ReadWriteOnce, so the
+# old pod has to release it before the new one can start.
+#
+# Turning this on for an existing release needs a one-time patch first: the
+# live Deployment carries a defaulted rollingUpdate block that the API server
+# rejects next to Recreate, and Helm's three-way merge never removes a field
+# the previous release didn't set.
+#   kubectl patch deployment <fullname> --type=json \
+#     -p='[{"op":"remove","path":"/spec/strategy/rollingUpdate"},{"op":"replace","path":"/spec/strategy/type","value":"Recreate"}]'
+#
+# The volume, the database Cluster and its credential Secrets are all kept on
+# helm uninstall (helm.sh/resource-policy: keep); delete them explicitly to
+# start over.
+persistence:
+  enabled: false
+  size: 1Gi
+  # storageClass: ""
+
+# Shared PostgreSQL server for the components that need one, managed by the
+# CloudNativePG operator (1.25 or later, for the Database resource - see
+# README.md). One Cluster, and per entry in `databases` one logical database,
+# one owning role of the same name, and one Secret
+# `<fullname>-db-<name>` with keys username, password and uri
+# (postgres://<name>:<password>@<fullname>-db-rw:5432/<name>).
+#
+# What is wired automatically when enabled:
+# - the embedded nuts-node: NUTS_STORAGE_SQL_CONNECTION from the `nuts`
+#   secret, replacing its BBolt file store (see also `persistence` above for
+#   the crypto keys, which SQL storage does not cover)
+#
+# What an environment wires itself, because a subchart's values cannot
+# reference this chart's templates:
+# - fhir: `fhir.postgres.enabled: false` (do not let the subchart provision
+#   its own server) plus `fhir.extraEnv` pointing HAPI at the `fhir` database,
+#   see infra/ovhcloud-sandbox/values.yaml
+database:
+  enabled: false
+  instances: 1
+  storage:
+    size: 5Gi
+    # storageClass: ""
+  databases:
+    - fhir
+    - nuts
+
 volumes: []
 # - name: foo
 #   secret:

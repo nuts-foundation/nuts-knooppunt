@@ -67,3 +67,18 @@ Create the database secret name for NUTS node
 {{- define "nuts-knooppunt.nuts.dbSecretName" -}}
 {{- printf "%s-nuts-db-app" (include "nuts-knooppunt.fullname" .) }}
 {{- end }}
+
+{{/*
+Name of the shared PostgreSQL Cluster (templates/database/cluster.yaml).
+*/}}
+{{- define "nuts-knooppunt.database.clusterName" -}}
+{{- printf "%s-db" (include "nuts-knooppunt.fullname" .) }}
+{{- end }}
+
+{{/*
+Name of the Secret holding one component's database credentials. Called with
+(dict "ctx" $ "name" <database name>).
+*/}}
+{{- define "nuts-knooppunt.database.secretName" -}}
+{{- printf "%s-db-%s" (include "nuts-knooppunt.fullname" .ctx) .name }}
+{{- end }}

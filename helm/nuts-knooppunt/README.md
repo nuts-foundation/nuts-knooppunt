@@ -17,8 +17,12 @@ This Helm chart deploys the NUTS Knooppunt application along with its dependenci
 
 ### Installing CloudNativePG Operator
 
+Version 1.25 or later: the shared database (`database.enabled`) declares a
+`Database` resource per component, which older operators don't have.
+
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.0.yaml
+helm repo add cnpg https://cloudnative-pg.github.io/charts
+helm upgrade --install cnpg cnpg/cloudnative-pg --namespace cnpg-system --create-namespace
 ```
 
 ## Installation
@@ -81,6 +85,18 @@ fhir:
     storage:
       size: 20Gi  # Adjust as needed
 ```
+
+### Shared Database
+
+`database.enabled: true` provisions one CloudNativePG `Cluster` and, per entry
+in `database.databases` (default: `fhir`, `nuts`), a logical database, an
+owning role and a Secret `<release>-db-<name>` with `username`, `password` and
+a ready-made `uri`. The embedded nuts-node is pointed at the `nuts` database
+automatically (`NUTS_STORAGE_SQL_CONNECTION`). Pair it with
+`persistence.enabled: true` for the nuts-node's crypto keys, which live on the
+filesystem. HAPI is wired by the environment's values (see
+`infra/ovhcloud-sandbox/values.yaml`): `fhir.postgres.enabled: false` plus
+`fhir.extraEnv` pointing at the `fhir` database.
 
 ### Database Connection Configuration
 

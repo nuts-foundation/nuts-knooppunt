@@ -1,0 +1,22 @@
+{{- if .Values.persistence.enabled }}
+# Backs /app/data: the embedded nuts-node keeps its crypto keys there
+# (crypto.storage: fs), which SQL storage does not cover.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "nuts-knooppunt.fullname" . }}-data
+  labels:
+    {{- include "nuts-knooppunt.labels" . | nindent 4 }}
+  annotations:
+    # Kept on uninstall, like the database (see database/cluster.yaml).
+    "helm.sh/resource-policy": keep
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+  {{- with .Values.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+{{- end }}
