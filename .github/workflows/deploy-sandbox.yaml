@@ -1,0 +1,41 @@
+---
+name: 'Deploy sandbox to OVHcloud'
+
+# One environment, deployed on every commit to main - see the decision on
+# nuts-knooppunt#564. No preview/staging environments yet; this is the
+# demo/sandbox cluster itself.
+on:
+  push:
+    branches:
+      - main
+
+# Never run two deploys at once, but don't cancel one that's already
+# talking to the cluster either - let it finish, queue the next.
+concurrency:
+  group: deploy-sandbox
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ovhcloud-sandbox
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.OVHCLOUD_SANDBOX_KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Deploy
+        run: infra/ovhcloud-sandbox/deploy.sh --timeout 10m
