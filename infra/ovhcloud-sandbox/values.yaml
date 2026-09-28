@@ -213,6 +213,20 @@ gf-sandbox:
   env:
     deziPublicAuthorizeUrl: "http://mock-dezi.57.129.23.152.nip.io/authorize"
     sandboxPublicUrl: "http://gf-sandbox.57.129.23.152.nip.io"
+  extraEnv:
+    - name: ZONNEBLOEM_EHR_PUBLIC_URL
+      value: "http://zonnebloem-ehr.57.129.23.152.nip.io"
+
+zonnebloem-ehr:
+  enabled: true
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: zonnebloem-ehr.57.129.23.152.nip.io
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
 
 seed:
   enabled: true

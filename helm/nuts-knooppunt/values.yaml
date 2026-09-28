@@ -448,6 +448,25 @@ gf-sandbox:
   env:
     knooppuntInternalUrl: "http://nuts-knooppunt:8081"
 
+# zonnebloem-ehr: De Zonnebloem's own EHR (sandbox/zonnebloem), the source side
+# of the demo's marker proof. The gf-sandbox chart and image, running the image's
+# second program. The chart also renders gf-sandbox's own variables (DEZI_*,
+# SANDBOX_PUBLIC_URL, KNOOPPUNT_INTERNAL_URL, HAPI_BASE_URL) on this pod; the
+# program reads none of them. pullPolicy Always because images carry the moving
+# "main" tag: a node holding an older gf-sandbox:main would otherwise start this
+# pod from an image without the program.
+zonnebloem-ehr:
+  enabled: false
+  fullnameOverride: zonnebloem-ehr
+  command: ["/zonnebloem-ehr"]
+  image:
+    pullPolicy: Always
+  service:
+    port: 3001
+  extraEnv:
+    - name: ZONNEBLOEM_FHIR_BASE_URL
+      value: "http://fhir:8080/fhir/sunflower-patients"
+
 # Seed Job configuration. Populates a fresh deployment with demo data (FHIR
 # test resources, a Nuts subject and X509Credential per demo organization,
 # NVI localization records) as a post-install/post-upgrade hook. Re-loads the

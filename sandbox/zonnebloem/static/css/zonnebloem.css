@@ -1,0 +1,85 @@
+/* De Zonnebloem's EHR. Ported from the source screen in sandbox/wireframe.html
+   (the .zd rules). Shares nothing with the sandbox's stylesheets. */
+
+:root {
+  --zb: #047857;
+  --zb-deep: #065f46;
+  --ink: #1b2b25;
+  --muted: #6b8378;
+  --line: #e2ece7;
+  --field: #cfe0d8;
+  --bg: #f6faf8;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body.zd { font-family: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--ink); font-size: 13px; line-height: 1.55; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+
+.zd .header { background: linear-gradient(120deg, #04432f, #047857 70%, #059669); color: #fff; padding: 14px 26px; }
+.zd .header-content { max-width: 1080px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.zd .brandz { display: flex; align-items: center; gap: 11px; text-decoration: none; color: #fff; }
+.zd .brandz .logo { width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,0.96); color: var(--zb); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; flex-shrink: 0; }
+.zd .brandz h1 { font-size: 16.5px; font-weight: 800; letter-spacing: -0.01em; }
+.zd .brandz .bsub { font-size: 11px; opacity: 0.85; }
+.zd .userz { display: flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 600; background: rgba(255,255,255,0.13); border-radius: 999px; padding: 4px 15px 4px 5px; }
+.zd .userz .av { width: 27px; height: 27px; border-radius: 50%; background: #fff; color: var(--zb); font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.zd .navz { background: #fff; border-bottom: 1px solid #e0eae5; }
+.zd .navz-inner { max-width: 1080px; margin: 0 auto; padding: 0 26px; display: flex; gap: 26px; }
+.zd .navz a { font-size: 13px; font-weight: 600; color: var(--muted); text-decoration: none; padding: 12px 2px; border-bottom: 2px solid transparent; }
+.zd .navz a.active { color: var(--zb); border-bottom-color: var(--zb); font-weight: 800; }
+.zd .mainz { max-width: 1080px; margin: 0 auto; padding: 20px 26px 34px; }
+.zd .test-chip2 { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 700; color: #93470d; background: #fff8eb; border: 1px solid #fce9c0; border-radius: 999px; padding: 3px 11px; margin-bottom: 14px; }
+
+.zd .cardz { background: #fff; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(4,67,47,0.05), 0 3px 10px rgba(4,67,47,0.04); padding: 20px 22px; min-width: 0; overflow-wrap: anywhere; }
+.zd .cardz h2 { font-size: 16px; font-weight: 800; margin-bottom: 3px; letter-spacing: -0.01em; }
+.zd .cardz h3 { font-size: 14.5px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.01em; }
+.zd .h-subz { font-size: 12px; color: var(--muted); margin-bottom: 15px; }
+
+.zd .patient-banner { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 13px 18px; display: flex; align-items: center; gap: 13px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(4,67,47,0.05); }
+.zd .pavz { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #6ee7b7, var(--zb)); color: #fff; font-weight: 800; font-size: 13px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 3px #fff, 0 0 0 4.5px #c8e8db; flex-shrink: 0; }
+.zd .pavz.small { width: 32px; height: 32px; font-size: 11px; }
+.zd .pnmz { font-weight: 800; font-size: 15px; }
+.zd .pmetaz { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.zd .bsn-b { background: #d1fae5; color: var(--zb-deep); padding: 1px 7px; border-radius: 6px; font-size: 10.5px; font-family: var(--mono); }
+
+.zd .client-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.zd .client-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; text-decoration: none; border: 1px solid transparent; }
+.zd .client-row:hover, .zd .client-row:focus-visible { background: #f2f9f5; border-color: #d8ebe1; outline: none; }
+.zd .client-name { font-weight: 700; font-size: 13.5px; }
+.zd .client-meta { margin-left: auto; font-size: 11.5px; color: var(--muted); text-align: right; }
+
+.zd .gridz { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; align-items: start; }
+.zd .record-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.zd .entries { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.zd .entry { padding: 9px 12px; border-radius: 10px; background: #f8fbf9; border: 1px solid #e6f0eb; }
+.zd .entry.added { background: #eaf6ef; border-color: #bfe3cd; }
+.zd .entry-title { font-weight: 700; font-size: 13px; }
+.zd .entry-detail { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: pre-wrap; }
+.zd .added-chip { display: inline-block; font-size: 10px; font-weight: 800; color: var(--zb-deep); background: #d1fae5; border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 1px; }
+.zd .empty { font-size: 12px; color: var(--muted); }
+
+.zd .form-row { margin-bottom: 14px; }
+.zd label { display: block; font-size: 11px; font-weight: 700; color: #3f5a4e; margin-bottom: 6px; }
+.zd label .hint { font-weight: 500; color: var(--muted); }
+.zd .input, .zd .select { width: 100%; padding: 9px 14px; font-size: 12.5px; font-family: inherit; border: 1px solid var(--field); border-radius: 10px; color: var(--ink); background: #fff; }
+.zd .input:focus, .zd .select:focus { outline: none; border-color: var(--zb); box-shadow: 0 0 0 3px rgba(4,120,87,0.13); }
+.zd textarea.input { min-height: 62px; font-family: var(--mono); font-size: 12px; resize: vertical; }
+.zd .actions { display: flex; gap: 10px; margin-top: 6px; flex-wrap: wrap; }
+.zd .buttonz { background: linear-gradient(180deg, #059669, var(--zb)); color: #fff; border: none; padding: 10px 20px; font-size: 13px; font-weight: 700; border-radius: 11px; cursor: pointer; font-family: inherit; box-shadow: 0 3px 10px rgba(4,120,87,0.3), inset 0 1px 0 rgba(255,255,255,0.2); }
+.zd .buttonz:hover { filter: brightness(1.05); }
+.zd .buttonz:focus-visible { outline: 3px solid rgba(4,120,87,0.35); outline-offset: 2px; }
+
+.zd .notice { border-radius: 12px; padding: 12px 14px; margin-bottom: 16px; font-size: 12.5px; border: 1px solid; }
+.zd .notice.ok { background: #eaf6ef; border-color: #bfe3cd; color: #14532d; }
+.zd .notice.error { background: #fdf0f0; border-color: #f3cfcf; color: #991b1b; margin-bottom: 14px; }
+.zd code { font-family: var(--mono); font-size: 11.5px; }
+
+@media (max-width: 760px) {
+  .zd .header, .zd .mainz { padding-left: 16px; padding-right: 16px; }
+  .zd .navz-inner { padding: 0 16px; }
+  .zd .gridz { grid-template-columns: 1fr; }
+  .zd .client-row { flex-wrap: wrap; }
+  .zd .client-meta { margin-left: 44px; text-align: left; width: 100%; }
+}

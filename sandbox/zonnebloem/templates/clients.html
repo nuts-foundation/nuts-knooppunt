@@ -1,0 +1,19 @@
+{{define "content"}}
+<section class="cardz">
+  <h2>Clients</h2>
+  <div class="h-subz">Residents of Zorgcentrum De Zonnebloem, read from this organization's own record store.</div>
+  {{if .Clients}}
+  <ul class="client-list">
+    {{range .Clients}}
+    <li><a class="client-row" href="/clients/{{.ID}}">
+      <span class="pavz small" aria-hidden="true">{{.Initials}}</span>
+      <span class="client-name">{{.Name}}</span>
+      <span class="client-meta">{{with .BirthDate}}{{.}}{{end}}{{if and .BirthDate .BSN}} · {{end}}{{with .BSN}}BSN <span class="bsn-b">{{.}}</span>{{end}}</span>
+    </a></li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="empty">The record store holds no clients.</p>
+  {{end}}
+</section>
+{{end}}

@@ -1,0 +1,64 @@
+{{define "content"}}
+{{with .Client}}
+<div class="patient-banner">
+  <span class="pavz" aria-hidden="true">{{.Initials}}</span>
+  <div><div class="pnmz">{{.Name}}</div><div class="pmetaz">{{with .BirthDate}}Born {{.}}{{end}}{{if and .BirthDate .BSN}} · {{end}}{{with .BSN}}BSN <span class="bsn-b">{{.}}</span>{{end}}</div></div>
+</div>
+{{end}}
+{{if eq .Saved "marker"}}
+<div class="notice ok" role="status"><b>Saved in De Zonnebloem's record.</b> Nothing was sent to Plataan: retrieve the patient there to see it arrive through the chain.</div>
+{{else if eq .Saved "plain"}}
+<div class="notice ok" role="status"><b>Saved in De Zonnebloem's record.</b> Nothing was sent to Plataan. The note carries no <code>DEMO-</code> word, so Plataan shows the entry without highlighting it.</div>
+{{end}}
+<div class="gridz">
+  <div class="record-col">
+    {{with .Record}}
+    <section class="cardz">
+      <h3>Allergies and intolerances</h3>
+      {{template "entries" .Allergies}}
+    </section>
+    <section class="cardz">
+      <h3>Medication</h3>
+      {{template "entries" .Medication}}
+    </section>
+    <section class="cardz">
+      <h3>Conditions</h3>
+      {{template "entries" .Conditions}}
+    </section>
+    {{end}}
+  </div>
+  <section class="cardz">
+    <h3>Register allergy or intolerance</h3>
+    <div class="h-subz">The entry becomes part of this client's record at De Zonnebloem.</div>
+    {{with .FormError}}<div class="notice error" role="alert">{{.}}</div>{{end}}
+    <form method="post" action="/clients/{{.Client.ID}}/allergies">
+      <div class="form-row"><label for="substance">Causative substance</label>
+        <select class="select" id="substance" name="substance">
+          {{range .Substances}}<option value="{{.Code}}"{{if eq .Code $.Form.Substance}} selected{{end}}>{{.Label}}</option>{{end}}
+        </select></div>
+      <div class="form-row"><label for="status">Status</label>
+        <select class="select" id="status" name="status">
+          {{range .Statuses}}<option value="{{.Code}}"{{if eq .Code $.Form.Status}} selected{{end}}>{{.Label}}</option>{{end}}
+        </select></div>
+      <div class="form-row"><label for="note">Note <span class="hint">· free text; a word starting with DEMO- is what Plataan highlights</span></label>
+        <textarea class="input" id="note" name="note" maxlength="500" rows="3">{{.Form.Note}}</textarea></div>
+      <div class="actions"><button class="buttonz" type="submit">Save to record</button></div>
+    </form>
+  </section>
+</div>
+{{end}}
+
+{{define "entries"}}
+{{if .}}
+<ul class="entries">
+  {{range .}}
+  <li class="entry{{if .AddedInDemo}} added{{end}}">
+    <div class="entry-title">{{.Title}}{{if .AddedInDemo}} <span class="added-chip">added in this demo</span>{{end}}</div>
+    {{with .Detail}}<div class="entry-detail">{{.}}</div>{{end}}
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="empty">None recorded.</p>
+{{end}}
+{{end}}

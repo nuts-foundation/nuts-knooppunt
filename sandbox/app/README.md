@@ -114,6 +114,7 @@ defaults instead of extending them.
 | `SANDBOX_FACILITY_TYPE` | `Z3` | the facility type asserted in the organization context credential, the only thing on this path that carries one |
 | `SANDBOX_NVI_CLIENT_ID` | `gf-sandbox-plataan` | `List.source.identifier` on published localization records. Synthetic: no NVI OAuth client is registered for the demo, and this is not the `gf-sandbox` client id used on the Dezi flow. The client id is the scope a registration is deleted by, so recycle and the global reset receive this same value in `vectors.SandboxTarget` rather than reaching for the compiled-in default; overriding it here therefore also moves what those clean up. |
 | `MITZMOCK_URL` | unset | Base URL of the mock Mitz. Enables subscription reconciliation and the consent-subscription cleanup in reset and recycle. Unset means the share flow reports an unreconciled Mitz error as unknown rather than failed, and both cleanup paths report a partial restore rather than a clean one. The sandbox compose overlay sets it; the base `--profile sandbox` invocation does not. |
+| `ZONNEBLOEM_EHR_PUBLIC_URL` | unset | where the browser reaches De Zonnebloem's EHR (`sandbox/zonnebloem`). Shows the "Proof it really works" card on the patient record, linking there in a new tab. Unset hides the card; a value that is not an absolute http(s) URL stops startup |
 
 The public and internal URLs are separate on purpose. Under compose the browser cannot resolve the
 `mock-dezi` service name, and the sandbox container resolving `localhost` would reach itself.

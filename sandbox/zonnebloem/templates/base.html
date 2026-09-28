@@ -1,0 +1,21 @@
+{{define "base"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Zorgcentrum De Zonnebloem</title>
+<link rel="stylesheet" href="/static/css/fonts.css">
+<link rel="stylesheet" href="/static/css/zonnebloem.css">
+</head>
+<body class="zd">
+<header class="header"><div class="header-content">
+  <a class="brandz" href="/"><span class="logo" aria-hidden="true">Z</span><div><h1>Zorgcentrum De Zonnebloem</h1><div class="bsub">Client records</div></div></a>
+  <div class="userz"><span class="av" aria-hidden="true">BW</span>B. Willems · verpleegkundig specialist</div>
+</div></header>
+<nav class="navz" aria-label="Main"><div class="navz-inner"><a class="active" href="/">Clients</a></div></nav>
+<main class="mainz">
+  <span class="test-chip2">● Test environment · synthetic data</span>
+  {{template "content" .}}
+</main>
+</body>
+</html>{{end}}
