@@ -304,9 +304,10 @@ Request bodies are read ahead and replayed when the client cannot replay them it
 the [FHIR client sends every NVI request](https://github.com/SanteonNL/go-fhir-client/blob/v0.6.1/client.go#L235).
 Bodies are kept up to 64 KiB. A body that is larger, binary, malformed JSON, not read to the end or
 unreadable is replaced by a `[not captured: …]` marker that says which; `null` means the call had no
-body. Capture never changes the bytes a caller sends or receives. The clients read JSON responses to
-the end, because a decoder that stops at the closing brace leaves a chunked response, which is how
-HAPI answers, unfinished.
+body. Capture never changes the bytes a caller sends or receives. A caller that closes a response
+early, as the Mitz subscription client does on its 201 and every source query does on a refusal,
+still leaves the event its body: the capture reads the rest, up to the same limit, before closing.
+`tokenReceived` still requires the token client to have read the response itself.
 
 A fully consumed, successful service-access-token response with a nonempty `access_token` sets
 the optional `response.tokenReceived` flag. Only this boolean is retained; the token value is never

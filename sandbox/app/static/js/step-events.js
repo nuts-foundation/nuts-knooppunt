@@ -1,5 +1,5 @@
 import { createJourneyStrip } from './journey-strip.js';
-import { journeyTargets, subscriptionResult, accessPresentation } from './journey-model.js';
+import { journeyTargets, subscriptionResult, accessPresentation, callCount } from './journey-model.js';
 import { createPlayback } from './event-playback.js';
 
 export function createEventFeed(runId, { onStep, onGap, onEnd } = {}) {
@@ -99,7 +99,6 @@ export function mountViewer(dock) {
   }
   const outcomeLabel = outcome => ({ ok: 'Completed', deny: 'Refused', error: 'Failed' }[outcome]);
   const timeLabel = time => new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-  const callCount = events => `${events.length} call${events.length === 1 ? '' : 's'}`;
   const serviceName = gf => ({ pseudonym: 'PRS', localization: 'NVI', consent: 'Mitz', addressing: 'mCSD / LRZA',
     authentication: 'Plataan access service', authorization: 'Plataan access service', exchange: 'Source' }[gf] || 'Service');
   function result(group) {
@@ -265,7 +264,6 @@ export function mountViewer(dock) {
     replay.disabled = ended || !action;
     skip.disabled = ended || !state.stage;
     dock.classList.toggle('playback-paused', state.paused);
-    dock.classList.toggle('playback-idle', !state.stage);
     if (!state.stage) journey.stop();
     if (followChanged) {
       const target = technicalMode ? activeTechnical : activeFunctional;
@@ -322,10 +320,14 @@ export function mountViewer(dock) {
       status.textContent = 'Run ended · reopen the patient to start again';
     },
   });
+  // Only parsing is guarded: a failure while applying an event is a bug to
+  // surface, not an unreadable event.
   function receive(callback) {
     return message => {
-      try { callback(JSON.parse(message.data)); }
-      catch { status.textContent = 'An event could not be read'; }
+      let data;
+      try { data = JSON.parse(message.data); }
+      catch { status.textContent = 'An event could not be read'; return; }
+      callback(data);
     };
   }
   source.addEventListener('step', receive(event => feed.step(event)), { signal: listeners.signal });
@@ -341,6 +343,8 @@ export function mountViewer(dock) {
       ? 'Stream unavailable · reopen the patient to start again' : 'Connection interrupted · reconnecting';
   }, { signal: listeners.signal });
   window.addEventListener('pagehide', cleanup, { once: true, signal: listeners.signal });
+  // Outside listeners.signal on purpose: cleanup runs on pagehide, and a page
+  // the back-forward cache restores must still reload to reopen its stream.
   window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
   render(player.state());
   return { player, cleanup };

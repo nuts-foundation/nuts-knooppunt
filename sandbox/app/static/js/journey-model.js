@@ -62,6 +62,7 @@ export const purposeLabels = {
   exchange: 'Request source data', pseudonymization: 'Pseudonymize identifier',
 };
 export const callIdentity = event => event.callId || `event-${event.seq}`;
+export const callCount = (events, kind = '') => `${events.length} ${kind}call${events.length === 1 ? '' : 's'}`;
 const eventTime = event => Date.parse(event.ts) || event.seq;
 export const isBackgroundAction = action => ['record', 'share-preview'].includes(action);
 
@@ -81,7 +82,7 @@ export function subscriptionResult(event) {
 }
 
 function actionSummary(action) {
-  if (action.action !== 'share') return `${action.events.length} observed calls`;
+  if (action.action !== 'share') return callCount(action.events, 'observed ');
   const successful = action.events.filter(event => event.outcome === 'ok');
   const removed = successful.filter(event => event.gf === 'localization' && event.request?.method === 'DELETE').length;
   const submitted = successful.filter(event => event.purpose === 'registration' && event.request?.method === 'POST').length;
@@ -90,7 +91,7 @@ function actionSummary(action) {
   if (submitted) parts.push(`${submitted} registration${submitted === 1 ? '' : 's'} submitted`);
   const subscription = successful.find(event => event.purpose === 'subscription') || successful.find(event => event.purpose === 'subscription-check');
   if (subscription) parts.push(subscriptionResult(subscription));
-  return parts.filter(Boolean).join(' · ') || `${action.events.length} observed calls`;
+  return parts.filter(Boolean).join(' · ') || callCount(action.events, 'observed ');
 }
 
 export function buildActionGroups(events) {

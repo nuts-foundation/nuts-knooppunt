@@ -361,15 +361,23 @@ function mountFixture(t) {
   }
   let source;
   class Source extends EventTarget {
-    constructor() { super(); source = this; this.closed = false; }
+    constructor() { super(); source = this; this.closed = false; this.listeners = new Map(); }
     close() { this.closed = true; }
     send(type, value) { this.dispatchEvent(new MessageEvent(type, { data: JSON.stringify(value) })); }
+    addEventListener(type, listener, options) {
+      super.addEventListener(type, listener, options);
+      this.listeners.set(type, [...(this.listeners.get(type) || []), listener]);
+    }
+    // Calls the listeners directly, so an exception reaches the test instead of
+    // being reported asynchronously the way EventTarget reports it.
+    deliver(type, data) { for (const listener of this.listeners.get(type) || []) listener(new MessageEvent(type, { data })); }
   }
   const doc = new Element(); doc.createElement = tag => new Element(tag); doc.body = new Element(); doc.hidden = false;
   const window = new EventTarget(); window.matchMedia = () => Object.assign(new EventTarget(), { matches: false });
   const dock = new Element(); dock.dataset.runId = 'run-one'; dock.classes.add('on');
   const nodes = new Map(['gf-viewer-steps', 'gf-stream-status', 'gf-playback-status', 'hd-title', 'gf-stage-caption', 'gf-stage-detail', 'gf-access-contract', 'gf-contract-status', 'gf-pause', 'gf-replay', 'gf-skip', 'gf-live'].map(id => [id, new Element()]));
   nodes.get('gf-viewer-steps').bounds = { top: 100, bottom: 400, height: 300 };
+  nodes.get('gf-pause').disabled = true; // as _viewer.html renders it until the player mounts
   const { svg } = journeyFixture();
   dock.querySelector = selector => selector === '.dock-map svg' ? svg : nodes.get(selector.slice(1));
   let observer;
@@ -598,4 +606,41 @@ test('an NVI action names missing PRS evidence only where PRS calls are traced',
     assert.doesNotMatch(text(), absent, `prsEvidence=${prsEvidence}`);
     mounted.cleanup();
   }
+});
+
+test('an unreadable event is reported, and a failing render is not disguised as one', t => {
+  const { mounted, source, clock, nodes } = mountFixture(t);
+  source.deliver('step', '{not json');
+  assert.equal(nodes.get('gf-stream-status').textContent, 'An event could not be read');
+  source.send('snapshot', { lastSeq: 0 }); clock.tick(1000);
+  nodes.get('gf-stream-status').textContent = 'Live';
+  const list = nodes.get('gf-viewer-steps');
+  const working = list.replaceChildren;
+  list.replaceChildren = () => { throw new Error('render broke'); };
+  assert.throws(() => source.deliver('step', JSON.stringify(observed(1, 'registration'))), /render broke/);
+  assert.equal(nodes.get('gf-stream-status').textContent, 'Live');
+  list.replaceChildren = working;
+  mounted.cleanup();
+});
+
+test('summaries count one call as one call', async () => {
+  const { buildActionGroups } = await import('./static/js/journey-model.js');
+  const read = (seq, action, overrides = {}) => observed(seq, 'status', { action, actionId: `${action}-${seq}`, ...overrides });
+  assert.equal(buildActionGroups([read(1, 'record')])[0].summary, '1 observed call');
+  assert.equal(buildActionGroups([read(1, 'record'), read(2, 'record', { actionId: 'record-1' })])[0].summary, '2 observed calls');
+  assert.equal(buildActionGroups([read(1, 'share', { outcome: 'error' })])[0].summary, '1 observed call',
+    'a share without a successful step falls back to the count');
+});
+
+test('a page restored from the back-forward cache reloads, although pagehide cleaned the viewer up', t => {
+  const { window } = mountFixture(t);
+  let reloads = 0;
+  const location = globalThis.location;
+  globalThis.location = { reload: () => { reloads++; } };
+  t.after(() => { globalThis.location = location; });
+  window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: false }));
+  assert.equal(reloads, 0, 'an ordinary page load does not reload');
+  window.dispatchEvent(new Event('pagehide'));
+  window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
+  assert.equal(reloads, 1, 'the closed stream is only restored by a reload');
 });

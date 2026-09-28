@@ -137,6 +137,8 @@ func (t *captureTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			event.Response.Body = bodyTooLarge
 		case bodyIncomplete:
 			event.Response.Body = bodyUnread
+		case bodyDrained:
+			event.Response.Body = redact.body(data, contentType)
 		default:
 			event.Response.Body = redact.body(data, contentType)
 			if tokenRequest {
@@ -151,20 +153,9 @@ func (t *captureTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	if response.Body == nil || response.Body == http.NoBody {
 		finish(nil, bodyComplete)
 	} else {
-		response.Body = &captureBody{body: response.Body, finish: finish, expected: response.ContentLength}
+		response.Body = &captureBody{body: response.Body, finish: finish}
 	}
 	return response, nil
-}
-
-// readJSON decodes a response body read to its end. json.Decoder stops at the
-// end of the value, which leaves a chunked body unfinished and its capture
-// without the body.
-func readJSON(body io.Reader, target any) error {
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, target)
 }
 
 // bufferRequestBody returns up to eventBodyLimit+1 bytes of the request body
@@ -208,20 +199,23 @@ type bodyState int
 
 const (
 	bodyComplete bodyState = iota
+	// bodyDrained is a body the caller closed early and the capture read to
+	// its end: shown, but not evidence that the caller received it.
+	bodyDrained
 	bodyOverflowed
 	bodyIncomplete
 	bodyFailed
 )
 
 type captureBody struct {
-	body     io.ReadCloser
-	mu       sync.Mutex
-	once     sync.Once
-	data     []byte
-	size     int64
-	expected int64
-	overflow bool
-	finish   func([]byte, bodyState)
+	body      io.ReadCloser
+	mu        sync.Mutex
+	once      sync.Once
+	data      []byte
+	size      int64
+	overflow  bool
+	published bool
+	finish    func([]byte, bodyState)
 }
 
 func (b *captureBody) Read(p []byte) (int, error) {
@@ -246,17 +240,32 @@ func (b *captureBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// Close reads what the caller left unread, up to the capture limit, before it
+// closes: a caller that only needs the status still leaves the event its body.
 func (b *captureBody) Close() error {
-	err := b.body.Close()
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if !b.published && !b.overflow {
+		rest, err := io.ReadAll(io.LimitReader(b.body, int64(eventBodyLimit-len(b.data)+1)))
+		b.size += int64(len(rest))
+		switch {
+		case len(b.data)+len(rest) > eventBodyLimit:
+			b.data, b.overflow = nil, true
+		case err != nil:
+			b.publish(bodyIncomplete)
+		case len(rest) == 0:
+			b.publish(bodyComplete)
+		default:
+			b.data = append(b.data, rest...)
+			b.publish(bodyDrained)
+		}
+	}
+	err := b.body.Close()
 	switch {
 	case err != nil:
 		b.publish(bodyFailed)
-	case b.expected > 0 && b.size == b.expected:
-		b.publish(bodyComplete)
-	default:
-		b.publish(bodyIncomplete)
+	case b.overflow:
+		b.publish(bodyOverflowed)
 	}
 	return err
 }
@@ -265,7 +274,7 @@ func (b *captureBody) publish(state bodyState) {
 	if state == bodyComplete && b.overflow {
 		state = bodyOverflowed
 	}
-	b.once.Do(func() { b.finish(b.data, state); b.data = nil })
+	b.once.Do(func() { b.published = true; b.finish(b.data, state); b.data = nil })
 }
 
 func eventEnum(value string, allowed ...string) bool {

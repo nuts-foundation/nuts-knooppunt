@@ -323,7 +323,8 @@ func TestCaptureMarksBodiesItDidNotCapture(t *testing.T) {
 		want                    any
 	}{
 		{"oversized", "application/fhir+json", `{"text":"` + strings.Repeat("x", eventBodyLimit) + `"}`, true, "[not captured: body exceeds the 65536-byte capture limit]"},
-		{"partially read", "application/fhir+json", `{"resourceType":"Patient"}`, false, "[not captured: the response body was not read to the end]"},
+		{"closed after a partial read", "application/fhir+json", `{"resourceType":"Patient"}`, false, map[string]any{"resourceType": "Patient"}},
+		{"closed unread and oversized", "application/fhir+json", `{"text":"` + strings.Repeat("x", eventBodyLimit) + `"}`, false, "[not captured: body exceeds the 65536-byte capture limit]"},
 		{"binary", "image/png", "\x89PNG\xff\xfe", true, "[not captured: image/png body of 6 bytes]"},
 		{"malformed JSON", "application/json", `{"access_token":"private-credential"`, true, "[not captured: malformed JSON body]"},
 		{"text", "text/plain; charset=utf-8", "upstream said no", true, "upstream said no"},
@@ -671,4 +672,102 @@ func TestCaptureSeesChunkedAnswersToDecodingClients(t *testing.T) {
 			require.True(t, captured, "body: %v", event.Response.Body)
 		})
 	}
+}
+
+// Callers that only need the status close the body unread: the Mitz subscribe
+// client on its 201, and every source query on a refusal. The event still
+// shows what came back.
+func TestCaptureShowsBodiesTheCallerClosedUnread(t *testing.T) {
+	const subscription = `{"resourceType":"Subscription","id":"sub-1","status":"requested","reason":"OTV","channel":{"type":"rest-hook"}}`
+	const refusal = `{"resourceType":"OperationOutcome","issue":[{"severity":"error","code":"forbidden","diagnostics":"no consent"}]}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", "application/fhir+json")
+		if strings.HasSuffix(r.URL.Path, "/mitz/Subscription") {
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, subscription)
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, refusal)
+	}))
+	defer server.Close()
+	base, _ := url.Parse(server.URL)
+	for name, tc := range map[string]struct {
+		call func(context.Context)
+		want string
+	}{
+		"Mitz subscription": {func(ctx context.Context) {
+			require.NoError(t, mitzSubscribeFunc(base, "00000010", "Z3")(ctx, "999900006"))
+		}, subscription},
+		"source refusal": {func(ctx context.Context) {
+			_, _ = retrieveBGZ(ctx, sourceAddress{Address: server.URL}, "private-token", "999900006", nil)
+		}, refusal},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var events []stepEvent
+			tc.call(withEventCapture(context.Background(), func(e stepEvent) { events = append(events, e) }, false))
+			require.NotEmpty(t, events)
+			require.JSONEq(t, tc.want, marshalled(t, events[0].Response.Body))
+		})
+	}
+}
+
+// failAfterReader hands out its data and then fails, so a close that reads on
+// finds a broken connection.
+type failAfterReader struct{ data *strings.Reader }
+
+func (r failAfterReader) Read(p []byte) (int, error) {
+	if r.data.Len() == 0 {
+		return 0, errors.New("connection reset")
+	}
+	return r.data.Read(p)
+}
+
+func (failAfterReader) Close() error { return nil }
+
+// What cannot be read after the caller stopped is marked as such, never shown
+// as a complete body.
+func TestCaptureMarksARestThatCannotBeRead(t *testing.T) {
+	var event stepEvent
+	base := captureRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}},
+			Body: failAfterReader{strings.NewReader(`{"resourceType":`)}, ContentLength: -1}, nil
+	})
+	req, _ := http.NewRequestWithContext(withEventCapture(context.Background(), func(e stepEvent) { event = e }, false), "GET", "http://example.invalid/Patient", nil)
+	res, err := newCaptureTransport("exchange", base).RoundTrip(req)
+	require.NoError(t, err)
+	_, _ = io.ReadFull(res.Body, make([]byte, 5))
+	_ = res.Body.Close()
+	require.Equal(t, "[not captured: the response body was not read to the end]", event.Response.Body)
+}
+
+type countingBody struct {
+	io.Reader
+	read *int
+}
+
+func (b countingBody) Read(p []byte) (int, error) {
+	n, err := b.Reader.Read(p)
+	*b.read += n
+	return n, err
+}
+
+func (countingBody) Close() error { return nil }
+
+// Reading on after the caller stopped is bounded by the capture limit, so a
+// large download the caller abandoned is not pulled into memory.
+func TestCaptureReadsAnAbandonedBodyOnlyUpToTheLimit(t *testing.T) {
+	read := 0
+	base := captureRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}},
+			Body: countingBody{strings.NewReader(strings.Repeat("x", 4*eventBodyLimit)), &read}, ContentLength: -1}, nil
+	})
+	var event stepEvent
+	req, _ := http.NewRequestWithContext(withEventCapture(context.Background(), func(e stepEvent) { event = e }, false), "GET", "http://example.invalid/Binary", nil)
+	res, err := newCaptureTransport("exchange", base).RoundTrip(req)
+	require.NoError(t, err)
+	require.NoError(t, res.Body.Close())
+	require.LessOrEqual(t, read, eventBodyLimit+1)
+	require.Equal(t, "[not captured: body exceeds the 65536-byte capture limit]", event.Response.Body)
 }

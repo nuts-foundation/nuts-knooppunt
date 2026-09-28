@@ -30,11 +30,11 @@
       </div>
       <p class="gf-stream-status" id="gf-stream-status" role="status">{{if .Patient}}{{if .Patient.RunID}}Connecting to this run…{{else}}Open this patient to start a run.{{end}}{{else}}Open a patient to follow its run.{{end}}</p>
       <div class="gf-playback-controls" aria-label="Playback controls">
-        <button id="gf-pause" type="button">Pause</button>
+        <button id="gf-pause" type="button" disabled>Pause</button>
         <button id="gf-replay" type="button" disabled>Replay</button>
         <button id="gf-skip" type="button" disabled>Skip</button>
         <button id="gf-live" type="button" disabled>Follow latest</button>
-        <span id="gf-playback-status" role="status">Preparing playback</span>
+        <span id="gf-playback-status" role="status"></span>
       </div>
       <div class="hd-body" id="gf-viewer-steps">
         <div class="hd-sec on">

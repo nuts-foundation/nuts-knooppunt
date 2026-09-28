@@ -22,6 +22,15 @@ func TestViewerShellStructure(t *testing.T) {
 	require.Contains(t, collapsed, `class="hood-dock peek"`)
 }
 
+// Every EHR page carries the viewer, the patient list included, but only a page
+// with a run mounts the player. Without one the controls must not look live:
+// the player enables Pause and fills the status once it mounts.
+func TestViewerShellHasNoLivePlaybackControlsWithoutARun(t *testing.T) {
+	shell := renderPartialForTest(t, "viewer", page{ViewerOpen: true}, "_viewer.html", "_journey_svg.html")
+	require.Contains(t, shell, `<button id="gf-pause" type="button" disabled>Pause</button>`)
+	require.Contains(t, shell, `<span id="gf-playback-status" role="status"></span>`)
+}
+
 func TestViewerBodyAttrsCarryHoodSignals(t *testing.T) {
 	attrs := string(viewerBodyAttrs(true))
 	require.Contains(t, attrs, "data-signals")
