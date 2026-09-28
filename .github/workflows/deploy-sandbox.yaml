@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 # Never run two deploys at once, but don't cancel one that's already
 # talking to the cluster either - let it finish, queue the next.
