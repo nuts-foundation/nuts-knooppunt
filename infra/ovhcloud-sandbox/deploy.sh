@@ -12,6 +12,8 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
+helm dependency update ../../helm/nuts-knooppunt
+
 set_file_args=()
 for f in discovery/*.json; do
   [ -e "$f" ] || continue
