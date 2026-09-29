@@ -6,13 +6,15 @@
 > carries the full note.
 
 Zorgcentrum De Zonnebloem's own record system in the GF Sandbox: the source side of the marker proof
-(`sandbox/DESIGN.md` §4 step 0b and §5.5). It lists the clients in De Zonnebloem's FHIR store, shows each client's
+(`sandbox/DESIGN.md` §4 step 0b and §5.5). It lists the demo-pool clients in De Zonnebloem's FHIR store, shows each client's
 allergies, medication and conditions, and adds an allergy with a free-text note. Plataan EHR finds such a record only
 through the GF chain; a note with a `DEMO-` word comes back highlighted on the enriched record.
 
 It talks to that FHIR store and nothing else: not the Knooppunt, not the NVI, not the sandbox. Adding a record needs
 no NVI registration, because the seed already registered De Zonnebloem's data for every pool patient, per data
-category, and the NVI records that data exists, not which entries.
+category, and the NVI records that data exists, not which entries. Clients outside the demo pool, including the
+legacy Jan Jansen fixture, are omitted and their record and allergy routes return 404: Plataan cannot retrieve or
+recycle them.
 
 ## Run
 
@@ -42,7 +44,9 @@ that patient's tagged records; a global reset clears the whole tenant.
 Nothing here authenticates. Anyone who can reach a hosted instance can add a note to a pool patient, and every demo
 that retrieves that patient shows it, highlighted, until the patient is recycled or the dataset reset. Substance and
 status come from fixed lists, the note is capped at 500 characters, a form post from another site is refused, and both
-applications escape what they render.
+applications escape what they render. The form uses Go's cross-origin protection: when `Sec-Fetch-Site` is absent
+(as on a hosted HTTP URL), the host in `Origin` must match the request's host, including any port. Requests without
+either header remain allowed for non-browser clients.
 
 ## Provenance
 

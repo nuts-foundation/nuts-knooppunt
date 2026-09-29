@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -63,10 +64,14 @@ func (f *fakeStore) AddAllergy(_ context.Context, a fhir.AllergyIntolerance) err
 
 func annaStore() *fakeStore {
 	return &fakeStore{
-		clients: []client{{ID: "anna", Name: "Jansen, Anna", Initials: "AJ", BirthDate: "1944-03-12", BSN: "999900006"}},
-		records: map[string]record{"anna": {Allergies: []entry{{Title: "Penicilline", Detail: "Unconfirmed · 2019"}}}},
+		clients: []client{{ID: "pool-anna-zonnebloem-patient", Name: "Jansen, Anna", Initials: "AJ", BirthDate: "1944-03-12", BSN: "999900006"}},
+		records: map[string]record{"pool-anna-zonnebloem-patient": {Allergies: []entry{{Title: "Penicilline", Detail: "Unconfirmed · 2019"}}}},
 	}
 }
+
+// bramID is a demo-pool client annaStore does not hold: the pool check lets it
+// through, so only the store can report it unknown.
+const bramID = "pool-pool-02-zonnebloem-patient"
 
 func serve(t *testing.T, st store) *httptest.Server {
 	t.Helper()
@@ -128,7 +133,7 @@ func TestClients_ListsTheStoresClients(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "Jansen, Anna")
-	require.Contains(t, body, `href="/clients/anna"`)
+	require.Contains(t, body, `href="/clients/pool-anna-zonnebloem-patient"`)
 	require.Contains(t, body, "Test environment · synthetic data")
 	require.Contains(t, body, "Zorgcentrum De Zonnebloem")
 }
@@ -144,24 +149,27 @@ func TestClients_AFailingStoreIs502(t *testing.T) {
 
 func TestClient_ShowsTheRecordAndSuggestsAMarker(t *testing.T) {
 	st := annaStore()
-	st.records["anna"] = record{Allergies: []entry{
+	st.records["pool-anna-zonnebloem-patient"] = record{Allergies: []entry{
 		{Title: "Pinda", Detail: "Confirmed · 2026-09-28 · DEMO-X", AddedInDemo: true},
 		{Title: "Penicilline", Detail: "Unconfirmed · 2019"},
 	}}
 
-	status, body := get(t, serve(t, st).URL+"/clients/anna")
+	status, body := get(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient")
 
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "Penicilline")
 	require.Contains(t, body, `<span class="added-chip">added in this demo</span>`)
 	require.Contains(t, body, "Established after reaction. DEMO-FIXED-MARKER-07</textarea>")
-	require.Contains(t, body, `action="/clients/anna/allergies"`)
+	require.Contains(t, body, `action="/clients/pool-anna-zonnebloem-patient/allergies"`)
 }
 
 func TestClient_UnknownClientIs404(t *testing.T) {
-	status, _ := get(t, serve(t, annaStore()).URL+"/clients/nobody")
+	st := annaStore()
+
+	status, _ := get(t, serve(t, st).URL+"/clients/"+bramID)
 
 	require.Equal(t, http.StatusNotFound, status)
+	require.Equal(t, []string{bramID}, st.asked)
 }
 
 // An id that is not a FHIR id never reaches the store's URL, where ".." would
@@ -181,9 +189,9 @@ func TestClient_AnIDThatIsNotAFHIRIDIs404WithoutAskingTheStore(t *testing.T) {
 
 func TestClient_EscapesWhatTheStoreHolds(t *testing.T) {
 	st := annaStore()
-	st.records["anna"] = record{Allergies: []entry{{Title: "Pinda", Detail: "<script>alert(1)</script>"}}}
+	st.records["pool-anna-zonnebloem-patient"] = record{Allergies: []entry{{Title: "Pinda", Detail: "<script>alert(1)</script>"}}}
 
-	_, body := get(t, serve(t, st).URL+"/clients/anna")
+	_, body := get(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient")
 
 	require.Contains(t, body, "&lt;script&gt;alert(1)&lt;/script&gt;")
 	require.NotContains(t, body, "<script>alert(1)")
@@ -192,12 +200,12 @@ func TestClient_EscapesWhatTheStoreHolds(t *testing.T) {
 func TestAddAllergy_SavesAndRedirectsToTheRecord(t *testing.T) {
 	st := annaStore()
 
-	res := post(t, serve(t, st).URL+"/clients/anna/allergies", validPost(), "same-origin")
+	res := post(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient/allergies", validPost(), "same-origin")
 
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
-	require.Equal(t, "/clients/anna?saved=marker", res.Header.Get("Location"))
+	require.Equal(t, "/clients/pool-anna-zonnebloem-patient?saved=marker", res.Header.Get("Location"))
 	require.Len(t, st.added, 1)
-	require.Equal(t, "Patient/anna", *st.added[0].Patient.Reference)
+	require.Equal(t, "Patient/pool-anna-zonnebloem-patient", *st.added[0].Patient.Reference)
 	require.Equal(t, "2026-09-28", *st.added[0].RecordedDate)
 	require.True(t, userCreated(st.added[0].Meta))
 }
@@ -208,11 +216,11 @@ func TestAddAllergy_ConfirmationSaysWhetherPlataanWillHighlightIt(t *testing.T) 
 	form := validPost()
 	form.Set("note", "Na pinda.")
 
-	res := post(t, srv.URL+"/clients/anna/allergies", form, "")
-	require.Equal(t, "/clients/anna?saved=plain", res.Header.Get("Location"))
+	res := post(t, srv.URL+"/clients/pool-anna-zonnebloem-patient/allergies", form, "")
+	require.Equal(t, "/clients/pool-anna-zonnebloem-patient?saved=plain", res.Header.Get("Location"))
 
-	_, plain := get(t, srv.URL+"/clients/anna?saved=plain")
-	_, marker := get(t, srv.URL+"/clients/anna?saved=marker")
+	_, plain := get(t, srv.URL+"/clients/pool-anna-zonnebloem-patient?saved=plain")
+	_, marker := get(t, srv.URL+"/clients/pool-anna-zonnebloem-patient?saved=marker")
 	require.Contains(t, plain, "carries no <code>DEMO-</code> word")
 	require.Contains(t, marker, "retrieve the patient there to see it arrive through the chain")
 }
@@ -222,7 +230,7 @@ func TestAddAllergy_AnInvalidFormRendersAgainWithTheReason(t *testing.T) {
 	form := validPost()
 	form.Set("substance", "294505008")
 
-	res := post(t, serve(t, st).URL+"/clients/anna/allergies", form, "")
+	res := post(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient/allergies", form, "")
 	body, err := io.ReadAll(res.Body)
 	require.NoError(t, err)
 
@@ -236,7 +244,7 @@ func TestAddAllergy_RefusesAPostFromAnotherSite(t *testing.T) {
 	for _, site := range []string{"cross-site", "same-site"} {
 		st := annaStore()
 
-		res := post(t, serve(t, st).URL+"/clients/anna/allergies", validPost(), site)
+		res := post(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient/allergies", validPost(), site)
 
 		require.Equalf(t, http.StatusForbidden, res.StatusCode, "Sec-Fetch-Site: %s", site)
 		require.Emptyf(t, st.added, "Sec-Fetch-Site: %s", site)
@@ -246,9 +254,10 @@ func TestAddAllergy_RefusesAPostFromAnotherSite(t *testing.T) {
 func TestAddAllergy_UnknownClientIs404(t *testing.T) {
 	st := annaStore()
 
-	res := post(t, serve(t, st).URL+"/clients/nobody/allergies", validPost(), "")
+	res := post(t, serve(t, st).URL+"/clients/"+bramID+"/allergies", validPost(), "")
 
 	require.Equal(t, http.StatusNotFound, res.StatusCode)
+	require.Equal(t, []string{bramID}, st.asked)
 	require.Empty(t, st.added)
 }
 
@@ -256,8 +265,79 @@ func TestAddAllergy_AStoreThatRefusesIs502(t *testing.T) {
 	st := annaStore()
 	st.addErr = errors.New("create allergy: FHIR request failed (status=422)")
 
-	res := post(t, serve(t, st).URL+"/clients/anna/allergies", validPost(), "")
+	res := post(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient/allergies", validPost(), "")
 
 	require.Equal(t, http.StatusBadGateway, res.StatusCode)
 	require.Empty(t, res.Header.Get("Location"))
+}
+
+func TestClients_OnlyListsDemoPool(t *testing.T) {
+	st := annaStore()
+	st.clients = append(st.clients, clientFrom(sunflower.Patients()[0]))
+
+	status, body := get(t, serve(t, st).URL+"/")
+
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, "Jansen, Anna")
+	require.NotContains(t, body, "Jansen, Jan")
+}
+
+func TestClient_OutsideDemoPoolIsUnavailable(t *testing.T) {
+	legacy := clientFrom(sunflower.Patients()[0])
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		t.Run(method, func(t *testing.T) {
+			st := annaStore()
+			st.clients = append(st.clients, legacy)
+			target := "/clients/" + legacy.ID
+			if method == http.MethodPost {
+				target += "/allergies"
+			}
+			request := httptest.NewRequest(method, target, strings.NewReader(validPost().Encode()))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			response := httptest.NewRecorder()
+
+			newMux(st, time.Now, func() string { return "DEMO-TEST" }).ServeHTTP(response, request)
+
+			require.Equal(t, http.StatusNotFound, response.Code)
+			require.Empty(t, st.added)
+			require.Empty(t, st.asked, "a non-pool client must be rejected before accessing its record")
+		})
+	}
+}
+
+func TestAddAllergy_ChecksOriginWithoutFetchMetadata(t *testing.T) {
+	for name, tc := range map[string]struct {
+		origin string
+		status int
+	}{
+		"same origin":             {"http://zonnebloem.example:3001", http.StatusSeeOther},
+		"TLS terminated upstream": {"https://zonnebloem.example:3001", http.StatusSeeOther},
+		"other site":              {"http://another-site.example", http.StatusForbidden},
+		"other port":              {"http://zonnebloem.example:3002", http.StatusForbidden},
+		"opaque origin":           {"null", http.StatusForbidden},
+		"malformed origin":        {"://invalid", http.StatusForbidden},
+		"non-browser request":     {"", http.StatusSeeOther},
+	} {
+		t.Run(name, func(t *testing.T) {
+			st := annaStore()
+			request := httptest.NewRequest(http.MethodPost,
+				"http://zonnebloem.example:3001/clients/pool-anna-zonnebloem-patient/allergies",
+				strings.NewReader(validPost().Encode()))
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			if tc.origin != "" {
+				request.Header.Set("Origin", tc.origin)
+			}
+			response := httptest.NewRecorder()
+
+			newMux(st, time.Now, func() string { return "DEMO-TEST" }).ServeHTTP(response, request)
+
+			require.Equal(t, tc.status, response.Code)
+			if tc.status == http.StatusForbidden {
+				require.Empty(t, st.added)
+				require.Empty(t, st.asked, "a rejected form must not access the store")
+			} else {
+				require.Len(t, st.added, 1)
+			}
+		})
+	}
 }

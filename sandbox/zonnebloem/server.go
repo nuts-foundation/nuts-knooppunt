@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"regexp"
 	"time"
+
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 )
 
 // fhirID is the FHIR id datatype (https://hl7.org/fhir/R4/datatypes.html#id).
@@ -37,7 +39,8 @@ func newMux(st store, now func() time.Time, marker func() string) *http.ServeMux
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
 	mux.HandleFunc("GET /{$}", s.handleClients)
 	mux.HandleFunc("GET /clients/{id}", s.handleClient)
-	mux.HandleFunc("POST /clients/{id}/allergies", s.handleAddAllergy)
+	mux.Handle("POST /clients/{id}/allergies",
+		http.NewCrossOriginProtection().Handler(http.HandlerFunc(s.handleAddAllergy)))
 	return mux
 }
 
@@ -47,7 +50,13 @@ func (s server) handleClients(w http.ResponseWriter, r *http.Request) {
 		storeFailure(w, err)
 		return
 	}
-	render(w, http.StatusOK, "clients.html", page{Title: "Clients", Clients: clients})
+	var demoClients []client
+	for _, c := range clients {
+		if isPoolClientID(c.ID) {
+			demoClients = append(demoClients, c)
+		}
+	}
+	render(w, http.StatusOK, "clients.html", page{Title: "Clients", Clients: demoClients})
 }
 
 func (s server) handleClient(w http.ResponseWriter, r *http.Request) {
@@ -64,10 +73,6 @@ func (s server) handleClient(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s server) handleAddAllergy(w http.ResponseWriter, r *http.Request) {
-	if crossSiteRequest(r) {
-		http.Error(w, "cross-site form posts are not allowed", http.StatusForbidden)
-		return
-	}
 	c, ok := s.client(w, r)
 	if !ok {
 		return
@@ -92,11 +97,11 @@ func (s server) handleAddAllergy(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/clients/"+url.PathEscape(c.ID)+"?saved="+saved, http.StatusSeeOther)
 }
 
-// client resolves the path's client: 404 for an id the store does not hold or
-// that is not an id at all, 502 when the store fails.
+// client resolves a demo-pool client: 404 outside the pool or when the store
+// does not hold it, 502 when the store fails.
 func (s server) client(w http.ResponseWriter, r *http.Request) (client, bool) {
 	id := r.PathValue("id")
-	if !validClientID(id) {
+	if !validClientID(id) || !isPoolClientID(id) {
 		http.NotFound(w, r)
 		return client{}, false
 	}
@@ -132,12 +137,13 @@ func storeFailure(w http.ResponseWriter, err error) {
 	http.Error(w, "De Zonnebloem's record store did not answer properly: "+err.Error(), http.StatusBadGateway)
 }
 
-// crossSiteRequest reports browser evidence that a request comes from another
-// site. Browsers set Sec-Fetch-Site on form submissions and a page cannot
-// override it; its absence (curl, tests) is allowed, and so is nothing wider
-// than same-origin. The same rule as the sandbox's own crossSiteRequest: the two
-// programs share no code.
-func crossSiteRequest(r *http.Request) bool {
-	site := r.Header.Get("Sec-Fetch-Site")
-	return site != "" && site != "same-origin"
+// isPoolClientID reports whether id is a demo-pool client: the only clients
+// Plataan can retrieve and recycle, so the only ones these screens offer.
+func isPoolClientID(id string) bool {
+	for _, patient := range pool.Patients() {
+		if patient.ZonnebloemPatientID == id {
+			return true
+		}
+	}
+	return false
 }

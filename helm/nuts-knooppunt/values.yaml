@@ -439,12 +439,14 @@ mock-dezi:
   fullnameOverride: mock-dezi
 
 # gf-sandbox: the GF Sandbox demo application. Set enabled: true to deploy
-# it. Only knooppuntInternalUrl differs from the chart's own defaults - the
-# rest (public URLs) are placeholders that depend on ingress hostnames an
-# environment values file has to set.
+# it. Public URLs depend on the environment's ingress hostnames. Like
+# zonnebloem-ehr, always refresh the moving "main" image on startup so both
+# programs receive the same upgrade.
 gf-sandbox:
   enabled: false
   fullnameOverride: gf-sandbox
+  image:
+    pullPolicy: Always
   env:
     knooppuntInternalUrl: "http://nuts-knooppunt:8081"
 
