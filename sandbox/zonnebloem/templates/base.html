@@ -11,12 +11,7 @@
 <body>
 <header class="topbar">
   <a class="brand" href="/">
-    <svg class="brand-mark" width="30" height="30" viewBox="-16 -16 32 32" aria-hidden="true">
-      <g fill="#f4b63f">
-        <ellipse rx="3" ry="6.4" transform="rotate(0) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(30) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(60) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(90) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(120) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(150) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(180) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(210) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(240) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(270) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(300) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(330) translate(0 -8.6)"/>
-      </g>
-      <circle r="5.8" fill="#5a3a1c"/>
-    </svg>
+    <span class="brand-mark">{{template "sunflower"}}</span>
     <span class="brand-name">Zorgcentrum De Zonnebloem</span>
     <span class="brand-module">Client records</span>
   </a>
@@ -31,3 +26,24 @@
 {{template "content" .}}
 </body>
 </html>{{end}}
+
+{{define "sunflower"}}<svg viewBox="-16 -16 32 32" aria-hidden="true">
+  <g fill="#f4b63f">
+    <ellipse rx="3" ry="6.4" transform="rotate(0) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(30) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(60) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(90) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(120) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(150) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(180) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(210) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(240) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(270) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(300) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(330) translate(0 -8.6)"/>
+  </g>
+  <circle r="5.8" fill="#5a3a1c"/>
+</svg>{{end}}
+
+{{define "rail"}}
+<nav class="rail" aria-label="Clients">
+  <div class="rail-head"><a class="rail-title" href="/">Clients</a><span class="rail-count">{{len .Clients}}</span></div>
+  <ul>
+    {{range .Clients}}
+    <li><a href="/clients/{{.ID}}"{{if .Current}} aria-current="page"{{end}}>
+      <span class="av" aria-hidden="true">{{.Initials}}</span>
+      <span><span class="rail-name">{{.Name}}</span>{{with .Age}}<span class="rail-sub">{{.}}</span>{{end}}</span>
+    </a></li>
+    {{end}}
+  </ul>
+</nav>
+{{end}}

@@ -344,13 +344,13 @@ a product, not a test harness.
 
 ### 6.3 De Zonnebloem's EHR: the source institution's own system
 
-The elderly care institution's record system, opened in its own tab for the marker path. It must not be mistakable
-for Plataan: its own name (Zorgcentrum De Zonnebloem), the green palette and Manrope typeface of the wireframe's
-source screen, and nothing shared with the other guises. Where Plataan is warm and editorial, this is a calm, modern
-care system: a light top bar with a sunflower mark, the client list beside the record, the client in a soft green band
-with the name large, the record as one sheet of rows, and a register form of chips and a two-option switch. Its layout
-lives in `sandbox/zonnebloem`'s templates, not in the wireframe. It carries no product brand of its own. A
-test-environment chip stays visible.
+The elderly care institution's record system, opened in its own tab for the marker path. It must not be mistakable for
+Plataan: its own name (Zorgcentrum De Zonnebloem), the green palette and Manrope typeface of the wireframe's source
+screen, and nothing shared with the other guises. Where Plataan is warm and editorial, this is a calm, modern care
+system: a light top bar with a sunflower mark, the client list beside the record (the start page is that list with no
+client open yet), the client in a soft green band with the name large, the record as one sheet of rows, and a register
+form of chips and a two-option switch. Its layout lives in `sandbox/zonnebloem`'s templates, not in the wireframe. It
+carries no product brand of its own. A test-environment chip stays visible.
 
 The GF viewer and the full-journey view use the wireframe's dark "under the hood" styling, so the journey map's glow and
 color coding stay readable against the warm EMR.

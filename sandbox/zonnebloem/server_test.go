@@ -486,10 +486,29 @@ func TestClient_ConfirmsARemoval(t *testing.T) {
 }
 
 // serve's clock stands on 28 September 2026, when Anna Jansen is 82.
-func TestClients_ShowsEachClientsAgeAndBirthDate(t *testing.T) {
+func TestClients_ShowsEachClientsAge(t *testing.T) {
 	_, body := get(t, serve(t, annaStore()).URL+"/")
 
-	require.Contains(t, body, "82 years, born 12 March 1944")
+	require.Contains(t, body, "82 years")
+}
+
+// The start page is the client list beside the record area, with nobody open.
+func TestClients_SaysNoClientIsSelectedYet(t *testing.T) {
+	_, body := get(t, serve(t, annaStore()).URL+"/")
+
+	require.Contains(t, body, "No client selected yet")
+	require.Contains(t, body, "Choose a client on the left to open their record.")
+	require.NotContains(t, body, `aria-current="page"`)
+}
+
+func TestClients_AnEmptyStoreSaysHowToFillIt(t *testing.T) {
+	st := annaStore()
+	st.clients = nil
+
+	_, body := get(t, serve(t, st).URL+"/")
+
+	require.Contains(t, body, "A reset in Plataan loads them.")
+	require.NotContains(t, body, "No client selected yet")
 }
 
 func TestClient_TheBannerShowsAgeBirthDateAndAllergies(t *testing.T) {
@@ -520,6 +539,7 @@ func TestClient_ListsTheDemoClientsAndMarksThisOne(t *testing.T) {
 	require.Contains(t, body, `href="/clients/pool-anna-zonnebloem-patient" aria-current="page"`)
 	require.NotContains(t, body, `href="/clients/`+bramID+`" aria-current`)
 	require.NotContains(t, body, "Jan Jansen")
+	require.NotContains(t, body, "No client selected yet")
 }
 
 func TestClient_AFailingClientListIs502(t *testing.T) {

@@ -1,16 +1,6 @@
 {{define "content"}}
 <div class="shell">
-  <nav class="rail" aria-label="Clients">
-    <div class="rail-head"><a class="rail-title" href="/">Clients</a><span class="rail-count">{{len .Clients}}</span></div>
-    <ul>
-      {{range .Clients}}
-      <li><a href="/clients/{{.ID}}"{{if .Current}} aria-current="page"{{end}}>
-        <span class="av" aria-hidden="true">{{.Initials}}</span>
-        <span><span class="rail-name">{{.Name}}</span>{{with .Age}}<span class="rail-sub">{{.}}</span>{{end}}</span>
-      </a></li>
-      {{end}}
-    </ul>
-  </nav>
+  {{template "rail" .}}
 
   <main class="main">
     <a class="back" href="/">All clients</a>

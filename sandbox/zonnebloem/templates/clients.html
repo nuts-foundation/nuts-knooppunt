@@ -1,27 +1,19 @@
 {{define "content"}}
-<main class="page">
-  <h1 class="page-title">Clients</h1>
-  <p class="lede">The demo's clients, read from De Zonnebloem's own record store.</p>
-  {{if .Clients}}
-  <nav class="sheet client-list" aria-label="Clients">
-    <ul>
-      {{range .Clients}}
-      <li><a href="/clients/{{.ID}}">
-        <span class="av" aria-hidden="true">{{.Initials}}</span>
-        <span class="who">
-          <span class="name">{{.Name}}</span>
-          {{template "born" .}}
-        </span>
-        {{with .BSN}}<span class="bsn">BSN <b>{{.}}</b></span>{{end}}
-        <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
-      </a></li>
-      {{end}}
-    </ul>
-  </nav>
-  {{else}}
-  <p class="empty">The record store holds no demo clients yet. A reset in Plataan loads them.</p>
-  {{end}}
-</main>
+<div class="shell start{{if not .Clients}} empty{{end}}">
+  {{template "rail" .}}
+  <main class="main">
+    <section class="band band-start" aria-labelledby="start-title">
+      <span class="band-mark">{{template "sunflower"}}</span>
+      <div class="band-main">
+        {{if .Clients}}
+        <h1 class="band-name" id="start-title">No client selected yet</h1>
+        <p class="band-lede">Choose a client on the left to open their record.</p>
+        {{else}}
+        <h1 class="band-name" id="start-title">No demo clients yet</h1>
+        <p class="band-lede">The record store holds none. A reset in Plataan loads them.</p>
+        {{end}}
+      </div>
+    </section>
+  </main>
+</div>
 {{end}}
-
-{{define "born"}}{{if .Age}}<span class="facts">{{.Age}}, born {{.Born}}</span>{{else if .Born}}<span class="facts">Born {{.Born}}</span>{{end}}{{end}}
