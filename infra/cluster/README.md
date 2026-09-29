@@ -82,3 +82,10 @@ it has a credential - to activate it:
 
 This credential is cluster-admin-equivalent (see above) - treat adding it
 with the same care as the Terraform state bucket access.
+
+`ci.yaml` can also be run manually (Actions tab → "Build and deploy
+sandbox" → Run workflow) with a `commit` input, to redeploy a commit
+that was already built and pushed to main - for rollback, or retrying a
+deploy without rebuilding. It only works for a commit that already has
+`sha-<short-sha>` images published; it doesn't build arbitrary commits
+on demand.

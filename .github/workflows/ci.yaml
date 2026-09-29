@@ -14,10 +14,22 @@ name: 'Build and deploy sandbox'
 # and even a wait wouldn't guarantee every component came from the *same*
 # commit - hence pinning every component below to this run's exact commit
 # SHA instead of the moving "main" tag.
+#
+# workflow_dispatch is deploy-only: it redeploys a commit that was already
+# built and pushed to main (skipping the 8 build jobs), for rollback or
+# retrying a deploy without rebuilding. It only works for a commit that
+# already has sha-<short-sha> images published - it doesn't build arbitrary
+# commits on demand.
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Commit SHA to redeploy - must already be built and pushed to main (has sha-<short-sha> images published)'
+        required: true
+        type: string
 
 concurrency:
   group: sandbox-ci
@@ -25,34 +37,42 @@ concurrency:
 
 jobs:
   build-knooppunt:
+    if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/build-nuts-knooppunt-image.yaml
     secrets: inherit
 
   build-pep:
+    if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/build-pep-image.yaml
     secrets: inherit
 
   build-mock-vc-issuer:
+    if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/build-mock-vc-issuer-image.yaml
     secrets: inherit
 
   build-mock-mitz:
+    if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/build-mock-mitz-image.yaml
     secrets: inherit
 
   build-mock-dezi:
+    if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/build-mock-dezi-image.yaml
     secrets: inherit
 
   build-gf-sandbox:
+    if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/build-gf-sandbox-image.yaml
     secrets: inherit
 
   build-fakenvi:
+    if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/build-fakenvi-image.yaml
     secrets: inherit
 
   build-seed:
+    if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/build-seed-image.yaml
     secrets: inherit
 
@@ -66,11 +86,16 @@ jobs:
       - build-gf-sandbox
       - build-fakenvi
       - build-seed
+    # needs: jobs that were skipped (workflow_dispatch) still let this run;
+    # only a genuine build failure (push) blocks it.
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-latest
     environment: ovhcloud-sandbox
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit || github.sha }}
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
@@ -90,7 +115,7 @@ jobs:
         run: |
           # Matches the docker/metadata-action `type=sha,format=short` tag
           # rule every build-*-image.yaml above now publishes.
-          tag="sha-$(echo "${{ github.sha }}" | cut -c1-7)"
+          tag="sha-$(echo "${{ github.event.inputs.commit || github.sha }}" | cut -c1-7)"
           infra/ovhcloud-sandbox/deploy.sh --timeout 10m \
             --set "image.tag=$tag" \
             --set "pep-zonnebloem.image.tag=$tag" \
