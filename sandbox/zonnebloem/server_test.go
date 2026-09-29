@@ -13,23 +13,34 @@ import (
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/stretchr/testify/require"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 // fakeStore is the store the handlers see in these tests. asked records every
 // client id the handlers looked up.
 type fakeStore struct {
-	clients []client
-	records map[string]record
-	fail    error
-	addErr  error
-	added   []fhir.AllergyIntolerance
-	asked   []string
+	clients    []client
+	clientsErr error
+	records    map[string]record
+	fail       error
+	addErr     error
+	added      []fhir.AllergyIntolerance
+	asked      []string
+
+	allergies     map[string]fhir.AllergyIntolerance // what Allergy reads, by id
+	allergyErr    error
+	readAllergies []string // every allergy id the handlers read
+	deleteErr     error
+	deleted       []string // every allergy id the handlers deleted
 }
 
 func (f *fakeStore) Clients(context.Context) ([]client, error) {
 	if f.fail != nil {
 		return nil, f.fail
+	}
+	if f.clientsErr != nil {
+		return nil, f.clientsErr
 	}
 	return f.clients, nil
 }
@@ -62,10 +73,30 @@ func (f *fakeStore) AddAllergy(_ context.Context, a fhir.AllergyIntolerance) err
 	return nil
 }
 
+func (f *fakeStore) Allergy(_ context.Context, id string) (fhir.AllergyIntolerance, error) {
+	f.readAllergies = append(f.readAllergies, id)
+	if f.allergyErr != nil {
+		return fhir.AllergyIntolerance{}, f.allergyErr
+	}
+	allergy, ok := f.allergies[id]
+	if !ok {
+		return fhir.AllergyIntolerance{}, errNotFound
+	}
+	return allergy, nil
+}
+
+func (f *fakeStore) DeleteAllergy(_ context.Context, id string) error {
+	if f.deleteErr != nil {
+		return f.deleteErr
+	}
+	f.deleted = append(f.deleted, id)
+	return nil
+}
+
 func annaStore() *fakeStore {
 	return &fakeStore{
-		clients: []client{{ID: "pool-anna-zonnebloem-patient", Name: "Jansen, Anna", Initials: "AJ", BirthDate: "1944-03-12", BSN: "999900006"}},
-		records: map[string]record{"pool-anna-zonnebloem-patient": {Allergies: []entry{{Title: "Penicilline", Detail: "Unconfirmed · 2019"}}}},
+		clients: []client{{ID: "pool-anna-zonnebloem-patient", Name: "Anna Jansen", Initials: "AJ", BirthDate: "1944-03-12", BSN: "999900006"}},
+		records: map[string]record{"pool-anna-zonnebloem-patient": {Allergies: []entry{{ID: "seeded-1", Title: "Penicilline", Meta: "Recorded 2019", Status: "unconfirmed", StatusLabel: "Suspected"}}}},
 	}
 }
 
@@ -132,9 +163,9 @@ func TestClients_ListsTheStoresClients(t *testing.T) {
 	status, body := get(t, serve(t, annaStore()).URL+"/")
 
 	require.Equal(t, http.StatusOK, status)
-	require.Contains(t, body, "Jansen, Anna")
+	require.Contains(t, body, "Anna Jansen")
 	require.Contains(t, body, `href="/clients/pool-anna-zonnebloem-patient"`)
-	require.Contains(t, body, "Test environment · synthetic data")
+	require.Contains(t, body, "Test environment with synthetic data")
 	require.Contains(t, body, "Zorgcentrum De Zonnebloem")
 }
 
@@ -150,15 +181,15 @@ func TestClients_AFailingStoreIs502(t *testing.T) {
 func TestClient_ShowsTheRecordAndSuggestsAMarker(t *testing.T) {
 	st := annaStore()
 	st.records["pool-anna-zonnebloem-patient"] = record{Allergies: []entry{
-		{Title: "Pinda", Detail: "Confirmed · 2026-09-28 · DEMO-X", AddedInDemo: true},
-		{Title: "Penicilline", Detail: "Unconfirmed · 2019"},
+		{ID: "added-1", Title: "Pinda", Meta: "Recorded 28 September 2026", Note: "DEMO-X", Status: "confirmed", StatusLabel: "Confirmed", AddedInDemo: true},
+		{ID: "seeded-1", Title: "Penicilline", Meta: "Recorded 2019", Status: "unconfirmed", StatusLabel: "Suspected"},
 	}}
 
 	status, body := get(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient")
 
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, "Penicilline")
-	require.Contains(t, body, `<span class="added-chip">added in this demo</span>`)
+	require.Contains(t, body, `<span class="tag">Added in this demo</span>`)
 	require.Contains(t, body, "Established after reaction. DEMO-FIXED-MARKER-07</textarea>")
 	require.Contains(t, body, `action="/clients/pool-anna-zonnebloem-patient/allergies"`)
 }
@@ -189,7 +220,7 @@ func TestClient_AnIDThatIsNotAFHIRIDIs404WithoutAskingTheStore(t *testing.T) {
 
 func TestClient_EscapesWhatTheStoreHolds(t *testing.T) {
 	st := annaStore()
-	st.records["pool-anna-zonnebloem-patient"] = record{Allergies: []entry{{Title: "Pinda", Detail: "<script>alert(1)</script>"}}}
+	st.records["pool-anna-zonnebloem-patient"] = record{Allergies: []entry{{Title: "Pinda", Note: "<script>alert(1)</script>"}}}
 
 	_, body := get(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient")
 
@@ -221,8 +252,8 @@ func TestAddAllergy_ConfirmationSaysWhetherPlataanWillHighlightIt(t *testing.T) 
 
 	_, plain := get(t, srv.URL+"/clients/pool-anna-zonnebloem-patient?saved=plain")
 	_, marker := get(t, srv.URL+"/clients/pool-anna-zonnebloem-patient?saved=marker")
-	require.Contains(t, plain, "carries no <code>DEMO-</code> word")
-	require.Contains(t, marker, "retrieve the patient there to see it arrive through the chain")
+	require.Contains(t, plain, "The note has no DEMO- word, so Plataan shows the entry without highlighting it.")
+	require.Contains(t, marker, "retrieve Anna Jansen there to see it arrive through the chain")
 }
 
 func TestAddAllergy_AnInvalidFormRendersAgainWithTheReason(t *testing.T) {
@@ -278,21 +309,21 @@ func TestClients_OnlyListsDemoPool(t *testing.T) {
 	status, body := get(t, serve(t, st).URL+"/")
 
 	require.Equal(t, http.StatusOK, status)
-	require.Contains(t, body, "Jansen, Anna")
-	require.NotContains(t, body, "Jansen, Jan")
+	require.Contains(t, body, "Anna Jansen")
+	require.NotContains(t, body, "Jan Jansen")
 }
 
 func TestClient_OutsideDemoPoolIsUnavailable(t *testing.T) {
 	legacy := clientFrom(sunflower.Patients()[0])
-	for _, method := range []string{http.MethodGet, http.MethodPost} {
-		t.Run(method, func(t *testing.T) {
+	for name, route := range map[string]struct{ method, path string }{
+		"record":         {http.MethodGet, ""},
+		"add allergy":    {http.MethodPost, "/allergies"},
+		"remove allergy": {http.MethodPost, "/allergies/added-1/remove"},
+	} {
+		t.Run(name, func(t *testing.T) {
 			st := annaStore()
 			st.clients = append(st.clients, legacy)
-			target := "/clients/" + legacy.ID
-			if method == http.MethodPost {
-				target += "/allergies"
-			}
-			request := httptest.NewRequest(method, target, strings.NewReader(validPost().Encode()))
+			request := httptest.NewRequest(route.method, "/clients/"+legacy.ID+route.path, strings.NewReader(validPost().Encode()))
 			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			response := httptest.NewRecorder()
 
@@ -300,6 +331,7 @@ func TestClient_OutsideDemoPoolIsUnavailable(t *testing.T) {
 
 			require.Equal(t, http.StatusNotFound, response.Code)
 			require.Empty(t, st.added)
+			require.Empty(t, st.deleted)
 			require.Empty(t, st.asked, "a non-pool client must be rejected before accessing its record")
 		})
 	}
@@ -340,4 +372,161 @@ func TestAddAllergy_ChecksOriginWithoutFetchMetadata(t *testing.T) {
 			}
 		})
 	}
+}
+
+// removableStore is annaStore holding three allergies to remove: one added for
+// Anna in the demo, one of Anna's seeded ones, and one added for Bram.
+func removableStore() *fakeStore {
+	st := annaStore()
+	anna := "Patient/pool-anna-zonnebloem-patient"
+	st.allergies = map[string]fhir.AllergyIntolerance{
+		"added-1":  {Id: to.Ptr("added-1"), Meta: userCreatedMeta(), Patient: fhir.Reference{Reference: to.Ptr(anna)}},
+		"seeded-1": {Id: to.Ptr("seeded-1"), Patient: fhir.Reference{Reference: to.Ptr(anna)}},
+		"bram-1":   {Id: to.Ptr("bram-1"), Meta: userCreatedMeta(), Patient: fhir.Reference{Reference: to.Ptr("Patient/" + bramID)}},
+	}
+	return st
+}
+
+func removeURL(srv *httptest.Server, allergyID string) string {
+	return srv.URL + "/clients/pool-anna-zonnebloem-patient/allergies/" + allergyID + "/remove"
+}
+
+func TestRemoveAllergy_RemovesAnAllergyAddedInTheDemo(t *testing.T) {
+	st := removableStore()
+
+	res := post(t, removeURL(serve(t, st), "added-1"), nil, "same-origin")
+
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/clients/pool-anna-zonnebloem-patient?removed=1", res.Header.Get("Location"))
+	require.Equal(t, []string{"added-1"}, st.deleted)
+}
+
+// Only what the demo added for this client can go. A seeded allergy stays, so the
+// NVI registration for the category keeps pointing at data that exists; one
+// added for Bram cannot be removed through Anna's address; an unknown id is
+// not there to remove. Each is read first, so the refusal is the check's.
+func TestRemoveAllergy_RefusesAnythingButThisClientsDemoAddition(t *testing.T) {
+	for _, id := range []string{"seeded-1", "bram-1", "unknown-1"} {
+		st := removableStore()
+
+		res := post(t, removeURL(serve(t, st), id), nil, "same-origin")
+
+		require.Equalf(t, http.StatusNotFound, res.StatusCode, "allergy %s", id)
+		require.Equalf(t, []string{id}, st.readAllergies, "allergy %s", id)
+		require.Emptyf(t, st.deleted, "allergy %s", id)
+	}
+}
+
+func TestRemoveAllergy_AnIDThatIsNotAFHIRIDIs404WithoutAskingTheStore(t *testing.T) {
+	st := removableStore()
+	srv := serve(t, st)
+
+	for _, id := range []string{"%2e%2e", "a%2Fb", strings.Repeat("a", 65)} {
+		res := post(t, removeURL(srv, id), nil, "same-origin")
+		require.Equalf(t, http.StatusNotFound, res.StatusCode, "id %q", id)
+	}
+
+	require.Len(t, st.asked, 3, "each request reached the handler, which found the client")
+	require.Empty(t, st.readAllergies)
+	require.Empty(t, st.deleted)
+}
+
+func TestRemoveAllergy_RefusesAPostFromAnotherSite(t *testing.T) {
+	st := removableStore()
+
+	res := post(t, removeURL(serve(t, st), "added-1"), nil, "cross-site")
+
+	require.Equal(t, http.StatusForbidden, res.StatusCode)
+	require.Empty(t, st.asked)
+	require.Empty(t, st.deleted)
+}
+
+func TestRemoveAllergy_AFailingStoreIs502(t *testing.T) {
+	t.Run("reading the allergy", func(t *testing.T) {
+		st := removableStore()
+		st.allergyErr = errors.New("read allergy: connection refused")
+
+		res := post(t, removeURL(serve(t, st), "added-1"), nil, "same-origin")
+
+		require.Equal(t, http.StatusBadGateway, res.StatusCode)
+		require.Empty(t, st.deleted)
+	})
+	t.Run("deleting it", func(t *testing.T) {
+		st := removableStore()
+		st.deleteErr = errors.New("delete allergy: FHIR request failed (status=409)")
+
+		res := post(t, removeURL(serve(t, st), "added-1"), nil, "same-origin")
+
+		require.Equal(t, http.StatusBadGateway, res.StatusCode)
+		require.Empty(t, res.Header.Get("Location"))
+	})
+}
+
+func TestClient_OffersRemovalOnlyForWhatTheDemoAdded(t *testing.T) {
+	st := annaStore()
+	st.records["pool-anna-zonnebloem-patient"] = record{Allergies: []entry{
+		{ID: "added-1", Title: "Pinda", Status: "confirmed", StatusLabel: "Confirmed", AddedInDemo: true},
+		{ID: "seeded-1", Title: "Penicilline", Status: "unconfirmed", StatusLabel: "Suspected"},
+	}}
+
+	_, body := get(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient")
+
+	require.Contains(t, body, `action="/clients/pool-anna-zonnebloem-patient/allergies/added-1/remove"`)
+	require.NotContains(t, body, "/allergies/seeded-1/remove")
+}
+
+func TestClient_ConfirmsARemoval(t *testing.T) {
+	srv := serve(t, annaStore())
+
+	_, removed := get(t, srv.URL+"/clients/pool-anna-zonnebloem-patient?removed=1")
+	_, plain := get(t, srv.URL+"/clients/pool-anna-zonnebloem-patient")
+
+	require.Contains(t, removed, "Removed from Anna Jansen's record.")
+	require.NotContains(t, plain, "Removed from")
+}
+
+// serve's clock stands on 28 September 2026, when Anna Jansen is 82.
+func TestClients_ShowsEachClientsAgeAndBirthDate(t *testing.T) {
+	_, body := get(t, serve(t, annaStore()).URL+"/")
+
+	require.Contains(t, body, "82 years, born 12 March 1944")
+}
+
+func TestClient_TheBannerShowsAgeBirthDateAndAllergies(t *testing.T) {
+	st := annaStore()
+	st.records["pool-anna-zonnebloem-patient"] = record{Allergies: []entry{
+		{ID: "added-1", Title: "Pinda", Status: "confirmed", StatusLabel: "Confirmed", AddedInDemo: true},
+		{ID: "seeded-1", Title: "Penicilline", Status: "unconfirmed", StatusLabel: "Suspected"},
+	}}
+
+	_, body := get(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient")
+
+	require.Contains(t, body, "82 years")
+	require.Contains(t, body, "born 12 March 1944")
+	require.Contains(t, body, "Pinda, Penicilline (suspected)")
+}
+
+// Next to the record, the client list offers the other demo clients and marks
+// the one open; a client outside the pool is not in it here either.
+func TestClient_ListsTheDemoClientsAndMarksThisOne(t *testing.T) {
+	st := annaStore()
+	st.clients = append(st.clients,
+		client{ID: bramID, Name: "Bram de Vries", Initials: "BD"},
+		clientFrom(sunflower.Patients()[0]))
+
+	_, body := get(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient")
+
+	require.Contains(t, body, `href="/clients/`+bramID+`"`)
+	require.Contains(t, body, `href="/clients/pool-anna-zonnebloem-patient" aria-current="page"`)
+	require.NotContains(t, body, `href="/clients/`+bramID+`" aria-current`)
+	require.NotContains(t, body, "Jan Jansen")
+}
+
+func TestClient_AFailingClientListIs502(t *testing.T) {
+	st := annaStore()
+	st.clientsErr = errors.New("search Patient: connection refused")
+
+	status, _ := get(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient")
+
+	require.Equal(t, http.StatusBadGateway, status)
 }

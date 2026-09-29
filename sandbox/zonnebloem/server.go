@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -15,9 +16,10 @@ import (
 // An id is checked against it before it becomes part of a store URL.
 var fhirID = regexp.MustCompile(`^[A-Za-z0-9\-.]{1,64}$`)
 
-// validClientID also refuses "." and "..", which the id pattern allows and a URL
-// path would resolve.
-func validClientID(id string) bool {
+// validID reports whether an id from the path may become part of a store URL:
+// a FHIR id, and not "." or "..", which the id pattern allows and a URL path
+// would resolve.
+func validID(id string) bool {
 	return fhirID.MatchString(id) && id != "." && id != ".."
 }
 
@@ -39,24 +41,37 @@ func newMux(st store, now func() time.Time, marker func() string) *http.ServeMux
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
 	mux.HandleFunc("GET /{$}", s.handleClients)
 	mux.HandleFunc("GET /clients/{id}", s.handleClient)
-	mux.Handle("POST /clients/{id}/allergies",
-		http.NewCrossOriginProtection().Handler(http.HandlerFunc(s.handleAddAllergy)))
+	crossOrigin := http.NewCrossOriginProtection()
+	mux.Handle("POST /clients/{id}/allergies", crossOrigin.Handler(http.HandlerFunc(s.handleAddAllergy)))
+	mux.Handle("POST /clients/{id}/allergies/{allergyID}/remove", crossOrigin.Handler(http.HandlerFunc(s.handleRemoveAllergy)))
 	return mux
 }
 
 func (s server) handleClients(w http.ResponseWriter, r *http.Request) {
-	clients, err := s.store.Clients(r.Context())
+	clients, err := s.demoClients(r.Context(), "")
 	if err != nil {
 		storeFailure(w, err)
 		return
 	}
-	var demoClients []client
+	render(w, http.StatusOK, "clients.html", page{Title: "Clients", Clients: clients})
+}
+
+// demoClients lists the demo-pool clients as the screens show them today,
+// marking the one whose record is open.
+func (s server) demoClients(ctx context.Context, currentID string) ([]clientView, error) {
+	clients, err := s.store.Clients(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var views []clientView
 	for _, c := range clients {
 		if isPoolClientID(c.ID) {
-			demoClients = append(demoClients, c)
+			view := viewOf(c, s.now())
+			view.Current = c.ID == currentID
+			views = append(views, view)
 		}
 	}
-	render(w, http.StatusOK, "clients.html", page{Title: "Clients", Clients: demoClients})
+	return views, nil
 }
 
 func (s server) handleClient(w http.ResponseWriter, r *http.Request) {
@@ -97,11 +112,44 @@ func (s server) handleAddAllergy(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/clients/"+url.PathEscape(c.ID)+"?saved="+saved, http.StatusSeeOther)
 }
 
+// handleRemoveAllergy removes an allergy added in the demo. Anything else, a
+// seeded allergy or another client's, is not there to remove: seeded data stays
+// so the NVI registration for its category keeps pointing at data that exists.
+func (s server) handleRemoveAllergy(w http.ResponseWriter, r *http.Request) {
+	c, ok := s.client(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("allergyID")
+	if !validID(id) {
+		http.NotFound(w, r)
+		return
+	}
+	allergy, err := s.store.Allergy(r.Context(), id)
+	if errors.Is(err, errNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		storeFailure(w, err)
+		return
+	}
+	if stringOr(allergy.Patient.Reference) != "Patient/"+c.ID || !userCreated(allergy.Meta) {
+		http.NotFound(w, r)
+		return
+	}
+	if err := s.store.DeleteAllergy(r.Context(), id); err != nil {
+		storeFailure(w, err)
+		return
+	}
+	http.Redirect(w, r, "/clients/"+url.PathEscape(c.ID)+"?removed=1", http.StatusSeeOther)
+}
+
 // client resolves a demo-pool client: 404 outside the pool or when the store
 // does not hold it, 502 when the store fails.
 func (s server) client(w http.ResponseWriter, r *http.Request) (client, bool) {
 	id := r.PathValue("id")
-	if !validClientID(id) || !isPoolClientID(id) {
+	if !validID(id) || !isPoolClientID(id) {
 		http.NotFound(w, r)
 		return client{}, false
 	}
@@ -123,9 +171,16 @@ func (s server) renderClient(w http.ResponseWriter, r *http.Request, status int,
 		storeFailure(w, err)
 		return
 	}
+	clients, err := s.demoClients(r.Context(), c.ID)
+	if err != nil {
+		storeFailure(w, err)
+		return
+	}
+	view := viewOf(c, s.now())
 	render(w, status, "client.html", page{
-		Title: c.Name, Client: &c, Record: &rec, Form: form, FormError: formError,
-		Substances: substances, Statuses: statuses, Saved: r.URL.Query().Get("saved"),
+		Title: c.Name, Clients: clients, Client: &view, Record: &rec, Form: form, FormError: formError,
+		Substances: substances, Statuses: statuses,
+		Saved: r.URL.Query().Get("saved"), Removed: r.URL.Query().Get("removed") != "",
 	})
 }
 

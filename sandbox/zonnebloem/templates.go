@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 //go:embed templates
@@ -17,14 +18,27 @@ var staticFS embed.FS
 // page is everything a template may read.
 type page struct {
 	Title      string
-	Clients    []client
-	Client     *client
+	Clients    []clientView
+	Client     *clientView
 	Record     *record
 	Form       allergyForm
 	Substances []substance
 	Statuses   []status
 	FormError  string
 	Saved      string // "marker" | "plain" | ""
+	Removed    bool
+}
+
+// clientView is a client as the screens show them on a given day.
+type clientView struct {
+	client
+	Age     string // "82 years", or "" without a full birth date
+	Born    string // "12 March 1944"
+	Current bool   // the client whose record is open
+}
+
+func viewOf(c client, now time.Time) clientView {
+	return clientView{client: c, Age: ageOn(c.BirthDate, now), Born: longDate(c.BirthDate)}
 }
 
 // render executes a page into a buffer first, so a template error answers 500

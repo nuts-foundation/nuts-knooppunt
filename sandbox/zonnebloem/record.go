@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -11,8 +13,10 @@ const bsnSystem = "http://fhir.nl/fhir/NamingSystem/bsn"
 
 // client is one resident as the screens show them.
 type client struct {
-	ID        string
-	Name      string
+	ID   string
+	Name string // given names first: "Anna Jansen"
+	// sortKey orders the client list by family name, as a care home's list is.
+	sortKey   string
 	Initials  string
 	BirthDate string
 	BSN       string
@@ -20,8 +24,16 @@ type client struct {
 
 // entry is one line of a client's record.
 type entry struct {
-	Title       string
-	Detail      string
+	ID    string
+	Title string
+	// Meta is the line under the title: when an allergy was recorded, a dosage,
+	// since when a condition applies.
+	Meta string
+	Note string
+	// Status is an allergy's verification code; StatusLabel is what the screen
+	// calls it.
+	Status      string
+	StatusLabel string
 	AddedInDemo bool
 }
 
@@ -30,6 +42,22 @@ type record struct {
 	Allergies  []entry
 	Medication []entry
 	Conditions []entry
+}
+
+// AllergyAlert names the allergies that may still apply, for the banner. A
+// refuted allergy and one entered in error do not; one without a status might.
+func (r record) AllergyAlert() string {
+	var names []string
+	for _, a := range r.Allergies {
+		switch a.Status {
+		case "refuted", "entered-in-error":
+		case "unconfirmed":
+			names = append(names, a.Title+" (suspected)")
+		default:
+			names = append(names, a.Title)
+		}
+	}
+	return strings.Join(names, ", ")
 }
 
 func clientFrom(p fhir.Patient) client {
@@ -42,40 +70,95 @@ func clientFrom(p fhir.Patient) client {
 	if len(p.Name) > 0 {
 		given := strings.Join(p.Name[0].Given, " ")
 		family := stringOr(p.Name[0].Family)
-		switch {
-		case family != "" && given != "":
-			c.Name = family + ", " + given
-		case family != "":
-			c.Name = family
-		default:
-			c.Name = given
-		}
+		c.Name = joinNonEmpty(" ", given, family)
+		c.sortKey = strings.ToLower(joinNonEmpty(", ", family, given))
 		c.Initials = firstLetter(given) + firstLetter(family)
 	}
 	if c.Name == "" {
 		c.Name = c.ID
+		c.sortKey = strings.ToLower(c.ID)
 	}
 	return c
 }
 
 func allergyEntry(a fhir.AllergyIntolerance) entry {
-	return entry{
+	e := entry{
+		ID:          stringOr(a.Id),
 		Title:       titleOf(a.Code),
-		Detail:      joinNonEmpty(" · ", codeableText(a.VerificationStatus), stringOr(a.RecordedDate), noteText(a.Note)),
+		Note:        noteText(a.Note),
 		AddedInDemo: userCreated(a.Meta),
 	}
+	if recorded := stringOr(a.RecordedDate); recorded != "" {
+		e.Meta = "Recorded " + longDate(recorded)
+	}
+	e.Status, e.StatusLabel = verificationOf(a.VerificationStatus)
+	return e
+}
+
+// verificationOf returns an allergy's verification code and what to call it:
+// the form's own word for a status it offers, so the record and the form agree,
+// and the store's display for any other.
+func verificationOf(concept *fhir.CodeableConcept) (string, string) {
+	if concept == nil {
+		return "", ""
+	}
+	var code string
+	for _, coding := range concept.Coding {
+		if code = stringOr(coding.Code); code != "" {
+			break
+		}
+	}
+	if st, ok := statusByCode(code); ok {
+		return code, st.Label
+	}
+	return code, codeableText(concept)
 }
 
 func medicationEntry(m fhir.MedicationRequest) entry {
 	e := entry{Title: titleOf(m.MedicationCodeableConcept), AddedInDemo: userCreated(m.Meta)}
 	if len(m.DosageInstruction) > 0 {
-		e.Detail = stringOr(m.DosageInstruction[0].Text)
+		e.Meta = stringOr(m.DosageInstruction[0].Text)
 	}
 	return e
 }
 
 func conditionEntry(c fhir.Condition) entry {
-	return entry{Title: titleOf(c.Code), Detail: stringOr(c.OnsetDateTime), AddedInDemo: userCreated(c.Meta)}
+	e := entry{Title: titleOf(c.Code), AddedInDemo: userCreated(c.Meta)}
+	if onset := stringOr(c.OnsetDateTime); onset != "" {
+		e.Meta = "Since " + longDate(onset)
+	}
+	return e
+}
+
+// longDate writes a FHIR date or dateTime out in full, "12 March 1944", at the
+// precision the store recorded. A value it cannot read is shown as it is.
+func longDate(value string) string {
+	if len(value) >= len(time.DateOnly) {
+		if day, err := time.Parse(time.DateOnly, value[:len(time.DateOnly)]); err == nil {
+			return day.Format("2 January 2006")
+		}
+	}
+	if month, err := time.Parse("2006-01", value); err == nil {
+		return month.Format("January 2006")
+	}
+	return value
+}
+
+// ageOn gives a client's age on a day, "82 years", or "" when the store holds no
+// full birth date to count from.
+func ageOn(birthDate string, now time.Time) string {
+	born, err := time.Parse(time.DateOnly, birthDate)
+	if err != nil {
+		return ""
+	}
+	years := now.Year() - born.Year()
+	if now.Month() < born.Month() || now.Month() == born.Month() && now.Day() < born.Day() {
+		years--
+	}
+	if years == 1 {
+		return "1 year"
+	}
+	return fmt.Sprintf("%d years", years)
 }
 
 // titleOf names an entry. A record without any code still gets a line, so

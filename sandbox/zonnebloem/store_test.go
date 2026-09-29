@@ -47,13 +47,15 @@ func notFound() map[string]any {
 	}}
 }
 
-func TestFHIRStore_ClientsSortsByNameAndSkipsAnOperationOutcome(t *testing.T) {
+// The screens show given names first, but the list goes by family name, as a
+// care home's does: Dirk Bakker comes before Anna Visser.
+func TestFHIRStore_ClientsSortsByFamilyNameAndSkipsAnOperationOutcome(t *testing.T) {
 	st := storeAgainst(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/Patient/_search", r.URL.Path)
 		writeFHIR(t, w, http.StatusOK, searchSet(
-			fhir.Patient{Id: to.Ptr("p2"), Name: []fhir.HumanName{{Given: []string{"Dirk"}, Family: to.Ptr("Visser")}}},
+			fhir.Patient{Id: to.Ptr("p2"), Name: []fhir.HumanName{{Given: []string{"Anna"}, Family: to.Ptr("Visser")}}},
 			map[string]any{"resourceType": "OperationOutcome", "id": "warning"},
-			fhir.Patient{Id: to.Ptr("p1"), Name: []fhir.HumanName{{Given: []string{"Cornelia"}, Family: to.Ptr("Bakker")}}},
+			fhir.Patient{Id: to.Ptr("p1"), Name: []fhir.HumanName{{Given: []string{"Dirk"}, Family: to.Ptr("Bakker")}}},
 		))
 	})
 
@@ -61,8 +63,8 @@ func TestFHIRStore_ClientsSortsByNameAndSkipsAnOperationOutcome(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, clients, 2, "the OperationOutcome is not a client")
-	require.Equal(t, "Bakker, Cornelia", clients[0].Name)
-	require.Equal(t, "Visser, Dirk", clients[1].Name)
+	require.Equal(t, "Dirk Bakker", clients[0].Name)
+	require.Equal(t, "Anna Visser", clients[1].Name)
 }
 
 func TestFHIRStore_ClientReportsAnUnknownClientAsNotFound(t *testing.T) {
@@ -172,4 +174,67 @@ func TestFHIRStore_AddAllergyReportsARejection(t *testing.T) {
 	})
 
 	require.Error(t, st.AddAllergy(t.Context(), fhir.AllergyIntolerance{}))
+}
+
+func TestFHIRStore_AllergyReadsOneByID(t *testing.T) {
+	st := storeAgainst(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "/AllergyIntolerance/a1", r.URL.Path)
+		writeFHIR(t, w, http.StatusOK, fhir.AllergyIntolerance{
+			Id: to.Ptr("a1"), Meta: userCreatedMeta(), Patient: fhir.Reference{Reference: to.Ptr("Patient/p1")},
+		})
+	})
+
+	allergy, err := st.Allergy(t.Context(), "a1")
+
+	require.NoError(t, err)
+	require.Equal(t, "Patient/p1", stringOr(allergy.Patient.Reference))
+	require.True(t, userCreated(allergy.Meta))
+}
+
+// HAPI answers 404 for an allergy it never held and 410 for one already removed:
+// a second removal of the same allergy finds nothing, not a failing store.
+func TestFHIRStore_AllergyReportsAnUnknownOrRemovedAllergyAsNotFound(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusGone} {
+		st := storeAgainst(t, func(w http.ResponseWriter, r *http.Request) {
+			writeFHIR(t, w, status, notFound())
+		})
+
+		_, err := st.Allergy(t.Context(), "a1")
+
+		require.ErrorIsf(t, err, errNotFound, "status %d", status)
+	}
+}
+
+func TestFHIRStore_AllergyReportsAFailingStoreAsAnError(t *testing.T) {
+	st := storeAgainst(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	_, err := st.Allergy(t.Context(), "a1")
+
+	require.Error(t, err)
+	require.NotErrorIs(t, err, errNotFound)
+}
+
+func TestFHIRStore_DeleteAllergyDeletesThatAllergy(t *testing.T) {
+	var method, path string
+	st := storeAgainst(t, func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		writeFHIR(t, w, http.StatusOK, map[string]any{"resourceType": "OperationOutcome", "issue": []any{
+			map[string]any{"severity": "information", "code": "informational", "diagnostics": "Successfully deleted 1 resource(s)."},
+		}})
+	})
+
+	require.NoError(t, st.DeleteAllergy(t.Context(), "a1"))
+	require.Equal(t, http.MethodDelete, method)
+	require.Equal(t, "/AllergyIntolerance/a1", path)
+}
+
+func TestFHIRStore_DeleteAllergyReportsARejection(t *testing.T) {
+	st := storeAgainst(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+	})
+
+	require.Error(t, st.DeleteAllergy(t.Context(), "a1"))
 }

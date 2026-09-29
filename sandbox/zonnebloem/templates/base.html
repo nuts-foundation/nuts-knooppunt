@@ -4,18 +4,30 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · Zorgcentrum De Zonnebloem</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-16 -16 32 32'%3E%3Ccircle r='15' fill='%23f4b63f'/%3E%3Ccircle r='6.5' fill='%235a3a1c'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="/static/css/fonts.css">
 <link rel="stylesheet" href="/static/css/zonnebloem.css">
 </head>
-<body class="zd">
-<header class="header"><div class="header-content">
-  <a class="brandz" href="/"><span class="logo" aria-hidden="true">Z</span><div><h1>Zorgcentrum De Zonnebloem</h1><div class="bsub">Client records</div></div></a>
-  <div class="userz"><span class="av" aria-hidden="true">BW</span>B. Willems · verpleegkundig specialist</div>
-</div></header>
-<nav class="navz" aria-label="Main"><div class="navz-inner"><a class="active" href="/">Clients</a></div></nav>
-<main class="mainz">
-  <span class="test-chip2">● Test environment · synthetic data</span>
-  {{template "content" .}}
-</main>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">
+    <svg class="brand-mark" width="30" height="30" viewBox="-16 -16 32 32" aria-hidden="true">
+      <g fill="#f4b63f">
+        <ellipse rx="3" ry="6.4" transform="rotate(0) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(30) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(60) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(90) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(120) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(150) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(180) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(210) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(240) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(270) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(300) translate(0 -8.6)"/><ellipse rx="3" ry="6.4" transform="rotate(330) translate(0 -8.6)"/>
+      </g>
+      <circle r="5.8" fill="#5a3a1c"/>
+    </svg>
+    <span class="brand-name">Zorgcentrum De Zonnebloem</span>
+    <span class="brand-module">Client records</span>
+  </a>
+  <div class="top-right">
+    <span class="env">Test environment with synthetic data</span>
+    <div class="me">
+      <span class="me-av" aria-hidden="true">BW</span>
+      <div class="me-text"><div class="me-name">B. Willems</div><div class="me-role">Verpleegkundig specialist</div></div>
+    </div>
+  </div>
+</header>
+{{template "content" .}}
 </body>
 </html>{{end}}

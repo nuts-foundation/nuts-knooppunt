@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
-	"strings"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -24,6 +23,8 @@ type store interface {
 	Client(ctx context.Context, id string) (client, error)
 	Record(ctx context.Context, clientID string) (record, error)
 	AddAllergy(ctx context.Context, allergy fhir.AllergyIntolerance) error
+	Allergy(ctx context.Context, id string) (fhir.AllergyIntolerance, error)
+	DeleteAllergy(ctx context.Context, id string) error
 }
 
 // searchCount bounds every search to one page. A care home's client list and one
@@ -53,7 +54,7 @@ func (s *fhirStore) Clients(ctx context.Context) ([]client, error) {
 		clients = append(clients, clientFrom(p))
 	}
 	sort.SliceStable(clients, func(i, j int) bool {
-		return strings.ToLower(clients[i].Name) < strings.ToLower(clients[j].Name)
+		return clients[i].sortKey < clients[j].sortKey
 	})
 	return clients, nil
 }
@@ -108,6 +109,28 @@ func (s *fhirStore) AddAllergy(ctx context.Context, allergy fhir.AllergyIntolera
 	var created fhir.AllergyIntolerance
 	if err := s.fhir.CreateWithContext(ctx, allergy, &created); err != nil {
 		return fmt.Errorf("create allergy: %w", err)
+	}
+	return nil
+}
+
+// Allergy reads one allergy. errNotFound covers both one the store never held
+// and one deleted since, which HAPI answers with 410.
+func (s *fhirStore) Allergy(ctx context.Context, id string) (fhir.AllergyIntolerance, error) {
+	var allergy fhir.AllergyIntolerance
+	var status int
+	err := s.fhir.ReadWithContext(ctx, "AllergyIntolerance/"+id, &allergy, fhirclient.ResponseStatusCode(&status))
+	if status == http.StatusNotFound || status == http.StatusGone {
+		return fhir.AllergyIntolerance{}, errNotFound
+	}
+	if err != nil {
+		return fhir.AllergyIntolerance{}, fmt.Errorf("read allergy %s: %w", id, err)
+	}
+	return allergy, nil
+}
+
+func (s *fhirStore) DeleteAllergy(ctx context.Context, id string) error {
+	if err := s.fhir.DeleteWithContext(ctx, "AllergyIntolerance/"+id); err != nil {
+		return fmt.Errorf("delete allergy %s: %w", id, err)
 	}
 	return nil
 }

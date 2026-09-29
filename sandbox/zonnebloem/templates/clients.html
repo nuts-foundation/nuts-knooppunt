@@ -1,19 +1,27 @@
 {{define "content"}}
-<section class="cardz">
-  <h2>Clients</h2>
-  <div class="h-subz">Demo clients at Zorgcentrum De Zonnebloem, read from this organization's own record store.</div>
+<main class="page">
+  <h1 class="page-title">Clients</h1>
+  <p class="lede">The demo's clients, read from De Zonnebloem's own record store.</p>
   {{if .Clients}}
-  <ul class="client-list">
-    {{range .Clients}}
-    <li><a class="client-row" href="/clients/{{.ID}}">
-      <span class="pavz small" aria-hidden="true">{{.Initials}}</span>
-      <span class="client-name">{{.Name}}</span>
-      <span class="client-meta">{{with .BirthDate}}{{.}}{{end}}{{if and .BirthDate .BSN}} · {{end}}{{with .BSN}}BSN <span class="bsn-b">{{.}}</span>{{end}}</span>
-    </a></li>
-    {{end}}
-  </ul>
+  <nav class="sheet client-list" aria-label="Clients">
+    <ul>
+      {{range .Clients}}
+      <li><a href="/clients/{{.ID}}">
+        <span class="av" aria-hidden="true">{{.Initials}}</span>
+        <span class="who">
+          <span class="name">{{.Name}}</span>
+          {{template "born" .}}
+        </span>
+        {{with .BSN}}<span class="bsn">BSN <b>{{.}}</b></span>{{end}}
+        <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+      </a></li>
+      {{end}}
+    </ul>
+  </nav>
   {{else}}
-  <p class="empty">No demo clients found in the record store.</p>
+  <p class="empty">The record store holds no demo clients yet. A reset in Plataan loads them.</p>
   {{end}}
-</section>
+</main>
 {{end}}
+
+{{define "born"}}{{if .Age}}<span class="facts">{{.Age}}, born {{.Born}}</span>{{else if .Born}}<span class="facts">Born {{.Born}}</span>{{end}}{{end}}
