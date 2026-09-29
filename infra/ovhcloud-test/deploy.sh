@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploys the sandbox environment to the OVHcloud MKS cluster (infra/cluster).
+# Deploys the test environment to the OVHcloud MKS cluster (infra/cluster).
 #
 # discovery/*.json and policy/*.json are loaded as --set-file values rather
 # than inlined into values.yaml - the chart supports any number of discovery
@@ -7,7 +7,7 @@
 # be named in a fixed set of flags. Add or remove a file here and it's
 # picked up automatically, no script or values.yaml change needed.
 #
-# Usage: infra/ovhcloud-sandbox/deploy.sh [extra helm upgrade args...]
+# Usage: infra/ovhcloud-test/deploy.sh [extra helm upgrade args...]
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"

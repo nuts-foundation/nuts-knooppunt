@@ -1,9 +1,9 @@
 ---
-name: 'Build and deploy sandbox'
+name: 'Build and deploy test'
 
-# Orchestrates the sandbox's build-then-deploy pipeline on every push to
-# main: build every image the sandbox stack uses, then deploy only once all
-# of them have finished and published successfully. The individual
+# Orchestrates the test environment's build-then-deploy pipeline on every
+# push to main: build every image the test stack uses, then deploy only
+# once all of them have finished and published successfully. The individual
 # build-*-image.yaml workflows still trigger themselves independently for
 # pull_request (their own path filters keep PR checks scoped and fast) and
 # for version tags (unrelated to this pipeline) - only their push-to-main
@@ -32,7 +32,7 @@ on:
         type: string
 
 concurrency:
-  group: sandbox-ci
+  group: test-ci
   cancel-in-progress: false
 
 jobs:
@@ -90,7 +90,7 @@ jobs:
     # only a genuine build failure (push) blocks it.
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-latest
-    environment: ovhcloud-sandbox
+    environment: ovhcloud-test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -108,7 +108,7 @@ jobs:
       - name: Configure kubeconfig
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.OVHCLOUD_SANDBOX_KUBECONFIG }}" | base64 -d > ~/.kube/config
+          echo "${{ secrets.OVHCLOUD_TEST_KUBECONFIG }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
 
       - name: Deploy
@@ -116,7 +116,7 @@ jobs:
           # Matches the docker/metadata-action `type=sha,format=short` tag
           # rule every build-*-image.yaml above now publishes.
           tag="sha-$(echo "${{ github.event.inputs.commit || github.sha }}" | cut -c1-7)"
-          infra/ovhcloud-sandbox/deploy.sh --timeout 10m \
+          infra/ovhcloud-test/deploy.sh --timeout 10m \
             --set "image.tag=$tag" \
             --set "pep-zonnebloem.image.tag=$tag" \
             --set "pep-plataan.image.tag=$tag" \

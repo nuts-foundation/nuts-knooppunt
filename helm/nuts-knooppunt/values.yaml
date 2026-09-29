@@ -174,7 +174,7 @@ persistence:
 # reference this chart's templates:
 # - fhir: `fhir.postgres.enabled: false` (do not let the subchart provision
 #   its own server) plus `fhir.extraEnv` pointing HAPI at the `fhir` database,
-#   see infra/ovhcloud-sandbox/values.yaml
+#   see infra/ovhcloud-test/values.yaml
 database:
   enabled: false
   instances: 1
@@ -298,7 +298,7 @@ nutsConfig:
 # objects. Environment- and use-case-specific: there can be any number of
 # them (including zero), so an environment supplies these via
 # `--set-file discoveryDefinitions.<id>=path/to/<id>.json` for each file it
-# has, rather than inlining them here. See infra/ovhcloud-sandbox/deploy.sh.
+# has, rather than inlining them here. See infra/ovhcloud-test/deploy.sh.
 discoveryDefinitions: {}
 
 # Access policy documents for nutsConfig.policy.directory above, keyed by
@@ -433,7 +433,7 @@ mock-mitz:
 # localhost, meant to be overridden once a real public ingress hostname
 # exists) already matches what we'd otherwise restate here - nothing to
 # override at the umbrella level. The actual environment values file
-# overrides it directly (see infra/ovhcloud-sandbox/values.yaml).
+# overrides it directly (see infra/ovhcloud-test/values.yaml).
 mock-dezi:
   enabled: false
   fullnameOverride: mock-dezi
