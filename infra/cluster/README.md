@@ -13,9 +13,9 @@ node pool backing the GF test environment. See
   (autoscaling off). Accepted tradeoff: upgrades may cause brief downtime
   since a drain can leave everything on one node.
 
-The sandbox stack itself (Helm charts, environment values) lives in
-`helm/` and `infra/ovhcloud-sandbox`, deployed today via
-`infra/ovhcloud-sandbox/deploy.sh`, run by hand.
+The test stack itself (Helm charts, environment values) lives in
+`helm/` and `infra/ovhcloud-test`, deployed via `ci.yaml` on every push
+to `main` (see "CI deploy" below).
 
 ## Setup
 
@@ -75,8 +75,8 @@ it has a credential - to activate it:
    above), scoped as narrowly as the OVH Control Panel allows. Don't
    reuse a personal kubeconfig - if it's ever rotated or revoked, CI
    deploys silently start failing.
-2. Base64-encode it and add it as `OVHCLOUD_SANDBOX_KUBECONFIG` in this
-   repo's `ovhcloud-sandbox` GitHub Environment (Settings → Environments
+2. Base64-encode it and add it as `OVHCLOUD_TEST_KUBECONFIG` in this
+   repo's `ovhcloud-test` GitHub Environment (Settings → Environments
    → New environment, then add the secret there, not as a repo-wide
    secret - scopes it to only this workflow).
 
@@ -84,7 +84,7 @@ This credential is cluster-admin-equivalent (see above) - treat adding it
 with the same care as the Terraform state bucket access.
 
 `ci.yaml` can also be run manually (Actions tab → "Build and deploy
-sandbox" → Run workflow) with a `commit` input, to redeploy a commit
+test" → Run workflow) with a `commit` input, to redeploy a commit
 that was already built and pushed to main - for rollback, or retrying a
 deploy without rebuilding. It only works for a commit that already has
 `sha-<short-sha>` images published; it doesn't build arbitrary commits

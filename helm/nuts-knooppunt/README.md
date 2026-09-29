@@ -95,7 +95,7 @@ a ready-made `uri`. The embedded nuts-node is pointed at the `nuts` database
 automatically (`NUTS_STORAGE_SQL_CONNECTION`). Pair it with
 `persistence.enabled: true` for the nuts-node's crypto keys, which live on the
 filesystem. HAPI is wired by the environment's values (see
-`infra/ovhcloud-sandbox/values.yaml`): `fhir.postgres.enabled: false` plus
+`infra/ovhcloud-test/values.yaml`): `fhir.postgres.enabled: false` plus
 `fhir.extraEnv` pointing at the `fhir` database.
 
 ### Database Connection Configuration
