@@ -23,7 +23,7 @@ const mitzCallTimeout = 10 * time.Second
 // register.
 func mitzSubscribeFunc(knooppuntInternalURL *url.URL, providerURA, providerType string) func(context.Context, string) error {
 	endpoint := knooppuntInternalURL.JoinPath("mitz", "Subscription").String()
-	client := &http.Client{Timeout: mitzCallTimeout}
+	client := &http.Client{Transport: newCaptureTransport("consent", nil), Timeout: mitzCallTimeout}
 
 	return func(ctx context.Context, bsn string) error {
 		criteria := fmt.Sprintf("Consent?_query=otv&patientid=%s&providerid=%s&providertype=%s",
@@ -70,7 +70,7 @@ func mitzSubscribedFunc(mitzMockBaseURL *url.URL, providerURA string) func(conte
 		return nil
 	}
 	endpoint := mitzMockBaseURL.JoinPath("abonnementen", "fhir", "Subscription")
-	client := &http.Client{Timeout: mitzCallTimeout}
+	client := &http.Client{Transport: newCaptureTransport("consent", nil), Timeout: mitzCallTimeout}
 
 	return func(ctx context.Context, bsn string) (bool, error) {
 		query := *endpoint
