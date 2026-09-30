@@ -3,8 +3,6 @@ name: 'Build mock-mitz Docker image'
 
 on:
   push:
-    branches:
-      - main
     tags:
       - 'v*'
   pull_request:
@@ -12,11 +10,16 @@ on:
       - main
     paths:
       - mock-components/mitz/**
+      - go.mod
+      - go.sum
+      - test/testdata/go.mod
+      - test/testdata/go.sum
       - .github/workflows/build-mock-mitz-image.yaml
+  workflow_call:
 
 # cancel build action if superseded by new commit on same branch
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: build-mock-mitz-image-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -53,6 +56,7 @@ jobs:
         with:
           images: ghcr.io/nuts-foundation/mock-mitz
           tags: |
+            type=sha,format=short,enable={{is_default_branch}}
             type=ref,event=branch,enable={{is_default_branch}},prefix=
             type=semver,pattern={{version}}
           flavor: |
@@ -80,5 +84,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
-          cache-from: type=gha,scope=${{ github.workflow }}
-          cache-to: type=gha,mode=max,scope=${{ github.workflow }},ignore-error=true
+          cache-from: type=gha,scope=build-mock-mitz-image
+          cache-to: type=gha,mode=max,scope=build-mock-mitz-image,ignore-error=true
