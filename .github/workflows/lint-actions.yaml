@@ -27,9 +27,16 @@ jobs:
 
       - name: Run actionlint
         run: |
-          # actionlint doesn't know the concurrency.queue key yet - it's a
-          # genuine, documented GitHub Actions feature (ci.yaml uses
+          # -shellcheck=: this check exists to catch broken reusable-workflow
+          # calls (bad inputs, typo'd uses: paths) and similar workflow-level
+          # mistakes, not to enforce shellcheck cleanliness across the whole
+          # repo. Without this, actionlint lints every run: script in every
+          # workflow file (not just the ones this PR touches), so a
+          # pre-existing shellcheck nit anywhere blocks unrelated PRs.
+          #
+          # -ignore: actionlint doesn't know the concurrency.queue key yet -
+          # it's a genuine, documented GitHub Actions feature (ci.yaml uses
           # queue: max), just not yet supported by actionlint's schema:
-          # https://github.com/rhysd/actionlint/issues/657. Drop this
-          # -ignore once that ships in a release.
-          ./actionlint -color -ignore 'unexpected key "queue"'
+          # https://github.com/rhysd/actionlint/issues/657. Drop this once
+          # that ships in a release.
+          ./actionlint -color -shellcheck= -ignore 'unexpected key "queue"'
