@@ -195,7 +195,7 @@ mock-dezi:
             pathType: ImplementationSpecific
   env:
     # Must match gf-sandbox's public callback below.
-    deziAllowedRedirectUris: "http://gf-sandbox.test.gf.nuts.nl/demo/auth/callback"
+    deziAllowedRedirectUris: "http://sandbox.test.gf.nuts.nl/demo/auth/callback"
 
 gf-sandbox:
   enabled: true
@@ -203,13 +203,14 @@ gf-sandbox:
     enabled: true
     className: nginx
     hosts:
-      - host: gf-sandbox.test.gf.nuts.nl
+      # Not gf-sandbox.test.gf.nuts.nl - the domain already has "gf" in it.
+      - host: sandbox.test.gf.nuts.nl
         paths:
           - path: /
             pathType: ImplementationSpecific
   env:
     deziPublicAuthorizeUrl: "http://mock-dezi.test.gf.nuts.nl/authorize"
-    sandboxPublicUrl: "http://gf-sandbox.test.gf.nuts.nl"
+    sandboxPublicUrl: "http://sandbox.test.gf.nuts.nl"
 
 seed:
   enabled: true
