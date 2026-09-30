@@ -1,0 +1,169 @@
+---
+name: 'Build and deploy test'
+
+# Orchestrates the test environment's build-then-deploy pipeline on every
+# push to main: build every image the test stack uses, then deploy only
+# once all of them have finished and published successfully. The individual
+# build-*-image.yaml workflows still trigger themselves independently for
+# pull_request (their own path filters keep PR checks scoped and fast) and
+# for version tags (unrelated to this pipeline) - only their push-to-main
+# trigger moved here, since that's the one the deploy job below needs to
+# wait on. See nuts-knooppunt#603's follow-up discussion for why a plain
+# `push: main` trigger on the deploy alone wasn't enough: it raced the image
+# builds (deploy could finish in under a minute, image builds take longer),
+# and even a wait wouldn't guarantee every component came from the *same*
+# commit - hence pinning every component below to this run's exact commit
+# SHA instead of the moving "main" tag.
+#
+# workflow_dispatch is deploy-only: it redeploys a commit that was already
+# built and pushed to main (skipping the 8 build jobs), for rollback or
+# retrying a deploy without rebuilding. It only works for a commit that
+# already has sha-<short-sha> images published - it doesn't build arbitrary
+# commits on demand.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Full 40-character commit SHA to redeploy - must already be on main and built (has sha-<short-sha> images published)'
+        required: true
+        type: string
+
+concurrency:
+  group: test-ci
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  build-knooppunt:
+    if: github.event_name != 'workflow_dispatch'
+    uses: ./.github/workflows/build-nuts-knooppunt-image.yaml
+    secrets: inherit
+
+  build-pep:
+    if: github.event_name != 'workflow_dispatch'
+    uses: ./.github/workflows/build-pep-image.yaml
+    secrets: inherit
+
+  build-mock-vc-issuer:
+    if: github.event_name != 'workflow_dispatch'
+    uses: ./.github/workflows/build-mock-vc-issuer-image.yaml
+    secrets: inherit
+
+  build-mock-mitz:
+    if: github.event_name != 'workflow_dispatch'
+    uses: ./.github/workflows/build-mock-mitz-image.yaml
+    secrets: inherit
+
+  build-mock-dezi:
+    if: github.event_name != 'workflow_dispatch'
+    uses: ./.github/workflows/build-mock-dezi-image.yaml
+    secrets: inherit
+
+  build-gf-sandbox:
+    if: github.event_name != 'workflow_dispatch'
+    uses: ./.github/workflows/build-gf-sandbox-image.yaml
+    secrets: inherit
+
+  build-fakenvi:
+    if: github.event_name != 'workflow_dispatch'
+    uses: ./.github/workflows/build-fakenvi-image.yaml
+    secrets: inherit
+
+  build-seed:
+    if: github.event_name != 'workflow_dispatch'
+    uses: ./.github/workflows/build-seed-image.yaml
+    secrets: inherit
+
+  deploy:
+    needs:
+      - build-knooppunt
+      - build-pep
+      - build-mock-vc-issuer
+      - build-mock-mitz
+      - build-mock-dezi
+      - build-gf-sandbox
+      - build-fakenvi
+      - build-seed
+    # needs: jobs that were skipped (workflow_dispatch) still let this run;
+    # a genuine build failure OR a build cancelled by a concurrency-group
+    # collision (see d079c12) both block it - a cancelled build may never
+    # have published its sha- image at all.
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    runs-on: ubuntu-latest
+    environment: ovhcloud-test
+    env:
+      # COMMIT is untrusted on the workflow_dispatch path (any collaborator
+      # can type anything into the commit input) - never interpolate it
+      # directly into a run: script (that's a script-injection point) or
+      # trust it as a checkout ref before Validate commit below confirms
+      # it's an actual commit already on main.
+      COMMIT: ${{ github.event.inputs.commit || github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.COMMIT }}
+          fetch-depth: 0
+
+      - name: Validate commit
+        run: |
+          [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::commit must be a full 40-character SHA, got '$COMMIT'"; exit 1; }
+          git fetch origin main --quiet
+          git merge-base --is-ancestor "$COMMIT" origin/main || { echo "::error::$COMMIT is not on main"; exit 1; }
+          # For push runs specifically: a workflow re-run keeps the original
+          # run's github.sha, so "re-run failed jobs" on an old, superseded
+          # run would otherwise silently redeploy an old commit.
+          if [ "${{ github.event_name }}" = "push" ]; then
+            head="$(git rev-parse origin/main)"
+            [ "$COMMIT" = "$head" ] || { echo "::error::$COMMIT is no longer the head of main ($head) - this run is stale (likely a re-run of an old workflow run), refusing to deploy it"; exit 1; }
+          fi
+
+      - name: Verify images exist for this commit
+        run: |
+          tag="sha-${COMMIT:0:7}"
+          # One entry per image actually built by the 8 build-*-image.yaml
+          # workflows (knooppunt-pep covers both pep-zonnebloem and
+          # pep-plataan - same image, deployed twice).
+          images=(
+            nuts-knooppunt knooppunt-pep fake-nvi mock-vc-issuer
+            mock-mitz mock-dezi gf-sandbox knooppunt-sandbox-seed
+          )
+          for image in "${images[@]}"; do
+            docker buildx imagetools inspect "ghcr.io/nuts-foundation/${image}:${tag}" >/dev/null || {
+              echo "::error::ghcr.io/nuts-foundation/${image}:${tag} does not exist - $COMMIT was never fully built"
+              exit 1
+            }
+          done
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.OVHCLOUD_TEST_KUBECONFIG }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Deploy
+        run: |
+          # Matches the docker/metadata-action `type=sha,format=short` tag
+          # rule every build-*-image.yaml above now publishes.
+          tag="sha-${COMMIT:0:7}"
+          infra/ovhcloud-test/deploy.sh --timeout 10m \
+            --set "image.tag=$tag" \
+            --set "pep-zonnebloem.image.tag=$tag" \
+            --set "pep-plataan.image.tag=$tag" \
+            --set "fhir.image.tag=$tag" \
+            --set "mock-vc-issuer.image.tag=$tag" \
+            --set "mock-mitz.image.tag=$tag" \
+            --set "mock-dezi.image.tag=$tag" \
+            --set "gf-sandbox.image.tag=$tag" \
+            --set "seed.image.tag=$tag"

@@ -1,6 +1,6 @@
 # Environment values for the OVHcloud MKS "gf-test" cluster (infra/cluster).
 #
-# Deploys the full sandbox stack: knooppunt, hapi-fhir (as fake-nvi), both
+# Deploys the full test stack: knooppunt, hapi-fhir (as fake-nvi), both
 # PEPs, nutsadmin, mock-vc-issuer, mock-mitz, mock-dezi, gf-sandbox, and the
 # seed Job (nuts-knooppunt#572) that populates it with demo data.
 #
@@ -113,7 +113,7 @@ pep-plataan:
 
 fhir:
   enabled: true
-  # The sandbox runs a HAPI build with our NVI pseudonymization interceptor
+  # The test environment runs a HAPI build with our NVI pseudonymization interceptor
   # baked in, not stock HAPI (see docker-compose.yml's hapi-fhir comment on
   # why :main specifically, not :latest).
   image:

@@ -1,0 +1,79 @@
+---
+name: 'Lint Helm chart'
+
+# Validates the test environment's Helm chart renders cleanly before
+# merge - the same class of problem lint-actions.yaml catches for
+# ci.yaml's own workflow syntax, but for the Helm side: a broken chart,
+# or a --set flag in ci.yaml's deploy step that no longer matches a real
+# values.yaml key, would otherwise only surface once the deploy job
+# actually runs against the live cluster after merge.
+#
+# helm template/lint are purely client-side, no cluster connection
+# needed - confirmed empirically that even `helm upgrade --dry-run=client`
+# still tries to reach the cluster (an upgrade inherently needs to read
+# the existing release state; `helm template` doesn't have that
+# problem), so this replicates deploy.sh's discovery/policy --set-file
+# handling against `helm template` directly rather than reusing
+# deploy.sh itself (which wraps `helm upgrade`).
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - helm/**
+      - infra/ovhcloud-test/**
+      - .github/workflows/ci.yaml
+      - .github/workflows/lint-helm.yaml
+
+jobs:
+  helm-template:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.14.0"
+
+      - name: Helm dependency update
+        run: helm dependency update helm/nuts-knooppunt
+
+      - name: Helm lint
+        run: |
+          helm lint helm/nuts-knooppunt \
+            -f infra/ovhcloud-test/values.yaml \
+            --set "image.tag=sha-0000000"
+
+      - name: Helm template
+        run: |
+          # Matches ci.yaml's Deploy step and deploy.sh's discovery/policy
+          # file handling exactly, so this validates the same rendering
+          # path a real deploy takes - just with a dummy tag, since no
+          # image needs to actually exist for a template-only render.
+          tag="sha-0000000"
+          set_file_args=()
+          for f in infra/ovhcloud-test/discovery/*.json; do
+            [ -e "$f" ] || continue
+            id="$(basename "$f" .json)"
+            set_file_args+=(--set-file "discoveryDefinitions.${id//./\\.}=${f}")
+          done
+          for f in infra/ovhcloud-test/policy/*.json; do
+            [ -e "$f" ] || continue
+            name="$(basename "$f")"
+            set_file_args+=(--set-file "policyDocuments.${name//./\\.}=${f}")
+          done
+          helm template sandbox helm/nuts-knooppunt \
+            -f infra/ovhcloud-test/values.yaml \
+            ${set_file_args[@]+"${set_file_args[@]}"} \
+            --set "image.tag=$tag" \
+            --set "pep-zonnebloem.image.tag=$tag" \
+            --set "pep-plataan.image.tag=$tag" \
+            --set "fhir.image.tag=$tag" \
+            --set "mock-vc-issuer.image.tag=$tag" \
+            --set "mock-mitz.image.tag=$tag" \
+            --set "mock-dezi.image.tag=$tag" \
+            --set "gf-sandbox.image.tag=$tag" \
+            --set "seed.image.tag=$tag" \
+            > /dev/null
