@@ -34,7 +34,10 @@ type entry struct {
 	// calls it.
 	Status      string
 	StatusLabel string
-	AddedInDemo bool
+	// ClinicalStatus is an allergy's clinical status code: active, inactive or
+	// resolved.
+	ClinicalStatus string
+	AddedInDemo    bool
 }
 
 // record is what the client screen shows below the banner.
@@ -45,19 +48,26 @@ type record struct {
 }
 
 // AllergyAlert names the allergies that may still apply, for the banner. A
-// refuted allergy and one entered in error do not; one without a status might.
+// refuted allergy, one entered in error and one that is inactive or resolved do
+// not; one without a status might.
 func (r record) AllergyAlert() string {
 	var names []string
 	for _, a := range r.Allergies {
-		switch a.Status {
-		case "refuted", "entered-in-error":
-		case "unconfirmed":
+		switch {
+		case a.Status == "refuted" || a.Status == "entered-in-error" || a.lapsed():
+		case a.Status == "unconfirmed":
 			names = append(names, a.Title+" (suspected)")
 		default:
 			names = append(names, a.Title)
 		}
 	}
 	return strings.Join(names, ", ")
+}
+
+// lapsed reports whether an allergy's clinical status says it no longer
+// applies: inactive or resolved.
+func (e entry) lapsed() bool {
+	return e.ClinicalStatus == "inactive" || e.ClinicalStatus == "resolved"
 }
 
 func clientFrom(p fhir.Patient) client {
@@ -83,12 +93,19 @@ func clientFrom(p fhir.Patient) client {
 
 func allergyEntry(a fhir.AllergyIntolerance) entry {
 	e := entry{
-		ID:          stringOr(a.Id),
-		Title:       titleOf(a.Code),
-		Note:        noteText(a.Note),
-		AddedInDemo: userCreated(a.Meta),
+		ID:             stringOr(a.Id),
+		Title:          titleOf(a.Code),
+		Note:           noteText(a.Note),
+		ClinicalStatus: codeOf(a.ClinicalStatus),
+		AddedInDemo:    userCreated(a.Meta),
 	}
-	if recorded := stringOr(a.RecordedDate); recorded != "" {
+	recorded := stringOr(a.RecordedDate)
+	switch {
+	case e.lapsed() && recorded != "":
+		e.Meta = codeableText(a.ClinicalStatus) + ", recorded " + longDate(recorded)
+	case e.lapsed():
+		e.Meta = codeableText(a.ClinicalStatus)
+	case recorded != "":
 		e.Meta = "Recorded " + longDate(recorded)
 	}
 	e.Status, e.StatusLabel = verificationOf(a.VerificationStatus)
@@ -99,19 +116,24 @@ func allergyEntry(a fhir.AllergyIntolerance) entry {
 // the form's own word for a status it offers, so the record and the form agree,
 // and the store's display for any other.
 func verificationOf(concept *fhir.CodeableConcept) (string, string) {
-	if concept == nil {
-		return "", ""
-	}
-	var code string
-	for _, coding := range concept.Coding {
-		if code = stringOr(coding.Code); code != "" {
-			break
-		}
-	}
+	code := codeOf(concept)
 	if st, ok := statusByCode(code); ok {
 		return code, st.Label
 	}
 	return code, codeableText(concept)
+}
+
+// codeOf returns the first code a concept carries.
+func codeOf(concept *fhir.CodeableConcept) string {
+	if concept == nil {
+		return ""
+	}
+	for _, coding := range concept.Coding {
+		if code := stringOr(coding.Code); code != "" {
+			return code
+		}
+	}
+	return ""
 }
 
 func medicationEntry(m fhir.MedicationRequest) entry {

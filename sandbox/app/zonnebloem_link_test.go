@@ -23,8 +23,10 @@ func TestRecord_NoZonnebloemCardWithoutAURL(t *testing.T) {
 	cfg, _, _ := fakeConfig()
 	srv, client := demoServer(t, cfg)
 
-	_, body := getBody(t, client, srv, "/demo/ehr/patients/anna")
+	status, body := getBody(t, client, srv, "/demo/ehr/patients/anna")
 
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, "<h2>Patient record</h2>", "the record page itself rendered")
 	require.NotContains(t, body, "Proof it really works")
 }
 

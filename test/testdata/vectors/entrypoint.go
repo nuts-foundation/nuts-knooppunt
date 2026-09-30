@@ -448,10 +448,6 @@ var freshResults = fhirclient.RequestHeaders(http.Header{"Cache-Control": {"no-c
 func deleteUserCreated(ctx context.Context, client fhirclient.Client, patientRef string) error {
 	for _, resourceType := range userCreatedTypes {
 		for round := 0; ; round++ {
-			if round == maxUserCreatedRounds {
-				return fmt.Errorf("%s records tagged user-created for %s are still there after %d rounds of deletes",
-					resourceType, patientRef, maxUserCreatedRounds)
-			}
 			var bundle fhir.Bundle
 			err := client.SearchWithContext(ctx, resourceType, url.Values{
 				"patient": {patientRef},
@@ -467,6 +463,10 @@ func deleteUserCreated(ctx context.Context, client fhirclient.Client, patientRef
 			}
 			if len(ids) == 0 {
 				break
+			}
+			if round == maxUserCreatedRounds {
+				return fmt.Errorf("%s records tagged user-created for %s are still there after %d rounds of deletes",
+					resourceType, patientRef, maxUserCreatedRounds)
 			}
 			for _, id := range ids {
 				if err := client.DeleteWithContext(ctx, resourceType+"/"+id); err != nil {

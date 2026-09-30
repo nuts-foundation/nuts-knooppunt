@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -300,6 +302,28 @@ func TestAddAllergy_AStoreThatRefusesIs502(t *testing.T) {
 
 	require.Equal(t, http.StatusBadGateway, res.StatusCode)
 	require.Empty(t, res.Header.Get("Location"))
+}
+
+// The store's error text can carry what was submitted: the FHIR client copies an
+// OperationOutcome's diagnostics into it. The page shows a fixed message; the
+// operator's log keeps the detail.
+func TestStoreFailure_KeepsTheStoresErrorTextOffThePage(t *testing.T) {
+	var logged bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	st := annaStore()
+	st.addErr = errors.New(`create allergy: OperationOutcome, issues: [processing error] note "Na pinda. CANARY-7" for 999900006`)
+
+	res := post(t, serve(t, st).URL+"/clients/pool-anna-zonnebloem-patient/allergies", validPost(), "same-origin")
+	body, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusBadGateway, res.StatusCode)
+	require.Contains(t, string(body), "De Zonnebloem's record store did not answer properly.")
+	require.NotContains(t, string(body), "CANARY-7")
+	require.NotContains(t, string(body), "999900006")
+	require.Contains(t, logged.String(), "CANARY-7")
 }
 
 func TestClients_OnlyListsDemoPool(t *testing.T) {

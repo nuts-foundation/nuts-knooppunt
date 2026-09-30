@@ -461,10 +461,11 @@ own runs and fill the gaps in their implementation:
 
 Epics for the /demo release. The clickable wireframe (`sandbox/wireframe.html`, a design artifact, not production code)
 is the screen-by-screen reference for layout and copy. Each epic names the existing components it extends, so nothing is
-green-field by accident. The two redesigns live inside E1 (Plataan EHR) and E7 (De Zonnebloem's EHR), not as separate epics, so
-no screen ever ships unstyled. Every UI-bearing epic (E1-E4, E7 and E8) follows the section 3 Datastar-first decision
-and its AI-assisted Preact + htm fallback; E6 keeps the shared event contract framework-neutral so that migration does
-not require backend rework.
+green-field by accident. The two redesigns live inside E1 (Plataan EHR) and E7 (De Zonnebloem's EHR), not as separate
+epics, so no screen ever ships unstyled. Every UI-bearing epic of the sandbox app (E1-E4 and E8) follows the section 3
+Datastar-first decision and its AI-assisted Preact + htm fallback; E6 keeps the shared event contract framework-neutral
+so that migration does not require backend rework. De Zonnebloem's EHR (E7) is a separate program of plain
+server-rendered forms and ships no client-side script.
 
 ### E1 Sandbox shell and Plataan EHR design system
 

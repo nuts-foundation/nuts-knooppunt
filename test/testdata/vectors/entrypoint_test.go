@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -238,6 +239,30 @@ func TestDeleteUserCreated_SkipsAnOperationOutcomeInTheResult(t *testing.T) {
 	}
 	if strings.Join(*deleted, ",") != "a1" {
 		t.Fatalf("deleted %v, want only [a1]", *deleted)
+	}
+}
+
+// The limit is on rounds that still find tagged records. When the last allowed
+// round deletes the last of them, the search after it finds nothing and recycle
+// goes on to restore the patient.
+func TestDeleteUserCreated_TheLastAllowedRoundCanTakeTheLastRecords(t *testing.T) {
+	var pages [][]byte
+	for i := range maxUserCreatedRounds {
+		pages = append(pages, searchBundle(t, "AllergyIntolerance", fmt.Sprintf("a%d", i+1)))
+	}
+	pages = append(pages, searchBundle(t, "AllergyIntolerance"))
+	client, searches, deleted := fakeTaggedStore(t, pages...)
+
+	err := deleteUserCreated(context.Background(), client, "Patient/p")
+
+	if err != nil {
+		t.Fatalf("err = %v, want nil: every tagged record was deleted", err)
+	}
+	if len(*deleted) != maxUserCreatedRounds {
+		t.Fatalf("deleted %d records, want %d", len(*deleted), maxUserCreatedRounds)
+	}
+	if len(*searches) != maxUserCreatedRounds+1 {
+		t.Fatalf("searched %d times, want %d: the last confirms nothing is left", len(*searches), maxUserCreatedRounds+1)
 	}
 }
 

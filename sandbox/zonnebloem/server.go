@@ -185,11 +185,13 @@ func (s server) renderClient(w http.ResponseWriter, r *http.Request, status int,
 }
 
 // storeFailure answers 502: the page depends on a store that did not answer
-// properly, and an empty record would read as "this client has no data". The
-// error names the request and its status; it carries no BSN and no note text.
+// properly, and an empty record would read as "this client has no data". The page
+// gets a fixed message, because the error text can echo what was submitted (the
+// FHIR client copies an OperationOutcome's diagnostics into it) and anyone can
+// reach a hosted instance. The log keeps the detail for the operator.
 func storeFailure(w http.ResponseWriter, err error) {
 	slog.Error("zonnebloem-ehr: FHIR store request failed", "error", err)
-	http.Error(w, "De Zonnebloem's record store did not answer properly: "+err.Error(), http.StatusBadGateway)
+	http.Error(w, "De Zonnebloem's record store did not answer properly.", http.StatusBadGateway)
 }
 
 // isPoolClientID reports whether id is a demo-pool client: the only clients

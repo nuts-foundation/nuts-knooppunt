@@ -20,6 +20,12 @@ func verification(code, display string) *fhir.CodeableConcept {
 	}}}
 }
 
+func clinical(code, display string) *fhir.CodeableConcept {
+	return &fhir.CodeableConcept{Coding: []fhir.Coding{{
+		System: to.Ptr(clinicalSystem), Code: to.Ptr(code), Display: to.Ptr(display),
+	}}}
+}
+
 func TestClientFrom_NameInitialsBirthDateAndBSN(t *testing.T) {
 	got := clientFrom(fhir.Patient{
 		Id:         to.Ptr("pool-anna-zonnebloem-patient"),
@@ -117,6 +123,29 @@ func TestMedicationAndConditionEntries(t *testing.T) {
 
 	require.Equal(t, entry{Title: "Metformine", Meta: "Metformine 500 mg 2dd"}, medication)
 	require.Equal(t, entry{Title: "Hypertensie", Meta: "Since 2009"}, condition)
+}
+
+// A record the EHR did not write can say the allergy no longer applies. The line
+// under it says so, and the banner's alert leaves it out.
+func TestAllergyEntry_AnInactiveOrResolvedAllergyIsShownAndLeftOutOfTheAlert(t *testing.T) {
+	for _, status := range []struct{ code, display string }{{"resolved", "Resolved"}, {"inactive", "Inactive"}} {
+		lapsed := allergyEntry(fhir.AllergyIntolerance{
+			Code:               &fhir.CodeableConcept{Text: to.Ptr("Latex")},
+			ClinicalStatus:     clinical(status.code, status.display),
+			VerificationStatus: verification("confirmed", "Confirmed"),
+			RecordedDate:       to.Ptr("2019"),
+		})
+		active := allergyEntry(fhir.AllergyIntolerance{
+			Code:               &fhir.CodeableConcept{Text: to.Ptr("Pinda")},
+			ClinicalStatus:     clinical("active", "Active"),
+			VerificationStatus: verification("confirmed", "Confirmed"),
+			RecordedDate:       to.Ptr("2026-09-28"),
+		})
+
+		require.Equal(t, status.display+", recorded 2019", lapsed.Meta)
+		require.Equal(t, "Recorded 28 September 2026", active.Meta)
+		require.Equal(t, "Pinda", record{Allergies: []entry{lapsed, active}}.AllergyAlert())
+	}
 }
 
 // The banner's alert names every allergy that may still apply: a refuted one or
