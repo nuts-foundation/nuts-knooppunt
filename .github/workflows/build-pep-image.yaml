@@ -52,7 +52,7 @@ jobs:
         with:
           images: ghcr.io/nuts-foundation/knooppunt-pep
           tags: |
-            type=sha,format=short
+            type=sha,format=short,enable={{is_default_branch}}
             type=ref,event=branch,enable={{is_default_branch}},prefix=
             type=semver,pattern={{version}}
           flavor: |
@@ -80,6 +80,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
-          cache-from: type=gha,scope=${{ github.workflow }}
-          cache-to: type=gha,mode=max,scope=${{ github.workflow }},ignore-error=true
+          cache-from: type=gha,scope=build-pep-image
+          cache-to: type=gha,mode=max,scope=build-pep-image,ignore-error=true
 

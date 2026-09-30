@@ -53,7 +53,7 @@ jobs:
           # Set the registry to GHCR here
           images: ghcr.io/nuts-foundation/fake-nvi
           tags: |
-            type=sha,format=short
+            type=sha,format=short,enable={{is_default_branch}}
             # generate 'main' tag for the main branch
             type=ref,event=branch,enable={{is_default_branch}},prefix=
             # generate 5.2.1 tag
@@ -84,8 +84,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
-          cache-from: type=gha,scope=${{ github.workflow }}
-          cache-to: type=gha,mode=max,scope=${{ github.workflow }},ignore-error=true
+          cache-from: type=gha,scope=build-fakenvi-image
+          cache-to: type=gha,mode=max,scope=build-fakenvi-image,ignore-error=true
           build-args: |
             GIT_VERSION=${{ steps.version.outputs.git_version }}
             GIT_COMMIT=${{ steps.version.outputs.git_commit }}

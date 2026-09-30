@@ -1,0 +1,35 @@
+---
+name: 'Lint GitHub Actions workflows'
+
+# ci.yaml never runs on a pull request (only push to main and dispatch), so
+# a broken reusable-workflow call - a bad input, a typo'd `uses:` path -
+# would otherwise only surface after merging to main, when GitHub rejects
+# the whole run before any job starts and nothing deploys. actionlint
+# catches this class of mistake at PR time instead. Deliberately a separate
+# workflow rather than a pull_request trigger on ci.yaml itself - that
+# would also run the deploy job.
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/**
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download actionlint
+        run: bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+
+      - name: Run actionlint
+        run: |
+          # actionlint doesn't know the concurrency.queue key yet - it's a
+          # genuine, documented GitHub Actions feature (ci.yaml uses
+          # queue: max), just not yet supported by actionlint's schema:
+          # https://github.com/rhysd/actionlint/issues/657. Drop this
+          # -ignore once that ships in a release.
+          ./actionlint -color -ignore 'unexpected key "queue"'
