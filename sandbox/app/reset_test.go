@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
@@ -175,6 +176,29 @@ func TestRecycle_SucceedsWhenAnotherPatientLocked(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, res.StatusCode)
 	require.Equal(t, "/demo?notice=recycle-done", res.Header.Get("Location"))
 	require.Equal(t, []string{anna}, *recycles)
+}
+
+// The lock check happens before the restore, which takes a while. A session
+// that opens the patient during the restore must keep its run and its lock.
+func TestRecycle_KeepsRunStartedDuringRestore(t *testing.T) {
+	cfg, _, _ := fakeConfig()
+	cfg.Runs = newRunStore(cfg.Locks)
+	anna := pool.Patients()[0].Key
+	other := &authSession{ID: "opened-during-recycle", ExpiresAt: time.Now().Add(time.Hour)}
+	opened := make(chan error, 1)
+	cfg.recyclePatient = func(context.Context, string) error {
+		opened <- cfg.startPatientRun(other, anna, true)
+		return nil
+	}
+	srv, client := demoServer(t, cfg)
+
+	res := postForm(t, client, srv, "/demo/patients/"+anna+"/recycle", nil)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo?notice=recycle-done", res.Header.Get("Location"))
+	require.NoError(t, <-opened)
+	require.True(t, cfg.Locks.HeldBy(anna, lockOwner(other)), "the recycle released a lock it never checked")
+	require.NotEmpty(t, cfg.Runs.current(lockOwner(other), anna), "the recycle removed a run it never checked")
 }
 
 func TestRecycle_UnknownPatientIs404(t *testing.T) {

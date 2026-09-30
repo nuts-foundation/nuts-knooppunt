@@ -53,8 +53,8 @@ These were settled during the planning, mockup and user-story rounds and are inp
    retrieval); whoever makes the calls knows when each step starts and ends, and the interior steps (Mitz check,
    pseudonymization, PIP, introspection) are invisible to any external caller regardless. What remains is a **capture
    middleware** on the sandbox backend that emits step events over SSE, following the step-event schema (GF label,
-   sanitized allowlisted request/response fields, outcome, timing, correlation ID). Externally initiated calls
-   (/connect) never pass an orchestrator anyway; they are covered by OTel and PEP logging.
+   request and response as sent and received with credentials and BSNs redacted, outcome, timing, correlation ID).
+   Externally initiated calls (/connect) never pass an orchestrator anyway; they are covered by OTel and PEP logging.
 2. **Explicit result screens, not notifications. Decision by the author of #532: the flow uses full result screens and
    modals (registration confirmation, localization results, authorization outcome) instead of snack bars or stacked
    notifications, so it is visually clear what happens at every step.** The earlier "look under the hood" toggle has
@@ -98,9 +98,9 @@ Interaction rules:
 - ZorgDossier and the sandbox share **no state, no session, no API**. ZorgDossier writes to its own FHIR store and
   registers in the NVI; the sandbox finds that data only through the GF chain (NVI, mCSD, token, retrieval).
 - The sandbox backend records every proxied call as a step event (correlation ID per scenario run, bounded in-memory
-  retention, SSE to the browser). Capture is allowlist-based and removes authorization headers, cookies, access tokens,
-  credentials and other secrets before an event exists. BSN visibility in events is deployment-conditional: plaintext
-  test BSNs locally, masked on shared deployments.
+  retention, SSE to the browser). Capture keeps each call as sent and received and replaces credentials, JWE and
+  `blind_factor` values with a visible marker before an event exists. BSNs in events are masked by default; an explicit
+  local flag reveals the synthetic pool, and shared deployments keep them masked.
 - Opening ZorgDossier from the sandbox is a plain `target="_blank"` link: genuinely a second browser tab, matching
   decision 3.
 
@@ -346,6 +346,13 @@ stack.
 
 ## 7. Step events (the shared substrate)
 
+E6 implements capture for patient-run outbound calls and the live viewer. The precise implemented
+retention, redaction, ownership and reconnect contract is documented in
+[the application README](app/README.md#step-events-e6). PRS spans are correlated through a private
+OTLP receiver in the sandbox overlay. Other interior-span and inbound-notification producers
+remain separate integrations. The viewer groups requests by action and purpose, with a separate
+playback clock for readable animations of observed calls.
+
 The sandbox backend emits one step event per proxied call:
 
 ```json
@@ -353,20 +360,27 @@ The sandbox backend emits one step event per proxied call:
   "runId": "…",
   // correlation ID per scenario run
   "seq": 3,
+  "actionId": "…",
+  "action": "share",
+  "purpose": "registration",
+  "resourceType": "Condition",
+  "callId": "…",
   "gf": "localization",
   // GF label: pseudonym|localization|addressing|authentication|consent|authorization|exchange
   "actor": "sandbox-backend",
   "request": {
     "method": "GET",
     "path": "/nvi/List?…",
+    "headers": {},
     "body": null
   },
-  // sanitized, allowlisted fields only
+  // as sent, with credentials and BSNs replaced by markers
   "response": {
     "status": 200,
+    "headers": {},
     "body": {}
   },
-  // sanitized, allowlisted fields only
+  // as received, with credentials and BSNs replaced by markers
   "outcome": "ok",
   // ok|deny|error
   "durationMs": 180,
@@ -378,11 +392,11 @@ The sandbox backend emits one step event per proxied call:
   stream, with `gf: "localization"` and `gf: "consent"` respectively.
 - Transport: SSE to the browser for the run's own events; bounded in-memory retention (survives a page refresh within
   the window).
-- Secret redaction: capture only allowlisted headers and payload fields. Authorization headers, cookies, access tokens,
-  credentials and other secrets are removed before the event object is constructed, so they are neither retained nor
-  streamed.
-- Identifier redaction: synthetic test BSNs are plaintext locally and masked on shared deployments (deployment flag, not
-  always-on).
+- Secret redaction: an event carries the call as sent and received. Credentials (authorization headers, cookies,
+  tokens, assertions) and the JWE and `blind_factor` values the pseudonymisation guide forbids persisting are replaced
+  by a visible marker before the event is retained or streamed; nothing is dropped without a marker.
+- Identifier redaction: BSNs are masked by default, including local development. An explicit local deployment flag may
+  reveal identifiers from the fixed synthetic pool; shared deployments keep them masked.
 - Demo consumes `gf`, `outcome`, `durationMs` plus selected response fields (the result screens render real chain
   output); the full records are retained for the deeper inspector level (section 8).
 - Pseudonymization is interior to the Knooppunt (the sandbox backend never calls PRS itself), so `gf: "pseudonym"`
@@ -404,10 +418,10 @@ An opt-in detail level of the same viewer, not a separate capture pipeline or ro
 
 - Per step: the stored request/response bodies from the capture middleware, GF labelling, and the PDP decision with
   reasons (emitted mainly on deny/error today).
-- Interior Knooppunt steps (Mitz XACML call, pseudonymization, PIP lookups, OAuth2/VC exchange) via correlated OTel
-  spans: presence and timing. This requires a queryable trace backend (today spans only export to Aspire, which has no
-  query API); adding Tempo/Jaeger or similar is the one new infrastructure piece, needed when /connect lands, not for
-  /demo v1.
+- Interior Knooppunt steps (Mitz XACML call, PIP lookups, OAuth2/VC exchange) via correlated OTel
+  spans: presence and timing. E6 already projects PRS client spans into live runs through its private
+  receiver. Broader historical trace inspection remains separate work and can use a queryable trace
+  backend; it does not need to change the live event contract.
 - Within /demo the inspector stays scoped to the demo pool patients; cross-system troubleshooting beyond that is
   /connect territory.
 - Because the inspector renders raw payloads, a shared deployment keeps it behind authentication and synthetic data
@@ -530,7 +544,7 @@ the same setting at the mock PRS (PR #561).
 ### E6 Step events (capture middleware)
 
 Capture middleware on the sandbox backend proxy: correlation ID per scenario run, one step-event record per forwarded
-call following the section 7 schema, allowlist-based capture with secret redaction before event construction, SSE to the
+call following the section 7 schema, exact capture with visible secret redaction before event construction, SSE to the
 browser, bounded in-memory retention, and deployment-conditional BSN redaction. The run correlation also drives the
 per-patient demo lock (section 5.7). Feeds the demo's live states now and the /connect inspector later. The event schema
 and resume semantics are framework-neutral: Datastar consumes them first, but a Preact + htm fallback consumes the same

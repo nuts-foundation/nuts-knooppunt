@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
@@ -24,6 +25,7 @@ var notices = map[string]string{
 	"reset-disabled":          "Reset is unavailable: it needs both KNOOPPUNT_INTERNAL_URL and HAPI_BASE_URL, and one of them is unset. Sharing only needs the first, so it can work while this does not.",
 	"signed-out":              "Signed out. The Dezi session has been cleared.",
 	"patient-busy":            "That patient is in use by another demo run. Pick a different one.",
+	"patient-not-open":        "Open the patient first: finding where its data is held needs the patient open in this session.",
 	"mitz-retry-done":         "Consent subscription started.",
 	"mitz-retry-existing":     "The Mitz lookup found an existing consent subscription for this patient. No registration request was sent.",
 	"mitz-retry-reconciled":   "The retry failed, but the lookup afterwards found a consent subscription for this patient. Whether it already existed or resulted from this retry could not be established.",
@@ -39,9 +41,13 @@ var notices = map[string]string{
 // deployment). The reset functions are injectable so tests can exercise the
 // handlers without a live HAPI/Knooppunt.
 type Config struct {
-	KnooppuntInternalURL string
-	HAPIBaseURL          string
-	Locks                *Registry
+	KnooppuntInternalURL   string
+	HAPIBaseURL            string
+	Locks                  *Registry
+	Runs                   *runStore
+	revealEventIdentifiers bool
+	eventTraces            *eventTraceBridge
+	eventTraceListenAddr   string
 
 	// resetGlobal and recyclePatient default to the vectors implementations when
 	// the URLs are set (see NewConfigFromEnv); tests may override them.
@@ -104,6 +110,25 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		KnooppuntInternalURL: getenv("KNOOPPUNT_INTERNAL_URL"),
 		HAPIBaseURL:          getenv("HAPI_BASE_URL"),
 		Locks:                NewRegistry(),
+	}
+	if err := cfg.configureEventTraces(getenv); err != nil {
+		return Config{}, err
+	}
+	switch getenv("SANDBOX_EVENT_IDENTIFIERS") {
+	case "", "masked":
+	case "synthetic":
+		public := getenv("SANDBOX_PUBLIC_URL")
+		if public == "" {
+			public = "http://localhost:8091"
+		}
+		u, err := url.Parse(public)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil ||
+			(u.Hostname() != "localhost" && !net.ParseIP(u.Hostname()).IsLoopback()) {
+			return Config{}, fmt.Errorf("synthetic event identifiers require a loopback SANDBOX_PUBLIC_URL")
+		}
+		cfg.revealEventIdentifiers = true
+	default:
+		return Config{}, fmt.Errorf("SANDBOX_EVENT_IDENTIFIERS must be masked or synthetic")
 	}
 	if cfg.KnooppuntInternalURL == "" {
 		return cfg, nil
@@ -184,6 +209,9 @@ func NewMux(cfg Config) *http.ServeMux {
 	if cfg.Locks == nil {
 		cfg.Locks = NewRegistry()
 	}
+	if cfg.Runs == nil {
+		cfg.Runs = newRunStore(cfg.Locks)
+	}
 
 	if cfg.Retrievals == nil {
 		cfg.Retrievals = newRetrievalStore()
@@ -195,6 +223,7 @@ func NewMux(cfg Config) *http.ServeMux {
 	// practitioner's authorization, so it has no business outliving the session.
 	sessions.onDrop = func(sessionID string) {
 		owner := lockOwner(&authSession{ID: sessionID})
+		cfg.Runs.clearOwner(owner)
 		cfg.Locks.ReleaseOwner(owner)
 		cfg.Retrievals.clearOwner(owner)
 	}
@@ -241,6 +270,18 @@ func NewMux(cfg Config) *http.ServeMux {
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /demo/runs/{runId}/events", func(w http.ResponseWriter, r *http.Request) {
+		if eventCrossOrigin(r) {
+			http.Error(w, "cross-site event streaming is not allowed", http.StatusForbidden)
+			return
+		}
+		session := signedIn(r)
+		if session == nil {
+			http.Error(w, "sign in to view run events", http.StatusUnauthorized)
+			return
+		}
+		cfg.handleEvents(w, r, session)
+	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
@@ -457,12 +498,12 @@ func NewMux(cfg Config) *http.ServeMux {
 
 	mux.HandleFunc("GET /demo/ehr", requireSession(signedIn, cfg.handlePatientList))
 	mux.HandleFunc("POST /demo/ehr/patients/{key}/open", requireSession(signedIn, cfg.handleOpenPatient))
-	mux.HandleFunc("GET /demo/ehr/patients/{key}", requireSession(signedIn, cfg.handlePatientRecord))
-	mux.HandleFunc("POST /demo/ehr/patients/{key}/subscribe", requireSession(signedIn, cfg.handleSubscribe))
-	mux.HandleFunc("GET /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.handleShareForm))
-	mux.HandleFunc("POST /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.handleShare))
-	mux.HandleFunc("GET /demo/ehr/patients/{key}/retrieve", requireSession(signedIn, cfg.handleRetrieveForm))
-	mux.HandleFunc("POST /demo/ehr/patients/{key}/retrieve", requireSession(signedIn, cfg.handleRetrieve))
+	mux.HandleFunc("GET /demo/ehr/patients/{key}", requireSession(signedIn, cfg.withPatientRun(cfg.handlePatientRecord)))
+	mux.HandleFunc("POST /demo/ehr/patients/{key}/subscribe", requireSession(signedIn, cfg.withPatientRun(cfg.handleSubscribe)))
+	mux.HandleFunc("GET /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.withPatientRun(cfg.handleShareForm)))
+	mux.HandleFunc("POST /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.withPatientRun(cfg.handleShare)))
+	mux.HandleFunc("GET /demo/ehr/patients/{key}/retrieve", requireSession(signedIn, cfg.withPatientRun(cfg.handleRetrieveForm)))
+	mux.HandleFunc("POST /demo/ehr/patients/{key}/retrieve", requireSession(signedIn, cfg.withPatientRun(cfg.handleRetrieve)))
 	return mux
 }
 
@@ -506,6 +547,9 @@ func (c Config) handleReset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resetErr := c.resetGlobal(r.Context())
+	if c.Runs != nil {
+		c.Runs.clear()
+	}
 
 	// Sessions go whether or not the restore succeeded. ResetGlobal is not
 	// transactional: it clears both patient tenants, reloads the fixtures, then
@@ -557,6 +601,8 @@ func (c Config) handleRecycle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "patient "+key+" is locked (demo in progress)", http.StatusConflict)
 		return
 	}
+	// Runs are left alone: the lock check above means none was live, and a run
+	// opened during the restore belongs to the session that opened it.
 	err := c.recyclePatient(r.Context(), key)
 	// Unconditionally, including on an ordinary error. RecyclePatient is not
 	// transactional: it PUTs the fixtures back one at a time and verifies
@@ -595,7 +641,15 @@ func (c Config) handleLock(w http.ResponseWriter, r *http.Request, session *auth
 		return
 	}
 	owner := lockOwner(session)
-	if !c.Locks.Lock(key, owner) {
+	if err := c.startPatientRun(session, key, false); err != nil {
+		if errors.Is(err, errRunUnavailable) {
+			http.Redirect(w, r, "/demo/login", http.StatusSeeOther)
+			return
+		}
+		if errors.Is(err, errRunCapacity) {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
 		http.Error(w, "patient "+key+" is already locked by another session", http.StatusConflict)
 		return
 	}
@@ -615,7 +669,12 @@ func (c Config) handleRelease(w http.ResponseWriter, r *http.Request, session *a
 		http.Error(w, "unknown patient: "+key, http.StatusNotFound)
 		return
 	}
-	released := c.Locks.Release(key, lockOwner(session))
+	var released bool
+	if c.Runs != nil {
+		released = c.Runs.release(lockOwner(session), key)
+	} else {
+		released = c.Locks.Release(key, lockOwner(session))
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"key": key, "locked": c.Locks.IsLocked(key), "released": released})
 }
 

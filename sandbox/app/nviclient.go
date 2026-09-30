@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"sync"
 	"time"
@@ -64,6 +65,7 @@ type nviRecords struct {
 }
 
 func (c Config) patientShareStatus(ctx context.Context, bsn string) shareStatus {
+	ctx = withEventPurpose(ctx, "status")
 	if c.nviLookup == nil {
 		return shareStatus{NVIUnknown: true}
 	}
@@ -110,9 +112,10 @@ func nviFuncs(knooppuntInternalURL *url.URL, clientID string) (
 	func(context.Context, string, []string) error,
 ) {
 	base := knooppuntInternalURL.JoinPath("nvi")
+	client := nvi.NewClient(base, &http.Client{Transport: newCaptureTransport("localization", nil)})
 
 	lookup := func(ctx context.Context, bsn string) (nviRecords, error) {
-		lists, err := nvi.ListsForCustodian(ctx, base, plataanURA, bsn)
+		lists, err := client.ListsForCustodian(ctx, plataanURA, bsn)
 		if err != nil {
 			return nviRecords{}, err
 		}
@@ -121,7 +124,7 @@ func nviFuncs(knooppuntInternalURL *url.URL, clientID string) (
 		}, nil
 	}
 	register := func(ctx context.Context, bsn string, cats []string) error {
-		return nvi.Register(ctx, base, nvi.Registration{
+		return client.Register(withEventPurpose(ctx, "registration"), nvi.Registration{
 			CustodianURA: plataanURA, BSN: bsn, ClientID: clientID, Categories: cats,
 		})
 	}
@@ -134,9 +137,10 @@ func nviFuncs(knooppuntInternalURL *url.URL, clientID string) (
 // De Plataan's, which scopes the pseudonymization rather than the result.
 func nviLocalizeFunc(knooppuntInternalURL *url.URL) func(context.Context, string) ([]localizedRecord, error) {
 	base := knooppuntInternalURL.JoinPath("nvi")
+	client := nvi.NewClient(base, &http.Client{Transport: newCaptureTransport("localization", nil)})
 
 	return func(ctx context.Context, bsn string) ([]localizedRecord, error) {
-		lists, err := nvi.ListsForPatient(ctx, base, plataanURA, bsn)
+		lists, err := client.ListsForPatient(ctx, plataanURA, bsn)
 		if err != nil {
 			return nil, err
 		}

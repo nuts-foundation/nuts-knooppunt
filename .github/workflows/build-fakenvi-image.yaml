@@ -84,6 +84,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
+          cache-from: type=gha,scope=${{ github.workflow }}
+          cache-to: type=gha,mode=max,scope=${{ github.workflow }},ignore-error=true
           build-args: |
             GIT_VERSION=${{ steps.version.outputs.git_version }}
             GIT_COMMIT=${{ steps.version.outputs.git_commit }}

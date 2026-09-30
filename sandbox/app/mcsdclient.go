@@ -74,7 +74,7 @@ var fhirDataConnectionTypes = map[string]string{
 // than worked around silently.
 func mcsdResolveFunc(hapiBaseURL *url.URL) func(context.Context, string) (sourceAddress, error) {
 	directory := hapiBaseURL.JoinPath(mcsdQueryTenant, "Organization")
-	client := &http.Client{Timeout: mcsdCallTimeout}
+	client := &http.Client{Transport: newCaptureTransport("addressing", nil), Timeout: mcsdCallTimeout}
 
 	return func(ctx context.Context, ura string) (sourceAddress, error) {
 		query := *directory

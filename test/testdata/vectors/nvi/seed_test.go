@@ -348,3 +348,43 @@ func TestCustodiansOf_SortedDeduplicatedAndWithoutBlanks(t *testing.T) {
 		t.Errorf("CustodiansOf = %v, want [00000010 00000020]", got)
 	}
 }
+
+func TestInjectedClientCoversRegistrationAndLookups(t *testing.T) {
+	calls := []string{}
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		if r.Header.Get("X-Tenant-ID") != uraNamingSystem+"|00000010" {
+			t.Error("missing tenant header")
+		}
+		w.Header().Set("Content-Type", "application/fhir+json")
+		switch {
+		case r.URL.Path == "/List/_search":
+			_ = json.NewEncoder(w).Encode(searchSetOf(listFor("existing", "00000010")))
+		case r.Method == "DELETE":
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == "POST":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(BuildList(Registration{BSN: "999900006", CustodianURA: "00000010", ClientID: "example"}, CategoryPatient))
+		}
+	}))
+	defer server.Close()
+	base, _ := url.Parse(server.URL)
+	client := NewClient(base, server.Client())
+	ctx := context.Background()
+	if err := client.Register(ctx, Registration{BSN: "999900006", CustodianURA: "00000010", ClientID: "example", Categories: []string{CategoryPatient}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := client.ListsForCustodian(ctx, "00000010", "999900006"); err != nil || len(got) != 1 {
+		t.Fatalf("custodian lookup = %#v, %v", got, err)
+	}
+	if got, err := client.ListsForPatient(ctx, "00000010", "999900006"); err != nil || len(got) != 1 {
+		t.Fatalf("patient lookup = %#v, %v", got, err)
+	}
+	if err := client.DeleteForClient(ctx, "00000010", "999900006", "example"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"POST /List/_search", "DELETE /List/existing", "POST /List", "POST /List/_search", "POST /List/_search", "POST /List/_search", "DELETE /List/existing"}
+	if !slices.Equal(calls, want) {
+		t.Fatalf("calls = %v", calls)
+	}
+}

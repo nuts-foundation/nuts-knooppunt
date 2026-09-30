@@ -15,6 +15,15 @@
   </div>
   {{end}}
 
+  {{if .SourceSelectionExpired}}
+  <div class="confirm-card unknown">
+    <h2>Find sources again</h2>
+    <div class="cc-detail">The previous source selection is no longer available for this patient run.
+    Refresh the source list before requesting access. No source was asked for data.</div>
+    <a class="btn solid" href="/demo/ehr/patients/{{.Patient.Key}}/retrieve">Refresh source list</a>
+  </div>
+  {{end}}
+
   {{with .LocalizeErr}}
   <div class="confirm-card failed">
     <h2><span class="fail-ic">&times;</span>Localization failed</h2>
@@ -57,6 +66,7 @@
     <div class="action-group card-action">
       <form method="post" action="/demo/ehr/patients/{{$.Patient.Key}}/retrieve">
         <input type="hidden" name="ura" value="{{.URA}}">
+        <input type="hidden" name="selection" value="{{$.SourceSelectionID}}">
         <button class="btn solid big" type="submit">Retrieve from {{.DisplayName}}</button>
       </form>
       <div class="btn-sub">Requests an access token at {{.DisplayName}} and asks for the data
@@ -65,7 +75,7 @@
     {{end}}
   </div>
   {{else}}
-  {{if not .LocalizeErr}}
+  {{if and (not .LocalizeErr) (not .SourceSelectionExpired)}}
   <div class="card">
     <div class="data-empty">The referral index holds no records for this patient at any other
     care provider. Only De Plataan's own data is available.</div>

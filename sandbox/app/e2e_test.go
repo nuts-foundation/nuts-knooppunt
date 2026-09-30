@@ -3,7 +3,6 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"testing"
 
@@ -39,14 +38,10 @@ func TestAcceptance_FullChain(t *testing.T) {
 		// That verdict is the Patient search's alone. The source decides every
 		// clinical search separately, and one it refused shows only as data that
 		// never arrived, so each category it holds for this patient has to be on
-		// the record. De Plataan holds none of these itself.
+		// the record.
 		record := sandbox.record(t)
-		for _, want := range []struct{ section, title string }{
-			{"Allergies", "Penicilline"},
-			{"Medication", "Metoprolol"},
-			{"Conditions", "Diabetes mellitus type 2"},
-		} {
-			require.Contains(t, record, want.title, "the %s search was served and its data reached the record", want.section)
+		for _, line := range sourceData {
+			require.Contains(t, record, line.title, "the %s search was served and its data reached the record", line.section)
 		}
 	})
 
@@ -66,9 +61,24 @@ func TestAcceptance_FullChain(t *testing.T) {
 		// token as much as a consent refusal. This one has to be Mitz's.
 		require.Greater(t, chain.MockMitzXACML.RequestCount(), questionsBefore, "the source's policy asked Mitz")
 		require.Contains(t, chain.MockMitzXACML.GetLastRequestXML(), chain.patient.BSN, "about this patient")
-		require.NotContains(t, sandbox.record(t), "Sunflower Care Home",
-			"a refusal may leave no trace of the source on the record")
+		// The source's name stays on the page, where the viewer draws who was
+		// asked. What a refusal may not leave is any of its data.
+		record := sandbox.record(t)
+		for _, line := range sourceData {
+			require.NotContains(t, record, line.title, "a refusal may leave none of the source's %s on the record", line.section)
+		}
 	})
+}
+
+// sourceData is one line per data category the source holds for anna, none of
+// which De Plataan holds itself, so any of them on the record is data that came
+// from the source. The happy path requires all of them and the refusal none,
+// from the same list, so a fixture change cannot quietly empty the refusal's
+// check.
+var sourceData = []struct{ section, title string }{
+	{"Allergies", "Penicilline"},
+	{"Medication", "Metoprolol"},
+	{"Conditions", "Diabetes mellitus type 2"},
 }
 
 // fullChain is the exchange, up and addressable: the directories, the NVI, the
@@ -173,8 +183,9 @@ func (c fullChain) openSandbox(t *testing.T) sandbox {
 	return sandbox{server: server, client: client, key: c.patient.Key, ura: c.SunflowerURA}
 }
 
-// retrieve confirms the source, which is where the sandbox asks the Nuts node
-// for a token.
+// retrieve opens the retrieve page and confirms the source it offers. Opening it
+// runs discovery against the real NVI and directory; confirming it is where the
+// sandbox asks the Nuts node for a token.
 //
 // That request is the one leg that cannot pass yet, and the node is right to
 // refuse it: the sandbox signs in against a fixture attestation whose signature
@@ -186,12 +197,12 @@ func (c fullChain) openSandbox(t *testing.T) sandbox {
 // serving its JWK set over TLS, trusting that certificate in the node and
 // naming it in NUTS_VCR_DEZI_ALLOWEDJKU:
 // https://github.com/nuts-foundation/nuts-knooppunt/issues/591. Everything
-// before this call runs.
+// before the confirmation runs.
 func (s sandbox) retrieve(t *testing.T) (int, string) {
 	t.Helper()
+	confirmation := sourceConfirmation(t, s.client, s.server, s.key, s.ura)
 	t.Skip("needs a Dezi that signs with a resolvable jku; see issue #591")
-	return postFormAndRead(t, s.client, s.server, "/demo/ehr/patients/"+s.key+"/retrieve",
-		url.Values{"ura": {s.ura}})
+	return postFormAndRead(t, s.client, s.server, "/demo/ehr/patients/"+s.key+"/retrieve", confirmation)
 }
 
 // record renders the patient's record. It has to come back as the record for
