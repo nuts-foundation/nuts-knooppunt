@@ -37,13 +37,13 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION=${GITHUB_REF#refs/tags/v}
           else
             # For workflow_dispatch, use version from Chart.yaml
             VERSION=$(grep "^version:" helm/nuts-knooppunt/Chart.yaml | awk '{print $2}')
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Extracted version: $VERSION"
 
       - name: Update nuts-knooppunt chart version

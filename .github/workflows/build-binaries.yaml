@@ -23,10 +23,14 @@ jobs:
       - name: Set version params
         id: version
         shell: bash
+        env:
+          RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
-          echo "git_commit=$(echo ${GITHUB_SHA})" >> $GITHUB_OUTPUT
-          echo "git_branch=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_OUTPUT
-          echo "git_version=${{github.event.release.tag_name}}" >> $GITHUB_OUTPUT
+          {
+            echo "git_commit=${GITHUB_SHA}"
+            echo "git_branch=${GITHUB_REF#refs/heads/}"
+            echo "git_version=${RELEASE_TAG_NAME}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Print version params
         run: |
