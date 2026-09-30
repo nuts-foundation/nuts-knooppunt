@@ -96,7 +96,7 @@ func allergyEntry(a fhir.AllergyIntolerance) entry {
 		ID:             stringOr(a.Id),
 		Title:          titleOf(a.Code),
 		Note:           noteText(a.Note),
-		ClinicalStatus: codeOf(a.ClinicalStatus),
+		ClinicalStatus: codeIn(a.ClinicalStatus, clinicalSystem),
 		AddedInDemo:    userCreated(a.Meta),
 	}
 	recorded := stringOr(a.RecordedDate)
@@ -116,20 +116,21 @@ func allergyEntry(a fhir.AllergyIntolerance) entry {
 // the form's own word for a status it offers, so the record and the form agree,
 // and the store's display for any other.
 func verificationOf(concept *fhir.CodeableConcept) (string, string) {
-	code := codeOf(concept)
+	code := codeIn(concept, verificationSystem)
 	if st, ok := statusByCode(code); ok {
 		return code, st.Label
 	}
 	return code, codeableText(concept)
 }
 
-// codeOf returns the first code a concept carries.
-func codeOf(concept *fhir.CodeableConcept) string {
+// codeIn returns the code a concept carries in a code system. FHIR gives the
+// order of codings no meaning, so a local code can come before the standard one.
+func codeIn(concept *fhir.CodeableConcept, system string) string {
 	if concept == nil {
 		return ""
 	}
 	for _, coding := range concept.Coding {
-		if code := stringOr(coding.Code); code != "" {
+		if code := stringOr(coding.Code); code != "" && stringOr(coding.System) == system {
 			return code
 		}
 	}

@@ -26,6 +26,14 @@ func clinical(code, display string) *fhir.CodeableConcept {
 	}}}
 }
 
+// localFirst puts a code from a care provider's own code system before the
+// concept's other codings.
+func localFirst(code string, concept *fhir.CodeableConcept) *fhir.CodeableConcept {
+	local := fhir.Coding{System: to.Ptr("http://example.org/fhir/CodeSystem/allergy-status"), Code: to.Ptr(code)}
+	concept.Coding = append([]fhir.Coding{local}, concept.Coding...)
+	return concept
+}
+
 func TestClientFrom_NameInitialsBirthDateAndBSN(t *testing.T) {
 	got := clientFrom(fhir.Patient{
 		Id:         to.Ptr("pool-anna-zonnebloem-patient"),
@@ -145,6 +153,49 @@ func TestAllergyEntry_AnInactiveOrResolvedAllergyIsShownAndLeftOutOfTheAlert(t *
 		require.Equal(t, status.display+", recorded 2019", lapsed.Meta)
 		require.Equal(t, "Recorded 28 September 2026", active.Meta)
 		require.Equal(t, "Pinda", record{Allergies: []entry{lapsed, active}}.AllergyAlert())
+	}
+}
+
+// The order of a concept's codings has no meaning in FHIR, so each status is read
+// from its own HL7 code system wherever that coding sits. A status only a local
+// code gives is not understood, and the allergy stays in the alert.
+func TestAllergyEntry_ReadsEachStatusFromItsHL7CodeSystem(t *testing.T) {
+	for name, tc := range map[string]struct {
+		clinicalStatus, verificationStatus *fhir.CodeableConcept
+		wantMeta, wantAlert                string
+	}{
+		"resolved after a local code": {
+			clinicalStatus:     localFirst("opgelost", clinical("resolved", "Resolved")),
+			verificationStatus: verification("confirmed", "Confirmed"),
+			wantMeta:           "Resolved, recorded 2019", wantAlert: "",
+		},
+		"refuted after a local code": {
+			clinicalStatus:     clinical("active", "Active"),
+			verificationStatus: localFirst("weerlegd", verification("refuted", "Refuted")),
+			wantMeta:           "Recorded 2019", wantAlert: "",
+		},
+		"unconfirmed after a local code": {
+			clinicalStatus:     clinical("active", "Active"),
+			verificationStatus: localFirst("vermoed", verification("unconfirmed", "Unconfirmed")),
+			wantMeta:           "Recorded 2019", wantAlert: "Latex (suspected)",
+		},
+		"resolved in a local code only": {
+			clinicalStatus:     localFirst("resolved", &fhir.CodeableConcept{}),
+			verificationStatus: verification("confirmed", "Confirmed"),
+			wantMeta:           "Recorded 2019", wantAlert: "Latex",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := allergyEntry(fhir.AllergyIntolerance{
+				Code:               &fhir.CodeableConcept{Text: to.Ptr("Latex")},
+				ClinicalStatus:     tc.clinicalStatus,
+				VerificationStatus: tc.verificationStatus,
+				RecordedDate:       to.Ptr("2019"),
+			})
+
+			require.Equal(t, tc.wantMeta, got.Meta)
+			require.Equal(t, tc.wantAlert, record{Allergies: []entry{got}}.AllergyAlert())
+		})
 	}
 }
 
