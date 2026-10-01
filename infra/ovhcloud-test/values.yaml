@@ -20,6 +20,16 @@ ingress:
 extraEnv:
   - name: NUTS_URL
     value: "http://knooppunt.test.gf.nuts.nl/nuts"
+  # Setting this REPLACES the node's own built-in defaults rather than
+  # adding to them (nuts-node vcr/vcr.go:170-184), so both have to be
+  # repeated here: the in-cluster mock (matches mock-dezi's own
+  # helm/mock-dezi/values.yaml deziJku) and the two public dezi.nl URLs,
+  # which the node would otherwise still accept. Dropping either silently
+  # stops validating attestations from that source. Without this at all,
+  # every Dezi id_token fails closed:
+  # "fetching url ... rejected by whitelist".
+  - name: NUTS_VCR_DEZI_ALLOWEDJKU
+    value: "https://mock-dezi:8443/dezi/jwks.json,https://auth.dezi.nl/dezi/jwks.json,https://acceptatie.auth.dezi.nl/dezi/jwks.json"
 
 # The NVI component is disabled unless baseurl is set
 # (component/nvi/component.go: Enabled() is FHIRBaseURL != ""). Matches
