@@ -227,7 +227,7 @@ services:
   #
   # The subject is spelled out here because there is nothing to read it from; it
   # must stay in step with SANDBOX_NUTS_SUBJECT, which sandbox/app/nuts.go and
-  # sandbox/bootstrap-nuts.sh both default to plataan.
+  # sandbox/bootstrap-nuts.sh both default to De Plataan's URA, 00000010.
   nuts-bootstrap-healthcheck:
     image: curlimages/curl:7.87.0
     profiles:
@@ -252,14 +252,14 @@ services:
         for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
           # curl -f first: a node not yet serving the wallet must not reach grep
           # as an empty body and read as success.
-          if curl -sf -o /tmp/wallet.json http://knooppunt:8081/nuts/internal/vcr/v2/holder/plataan/vc && grep -qv '^\[\]' /tmp/wallet.json; then
-            echo 'The plataan wallet is provisioned.'
+          if curl -sf -o /tmp/wallet.json http://knooppunt:8081/nuts/internal/vcr/v2/holder/00000010/vc && grep -qv '^\[\]' /tmp/wallet.json; then
+            echo 'The 00000010 wallet is provisioned.'
             exit 0
           fi
-          echo 'Waiting for the plataan wallet to be bootstrapped...'
+          echo 'Waiting for the 00000010 wallet to be bootstrapped...'
           sleep 5
         done
-        echo 'The plataan wallet is empty. Run ./sandbox/bootstrap-nuts.sh from the repo root, then bring the stack up again.'
+        echo 'The 00000010 wallet is empty. Run ./sandbox/bootstrap-nuts.sh from the repo root, then bring the stack up again.'
         exit 1
     # Ensure the container exits successfully after the check
     restart: "no"
