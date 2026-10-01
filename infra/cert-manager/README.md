@@ -12,17 +12,17 @@ release.
 ## Install
 
 ```
-helm repo add jetstack https://charts.jetstack.io
-helm repo update
-helm install cert-manager jetstack/cert-manager \
+helm install cert-manager oci://quay.io/jetstack/charts/cert-manager \
+  --version v1.21.2 \
   --namespace cert-manager --create-namespace \
   --set crds.enabled=true
 kubectl wait --for=condition=Available --timeout=120s \
   -n cert-manager deployment/cert-manager deployment/cert-manager-webhook
 ```
 
-Then apply both `ClusterIssuer`s - Let's Encrypt uses the `email` in each
-for certificate-expiry notices:
+Then apply both `ClusterIssuer`s - Let's Encrypt still requires an `email`
+on the account even though it stopped sending expiry notices to it
+([2025-01-22](https://letsencrypt.org/2025/01/22/ending-expiration-emails)):
 
 ```
 kubectl apply -f cluster-issuer-staging.yaml -f cluster-issuer-production.yaml
@@ -30,14 +30,12 @@ kubectl apply -f cluster-issuer-staging.yaml -f cluster-issuer-production.yaml
 
 ## Rollout
 
-Every ingress in `infra/ovhcloud-test/values.yaml` starts on
-`letsencrypt-staging` (see each `cert-manager.io/cluster-issuer`
-annotation). Staging certs aren't trusted by browsers/clients, but issuance
-is near-unlimited, so this is where to debug the HTTP-01 setup itself.
-
-Once a host's staging cert issues successfully -
-`kubectl describe certificate <host>-tls` shows `Ready: True` - switch that
-host's annotation from `letsencrypt-staging` to `letsencrypt-production` and
-redeploy. Do this one host at a time rather than all four at once:
-production allows only 5 duplicate certs per domain per week, so a mistake
-repeated across all four burns through that fast.
+Every ingress in `infra/ovhcloud-test/values.yaml` goes straight to
+`letsencrypt-production` (see each `cert-manager.io/cluster-issuer`
+annotation). The HTTP-01 setup was validated against `letsencrypt-staging`
+by hand, on each host in turn, before any of this was committed - staging
+certs aren't trusted by browsers/clients, but issuance is near-unlimited,
+so that's the issuer to debug against if the setup ever needs changing.
+Production allows only 5 duplicate certs per domain per week, so re-validate
+against staging first for any change that could cause repeated issuance
+(e.g. ingress annotation or host changes), one host at a time.
