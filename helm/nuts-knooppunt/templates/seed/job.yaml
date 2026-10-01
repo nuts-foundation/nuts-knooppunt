@@ -25,6 +25,10 @@ spec:
               value: {{ .Values.seed.zonnebloemEndpointAddress | quote }}
             - name: SEED_PLATAAN_ENDPOINT_ADDRESS
               value: {{ .Values.seed.plataanEndpointAddress | quote }}
+            - name: SEED_ZONNEBLOEM_AUTH_SERVER_ADDRESS
+              value: {{ .Values.seed.zonnebloemAuthServerAddress | quote }}
+            - name: SEED_PLATAAN_AUTH_SERVER_ADDRESS
+              value: {{ .Values.seed.plataanAuthServerAddress | quote }}
           args:
             - "http://{{ include "nuts-knooppunt.fullname" . }}:{{ .Values.service.internalPort }}"
             - {{ .Values.seed.fhirBaseURL | quote }}
