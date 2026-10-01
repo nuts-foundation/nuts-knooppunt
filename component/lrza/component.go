@@ -37,8 +37,11 @@ import (
 
 var _ component.Lifecycle = &Component{}
 
-// defaultResourceTypes are the resource types synced from the trusted directory by default.
-var defaultResourceTypes = []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
+// resourceTypes are the resource types synced from the trusted directory, in the NL-GF-recommended
+// initial-load order (Organization -> Location -> HealthcareService -> Endpoint ->
+// OrganizationAffiliation). Not configurable: the LRZA is a trusted national directory synced under a
+// fixed specification, not a peer directory where an operator might reasonably want to narrow scope.
+var resourceTypes = []string{"Organization", "Location", "HealthcareService", "Endpoint", "OrganizationAffiliation"}
 
 // maxUpdateEntries limits the number of entries processed in a single FHIR transaction to prevent
 // excessive load on the FHIR server.
@@ -53,9 +56,7 @@ const searchPageSize = 100
 var clockSkewBuffer = 2 * time.Second
 
 func DefaultConfig() Config {
-	return Config{
-		ResourceTypes: defaultResourceTypes,
-	}
+	return Config{}
 }
 
 type Config struct {
@@ -64,8 +65,6 @@ type Config struct {
 	// QueryBaseUrl is the base URL of the local mCSD query directory that synced resources are
 	// written into.
 	QueryBaseUrl string `koanf:"querybaseurl"`
-	// ResourceTypes are the FHIR resource types to sync. Defaults to defaultResourceTypes.
-	ResourceTypes []string `koanf:"resourcetypes"`
 	// Auth optionally configures OAuth2 client-credentials authentication against the source.
 	Auth httpauth.OAuth2Config `koanf:"auth"`
 	// Config carries the optional mTLS client-certificate settings for the source connection
@@ -89,7 +88,6 @@ type Component struct {
 	fhirLRZAClient  fhirclient.Client
 	fhirQueryClient fhirclient.Client
 
-	resourceTypes  []string
 	lastUpdateTime string // _since value for the next incremental sync; empty means full sync
 	updateMux      *sync.Mutex
 }
@@ -129,16 +127,10 @@ func New(config Config) (*Component, error) {
 		return nil, fmt.Errorf("invalid LRZA query directory FHIR base URL (url=%s): %w", config.QueryBaseUrl, err)
 	}
 
-	resourceTypes := config.ResourceTypes
-	if len(resourceTypes) == 0 {
-		resourceTypes = append([]string(nil), defaultResourceTypes...)
-	}
-
 	return &Component{
 		config:          config,
 		fhirLRZAClient:  fhirclient.New(sourceBaseURL, sourceHTTPClient, &fhirclient.Config{UsePostSearch: false}),
 		fhirQueryClient: fhirclient.New(queryBaseURL, tracing.NewHTTPClient(), &fhirclient.Config{UsePostSearch: false}),
-		resourceTypes:   resourceTypes,
 		updateMux:       &sync.Mutex{},
 	}, nil
 }
@@ -169,7 +161,7 @@ func newSourceHTTPClient(config Config) (*http.Client, error) {
 func (c *Component) Start() error {
 	slog.Info("Starting LRZA sync component",
 		logging.FHIRServer(c.config.LRZABaseUrl),
-		slog.Any("resourceTypes", c.resourceTypes))
+		slog.Any("resourceTypes", resourceTypes))
 
 	return nil
 }
@@ -251,7 +243,7 @@ func (run *syncRun) incremental() bool {
 // only what currently exists, with no deletions to replay); later syncs read changes via _history.
 func (c *Component) fetchEntries(ctx context.Context, run *syncRun) error {
 	var entries []fhir.BundleEntry
-	for i, resourceType := range c.resourceTypes {
+	for i, resourceType := range resourceTypes {
 		curr, searchSet, err := c.queryResourceType(ctx, run, resourceType, cloneValues(run.searchParams))
 		if err != nil {
 			return fmt.Errorf("failed to query %s: %w", resourceType, err)
