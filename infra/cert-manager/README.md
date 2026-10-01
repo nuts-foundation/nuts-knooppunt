@@ -21,9 +21,8 @@ kubectl wait --for=condition=Available --timeout=120s \
   -n cert-manager deployment/cert-manager deployment/cert-manager-webhook
 ```
 
-Then apply both `ClusterIssuer`s. Fill in a real `email` in each file first -
-Let's Encrypt uses it for certificate-expiry notices, and the placeholder
-(`ops@nuts.nl`) is just that, a placeholder:
+Then apply both `ClusterIssuer`s - Let's Encrypt uses the `email` in each
+for certificate-expiry notices:
 
 ```
 kubectl apply -f cluster-issuer-staging.yaml -f cluster-issuer-production.yaml

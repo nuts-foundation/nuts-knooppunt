@@ -14,9 +14,7 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    # TODO: replace with the team's actual ops contact before applying -
-    # Let's Encrypt emails this address about certificate expiry problems.
-    email: ops@nuts.nl
+    email: nuts@reinkrul.nl
     privateKeySecretRef:
       name: letsencrypt-staging-account-key
     solvers:

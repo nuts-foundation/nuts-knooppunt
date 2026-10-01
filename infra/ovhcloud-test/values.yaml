@@ -8,14 +8,14 @@
 # record pointing at the ingress-nginx controller's LoadBalancer IP.
 #
 # TLS via cert-manager (nuts-knooppunt#610), HTTP-01 challenge solved
-# through this same ingress-nginx - see infra/cert-manager/. Starts on
-# letsencrypt-staging; switch every cluster-issuer annotation below to
-# letsencrypt-production once staging's cert issuance is confirmed working.
+# through this same ingress-nginx - see infra/cert-manager/. Validated
+# against letsencrypt-staging manually before this went in, so every
+# cluster-issuer annotation below goes straight to letsencrypt-production.
 ingress:
   enabled: true
   className: nginx
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-staging
+    cert-manager.io/cluster-issuer: letsencrypt-production
   hosts:
     - host: knooppunt.test.gf.nuts.nl
       paths:
@@ -173,7 +173,7 @@ nutsadmin:
     enabled: true
     className: nginx
     annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-staging
+      cert-manager.io/cluster-issuer: letsencrypt-production
     hosts:
       - host: nutsadmin.test.gf.nuts.nl
         paths:
@@ -206,7 +206,7 @@ mock-dezi:
     enabled: true
     className: nginx
     annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-staging
+      cert-manager.io/cluster-issuer: letsencrypt-production
     hosts:
       - host: mock-dezi.test.gf.nuts.nl
         paths:
@@ -228,7 +228,7 @@ gf-sandbox:
     enabled: true
     className: nginx
     annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-staging
+      cert-manager.io/cluster-issuer: letsencrypt-production
     hosts:
       # Not gf-sandbox.test.gf.nuts.nl - the domain already has "gf" in it.
       - host: sandbox.test.gf.nuts.nl
