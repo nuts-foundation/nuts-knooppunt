@@ -4,16 +4,13 @@
 # PEPs, nutsadmin, mock-vc-issuer, mock-mitz, mock-dezi, gf-sandbox, and the
 # seed Job (nuts-knooppunt#572) that populates it with demo data.
 #
-# No real domain decided yet (nuts-knooppunt#563 is still open), so this
-# uses nip.io against the ingress-nginx controller's LoadBalancer IP
-# (57.129.23.152) already running on this cluster - the same pattern an
-# earlier smoke-test release on this cluster already proved works. Swap
-# these hosts for the real *.test.gf.nuts.nl domain once #563 lands.
+# Hosts live under *.test.gf.nuts.nl (nuts-knooppunt#563): a wildcard A
+# record pointing at the ingress-nginx controller's LoadBalancer IP.
 ingress:
   enabled: true
   className: nginx
   hosts:
-    - host: knooppunt.57.129.23.152.nip.io
+    - host: knooppunt.test.gf.nuts.nl
       paths:
         - path: /
           pathType: ImplementationSpecific
@@ -22,7 +19,7 @@ ingress:
 # identifiers, must match the public ingress host above.
 extraEnv:
   - name: NUTS_URL
-    value: "http://knooppunt.57.129.23.152.nip.io/nuts"
+    value: "http://knooppunt.test.gf.nuts.nl/nuts"
 
 # The NVI component is disabled unless baseurl is set
 # (component/nvi/component.go: Enabled() is FHIRBaseURL != ""). Matches
@@ -165,7 +162,7 @@ nutsadmin:
     enabled: true
     className: nginx
     hosts:
-      - host: nutsadmin.57.129.23.152.nip.io
+      - host: nutsadmin.test.gf.nuts.nl
         paths:
           - path: /
             pathType: ImplementationSpecific
@@ -192,13 +189,13 @@ mock-dezi:
     enabled: true
     className: nginx
     hosts:
-      - host: mock-dezi.57.129.23.152.nip.io
+      - host: mock-dezi.test.gf.nuts.nl
         paths:
           - path: /
             pathType: ImplementationSpecific
   env:
     # Must match gf-sandbox's public callback below.
-    deziAllowedRedirectUris: "http://gf-sandbox.57.129.23.152.nip.io/demo/auth/callback"
+    deziAllowedRedirectUris: "http://sandbox.test.gf.nuts.nl/demo/auth/callback"
 
 gf-sandbox:
   enabled: true
@@ -206,13 +203,14 @@ gf-sandbox:
     enabled: true
     className: nginx
     hosts:
-      - host: gf-sandbox.57.129.23.152.nip.io
+      # Not gf-sandbox.test.gf.nuts.nl - the domain already has "gf" in it.
+      - host: sandbox.test.gf.nuts.nl
         paths:
           - path: /
             pathType: ImplementationSpecific
   env:
-    deziPublicAuthorizeUrl: "http://mock-dezi.57.129.23.152.nip.io/authorize"
-    sandboxPublicUrl: "http://gf-sandbox.57.129.23.152.nip.io"
+    deziPublicAuthorizeUrl: "http://mock-dezi.test.gf.nuts.nl/authorize"
+    sandboxPublicUrl: "http://sandbox.test.gf.nuts.nl"
 
 seed:
   enabled: true
