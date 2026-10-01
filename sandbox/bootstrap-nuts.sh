@@ -27,7 +27,13 @@
 set -euo pipefail
 
 NUTS="${KNOOPPUNT_INTERNAL_URL:-http://localhost:8081}/nuts/internal"
-SUBJECT="${SANDBOX_NUTS_SUBJECT:-plataan}"
+# De Plataan's URA (test/testdata/vectors/plataan/vectors.go's URA constant -
+# a bash script can't import it, so this has to stay in step by hand),
+# matching the PEP in front of it and the Kubernetes seed pipeline. Not a
+# human-readable name: that used to be this script's own default, and
+# sandbox/app/nuts.go's independently, until both were switched to the URA
+# so neither environment needs an override.
+SUBJECT="${SANDBOX_NUTS_SUBJECT:-00000010}"
 CERTS="$(cd "$(dirname "$0")" && pwd)/.certs"
 
 # Every call to the node goes through this, so that a refusal arrives as

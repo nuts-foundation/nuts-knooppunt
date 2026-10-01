@@ -242,12 +242,6 @@ gf-sandbox:
   env:
     deziPublicAuthorizeUrl: "https://mock-dezi.test.gf.nuts.nl/authorize"
     sandboxPublicUrl: "https://sandbox.test.gf.nuts.nl"
-    # The seed pipeline (test/testdata/cmd/main.go) creates De Plataan's
-    # Nuts subject under its URA, not the literal name "plataan" that
-    # sandbox/app/nuts.go defaults to (that default matches
-    # docker-compose's subject naming instead). Without this, every
-    # retrieve request fails: "invalid_request - subject not found".
-    nutsSubject: "00000010"
 
 seed:
   enabled: true

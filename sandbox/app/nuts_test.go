@@ -11,6 +11,8 @@ import (
 	"github.com/nuts-foundation/go-did/vc"
 	"github.com/nuts-foundation/nuts-node/vcr/pe"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/plataan"
 )
 
 func TestOrganizationContextCredentialShape(t *testing.T) {
@@ -53,7 +55,7 @@ func TestNutsConfigDefaultsAreDevelopmentLocal(t *testing.T) {
 	cfg := nutsConfigFromEnv()
 
 	require.Equal(t, "http://localhost:8081", cfg.InternalBaseURL)
-	require.Equal(t, "plataan", cfg.Subject)
+	require.Equal(t, plataan.URA, cfg.Subject)
 	require.Equal(t, "bgz", cfg.Scope)
 	require.Equal(t, "Z3", cfg.FacilityType)
 }
@@ -126,7 +128,7 @@ func TestOrganizationContextCredentialMatchesBGZPolicy(t *testing.T) {
 func fakeNode(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /nuts/internal/auth/v2/plataan/request-service-access-token",
+	mux.HandleFunc("POST /nuts/internal/auth/v2/"+plataan.URA+"/request-service-access-token",
 		func(w http.ResponseWriter, r *http.Request) {
 			// The real node answers 415 on anything else, and httptest does
 			// not: json.Decoder below happily decodes a body sent as

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/plataan"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 	"github.com/stretchr/testify/require"
 )
@@ -633,7 +634,7 @@ func authorizeSandbox(t *testing.T, nodeBaseURL string) (*httptest.Server, *http
 func nodeIntrospecting(t *testing.T, status int, response string) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /nuts/internal/auth/v2/plataan/request-service-access-token",
+	mux.HandleFunc("POST /nuts/internal/auth/v2/"+plataan.URA+"/request-service-access-token",
 		func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"access_token":"the-token"}`))
@@ -669,7 +670,7 @@ const vouchedClaims = `"user_id":"900001234","user_role":"01.022",` +
 func nodeVouchingForTheToken(t *testing.T) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /nuts/internal/auth/v2/plataan/request-service-access-token",
+	mux.HandleFunc("POST /nuts/internal/auth/v2/"+plataan.URA+"/request-service-access-token",
 		func(w http.ResponseWriter, r *http.Request) {
 			var body struct {
 				IdToken string `json:"id_token"`

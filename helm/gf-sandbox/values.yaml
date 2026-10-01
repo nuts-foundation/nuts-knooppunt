@@ -60,12 +60,11 @@ env:
   sandboxPublicUrl: "http://localhost:8091"
   knooppuntInternalUrl: "http://knooppunt:8081"
   hapiBaseUrl: "http://fhir:8080/fhir"
-  # Matches sandbox/app/nuts.go's own default and docker-compose's subject
-  # naming (bootstrap-nuts.sh creates a subject literally named "plataan").
-  # The Kubernetes seed pipeline (test/testdata/cmd/main.go) uses a
-  # different scheme - De Plataan's URA, not its name - so
-  # infra/ovhcloud-test/values.yaml overrides this to match.
-  nutsSubject: "plataan"
+  # De Plataan's URA (test/testdata/vectors/plataan.URA) - matches
+  # sandbox/app/nuts.go's own default and what the seed pipeline
+  # (test/testdata/cmd/main.go) and docker-compose's bootstrap-nuts.sh both
+  # create the Nuts subject under, so no environment needs to override this.
+  nutsSubject: "00000010"
 
 volumes: []
 volumeMounts: []

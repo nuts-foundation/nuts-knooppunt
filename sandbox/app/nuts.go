@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/plataan"
 )
 
 // nutsConfig is what this process needs to talk to its own node: where to reach
@@ -31,9 +33,15 @@ func nutsConfigFromEnv() nutsConfig {
 		// (NUTS_POLICY_DIRECTORY and friends), and a sandbox setting wearing it
 		// reads as node config that the node never sees.
 		InternalBaseURL: envOr("KNOOPPUNT_INTERNAL_URL", "http://localhost:8081"),
-		Subject:         envOr("SANDBOX_NUTS_SUBJECT", "plataan"),
-		Scope:           envOr("SANDBOX_BGZ_SCOPE", "bgz"),
-		FacilityType:    envOr("SANDBOX_FACILITY_TYPE", "Z3"),
+		// The seed pipeline (test/testdata/cmd/main.go) creates De Plataan's
+		// Nuts subject under its URA, not a human-readable name - matching
+		// the PEP in front of it, whose own authorization config is keyed
+		// by URA (DATA_HOLDER_ORGANIZATION_URA). A literal name here used
+		// to be docker-compose's own default (bootstrap-nuts.sh); both now
+		// default to the URA so neither environment needs an override.
+		Subject:      envOr("SANDBOX_NUTS_SUBJECT", plataan.URA),
+		Scope:        envOr("SANDBOX_BGZ_SCOPE", "bgz"),
+		FacilityType: envOr("SANDBOX_FACILITY_TYPE", "Z3"),
 	}
 }
 

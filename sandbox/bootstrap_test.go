@@ -247,7 +247,7 @@ func x509CredentialJWT(t *testing.T) string {
 	t.Helper()
 	credential := jwtCredentialWithClaims(map[string]any{
 		"iss": "did:x509:0:sha256:0Nfv4ZSDLbBqLXvVBPcjITMWFYm4dsK5wIeCDcbmxi0::subject:serialNumber:00000010",
-		"sub": "did:web:example.com:iam:plataan",
+		"sub": "did:web:example.com:iam:00000010",
 		"jti": "urn:uuid:5f0ff0a1-2eb3-4f30-b3a1-6f2a54a5c7",
 	}, "VerifiableCredential", "X509Credential")
 	payload := strings.Split(credential, ".")[1]
@@ -410,9 +410,9 @@ func TestBootstrapIsIdempotent(t *testing.T) {
 	creates, stores := node.counts()
 	require.Equal(t, 1, creates)
 	require.Equal(t, 1, stores)
-	require.Equal(t, []string{"plataan"}, node.subjectNames(),
+	require.Equal(t, []string{"00000010"}, node.subjectNames(),
 		"the create must name the subject; without a name the node generates a uuid and the wallet calls address nothing")
-	require.Len(t, node.walletRaw("plataan"), 1)
+	require.Len(t, node.walletRaw("00000010"), 1)
 
 	// The reference helpers in test/e2e/pep/authorization_test.go always create
 	// and always store. Re-running this script must do neither, or the compose
@@ -425,8 +425,8 @@ func TestBootstrapIsIdempotent(t *testing.T) {
 
 func TestBootstrapReadsEveryCredentialFormatTheWalletReturns(t *testing.T) {
 	node, nodeURL := newFakeNode(t)
-	node.seedSubject("plataan")
-	node.seedWallet("plataan",
+	node.seedSubject("00000010")
+	node.seedWallet("00000010",
 		// A JSON-LD credential with one type marshals that type as a bare
 		// string (go-did vc/vc.go, marshal.Unplural).
 		`{"type":"OrganizationCredential"}`,
@@ -462,8 +462,8 @@ func TestBootstrapReadsEveryCredentialFormatTheWalletReturns(t *testing.T) {
 
 func TestBootstrapDoesNothingWhenTheWalletAlreadyHoldsTheCredential(t *testing.T) {
 	node, nodeURL := newFakeNode(t)
-	node.seedSubject("plataan")
-	node.seedWallet("plataan", `"`+x509CredentialJWT(t)+`"`)
+	node.seedSubject("00000010")
+	node.seedWallet("00000010", `"`+x509CredentialJWT(t)+`"`)
 
 	runBootstrap(t, nodeURL, skipDidx509(t)...)
 	creates, stores := node.counts()
@@ -506,7 +506,7 @@ func TestBootstrapFailsWhenTheNodeReturnsAnError(t *testing.T) {
 
 	t.Run("reading the wallet", func(t *testing.T) {
 		node, nodeURL := newFakeNode(t)
-		node.seedSubject("plataan")
+		node.seedSubject("00000010")
 		node.breakWallet()
 
 		out := runBootstrapExpectingFailure(t, nodeURL, skipDidx509(t)...)
@@ -588,7 +588,7 @@ func TestBootstrapFailsWhenTheNodeRejectsTheCredential(t *testing.T) {
 
 	_, stores := node.counts()
 	require.Equal(t, 1, stores, "the credential was offered and refused")
-	require.Empty(t, node.walletRaw("plataan"))
+	require.Empty(t, node.walletRaw("00000010"))
 }
 
 func TestBootstrapIssuesTheCredentialFromTheDemoCertificates(t *testing.T) {
@@ -615,10 +615,10 @@ func TestBootstrapIssuesTheCredentialFromTheDemoCertificates(t *testing.T) {
 		"vc", "/cert-chain.pem", "/cert-key.key",
 		// The issuer of the demo chain, from generate-demo-certs.sh.
 		"CN=GF Sandbox Demo CA",
-		"did:web:example.com:iam:plataan",
+		"did:web:example.com:iam:00000010",
 	}, toolkit.arguments(t))
 
-	require.Equal(t, []string{`"` + credential + `"`}, node.walletRaw("plataan"),
+	require.Equal(t, []string{`"` + credential + `"`}, node.walletRaw("00000010"),
 		"the credential must be stored as a JSON string, as the node parses the body as JSON")
 }
 
