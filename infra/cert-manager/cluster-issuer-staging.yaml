@@ -1,0 +1,25 @@
+# HTTP-01 challenge, solved through the existing ingress-nginx controller -
+# no extra DNS provider credentials needed, since there are 4 fixed public
+# hosts here, not a wildcard. See infra/cert-manager/README.md.
+#
+# Staging: near-unlimited issuance, for working out the setup without
+# burning production's rate limit (5 duplicate certs/domain/week). Not
+# trusted by browsers/clients - every ingress using this issuer starts on
+# letsencrypt-staging in infra/ovhcloud-test/values.yaml; switch to
+# letsencrypt-production once a staging cert issues successfully.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    # TODO: replace with the team's actual ops contact before applying -
+    # Let's Encrypt emails this address about certificate expiry problems.
+    email: ops@nuts.nl
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - http01:
+          ingress:
+            ingressClassName: nginx
