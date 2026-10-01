@@ -17,6 +17,10 @@ The test stack itself (Helm charts, environment values) lives in
 `helm/` and `infra/ovhcloud-test`, deployed via `ci.yaml` on every push
 to `main` (see "CI deploy" below).
 
+TLS for the test environment's public ingresses is cert-manager, installed
+and configured the same way ingress-nginx is - manually, not through
+Terraform. See `infra/cert-manager/README.md`.
+
 ## Setup
 
 Provider credentials (never committed):
