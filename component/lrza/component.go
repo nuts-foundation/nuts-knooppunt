@@ -31,7 +31,6 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/httpauth"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -140,7 +139,7 @@ func New(config Config) (*Component, error) {
 // the national LRZA environment), then OpenTelemetry tracing, then optional OAuth2 client-credentials.
 // The same base transport - including mTLS - is reused for OAuth2 token requests.
 func newSourceHTTPClient(config Config) (*http.Client, error) {
-	var baseTransport http.RoundTripper = http.DefaultTransport
+	var baseTransport = http.DefaultTransport
 	if config.TLSCertFile != "" {
 		tlsConfig, err := tlsutil.CreateTLSConfig(config.Config)
 		if err != nil {
@@ -166,25 +165,25 @@ func (c *Component) Start() error {
 	return nil
 }
 
-func (c *Component) Stop(ctx context.Context) error { return nil }
+func (c *Component) Stop(_ context.Context) error { return nil }
 
 // RegisterHttpHandlers registers no routes: /lrza/update is served through the generated
 // OpenAPI strict server, wired up in strictAPIServer.RegisterHttpHandlers in package cmd.
-func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) {
+func (c *Component) RegisterHttpHandlers(_, _ *http.ServeMux) {
 }
 
 func (c *Component) TriggerLrzaSync(ctx context.Context, _ api.TriggerLrzaSyncRequestObject) (api.TriggerLrzaSyncResponseObject, error) {
 	report, err := c.update(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "LRZA update failed", logging.Error(err))
-		return api.TriggerLrzaSync500JSONResponse{Error: to.Ptr("Failed to update LRZA: " + err.Error())}, nil
+		return api.TriggerLrzaSync500JSONResponse{Error: new("Failed to update LRZA: " + err.Error())}, nil
 	}
 	return api.TriggerLrzaSync200JSONResponse(api.DirectoryUpdateReport{
-		Created:  to.Ptr(report.CountCreated),
-		Updated:  to.Ptr(report.CountUpdated),
-		Deleted:  to.Ptr(report.CountDeleted),
-		Warnings: to.Ptr(report.Warnings),
-		Errors:   to.Ptr(report.Errors),
+		Created:  new(report.CountCreated),
+		Updated:  new(report.CountUpdated),
+		Deleted:  new(report.CountDeleted),
+		Warnings: new(report.Warnings),
+		Errors:   new(report.Errors),
 	}), nil
 }
 
