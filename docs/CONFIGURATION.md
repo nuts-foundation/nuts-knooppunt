@@ -47,7 +47,6 @@ enable NUTS node as embedded service within your Knooppunt, those variables are 
 | **Addressing / LRZA**                |                                 |  |
 | `KNPT_LRZA_LRZABASEURL`              | `lrza.lrzabaseurl`              | Base URL of the trusted national LRZA mCSD directory to synchronize from. The LRZA sync client is only enabled when this is set. |
 | `KNPT_LRZA_QUERYBASEURL`             | `lrza.querybaseurl`             | FHIR base URL of the local mCSD Query Directory to synchronize into (shared with the mCSD client). |
-| `KNPT_LRZA_RESOURCETYPES`            | `lrza.resourcetypes`            | (Optional) Resource types to synchronize from the LRZA. Defaults to: `Organization`, `Endpoint`, `Location`, `HealthcareService`, `PractitionerRole`, `Practitioner`. Multiple values can be specified as a comma-separated list. |
 | `KNPT_LRZA_AUTH_TOKENENDPOINT`       | `lrza.auth.tokenendpoint`       | (Optional) OAuth2 token endpoint URL for authenticating requests to the LRZA. |
 | `KNPT_LRZA_AUTH_CLIENTID`            | `lrza.auth.clientid`            | (Optional) OAuth2 client ID for authenticating requests to the LRZA. |
 | `KNPT_LRZA_AUTH_CLIENTSECRET`        | `lrza.auth.clientsecret`        | (Optional) OAuth2 client secret for authenticating requests to the LRZA. |
