@@ -4,25 +4,33 @@
 # PEPs, nutsadmin, mock-vc-issuer, mock-mitz, mock-dezi, gf-sandbox, and the
 # seed Job (nuts-knooppunt#572) that populates it with demo data.
 #
-# No real domain decided yet (nuts-knooppunt#563 is still open), so this
-# uses nip.io against the ingress-nginx controller's LoadBalancer IP
-# (57.129.23.152) already running on this cluster - the same pattern an
-# earlier smoke-test release on this cluster already proved works. Swap
-# these hosts for the real *.test.gf.nuts.nl domain once #563 lands.
+# Hosts live under *.test.gf.nuts.nl (nuts-knooppunt#563): a wildcard A
+# record pointing at the ingress-nginx controller's LoadBalancer IP.
+#
+# TLS via cert-manager (nuts-knooppunt#610), HTTP-01 challenge solved
+# through this same ingress-nginx - see infra/cert-manager/. Validated
+# against letsencrypt-staging manually before this went in, so every
+# cluster-issuer annotation below goes straight to letsencrypt-production.
 ingress:
   enabled: true
   className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-production
   hosts:
-    - host: knooppunt.57.129.23.152.nip.io
+    - host: knooppunt.test.gf.nuts.nl
       paths:
         - path: /
           pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - knooppunt.test.gf.nuts.nl
+      secretName: knooppunt-tls
 
 # The embedded nuts-node's own public base URL - used for did:web
 # identifiers, must match the public ingress host above.
 extraEnv:
   - name: NUTS_URL
-    value: "http://knooppunt.57.129.23.152.nip.io/nuts"
+    value: "https://knooppunt.test.gf.nuts.nl/nuts"
 
 # The NVI component is disabled unless baseurl is set
 # (component/nvi/component.go: Enabled() is FHIRBaseURL != ""). Matches
@@ -164,11 +172,17 @@ nutsadmin:
   ingress:
     enabled: true
     className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-production
     hosts:
-      - host: nutsadmin.57.129.23.152.nip.io
+      - host: nutsadmin.test.gf.nuts.nl
         paths:
           - path: /
             pathType: ImplementationSpecific
+    tls:
+      - hosts:
+          - nutsadmin.test.gf.nuts.nl
+        secretName: nutsadmin-tls
 
 mock-vc-issuer:
   enabled: true
@@ -191,42 +205,69 @@ mock-dezi:
   ingress:
     enabled: true
     className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-production
     hosts:
-      - host: mock-dezi.57.129.23.152.nip.io
+      - host: mock-dezi.test.gf.nuts.nl
         paths:
           - path: /
             pathType: ImplementationSpecific
+    tls:
+      - hosts:
+          - mock-dezi.test.gf.nuts.nl
+        secretName: mock-dezi-tls
   env:
-    # Must match gf-sandbox's public callback below.
-    deziAllowedRedirectUris: "http://gf-sandbox.57.129.23.152.nip.io/demo/auth/callback"
+    # Must match gf-sandbox's public callback below. https, not http - once
+    # a host has a tls: block, ingress-nginx redirects http to https by
+    # default, and this is matched exactly by the OAuth2 redirect check.
+    deziAllowedRedirectUris: "https://sandbox.test.gf.nuts.nl/demo/auth/callback"
 
 gf-sandbox:
   enabled: true
   ingress:
     enabled: true
     className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-production
     hosts:
-      - host: gf-sandbox.57.129.23.152.nip.io
+      # Not gf-sandbox.test.gf.nuts.nl - the domain already has "gf" in it.
+      - host: sandbox.test.gf.nuts.nl
         paths:
           - path: /
             pathType: ImplementationSpecific
+    tls:
+      - hosts:
+          - sandbox.test.gf.nuts.nl
+        secretName: sandbox-tls
   env:
-    deziPublicAuthorizeUrl: "http://mock-dezi.57.129.23.152.nip.io/authorize"
-    sandboxPublicUrl: "http://gf-sandbox.57.129.23.152.nip.io"
+    deziPublicAuthorizeUrl: "https://mock-dezi.test.gf.nuts.nl/authorize"
+    sandboxPublicUrl: "https://sandbox.test.gf.nuts.nl"
+    # The seed pipeline (test/testdata/cmd/main.go) creates De Plataan's
+    # Nuts subject under its URA, not the literal name "plataan" that
+    # sandbox/app/nuts.go defaults to (that default matches
+    # docker-compose's subject naming instead). Without this, every
+    # retrieve request fails: "invalid_request - subject not found".
+    nutsSubject: "00000010"
   extraEnv:
     - name: ZONNEBLOEM_EHR_PUBLIC_URL
-      value: "http://zonnebloem-ehr.57.129.23.152.nip.io"
+      value: "https://zonnebloem-ehr.test.gf.nuts.nl"
 
 zonnebloem-ehr:
   enabled: true
   ingress:
     enabled: true
     className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-production
     hosts:
-      - host: zonnebloem-ehr.57.129.23.152.nip.io
+      - host: zonnebloem-ehr.test.gf.nuts.nl
         paths:
           - path: /
             pathType: ImplementationSpecific
+    tls:
+      - hosts:
+          - zonnebloem-ehr.test.gf.nuts.nl
+        secretName: zonnebloem-ehr-tls
 
 seed:
   enabled: true

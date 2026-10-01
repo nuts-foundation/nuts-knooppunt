@@ -30,9 +30,11 @@ jobs:
         id: version
         shell: bash
         run: |
-          echo "git_commit=$(echo ${GITHUB_SHA})" >> $GITHUB_OUTPUT
-          echo "git_branch=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_OUTPUT
-          echo "git_version=$(git name-rev --tags --name-only $(git rev-parse HEAD))" >> $GITHUB_OUTPUT
+          {
+            echo "git_commit=${GITHUB_SHA}"
+            echo "git_branch=${GITHUB_REF#refs/heads/}"
+            echo "git_version=$(git name-rev --tags --name-only "$(git rev-parse HEAD)")"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: actions-ecosystem/action-get-latest-tag@v1
         id: get-latest-tag

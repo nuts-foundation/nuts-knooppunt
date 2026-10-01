@@ -55,6 +55,8 @@ spec:
               value: {{ .Values.env.knooppuntInternalUrl | quote }}
             - name: HAPI_BASE_URL
               value: {{ .Values.env.hapiBaseUrl | quote }}
+            - name: SANDBOX_NUTS_SUBJECT
+              value: {{ .Values.env.nutsSubject | quote }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
