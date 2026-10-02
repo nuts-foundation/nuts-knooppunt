@@ -1,0 +1,68 @@
+{{- if .Values.traceCapture.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gf-sandbox.collectorName" . }}
+  labels:
+    {{- include "gf-sandbox.collectorLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "gf-sandbox.collectorSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/otel-collector-config.yaml") . | sha256sum }}
+      labels:
+        {{- include "gf-sandbox.collectorLabels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: otel-collector
+          image: "{{ .Values.traceCapture.collector.image.repository }}:{{ .Values.traceCapture.collector.image.tag }}"
+          imagePullPolicy: {{ .Values.traceCapture.collector.image.pullPolicy }}
+          args:
+            - --config=/etc/otelcol/config.yaml
+          env:
+            - name: SANDBOX_OTLP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "gf-sandbox.otlpTokenSecretName" . }}
+                  key: token
+          ports:
+            - name: otlp-http
+              containerPort: 4318
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: otlp-http
+          {{- with .Values.traceCapture.collector.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "gf-sandbox.collectorName" . }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gf-sandbox.collectorName" . }}
+  labels:
+    {{- include "gf-sandbox.collectorLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4318
+      targetPort: otlp-http
+      protocol: TCP
+      name: otlp-http
+  selector:
+    {{- include "gf-sandbox.collectorSelectorLabels" . | nindent 4 }}
+{{- end }}

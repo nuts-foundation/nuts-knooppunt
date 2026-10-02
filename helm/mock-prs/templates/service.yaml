@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mock-prs.fullname" . }}
+  labels:
+    {{- include "mock-prs.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: {{ .Values.service.sandboxPort }}
+      targetPort: sandbox
+      protocol: TCP
+      name: sandbox
+  selector:
+    {{- include "mock-prs.selectorLabels" . | nindent 4 }}

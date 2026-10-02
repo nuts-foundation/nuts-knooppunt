@@ -408,20 +408,26 @@ states that the deployment does not trace the PRS call instead of reporting its 
 
 Receiver configuration is separate from the public application listener:
 
-- `SANDBOX_OTLP_LISTEN_ADDR`: private listener, `:4318` in Compose. No host port is published.
+- `SANDBOX_OTLP_LISTEN_ADDR`: private listener, `:4318` in Compose and Helm. No host port is
+  published, and on Kubernetes it has a ClusterIP service of its own that no ingress routes to.
 - `SANDBOX_OTLP_TOKEN`: shared ingest token, required by the receiver and Collector.
-- `SANDBOX_PRS_URL`: PRS base URL to recognize, `http://mock-prs:8080` in offline Compose.
+- `SANDBOX_PRS_URL`: PRS base URL to recognize, `http://mock-prs:8080` in offline Compose and in
+  the test environment.
 - `SANDBOX_TRACE_SERVICE_NAME`: expected trace service, default `nuts-knooppunt`.
 
 The receiver is disabled when these variables are unset. Partial configuration fails startup. Its
 `POST /v1/traces` endpoint accepts authenticated OTLP HTTP protobuf with a 1 MiB request limit and
 at most 1,024 spans. It retains up to 512 request correlations for five minutes and up to 128 span
 identities per correlation; unrelated or stale spans are ignored. A cleared run cannot be recreated.
-The sandbox overlay sets the Go SDK's `OTEL_BSP_SCHEDULE_DELAY=250` to deliver spans promptly.
+The sandbox overlay and the test environment set the Go SDK's `OTEL_BSP_SCHEDULE_DELAY=250` to
+deliver spans promptly.
 
-The default Compose ingest token is for the local demo only. The `gf-sandbox` Helm chart sets none of
-these variables and deploys no Collector, so a Kubernetes deployment runs without PRS evidence. The
-Collector's bounded queues and short export timeouts keep viewer outages out of the request path.
+The default Compose ingest token is for the local demo only. On Kubernetes, `traceCapture` in the
+`gf-sandbox` Helm chart sets these variables from a generated token Secret and deploys the same
+Collector without Aspire: traces go to the sandbox only, and logs to the Collector's own output,
+which is where the Knooppunt's logs are read once its tracing is on. The test environment enables
+it (`infra/ovhcloud-test/values.yaml`); a deployment that leaves it off runs without PRS evidence.
+The Collector's bounded queues and short export timeouts keep viewer outages out of the request path.
 
 Run `go test ./sandbox/...` for the sandbox tests (Docker is required for acceptance tests),
 `go test -race ./sandbox/app -run 'TestRunStore_|TestEventHTTP_|TestCapture|TestTraceBridge'` for event concurrency,
