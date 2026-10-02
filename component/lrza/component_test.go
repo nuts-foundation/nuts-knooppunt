@@ -33,11 +33,11 @@ func TestBuildTransaction(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		run := &syncRun{entries: []fhir.BundleEntry{{
+		run := &syncRun{}
+		c.buildTransaction(context.Background(), run, []fhir.BundleEntry{{
 			Resource: resource,
 			Request:  &fhir.BundleEntryRequest{Method: fhir.HTTPVerbPUT, Url: "Organization/123/_history/3"},
-		}}}
-		c.buildTransaction(context.Background(), run)
+		}})
 
 		require.Len(t, run.tx.Entry, 1)
 		require.Empty(t, run.report.Warnings)
@@ -59,11 +59,43 @@ func TestBuildTransaction(t *testing.T) {
 		require.Equal(t, "Organization?"+sourceQuery(t, "Organization/456"), partOf["reference"], "references must be rewritten to conditional _source references")
 	})
 
+	t.Run("a reference to a resource not part of this sync is accepted, not rejected", func(t *testing.T) {
+		// Per https://minvws.github.io/generiekefuncties-docs/en/csd.html, a Local Replica SHALL
+		// accept resources whose references cannot (yet) be resolved - e.g. Organization and Endpoint
+		// reference each other, so neither can always be synced before the other. appendTransactionEntry
+		// only rewrites the reference string to a conditional lookup; it never checks whether the
+		// target exists, here or anywhere else.
+		resource, err := json.Marshal(map[string]any{
+			"resourceType": "Organization",
+			"id":           "123",
+			"endpoint":     []map[string]any{{"reference": "Endpoint/not-yet-synced"}},
+		})
+		require.NoError(t, err)
+
+		run := &syncRun{}
+		c.buildTransaction(context.Background(), run, []fhir.BundleEntry{{
+			Resource: resource,
+			Request:  &fhir.BundleEntryRequest{Method: fhir.HTTPVerbPUT, Url: "Organization/123/_history/1"},
+		}})
+
+		require.Len(t, run.tx.Entry, 1)
+		require.Empty(t, run.report.Warnings, "an unresolved reference must not be treated as an error")
+
+		var got map[string]any
+		require.NoError(t, json.Unmarshal(run.tx.Entry[0].Resource, &got))
+		endpoints, ok := got["endpoint"].([]any)
+		require.True(t, ok)
+		require.Len(t, endpoints, 1)
+		endpointRef := endpoints[0].(map[string]any)
+		require.Equal(t, "Endpoint?"+sourceQuery(t, "Endpoint/not-yet-synced"), endpointRef["reference"],
+			"the reference is rewritten to a conditional lookup even though Endpoint/not-yet-synced hasn't been synced yet")
+	})
+
 	t.Run("DELETE becomes a conditional DELETE keyed by _source", func(t *testing.T) {
-		run := &syncRun{entries: []fhir.BundleEntry{{
+		run := &syncRun{}
+		c.buildTransaction(context.Background(), run, []fhir.BundleEntry{{
 			Request: &fhir.BundleEntryRequest{Method: fhir.HTTPVerbDELETE, Url: "Organization/789/_history/2"},
-		}}}
-		c.buildTransaction(context.Background(), run)
+		}})
 
 		require.Len(t, run.tx.Entry, 1)
 		require.Empty(t, run.report.Warnings)
@@ -78,11 +110,11 @@ func TestBuildTransaction(t *testing.T) {
 		resource, err := json.Marshal(map[string]any{"resourceType": "Organization", "id": "123"})
 		require.NoError(t, err)
 
-		run := &syncRun{entries: []fhir.BundleEntry{{
+		run := &syncRun{}
+		c.buildTransaction(context.Background(), run, []fhir.BundleEntry{{
 			FullUrl:  to.Ptr("http://source.example/fhir/Organization/123"),
 			Resource: resource,
-		}}}
-		c.buildTransaction(context.Background(), run)
+		}})
 
 		require.Len(t, run.tx.Entry, 1)
 		require.Empty(t, run.report.Warnings)
@@ -93,11 +125,11 @@ func TestBuildTransaction(t *testing.T) {
 	})
 
 	t.Run("unprocessable entries become warnings, not transaction entries", func(t *testing.T) {
-		run := &syncRun{entries: []fhir.BundleEntry{
+		run := &syncRun{}
+		c.buildTransaction(context.Background(), run, []fhir.BundleEntry{
 			{Request: nil}, // missing request
 			{Request: &fhir.BundleEntryRequest{Method: fhir.HTTPVerbPUT}, Resource: nil}, // missing body
-		}}
-		c.buildTransaction(context.Background(), run)
+		})
 
 		require.Empty(t, run.tx.Entry)
 		require.Len(t, run.report.Warnings, 2)

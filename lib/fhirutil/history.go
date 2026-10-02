@@ -23,25 +23,44 @@ import (
 // a resource type, so e.g. Organization/1 and Endpoint/1 are distinct resources that must not be
 // collapsed into one.
 func DeduplicateHistoryEntries(entries []fhir.BundleEntry) []fhir.BundleEntry {
-	seen := make(map[string]struct{}, len(entries))
+	dedup := NewHistoryDeduplicator()
 	result := make([]fhir.BundleEntry, 0, len(entries))
-
 	for _, entry := range entries {
-		key := historyEntryKey(entry)
-		if key == "" {
-			// No key to dedup on (e.g. a malformed entry); keep it rather than silently drop it.
+		if dedup.Keep(entry) {
 			result = append(result, entry)
-			continue
 		}
-		if _, exists := seen[key]; exists {
-			// An older version of a resource we've already kept; skip it.
-			continue
-		}
-		seen[key] = struct{}{}
-		result = append(result, entry)
 	}
-
 	return result
+}
+
+// HistoryDeduplicator deduplicates a _history feed incrementally, for callers that process it page by
+// page (e.g. to bound memory use) rather than holding the whole feed in memory at once. A single
+// instance must be reused across every page of one resource type's feed: a resource's versions can be
+// split across pages, and an older version must never be let through after its newer version has
+// already been kept - see DeduplicateHistoryEntries for the newest-first ordering this relies on.
+type HistoryDeduplicator struct {
+	seen map[string]struct{}
+}
+
+func NewHistoryDeduplicator() *HistoryDeduplicator {
+	return &HistoryDeduplicator{seen: make(map[string]struct{})}
+}
+
+// Keep reports whether entry is the first (i.e. newest) occurrence of its resource seen so far by
+// this deduplicator, and records it as seen if so. Entries must be fed in history order (newest
+// first).
+func (d *HistoryDeduplicator) Keep(entry fhir.BundleEntry) bool {
+	key := historyEntryKey(entry)
+	if key == "" {
+		// No key to dedup on (e.g. a malformed entry); keep it rather than silently drop it.
+		return true
+	}
+	if _, exists := d.seen[key]; exists {
+		// An older version of a resource we've already kept; skip it.
+		return false
+	}
+	d.seen[key] = struct{}{}
+	return true
 }
 
 // historyEntryKey returns a "ResourceType/id" key identifying the resource an entry refers to: built
