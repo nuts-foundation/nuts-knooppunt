@@ -492,6 +492,17 @@ seed:
   # internal service names, not environment-specific.
   zonnebloemEndpointAddress: "http://pep-zonnebloem:8080/fhir"
   plataanEndpointAddress: "http://pep-plataan:8080/fhir"
+  # Published as each org's OAuth2 authorization server (test/testdata/vectors/
+  # {plataan,sunflower}'s own AuthorizationServerAddress default - matching
+  # it here, not overriding, since there is no address a chart default could
+  # give that works from outside the cluster; the node's own public hostname
+  # is environment-specific, same as nutsConfig's url is not set here either.
+  # FHIR's PUT-based upsert (test/testdata/vectors/entrypoint.go) means a
+  # stale address self-heals on the next normal seed re-run - no special
+  # reseed needed once this is set correctly, unlike a DID subject create,
+  # which is create-once and does not overwrite on a second run.
+  zonnebloemAuthServerAddress: "http://localhost:8080/nuts/oauth2/00000020"
+  plataanAuthServerAddress: "http://localhost:8080/nuts/oauth2/00000010"
 
 # Jaeger configuration for distributed tracing
 # Set enabled: true to deploy Jaeger for trace collection and visualization

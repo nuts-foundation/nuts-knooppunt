@@ -31,6 +31,15 @@ ingress:
 extraEnv:
   - name: NUTS_URL
     value: "https://knooppunt.test.gf.nuts.nl/nuts"
+  # Setting this REPLACES the node's own built-in defaults rather than
+  # adding to them (nuts-node vcr/vcr.go:170-184), so both have to be
+  # repeated here: mock-dezi's public ingress URL (matches mock-dezi's own
+  # deziJku below) and the two public dezi.nl URLs, which the node would
+  # otherwise still accept. Dropping either silently stops validating
+  # attestations from that source. Without this at all, every Dezi
+  # id_token fails closed: "fetching url ... rejected by whitelist".
+  - name: NUTS_VCR_DEZI_ALLOWEDJKU
+    value: "https://mock-dezi.test.gf.nuts.nl/dezi/jwks.json,https://auth.dezi.nl/dezi/jwks.json,https://acceptatie.auth.dezi.nl/dezi/jwks.json"
 
 # The NVI component is disabled unless baseurl is set
 # (component/nvi/component.go: Enabled() is FHIRBaseURL != ""). Matches
@@ -221,6 +230,17 @@ mock-dezi:
     # a host has a tls: block, ingress-nginx redirects http to https by
     # default, and this is matched exactly by the OAuth2 redirect check.
     deziAllowedRedirectUris: "https://sandbox.test.gf.nuts.nl/demo/auth/callback"
+    # The chart default (mock-dezi:8443) is served over mock-dezi's own
+    # self-signed cert ("GF Sandbox Demo CA" - see helm/mock-dezi's
+    # certsSecretName), which the node doesn't trust, failing every
+    # retrieve with "certificate signed by unknown authority". /dezi/jwks.json
+    # is on the same mux as /authorize (mock-components/dezi/main.go) - it
+    # was already reachable on the plain HTTP port, just never exposed
+    # there - so routing it through the public ingress instead gets a real,
+    # already-trusted Let's Encrypt cert for free, with no cert-trust
+    # wiring needed at all. Confirmed hairpin routing (pod -> public
+    # ingress -> back into the cluster) works on this LoadBalancer.
+    deziJku: "https://mock-dezi.test.gf.nuts.nl/dezi/jwks.json"
 
 gf-sandbox:
   enabled: true
@@ -242,12 +262,6 @@ gf-sandbox:
   env:
     deziPublicAuthorizeUrl: "https://mock-dezi.test.gf.nuts.nl/authorize"
     sandboxPublicUrl: "https://sandbox.test.gf.nuts.nl"
-    # The seed pipeline (test/testdata/cmd/main.go) creates De Plataan's
-    # Nuts subject under its URA, not the literal name "plataan" that
-    # sandbox/app/nuts.go defaults to (that default matches
-    # docker-compose's subject naming instead). Without this, every
-    # retrieve request fails: "invalid_request - subject not found".
-    nutsSubject: "00000010"
   extraEnv:
     - name: ZONNEBLOEM_EHR_PUBLIC_URL
       value: "https://zonnebloem-ehr.test.gf.nuts.nl"
@@ -278,3 +292,9 @@ seed:
     # A moving tag: without this, a node that already pulled "main" keeps
     # running the old seed on every upgrade.
     pullPolicy: Always
+  # The chart default (localhost:8080) only resolves inside the seed's own
+  # container. A consumer elsewhere in the cluster needs the node's real
+  # public address, which the knooppunt itself can also reach for its own
+  # metadata fetch - this node is the authorization server for both subjects.
+  zonnebloemAuthServerAddress: "https://knooppunt.test.gf.nuts.nl/nuts/oauth2/00000020"
+  plataanAuthServerAddress: "https://knooppunt.test.gf.nuts.nl/nuts/oauth2/00000010"

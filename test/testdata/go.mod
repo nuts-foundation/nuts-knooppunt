@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/SanteonNL/go-fhir-client v0.5.0
+	github.com/lestrrat-go/jwx/v2 v2.1.6
 	github.com/nuts-foundation/go-didx509-toolkit v1.3.0
 	github.com/zorgbijjou/golang-fhir-models/fhir-models v0.0.0-20250901091002-777673f2b656
 )
@@ -16,7 +17,6 @@ require (
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
 	github.com/lestrrat-go/httprc v1.0.6 // indirect
 	github.com/lestrrat-go/iter v1.0.2 // indirect
-	github.com/lestrrat-go/jwx/v2 v2.1.6 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/mr-tron/base58 v1.2.0 // indirect
 	github.com/multiformats/go-base32 v0.1.0 // indirect
