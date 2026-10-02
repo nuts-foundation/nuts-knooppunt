@@ -256,7 +256,7 @@ func (c *Component) fetchEntries(ctx context.Context, run *syncRun) error {
 	return nil
 }
 
-// queryResourceType queries a single resource type, following pagination up to maxUpdateEntries. It
+// queryResourceType queries a single resource type, following pagination up to UpdateEntries. It
 // reads the _history endpoint for an incremental sync, or searches the resource type directly for the
 // initial full sync.
 func (c *Component) queryResourceType(ctx context.Context, run *syncRun, resourceType string, searchParams url.Values) ([]fhir.BundleEntry, fhir.Bundle, error) {
