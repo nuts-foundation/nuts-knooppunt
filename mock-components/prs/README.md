@@ -34,7 +34,9 @@ service's newer main branch and the draft implementation guide.
   listener has no authentication: whoever reaches it can de-tokenize any
   identifier value and create identifier values for any pseudonym and audience.
   It is off unless `SANDBOX_LISTEN_ADDR` is set; the compose project sets it
-  and publishes no port for it, so only that project's containers reach it.
+  and publishes no port for it, so only that project's containers reach it,
+  and the Helm chart sets it on a ClusterIP service that no ingress routes
+  to, so only workloads in the cluster reach it.
 
 ## Deliberate deviations
 
@@ -46,8 +48,9 @@ service's newer main branch and the draft implementation guide.
 - Nothing cryptographic is committed and nothing runs on the host first: the
   service creates its recipient key and OPRF key on first start at
   `RECIPIENT_KEY_FILE` and `OPRF_KEY_FILE` (the image defaults to `/keys`,
-  where the compose project mounts a named volume), so pseudonyms stay
-  stable across restarts and `docker compose down -v` starts afresh.
+  where the compose project mounts a named volume and the Helm chart a
+  persistent volume it keeps on uninstall), so pseudonyms stay stable across
+  restarts and `docker compose down -v` starts afresh.
 
 ## Run
 
@@ -60,4 +63,5 @@ clients use, the audience and target the token endpoint enforces),
 `OPRF_KEY_FILE`,
 `RECIPIENTS` (`ura:scope` pairs, comma separated, default
 `90000901:nationale-verwijsindex`). Containerized, it is the `mock-prs`
-service of the sandbox profile in `docker-compose.yml`.
+service of the sandbox profile in `docker-compose.sandbox.yml`, and on
+Kubernetes the `helm/mock-prs` chart, which the test environment deploys.

@@ -60,3 +60,35 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+The trace capture Collector (traceCapture). Its own name label, so the
+sandbox's Service selector never matches its pods.
+*/}}
+{{- define "gf-sandbox.collectorName" -}}
+{{- printf "%s-otel-collector" (include "gf-sandbox.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "gf-sandbox.collectorSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "gf-sandbox.name" . }}-otel-collector
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{- define "gf-sandbox.collectorLabels" -}}
+helm.sh/chart: {{ include "gf-sandbox.chart" . }}
+{{ include "gf-sandbox.collectorSelectorLabels" . }}
+app.kubernetes.io/version: {{ .Values.traceCapture.collector.image.tag | quote }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/*
+The Secret holding the ingest token the Collector presents and the sandbox's
+private OTLP listener requires.
+*/}}
+{{- define "gf-sandbox.otlpTokenSecretName" -}}
+{{- printf "%s-otlp-token" (include "gf-sandbox.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "gf-sandbox.otlpServiceName" -}}
+{{- printf "%s-otlp" (include "gf-sandbox.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}

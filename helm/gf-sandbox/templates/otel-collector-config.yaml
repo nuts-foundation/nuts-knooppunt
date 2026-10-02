@@ -1,0 +1,65 @@
+{{- if .Values.traceCapture.enabled }}
+# sandbox/otel-collector.yaml without the Aspire dashboard, which only the
+# Compose stack runs: traces go to the sandbox's private listener only, and
+# logs to this Collector's own stdout. Once tracing is on, the knooppunt sends
+# its logs here instead of to its stdout (component/tracing), the embedded
+# nuts-node's included (lib/logging routes logrus through slog); only the
+# nuts-node's audit log stays on stdout. So `kubectl logs` on this Collector
+# is where the knooppunt's logs are read, one block per record with its
+# timestamp, severity, body, attributes and trace context (verbosity normal
+# would drop the timestamp and severity). use_internal_logger is off because
+# the Collector's own logger samples repeated lines.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "gf-sandbox.collectorName" . }}
+  labels:
+    {{- include "gf-sandbox.collectorLabels" . | nindent 4 }}
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+            max_request_body_size: 1048576
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 96
+        spike_limit_mib: 24
+      batch:
+        timeout: 100ms
+        send_batch_size: 128
+        send_batch_max_size: 256
+
+    exporters:
+      otlphttp/viewer:
+        endpoint: http://{{ include "gf-sandbox.otlpServiceName" . }}:{{ .Values.traceCapture.listenPort }}
+        compression: none
+        headers:
+          Authorization: "Bearer ${env:SANDBOX_OTLP_TOKEN}"
+        timeout: 2s
+        sending_queue:
+          num_consumers: 2
+          queue_size: 32
+        retry_on_failure:
+          initial_interval: 1s
+          max_interval: 5s
+          max_elapsed_time: 30s
+      debug:
+        verbosity: detailed
+        use_internal_logger: false
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp/viewer]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+{{- end }}

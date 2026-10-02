@@ -1,10 +1,14 @@
-# Mock PRS (Pseudoniemendienst) for local docker compose.
+# Mock PRS (Pseudoniemendienst) for local docker compose and the hosted
+# sandbox (helm/mock-prs).
 #
 # Build context is the repository root: the mock lives in the main Go module,
 # so go.mod/go.sum at the root are needed to build it.
 #
 #   docker build -f mock-components/prs/Dockerfile .
-FROM golang:1.26.1-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.1-alpine AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /src
 
@@ -17,12 +21,13 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -o /out/mock-prs ./mock-components/prs/cmd
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/mock-prs ./mock-components/prs/cmd
 
 FROM alpine:3.22.0
 
 # /keys holds the recipient and OPRF keys the service creates on first start;
-# compose mounts a named volume there so they survive restarts.
+# compose mounts a named volume there and the chart a persistent volume, so
+# they survive restarts.
 RUN adduser -D -u 10000 mockprs && mkdir /keys && chown mockprs /keys
 USER mockprs
 
@@ -30,8 +35,9 @@ COPY --from=builder /out/mock-prs /usr/local/bin/mock-prs
 
 # SANDBOX_LISTEN_ADDR is deliberately not set here: the unauthenticated
 # sandbox helper is enabled by the compose project, which keeps its port
-# inside the project network. PUBLIC_URL is required and environment-specific,
-# so it has no default either.
+# inside the project network, and by the chart, which keeps it on a ClusterIP
+# service. PUBLIC_URL is required and environment-specific, so it has no
+# default either.
 ENV LISTEN_ADDR=":8080" \
     RECIPIENT_KEY_FILE=/keys/recipient.key \
     OPRF_KEY_FILE=/keys/oprf.key

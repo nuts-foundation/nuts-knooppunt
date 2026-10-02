@@ -53,10 +53,28 @@ spec:
               value: {{ .Values.env.hapiBaseUrl | quote }}
             - name: SANDBOX_NUTS_SUBJECT
               value: {{ .Values.env.nutsSubject | quote }}
+            {{- if .Values.traceCapture.enabled }}
+            - name: SANDBOX_OTLP_LISTEN_ADDR
+              value: ":{{ .Values.traceCapture.listenPort }}"
+            - name: SANDBOX_OTLP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "gf-sandbox.otlpTokenSecretName" . }}
+                  key: token
+            - name: SANDBOX_PRS_URL
+              value: {{ required "traceCapture.prsUrl must be set when traceCapture is enabled" .Values.traceCapture.prsUrl | quote }}
+            - name: SANDBOX_TRACE_SERVICE_NAME
+              value: {{ .Values.traceCapture.serviceName | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            {{- if .Values.traceCapture.enabled }}
+            - name: otlp
+              containerPort: {{ .Values.traceCapture.listenPort }}
+              protocol: TCP
+            {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

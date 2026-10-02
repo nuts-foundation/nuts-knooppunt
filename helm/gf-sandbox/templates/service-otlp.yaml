@@ -1,0 +1,20 @@
+{{- if .Values.traceCapture.enabled }}
+# The sandbox's private OTLP listener, for the Collector only. A Service of
+# its own, so it stays ClusterIP whatever service.type is and no ingress rule
+# for service.port reaches it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gf-sandbox.otlpServiceName" . }}
+  labels:
+    {{- include "gf-sandbox.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.traceCapture.listenPort }}
+      targetPort: otlp
+      protocol: TCP
+      name: otlp
+  selector:
+    {{- include "gf-sandbox.selectorLabels" . | nindent 4 }}
+{{- end }}

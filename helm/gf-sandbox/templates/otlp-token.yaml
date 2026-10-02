@@ -1,0 +1,23 @@
+{{- if .Values.traceCapture.enabled }}
+{{- $secretName := include "gf-sandbox.otlpTokenSecretName" . }}
+{{- /* Keep the token stable across upgrades: reuse the one already in the
+       cluster, generate one only on first install. Both the Collector and the
+       sandbox read it at container start, so a new value on every upgrade
+       would leave one of them holding the old one until it restarts. */}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $secretName }}
+{{- $token := "" }}
+{{- if $existing }}
+{{- $token = index $existing.data "token" | b64dec }}
+{{- else }}
+{{- $token = randAlphaNum 40 }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  labels:
+    {{- include "gf-sandbox.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  token: {{ $token }}
+{{- end }}
