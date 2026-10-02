@@ -129,6 +129,15 @@ services:
       hapi.fhir.server_id_strategy: UUID
       # Allow storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
       hapi.fhir.store_meta_source_information: SOURCE_URI
+      # mCSD directories can legitimately receive a resource before a resource
+      # it references (e.g. Organization <-> Endpoint are circular, per
+      # https://minvws.github.io/generiekefuncties-docs/en/csd.html). Rejecting
+      # those writes would break sync; the hapi-fhir-reindex sidecar below
+      # periodically reindexes the query directory so search/_include catches
+      # up once the target resource arrives. Note this only skips the
+      # write-time check: it does not relax search indexing, which is why the
+      # periodic reindex is needed.
+      hapi.fhir.enforce_referential_integrity_on_write: false
 
       NVI_AUDIENCE: nvi
       NVI_TENANT: nvi
@@ -199,6 +208,26 @@ services:
       ]
     # Ensure the container exits successfully after the check
     restart: "no"
+
+  # Writes to the query directory may arrive before a resource they reference
+  # does (circular refs like Organization <-> Endpoint, or partial sync
+  # batches) now that hapi.fhir.enforce_referential_integrity_on_write is
+  # false. That only lets the write through — HAPI's search index for that
+  # reference stays empty, so chained search/_include silently misses it,
+  # even after the target resource later arrives. Periodically calling
+  # $reindex on the knpt-mcsd-query partition makes its index catch up.
+  hapi-fhir-reindex:
+    image: curlimages/curl:7.87.0
+    depends_on:
+      hapi-fhir-healthcheck:
+        condition: service_completed_successfully
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "echo 'Starting periodic query directory reindex...'; while true; do sleep 60; curl -s -o /dev/null -w 'reindex: HTTP %{http_code}\\n' -X POST --data '{\"resourceType\":\"Parameters\",\"parameter\":[{\"name\":\"everything\",\"valueBoolean\":true}]}' -H 'Content-Type: application/fhir+json' 'http://hapi-fhir:7050/fhir/knpt-mcsd-query/$$reindex'; done",
+      ]
+    restart: unless-stopped
 
   # The init service seeds NVI Lists through the Knooppunt's internal API, so it
   # must wait for the Knooppunt to accept requests — not just for HAPI.
