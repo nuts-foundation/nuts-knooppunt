@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/nuts-foundation/go-didx509-toolkit/credential_issuer"
 	"github.com/nuts-foundation/go-didx509-toolkit/x509_cert"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
@@ -50,6 +51,11 @@ var httpClient = &http.Client{Timeout: 30 * time.Second}
 // config/discovery/bgz-test.json by that CA's public key hash, so it must
 // keep matching the committed certificates exactly.
 const caFingerprintDN = "CN=Fake UZI Root CA"
+
+// fakeUZIFingerprint is that same CA's did:x509 fingerprint - the
+// unpadded base64url SHA-256 of its DER certificate - exactly as pinned in
+// config/discovery/bgz-test.json. See walletHoldsFakeUZICredential.
+const fakeUZIFingerprint = "OPYJNiIh8WSwSDzJL0R2d2yPlolN9eAzZ8zvfMK3lcM"
 
 // organization is a demo organization that participates in the
 // authorization chain: it has a Nuts subject, an X509Credential minted from
@@ -108,7 +114,6 @@ func main() {
 		// organization: the seed is meant to be re-run wholesale on failure,
 		// not resumed per-organization.
 		did, err := createNutsSubject(internalAPI, org.subject)
-		isNewSubject := err == nil
 		if err != nil {
 			println("Note: could not create Nuts subject " + org.subject + " (" + err.Error() + "); looking up existing subject")
 			did, err = resolveSubjectDID(internalAPI, org.subject)
@@ -120,12 +125,20 @@ func main() {
 			println("Created Nuts subject " + org.subject + " (" + did + ")")
 		}
 
-		// Only issue a credential for a subject created just now: an existing
-		// subject already got one from whichever run created it. Issuance
-		// mints a fresh JWT ID every call, so storeCredential's 409-means-
-		// already-stored check never fires on a re-issued credential - without
-		// this guard, every re-run adds another credential to the wallet.
-		if isNewSubject {
+		// Only issue a credential when the wallet doesn't already hold one
+		// from the Fake UZI CA. Checked directly against the wallet rather
+		// than inferred from whether this run created the subject: a
+		// Kubernetes upgrade or a compose restart re-runs this seed against a
+		// node that already has the subject, and issuance mints a fresh JWT
+		// ID every call, so storeCredential's 409-means-already-stored check
+		// never fires on a re-issued credential - skipping the call
+		// entirely, not just the store, is what keeps a re-run from adding a
+		// duplicate.
+		hasFakeUZICredential, err := walletHoldsFakeUZICredential(internalAPI, org.subject)
+		if err != nil {
+			panic("unable to inspect wallet for " + org.subject + ": " + err.Error())
+		}
+		if !hasFakeUZICredential {
 			credential, err := issueX509Credential(certsDir, org.certKey, did)
 			if err != nil {
 				panic("unable to issue X509Credential for " + org.subject + ": " + err.Error())
@@ -282,6 +295,39 @@ func invokeMCSDUpdate(internalAPI string) error {
 			httpResponse.Status, strings.TrimSpace(string(responseData)))
 	}
 	return nil
+}
+
+// walletHoldsFakeUZICredential reports whether subject's wallet already
+// holds an X509Credential issued from the Fake UZI CA, by decoding each
+// entry's iss claim and checking for the CA's did:x509 fingerprint. A
+// wallet entry that isn't a compact JWT (e.g. a JSON-LD credential) is
+// skipped rather than treated as an error: this codebase only ever issues
+// JWT X509Credentials, so such an entry can't be one of ours anyway.
+func walletHoldsFakeUZICredential(internalAPI, subject string) (bool, error) {
+	httpResponse, err := httpClient.Get(internalAPI + "/nuts/internal/vcr/v2/holder/" + subject + "/vc")
+	if err != nil {
+		return false, err
+	}
+	defer httpResponse.Body.Close()
+
+	entries, err := readJSONResponse[[]json.RawMessage](httpResponse, http.StatusOK)
+	if err != nil {
+		return false, fmt.Errorf("failed to read wallet: %w", err)
+	}
+	for _, entry := range entries {
+		var compact string
+		if err := json.Unmarshal(entry, &compact); err != nil {
+			continue
+		}
+		token, err := jwt.ParseInsecure([]byte(compact))
+		if err != nil {
+			continue
+		}
+		if strings.Contains(token.Issuer(), fakeUZIFingerprint) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // resolveSubjectDID returns the preferred DID of an existing Nuts subject.

@@ -43,22 +43,13 @@ creates empty directories at the bind-mount paths and mock-dezi fails to start
 
 ```shell
 ./sandbox/generate-demo-certs.sh     # once, writes to the gitignored sandbox/.certs/
-
-# The node has to be listening before the bootstrap can reach it, and the bootstrap
-# has to have run before the sandbox starts. Start the node and trace collector first.
-docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up -d sandbox-otel-collector knooppunt
-./sandbox/bootstrap-nuts.sh
 docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up
 ```
 
-`sandbox/bootstrap-nuts.sh` runs on the host, not in a container: it needs bash, python3 and the
-didx509 toolkit through Docker, with the certificate paths resolved on the host. The overlay's
-`nuts-bootstrap-healthcheck` service enforces the ordering rather than trusting it. It waits for the
-knooppunt, then for the `plataan` wallet to hold a credential, and `gf-sandbox` starts only once it
-has exited successfully. Skip the bootstrap and that service fails after a minute with the command
-to run, which `docker compose logs nuts-bootstrap-healthcheck` shows. Without the gate the sandbox
-would start and the authorization route would fail on an empty wallet, which reads as a policy or
-certificate problem rather than a missing step.
+No separate bootstrap step: the seed (the `init` service in `docker-compose.yml`) creates De
+Plataan's Nuts subject and issues its `X509Credential` from the Fake UZI CA
+(`test/testdata/cmd/main.go`), the same CA `docker-compose.sandbox.yml`'s bgz policy pins.
+`gf-sandbox` depends on `init` completing, so it only starts once that credential exists.
 
 ### Reloading Knooppunt while the demo is running
 
@@ -109,7 +100,7 @@ defaults instead of extending them.
 | `SANDBOX_PUBLIC_URL` | `http://localhost:8091` | the URL the browser reaches the sandbox on. Builds the redirect URI, and its scheme decides whether the session cookie carries `Secure`. A hosted deployment behind a TLS-terminating proxy must set this to its `https://` URL: the request arriving at this process is plain http, so nothing else here can tell that the browser used TLS |
 | `SANDBOX_EVENT_IDENTIFIERS` | `masked` | BSN visibility in step events. `synthetic` reveals only identifiers in the fixed demo pool, and startup refuses it unless `SANDBOX_PUBLIC_URL` names localhost or a loopback IP. Shared deployments must use `masked`. Other values are rejected. This setting applies to event capture, not the existing synthetic patient record screens. |
 | `KNOOPPUNT_INTERNAL_URL` | `http://localhost:8081` | the knooppunt's internal mux. The backend reaches the Nuts node through it (proxied under `/nuts`) for the token request, and the same address enables reset/recycle when `HAPI_BASE_URL` is set too. One variable because it is one address: it was spelled `NUTS_INTERNAL_BASE_URL` here and `KNOOPPUNT_INTERNAL_URL` for reset, and `NUTS_` is the node's own configuration prefix, so that name read as node config the node never sees |
-| `SANDBOX_NUTS_SUBJECT` | `plataan` | the Nuts subject the token is requested for. Must name the subject `sandbox/bootstrap-nuts.sh` creates, whose wallet holds the `X509Credential` |
+| `SANDBOX_NUTS_SUBJECT` | `00000010` | the Nuts subject the token is requested for - De Plataan's URA. Must name the subject the seed creates, whose wallet holds the `X509Credential` |
 | `SANDBOX_BGZ_SCOPE` | `bgz` | the scope requested. Must be a key in the definition the node loads, which the sandbox renders to `sandbox/.certs/policy/bgz.json` from `sandbox/policy/bgz.json.template`, or the node answers `invalid_scope` |
 | `SANDBOX_FACILITY_TYPE` | `Z3` | the facility type asserted in the organization context credential, the only thing on this path that carries one |
 | `SANDBOX_NVI_CLIENT_ID` | `gf-sandbox-plataan` | `List.source.identifier` on published localization records. Synthetic: no NVI OAuth client is registered for the demo, and this is not the `gf-sandbox` client id used on the Dezi flow. The client id is the scope a registration is deleted by, so recycle and the global reset receive this same value in `vectors.SandboxTarget` rather than reaching for the compiled-in default; overriding it here therefore also moves what those clean up. |
@@ -243,9 +234,8 @@ Six limitations are carried deliberately:
 
 Both token requests read their authorization server from the directory: the retrieval under the
 source's URA, `POST /demo/authorize` under De Plataan's own. Which wallet the request is made from is a
-separate question, answered by `SANDBOX_NUTS_SUBJECT` in the path of the internal call, so the two
-differ here: the wallet is `plataan` while the server published for De Plataan's own data is the one
-under `00000010`.
+separate question, answered by `SANDBOX_NUTS_SUBJECT` in the path of the internal call - the two now
+coincide, both resolving to De Plataan's URA, `00000010`.
 
 Editing the seeded directory takes a re-seed and a `POST /mcsd/update` before the sandbox sees it. The
 sandbox's own reset reloads the fixtures without touching the query directory; compose's `init` does
