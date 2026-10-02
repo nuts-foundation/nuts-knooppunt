@@ -127,16 +127,13 @@ func main() {
 
 		// Only issue a credential when the wallet doesn't already hold one
 		// from the Fake UZI CA. Checked directly against the wallet rather
-		// than inferred from whether this run created the subject: De
-		// Plataan's subject is also created by sandbox/bootstrap-nuts.sh
-		// (nuts-knooppunt#613 standardized both on the organization's URA),
-		// which can run first and leave the subject already existing but
-		// its wallet holding only a credential from the local demo CA - in
-		// that case the Fake UZI credential registerOnDiscovery needs below
-		// is still missing. Issuance mints a fresh JWT ID every call, so
-		// storeCredential's 409-means-already-stored check never fires on a
-		// re-issued credential - skipping the call entirely, not just the
-		// store, is what keeps a re-run from adding a duplicate.
+		// than inferred from whether this run created the subject: a
+		// Kubernetes upgrade or a compose restart re-runs this seed against a
+		// node that already has the subject, and issuance mints a fresh JWT
+		// ID every call, so storeCredential's 409-means-already-stored check
+		// never fires on a re-issued credential - skipping the call
+		// entirely, not just the store, is what keeps a re-run from adding a
+		// duplicate.
 		hasFakeUZICredential, err := walletHoldsFakeUZICredential(internalAPI, org.subject)
 		if err != nil {
 			panic("unable to inspect wallet for " + org.subject + ": " + err.Error())

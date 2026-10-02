@@ -62,8 +62,8 @@ env:
   hapiBaseUrl: "http://fhir:8080/fhir"
   # De Plataan's URA (test/testdata/vectors/plataan.URA) - matches
   # sandbox/app/nuts.go's own default and what the seed pipeline
-  # (test/testdata/cmd/main.go) and docker-compose's bootstrap-nuts.sh both
-  # create the Nuts subject under, so no environment needs to override this.
+  # (test/testdata/cmd/main.go) creates the Nuts subject under in every
+  # environment, so no environment needs to override this.
   nutsSubject: "00000010"
 
 volumes: []

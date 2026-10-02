@@ -47,8 +47,7 @@ func TestWalletHoldsFakeUZICredentialEmptyWallet(t *testing.T) {
 }
 
 func TestWalletHoldsFakeUZICredentialOtherCAOnly(t *testing.T) {
-	// The shape a wallet holds after sandbox/bootstrap-nuts.sh issues a
-	// credential from the local demo CA, not the Fake UZI CA this function
+	// A credential from some other CA, not the Fake UZI CA this function
 	// looks for.
 	srv := walletServer(t, []any{fakeJWT(t, "did:x509:0:sha256:SOME-OTHER-CA-FINGERPRINT::subject:O:Ziekenhuis%20De%20Plataan")})
 	has, err := walletHoldsFakeUZICredential(srv.URL, "00000010")

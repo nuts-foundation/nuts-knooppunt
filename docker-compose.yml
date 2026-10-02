@@ -414,11 +414,12 @@ services:
       # Knooppunt internal /nvi endpoint and HAPI to restore the seeded dataset.
       KNOOPPUNT_INTERNAL_URL: http://knooppunt:8081
       HAPI_BASE_URL: http://hapi-fhir:7050/fhir
-    # The ordering that makes the authorization route work lives in
-    # docker-compose.sandbox.yml: it depends on a service only that file defines.
-    # Spelled in mapping form to match the override there. Compose 5.3.0 merges
-    # list and mapping notation additively either way, but matching notation
-    # means this dependency's survival does not rest on that.
+    # docker-compose.sandbox.yml adds a further dependency on init completing,
+    # so the seed's X509Credential exists before the first authorization
+    # route is used. Spelled in mapping form to match that override. Compose
+    # 5.3.0 merges list and mapping notation additively either way, but
+    # matching notation means this dependency's survival does not rest on
+    # that.
     depends_on:
       mock-dezi:
         condition: service_started

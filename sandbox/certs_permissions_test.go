@@ -8,19 +8,15 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/asn1"
-	"encoding/json"
 	"encoding/pem"
 	"io/fs"
 	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/nuts-foundation/nuts-node/vcr/pe"
 	"github.com/stretchr/testify/require"
 )
 
@@ -102,14 +98,6 @@ func requireContainerReadable(t *testing.T, out string) {
 	}
 	require.Equal(t, os.FileMode(wantPublic), mode(t, filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem")))
 	require.Equal(t, os.FileMode(wantKey), mode(t, filepath.Join(out, "ca.key")), "the CA key is mounted nowhere and must stay owner-only")
-	// No compose service mounts this key: its only consumer is the one-shot
-	// toolkit container in bootstrap-nuts.sh, whose image runs as root and can
-	// therefore read an owner-only bind mount. The fixed-UID argument that
-	// forces the two mock keys open does not reach it, and a ten-year signing
-	// key readable by every account on the host is the cost of widening it
-	// anyway.
-	require.Equal(t, os.FileMode(wantKey), mode(t, filepath.Join(out, "plataan-uzi.key")),
-		"the UZI key is read by a root container and must stay owner-only")
 }
 
 func runScript(t *testing.T, script string) string {
@@ -137,15 +125,15 @@ func runScriptExpectingRefusal(t *testing.T, script string) string {
 // distinction visible at the call site instead of buried in duplicated
 // certificate boilerplate.
 //
-// The root's own key, the trust store copy and the chain are rewritten along
-// with it, so the result is broken in one way rather than four: with isCA true
-// the only relationship left false is that this root issued nothing around it,
+// The root's own key and the trust store copy are rewritten along with it, so
+// the result is broken in one way rather than several: with isCA true the
+// only relationship left false is that this root issued nothing around it,
 // and with isCA false the missing CA:TRUE joins it. A fixture that trips every
 // check at once cannot show that the particular check it aims at is still
 // there, because any of the others would catch it.
 //
 // The root and its key come back so a caller can re-issue material underneath
-// it, which is how the leaf's issuance gets isolated from mock-dezi's.
+// it, which is how mock-dezi's issuance gets isolated from the root's own.
 func stageForeignRoot(t *testing.T, out string, isCA bool) (*x509.Certificate, crypto.Signer) {
 	t.Helper()
 	key := newECKey(t)
@@ -172,160 +160,16 @@ func stageForeignRoot(t *testing.T, out string, isCA bool) (*x509.Certificate, c
 	require.NoError(t, os.WriteFile(filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"), root, 0o600))
 	writeECKey(t, filepath.Join(out, "ca.key"), key)
 
-	leaf, err := os.ReadFile(filepath.Join(out, "plataan-uzi.pem"))
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi-chain.pem"),
-		append(leaf, root...), 0o600))
-
 	parsed, err := x509.ParseCertificate(der)
 	require.NoError(t, err)
 	return parsed, key
 }
 
-// stageLeafWithTheURAOutsideTheSAN replaces the leaf with one the root really
-// did issue, whose key really is beside it, and whose chain really is the leaf
-// followed by the root, but which carries the URA in its subject Common Name
-// and has no subjectAltName extension at all.
-//
-// Every relationship except the one under test therefore still holds, so only
-// the SAN check can catch it. That is the point: the check this fixture exists
-// for used to search the whole certificate DER for the URA bytes, found them in
-// the subject, and reported that the value sat in the SAN otherName. A
-// validation that reports a relationship it did not check is worse than one
-// that checks nothing, because the fast path then accepts the material forever
-// and the failure surfaces at the token request, in a service that has never
-// heard of this directory.
-func stageLeafWithTheURAOutsideTheSAN(t *testing.T, out string) {
-	t.Helper()
-	issueLeaf(t, out, pkix.Name{
-		CommonName:   plataanOtherName,
-		Organization: []string{"Ziekenhuis De Plataan"},
-	}, nil)
-}
-
-// A leaf whose subjectAltName is marked critical is a perfectly valid leaf, and
-// RFC 5280 section 4.2.1.6 requires the extension to be critical when the
-// subject is empty. The generator does not issue one, so nothing else here
-// would notice a check that cannot read one.
-//
-// It matters anyway, and in the expensive direction. Rejecting a valid leaf
-// sends the script down the generation path, so a false negative costs the
-// operator their whole PKI on every single run, which is worse than the
-// misplaced-URA acceptance the check exists to stop. The first version of that
-// check read the line immediately after the extension's OID, and a critical
-// extension puts a BOOLEAN there before the OCTET STRING, so it silently found
-// nothing.
-// Valid leaves the generator must not touch. Every case here is a false
-// negative if it fails, and a false negative is the expensive direction: it
-// sends the script down the generation path, so it rotates the operator's
-// entire PKI on every run rather than once.
-func TestGeneratorAcceptsValidLeavesItDidNotIssueItself(t *testing.T) {
-	for name, stage := range map[string]func(*testing.T, string) []byte{
-		// RFC 5280 section 4.2.1.6 requires a critical subjectAltName when the
-		// subject is empty, so this shape is not exotic. The first version of
-		// the SAN check read the line straight after the extension OID, where
-		// a critical extension puts its BOOLEAN, and passing that offset to
-		// -strparse segfaults LibreSSL 3.3.6.
-		"the SAN is marked critical": stageLeafWithACriticalSAN,
-
-		// The extension is found by matching the friendly name openssl renders
-		// for the SAN OID. A certificate may carry that same string anywhere,
-		// including its subject, where it renders as a UTF8STRING well before
-		// the extensions. Matching it there selects an earlier extension's
-		// OCTET STRING and answers about the wrong extension entirely.
-		"the subject names the SAN extension": stageLeafWhoseSubjectNamesTheSANExtension,
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			healthy := healthyMaterial(t)
-			script := stageScript(t)
-			out := stageMaterial(t, script, healthy)
-			staged := stage(t, out)
-
-			output := runScript(t, script)
-
-			require.Contains(t, output, "already present",
-				"a valid leaf must not send the generator down the rotation path")
-			onDisk, err := os.ReadFile(filepath.Join(out, "plataan-uzi.pem"))
-			require.NoError(t, err)
-			require.Equal(t, staged, onDisk,
-				"the leaf was rotated, so the check rejected a certificate it should have accepted")
-		})
-	}
-}
-
-// uraOtherNameType is the otherName type-id the did:x509 resolver looks for.
-// It appends a SAN value only when the otherName carries exactly this OID
-// (nuts-node vdr/didx509/x509_utils.go), so the same string under any other one
-// is a value the node cannot see.
-var uraOtherNameType = asn1.ObjectIdentifier{2, 5, 5, 5}
-
-// issueLeaf reissues the leaf under root, keeping the certificate, the key
-// beside it and the chain file consistent, and returns the PEM it wrote so a
-// caller can tell "accepted unchanged" from "regenerated".
-func issueLeaf(t *testing.T, out string, subject pkix.Name, extensions []pkix.Extension) []byte {
-	t.Helper()
-	root := parseCert(t, filepath.Join(out, "ca.pem"))
-	rootKey, ok := parsePrivateKey(t, filepath.Join(out, "ca.key")).(crypto.Signer)
-	require.True(t, ok, "the CA key must be a signing key")
-
-	key := newECKey(t)
-	der, err := x509.CreateCertificate(rand.Reader, &x509.Certificate{
-		SerialNumber:          big.NewInt(9),
-		Subject:               subject,
-		NotBefore:             time.Now().Add(-time.Minute),
-		NotAfter:              time.Now().Add(time.Hour),
-		BasicConstraintsValid: true,
-		ExtraExtensions:       extensions,
-	}, root, &key.PublicKey, rootKey)
-	require.NoError(t, err)
-
-	leaf := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
-	require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi.pem"), leaf, 0o600))
-	writeECKey(t, filepath.Join(out, "plataan-uzi.key"), key)
-
-	rootPEM, err := os.ReadFile(filepath.Join(out, "ca.pem"))
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi-chain.pem"),
-		append(leaf, rootPEM...), 0o600))
-	return leaf
-}
-
-// stageLeafWithACriticalSAN reissues the leaf with the URA in a critical
-// subjectAltName otherName. Everything else about the material stays true.
-func stageLeafWithACriticalSAN(t *testing.T, out string) []byte {
-	t.Helper()
-	return issueLeaf(t, out,
-		pkix.Name{CommonName: "plataan", Organization: []string{"Ziekenhuis De Plataan"}},
-		[]pkix.Extension{uraSANExtension(t, uraOtherNameType, true)})
-}
-
-// stageLeafWhoseSubjectNamesTheSANExtension gives the leaf a subject Common
-// Name equal to the friendly text openssl prints for the SAN OID, while its
-// actual SAN is correct. BasicConstraintsValid puts a second extension ahead of
-// the SAN, so a scanner that starts on the subject and takes the next OCTET
-// STRING lands on Basic Constraints and answers about that instead.
-func stageLeafWhoseSubjectNamesTheSANExtension(t *testing.T, out string) []byte {
-	t.Helper()
-	return issueLeaf(t, out,
-		pkix.Name{CommonName: "X509v3 Subject Alternative Name", Organization: []string{"Ziekenhuis De Plataan"}},
-		[]pkix.Extension{uraSANExtension(t, uraOtherNameType, false)})
-}
-
-// stageLeafWithTheURAUnderAnotherTypeID puts the URA in a real SAN otherName
-// under an OID the resolver does not look at.
-func stageLeafWithTheURAUnderAnotherTypeID(t *testing.T, out string) {
-	t.Helper()
-	issueLeaf(t, out,
-		pkix.Name{CommonName: "plataan", Organization: []string{"Ziekenhuis De Plataan"}},
-		[]pkix.Extension{uraSANExtension(t, asn1.ObjectIdentifier{1, 2, 3, 4}, false)})
-}
-
 // stageRootClaimingCAInItsSubject swaps in a root that is not a CA and carries
 // the text CA:TRUE in its subject instead of in Basic Constraints, then
-// reissues everything beneath it so that this is the only relationship left
+// reissues mock-dezi beneath it so that this is the only relationship left
 // false. LibreSSL 3.3.6 accepts a non-CA certificate as an explicit -CAfile
-// anchor, so the issuance checks do not contradict it either.
+// anchor, so the issuance check does not contradict it either.
 func stageRootClaimingCAInItsSubject(t *testing.T, out string) {
 	t.Helper()
 	key := newECKey(t)
@@ -351,54 +195,6 @@ func stageRootClaimingCAInItsSubject(t *testing.T, out string) {
 	require.NoError(t, err)
 	require.False(t, parsed.IsCA, "the fixture must not be a CA, or it proves nothing")
 	stageMockDezi(t, out, parsed, key)
-	issueLeaf(t, out,
-		pkix.Name{CommonName: "plataan", Organization: []string{"Ziekenhuis De Plataan"}},
-		[]pkix.Extension{uraSANExtension(t, uraOtherNameType, false)})
-}
-
-// uraSANExtension builds the extension Go's x509 package will not: an otherName
-// carrying the URA as a UTF8String under the given type-id. Go drops otherName
-// entries it does not recognise rather than emitting them, so this is assembled
-// with encoding/asn1, mirroring how sanOtherName takes one apart.
-//
-// The type-id is a parameter because it is load-bearing and invisible in the
-// rendered value: the same string under the wrong OID looks identical in
-// openssl's output and is unreadable to the node.
-func uraSANExtension(t *testing.T, typeID asn1.ObjectIdentifier, critical bool) pkix.Extension {
-	t.Helper()
-	return uraSANExtensionAs(t, typeID, critical, "utf8")
-}
-
-// uraSANExtensionAs is uraSANExtension with the ASN.1 string encoding as a
-// parameter, for the case that asserts the generator issues UTF8String and
-// treats anything else as material it did not produce.
-func uraSANExtensionAs(t *testing.T, typeID asn1.ObjectIdentifier, critical bool, encoding string) pkix.Extension {
-	t.Helper()
-	value, err := asn1.MarshalWithParams(plataanOtherName, encoding)
-	require.NoError(t, err)
-
-	otherName, err := asn1.Marshal(struct {
-		TypeID asn1.ObjectIdentifier
-		Value  asn1.RawValue `asn1:"tag:0"`
-	}{
-		TypeID: typeID,
-		Value:  asn1.RawValue{Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: value},
-	})
-	require.NoError(t, err)
-
-	// GeneralName's otherName is "[0] IMPLICIT OtherName", so the context tag
-	// replaces the SEQUENCE tag rather than wrapping it, which is why the
-	// content bytes are lifted out and re-tagged.
-	var sequence asn1.RawValue
-	_, err = asn1.Unmarshal(otherName, &sequence)
-	require.NoError(t, err)
-
-	names, err := asn1.Marshal([]asn1.RawValue{{
-		Class: asn1.ClassContextSpecific, Tag: 0, IsCompound: true, Bytes: sequence.Bytes,
-	}})
-	require.NoError(t, err)
-
-	return pkix.Extension{Id: asn1.ObjectIdentifier{2, 5, 29, 17}, Critical: critical, Value: names}
 }
 
 // stageMockDezi replaces the mock-dezi pair with a fresh certificate and its
@@ -449,9 +245,10 @@ func writeECKey(t *testing.T, path string, key *ecdsa.PrivateKey) {
 // while changing nothing. What the earlier version of this test never checked
 // is the other half of the promise in its name. Repairing in place means the
 // material survives the repair, and rotation is not a harmless extra here:
-// bootstrap-nuts.sh matches the wallet on credential type alone, so a rotated
-// leaf leaves the node holding a credential issued from the chain that no
-// longer exists, and the demo fails at token request time pointing at the node.
+// the knooppunt trusts ca-only/gf-sandbox-demo-ca.pem as a fixed root, so a
+// rotated CA invalidates every certificate the browser or the node already
+// holds a session against, and the demo fails at the next TLS handshake
+// rather than at this script.
 func TestGeneratorRepairsPermissionsWithoutRotatingMaterial(t *testing.T) {
 	healthy := healthyMaterial(t)
 	script := stageScript(t)
@@ -481,16 +278,6 @@ func TestGeneratorRegeneratesMaterialThatDoesNotHangTogether(t *testing.T) {
 		mutate func(t *testing.T, out string)
 	}{
 		{
-			// The reproduction from the review: the state an interrupt leaves
-			// between writing plataan-uzi.key and re-issuing the certificate
-			// beside it. The toolkit then signs with this key while embedding
-			// the old leaf, and the credential fails against its own chain.
-			name: "the UZI key is not the leaf's key",
-			mutate: func(t *testing.T, out string) {
-				writeECKey(t, filepath.Join(out, "plataan-uzi.key"), newECKey(t))
-			},
-		},
-		{
 			name: "the CA key is not the root's key",
 			mutate: func(t *testing.T, out string) {
 				writeECKey(t, filepath.Join(out, "ca.key"), newECKey(t))
@@ -517,53 +304,10 @@ func TestGeneratorRegeneratesMaterialThatDoesNotHangTogether(t *testing.T) {
 			// rejects every chain the node is given.
 			name: "the trust store copy is not the root",
 			mutate: func(t *testing.T, out string) {
-				leaf, err := os.ReadFile(filepath.Join(out, "plataan-uzi.pem"))
-				require.NoError(t, err)
-				require.NoError(t, os.WriteFile(
-					filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"), leaf, 0o600))
-			},
-		},
-		{
-			// The CA is written first, so every interrupt after it leaves
-			// this: a root the material around it does not descend from.
-			// mock-dezi is re-issued underneath the new root so that the leaf
-			// is the only thing left unissued by it, which is what makes this
-			// case name the leaf's own check rather than mock-dezi's.
-			name: "the root did not issue the leaf",
-			mutate: func(t *testing.T, out string) {
-				root, key := stageForeignRoot(t, out, true)
-				stageMockDezi(t, out, root, key)
-			},
-		},
-		{
-			// bootstrap-nuts.sh feeds this file to the toolkit, and the
-			// did:x509 resolver needs the root in it to anchor the chain.
-			name: "the chain is not the leaf followed by the root",
-			mutate: func(t *testing.T, out string) {
-				leaf, err := os.ReadFile(filepath.Join(out, "plataan-uzi.pem"))
-				require.NoError(t, err)
-				require.NoError(t, os.WriteFile(
-					filepath.Join(out, "plataan-uzi-chain.pem"), leaf, 0o600))
-			},
-		},
-		{
-			// The mock-dezi certificate stands in as the leaf: same key pair,
-			// same issuer, same chain shape, no URA. It is the shape of what
-			// a leaf from an older version of this script leaves behind, and
-			// the presentation definition is the only thing that would ever
-			// notice, three services downstream.
-			name: "the leaf does not carry the URA",
-			mutate: func(t *testing.T, out string) {
 				dezi, err := os.ReadFile(filepath.Join(out, "mock-dezi.pem"))
 				require.NoError(t, err)
-				deziKey, err := os.ReadFile(filepath.Join(out, "mock-dezi.key"))
-				require.NoError(t, err)
-				root, err := os.ReadFile(filepath.Join(out, "ca.pem"))
-				require.NoError(t, err)
-				require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi.pem"), dezi, 0o600))
-				require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi.key"), deziKey, 0o600))
-				require.NoError(t, os.WriteFile(filepath.Join(out, "plataan-uzi-chain.pem"),
-					append(dezi, root...), 0o600))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"), dezi, 0o600))
 			},
 		},
 		{
@@ -583,44 +327,6 @@ func TestGeneratorRegeneratesMaterialThatDoesNotHangTogether(t *testing.T) {
 			name: "the signing key is not RSA",
 			mutate: func(t *testing.T, out string) {
 				writeECKey(t, filepath.Join(out, "dezi-signing.key"), newECKey(t))
-			},
-		},
-		{
-			// The URA is present in the certificate, and in the wrong place.
-			// This is the case a check that searches the whole DER cannot
-			// distinguish from a correct leaf, and the presentation definition
-			// reads $.credentialSubject.san.otherName, so the wrong place is
-			// no place at all.
-			name:   "the URA is in the subject rather than the SAN",
-			mutate: stageLeafWithTheURAOutsideTheSAN,
-		},
-		{
-			// In the SAN, in an otherName, and still invisible to the node.
-			// The did:x509 resolver appends a SAN value only when the
-			// otherName's type-id is exactly 2.5.5.5
-			// (nuts-node vdr/didx509/x509_utils.go), so the same string under
-			// any other OID resolves to no san:otherName at all and the
-			// credential fails against its own policy.
-			name:   "the URA is under another otherName type-id",
-			mutate: stageLeafWithTheURAUnderAnotherTypeID,
-		},
-		{
-			// The URA, under the right type-id, in a string type this script
-			// does not issue. Regenerating is the intended answer and not a
-			// near miss: every other check in validate_material asks "is this
-			// the set I produced", and a leaf encoded some other way is not.
-			//
-			// It is worth pinning because the resolver is more permissive than
-			// this: it unmarshals into a Go string, and encoding/asn1 takes
-			// IA5String, GeneralString, T61String, NumericString and BMPString
-			// too. Someone reading only that could widen this check to match,
-			// which would make it depend on openssl printing the value, and
-			// openssl prints nothing at all for GeneralString and BMPString.
-			name: "the URA is not a UTF8String",
-			mutate: func(t *testing.T, out string) {
-				issueLeaf(t, out,
-					pkix.Name{CommonName: "plataan", Organization: []string{"Ziekenhuis De Plataan"}},
-					[]pkix.Extension{uraSANExtensionAs(t, uraOtherNameType, false, "ia5")})
 			},
 		},
 		{
@@ -681,46 +387,20 @@ func TestGeneratorSurvivesADanglingSymlink(t *testing.T) {
 	requireContainerReadable(t, out)
 }
 
-func TestGeneratorProducesACARootAndUZILeaf(t *testing.T) {
+func TestGeneratorProducesACARoot(t *testing.T) {
 	script := stageScript(t)
 	out := filepath.Join(filepath.Dir(script), ".certs")
 
 	runScript(t, script)
 
 	// did:x509 fingerprints the root and rejects it unless it is a CA, so a
-	// root without Basic Constraints cannot anchor the chain at all.
+	// root without Basic Constraints cannot anchor the chain at all - the one
+	// this CA is still used for is mock-dezi's own TLS certificate.
 	root := parseCert(t, filepath.Join(out, "ca.pem"))
 	require.True(t, root.IsCA, "the demo root must be a CA certificate")
 	require.True(t, root.BasicConstraintsValid, "Basic Constraints must be present, not merely implied")
 
-	leaf := parseCert(t, filepath.Join(out, "plataan-uzi.pem"))
-	require.False(t, leaf.IsCA, "the leaf must not be a CA")
-	require.Len(t, leaf.Subject.Organization, 1)
-	require.Equal(t, "Ziekenhuis De Plataan", leaf.Subject.Organization[0])
-
-	// The descriptor extracts the URA from this SAN with a single capture
-	// group, so the exact shape is load-bearing, not cosmetic. A substring
-	// check would still pass with an unwanted prefix or suffix around the
-	// expected value, e.g. a leading "urn:X" or a trailing "-x", even though
-	// config/policy/policy.json's "^[0-9.]+-\d+-\d+-S-(\d+)-00\.000-\d+$"
-	// pattern rejects both, so the otherName must equal the expected value
-	// exactly.
-	require.Equal(t, plataanOtherName, sanOtherName(t, leaf),
-		"the URA must sit in the SAN otherName where the presentation definition looks for it")
-
-	// Task 6 feeds this chain to the did:x509 resolver, which requires a
-	// chain sorted leaf to root; a silent reversal here would otherwise only
-	// surface there as a confusing failure.
-	chain := parseCertChain(t, filepath.Join(out, "plataan-uzi-chain.pem"))
-	require.Len(t, chain, 2, "the chain must contain exactly the leaf and the root")
-	require.True(t, chain[0].Equal(leaf), "the chain's first certificate must be the leaf")
-	require.True(t, chain[1].Equal(root), "the chain's second certificate must be the root")
-
 	requireContainerReadable(t, out)
-	for _, name := range []string{"plataan-uzi.pem", "plataan-uzi-chain.pem"} {
-		require.Equal(t, os.FileMode(wantPublic), mode(t, filepath.Join(out, name)),
-			"%s is mounted into the bootstrap and must be readable", name)
-	}
 }
 
 // A root generated before this material became did:x509 anchored is a real,
@@ -795,124 +475,6 @@ func TestGeneratorRefusesADirectoryWhereAFileBelongs(t *testing.T) {
 				"the guard must refuse before apply_modes touches a wedged tree")
 		})
 	}
-}
-
-// The seam between a shell pipeline and a Go constant, and the one place a
-// silent mismatch could hide. Everything else that touches the fingerprint
-// works from whichever side of it the reader happens to be on: the script
-// computes it with openssl and never parses the policy back, and the policy
-// tests substitute a fingerprint they minted themselves and never run the
-// script. A digest computed one way and pinned the other is invisible to both,
-// and shows up two services away as a token request that fails to match a
-// credential the node holds and considers valid.
-//
-// So this asserts the whole pattern, not just the digest: what the shell wrote
-// has to be exactly what Go computes from the same ca.pem, wrapped in the
-// pattern the template carries.
-func TestGeneratorRendersThePolicyForTheCAItGenerated(t *testing.T) {
-	script := stageScript(t)
-	out := filepath.Join(filepath.Dir(script), ".certs")
-
-	runScript(t, script)
-
-	require.Equal(t, issuerPattern(caFingerprintOnDisk(t, out)), renderedIssuerPattern(t, out),
-		"the rendered policy must pin the CA this run produced")
-	require.Equal(t, os.FileMode(wantDir), mode(t, filepath.Join(out, "policy")),
-		"the knooppunt reads the policy directory as UID 18081 and must be able to traverse it")
-	require.Equal(t, os.FileMode(wantPublic), mode(t, filepath.Join(out, "policy", "bgz.json")),
-		"the policy is bind-mounted into the knooppunt and must be readable")
-}
-
-// The early exit is the path an operator whose material predates the policy
-// step takes, and it is the path that costs nothing to get wrong: the material
-// validates, the script says there is nothing to do, and the sandbox comes up
-// with no bgz scope at all. apply_modes runs on both paths for the same reason
-// and gives the same argument; this is that argument applied to the render.
-func TestGeneratorRendersThePolicyOnTheEarlyExitPath(t *testing.T) {
-	healthy := healthyMaterial(t)
-	script := stageScript(t)
-	out := stageMaterial(t, script, healthy)
-	require.NoError(t, os.RemoveAll(filepath.Join(out, "policy")))
-
-	output := runScript(t, script)
-
-	require.Contains(t, output, "already present", "the material must still be accepted as it stands")
-	require.Equal(t, issuerPattern(caFingerprintOnDisk(t, out)), renderedIssuerPattern(t, out),
-		"a run that repairs nothing else must still render the policy")
-}
-
-// A policy left pinned to a CA that no longer exists is worse than an absent
-// one: absent fails closed at startup with invalid_scope, while stale fails at
-// the token request, against a credential the node holds and considers valid,
-// naming nothing that points back here. The fingerprint is 43 base64url
-// characters of an unpadded 32-byte digest, so the stale value is a real one
-// rather than a placeholder; a shorter string would be rejected by length alone
-// and would not show that the script re-derives rather than merely repairs.
-func TestGeneratorRepinsAPolicyLeftOnAnotherCA(t *testing.T) {
-	healthy := healthyMaterial(t)
-	script := stageScript(t)
-	out := stageMaterial(t, script, healthy)
-
-	stale := caFingerprintOf([]byte("a certificate this material never descended from"))
-	require.Len(t, stale, 43)
-	rendered := filepath.Join(out, "policy", "bgz.json")
-	require.NoError(t, os.MkdirAll(filepath.Dir(rendered), 0o700))
-	template, err := os.ReadFile(bgzPolicyTemplate)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(rendered,
-		[]byte(strings.ReplaceAll(string(template), caFingerprintPlaceholder, stale)), 0o600))
-
-	output := runScript(t, script)
-
-	require.Contains(t, output, "already present")
-	require.Equal(t, issuerPattern(caFingerprintOnDisk(t, out)), renderedIssuerPattern(t, out),
-		"the policy must follow the CA on disk, not whatever a previous run pinned")
-}
-
-// issuerPattern is the whole of what the descriptor's $.issuer filter contains
-// for a given CA. Written once, so a test cannot agree with the template about
-// the fingerprint while disagreeing about the shape around it.
-func issuerPattern(fingerprint string) string {
-	return "^did:x509:0:sha256:" + fingerprint + "::.*$"
-}
-
-// caFingerprintOnDisk computes what a did:x509 issued under out/ca.pem would
-// carry, with crypto/x509 and encoding/base64 rather than by shelling out to
-// the openssl pipeline the generator uses. Asserting with the same tool and the
-// same reasoning as the code under test would pass on whatever that pipeline
-// happens to emit, including the empty string two failed openssl calls produce.
-func caFingerprintOnDisk(t *testing.T, out string) string {
-	t.Helper()
-	fingerprint := caFingerprintOf(parseCert(t, filepath.Join(out, "ca.pem")).Raw)
-	require.Len(t, fingerprint, 43, "an unpadded base64url SHA-256 is 43 characters; anything else is not a digest")
-	return fingerprint
-}
-
-// renderedIssuerPattern reads the generated policy back through the node's own
-// types, so a render that is no longer a loadable presentation definition fails
-// here rather than at node startup.
-func renderedIssuerPattern(t *testing.T, out string) string {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(out, "policy", "bgz.json"))
-	require.NoError(t, err)
-
-	var mapping map[string]pe.WalletOwnerMapping
-	require.NoError(t, json.Unmarshal(raw, &mapping))
-	for _, descriptor := range mapping["bgz"]["organization"].InputDescriptors {
-		if descriptor.Id != "id_uzicert_uracredential" {
-			continue
-		}
-		for _, field := range descriptor.Constraints.Fields {
-			if len(field.Path) != 1 || field.Path[0] != "$.issuer" {
-				continue
-			}
-			require.NotNil(t, field.Filter)
-			require.NotNil(t, field.Filter.Pattern)
-			return *field.Filter.Pattern
-		}
-	}
-	t.Fatal("the rendered policy does not constrain $.issuer, so it pins no CA at all")
-	return ""
 }
 
 // healthyMaterialCache holds one complete generator run, produced on first use
@@ -1001,22 +563,11 @@ func requireMaterialHangsTogether(t *testing.T, out string) {
 	requireKeyBelongsTo(t, filepath.Join(out, "mock-dezi.key"), dezi)
 	require.NoError(t, dezi.CheckSignatureFrom(root), "mock-dezi.pem must be issued by the root")
 
-	leaf := parseCert(t, filepath.Join(out, "plataan-uzi.pem"))
-	requireKeyBelongsTo(t, filepath.Join(out, "plataan-uzi.key"), leaf)
-	require.NoError(t, leaf.CheckSignatureFrom(root), "plataan-uzi.pem must be issued by the root")
-	require.Equal(t, plataanOtherName, sanOtherName(t, leaf),
-		"the leaf must carry the URA the presentation definition looks for")
-
 	root0, err := os.ReadFile(filepath.Join(out, "ca.pem"))
 	require.NoError(t, err)
 	trusted, err := os.ReadFile(filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"))
 	require.NoError(t, err)
 	require.Equal(t, root0, trusted, "the knooppunt's trust store copy must be the root itself")
-
-	chain := parseCertChain(t, filepath.Join(out, "plataan-uzi-chain.pem"))
-	require.Len(t, chain, 2, "the chain must contain exactly the leaf and the root")
-	require.True(t, chain[0].Equal(leaf), "the chain must start with the leaf on disk")
-	require.True(t, chain[1].Equal(root), "the chain must end with the root on disk")
 
 	// The type, not merely that it parses: mock-components/dezi/keys.go
 	// type-asserts *rsa.PrivateKey and exits fatally on anything else, so an
@@ -1067,68 +618,4 @@ func parseCert(t *testing.T, path string) *x509.Certificate {
 	cert, err := x509.ParseCertificate(block.Bytes)
 	require.NoError(t, err)
 	return cert
-}
-
-// parseCertChain parses every PEM-encoded certificate in path, in file order.
-func parseCertChain(t *testing.T, path string) []*x509.Certificate {
-	t.Helper()
-	raw, err := os.ReadFile(path)
-	require.NoError(t, err)
-	var certs []*x509.Certificate
-	for {
-		var block *pem.Block
-		block, raw = pem.Decode(raw)
-		if block == nil {
-			break
-		}
-		cert, err := x509.ParseCertificate(block.Bytes)
-		require.NoError(t, err)
-		certs = append(certs, cert)
-	}
-	return certs
-}
-
-// sanOtherName decodes the certificate's SAN extension and returns the
-// UTF8String value of its otherName entry. Go's x509 parser drops otherName
-// entries it does not recognise, so the extension is decoded directly with
-// encoding/asn1 rather than through cert.Extensions helpers.
-func sanOtherName(t *testing.T, cert *x509.Certificate) string {
-	t.Helper()
-	for _, ext := range cert.Extensions {
-		if ext.Id.String() != "2.5.29.17" {
-			continue
-		}
-
-		// SubjectAltName ::= GeneralNames ::= SEQUENCE OF GeneralName, and
-		// GeneralName is a CHOICE, so each entry can carry a different tag;
-		// RawValue captures whichever one is on the wire without needing to
-		// know it ahead of time.
-		var names []asn1.RawValue
-		_, err := asn1.Unmarshal(ext.Value, &names)
-		require.NoError(t, err)
-
-		for _, name := range names {
-			// otherName is GeneralName's "[0] IMPLICIT OtherName"; every
-			// other GeneralName choice carries a different tag.
-			if name.Class != asn1.ClassContextSpecific || name.Tag != 0 {
-				continue
-			}
-
-			// OtherName ::= SEQUENCE { type-id OID, value [0] EXPLICIT ANY }.
-			var other struct {
-				TypeID asn1.ObjectIdentifier
-				Value  asn1.RawValue `asn1:"tag:0"`
-			}
-			_, err := asn1.UnmarshalWithParams(name.FullBytes, &other, "tag:0")
-			require.NoError(t, err)
-
-			var value string
-			_, err = asn1.Unmarshal(other.Value.Bytes, &value)
-			require.NoError(t, err)
-			return value
-		}
-		t.Fatalf("subjectAltName extension has no otherName entry")
-	}
-	t.Fatalf("certificate has no subjectAltName extension")
-	return ""
 }
