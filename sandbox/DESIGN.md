@@ -61,8 +61,8 @@ These were settled during the planning, mockup and user-story rounds and are inp
    since grown into the GF viewer: a collapsible side panel that follows the demo step by step (section 4,
    cross-cutting), the transparency feature of /demo and the component the later /connect inspector reuses.
 3. **The source is a genuinely separate application in a separate browser tab.** Team decision: entering data inside the
-   demo surface would suggest everything lives in one system and the GF adds nothing. The source institution's record
-   system is its own app with its own branding and URL; the only road between the two systems is the GF chain. In the
+   demo surface would suggest everything lives in one system and the GF adds nothing. De Zonnebloem's EHR is its own
+   program, process and URL with its own look; the only road between the two systems is the GF chain. In the
    #532 flow this carries the optional marker-proof path (section 4, step 0b).
 4. **Single multi-tenant Knooppunt instance** hosting both the consumer and the source organization (NVI
    pseudonymization is keyed per tenant via `X-Tenant-ID`).
@@ -77,8 +77,8 @@ Two user-facing applications on top of the existing mocked stack:
 
 | System                   | What it is                                                                                                                                                                                                                                                                                                                                      | Style                                               | Default port                                                                                                                                        |
 |--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
-| **GF Sandbox**           | Shell (path chooser, demo controls, reset) whose /demo path renders the consumer EMR experience: **Plataan EHR**, the hospital system of Ziekenhuis De Plataan. Go backend (sandbox/app) proxies to the Knooppunt and emits step events                                                                                                         | Shell: quiet frame (6.1). EMR: warm editorial (6.2) | own port, e.g. :8091 (the current demo-ehr maps host :8091 to container :3000 and is to be split; host :3000 itself is taken by the mock VC issuer) |
-| **ZorgDossier**          | The elderly care institution's own record system: resident record, data entry, NVI registration on save. Stack decided in E7 (demo-ehr reuse or the sandbox's Go shape), restyled and reduced                                                                                                                                                   | Own brand, deliberately different (6.3)             | own port, e.g. :3001                                                                                                                                |
+| **GF Sandbox**           | Shell (path chooser, demo controls, reset) whose /demo path renders the consumer EMR experience: **Plataan EHR**, the hospital system of Ziekenhuis De Plataan. Go backend (sandbox/app) proxies to the Knooppunt and emits step events                                                                                                         | Shell: quiet frame (6.1). EMR: warm editorial (6.2) | own port, :8091 (demo-ehr maps the same host port, so its profile and the sandbox profile do not run together; host :3000 is taken by the mock VC issuer) |
+| **De Zonnebloem's EHR**  | The elderly care institution's own record system: client list, client record read from its own FHIR store, an allergy entry form, and removal of the allergies the demo added. A second Go program (`sandbox/zonnebloem`) in the gf-sandbox image, with its own process and URL | Its own green look, deliberately different (6.3)    | own port, :3001 |
 | Nuts Knooppunt           | Real GF components: NVI, mCSD, PDP, Mitz client, Nuts node proxy                                                                                                                                                                                                                                                                                | n/a                                                 | :8080 public, :8081 internal                                                                                                                        |
 | PRS (pseudonymization)   | **mocked offline, real when hosted**: since PR #561 the compose overlay points `prsurl` at `mock-components/prs`, a mock modelled on acceptance PRS v0.0.18 that performs real OPRF on ristretto255 and stands in for the ministry's token endpoint, so the Knooppunt's own authn flow runs unchanged. The hosted sandbox points the same configuration at the PRS acceptance environment. The built-in fake pseudonymizer is now only reached when `prsurl` is unset, which the e2e harness still does. Scope: acceptance v0.0.18 checks no scope value, the service's `main` requires `prs:oprf`, and the acceptance OAuth service documents `epd:read`; see `docs/prs-contract.md` | n/a                                                 | external (acc)                                                                                                                                      |
 | Mocked national services | fake-NVI backing store (HAPI), fake LRZa, mock Mitz (user-controllable answer, subscriptions and notifications), mock Dezi (signed v0.7 attestation over an authorization code flow), mock VC issuer (`HealthcareProviderRoleTypeCredential` over OID4VCI; still in compose on :3000, but not on the sandbox authentication path, see E2)                                                                                                                                                                                   | n/a                                                 | existing compose ports                                                                                                                              |
@@ -95,20 +95,22 @@ its real acceptance environment adds realism without sacrificing deterministic r
 Interaction rules:
 
 - The browser never calls the Knooppunt; each app's backend proxies its own calls.
-- ZorgDossier and the sandbox share **no state, no session, no API**. ZorgDossier writes to its own FHIR store and
-  registers in the NVI; the sandbox finds that data only through the GF chain (NVI, mCSD, token, retrieval).
+- De Zonnebloem's EHR and the sandbox share **no state, no session, no API**. The EHR writes to De Zonnebloem's own
+  FHIR store, whose data the seed registered in the NVI; the sandbox finds that data only through the GF chain (NVI,
+  mCSD, token, retrieval).
 - The sandbox backend records every proxied call as a step event (correlation ID per scenario run, bounded in-memory
   retention, SSE to the browser). Capture keeps each call as sent and received and replaces credentials, JWE and
   `blind_factor` values with a visible marker before an event exists. BSNs in events are masked by default; an explicit
   local flag reveals the synthetic pool, and shared deployments keep them masked.
-- Opening ZorgDossier from the sandbox is a plain `target="_blank"` link: genuinely a second browser tab, matching
+- Opening De Zonnebloem's EHR from the sandbox is a plain `target="_blank"` link: genuinely a second browser tab, matching
   decision 3.
 
 Application tech stack: the sandbox UI is a server-rendered hypermedia application on a small standalone Go backend in
 `sandbox/app` (stdlib `net/http` + `html/template` + `go:embed`, following the `mcsdadmin` pattern in this repo), with
 **Datastar as the v1 frontend implementation**. demo-ehr's pages remain reference material; its proxy role is superseded
-by Go equivalents (the knooppunt client plumbing in `lib/` is reused directly from E2/E4 on). Whether ZorgDossier (E7)
-reuses demo-ehr's Node plumbing or follows the same Go shape is decided in E7. Pages are server templates ported from
+by Go equivalents (the knooppunt client plumbing in `lib/` is reused directly from E2/E4 on). De Zonnebloem's EHR (E7)
+is its own Go program in the same shape, with plain server-rendered forms and no client-side script. Pages are server
+templates ported from
 the wireframe, live updates arrive over the E6 SSE stream, the journey strip stays vanilla JS, and Datastar is vendored
 as one static file: no npm dependency tree and no build step.
 
@@ -129,10 +131,11 @@ cross-cutting below). Screens (the wireframe numbers these 1-8, splitting record
 0. **Start** (`/demo`): the shell's path chooser and a brief scenario intro (E1; not part of the clickable wireframe,
    which begins at the login screen). **Two optional side doors:**
 
-- **0b. Marker proof** (optional, before or during the demo): open ZorgDossier in a new tab, enter a recognisable record
-  for the patient (for example an allergy with a self-chosen marker word in the free-text note) and register it in the
-  NVI via an explicit checkbox (the source's patiëntaanmelding). Later retrieval highlights the marker: proof the data
-  really comes from the other system.
+- **0b. Marker proof** (optional, before or during the demo): open De Zonnebloem's EHR in a new tab, pick the client
+  and add a recognisable record (an allergy with a self-chosen marker word in the free-text note). Nothing is
+  registered anew: the seed registered De Zonnebloem's data for the client in the NVI, per data category, and the NVI
+  records that data exists, not which entries. Later retrieval highlights the marker: proof the data really comes
+  from the other system. Removing the record in De Zonnebloem's EHR takes it out of the next retrieval.
 
 1. **Login (GF Authenticatie): the specialist logs into the Plataan EHR via a mock Dezi login.** From here the EMR top
    bar permanently shows the Dezi session: practitioner name, role, UZI number, and organization context ("Logged in to:
@@ -159,8 +162,9 @@ cross-cutting below). Screens (the wireframe numbers these 1-8, splitting record
    **Demo disclaimer at the top**: in production these checks run on the source side and only a yes/no comes back; the
    breakdown is shown for demo purposes only.
 6. **Enriched home screen**: the overview now shows data from two sources, De Plataan and Zonnebloem, with source
-   attribution visually explicit on every element. On the marker path the user's own ZorgDossier entry appears with the
-   marker word highlighted and a "just entered by you in ZorgDossier" chip.
+   attribution visually explicit on every element. On the marker path the entry added in De Zonnebloem's EHR appears
+   with the marker word highlighted and a chip saying it carries a demo marker from the source system. Nothing
+   retrieved says who typed it, so the chip claims no authorship.
 7. **Consent revocation (GF Toestemming, optional ending)**: the patient revokes consent in Mitz. In the demo, the
    "withdraw consent" control on the enriched record's optional-ending card flips the mock Mitz answer and presents that
    as the patient having acted in the Mitz portal. The subscription notification is a UX event only: demo plumbing shows
@@ -210,7 +214,7 @@ Zonnebloem: a FHIR R4 Endpoint alone cannot express a ward), and a tenant regist
 | Item            | Value                                                                                                                                                                                                                      | System of record                                                                             |
 |-----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | Requesting user | S. el Amrani, klinisch geriater (RoleCodeNL 01.022), Ziekenhuis De Plataan, UZI 900001234 (synthetic)                                                                                                                           | mock Dezi session (claims: name, role, UZI, URA; used in PDP input and shown in the top bar) |
-| Source user     | B. Willems, verpleegkundig specialist, De Zonnebloem                                                                                                                                                                       | ZorgDossier display only                                                                     |
+| Source user     | B. Willems, verpleegkundig specialist, De Zonnebloem                                                                                                                                                                       | De Zonnebloem's EHR, display only                                                            |
 | Patient         | Anna Jansen, born 1944, resident of De Zonnebloem, known at De Plataan; canonical member of the demo pool (section 5.7)                                                                                                    | Patient resource in both FHIR stores (same BSN, own local identifiers)                       |
 | BSN             | each pool patient gets its own test BSN; 999911120 is Anna's placeholder (passes the elfproef, but **all pool BSNs must be checked against the published RvIG test-BSN set during implementation and replaced if absent**) | Patient.identifier                                                                           |
 
@@ -244,7 +248,7 @@ it.
 
 | Fact                                                 | Where it lives                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Who reads it                                            |
 |------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------|
-| "Zonnebloem has a record for pseudonym(BSN)"         | NVI List resource (fake-NVI store), seeded and re-registered on ZorgDossier save                                                                                                                                                                                                                                                                                                                                                                                                   | Knooppunt NVI component, queried by the sandbox backend |
+| "Zonnebloem has a record for pseudonym(BSN)"         | NVI List resource (fake-NVI store), seeded                                                                                                                                                                                                                                                                                                                                                                                                                                         | Knooppunt NVI component, queried by the sandbox backend |
 | "De Plataan has a record for pseudonym(BSN)"         | NVI List resource, published during the patiëntaanmelding (step 3)                                                                                                                                                                                                                                                                                                                                                                                                                 | same                                                    |
 | Zonnebloem's endpoints (FHIR, notification)          | mCSD admin directory (`sunflower-admin`), synced to the query directory. **Must point at Zonnebloem's PEP**: the current seed points straight at HAPI (`http://localhost:7050/fhir/sunflower-patients`), which would bypass PEP/PDP/Mitz entirely, and the compose PEP is configured for URA 00000666; repointing the endpoint and the PEP tenant config is E5 scope, and the seeded address must be deployment-aware (compose-internal hostname locally, cluster URL when hosted) | Knooppunt mCSD, queried by the sandbox backend          |
 | Anna's consent (share with treating physicians: yes) | mock Mitz, answer flippable via the withdraw-consent control on the enriched record                                                                                                                                                                                                                                                                                                                                                                                                | PDP during the authorization step                       |
@@ -254,21 +258,26 @@ it.
 
 ### 5.5 The marker record (path 0b)
 
-When the user saves in ZorgDossier:
+When the user saves in De Zonnebloem's EHR:
 
-1. An AllergyIntolerance (category/substance/status from the form) with the marker word in `note` is written to
-   Zonnebloem's FHIR store, tagged as user-created (for reset).
-2. If the checkbox is on, the record is (re)registered in the NVI for Anna's pseudonym: the same `/nvi/List` call the
-   seed uses. Registration must be idempotent; today `POST /nvi/List` is an unconditional create, so repeated saves
-   would accumulate duplicate Lists (open point).
+1. An AllergyIntolerance (substance and status from the form, the marker word in `note`) is written to De Zonnebloem's
+   FHIR store with a server-assigned id and the user-created tag
+   (`meta.tag` `https://github.com/nuts-foundation/nuts-knooppunt/sandbox|user-created`).
+2. Nothing is registered in the NVI: the client's `AllergyIntolerance` category was registered by the seed, and the
+   NVI does not index entries.
 3. Nothing is sent to the sandbox. The later retrieval in step 4 finds the marker only if the whole chain works; the
    enriched home screen highlights any entry whose note carries the marker convention (prefix `DEMO-`).
+4. The EHR can remove the record again. It deletes only an allergy that carries the user-created tag and belongs to
+   the client on screen, so the seeded records behind the NVI registrations stay; the next retrieval no longer finds
+   the removed one.
 
 ### 5.6 Reset semantics
 
 Reset = expunge the mutable stores (both FHIR datasets, NVI Lists, Mitz subscriptions, step-event retention) and re-run
 the loader. After reset the fixed dataset is exactly restored (semantically identical fixtures; byte identity is not a
-HAPI guarantee), user-created records and their NVI registrations are gone, and the demo starts clean at step 1.
+HAPI guarantee), user-created records are gone, and the demo starts clean at step 1. A per-patient recycle also removes
+the records added for that patient in De Zonnebloem's EHR, found by their user-created tag; an untagged record someone
+else added stays until a global reset.
 
 Two gaps against that as implemented, both recorded in `test/testdata/README.md`:
 
@@ -315,8 +324,9 @@ presenter accounts or authentication are involved.
 
 Three distinguishable identities, because "these are different systems" must be visible before a single word is read.
 The clickable wireframe (`sandbox/wireframe.html`) is the single source of truth for style: tokens, components, layout
-and copy of all three guises are extracted from the wireframe during implementation, not from this document. This
-section only records the intent per guise.
+and copy of the shell and Plataan are extracted from the wireframe during implementation, not from this document. De
+Zonnebloem's EHR takes its palette and typeface from the wireframe and has a layout of its own (6.3). This section only
+records the intent per guise.
 
 ### 6.1 GF Sandbox shell
 
@@ -332,17 +342,20 @@ patient card, the "available sources" card and the source attribution chips are 
 demo's core message), and the quality bar is high because this is the full-screen sales demo surface: it must look like
 a product, not a test harness.
 
-### 6.3 ZorgDossier: the source institution's own system
+### 6.3 De Zonnebloem's EHR: the source institution's own system
 
-The elderly care institution's record system, opened in its own tab for the marker path. It must look like a different
-vendor built it, and a good one: own name, mark, type and green palette, nothing shared with the other guises. The NVI
-checkbox is styled as a deliberate, explained action; a test-environment banner stays visible.
+The elderly care institution's record system, opened in its own tab for the marker path. It must not be mistakable for
+Plataan: its own name (Zorgcentrum De Zonnebloem), the green palette and Manrope typeface of the wireframe's source
+screen, and nothing shared with the other guises. Where Plataan is warm and editorial, this is a calm, modern care
+system: a light top bar with a sunflower mark, the client list beside the record (the start page is that list with no
+client open yet), the client in a soft green band with the name large, the record as one sheet of rows, and a register
+form of chips and a two-option switch. Its layout lives in `sandbox/zonnebloem`'s templates, not in the wireframe. It
+carries no product brand of its own. A test-environment chip stays visible.
 
 The GF viewer and the full-journey view use the wireframe's dark "under the hood" styling, so the journey map's glow and
 color coding stay readable against the warm EMR.
 
-demo-ehr is reference material for the EMR guises; the sandbox backend is Go (section 3), and E7 decides ZorgDossier's
-stack.
+demo-ehr is reference material for the EMR guises; the sandbox backend and De Zonnebloem's EHR are Go (section 3).
 
 ## 7. Step events (the shared substrate)
 
@@ -448,10 +461,11 @@ own runs and fill the gaps in their implementation:
 
 Epics for the /demo release. The clickable wireframe (`sandbox/wireframe.html`, a design artifact, not production code)
 is the screen-by-screen reference for layout and copy. Each epic names the existing components it extends, so nothing is
-green-field by accident. The two redesigns live inside E1 (Plataan EHR) and E7 (ZorgDossier), not as separate epics, so
-no screen ever ships unstyled. Every UI-bearing epic (E1-E4, E7 and E8) follows the section 3 Datastar-first decision
-and its AI-assisted Preact + htm fallback; E6 keeps the shared event contract framework-neutral so that migration does
-not require backend rework.
+green-field by accident. The two redesigns live inside E1 (Plataan EHR) and E7 (De Zonnebloem's EHR), not as separate
+epics, so no screen ever ships unstyled. Every UI-bearing epic of the sandbox app (E1-E4 and E8) follows the section 3
+Datastar-first decision and its AI-assisted Preact + htm fallback; E6 keeps the shared event contract framework-neutral
+so that migration does not require backend rework. De Zonnebloem's EHR (E7) is a separate program of plain
+server-rendered forms and ships no client-side script.
 
 ### E1 Sandbox shell and Plataan EHR design system
 
@@ -554,19 +568,19 @@ contract without backend changes.
   window, contain no authorization headers, cookies, access tokens, credentials or other secrets, and can be consumed
   without Datastar-specific fields or transport behavior.
 
-### E7 ZorgDossier source app and path B marker entry
+### E7 De Zonnebloem's EHR and path B marker entry
 
-The source-side extension of demo-ehr: split the source guise into the standalone ZorgDossier application (own port,
-opened via `target="_blank"` from the sandbox card), restyle it per section 6.3 into a credible product from another
-vendor, and build the path B flow: the allergy entry form with a free-text note for the marker word (`DEMO-` prefix
-convention), the explicit NVI checkbox that (re)registers the record via `/nvi/List` on save, and tagging of
-user-created resources for reset. It uses the same Datastar-first, buildless stack and the same Preact + htm fallback
-rule as the sandbox, without sharing visual components or branding.
+A small EHR for Zorgcentrum De Zonnebloem as its own program, process, port and URL (`sandbox/zonnebloem`, the second
+program in the gf-sandbox image), opened via `target="_blank"` from a card on the Plataan record: the client list and
+client record read live from De Zonnebloem's FHIR store, and an allergy entry form with a free-text note for the
+marker word (`DEMO-` prefix convention). Records it creates carry a user-created tag: per-patient recycle deletes by
+it, and the EHR removes only records that carry it, never a seeded one. It needs no client-side script and ships none.
 
-- Extends: demo-ehr (FHIR write plumbing and proxy reused); the NVI registration path is shared with the E5 seed.
-- Acceptance: a record entered in ZorgDossier is retrievable in the sandbox purely through the chain; the marker word
-  appears highlighted in the enriched record with the "just entered by you in ZorgDossier" chip; reset removes it from
-  both the FHIR store and the NVI.
+- Extends: the seeded Zonnebloem store and NVI registrations (E5), the E4 marker highlighting,
+  `vectors.RecyclePatient`, the gf-sandbox image and Helm chart (deployed a second time as `zonnebloem-ehr`).
+- Acceptance: a record entered in De Zonnebloem's EHR is retrievable in the sandbox purely through the chain; its
+  marker word appears highlighted in the enriched record; removing it in De Zonnebloem's EHR takes it out of the next
+  retrieval; recycle and reset remove it.
 
 ### E8 Consent revocation (GF Consent)
 
@@ -606,13 +620,13 @@ subscription. The open question on the authorization breakdown source (section 1
 - Mitz subscription and notification shape in the mock: no national spec is implemented in `mitzmock` yet, and the
   current `/mitz/notify` handler logs and discards notifications. Keep the mock's interface minimal and swappable, and
   make E8's run-scoped notification delivery explicitly independent from authorization enforcement.
-- Naming: "GF Sandbox", "Plataan EHR" and "ZorgDossier" are working titles. Issue #532 called the hospital "Ziekenhuis
+- Naming: "GF Sandbox" and "Plataan EHR" are working titles. Issue #532 called the hospital "Ziekenhuis
   ZMC", but ZMC is the abbreviation of a real hospital and demo organizations must be fictional; hence "Ziekenhuis De
   Plataan", following the botanical naming of the demo organizations (the existing `sunflower` vector maps to De
   Zonnebloem). Check any future name against real organizations before it lands in code.
 - Hosting: the sandbox is demoed from a hosted environment (extending the existing Helm charts); docker compose is the
-  offline dev path only. Charts for the sandbox and ZorgDossier apps, plus the seed job, are needed for the first hosted
-  deploy.
+  offline dev path only. The umbrella chart deploys the sandbox, De Zonnebloem's EHR (the gf-sandbox chart a second
+  time, as `zonnebloem-ehr`) and the seed job.
 - PRS acceptance environment: confirm access (connection details, auth and allowlisting of the demo URAs
   00000010/00000020) and that RvIG test-BSNs are accepted there. Note the failure mode: with `prsurl` set, an
   unreachable PRS fails the lookup (no silent fake fallback), so a demo depends on acc availability; decide whether that

@@ -49,6 +49,11 @@ type Config struct {
 	eventTraces            *eventTraceBridge
 	eventTraceListenAddr   string
 
+	// ZonnebloemEHRURL is where the browser reaches De Zonnebloem's EHR
+	// (sandbox/zonnebloem). The record page links there in a new tab; empty hides
+	// the link.
+	ZonnebloemEHRURL string
+
 	// resetGlobal and recyclePatient default to the vectors implementations when
 	// the URLs are set (see NewConfigFromEnv); tests may override them.
 	resetGlobal    func(ctx context.Context) error
@@ -129,6 +134,13 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		cfg.revealEventIdentifiers = true
 	default:
 		return Config{}, fmt.Errorf("SANDBOX_EVENT_IDENTIFIERS must be masked or synthetic")
+	}
+	if raw := getenv("ZONNEBLOEM_EHR_PUBLIC_URL"); raw != "" {
+		u, err := url.Parse(raw)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return Config{}, fmt.Errorf("ZONNEBLOEM_EHR_PUBLIC_URL must be an absolute http(s) URL, got %q", raw)
+		}
+		cfg.ZonnebloemEHRURL = u.String()
 	}
 	if cfg.KnooppuntInternalURL == "" {
 		return cfg, nil

@@ -66,6 +66,14 @@ env:
   # environment, so no environment needs to override this.
   nutsSubject: "00000010"
 
+# Overrides the image's entrypoint. Empty runs the image's own (/gf-sandbox).
+# The umbrella chart deploys this chart a second time with /zonnebloem-ehr, the
+# image's other program (De Zonnebloem's EHR).
+command: []
+
+# Extra environment entries, rendered after the ones env: produces.
+extraEnv: []
+
 volumes: []
 volumeMounts: []
 

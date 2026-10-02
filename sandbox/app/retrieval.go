@@ -543,6 +543,10 @@ func runBGZSearch(ctx context.Context, client *http.Client, base *url.URL, token
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/fhir+json")
+	// HAPI answers an identical search from its cache for a while (60 seconds by
+	// default), so a record the source added since the previous retrieval would
+	// stay invisible to this one. The PEP passes the header through.
+	req.Header.Set("Cache-Control", "no-cache")
 	if search.InBody {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}

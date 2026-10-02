@@ -262,6 +262,26 @@ gf-sandbox:
   env:
     deziPublicAuthorizeUrl: "https://mock-dezi.test.gf.nuts.nl/authorize"
     sandboxPublicUrl: "https://sandbox.test.gf.nuts.nl"
+  extraEnv:
+    - name: ZONNEBLOEM_EHR_PUBLIC_URL
+      value: "https://zonnebloem-ehr.test.gf.nuts.nl"
+
+zonnebloem-ehr:
+  enabled: true
+  ingress:
+    enabled: true
+    className: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-production
+    hosts:
+      - host: zonnebloem-ehr.test.gf.nuts.nl
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
+    tls:
+      - hosts:
+          - zonnebloem-ehr.test.gf.nuts.nl
+        secretName: zonnebloem-ehr-tls
 
 seed:
   enabled: true

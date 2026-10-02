@@ -1,0 +1,121 @@
+{{define "content"}}
+<div class="shell">
+  {{template "rail" .}}
+
+  <main class="main">
+    <a class="back" href="/">All clients</a>
+    {{template "notices" .}}
+
+    {{with .Client}}
+    <section class="band" aria-label="Client">
+      <span class="band-av" aria-hidden="true">{{.Initials}}</span>
+      <div class="band-main">
+        <h1 class="band-name">{{.Name}}</h1>
+        <ul class="band-facts">
+          {{if .Age}}<li><b>{{.Age}}</b>, born {{.Born}}</li>{{else if .Born}}<li>Born {{.Born}}</li>{{end}}
+          {{with .BSN}}<li>BSN <b>{{.}}</b></li>{{end}}
+        </ul>
+      </div>
+      {{with $.Record.AllergyAlert}}
+      <div class="alert" role="note">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <div>Allergies: <span>{{.}}</span></div>
+      </div>
+      {{else}}
+      <div class="alert none" role="note">No known allergies</div>
+      {{end}}
+    </section>
+    {{end}}
+
+    <div class="body">
+      <div class="sheet">
+        <section class="section" aria-labelledby="allergies">
+          <div class="section-head"><h2 class="section-title" id="allergies">Allergies and intolerances</h2><span class="section-count">{{len .Record.Allergies}}</span></div>
+          {{if .Record.Allergies}}
+          <ul class="rows">
+            {{range .Record.Allergies}}
+            <li class="row{{if .AddedInDemo}} added{{end}}">
+              <div class="row-main">
+                <div class="row-title">{{.Title}}{{if .AddedInDemo}} <span class="tag">Added in this demo</span>{{end}}</div>
+                {{with .Meta}}<div class="row-meta">{{.}}</div>{{end}}
+                {{with .Note}}<div class="row-note">{{.}}</div>{{end}}
+              </div>
+              <div class="aside">
+                {{if .StatusLabel}}<span class="status status-{{.Status}}">{{.StatusLabel}}</span>{{end}}
+                {{if .AddedInDemo}}
+                <details class="remove">
+                  <summary><span class="closed-label">Remove</span><span class="open-label">Keep it</span></summary>
+                  <form class="confirm" method="post" action="/clients/{{$.Client.ID}}/allergies/{{.ID}}/remove">
+                    <p><strong>Remove {{.Title}} from {{$.Client.Name}}'s record?</strong> Plataan no longer receives it at its next retrieval.</p>
+                    <button class="btn btn-danger" type="submit">Remove allergy</button>
+                  </form>
+                </details>
+                {{end}}
+              </div>
+            </li>
+            {{end}}
+          </ul>
+          {{else}}
+          <p class="empty">None recorded.</p>
+          {{end}}
+        </section>
+        <section class="section" aria-labelledby="medication">
+          <div class="section-head"><h2 class="section-title" id="medication">Medication</h2><span class="section-count">{{len .Record.Medication}}</span></div>
+          {{template "rows" .Record.Medication}}
+        </section>
+        <section class="section" aria-labelledby="conditions">
+          <div class="section-head"><h2 class="section-title" id="conditions">Conditions</h2><span class="section-count">{{len .Record.Conditions}}</span></div>
+          {{template "rows" .Record.Conditions}}
+        </section>
+      </div>
+
+      <aside class="panel" aria-labelledby="register">
+        <h2 id="register">Register an allergy</h2>
+        <p class="panel-intro">It becomes part of {{.Client.Name}}'s record here at De Zonnebloem.</p>
+        {{with .FormError}}<div class="notice error" role="alert">{{.}}</div>{{end}}
+        <form method="post" action="/clients/{{.Client.ID}}/allergies">
+          <fieldset>
+            <legend>Substance</legend>
+            <div class="chips">
+              {{range .Substances}}<label><input type="radio" name="substance" value="{{.Code}}"{{if eq .Code $.Form.Substance}} checked{{end}}><span>{{.Label}}</span></label>{{end}}
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Verification</legend>
+            <div class="switch">
+              {{range .Statuses}}<label><input type="radio" name="status" value="{{.Code}}"{{if eq .Code $.Form.Status}} checked{{end}}><span>{{.Label}}</span></label>{{end}}
+            </div>
+          </fieldset>
+          <label class="label" for="note">Note</label>
+          <textarea id="note" name="note" maxlength="500" rows="4">{{.Form.Note}}</textarea>
+          <p class="help">Plataan highlights a word that starts with DEMO- when it retrieves this record.</p>
+          <button class="btn btn-primary" type="submit">Save to record</button>
+        </form>
+      </aside>
+    </div>
+  </main>
+</div>
+{{end}}
+
+{{define "notices"}}
+{{if eq .Saved "marker"}}
+<div class="notice" role="status"><b>Saved in {{.Client.Name}}'s record.</b> Nothing was sent to Plataan: retrieve {{.Client.Name}} there to see it arrive through the chain.</div>
+{{else if eq .Saved "plain"}}
+<div class="notice" role="status"><b>Saved in {{.Client.Name}}'s record.</b> Nothing was sent to Plataan. The note has no DEMO- word, so Plataan shows the entry without highlighting it.</div>
+{{end}}
+{{if .Removed}}
+<div class="notice" role="status"><b>Removed from {{.Client.Name}}'s record.</b> Plataan no longer receives it at its next retrieval.</div>
+{{end}}
+{{end}}
+
+{{define "rows"}}
+{{if .}}
+<ul class="rows">
+  {{range .}}
+  <li class="row"><div class="row-main"><div class="row-title">{{.Title}}</div>{{with .Meta}}<div class="row-meta">{{.}}</div>{{end}}</div></li>
+  {{end}}
+</ul>
+{{else}}
+<p class="empty">None recorded.</p>
+{{end}}
+{{end}}

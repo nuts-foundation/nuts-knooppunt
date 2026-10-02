@@ -68,7 +68,14 @@ dependencies:
     alias: gf-sandbox
     condition: gf-sandbox.enabled
     repository: file://../gf-sandbox
-    version: "0.1.0"
+    version: "0.2.0"
+  # The same chart a second time: the gf-sandbox image also carries De
+  # Zonnebloem's EHR, which runs as its own deployment with its own URL.
+  - name: helm-gf-sandbox
+    alias: zonnebloem-ehr
+    condition: zonnebloem-ehr.enabled
+    repository: file://../gf-sandbox
+    version: "0.2.0"
   - name: nuts-node-chart
     alias: nuts
     condition: nuts.enabled

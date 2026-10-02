@@ -40,6 +40,10 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             - name: DEZI_PUBLIC_AUTHORIZE_URL
               value: {{ .Values.env.deziPublicAuthorizeUrl | quote }}
@@ -53,6 +57,9 @@ spec:
               value: {{ .Values.env.hapiBaseUrl | quote }}
             - name: SANDBOX_NUTS_SUBJECT
               value: {{ .Values.env.nutsSubject | quote }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}

@@ -368,10 +368,9 @@ func clearMitzSubscriptions(ctx context.Context, mitzMockBaseURL *url.URL, scope
 // a patient who is unshared in the NVI and still subscribed at Mitz, so the next
 // share finds the existing subscription and the "restored" notice was untrue.
 //
-// Known limitation: RecyclePatient cannot remove that patient's user-created
-// marker records (random ids) — only a global reset (expunge) clears those. For
-// the common between-demos need this is enough: recycle restores the seeded
-// state and clears the shared/registered flags.
+// It also deletes the records added for that patient in De Zonnebloem's EHR,
+// found by the pool.UserCreatedTagSystem tag. An untagged record someone else
+// added stays until a global reset, which clears the whole tenant.
 func RecyclePatient(ctx context.Context, target SandboxTarget, patientKey string) error {
 	hapiBaseURL := target.HAPIBaseURL
 	patient, ok := pool.PatientByKey(patientKey)
@@ -391,11 +390,19 @@ func RecyclePatient(ctx context.Context, target SandboxTarget, patientKey string
 		}
 	}
 
+	// Records added in De Zonnebloem's EHR during a demo go first. They carry the
+	// user-created tag and a server-assigned id, so the re-PUT below cannot
+	// overwrite them.
+	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(hapiBaseURL)
+	if err := deleteUserCreated(ctx, zonnebloem, "Patient/"+patient.ZonnebloemPatientID); err != nil {
+		return fmt.Errorf("recycle: remove records added for patient %s: %w", patient.Key, err)
+	}
+
 	// Re-PUT the seeded FHIR resources by fixed id.
 	if err := putResources(ctx, plataan.PatientsHAPITenant().FHIRClient(hapiBaseURL), patient.PlataanResources()); err != nil {
 		return fmt.Errorf("recycle plataan resources for patient %s: %w", patient.Key, err)
 	}
-	if err := putResources(ctx, sunflower.PatientsHAPITenant().FHIRClient(hapiBaseURL), patient.ZonnebloemResources()); err != nil {
+	if err := putResources(ctx, zonnebloem, patient.ZonnebloemResources()); err != nil {
 		return fmt.Errorf("recycle zonnebloem resources for patient %s: %w", patient.Key, err)
 	}
 
@@ -419,6 +426,75 @@ func RecyclePatient(ctx context.Context, target SandboxTarget, patientKey string
 		return unsharedOrPartial([]string{patient.Key})
 	}
 	return nil
+}
+
+// userCreatedTypes are the resource types De Zonnebloem's EHR creates.
+var userCreatedTypes = []string{"AllergyIntolerance"}
+
+// maxUserCreatedRounds bounds deleteUserCreated. A store that still answers with
+// tagged records after this many rounds of deletes is not deleting them.
+const maxUserCreatedRounds = 10
+
+// freshResults asks HAPI not to answer from its cache of identical searches,
+// which it keeps for a minute by default. A recycle or reset sends the same
+// searches every time it runs, so without it a second run within the minute
+// would see the store as the first one did and leave what was added in between.
+var freshResults = fhirclient.RequestHeaders(http.Header{"Cache-Control": {"no-cache"}})
+
+// deleteUserCreated deletes one patient's records that carry the user-created
+// tag, in the tenant the client points at. It searches again after each round of
+// deletes rather than following next links, which would page through a result
+// set it is shrinking.
+func deleteUserCreated(ctx context.Context, client fhirclient.Client, patientRef string) error {
+	for _, resourceType := range userCreatedTypes {
+		for round := 0; ; round++ {
+			var bundle fhir.Bundle
+			err := client.SearchWithContext(ctx, resourceType, url.Values{
+				"patient": {patientRef},
+				"_tag":    {pool.UserCreatedTagSystem + "|" + pool.UserCreatedTagCode},
+				"_count":  {"100"},
+			}, &bundle, freshResults)
+			if err != nil {
+				return fmt.Errorf("search %s tagged user-created: %w", resourceType, err)
+			}
+			ids, err := entryIDs(bundle, resourceType)
+			if err != nil {
+				return err
+			}
+			if len(ids) == 0 {
+				break
+			}
+			if round == maxUserCreatedRounds {
+				return fmt.Errorf("%s records tagged user-created for %s are still there after %d rounds of deletes",
+					resourceType, patientRef, maxUserCreatedRounds)
+			}
+			for _, id := range ids {
+				if err := client.DeleteWithContext(ctx, resourceType+"/"+id); err != nil {
+					return fmt.Errorf("delete %s/%s: %w", resourceType, id, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// entryIDs returns the ids of a search bundle's entries of one resource type. An
+// OperationOutcome a server adds to a search result is not a record.
+func entryIDs(bundle fhir.Bundle, resourceType string) ([]string, error) {
+	var ids []string
+	for _, entry := range bundle.Entry {
+		var resource struct {
+			ResourceType string `json:"resourceType"`
+			ID           string `json:"id"`
+		}
+		if err := json.Unmarshal(entry.Resource, &resource); err != nil {
+			return nil, fmt.Errorf("parse search entry: %w", err)
+		}
+		if resource.ResourceType == resourceType && resource.ID != "" {
+			ids = append(ids, resource.ID)
+		}
+	}
+	return ids, nil
 }
 
 // mutableResourceTypes are the resource types the reset paths clear from the
@@ -475,7 +551,7 @@ func clearTenant(ctx context.Context, client fhirclient.Client) error {
 func searchResourceIDs(ctx context.Context, client fhirclient.Client, resourceType string) ([]string, error) {
 	var ids []string
 	var bundle fhir.Bundle
-	if err := client.SearchWithContext(ctx, resourceType, url.Values{"_count": {"500"}}, &bundle); err != nil {
+	if err := client.SearchWithContext(ctx, resourceType, url.Values{"_count": {"500"}}, &bundle, freshResults); err != nil {
 		return nil, err
 	}
 	for {
