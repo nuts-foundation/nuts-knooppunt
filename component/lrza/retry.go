@@ -52,14 +52,26 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return resp, err
 		}
 
-		if resp != nil && resp.Body != nil {
-			// Drain and close so the underlying connection can be reused for the retry.
+		// On a network error there's no response to read, so status and retryAfter stay "N/A".
+		status := "N/A"
+		retryAfter := "N/A"
+		if resp != nil {
+			status = strconv.Itoa(resp.StatusCode)
+			if ra := resp.Header.Get("Retry-After"); ra != "" {
+				retryAfter = ra
+			}
+			// resp.Body streams directly off the connection; closing it without reading to EOF first
+			// leaves unread bytes on the wire, so the Transport can't safely hand that connection back
+			// to the pool and opens a new one (new TCP/mTLS handshake) for the retry instead. Draining
+			// it here lets the Transport reuse the existing connection.
 			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 		}
 		slog.WarnContext(req.Context(), "Retrying LRZA request after transient failure",
 			slog.String("url", req.URL.String()),
+			slog.String("http status", status),
 			slog.Int("attempt", attempt+1),
+			slog.String("retryAfter", retryAfter),
 			slog.Duration("delay", delay),
 			logging.Error(err))
 		if waitErr := sleep(req.Context(), delay); waitErr != nil {
