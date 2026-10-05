@@ -1,7 +1,7 @@
 # De Zonnebloem's EHR
 
 > [!WARNING]
-> **Use at your own risk.** Like the rest of `sandbox/`, this program was written mostly by AI models and has had
+> **Use at your own risk.** Like the rest of `sandbox/`, this package was written mostly by AI models and has had
 > only light human review. It exists to show the demo end to end, not to be depended on. `sandbox/app/README.md`
 > carries the full note.
 
@@ -11,27 +11,22 @@ allergies, medication and conditions, adds an allergy with a free-text note, and
 Plataan EHR finds such a record only through the GF chain: a note with a `DEMO-` word comes back highlighted on the
 enriched record, and a removed record is gone from the next retrieval.
 
-It talks to that FHIR store and nothing else: not the Knooppunt, not the NVI, not the sandbox. Adding a record needs
-no NVI registration, because the seed already registered De Zonnebloem's data for every pool patient, per data
-category, and the NVI records that data exists, not which entries. Clients outside the demo pool, including the
-legacy Jan Jansen fixture, are omitted and their record and allergy routes return 404: Plataan cannot retrieve or
-recycle them.
+It talks to that FHIR store and nothing else: not the Knooppunt, not the NVI, and not the sandbox, although the
+sandbox's process serves it. Adding a record needs no NVI registration, because the seed already registered De
+Zonnebloem's data for every pool patient, per data category, and the NVI records that data exists, not which entries.
+Clients outside the demo pool, including the legacy Jan Jansen fixture, are omitted and their record and allergy routes
+return 404: Plataan cannot retrieve or recycle them.
 
 ## Run
 
 ```shell
-ZONNEBLOEM_FHIR_BASE_URL=http://localhost:7050/fhir/sunflower-patients go run ./sandbox/zonnebloem
+ZONNEBLOEM_FHIR_BASE_URL=http://localhost:7050/fhir/sunflower-patients go run ./sandbox/app
 ```
 
-Serves on `http://localhost:3001`. Under compose it is the `zonnebloem-ehr` service in the `sandbox` profile, on the
-same port, and the sandbox's patient record links to it.
-
-## Configuration
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `PORT` | `3001` | listen port |
-| `ZONNEBLOEM_FHIR_BASE_URL` | none, required | De Zonnebloem's FHIR store, for example `http://hapi-fhir:7050/fhir/sunflower-patients`. Startup refuses a missing value or one that is not an absolute http(s) URL |
+The gf-sandbox process serves the EHR on `http://localhost:3001`, next to the sandbox on 8091, whenever
+`ZONNEBLOEM_FHIR_BASE_URL` names De Zonnebloem's FHIR store; `ZONNEBLOEM_EHR_PORT` moves it. `sandbox/app/README.md`
+lists both with the rest of the process's configuration. Under compose the `gf-sandbox` service publishes both ports,
+and the sandbox's patient record links to the EHR.
 
 ## Records it creates
 
@@ -58,4 +53,4 @@ either header remain allowed for non-browser clients.
 ## Provenance
 
 Manrope is vendored from Google Fonts (SIL Open Font License), latin and latin-ext subsets. The palette and typeface
-follow the source screen in `sandbox/wireframe.html`; the layout is this program's own (`sandbox/DESIGN.md` §6.3).
+follow the source screen in `sandbox/wireframe.html`; the layout is the EHR's own (`sandbox/DESIGN.md` §6.3).

@@ -255,33 +255,27 @@ gf-sandbox:
         paths:
           - path: /
             pathType: ImplementationSpecific
-    tls:
-      - hosts:
-          - sandbox.test.gf.nuts.nl
-        secretName: sandbox-tls
-  env:
-    deziPublicAuthorizeUrl: "https://mock-dezi.test.gf.nuts.nl/authorize"
-    sandboxPublicUrl: "https://sandbox.test.gf.nuts.nl"
-  extraEnv:
-    - name: ZONNEBLOEM_EHR_PUBLIC_URL
-      value: "https://zonnebloem-ehr.test.gf.nuts.nl"
-
-zonnebloem-ehr:
-  enabled: true
-  ingress:
-    enabled: true
-    className: nginx
-    annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-production
-    hosts:
+      # De Zonnebloem's EHR, served by the same pod on its own port.
       - host: zonnebloem-ehr.test.gf.nuts.nl
+        servicePort: 3001
         paths:
           - path: /
             pathType: ImplementationSpecific
     tls:
       - hosts:
+          - sandbox.test.gf.nuts.nl
+        secretName: sandbox-tls
+      - hosts:
           - zonnebloem-ehr.test.gf.nuts.nl
         secretName: zonnebloem-ehr-tls
+  env:
+    deziPublicAuthorizeUrl: "https://mock-dezi.test.gf.nuts.nl/authorize"
+    sandboxPublicUrl: "https://sandbox.test.gf.nuts.nl"
+  zonnebloemEhr:
+    enabled: true
+  extraEnv:
+    - name: ZONNEBLOEM_EHR_PUBLIC_URL
+      value: "https://zonnebloem-ehr.test.gf.nuts.nl"
 
 seed:
   enabled: true

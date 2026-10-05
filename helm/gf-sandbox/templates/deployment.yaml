@@ -40,10 +40,6 @@ spec:
           {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- with .Values.command }}
-          command:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
           env:
             - name: DEZI_PUBLIC_AUTHORIZE_URL
               value: {{ .Values.env.deziPublicAuthorizeUrl | quote }}
@@ -57,6 +53,12 @@ spec:
               value: {{ .Values.env.hapiBaseUrl | quote }}
             - name: SANDBOX_NUTS_SUBJECT
               value: {{ .Values.env.nutsSubject | quote }}
+            {{- if .Values.zonnebloemEhr.enabled }}
+            - name: ZONNEBLOEM_FHIR_BASE_URL
+              value: {{ required "zonnebloemEhr.fhirBaseUrl is required when zonnebloemEhr.enabled is true" .Values.zonnebloemEhr.fhirBaseUrl | quote }}
+            - name: ZONNEBLOEM_EHR_PORT
+              value: {{ .Values.zonnebloemEhr.port | quote }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -64,6 +66,11 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            {{- if .Values.zonnebloemEhr.enabled }}
+            - name: zonnebloem-ehr
+              containerPort: {{ .Values.zonnebloemEhr.port }}
+              protocol: TCP
+            {{- end }}
           {{- with .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml . | nindent 12 }}

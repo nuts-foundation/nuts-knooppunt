@@ -25,6 +25,7 @@ spec:
   {{- end }}
   rules:
     {{- range .Values.ingress.hosts }}
+    {{- $servicePort := .servicePort | default $.Values.service.port }}
     - host: {{ .host | quote }}
       http:
         paths:
@@ -37,7 +38,7 @@ spec:
               service:
                 name: {{ include "gf-sandbox.fullname" $ }}
                 port:
-                  number: {{ $.Values.service.port }}
+                  number: {{ $servicePort }}
           {{- end }}
     {{- end }}
 {{- end }}

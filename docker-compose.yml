@@ -406,6 +406,7 @@ services:
       dockerfile: sandbox/app/Dockerfile
     ports:
       - "8091:8091"  # same host port as demo-ehr maps; don't combine --profile demoehr with --profile sandbox
+      - "3001:3001"  # De Zonnebloem's EHR
     environment:
       DEZI_PUBLIC_AUTHORIZE_URL: http://localhost:8092/authorize
       DEZI_INTERNAL_BASE_URL: http://mock-dezi:8092
@@ -414,8 +415,10 @@ services:
       # Knooppunt internal /nvi endpoint and HAPI to restore the seeded dataset.
       KNOOPPUNT_INTERNAL_URL: http://knooppunt:8081
       HAPI_BASE_URL: http://hapi-fhir:7050/fhir
-      # Where the browser reaches De Zonnebloem's EHR, for the link on the
-      # patient record. The zonnebloem-ehr service below.
+      # De Zonnebloem's EHR (sandbox/zonnebloem), served by this process on 3001:
+      # its own FHIR store, and where the browser reaches it for the link on the
+      # patient record.
+      ZONNEBLOEM_FHIR_BASE_URL: http://hapi-fhir:7050/fhir/sunflower-patients
       ZONNEBLOEM_EHR_PUBLIC_URL: http://localhost:3001
     # docker-compose.sandbox.yml adds a further dependency on init completing,
     # so the seed's X509Credential exists before the first authorization
@@ -428,25 +431,8 @@ services:
         condition: service_started
       knooppunt:
         condition: service_started
-      hapi-fhir:
-        condition: service_started
-    profiles:
-      - sandbox
-
-  # De Zonnebloem's own EHR (sandbox/zonnebloem): the source side of the marker
-  # proof. The second program in the gf-sandbox image, run as its own process on
-  # its own port. It reads and writes De Zonnebloem's FHIR store and nothing
-  # else, so it needs neither the Knooppunt nor the sandbox.
-  zonnebloem-ehr:
-    build:
-      context: .
-      dockerfile: sandbox/app/Dockerfile
-    entrypoint: ["/zonnebloem-ehr"]
-    ports:
-      - "3001:3001"
-    environment:
-      ZONNEBLOEM_FHIR_BASE_URL: http://hapi-fhir:7050/fhir/sunflower-patients
-    depends_on:
+      # Healthy, not just started: De Zonnebloem's EHR reads HAPI on its first
+      # request.
       hapi-fhir-healthcheck:
         condition: service_completed_successfully
     profiles:

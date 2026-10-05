@@ -439,9 +439,9 @@ mock-dezi:
   fullnameOverride: mock-dezi
 
 # gf-sandbox: the GF Sandbox demo application. Set enabled: true to deploy
-# it. Public URLs depend on the environment's ingress hostnames. Like
-# zonnebloem-ehr, always refresh the moving "main" image on startup so both
-# programs receive the same upgrade.
+# it. Public URLs depend on the environment's ingress hostnames. pullPolicy
+# Always because images carry the moving "main" tag: a node holding an older
+# gf-sandbox:main would otherwise start the pod from that older build.
 gf-sandbox:
   enabled: false
   fullnameOverride: gf-sandbox
@@ -449,25 +449,11 @@ gf-sandbox:
     pullPolicy: Always
   env:
     knooppuntInternalUrl: "http://nuts-knooppunt:8081"
-
-# zonnebloem-ehr: De Zonnebloem's own EHR (sandbox/zonnebloem), the source side
-# of the demo's marker proof. The gf-sandbox chart and image, running the image's
-# second program. The chart also renders gf-sandbox's own variables (DEZI_*,
-# SANDBOX_PUBLIC_URL, KNOOPPUNT_INTERNAL_URL, HAPI_BASE_URL) on this pod; the
-# program reads none of them. pullPolicy Always because images carry the moving
-# "main" tag: a node holding an older gf-sandbox:main would otherwise start this
-# pod from an image without the program.
-zonnebloem-ehr:
-  enabled: false
-  fullnameOverride: zonnebloem-ehr
-  command: ["/zonnebloem-ehr"]
-  image:
-    pullPolicy: Always
-  service:
-    port: 3001
-  extraEnv:
-    - name: ZONNEBLOEM_FHIR_BASE_URL
-      value: "http://fhir:8080/fhir/sunflower-patients"
+  # De Zonnebloem's own EHR (sandbox/zonnebloem), the source side of the demo's
+  # marker proof, served by the same pod on its own port. Set enabled: true and
+  # give it an ingress host with servicePort: 3001.
+  zonnebloemEhr:
+    fhirBaseUrl: "http://fhir:8080/fhir/sunflower-patients"
 
 # Seed Job configuration. Populates a fresh deployment with demo data (FHIR
 # test resources, a Nuts subject and X509Credential per demo organization,

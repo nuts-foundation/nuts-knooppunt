@@ -47,3 +47,43 @@ func TestNewConfigFromEnv_RejectsAZonnebloemEHRURLThatIsNotAbsolute(t *testing.T
 		require.ErrorContainsf(t, err, "ZONNEBLOEM_EHR_PUBLIC_URL", "%q must be rejected", raw)
 	}
 }
+
+// Without a store De Zonnebloem's EHR has nothing to show, so gf-sandbox does
+// not serve it.
+func TestNewConfigFromEnv_LeavesZonnebloemsEHROffWithoutAStore(t *testing.T) {
+	cfg, err := NewConfigFromEnv(envOf(map[string]string{"ZONNEBLOEM_EHR_PORT": "4000"}))
+
+	require.NoError(t, err)
+	require.Nil(t, cfg.zonnebloemFHIRBaseURL)
+}
+
+// Read before the Knooppunt settings, like the link. PORT is the sandbox's own
+// listener, so it must not move the EHR.
+func TestNewConfigFromEnv_ReadsZonnebloemsStoreAndDefaultsTheEHRPort(t *testing.T) {
+	cfg, err := NewConfigFromEnv(envOf(map[string]string{
+		"ZONNEBLOEM_FHIR_BASE_URL": "http://hapi-fhir:7050/fhir/sunflower-patients", "PORT": "9000",
+	}))
+
+	require.NoError(t, err)
+	require.NotNil(t, cfg.zonnebloemFHIRBaseURL)
+	require.Equal(t, "http://hapi-fhir:7050/fhir/sunflower-patients", cfg.zonnebloemFHIRBaseURL.String())
+	require.Equal(t, "3001", cfg.zonnebloemEHRPort)
+}
+
+func TestNewConfigFromEnv_HonoursZONNEBLOEM_EHR_PORT(t *testing.T) {
+	cfg, err := NewConfigFromEnv(envOf(map[string]string{
+		"ZONNEBLOEM_FHIR_BASE_URL": "http://hapi-fhir:7050/fhir/sunflower-patients", "ZONNEBLOEM_EHR_PORT": "4000",
+	}))
+
+	require.NoError(t, err)
+	require.Equal(t, "4000", cfg.zonnebloemEHRPort)
+}
+
+func TestNewConfigFromEnv_RejectsAZonnebloemStoreURLThatIsNotAbsolute(t *testing.T) {
+	// "ftp://hapi/fhir" only fails the scheme check, "http:///fhir" only the
+	// host check.
+	for _, raw := range []string{"hapi-fhir:7050/fhir/sunflower-patients", "/fhir/sunflower-patients", "ftp://hapi/fhir", "http:///fhir"} {
+		_, err := NewConfigFromEnv(envOf(map[string]string{"ZONNEBLOEM_FHIR_BASE_URL": raw}))
+		require.ErrorContainsf(t, err, "ZONNEBLOEM_FHIR_BASE_URL", "%q must be rejected", raw)
+	}
+}

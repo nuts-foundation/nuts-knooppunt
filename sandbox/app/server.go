@@ -53,6 +53,10 @@ type Config struct {
 	// (sandbox/zonnebloem). The record page links there in a new tab; empty hides
 	// the link.
 	ZonnebloemEHRURL string
+	// zonnebloemFHIRBaseURL is De Zonnebloem's own FHIR store. When set, main
+	// serves the EHR on zonnebloemEHRPort; nil leaves it off.
+	zonnebloemFHIRBaseURL *url.URL
+	zonnebloemEHRPort     string
 
 	// resetGlobal and recyclePatient default to the vectors implementations when
 	// the URLs are set (see NewConfigFromEnv); tests may override them.
@@ -136,11 +140,22 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		return Config{}, fmt.Errorf("SANDBOX_EVENT_IDENTIFIERS must be masked or synthetic")
 	}
 	if raw := getenv("ZONNEBLOEM_EHR_PUBLIC_URL"); raw != "" {
-		u, err := url.Parse(raw)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-			return Config{}, fmt.Errorf("ZONNEBLOEM_EHR_PUBLIC_URL must be an absolute http(s) URL, got %q", raw)
+		u, err := absoluteHTTPURL("ZONNEBLOEM_EHR_PUBLIC_URL", raw)
+		if err != nil {
+			return Config{}, err
 		}
 		cfg.ZonnebloemEHRURL = u.String()
+	}
+	if raw := getenv("ZONNEBLOEM_FHIR_BASE_URL"); raw != "" {
+		u, err := absoluteHTTPURL("ZONNEBLOEM_FHIR_BASE_URL", raw)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.zonnebloemFHIRBaseURL = u
+		cfg.zonnebloemEHRPort = getenv("ZONNEBLOEM_EHR_PORT")
+		if cfg.zonnebloemEHRPort == "" {
+			cfg.zonnebloemEHRPort = "3001"
+		}
 	}
 	if cfg.KnooppuntInternalURL == "" {
 		return cfg, nil
@@ -199,6 +214,16 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		return vectors.RecyclePatient(ctx, target, patientKey)
 	}
 	return cfg, nil
+}
+
+// absoluteHTTPURL parses raw, the value of the variable name, which must be an
+// absolute http(s) URL.
+func absoluteHTTPURL(name, raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, fmt.Errorf("%s must be an absolute http(s) URL, got %q", name, raw)
+	}
+	return u, nil
 }
 
 // nviConfigured reports whether the sandbox can reach the NVI. main uses it to

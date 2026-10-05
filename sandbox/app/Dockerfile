@@ -13,17 +13,14 @@ COPY ./test/testdata/go.sum test/testdata/
 RUN go mod download && go mod verify
 COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /gf-sandbox ./sandbox/app
-# De Zonnebloem's EHR, the source side of the marker proof. Its own program and
-# process; it only shares this image. Run it by overriding the entrypoint.
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /zonnebloem-ehr ./sandbox/zonnebloem
 
 FROM alpine:3.22.0
 COPY --from=builder /gf-sandbox /gf-sandbox
-COPY --from=builder /zonnebloem-ehr /zonnebloem-ehr
 
 RUN adduser -D -H -u 18091 sandbox-usr
-RUN chown 18091 /gf-sandbox /zonnebloem-ehr
+RUN chown 18091 /gf-sandbox
 USER 18091:18091
 
+# 3001 is De Zonnebloem's EHR, served when ZONNEBLOEM_FHIR_BASE_URL is set.
 EXPOSE 8091 3001
 ENTRYPOINT ["/gf-sandbox"]

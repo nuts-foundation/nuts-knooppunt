@@ -61,9 +61,9 @@ These were settled during the planning, mockup and user-story rounds and are inp
    since grown into the GF viewer: a collapsible side panel that follows the demo step by step (section 4,
    cross-cutting), the transparency feature of /demo and the component the later /connect inspector reuses.
 3. **The source is a genuinely separate application in a separate browser tab.** Team decision: entering data inside the
-   demo surface would suggest everything lives in one system and the GF adds nothing. De Zonnebloem's EHR is its own
-   program, process and URL with its own look; the only road between the two systems is the GF chain. In the
-   #532 flow this carries the optional marker-proof path (section 4, step 0b).
+   demo surface would suggest everything lives in one system and the GF adds nothing. De Zonnebloem's EHR has its own
+   URL and look and shares no state with the sandbox, although one process serves both; the only road between the two
+   systems is the GF chain. In the #532 flow this carries the optional marker-proof path (section 4, step 0b).
 4. **Single multi-tenant Knooppunt instance** hosting both the consumer and the source organization (NVI
    pseudonymization is keyed per tenant via `X-Tenant-ID`).
 5. **Knooppunt has no CORS and the internal mux (:8081) is never exposed on shared deployments**; every browser call
@@ -78,7 +78,7 @@ Two user-facing applications on top of the existing mocked stack:
 | System                   | What it is                                                                                                                                                                                                                                                                                                                                      | Style                                               | Default port                                                                                                                                        |
 |--------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|
 | **GF Sandbox**           | Shell (path chooser, demo controls, reset) whose /demo path renders the consumer EMR experience: **Plataan EHR**, the hospital system of Ziekenhuis De Plataan. Go backend (sandbox/app) proxies to the Knooppunt and emits step events                                                                                                         | Shell: quiet frame (6.1). EMR: warm editorial (6.2) | own port, :8091 (demo-ehr maps the same host port, so its profile and the sandbox profile do not run together; host :3000 is taken by the mock VC issuer) |
-| **De Zonnebloem's EHR**  | The elderly care institution's own record system: client list, client record read from its own FHIR store, an allergy entry form, and removal of the allergies the demo added. A second Go program (`sandbox/zonnebloem`) in the gf-sandbox image, with its own process and URL | Its own green look, deliberately different (6.3)    | own port, :3001 |
+| **De Zonnebloem's EHR**  | The elderly care institution's own record system: client list, client record read from its own FHIR store, an allergy entry form, and removal of the allergies the demo added. A Go package (`sandbox/zonnebloem`) that the gf-sandbox process serves on its own port and URL | Its own green look, deliberately different (6.3)    | own port, :3001 |
 | Nuts Knooppunt           | Real GF components: NVI, mCSD, PDP, Mitz client, Nuts node proxy                                                                                                                                                                                                                                                                                | n/a                                                 | :8080 public, :8081 internal                                                                                                                        |
 | PRS (pseudonymization)   | **mocked offline, real when hosted**: since PR #561 the compose overlay points `prsurl` at `mock-components/prs`, a mock modelled on acceptance PRS v0.0.18 that performs real OPRF on ristretto255 and stands in for the ministry's token endpoint, so the Knooppunt's own authn flow runs unchanged. The hosted sandbox points the same configuration at the PRS acceptance environment. The built-in fake pseudonymizer is now only reached when `prsurl` is unset, which the e2e harness still does. Scope: acceptance v0.0.18 checks no scope value, the service's `main` requires `prs:oprf`, and the acceptance OAuth service documents `epd:read`; see `docs/prs-contract.md` | n/a                                                 | external (acc)                                                                                                                                      |
 | Mocked national services | fake-NVI backing store (HAPI), fake LRZa, mock Mitz (user-controllable answer, subscriptions and notifications), mock Dezi (signed v0.7 attestation over an authorization code flow), mock VC issuer (`HealthcareProviderRoleTypeCredential` over OID4VCI; still in compose on :3000, but not on the sandbox authentication path, see E2)                                                                                                                                                                                   | n/a                                                 | existing compose ports                                                                                                                              |
@@ -109,10 +109,10 @@ Application tech stack: the sandbox UI is a server-rendered hypermedia applicati
 `sandbox/app` (stdlib `net/http` + `html/template` + `go:embed`, following the `mcsdadmin` pattern in this repo), with
 **Datastar as the v1 frontend implementation**. demo-ehr's pages remain reference material; its proxy role is superseded
 by Go equivalents (the knooppunt client plumbing in `lib/` is reused directly from E2/E4 on). De Zonnebloem's EHR (E7)
-is its own Go program in the same shape, with plain server-rendered forms and no client-side script. Pages are server
-templates ported from
-the wireframe, live updates arrive over the E6 SSE stream, the journey strip stays vanilla JS, and Datastar is vendored
-as one static file: no npm dependency tree and no build step.
+is its own Go package in the same shape, served by the same process on its own port, with plain server-rendered forms
+and no client-side script. Pages are server templates ported from the wireframe, live updates arrive over the E6 SSE
+stream, the journey strip stays vanilla JS, and Datastar is vendored as one static file: no npm dependency tree and no
+build step.
 
 The choice is deliberately reversible, with exactly one frontend implementation active: Datastar initially, or Preact +
 htm after a cutover. Backend routes, the step-event JSON schema, design tokens and CSS, and the framework-free
@@ -464,7 +464,7 @@ is the screen-by-screen reference for layout and copy. Each epic names the exist
 green-field by accident. The two redesigns live inside E1 (Plataan EHR) and E7 (De Zonnebloem's EHR), not as separate
 epics, so no screen ever ships unstyled. Every UI-bearing epic of the sandbox app (E1-E4 and E8) follows the section 3
 Datastar-first decision and its AI-assisted Preact + htm fallback; E6 keeps the shared event contract framework-neutral
-so that migration does not require backend rework. De Zonnebloem's EHR (E7) is a separate program of plain
+so that migration does not require backend rework. De Zonnebloem's EHR (E7) is a separate application of plain
 server-rendered forms and ships no client-side script.
 
 ### E1 Sandbox shell and Plataan EHR design system
@@ -570,14 +570,14 @@ contract without backend changes.
 
 ### E7 De Zonnebloem's EHR and path B marker entry
 
-A small EHR for Zorgcentrum De Zonnebloem as its own program, process, port and URL (`sandbox/zonnebloem`, the second
-program in the gf-sandbox image), opened via `target="_blank"` from a card on the Plataan record: the client list and
+A small EHR for Zorgcentrum De Zonnebloem on its own port and URL (`sandbox/zonnebloem`, served by the gf-sandbox
+process), opened via `target="_blank"` from a card on the Plataan record: the client list and
 client record read live from De Zonnebloem's FHIR store, and an allergy entry form with a free-text note for the
 marker word (`DEMO-` prefix convention). Records it creates carry a user-created tag: per-patient recycle deletes by
 it, and the EHR removes only records that carry it, never a seeded one. It needs no client-side script and ships none.
 
 - Extends: the seeded Zonnebloem store and NVI registrations (E5), the E4 marker highlighting,
-  `vectors.RecyclePatient`, the gf-sandbox image and Helm chart (deployed a second time as `zonnebloem-ehr`).
+  `vectors.RecyclePatient`, the gf-sandbox process and Helm chart (a second port and ingress host).
 - Acceptance: a record entered in De Zonnebloem's EHR is retrievable in the sandbox purely through the chain; its
   marker word appears highlighted in the enriched record; removing it in De Zonnebloem's EHR takes it out of the next
   retrieval; recycle and reset remove it.
@@ -625,8 +625,8 @@ subscription. The open question on the authorization breakdown source (section 1
   Plataan", following the botanical naming of the demo organizations (the existing `sunflower` vector maps to De
   Zonnebloem). Check any future name against real organizations before it lands in code.
 - Hosting: the sandbox is demoed from a hosted environment (extending the existing Helm charts); docker compose is the
-  offline dev path only. The umbrella chart deploys the sandbox, De Zonnebloem's EHR (the gf-sandbox chart a second
-  time, as `zonnebloem-ehr`) and the seed job.
+  offline dev path only. The umbrella chart deploys the sandbox, with De Zonnebloem's EHR on a second port and ingress
+  host of the same pod, and the seed job.
 - PRS acceptance environment: confirm access (connection details, auth and allowlisting of the demo URAs
   00000010/00000020) and that RvIG test-BSNs are accepted there. Note the failure mode: with `prsurl` set, an
   unreachable PRS fails the lookup (no silent fake fallback), so a demo depends on acc availability; decide whether that
