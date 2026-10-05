@@ -154,9 +154,10 @@
   .hd-idle { font-size: 13px; line-height: 1.6; color: #d8d0c2; margin-bottom: 10px; }
 
   .gf-stream-status { flex: 1 1 180px; color: #c8bfb2; font-size: 12px; line-height: 1.5; }
-  /* Actions, stages and calls nest; a result takes the outcome of its nearest owner. */
+  /* Actions, stages and calls nest; a result takes the outcome of its nearest owner.
+     Result text is a tint lighter than the outcome's border colour, so it keeps 7:1 on a playing call. */
   .gf-step-ok { --gf-result-color: #d8d0c2; }
-  .gf-step-deny { --gf-result-color: #e59ab8; }
+  .gf-step-deny { --gf-result-color: #eaa9c3; }
   .gf-step-error { --gf-result-color: #e9ba72; }
   .gf-step-result { font-size: 13px; line-height: 1.5; color: var(--gf-result-color, #d8d0c2); margin-top: 3px; }
 
@@ -216,6 +217,8 @@
   .gf-stage-content { min-width: 0; }
   .gf-stage h4 { font-size: 14px; font-weight: 600; line-height: 1.5; color: #f0ebe1; }
   .gf-stage-current { background: rgba(127,199,188,0.09); }
+  /* A playing call nested in a playing call would double the tint; it is outlined instead. */
+  .gf-stage-current .gf-stage-current { background: none; border-top-color: rgba(127,199,188,0.6); border-right-color: rgba(127,199,188,0.6); border-bottom-color: rgba(127,199,188,0.6); }
   .gf-stage-current .gf-stage-number { background: #7fc7bc; color: #241e17; }
   .gf-stage-now { display: block; margin-top: 4px; font-size: 12px; color: #7fc7bc; }
   .gf-call { margin-top: 8px; border: 1px solid rgba(240,235,225,0.13); border-left: 2px solid #7fc7bc; border-radius: 6px; overflow: hidden; }
@@ -227,7 +230,7 @@
   .gf-call-path { color: #d8d0c2; }
   .gf-http-exchange { padding: 0 12px; }
   .gf-http-exchange section { padding: 10px 0; border-top: 1px solid rgba(240,235,225,0.13); }
-  .gf-http-exchange h5 { font-size: 13px; font-weight: 600; color: #93b4f0; }
+  .gf-http-exchange h5 { font-size: 13px; font-weight: 600; color: #a8c3f3; }
   .gf-http-response h5 { color: #7fc7bc; }
   .gf-http-status, .gf-call pre { font-family: 'Fira Mono', monospace; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; white-space: pre-wrap; color: #d8d0c2; margin-top: 5px; }
   .gf-http-label { color: #c8bfb2; font-size: 12px; font-weight: 600; margin-top: 10px; }
