@@ -1,0 +1,19 @@
+{{define "content"}}
+<div class="shell start{{if not .Clients}} empty{{end}}">
+  {{template "rail" .}}
+  <main class="main">
+    <section class="band band-start" aria-labelledby="start-title">
+      <span class="band-mark">{{template "sunflower"}}</span>
+      <div class="band-main">
+        {{if .Clients}}
+        <h1 class="band-name" id="start-title">No client selected yet</h1>
+        <p class="band-lede">Choose a client on the left to open their record.</p>
+        {{else}}
+        <h1 class="band-name" id="start-title">No demo clients yet</h1>
+        <p class="band-lede">The record store holds none. A reset in Plataan loads them.</p>
+        {{end}}
+      </div>
+    </section>
+  </main>
+</div>
+{{end}}

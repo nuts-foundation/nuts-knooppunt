@@ -139,6 +139,7 @@ func (c Config) handlePatientRecord(w http.ResponseWriter, r *http.Request, sess
 		Active: "dossier", TopTitle: "Patient record", ViewerOpen: true,
 		Session: &view, Patient: &row, Notice: demoNotice(r),
 		Sections: sections, SourceNames: sourceNames, Retrieval: retrieved,
+		ZonnebloemEHRURL: c.ZonnebloemEHRURL,
 	})
 }
 

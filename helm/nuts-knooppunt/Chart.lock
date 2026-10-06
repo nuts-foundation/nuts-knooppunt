@@ -25,12 +25,12 @@ dependencies:
   version: 0.1.0
 - name: helm-gf-sandbox
   repository: file://../gf-sandbox
-  version: 0.1.0
+  version: 0.2.0
 - name: nuts-node-chart
   repository: https://nuts-foundation.github.io/nuts-node/
   version: 0.0.6
 - name: jaeger
   repository: https://jaegertracing.github.io/helm-charts
   version: 3.4.1
-digest: sha256:2d4714a4ef821d02d392c6e44d9bdd447e19c9a46eb6bdac26c2268fed44a40a
-generated: "2026-10-02T15:58:12.465786+02:00"
+digest: sha256:570cdd501a971f1654c7446a719cb6e3ac40af8a00873e0d7df26d9ccdd44eef
+generated: "2026-10-06T12:34:39.372202+02:00"

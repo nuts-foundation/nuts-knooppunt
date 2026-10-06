@@ -53,6 +53,16 @@ spec:
               value: {{ .Values.env.hapiBaseUrl | quote }}
             - name: SANDBOX_NUTS_SUBJECT
               value: {{ .Values.env.nutsSubject | quote }}
+            {{- if .Values.zonnebloemEhr.enabled }}
+            - name: ZONNEBLOEM_FHIR_BASE_URL
+              value: {{ required "zonnebloemEhr.fhirBaseUrl is required when zonnebloemEhr.enabled is true" .Values.zonnebloemEhr.fhirBaseUrl | quote }}
+            - name: ZONNEBLOEM_EHR_PORT
+              value: {{ .Values.zonnebloemEhr.port | quote }}
+            {{- with .Values.zonnebloemEhr.publicUrl }}
+            - name: ZONNEBLOEM_EHR_PUBLIC_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.traceCapture.enabled }}
             - name: SANDBOX_OTLP_LISTEN_ADDR
               value: ":{{ .Values.traceCapture.listenPort }}"
@@ -70,6 +80,11 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+            {{- if .Values.zonnebloemEhr.enabled }}
+            - name: zonnebloem-ehr
+              containerPort: {{ .Values.zonnebloemEhr.port }}
+              protocol: TCP
+            {{- end }}
             {{- if .Values.traceCapture.enabled }}
             - name: otlp
               containerPort: {{ .Values.traceCapture.listenPort }}

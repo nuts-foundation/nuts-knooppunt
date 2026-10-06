@@ -147,11 +147,13 @@ subject's wallet, which is empty until the credential is stored.
   each side: the sandbox publishes under `SANDBOX_NVI_CLIENT_ID` when it is set,
   and a cleanup holding a different id deletes nothing while reporting a restore.
 
+  It also deletes the records added for that patient in De Zonnebloem's EHR
+  (`sandbox/zonnebloem`). Those carry the `pool.UserCreatedTagSystem` /
+  `pool.UserCreatedTagCode` tag and a server-assigned id that the fixed-id re-PUT
+  cannot overwrite. An untagged record stays until a global reset.
+
 ### Known limitations
 
-- **Per-patient recycle cannot remove that patient's user-created marker records**
-  (they have random ids). A global reset is the escape hatch until a later epic
-  tags user-created resources for targeted deletion.
 - **NVI Lists registered under a BSN outside the pool survive a global reset.**
   Pool BSNs are handled: `SeedNVI` restores De Zonnebloem's registrations and
   `ResetGlobal` removes De Plataan's by client id. A BSN that is not in the pool

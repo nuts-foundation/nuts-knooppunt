@@ -306,13 +306,25 @@ gf-sandbox:
         paths:
           - path: /
             pathType: ImplementationSpecific
+      # De Zonnebloem's EHR, served by the same pod on its own port.
+      - host: zonnebloem-ehr.test.gf.nuts.nl
+        servicePort: 3001
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
     tls:
       - hosts:
           - sandbox.test.gf.nuts.nl
         secretName: sandbox-tls
+      - hosts:
+          - zonnebloem-ehr.test.gf.nuts.nl
+        secretName: zonnebloem-ehr-tls
   env:
     deziPublicAuthorizeUrl: "https://mock-dezi.test.gf.nuts.nl/authorize"
     sandboxPublicUrl: "https://sandbox.test.gf.nuts.nl"
+  zonnebloemEhr:
+    enabled: true
+    publicUrl: "https://zonnebloem-ehr.test.gf.nuts.nl"
   # PRS evidence in the viewer. prsUrl must equal the knooppunt's
   # config.pseudo.prsurl, whose spans are the ones it picks out.
   traceCapture:

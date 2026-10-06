@@ -50,6 +50,9 @@ type page struct {
 	Retrieval              *sourceRetrieval
 	Sections               []recordSection
 	SourceNames            []string
+
+	// ZonnebloemEHRURL links the record page to De Zonnebloem's EHR.
+	ZonnebloemEHRURL string
 }
 
 // claim is one introspected value, rendered on the authorization page.

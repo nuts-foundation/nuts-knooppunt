@@ -97,6 +97,13 @@
         <div class="data-item"><div><b>{{.}}</b></div></div>
         {{end}}
     </div>
+    {{with .ZonnebloemEHRURL}}
+    <div class="card">
+        <h2>Proof it really works</h2>
+        <div class="h-sub">Add a record at the source itself, in De Zonnebloem's own system (it opens in a new tab), then retrieve it here.</div>
+        <div class="card-action"><a class="btn ghost" href="{{.}}" target="_blank" rel="noopener">Open De Zonnebloem's EHR&nbsp;&nbsp;↗</a></div>
+    </div>
+    {{end}}
   </div>
 </main>
 {{end}}
