@@ -134,11 +134,11 @@
   .js-path.lit.event-error { stroke: #e9ba72; }
   .js-dim.lit.deny { filter: drop-shadow(0 0 5px rgba(229,154,184,0.4)); }
   .js-dim.lit.event-error { filter: drop-shadow(0 0 5px rgba(233,186,114,0.4)); }
-  .js-lbl { font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600; fill: #f0ebe1; }
-  .js-lbl2 { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; fill: #f0ebe1; }
-  .js-band { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; fill: rgba(147,180,240,0.9); }
+  .js-lbl { font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700; fill: #f0ebe1; }
+  .js-lbl2 { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 700; fill: #f0ebe1; }
+  .js-band { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; fill: rgba(147,180,240,0.9); }
   .js-sprite { opacity: 0; offset-rotate: 0deg; }
-  .js-sprite text { font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 600; fill: #f0ebe1; }
+  .js-sprite text { font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 700; fill: #f0ebe1; }
   .js-sprite.deny rect { stroke: #e59ab8; }
   .js-sprite.event-error rect { stroke: #e9ba72; }
   .gf-map-caption { padding: 10px 8px 12px; min-height: 66px; }
