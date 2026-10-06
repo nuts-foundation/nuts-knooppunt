@@ -438,6 +438,16 @@ mock-dezi:
   enabled: false
   fullnameOverride: mock-dezi
 
+# mock-prs: the GF Sandbox's stand-in for the pseudonymization service (PRS),
+# with a sandbox helper the fake NVI de-tokenizes through. Set enabled: true
+# to deploy it; the knooppunt uses it once config.pseudo.prsurl and
+# config.authn.minvws point at it (see infra/ovhcloud-test/values.yaml), and
+# the NVI once the fhir chart's PRS_MOCK_URL does. Its keys sit on a volume
+# that is kept on helm uninstall.
+mock-prs:
+  enabled: false
+  fullnameOverride: mock-prs
+
 # gf-sandbox: the GF Sandbox demo application. Set enabled: true to deploy
 # it. Public URLs depend on the environment's ingress hostnames. pullPolicy
 # Always because images carry the moving "main" tag: a node holding an older

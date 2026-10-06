@@ -77,6 +77,36 @@ zonnebloemEhr:
   fhirBaseUrl: ""
   publicUrl: ""
 
+# PRS evidence in the viewer (sandbox/app/README.md, "Private PRS trace
+# receiver"): the knooppunt exports to an OpenTelemetry Collector deployed by
+# this chart (set its config.tracing.otlpendpoint to
+# <fullname>-otel-collector:4318), which forwards traces to the sandbox's
+# private OTLP listener with a generated ingest token. That listener gets a
+# ClusterIP service of its own (<fullname>-otlp), which no ingress routes to.
+# Off by default, and then the viewer says the deployment does not trace the
+# PRS call.
+traceCapture:
+  enabled: false
+  # The PRS base URL whose client spans become viewer events. Must equal the
+  # knooppunt's pseudo.prsurl. Required when enabled.
+  prsUrl: ""
+  # The service.name the knooppunt reports (its tracing.servicename).
+  serviceName: "nuts-knooppunt"
+  # The sandbox's private OTLP listener (SANDBOX_OTLP_LISTEN_ADDR).
+  listenPort: 4318
+  collector:
+    image:
+      repository: otel/opentelemetry-collector
+      tag: "0.123.0"
+      pullPolicy: IfNotPresent
+    # The memory_limiter in the Collector's config (96 MiB) is sized for this
+    # limit; change them together.
+    resources:
+      requests:
+        memory: 32Mi
+      limits:
+        memory: 128Mi
+
 volumes: []
 volumeMounts: []
 

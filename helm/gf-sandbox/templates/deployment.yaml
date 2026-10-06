@@ -63,6 +63,19 @@ spec:
               value: {{ . | quote }}
             {{- end }}
             {{- end }}
+            {{- if .Values.traceCapture.enabled }}
+            - name: SANDBOX_OTLP_LISTEN_ADDR
+              value: ":{{ .Values.traceCapture.listenPort }}"
+            - name: SANDBOX_OTLP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "gf-sandbox.otlpTokenSecretName" . }}
+                  key: token
+            - name: SANDBOX_PRS_URL
+              value: {{ required "traceCapture.prsUrl must be set when traceCapture is enabled" .Values.traceCapture.prsUrl | quote }}
+            - name: SANDBOX_TRACE_SERVICE_NAME
+              value: {{ .Values.traceCapture.serviceName | quote }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -70,6 +83,11 @@ spec:
             {{- if .Values.zonnebloemEhr.enabled }}
             - name: zonnebloem-ehr
               containerPort: {{ .Values.zonnebloemEhr.port }}
+              protocol: TCP
+            {{- end }}
+            {{- if .Values.traceCapture.enabled }}
+            - name: otlp
+              containerPort: {{ .Values.traceCapture.listenPort }}
               protocol: TCP
             {{- end }}
           {{- with .Values.livenessProbe }}

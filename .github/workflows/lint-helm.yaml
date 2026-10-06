@@ -74,6 +74,7 @@ jobs:
             --set "mock-vc-issuer.image.tag=$tag" \
             --set "mock-mitz.image.tag=$tag" \
             --set "mock-dezi.image.tag=$tag" \
+            --set "mock-prs.image.tag=$tag" \
             --set "gf-sandbox.image.tag=$tag" \
             --set "seed.image.tag=$tag" \
             > /dev/null

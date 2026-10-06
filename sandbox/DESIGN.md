@@ -80,7 +80,7 @@ Two user-facing applications on top of the existing mocked stack:
 | **GF Sandbox**           | Shell (path chooser, demo controls, reset) whose /demo path renders the consumer EMR experience: **Plataan EHR**, the hospital system of Ziekenhuis De Plataan. Go backend (sandbox/app) proxies to the Knooppunt and emits step events                                                                                                         | Shell: quiet frame (6.1). EMR: warm editorial (6.2) | own port, :8091 (demo-ehr maps the same host port, so its profile and the sandbox profile do not run together; host :3000 is taken by the mock VC issuer) |
 | **De Zonnebloem's EHR**  | The elderly care institution's own record system: client list, client record read from its own FHIR store, an allergy entry form, and removal of the allergies the demo added. A Go package (`sandbox/zonnebloem`) that the gf-sandbox process serves on its own port and URL | Its own green look, deliberately different (6.3)    | own port, :3001 |
 | Nuts Knooppunt           | Real GF components: NVI, mCSD, PDP, Mitz client, Nuts node proxy                                                                                                                                                                                                                                                                                | n/a                                                 | :8080 public, :8081 internal                                                                                                                        |
-| PRS (pseudonymization)   | **mocked offline, real when hosted**: since PR #561 the compose overlay points `prsurl` at `mock-components/prs`, a mock modelled on acceptance PRS v0.0.18 that performs real OPRF on ristretto255 and stands in for the ministry's token endpoint, so the Knooppunt's own authn flow runs unchanged. The hosted sandbox points the same configuration at the PRS acceptance environment. The built-in fake pseudonymizer is now only reached when `prsurl` is unset, which the e2e harness still does. Scope: acceptance v0.0.18 checks no scope value, the service's `main` requires `prs:oprf`, and the acceptance OAuth service documents `epd:read`; see `docs/prs-contract.md` | n/a                                                 | external (acc)                                                                                                                                      |
+| PRS (pseudonymization)   | **mocked, offline and hosted**: the compose overlay (since PR #561) and the hosted deployment (`helm/mock-prs`) point `prsurl` at `mock-components/prs`, a mock modelled on acceptance PRS v0.0.18 that performs real OPRF on ristretto255 and stands in for the ministry's token endpoint, so the Knooppunt's own authn flow runs unchanged. The fake NVI de-tokenizes through the mock, which holds its recipient key; it cannot open what the acceptance PRS encrypts for the real NVI. The built-in fake pseudonymizer is now only reached when `prsurl` is unset, which the e2e harness still does. Scope: acceptance v0.0.18 checks no scope value, the service's `main` requires `prs:oprf`, and the acceptance OAuth service documents `epd:read`; see `docs/prs-contract.md` | n/a                                                 | :8080, sandbox helper :8081 (neither published)                                                                                                     |
 | Mocked national services | fake-NVI backing store (HAPI), fake LRZa, mock Mitz (user-controllable answer, subscriptions and notifications), mock Dezi (signed v0.7 attestation over an authorization code flow), mock VC issuer (`HealthcareProviderRoleTypeCredential` over OID4VCI; still in compose on :3000, but not on the sandbox authentication path, see E2)                                                                                                                                                                                   | n/a                                                 | existing compose ports                                                                                                                              |
 
 Mitz is mocked deliberately for `/demo`; none of the sandbox organizations or URAs need registration in the real Mitz
@@ -89,8 +89,9 @@ test-Mitz would add onboarding, availability and shared-state dependencies, and 
 require a consent-registration interface that the Knooppunt does not implement. The Knooppunt-side path remains real:
 `component/mitz` sends XACML closed authorization questions and creates FHIR subscriptions against the mock. Real
 test-Mitz connectivity remains a separate component-testing track, while national onboarding belongs to the post-v1
-`/connect` mode 2. The asymmetry with PRS is intentional: pseudonymization is stateless from the demo's perspective, so
-its real acceptance environment adds realism without sacrificing deterministic reset.
+`/connect` mode 2. PRS is mocked for another reason: pseudonymization is stateless from the demo's perspective, but the
+fake NVI can only de-tokenize what a PRS holding its recipient key produces, and the acceptance PRS encrypts for the
+real NVI.
 
 Interaction rules:
 
@@ -413,8 +414,8 @@ The sandbox backend emits one step event per proxied call:
 - Demo consumes `gf`, `outcome`, `durationMs` plus selected response fields (the result screens render real chain
   output); the full records are retained for the deeper inspector level (section 8).
 - Pseudonymization is interior to the Knooppunt (the sandbox backend never calls PRS itself), so `gf: "pseudonym"`
-  entries derive from the Knooppunt's OTel span rather than the capture middleware. On the hosted environment that span
-  is a real call to the PRS acceptance environment; offline it is a real call to the mock PRS.
+  entries derive from the Knooppunt's OTel span rather than the capture middleware. Offline and hosted alike, that span
+  is a real call to the mock PRS.
 - Request strings shown in the wireframe's Technical mode are illustrative, not API contracts: the NVI List API requires
   `patient:identifier=...` (not `patient=`), and BGZ retrieval is a set of resource-level FHIR queries rather than one
   `/bgz/Bundle` call.
@@ -523,7 +524,7 @@ sharing an existing local record, not creating a patient; no clinical data leave
 
 The scripted chain in the sandbox backend plus the screens that render it: record home (own data, sources card, retrieve
 button), the retrieve modal (NVI result versus GF Addressing result, explicit confirmation), the chain itself (NVI List
-query, whose pseudonymization leg runs against the PRS acceptance environment inside the Knooppunt; mCSD endpoint
+query, whose pseudonymization leg the Knooppunt runs against the mock PRS; mCSD endpoint
 lookup; access token via `/nuts/auth/v2/{subjectID}/request-service-access-token` on the internal mux; FHIR BGZ
 retrieval), the authorization result page (real top-level decision, sub-check breakdown, demo disclaimer), and the
 enriched home with per-item source attribution and marker highlighting.
@@ -546,9 +547,8 @@ the seeded NVI registration for De Zonnebloem, BSN verification against the RvIG
 (expunge mutable stores, re-run the loader, and clear Mitz subscriptions where a mock is configured, reporting a partial
 restore where one is not; see section 5.6). The seed must run both as the
 compose init service and as a job in the hosted deployment; reset reuses it. Seeding covers the whole demo pool (section
-5.7), and the reset endpoint gains a per-patient recycle variant; both respect demo locks. The hosted deployment also
-configures the pseudonymisation component against the PRS acceptance environment (`prsurl`); offline compose points
-the same setting at the mock PRS (PR #561).
+5.7), and the reset endpoint gains a per-patient recycle variant; both respect demo locks. The hosted deployment points
+the pseudonymisation component (`prsurl`) at the mock PRS, as offline compose does since PR #561.
 
 - Extends: `test/testdata` vectors, the `init` compose service and its hosted seed-job counterpart, HAPI `$expunge`.
 - Acceptance: a fresh deployment (compose locally, Helm hosted) yields a findable, addressable, retrievable Anna without
@@ -627,10 +627,6 @@ subscription. The open question on the authorization breakdown source (section 1
 - Hosting: the sandbox is demoed from a hosted environment (extending the existing Helm charts); docker compose is the
   offline dev path only. The umbrella chart deploys the sandbox, with De Zonnebloem's EHR on a second port and ingress
   host of the same pod, and the seed job.
-- PRS acceptance environment: confirm access (connection details, auth and allowlisting of the demo URAs
-  00000010/00000020) and that RvIG test-BSNs are accepted there. Note the failure mode: with `prsurl` set, an
-  unreachable PRS fails the lookup (no silent fake fallback), so a demo depends on acc availability; decide whether that
-  is acceptable or needs a visible degradation.
 - ~~The NVI registration needs a BGZ zorgcontext code.~~ Settled by E3: there is none, and there cannot be. `List.code`
   binds to `nl-gf-zorgcontext-vs`, whose 28 codes come from `nl-gf-data-categories-cs` and are data categories at FHIR
   resource granularity. A patient summary is registered as the set of categories it contains, one List each. The

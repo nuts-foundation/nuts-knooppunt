@@ -16,7 +16,7 @@ name: 'Build and deploy test'
 # SHA instead of the moving "main" tag.
 #
 # workflow_dispatch is deploy-only: it redeploys a commit that was already
-# built and pushed to main (skipping the 8 build jobs), for rollback or
+# built and pushed to main (skipping the 9 build jobs), for rollback or
 # retrying a deploy without rebuilding. It only works for a commit that
 # already has sha-<short-sha> images published - it doesn't build arbitrary
 # commits on demand.
@@ -62,6 +62,11 @@ jobs:
     uses: ./.github/workflows/build-mock-dezi-image.yaml
     secrets: inherit
 
+  build-mock-prs:
+    if: github.event_name != 'workflow_dispatch'
+    uses: ./.github/workflows/build-mock-prs-image.yaml
+    secrets: inherit
+
   build-gf-sandbox:
     if: github.event_name != 'workflow_dispatch'
     uses: ./.github/workflows/build-gf-sandbox-image.yaml
@@ -84,6 +89,7 @@ jobs:
       - build-mock-vc-issuer
       - build-mock-mitz
       - build-mock-dezi
+      - build-mock-prs
       - build-gf-sandbox
       - build-fakenvi
       - build-seed
@@ -124,13 +130,19 @@ jobs:
       - name: Verify images exist for this commit
         run: |
           tag="sha-${COMMIT:0:7}"
-          # One entry per image actually built by the 8 build-*-image.yaml
+          # One entry per image actually built by the 9 build-*-image.yaml
           # workflows (knooppunt-pep covers both pep-zonnebloem and
-          # pep-plataan - same image, deployed twice).
+          # pep-plataan - same image, deployed twice). mock-prs only when
+          # the checked-out commit has its chart, so that a workflow_dispatch
+          # rollback to an older commit does not fail on an image that
+          # commit never built.
           images=(
             nuts-knooppunt knooppunt-pep fake-nvi mock-vc-issuer
             mock-mitz mock-dezi gf-sandbox knooppunt-sandbox-seed
           )
+          if [ -d helm/mock-prs ]; then
+            images+=(mock-prs)
+          fi
           for image in "${images[@]}"; do
             docker buildx imagetools inspect "ghcr.io/nuts-foundation/${image}:${tag}" >/dev/null || {
               echo "::error::ghcr.io/nuts-foundation/${image}:${tag} does not exist - $COMMIT was never fully built"
@@ -165,5 +177,6 @@ jobs:
             --set "mock-vc-issuer.image.tag=$tag" \
             --set "mock-mitz.image.tag=$tag" \
             --set "mock-dezi.image.tag=$tag" \
+            --set "mock-prs.image.tag=$tag" \
             --set "gf-sandbox.image.tag=$tag" \
             --set "seed.image.tag=$tag"
