@@ -439,14 +439,22 @@ mock-dezi:
   fullnameOverride: mock-dezi
 
 # gf-sandbox: the GF Sandbox demo application. Set enabled: true to deploy
-# it. Only knooppuntInternalUrl differs from the chart's own defaults - the
-# rest (public URLs) are placeholders that depend on ingress hostnames an
-# environment values file has to set.
+# it. Public URLs depend on the environment's ingress hostnames. pullPolicy
+# Always because images carry the moving "main" tag: a node holding an older
+# gf-sandbox:main would otherwise start the pod from that older build.
 gf-sandbox:
   enabled: false
   fullnameOverride: gf-sandbox
+  image:
+    pullPolicy: Always
   env:
     knooppuntInternalUrl: "http://nuts-knooppunt:8081"
+  # De Zonnebloem's own EHR (sandbox/zonnebloem), the source side of the demo's
+  # marker proof, served by the same pod on its own port. Set enabled: true,
+  # give it an ingress host with servicePort: 3001, and set publicUrl to that
+  # host's URL so Plataan links to it.
+  zonnebloemEhr:
+    fhirBaseUrl: "http://fhir:8080/fhir/sunflower-patients"
 
 # Seed Job configuration. Populates a fresh deployment with demo data (FHIR
 # test resources, a Nuts subject and X509Credential per demo organization,

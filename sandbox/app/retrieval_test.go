@@ -14,11 +14,12 @@ import (
 
 // sourceRequest is one call the fake source received.
 type sourceRequest struct {
-	Method string
-	Path   string
-	Query  url.Values
-	Form   url.Values
-	Auth   string
+	Method       string
+	Path         string
+	Query        url.Values
+	Form         url.Values
+	Auth         string
+	CacheControl string
 }
 
 // all returns every value the request carried, wherever it carried it, so a test
@@ -36,6 +37,7 @@ func fakeSource(t *testing.T, got *[]sourceRequest, routes map[string]string) so
 			*got = append(*got, sourceRequest{
 				Method: r.Method, Path: r.URL.Path, Query: r.URL.Query(),
 				Form: r.PostForm, Auth: r.Header.Get("Authorization"),
+				CacheControl: r.Header.Get("Cache-Control"),
 			})
 		}
 		resourceType := strings.TrimSuffix(r.URL.Path[len("/fhir/"):], "/_search")
@@ -128,6 +130,27 @@ func TestRetrieveBGZ_IssuesTheAuthorizedQueries(t *testing.T) {
 	assert.Equal(t, chainGranted, result.Outcome)
 	for _, outcome := range result.Queries {
 		assert.Equal(t, http.StatusOK, outcome.Status, outcome.Label)
+	}
+}
+
+// HAPI answers an identical search from its cache for a while (60 seconds by
+// default). Without this, a record added at the source just after a retrieval
+// stays invisible to the next one, which is exactly the marker proof: retrieve,
+// add a record in De Zonnebloem's EHR, retrieve again.
+func TestRetrieveBGZ_AsksTheSourceForFreshResults(t *testing.T) {
+	var got []sourceRequest
+	source := fakeSource(t, &got, map[string]string{
+		"Patient":            bundleOf(zonnebloemPatient),
+		"AllergyIntolerance": bundleOf(penicillinAllergy),
+	})
+
+	_, err := retrieveBGZ(t.Context(), source, "the-token", "999900006",
+		[]string{nvi.CategoryAllergyIntolerance, nvi.CategoryPatient})
+
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	for _, request := range got {
+		assert.Equal(t, "no-cache", request.CacheControl, request.Path)
 	}
 }
 
