@@ -450,8 +450,9 @@ gf-sandbox:
   env:
     knooppuntInternalUrl: "http://nuts-knooppunt:8081"
   # De Zonnebloem's own EHR (sandbox/zonnebloem), the source side of the demo's
-  # marker proof, served by the same pod on its own port. Set enabled: true and
-  # give it an ingress host with servicePort: 3001.
+  # marker proof, served by the same pod on its own port. Set enabled: true,
+  # give it an ingress host with servicePort: 3001, and set publicUrl to that
+  # host's URL so Plataan links to it.
   zonnebloemEhr:
     fhirBaseUrl: "http://fhir:8080/fhir/sunflower-patients"
 

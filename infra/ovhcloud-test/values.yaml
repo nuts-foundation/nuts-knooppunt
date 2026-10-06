@@ -273,9 +273,7 @@ gf-sandbox:
     sandboxPublicUrl: "https://sandbox.test.gf.nuts.nl"
   zonnebloemEhr:
     enabled: true
-  extraEnv:
-    - name: ZONNEBLOEM_EHR_PUBLIC_URL
-      value: "https://zonnebloem-ehr.test.gf.nuts.nl"
+    publicUrl: "https://zonnebloem-ehr.test.gf.nuts.nl"
 
 seed:
   enabled: true

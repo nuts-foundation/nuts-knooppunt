@@ -10,6 +10,7 @@ import (
 	"sort"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -31,17 +32,15 @@ type store interface {
 // client's record fit well inside it; the demo store holds seven clients.
 const searchCount = "200"
 
-// freshResults asks HAPI not to answer from its cache of identical searches,
-// which it keeps for a while (60 seconds by default): a record added a moment
-// ago has to show on the next page view.
-var freshResults = fhirclient.RequestHeaders(http.Header{"Cache-Control": {"no-cache"}})
-
 type fhirStore struct {
 	fhir fhirclient.Client
 }
 
+// newFHIRStore uses the knooppunt's FHIR client settings, which ask HAPI not to
+// answer from its cache of identical searches (kept for 60 seconds by default):
+// a record added a moment ago has to show on the next page view.
 func newFHIRStore(baseURL *url.URL, httpClient *http.Client) *fhirStore {
-	return &fhirStore{fhir: fhirclient.New(baseURL, httpClient, nil)}
+	return &fhirStore{fhir: fhirclient.New(baseURL, httpClient, fhirutil.ClientConfig())}
 }
 
 func (s *fhirStore) Clients(ctx context.Context) ([]client, error) {
@@ -141,7 +140,7 @@ func (s *fhirStore) DeleteAllergy(ctx context.Context, id string) error {
 func search[T any](ctx context.Context, c fhirclient.Client, resourceType string, params url.Values) ([]T, error) {
 	params.Set("_count", searchCount)
 	var bundle fhir.Bundle
-	if err := c.SearchWithContext(ctx, resourceType, params, &bundle, freshResults); err != nil {
+	if err := c.SearchWithContext(ctx, resourceType, params, &bundle); err != nil {
 		return nil, fmt.Errorf("search %s: %w", resourceType, err)
 	}
 	resources := make([]T, 0, len(bundle.Entry))

@@ -68,14 +68,14 @@ env:
 
 # De Zonnebloem's EHR (sandbox/zonnebloem), which gf-sandbox serves on its own
 # port when enabled, reading and writing only the FHIR store at fhirBaseUrl.
-# An ingress host reaches it with servicePort set to this port.
+# An ingress host reaches it with servicePort set to this port. publicUrl is
+# where browsers reach it: Plataan's patient record links there, and shows no
+# link while it is empty.
 zonnebloemEhr:
   enabled: false
   port: 3001
   fhirBaseUrl: ""
-
-# Extra environment entries, rendered after the ones env: produces.
-extraEnv: []
+  publicUrl: ""
 
 volumes: []
 volumeMounts: []
