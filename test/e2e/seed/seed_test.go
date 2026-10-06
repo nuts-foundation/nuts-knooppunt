@@ -543,3 +543,51 @@ func searchOrg(client fhirclient.Client, ura string) (*fhir.Organization, error)
 	}
 	return &organization, nil
 }
+
+// createAllergy adds an allergy for the patient at De Zonnebloem, as the EHR
+// does when tagged, and returns its server-assigned id.
+func createAllergy(t *testing.T, h harness.Details, p pool.PoolPatient, tagged bool) string {
+	t.Helper()
+	allergy := fhir.AllergyIntolerance{
+		Patient: fhir.Reference{Reference: to.Ptr("Patient/" + p.ZonnebloemPatientID)},
+		Code:    &fhir.CodeableConcept{Text: to.Ptr("Pinda")},
+		Note:    []fhir.Annotation{{Text: "Na pinda. DEMO-TEST-01"}},
+	}
+	if tagged {
+		allergy.Meta = &fhir.Meta{Tag: []fhir.Coding{{
+			System: to.Ptr(pool.UserCreatedTagSystem), Code: to.Ptr(pool.UserCreatedTagCode),
+		}}}
+	}
+	var created fhir.AllergyIntolerance
+	require.NoError(t, sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL).CreateWithContext(t.Context(), allergy, &created))
+	require.NotNil(t, created.Id, "precondition: the allergy got a server-assigned id")
+	return *created.Id
+}
+
+// allergyExists reports whether De Zonnebloem still holds the allergy.
+func allergyExists(t *testing.T, h harness.Details, id string) bool {
+	t.Helper()
+	var allergy fhir.AllergyIntolerance
+	return sunflower.PatientsHAPITenant().FHIRClient(h.HAPIBaseURL).ReadWithContext(
+		t.Context(), "AllergyIntolerance/"+id, &allergy) == nil
+}
+
+// Recycle removes what was added to the patient's record in De Zonnebloem's EHR,
+// which that EHR tags. Only tagged records, and only this patient's: an untagged
+// record is not the sandbox's to remove, the seeded fixture must survive, and
+// another patient may be in a running demo.
+func TestRecyclePatient_RemovesThatPatientsUserCreatedRecords(t *testing.T) {
+	h := harness.Start(t)
+	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
+	anna, bram := pool.Patients()[0], pool.Patients()[1]
+	annaTagged := createAllergy(t, h, anna, true)
+	annaUntagged := createAllergy(t, h, anna, false)
+	bramTagged := createAllergy(t, h, bram, true)
+
+	require.NoError(t, vectors.RecyclePatient(t.Context(), sandboxTarget(t, h), anna.Key))
+
+	assert.False(t, allergyExists(t, h, annaTagged), "the record added for %s must be gone", anna.Key)
+	assert.True(t, allergyExists(t, h, annaUntagged), "an untagged record is not the recycle's to remove")
+	assert.True(t, allergyExists(t, h, bramTagged), "another patient's addition must survive")
+	requireSeededAllergyRestored(t, h, anna, "the seeded allergy carries no tag and must stay")
+}

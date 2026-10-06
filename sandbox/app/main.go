@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/nuts-foundation/nuts-knooppunt/sandbox/zonnebloem"
 )
 
 func main() {
@@ -28,6 +30,9 @@ func main() {
 	if !cfg.configured() {
 		log.Printf("gf-sandbox: reset/recycle disabled (set KNOOPPUNT_INTERNAL_URL and HAPI_BASE_URL to enable)")
 	}
+	if cfg.zonnebloemFHIRBaseURL == nil {
+		log.Printf("gf-sandbox: De Zonnebloem's EHR disabled (set ZONNEBLOEM_FHIR_BASE_URL to enable)")
+	}
 	if cfg.eventTraces != nil {
 		listener, err := net.Listen("tcp", cfg.eventTraceListenAddr)
 		if err != nil {
@@ -47,6 +52,27 @@ func main() {
 			}
 		}()
 		log.Printf("gf-sandbox private PRS trace receiver listening on %s", cfg.eventTraceListenAddr)
+	}
+	if cfg.zonnebloemFHIRBaseURL != nil {
+		listener, err := net.Listen("tcp", ":"+cfg.zonnebloemEHRPort)
+		if err != nil {
+			log.Fatal(err)
+		}
+		// De Zonnebloem's EHR shares this process and nothing else: it gets only
+		// its own FHIR store, so what it saves reaches Plataan through the GF chain.
+		ehrServer := &http.Server{
+			Handler:           zonnebloem.NewHandler(cfg.zonnebloemFHIRBaseURL),
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       30 * time.Second,
+			WriteTimeout:      30 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		}
+		go func() {
+			if err := ehrServer.Serve(listener); err != nil && err != http.ErrServerClosed {
+				log.Fatal(err)
+			}
+		}()
+		log.Printf("gf-sandbox: De Zonnebloem's EHR listening on :%s, store %s", cfg.zonnebloemEHRPort, cfg.zonnebloemFHIRBaseURL)
 	}
 
 	log.Printf("gf-sandbox listening on :%s", port)

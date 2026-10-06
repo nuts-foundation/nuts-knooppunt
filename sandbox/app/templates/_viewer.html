@@ -24,11 +24,13 @@
         </div>
         <button type="button" class="hd-close" aria-label="Close GF viewer" data-on:click="$hood.open = false">✕</button>
       </div>
-      <div class="hd-mode">
-        <button id="hm-f" class="on" data-class='{"on":!$hood.tech}' data-on:click="$hood.tech = false">Functional</button>
-        <button id="hm-t" data-class='{"on":$hood.tech}' data-on:click="$hood.tech = true">Technical</button>
+      <div class="hd-bar">
+        <div class="hd-mode">
+          <button id="hm-f" class="on" data-class='{"on":!$hood.tech}' data-on:click="$hood.tech = false">Functional</button>
+          <button id="hm-t" data-class='{"on":$hood.tech}' data-on:click="$hood.tech = true">Technical</button>
+        </div>
+        <p class="gf-stream-status" id="gf-stream-status" role="status">{{if .Patient}}{{if .Patient.RunID}}Connecting to this run…{{else}}Open this patient to start a run.{{end}}{{else}}Open a patient to follow its run.{{end}}</p>
       </div>
-      <p class="gf-stream-status" id="gf-stream-status" role="status">{{if .Patient}}{{if .Patient.RunID}}Connecting to this run…{{else}}Open this patient to start a run.{{end}}{{else}}Open a patient to follow its run.{{end}}</p>
       <div class="gf-playback-controls" aria-label="Playback controls">
         <button id="gf-pause" type="button" disabled>Pause</button>
         <button id="gf-replay" type="button" disabled>Replay</button>

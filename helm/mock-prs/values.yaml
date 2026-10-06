@@ -1,0 +1,65 @@
+# Default values for mock-prs. What the mock does and does not model is in
+# mock-components/prs/README.md.
+
+image:
+  repository: ghcr.io/nuts-foundation/mock-prs
+  pullPolicy: IfNotPresent
+  # Empty means the chart's appVersion, "main". The test environment's deploy
+  # sets the sha-<commit> tag its build published (.github/workflows/ci.yaml).
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+# The image runs as uid 10000 (mock-components/prs/Dockerfile). A freshly
+# provisioned volume is owned by root, so without this the service cannot
+# create its keys on first start.
+podSecurityContext:
+  fsGroup: 10000
+securityContext: {}
+
+service:
+  type: ClusterIP
+  # POST /oprf/eval and the stand-in token endpoint POST /oauth/token.
+  port: 8080
+  # The unauthenticated sandbox helper the NVI de-tokenizes through
+  # (POST /sandbox/finalize and /sandbox/tokenize). It answers anyone who
+  # reaches it, so it stays on this ClusterIP service: no ingress routes to it.
+  sandboxPort: 8081
+
+env:
+  # The origin clients address, which the token endpoint issues tokens for.
+  # Must equal the knooppunt's pseudo.prsurl. Empty means this chart's own
+  # service, http://<fullname>:<service.port>.
+  publicUrl: ""
+
+# Holds the recipient and OPRF keys the service generates on first start.
+# They decide every pseudonym, so losing them orphans whatever the NVI
+# already stores. Kept on helm uninstall, like the knooppunt's own volume.
+persistence:
+  size: 1Gi
+  # storageClass: ""
+
+resources: {}
+
+livenessProbe: {}
+# No health route. The service opens its port once its keys are loaded,
+# which is what deploy.sh's --wait has to see before the seed Job registers
+# through it.
+readinessProbe:
+  tcpSocket:
+    port: http
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

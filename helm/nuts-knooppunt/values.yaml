@@ -438,15 +438,33 @@ mock-dezi:
   enabled: false
   fullnameOverride: mock-dezi
 
+# mock-prs: the GF Sandbox's stand-in for the pseudonymization service (PRS),
+# with a sandbox helper the fake NVI de-tokenizes through. Set enabled: true
+# to deploy it; the knooppunt uses it once config.pseudo.prsurl and
+# config.authn.minvws point at it (see infra/ovhcloud-test/values.yaml), and
+# the NVI once the fhir chart's PRS_MOCK_URL does. Its keys sit on a volume
+# that is kept on helm uninstall.
+mock-prs:
+  enabled: false
+  fullnameOverride: mock-prs
+
 # gf-sandbox: the GF Sandbox demo application. Set enabled: true to deploy
-# it. Only knooppuntInternalUrl differs from the chart's own defaults - the
-# rest (public URLs) are placeholders that depend on ingress hostnames an
-# environment values file has to set.
+# it. Public URLs depend on the environment's ingress hostnames. pullPolicy
+# Always because images carry the moving "main" tag: a node holding an older
+# gf-sandbox:main would otherwise start the pod from that older build.
 gf-sandbox:
   enabled: false
   fullnameOverride: gf-sandbox
+  image:
+    pullPolicy: Always
   env:
     knooppuntInternalUrl: "http://nuts-knooppunt:8081"
+  # De Zonnebloem's own EHR (sandbox/zonnebloem), the source side of the demo's
+  # marker proof, served by the same pod on its own port. Set enabled: true,
+  # give it an ingress host with servicePort: 3001, and set publicUrl to that
+  # host's URL so Plataan links to it.
+  zonnebloemEhr:
+    fhirBaseUrl: "http://fhir:8080/fhir/sunflower-patients"
 
 # Seed Job configuration. Populates a fresh deployment with demo data (FHIR
 # test resources, a Nuts subject and X509Credential per demo organization,
@@ -471,6 +489,17 @@ seed:
   # internal service names, not environment-specific.
   zonnebloemEndpointAddress: "http://pep-zonnebloem:8080/fhir"
   plataanEndpointAddress: "http://pep-plataan:8080/fhir"
+  # Published as each org's OAuth2 authorization server (test/testdata/vectors/
+  # {plataan,sunflower}'s own AuthorizationServerAddress default - matching
+  # it here, not overriding, since there is no address a chart default could
+  # give that works from outside the cluster; the node's own public hostname
+  # is environment-specific, same as nutsConfig's url is not set here either.
+  # FHIR's PUT-based upsert (test/testdata/vectors/entrypoint.go) means a
+  # stale address self-heals on the next normal seed re-run - no special
+  # reseed needed once this is set correctly, unlike a DID subject create,
+  # which is create-once and does not overwrite on a second run.
+  zonnebloemAuthServerAddress: "http://localhost:8080/nuts/oauth2/00000020"
+  plataanAuthServerAddress: "http://localhost:8080/nuts/oauth2/00000010"
 
 # Jaeger configuration for distributed tracing
 # Set enabled: true to deploy Jaeger for trace collection and visualization

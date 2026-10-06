@@ -43,22 +43,13 @@ creates empty directories at the bind-mount paths and mock-dezi fails to start
 
 ```shell
 ./sandbox/generate-demo-certs.sh     # once, writes to the gitignored sandbox/.certs/
-
-# The node has to be listening before the bootstrap can reach it, and the bootstrap
-# has to have run before the sandbox starts. Start the node and trace collector first.
-docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up -d sandbox-otel-collector knooppunt
-./sandbox/bootstrap-nuts.sh
 docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up
 ```
 
-`sandbox/bootstrap-nuts.sh` runs on the host, not in a container: it needs bash, python3 and the
-didx509 toolkit through Docker, with the certificate paths resolved on the host. The overlay's
-`nuts-bootstrap-healthcheck` service enforces the ordering rather than trusting it. It waits for the
-knooppunt, then for the `plataan` wallet to hold a credential, and `gf-sandbox` starts only once it
-has exited successfully. Skip the bootstrap and that service fails after a minute with the command
-to run, which `docker compose logs nuts-bootstrap-healthcheck` shows. Without the gate the sandbox
-would start and the authorization route would fail on an empty wallet, which reads as a policy or
-certificate problem rather than a missing step.
+No separate bootstrap step: the seed (the `init` service in `docker-compose.yml`) creates De
+Plataan's Nuts subject and issues its `X509Credential` from the Fake UZI CA
+(`test/testdata/cmd/main.go`), the same CA `docker-compose.sandbox.yml`'s bgz policy pins.
+`gf-sandbox` depends on `init` completing, so it only starts once that credential exists.
 
 ### Reloading Knooppunt while the demo is running
 
@@ -109,11 +100,14 @@ defaults instead of extending them.
 | `SANDBOX_PUBLIC_URL` | `http://localhost:8091` | the URL the browser reaches the sandbox on. Builds the redirect URI, and its scheme decides whether the session cookie carries `Secure`. A hosted deployment behind a TLS-terminating proxy must set this to its `https://` URL: the request arriving at this process is plain http, so nothing else here can tell that the browser used TLS |
 | `SANDBOX_EVENT_IDENTIFIERS` | `masked` | BSN visibility in step events. `synthetic` reveals only identifiers in the fixed demo pool, and startup refuses it unless `SANDBOX_PUBLIC_URL` names localhost or a loopback IP. Shared deployments must use `masked`. Other values are rejected. This setting applies to event capture, not the existing synthetic patient record screens. |
 | `KNOOPPUNT_INTERNAL_URL` | `http://localhost:8081` | the knooppunt's internal mux. The backend reaches the Nuts node through it (proxied under `/nuts`) for the token request, and the same address enables reset/recycle when `HAPI_BASE_URL` is set too. One variable because it is one address: it was spelled `NUTS_INTERNAL_BASE_URL` here and `KNOOPPUNT_INTERNAL_URL` for reset, and `NUTS_` is the node's own configuration prefix, so that name read as node config the node never sees |
-| `SANDBOX_NUTS_SUBJECT` | `plataan` | the Nuts subject the token is requested for. Must name the subject `sandbox/bootstrap-nuts.sh` creates, whose wallet holds the `X509Credential` |
+| `SANDBOX_NUTS_SUBJECT` | `00000010` | the Nuts subject the token is requested for - De Plataan's URA. Must name the subject the seed creates, whose wallet holds the `X509Credential` |
 | `SANDBOX_BGZ_SCOPE` | `bgz` | the scope requested. Must be a key in the definition the node loads, which the sandbox renders to `sandbox/.certs/policy/bgz.json` from `sandbox/policy/bgz.json.template`, or the node answers `invalid_scope` |
 | `SANDBOX_FACILITY_TYPE` | `Z3` | the facility type asserted in the organization context credential, the only thing on this path that carries one |
 | `SANDBOX_NVI_CLIENT_ID` | `gf-sandbox-plataan` | `List.source.identifier` on published localization records. Synthetic: no NVI OAuth client is registered for the demo, and this is not the `gf-sandbox` client id used on the Dezi flow. The client id is the scope a registration is deleted by, so recycle and the global reset receive this same value in `vectors.SandboxTarget` rather than reaching for the compiled-in default; overriding it here therefore also moves what those clean up. |
 | `MITZMOCK_URL` | unset | Base URL of the mock Mitz. Enables subscription reconciliation and the consent-subscription cleanup in reset and recycle. Unset means the share flow reports an unreconciled Mitz error as unknown rather than failed, and both cleanup paths report a partial restore rather than a clean one. The sandbox compose overlay sets it; the base `--profile sandbox` invocation does not. |
+| `ZONNEBLOEM_EHR_PUBLIC_URL` | unset | where the browser reaches De Zonnebloem's EHR (`sandbox/zonnebloem`). Shows the "Proof it really works" card on the patient record, linking there in a new tab. Unset hides the card; a value that is not an absolute http(s) URL stops startup |
+| `ZONNEBLOEM_FHIR_BASE_URL` | unset | De Zonnebloem's own FHIR store. When set, this process also serves De Zonnebloem's EHR on `ZONNEBLOEM_EHR_PORT`, reading and writing that store only. Unset leaves the EHR off; a value that is not an absolute http(s) URL stops startup |
+| `ZONNEBLOEM_EHR_PORT` | `3001` | listen port for De Zonnebloem's EHR |
 
 The public and internal URLs are separate on purpose. Under compose the browser cannot resolve the
 `mock-dezi` service name, and the sandbox container resolving `localhost` would reach itself.
@@ -243,9 +237,8 @@ Six limitations are carried deliberately:
 
 Both token requests read their authorization server from the directory: the retrieval under the
 source's URA, `POST /demo/authorize` under De Plataan's own. Which wallet the request is made from is a
-separate question, answered by `SANDBOX_NUTS_SUBJECT` in the path of the internal call, so the two
-differ here: the wallet is `plataan` while the server published for De Plataan's own data is the one
-under `00000010`.
+separate question, answered by `SANDBOX_NUTS_SUBJECT` in the path of the internal call - the two now
+coincide, both resolving to De Plataan's URA, `00000010`.
 
 Editing the seeded directory takes a re-seed and a `POST /lrza/update` before the sandbox sees it. The
 sandbox's own reset reloads the fixtures without touching the query directory; compose's `init` does
@@ -418,20 +411,26 @@ states that the deployment does not trace the PRS call instead of reporting its 
 
 Receiver configuration is separate from the public application listener:
 
-- `SANDBOX_OTLP_LISTEN_ADDR`: private listener, `:4318` in Compose. No host port is published.
+- `SANDBOX_OTLP_LISTEN_ADDR`: private listener, `:4318` in Compose and Helm. No host port is
+  published, and on Kubernetes it has a ClusterIP service of its own that no ingress routes to.
 - `SANDBOX_OTLP_TOKEN`: shared ingest token, required by the receiver and Collector.
-- `SANDBOX_PRS_URL`: PRS base URL to recognize, `http://mock-prs:8080` in offline Compose.
+- `SANDBOX_PRS_URL`: PRS base URL to recognize, `http://mock-prs:8080` in offline Compose and in
+  the test environment.
 - `SANDBOX_TRACE_SERVICE_NAME`: expected trace service, default `nuts-knooppunt`.
 
 The receiver is disabled when these variables are unset. Partial configuration fails startup. Its
 `POST /v1/traces` endpoint accepts authenticated OTLP HTTP protobuf with a 1 MiB request limit and
 at most 1,024 spans. It retains up to 512 request correlations for five minutes and up to 128 span
 identities per correlation; unrelated or stale spans are ignored. A cleared run cannot be recreated.
-The sandbox overlay sets the Go SDK's `OTEL_BSP_SCHEDULE_DELAY=250` to deliver spans promptly.
+The sandbox overlay and the test environment set the Go SDK's `OTEL_BSP_SCHEDULE_DELAY=250` to
+deliver spans promptly.
 
-The default Compose ingest token is for the local demo only. The `gf-sandbox` Helm chart sets none of
-these variables and deploys no Collector, so a Kubernetes deployment runs without PRS evidence. The
-Collector's bounded queues and short export timeouts keep viewer outages out of the request path.
+The default Compose ingest token is for the local demo only. On Kubernetes, `traceCapture` in the
+`gf-sandbox` Helm chart sets these variables from a generated token Secret and deploys the same
+Collector without Aspire: traces go to the sandbox only, and logs to the Collector's own output,
+which is where the Knooppunt's logs are read once its tracing is on. The test environment enables
+it (`infra/ovhcloud-test/values.yaml`); a deployment that leaves it off runs without PRS evidence.
+The Collector's bounded queues and short export timeouts keep viewer outages out of the request path.
 
 Run `go test ./sandbox/...` for the sandbox tests (Docker is required for acceptance tests),
 `go test -race ./sandbox/app -run 'TestRunStore_|TestEventHTTP_|TestCapture|TestTraceBridge'` for event concurrency,

@@ -136,8 +136,9 @@ func New(config Config) (*Component, error) {
 
 // newSourceHTTPClient builds the HTTP client used to talk to the trusted source directory. It layers,
 // from the bottom up: an optional mTLS transport when a client certificate is configured (required by
-// the national LRZA environment), then OpenTelemetry tracing, then optional OAuth2 client-credentials.
-// The same base transport - including mTLS - is reused for OAuth2 token requests.
+// the national LRZA environment), then OpenTelemetry tracing, then retrying of transient failures (see
+// retryTransport), then optional OAuth2 client-credentials. The same base transport - including mTLS
+// and retrying - is reused for OAuth2 token requests.
 func newSourceHTTPClient(config Config) (*http.Client, error) {
 	var baseTransport = http.DefaultTransport
 	if config.TLSCertFile != "" {
@@ -149,12 +150,13 @@ func newSourceHTTPClient(config Config) (*http.Client, error) {
 	}
 
 	tracedTransport := tracing.WrapTransport(baseTransport)
+	retryingTransport := wrapRetryTransport(tracedTransport)
 
 	// The current implementation in the iRealisatie proeftuin does not use oAuth delegation, this is therefore untested
 	if config.Auth.IsConfigured() {
-		return httpauth.NewOAuth2HTTPClient(config.Auth, tracedTransport)
+		return httpauth.NewOAuth2HTTPClient(config.Auth, retryingTransport)
 	}
-	return &http.Client{Transport: tracedTransport}, nil
+	return &http.Client{Transport: retryingTransport}, nil
 }
 
 func (c *Component) Start() error {

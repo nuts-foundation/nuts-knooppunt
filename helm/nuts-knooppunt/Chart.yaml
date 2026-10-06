@@ -64,11 +64,16 @@ dependencies:
     condition: mock-dezi.enabled
     repository: file://../mock-dezi
     version: "0.1.0"
+  - name: helm-mock-prs
+    alias: mock-prs
+    condition: mock-prs.enabled
+    repository: file://../mock-prs
+    version: "0.1.0"
   - name: helm-gf-sandbox
     alias: gf-sandbox
     condition: gf-sandbox.enabled
     repository: file://../gf-sandbox
-    version: "0.1.0"
+    version: "0.3.0"
   - name: nuts-node-chart
     alias: nuts
     condition: nuts.enabled

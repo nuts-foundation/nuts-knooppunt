@@ -1,8 +1,9 @@
 # Environment values for the OVHcloud MKS "gf-test" cluster (infra/cluster).
 #
 # Deploys the full test stack: knooppunt, hapi-fhir (as fake-nvi), both
-# PEPs, nutsadmin, mock-vc-issuer, mock-mitz, mock-dezi, gf-sandbox, and the
-# seed Job (nuts-knooppunt#572) that populates it with demo data.
+# PEPs, nutsadmin, mock-vc-issuer, mock-mitz, mock-dezi, mock-prs, gf-sandbox
+# with its trace Collector, and the seed Job (nuts-knooppunt#572) that
+# populates it with demo data.
 #
 # Hosts live under *.test.gf.nuts.nl (nuts-knooppunt#563): a wildcard A
 # record pointing at the ingress-nginx controller's LoadBalancer IP.
@@ -31,6 +32,20 @@ ingress:
 extraEnv:
   - name: NUTS_URL
     value: "https://knooppunt.test.gf.nuts.nl/nuts"
+  # Setting this REPLACES the node's own built-in defaults rather than
+  # adding to them (nuts-node vcr/vcr.go:170-184), so both have to be
+  # repeated here: mock-dezi's public ingress URL (matches mock-dezi's own
+  # deziJku below) and the two public dezi.nl URLs, which the node would
+  # otherwise still accept. Dropping either silently stops validating
+  # attestations from that source. Without this at all, every Dezi
+  # id_token fails closed: "fetching url ... rejected by whitelist".
+  - name: NUTS_VCR_DEZI_ALLOWEDJKU
+    value: "https://mock-dezi.test.gf.nuts.nl/dezi/jwks.json,https://auth.dezi.nl/dezi/jwks.json,https://acceptatie.auth.dezi.nl/dezi/jwks.json"
+  # Export spans every 250 ms instead of the Go SDK's 5 s, as
+  # docker-compose.sandbox.yml does: the viewer waits about a second for a
+  # PRS span before it reports the evidence as unavailable.
+  - name: OTEL_BSP_SCHEDULE_DELAY
+    value: "250"
 
 # The NVI component is disabled unless baseurl is set
 # (component/nvi/component.go: Enabled() is FHIRBaseURL != ""). Matches
@@ -39,7 +54,9 @@ extraEnv:
 config:
   nvi:
     baseurl: "http://fhir:8080/fhir/nvi"
-    audience: "nvi"
+    # The NVI's URA, the recipient the knooppunt pseudonymizes for: what
+    # mock-prs registers a key for (docs/CONFIGURATION.md).
+    audience: "90000901"
   # Same gap, same fix: component/mitz.Enabled() requires mitzbase, and it
   # was never set. Needed for BGZ authorization (its policy requires Mitz
   # consent - mock-mitz's closed-question endpoint supplies that answer).
@@ -72,6 +89,27 @@ config:
   mcsd:
     query:
       fhirbaseurl: "http://fhir:8080/fhir/knpt-mcsd-query"
+  # Pseudonymize through mock-prs with the same authn flow as against the
+  # ministry, as docker-compose.sandbox.yml does: a client certificate, a
+  # token request to the mock's stand-in token endpoint, a bearer on the PRS
+  # call. Without prsurl the knooppunt falls back to its built-in XOR fake
+  # and makes no PRS call at all. The certificate is mock-prs's generated
+  # client-cert Secret, mounted below: the mock checks neither it nor the
+  # signed assertion, but component/authn refuses a token endpoint without one.
+  pseudo:
+    prsurl: "http://mock-prs:8080"
+  authn:
+    minvws:
+      tokenendpoint: "http://mock-prs:8080/oauth/token"
+      tlscertfile: /certs/prs/tls.crt
+      tlskeyfile: /certs/prs/tls.key
+  # Traces to gf-sandbox's Collector, which turns the PRS client spans into
+  # viewer events (gf-sandbox.traceCapture below). The knooppunt's logs go
+  # there as well instead of to its stdout, the embedded nuts-node's
+  # included (lib/logging routes logrus through slog), so they are read from
+  # that Collector's pod. Only the nuts-node's audit log stays on stdout.
+  tracing:
+    otlpendpoint: "gf-sandbox-otel-collector:4318"
 
 nutsConfig:
   discovery:
@@ -98,6 +136,15 @@ persistence:
 # image runs as uid 18081 (Dockerfile).
 podSecurityContext:
   fsGroup: 18081
+# The client certificate config.authn.minvws points at.
+volumes:
+  - name: prs-client-cert
+    secret:
+      secretName: mock-prs-client-cert
+volumeMounts:
+  - name: prs-client-cert
+    mountPath: /certs/prs
+    readOnly: true
 
 pep-zonnebloem:
   enabled: true
@@ -157,6 +204,13 @@ fhir:
         secretKeyRef:
           name: nuts-knooppunt-db-fhir
           key: password
+    # The knooppunt registers and searches with mock-prs's blinded values,
+    # which the NVI interceptor de-tokenizes through mock-prs's sandbox
+    # helper, as in docker-compose.sandbox.yml. Without it the interceptor
+    # expects the XOR fake's tokens. Here rather than in configExtra because
+    # the subchart does not restart HAPI when only its ConfigMap changes.
+    - name: PRS_MOCK_URL
+      value: "http://mock-prs:8081"
   configExtra:
     NVI_AUDIENCE: "nvi"
     NVI_TENANT: "nvi"
@@ -220,6 +274,23 @@ mock-dezi:
     # a host has a tls: block, ingress-nginx redirects http to https by
     # default, and this is matched exactly by the OAuth2 redirect check.
     deziAllowedRedirectUris: "https://sandbox.test.gf.nuts.nl/demo/auth/callback"
+    # The chart default (mock-dezi:8443) is served over mock-dezi's own
+    # self-signed cert ("GF Sandbox Demo CA" - see helm/mock-dezi's
+    # certsSecretName), which the node doesn't trust, failing every
+    # retrieve with "certificate signed by unknown authority". /dezi/jwks.json
+    # is on the same mux as /authorize (mock-components/dezi/main.go) - it
+    # was already reachable on the plain HTTP port, just never exposed
+    # there - so routing it through the public ingress instead gets a real,
+    # already-trusted Let's Encrypt cert for free, with no cert-trust
+    # wiring needed at all. Confirmed hairpin routing (pod -> public
+    # ingress -> back into the cluster) works on this LoadBalancer.
+    deziJku: "https://mock-dezi.test.gf.nuts.nl/dezi/jwks.json"
+
+# The PRS the knooppunt's config.pseudo points at and the NVI's PRS_MOCK_URL
+# de-tokenizes through. Its chart default PUBLIC_URL, http://mock-prs:8080,
+# is the prsurl above.
+mock-prs:
+  enabled: true
 
 gf-sandbox:
   enabled: true
@@ -234,19 +305,30 @@ gf-sandbox:
         paths:
           - path: /
             pathType: ImplementationSpecific
+      # De Zonnebloem's EHR, served by the same pod on its own port.
+      - host: zonnebloem-ehr.test.gf.nuts.nl
+        servicePort: 3001
+        paths:
+          - path: /
+            pathType: ImplementationSpecific
     tls:
       - hosts:
           - sandbox.test.gf.nuts.nl
         secretName: sandbox-tls
+      - hosts:
+          - zonnebloem-ehr.test.gf.nuts.nl
+        secretName: zonnebloem-ehr-tls
   env:
     deziPublicAuthorizeUrl: "https://mock-dezi.test.gf.nuts.nl/authorize"
     sandboxPublicUrl: "https://sandbox.test.gf.nuts.nl"
-    # The seed pipeline (test/testdata/cmd/main.go) creates De Plataan's
-    # Nuts subject under its URA, not the literal name "plataan" that
-    # sandbox/app/nuts.go defaults to (that default matches
-    # docker-compose's subject naming instead). Without this, every
-    # retrieve request fails: "invalid_request - subject not found".
-    nutsSubject: "00000010"
+  zonnebloemEhr:
+    enabled: true
+    publicUrl: "https://zonnebloem-ehr.test.gf.nuts.nl"
+  # PRS evidence in the viewer. prsUrl must equal the knooppunt's
+  # config.pseudo.prsurl, whose spans are the ones it picks out.
+  traceCapture:
+    enabled: true
+    prsUrl: "http://mock-prs:8080"
 
 seed:
   enabled: true
@@ -257,3 +339,9 @@ seed:
     # A moving tag: without this, a node that already pulled "main" keeps
     # running the old seed on every upgrade.
     pullPolicy: Always
+  # The chart default (localhost:8080) only resolves inside the seed's own
+  # container. A consumer elsewhere in the cluster needs the node's real
+  # public address, which the knooppunt itself can also reach for its own
+  # metadata fetch - this node is the authorization server for both subjects.
+  zonnebloemAuthServerAddress: "https://knooppunt.test.gf.nuts.nl/nuts/oauth2/00000020"
+  plataanAuthServerAddress: "https://knooppunt.test.gf.nuts.nl/nuts/oauth2/00000010"

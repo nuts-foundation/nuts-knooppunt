@@ -11,5 +11,11 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+    {{- if .Values.zonnebloemEhr.enabled }}
+    - port: {{ .Values.zonnebloemEhr.port }}
+      targetPort: zonnebloem-ehr
+      protocol: TCP
+      name: zonnebloem-ehr
+    {{- end }}
   selector:
     {{- include "gf-sandbox.selectorLabels" . | nindent 4 }}

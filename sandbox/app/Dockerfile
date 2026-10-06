@@ -21,5 +21,6 @@ RUN adduser -D -H -u 18091 sandbox-usr
 RUN chown 18091 /gf-sandbox
 USER 18091:18091
 
-EXPOSE 8091
+# 3001 is De Zonnebloem's EHR, served when ZONNEBLOEM_FHIR_BASE_URL is set.
+EXPOSE 8091 3001
 ENTRYPOINT ["/gf-sandbox"]

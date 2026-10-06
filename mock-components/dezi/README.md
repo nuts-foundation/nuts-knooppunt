@@ -35,17 +35,13 @@ service is not profile-gated, so a sandbox-only setting there would change the s
     go run ./mock-components/dezi
     go test ./mock-components/dezi/...
 
-Or, containerized alongside the rest of the demo. The bootstrap step is not optional and cannot be
-folded into `up`: it runs on the host and needs a node that is already listening, so the knooppunt
-comes up on its own first.
+Or, containerized alongside the rest of the demo:
 
     ./sandbox/generate-demo-certs.sh     # once, writes to the gitignored sandbox/.certs/
-    docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up -d knooppunt
-    ./sandbox/bootstrap-nuts.sh
     docker compose -f docker-compose.yml -f docker-compose.sandbox.yml --profile sandbox up
 
-Skipping the bootstrap does not fail fast: `nuts-bootstrap-healthcheck` waits a minute for a wallet
-that nothing else fills, then exits non-zero with the command to run.
+No separate bootstrap step: the seed creates De Plataan's Nuts subject and issues its
+`X509Credential`, and `gf-sandbox` waits for that to finish before it starts.
 
 ## Endpoints
 
