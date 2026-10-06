@@ -124,10 +124,17 @@ subject's wallet, which is empty until the credential is stored.
   carrying the HAPI and Knooppunt base URLs, the mock Mitz base URL (nil when none
   is configured) and the NVI client id the caller publishes under — clears the
   mutable patient stores (removing user-created records, which have random ids a
-  plain re-seed cannot overwrite), then re-runs `Load` + `SeedNVI`, removes the
-  localization records the sandbox published on De Plataan's side, and clears the
-  mock Mitz's subscriptions when one is configured. This is the "restore fixtures"
-  path, and it returns every pool patient to the unshared state a demo starts from.
+  plain re-seed cannot overwrite), then reloads their fixtures and re-runs
+  `SeedNVI`, removes the localization records the sandbox published on De Plataan's
+  side, and clears the mock Mitz's subscriptions when one is configured. This is the
+  "restore fixtures" path, and it returns every pool patient to the unshared state a
+  demo starts from.
+
+  The mCSD directories and the PIP keep what the seed wrote. A demo never changes
+  them, and the endpoint addresses in the admin directories come from the `SEED_*`
+  variables, which only the seed is configured with: the sandbox runs the reset
+  without them, so reloading the directories would publish the localhost defaults
+  in their place. `TestResetGlobal_LeavesTheDirectoriesAsSeeded` guards this.
 
   Clearing is a search-and-delete per resource type with `_cascade=delete`, **not**
   `$expunge`. HAPI applies `expungeEverything=true` server-wide regardless of the

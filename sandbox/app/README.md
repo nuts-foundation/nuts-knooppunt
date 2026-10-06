@@ -240,11 +240,11 @@ source's URA, `POST /demo/authorize` under De Plataan's own. Which wallet the re
 separate question, answered by `SANDBOX_NUTS_SUBJECT` in the path of the internal call - the two now
 coincide, both resolving to De Plataan's URA, `00000010`.
 
-Editing the seeded directory takes a re-seed and a `POST /mcsd/update` before the sandbox sees it. The
-sandbox's own reset reloads the fixtures without touching the query directory; compose's `init` does
-both. A seed run reports success on HTTP 200 without reading the update report, and a per-directory
-failure can sit inside a 200, so "seed complete" is not proof that an endpoint reached
-`knpt-mcsd-query`.
+Editing the seeded directory takes a re-seed and a `POST /mcsd/update` before the sandbox sees it;
+compose's `init` does both. The sandbox's own reset reloads only the patient data and leaves every
+directory as the seed wrote it. A seed run reports success on HTTP 200 without reading the update
+report, and a per-directory failure can sit inside a 200, so "seed complete" is not proof that an
+endpoint reached `knpt-mcsd-query`.
 
 ## Architecture
 
