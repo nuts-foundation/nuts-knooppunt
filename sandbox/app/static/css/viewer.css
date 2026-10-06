@@ -106,7 +106,7 @@
   .cap-chip.plan { color: #e7d9c1; background: rgba(231,217,193,0.07); border: 1px dashed rgba(231,217,193,0.4); }
   .hnode.plan { border-style: dashed; background: #1e1913; }
   .hstat .pend { font-family: 'Fira Mono', monospace; font-size: 10.5px; color: #6e6558; white-space: nowrap; }
-  .app, .app .content { transition: padding 0.28s cubic-bezier(0.32,0.72,0.28,1); }
+  .sb-bar, .app, .app .content { transition: padding 0.28s cubic-bezier(0.32,0.72,0.28,1); }
   /* Only reserve room for the dock where there is room to spare. The dock is
      position:fixed, so without this padding it simply overlays the content
      instead of displacing it, which is the right trade below this width: the
@@ -114,9 +114,10 @@
      238px for the record once the 226px sidebar was taken, which is narrower
      than a single card. Reserving exactly the dock's width lets the top bar run
      up to the dock; the content keeps 14px more gutter, clear of the GF viewer
-     tab that sticks out of the dock's edge. */
+     tab that sticks out of the dock's edge. The demo bar above the app reserves
+     the same width, or the dock covers its Reset control. */
   @media (min-width: 1400px) {
-    body.hood-open .app { padding-right: 560px; }
+    body.hood-open .sb-bar, body.hood-open .app { padding-right: 560px; }
     body.hood-open .content { padding-right: 38px; }
   }
   .gf-tab { position: absolute; top: 50%; right: calc(100% - 2px); transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; background: #1f1913; border: 1px solid rgba(240,235,225,0.14); border-right: none; border-radius: 11px 0 0 11px; padding: 12px 7px 13px 8px; cursor: pointer; font-family: 'Inter', sans-serif; box-shadow: -8px 0 22px rgba(0,0,0,0.28); transition: border-color 0.15s; }
