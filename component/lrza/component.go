@@ -38,7 +38,7 @@ var _ component.Lifecycle = &Component{}
 
 // resourceTypes are the resource types synced from the trusted directory, in the NL-GF-recommended
 // initial-load order (Organization -> Location -> HealthcareService -> Endpoint ->
-// OrganizationAffiliation). Not configurable: the LRZA is a trusted national directory synced under a/
+// OrganizationAffiliation). Not configurable: the LRZA is a trusted national directory synced under a
 // fixed specification, not a peer directory where an operator might reasonably want to narrow scope.
 var resourceTypes = []string{"Organization", "Location", "HealthcareService", "Endpoint", "OrganizationAffiliation"}
 

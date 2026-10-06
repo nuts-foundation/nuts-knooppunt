@@ -247,7 +247,7 @@ separate question, answered by `SANDBOX_NUTS_SUBJECT` in the path of the interna
 differ here: the wallet is `plataan` while the server published for De Plataan's own data is the one
 under `00000010`.
 
-Editing the seeded directory takes a re-seed and a `POST /mcsd/update` before the sandbox sees it. The
+Editing the seeded directory takes a re-seed and a `POST /lrza/update` before the sandbox sees it. The
 sandbox's own reset reloads the fixtures without touching the query directory; compose's `init` does
 both. A seed run reports success on HTTP 200 without reading the update report, and a per-directory
 failure can sit inside a 200, so "seed complete" is not proof that an endpoint reached

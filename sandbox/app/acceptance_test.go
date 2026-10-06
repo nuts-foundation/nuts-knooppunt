@@ -267,15 +267,15 @@ func TestAcceptance_ASecondSessionCannotOpenALockedPatient(t *testing.T) {
 	require.Equal(t, "/demo/ehr?notice=patient-busy", res.Header.Get("Location"))
 }
 
-// syncMCSD runs the Knooppunt's directory sync, which is what populates the
+// syncDirectory runs the Knooppunt's directory sync, which is what populates the
 // query directory the addressing step reads. Without it the replica is empty and
 // every holder the index names is unaddressable.
-func syncMCSD(t *testing.T, h harness.Details) {
+func syncDirectory(t *testing.T, h harness.Details) {
 	t.Helper()
-	res, err := http.Post(h.KnooppuntInternalBaseURL.JoinPath("mcsd", "update").String(), "application/json", nil)
+	res, err := http.Post(h.KnooppuntInternalBaseURL.JoinPath("lrza", "update").String(), "application/json", nil)
 	require.NoError(t, err)
 	defer res.Body.Close()
-	require.Equal(t, http.StatusOK, res.StatusCode, "the mCSD sync must succeed for the directory to hold anything")
+	require.Equal(t, http.StatusOK, res.StatusCode, "the directory sync must succeed for the directory to hold anything")
 }
 
 // The localization and addressing legs against the real components rather than
@@ -291,7 +291,7 @@ func TestAcceptance_LocalizationFindsTheSourceAndSkipsOurOwnRecords(t *testing.T
 	h, srv, client := acceptanceServer(t)
 	anna, ok := pool.PatientByKey("anna")
 	require.True(t, ok)
-	syncMCSD(t, h)
+	syncDirectory(t, h)
 
 	openPatient(t, client, srv, anna.Key)
 	sharePublished(t, client, srv, anna.Key)

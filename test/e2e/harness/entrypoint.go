@@ -13,6 +13,7 @@ import (
 
 	"github.com/nuts-foundation/nuts-knooppunt/cmd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/http"
+	"github.com/nuts-foundation/nuts-knooppunt/component/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mcsd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
@@ -124,11 +125,14 @@ func start(t *testing.T, options startOptions) Details {
 
 	config := cmd.DefaultConfig()
 	config.HTTP = http.TestConfig()
-	config.MCSD.AdministrationDirectories = map[string]mcsd.DirectoryConfig{
-		"lrza": {
-			FHIRBaseURL: testData.LRZa.FHIRBaseURL.String(),
-			Direct:      true,
-		},
+	// The seeded central addressing directory is synced wholesale by the LRZA
+	// client, matching docker-compose.yml. No mCSD administration directory is
+	// configured: component/mcsd only syncs a root directory's discovery
+	// pointers (mcsd-directory-payload Endpoints), and this directory holds
+	// each organization's own Organization/Endpoint resources instead.
+	config.LRZA = lrza.Config{
+		LRZABaseUrl:  testData.LRZa.FHIRBaseURL.String(),
+		QueryBaseUrl: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
 	}
 	config.MCSD.QueryDirectory = mcsd.DirectoryConfig{
 		FHIRBaseURL: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),

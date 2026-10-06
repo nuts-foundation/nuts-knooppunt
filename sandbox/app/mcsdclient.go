@@ -13,7 +13,7 @@ import (
 )
 
 // mcsdQueryTenant is the HAPI tenant holding the local replica of the LRZa
-// directory. The Knooppunt syncs it (POST /mcsd/update) but exposes no query API
+// directory. The Knooppunt syncs it (POST /lrza/update) but exposes no query API
 // of its own, so the sandbox reads the replica directly, which is what the
 // Addressing spec has a Query Client do: matching happens on the local replica,
 // never against the LRZa itself.

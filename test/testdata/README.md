@@ -38,20 +38,27 @@ patient-pool data of its own.
 ### Central Addressing Directory (`lrza-root-directory`)
 One directory (`vectors/lrza`, HAPI tenant `lrza-root-directory`) holds every
 care organization's Organization + Endpoint resources directly — no per-org
-admin tenant, no discovery hop. In compose, `component/lrza` syncs it
-wholesale into the query directory.
+admin tenant, no discovery hop. Each organization gets its own file
+(`sunflower.go`, `plataan.go`, `care2cure.go`) for readability.
 
-The Go e2e test harness (`test/e2e/harness`) instead registers this same
-tenant with `component/mcsd`, configured as a **direct** (non-discoverable)
-administration directory (`mcsd.DirectoryConfig.Direct: true`) — this is a
-deliberate, temporary divergence: `component/mcsd`'s e2e coverage hasn't yet
-been replaced by one for `component/lrza` (see `test/e2e/mcsd/update_test.go`).
-Both components can sync this directory because its data is just Organization
-+ Endpoint resources with no decentralized-discovery-specific markers.
+`component/lrza` syncs it wholesale into the query directory, in both compose
+(`KNPT_LRZA_LRZABASEURL`) and the Go e2e harness (`test/e2e/harness`), via
+`POST /lrza/update`.
+
+`component/mcsd` is **not** used for this directory and has no administration
+directory configured in either. It syncs only a root directory's *discovery
+pointers* — the `mcsd-directory`-payload Endpoints that point at further admin
+directories — and deliberately never syncs a discoverable directory's own
+Organizations (see `buildUpdateTransaction`'s `isDiscoverableDirectory` gate).
+That makes it structurally unable to serve a flattened directory like this one.
+Its decentralized e2e coverage has been retired accordingly; the sync mechanics
+remain covered by the `httptest`-based unit tests in
+`component/mcsd/component_test.go`, and an e2e suite for `component/lrza` is
+still to be written.
 
 ### Query Directory
-The directory that contains the synced addressing resources after the LRZA
-(compose) or mCSD (e2e harness) update process runs.
+The directory that contains the synced addressing resources after
+`POST /lrza/update` runs.
 
 ## GF Sandbox demo-patient pool
 
