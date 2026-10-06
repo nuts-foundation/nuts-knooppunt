@@ -7,7 +7,7 @@
   .brand h1 span { color: var(--teal); }
   .brand .bsub { font-size: 10.5px; color: var(--text2); margin-top: -1px; font-family: 'Inter', sans-serif; }
   .nav-lbl { font-size: 9.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); padding: 13px 10px 6px; }
-  .nav-item { display: flex; align-items: center; gap: 11px; padding: 8px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 500; color: var(--text2); cursor: pointer; transition: background 0.15s, color 0.15s; }
+  .nav-item { display: flex; align-items: center; gap: 11px; padding: 8px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 500; color: var(--text2); text-decoration: none; cursor: pointer; transition: background 0.15s, color 0.15s; }
   .nav-item:hover { background: #f1ede6; color: var(--text); }
   .nav-item.active { background: var(--teal-soft); color: var(--teal-deep); font-weight: 600; }
   .nav-item svg { width: 15px; height: 15px; flex-shrink: 0; opacity: 0.85; }

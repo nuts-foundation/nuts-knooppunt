@@ -1007,11 +1007,10 @@ func TestEhrHomeOffersTheAuthorizeControl(t *testing.T) {
 	require.Contains(t, form, "Show what is in my access token", "the control must say what clicking it does")
 }
 
-// The claims page renders inside the EHR chrome, whose sidebar items are
-// static divs, so its only other controls are sign-out and reset, and both end
-// the demo. Reload is not an exit either: the page is a POST response with no
-// redirect after it, so the browser offers to resubmit the form instead. This
-// link is the only way off the screen that leaves the session standing.
+// The claims page is a POST response with no redirect after it, so reload is not
+// an exit: the browser offers to resubmit the form instead. Sign-out and reset
+// both end the demo, which leaves a link into the EHR as the only way off the
+// screen that keeps the session standing.
 func TestAuthorizeLinksBackToTheEhr(t *testing.T) {
 	srv, client := authorizeSandbox(t, nodeVouchingForTheToken(t).URL)
 
