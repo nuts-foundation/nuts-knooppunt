@@ -217,12 +217,18 @@ config:
 
   # mCSD (Mobile Care Services Discovery) configuration
   mcsd:
-    # Administration directories to synchronize from
+    # Administration directories to synchronize from. By default a directory
+    # is treated as a root/discovery directory: its own Organizations are not
+    # synced, only the mCSD-directory-payload Endpoints it uses to point at
+    # further (discovered) admin directories. Set direct: true to instead
+    # sync a directory's own Organization/Endpoint resources directly, with
+    # no discovery hop.
     # admin:
     #   "example-org":
     #     fhirbaseurl: "https://fhir.example.org/fhir"
     #   "another-org":
     #     fhirbaseurl: "https://fhir.another-org.com/fhir"
+    #     direct: true
 
     # Local FHIR directory configuration (query directory)
     query:

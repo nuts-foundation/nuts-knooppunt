@@ -57,22 +57,21 @@ config:
     pip:
       url: "http://fhir:8080/fhir/sunflower-patients"
   # Same gap again, for addressing. Matches docker-compose.yml's
-  # KNPT_MCSD_QUERY_FHIRBASEURL / KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL:
-  # - The seeded LRZa tenant is the root administration directory. Without
-  #   it, `POST /mcsd/update` has nothing to walk and the query directory
-  #   stays empty, so the demo organizations are findable but not
+  # KNPT_LRZA_LRZABASEURL / KNPT_LRZA_QUERYBASEURL:
+  # - The seeded central addressing directory (lrza-root-directory) is
+  #   synced wholesale by component/lrza, not discovered by component/mcsd.
+  #   Without this, `POST /lrza/update` has nothing to sync and the query
+  #   directory stays empty, so the demo organizations are findable but not
   #   addressable.
   # - The query directory must be the knpt-mcsd-query tenant: that is where
   #   gf-sandbox resolves addresses (sandbox/app/mcsdclient.go), not the
   #   chart's default of HAPI's default partition.
+  lrza:
+    lrzabaseurl: "http://fhir:8080/fhir/lrza-root-directory"
+    querybaseurl: "http://fhir:8080/fhir/knpt-mcsd-query"
   mcsd:
-    admin:
-      lrza:
-        fhirbaseurl: "http://fhir:8080/fhir/lrza-mcsd-admin"
     query:
       fhirbaseurl: "http://fhir:8080/fhir/knpt-mcsd-query"
-    adminexclude:
-      - "http://fhir:8080/fhir/knpt-mcsd-query"
 
 nutsConfig:
   discovery:

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
-	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/plataan"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -431,7 +431,7 @@ func localItems(patient pool.PoolPatient) []recordItem {
 // plataanName takes the hospital's name from the seed rather than restating it,
 // so the record cannot attribute data to a name the directory does not use.
 func plataanName() string {
-	if name := plataan.Organization().Name; name != nil {
+	if name := lrza.HospitalPlataan().Name; name != nil {
 		return *name
 	}
 	return "Ziekenhuis De Plataan"

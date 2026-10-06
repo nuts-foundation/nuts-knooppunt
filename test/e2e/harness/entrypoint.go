@@ -20,7 +20,6 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
 	"github.com/nuts-foundation/nuts-knooppunt/mock-components/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
-	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/stretchr/testify/require"
@@ -32,10 +31,7 @@ type Details struct {
 	HAPIBaseURL              *url.URL
 	MCSDQueryFHIRBaseURL     *url.URL
 	LRZaFHIRBaseURL          *url.URL
-	Care2CureFHIRBaseURL     *url.URL
-	SunflowerFHIRBaseURL     *url.URL
 	SunflowerURA             string
-	Care2CureURA             string
 	MockMitzXACML            *mitzmock.ClosedQuestionService
 }
 
@@ -131,6 +127,7 @@ func start(t *testing.T, options startOptions) Details {
 	config.MCSD.AdministrationDirectories = map[string]mcsd.DirectoryConfig{
 		"lrza": {
 			FHIRBaseURL: testData.LRZa.FHIRBaseURL.String(),
+			Direct:      true,
 		},
 	}
 	config.MCSD.QueryDirectory = mcsd.DirectoryConfig{
@@ -167,10 +164,7 @@ func start(t *testing.T, options startOptions) Details {
 		HAPIBaseURL:              hapiBaseURL,
 		MCSDQueryFHIRBaseURL:     testData.Knooppunt.MCSD.QueryFHIRBaseURL,
 		LRZaFHIRBaseURL:          testData.LRZa.FHIRBaseURL,
-		SunflowerFHIRBaseURL:     sunflower.AdminHAPITenant().BaseURL(hapiBaseURL),
-		SunflowerURA:             *sunflower.Organization().Identifier[0].Value,
-		Care2CureFHIRBaseURL:     care2cure.AdminHAPITenant().BaseURL(hapiBaseURL),
-		Care2CureURA:             *care2cure.Organization().Identifier[0].Value,
+		SunflowerURA:             sunflower.URA,
 		Vectors:                  *testData,
 		MockMitzXACML:            mockMitz,
 	}

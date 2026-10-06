@@ -7,13 +7,6 @@ services:
     environment:
       KNPT_MCSDADMIN_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-admin
       KNPT_MCSD_QUERY_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-query
-      # The seeded LRZa tenant, NOT the external test LRZa. The seed registers the
-      # demo organizations (De Plataan, Zonnebloem, Care2Cure) here, and the mCSD
-      # sync walks this directory to populate the query directory. Pointing this
-      # at the external LRZa instead yields a query directory full of unrelated
-      # organizations and none of the demo ones — so the seeded patient would be
-      # findable but not addressable.
-      KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL: http://hapi-fhir:7050/fhir/lrza-mcsd-admin
       KNPT_NVI_BASEURL: http://hapi-fhir:7050/fhir/nvi
       KNPT_TRACING_OTLPENDPOINT: ${KNPT_TRACING_OTLPENDPOINT:-aspire-dashboard:18890}
       # The PDP's Policy Information Point resolves Patient/<id> to a BSN, which
@@ -32,12 +25,12 @@ services:
       # variable rather than config.
       #
       # ⚠️ This REPLACES the system trust store: any outbound HTTPS from the
-      # knooppunt will fail verification. That is why the external LRZa sync is
-      # disabled below — otherwise its TLS errors fill the logs and mask real
-      # failures in the authorization chain.
+      # knooppunt will fail verification. Irrelevant to the LRZA sync below,
+      # which stays on plain HTTP against the seeded local tenant, not the
+      # external LRZA.
       SSL_CERT_FILE: /app/certs/ca.pem
-      # Empty disables the LRZa sync client (see lrza.Config.Enabled).
-      KNPT_LRZA_LRZABASEURL: ""
+      KNPT_LRZA_LRZABASEURL: http://hapi-fhir:7050/fhir/lrza-root-directory
+      KNPT_LRZA_QUERYBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-query
       KNPT_MITZ_MITZBASE: http://mitzmock:8080
     volumes:
       - ./config:/app/config:ro
@@ -167,30 +160,15 @@ services:
       hapi.fhir.tester.query.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.query.fhir_version: R4
 
-      hapi.fhir.tester.lrza.name: Local LRZA
-      hapi.fhir.tester.lrza.server_address: http://localhost:7050/fhir/lrza-mcsd-admin
+      hapi.fhir.tester.lrza.name: Central Addressing Directory
+      hapi.fhir.tester.lrza.server_address: http://localhost:7050/fhir/lrza-root-directory
       hapi.fhir.tester.lrza.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.lrza.fhir_version: R4
-
-      hapi.fhir.tester.care2cure.name: Care2Cure Admin Directory
-      hapi.fhir.tester.care2cure.server_address: http://localhost:7050/fhir/care2cure-admin
-      hapi.fhir.tester.care2cure.refuse_to_fetch_third_party_urls: false
-      hapi.fhir.tester.care2cure.fhir_version: R4
-
-      hapi.fhir.tester.sunflower.name: Sunflower Admin Directory
-      hapi.fhir.tester.sunflower.server_address: http://localhost:7050/fhir/sunflower-admin
-      hapi.fhir.tester.sunflower.refuse_to_fetch_third_party_urls: false
-      hapi.fhir.tester.sunflower.fhir_version: R4
 
       hapi.fhir.tester.sunflowerpatients.name: Sunflower Patients Directory
       hapi.fhir.tester.sunflowerpatients.server_address: http://localhost:7050/fhir/sunflower-patients
       hapi.fhir.tester.sunflowerpatients.refuse_to_fetch_third_party_urls: false
       hapi.fhir.tester.sunflowerpatients.fhir_version: R4
-
-      hapi.fhir.tester.plataan.name: Plataan Admin Directory
-      hapi.fhir.tester.plataan.server_address: http://localhost:7050/fhir/plataan-admin
-      hapi.fhir.tester.plataan.refuse_to_fetch_third_party_urls: false
-      hapi.fhir.tester.plataan.fhir_version: R4
 
       hapi.fhir.tester.plataanpatients.name: Plataan Patients Directory
       hapi.fhir.tester.plataanpatients.server_address: http://localhost:7050/fhir/plataan-patients

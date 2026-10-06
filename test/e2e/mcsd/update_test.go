@@ -13,9 +13,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/from"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
-	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
-	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -26,10 +24,12 @@ func Test_mCSDUpdateClient(t *testing.T) {
 	t.Run("Force update mCSD Client", func(t *testing.T) {
 		response := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-		t.Run("assert resource sync'd from LRZa Admin Directory", func(t *testing.T) {
-			// This is the root/discovery directory, so only mCSD Directory endpoints should be present.
-			// One per organization in LRZa: Sunflower, Care2Cure and Plataan.
-			assert.Equalf(t, 3, mapEntryContains(response, "lrza-mcsd-admin").CountCreated, "created=3 in %v", response)
+		t.Run("assert resources synced from the central mCSD addressing directory", func(t *testing.T) {
+			// The directory is registered directly (no discovery hop), so the first
+			// sync creates every organization's Organization + Endpoint resources in
+			// one pass: Sunflower (1 org + 2 endpoints), Plataan (1 org + 2 endpoints),
+			// Care2Cure (1 org + 1 endpoint) = 8.
+			assert.Equalf(t, 8, mapEntryContains(response, "lrza-root-directory").CountCreated, "created=8 in %v", response)
 		})
 
 		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
@@ -40,35 +40,22 @@ func Test_mCSDUpdateClient(t *testing.T) {
 			assert.Equal(t, *expectedOrg.Name, *org.Name)
 			assert.NotEqual(t, *expectedOrg.Id, *org.Id, "copy of organization in local Query Directory should have new ID")
 			t.Run("meta", func(t *testing.T) {
-				expectedSource := harnessDetail.SunflowerFHIRBaseURL.JoinPath("Organization", *sunflower.Organization().Id)
+				expectedSource := harnessDetail.LRZaFHIRBaseURL.JoinPath("Organization", *expectedOrg.Id)
 				assert.Equal(t, expectedSource.String(), *org.Meta.Source, "copy of organization in local Query Directory should have Meta.Source set to original resource")
 			})
-			// Assert mCSD-directory endpoint exists in query directory (from root directory)
-			// TODO: Not possible yet, since the mCSD Directory endpoints comes from the root directory,
-			//       but the Organization resource from the org directory, which doesn't reference its mCSD Directory.
-			// assertEndpoint(t, queryFHIRClient, harnessDetail.SunflowerURA, "mcsd-directory", "/sunflower/mcsd")
-
-			// Assert FHIR endpoint exists in query directory (from admin directory)
-			assertEndpoint(t, queryFHIRClient, harnessDetail.SunflowerURA, "fhir", "fhir/sunflower-patients")
+			assertEndpoint(t, queryFHIRClient, harnessDetail.SunflowerURA, "hl7-fhir-rest", "fhir/sunflower-patients")
 		})
 		t.Run("assert Care2Cure organization resources", func(t *testing.T) {
 			expectedOrg := lrza.Care2Cure()
-			org, err := searchOrg(queryFHIRClient, harnessDetail.Care2CureURA)
+			org, err := searchOrg(queryFHIRClient, lrza.Care2CureURA)
 			require.NoError(t, err)
 			assert.Equal(t, "Care2Cure Hospital", *org.Name)
 			assert.NotEqual(t, *expectedOrg.Id, *org.Id, "copy of organization in local Query Directory should have new ID")
 			t.Run("meta", func(t *testing.T) {
-				expectedSource := harnessDetail.Care2CureFHIRBaseURL.JoinPath("Organization", *care2cure.Organization().Id)
+				expectedSource := harnessDetail.LRZaFHIRBaseURL.JoinPath("Organization", *expectedOrg.Id)
 				assert.Equal(t, expectedSource.String(), *org.Meta.Source, "copy of organization in local Query Directory should have Meta.Source set to original resource")
 			})
-
-			// Assert mCSD-directory endpoint exists in query directory (from root directory)
-			// TODO: Not possible yet, since the mCSD Directory endpoints comes from the root directory,
-			//       but the Organization resource from the org directory, which doesn't reference its mCSD Directory.
-			//assertEndpoint(t, queryFHIRClient, harnessDetail.Care2CureURA, "mcsd-directory", "/care2curehospital/mcsd")
-
-			// Assert FHIR endpoint exists in query directory (from admin directory)
-			assertEndpoint(t, queryFHIRClient, harnessDetail.Care2CureURA, "fhir", "/care2curehospital/fhir")
+			assertEndpoint(t, queryFHIRClient, lrza.Care2CureURA, "hl7-fhir-rest", "/care2curehospital/fhir")
 		})
 	})
 }
@@ -76,60 +63,63 @@ func Test_mCSDUpdateClient(t *testing.T) {
 func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 	t.Log("This test verifies that the mCSD update client correctly uses the _since parameter for incremental updates.")
 
-	t.Run("updated endpoint in care provider Administration Directory (no references to other resources)", func(t *testing.T) {
+	t.Run("updated endpoint in the central mCSD addressing directory (no references to other resources)", func(t *testing.T) {
 		harnessDetail := harness.Start(t)
 		t.Log("Initial sync")
 		_ = invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
-		t.Log("Update endpoint in Care2Cure Admin Directory")
-		// Update the FHIR endpoint in the Care2Cure Admin Directory to simulate a change
-		newEndpoint := care2cure.Endpoints()[0]
+		t.Log("Update Care2Cure's endpoint in the central addressing directory")
+		newEndpoint := lrza.Care2CureEndpoints()[0]
 		newEndpoint.Address = "https://example.com/updated/care2curehospital/fhir"
-		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, nil)
-		err := care2CureFHIRClient.Update("Endpoint/"+*newEndpoint.Id, newEndpoint, nil)
+		lrzaFHIRClient := fhirclient.New(harnessDetail.LRZaFHIRBaseURL, http.DefaultClient, nil)
+		err := lrzaFHIRClient.Update("Endpoint/"+*newEndpoint.Id, newEndpoint, nil)
 		require.NoError(t, err, "Failed to update Care2Cure endpoint")
 
 		t.Log("Second sync - should pick up updated endpoint via _since parameter")
 		updateReport := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-		care2CureReport := mapEntryContains(updateReport, "care2cure-admin")
-		require.Equal(t, 0, care2CureReport.CountCreated)
-		require.Equal(t, 2, care2CureReport.CountUpdated)
+		lrzaReport := mapEntryContains(updateReport, "lrza-root-directory")
+		require.Equal(t, 0, lrzaReport.CountCreated)
+		// Organization history is always re-queried in full (no _since; see
+		// queryAllResourceTypes), so all three organizations are unconditionally
+		// resent as updates every sync, plus the one endpoint that actually changed.
+		require.Equal(t, 4, lrzaReport.CountUpdated)
 
 		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
 		t.Run("assert updated endpoint in query directory", func(t *testing.T) {
-			assertEndpoint(t, queryFHIRClient, harnessDetail.Care2CureURA, "fhir", "/updated/care2curehospital/fhir")
+			assertEndpoint(t, queryFHIRClient, lrza.Care2CureURA, "hl7-fhir-rest", "/updated/care2curehospital/fhir")
 		})
 	})
-	t.Run("updated organization in care provider Administration Directory", func(t *testing.T) {
+	t.Run("updated organization in the central mCSD addressing directory", func(t *testing.T) {
 		t.Log("This test verifies that the mCSD update client resolves references to existing resources when updating a resource.")
 		harnessDetail := harness.Start(t)
 		t.Log("Initial sync")
 		_ = invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
-		t.Log("Update organization in Care2Cure Admin Directory")
-		// Update the FHIR endpoint in the Care2Cure Admin Directory to simulate a change
-		updatedOrganization := care2cure.Organization()
+		t.Log("Update Care2Cure's organization in the central addressing directory")
+		updatedOrganization := lrza.Care2Cure()
 		updatedOrganization.Alias = []string{"Updated Alias"}
-		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, nil)
-		err := care2CureFHIRClient.Update("Organization/"+*updatedOrganization.Id, updatedOrganization, nil)
+		lrzaFHIRClient := fhirclient.New(harnessDetail.LRZaFHIRBaseURL, http.DefaultClient, nil)
+		err := lrzaFHIRClient.Update("Organization/"+*updatedOrganization.Id, updatedOrganization, nil)
 		require.NoError(t, err)
 
 		updateReport := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-		care2CureReport := mapEntryContains(updateReport, "care2cure-admin")
-		assert.Empty(t, care2CureReport.Warnings)
-		assert.Empty(t, care2CureReport.Errors)
-		assert.Equal(t, 0, care2CureReport.CountCreated)
-		assert.Equal(t, 1, care2CureReport.CountUpdated)
+		lrzaReport := mapEntryContains(updateReport, "lrza-root-directory")
+		assert.Empty(t, lrzaReport.Warnings)
+		assert.Empty(t, lrzaReport.Errors)
+		assert.Equal(t, 0, lrzaReport.CountCreated)
+		// All three organizations are unconditionally resent every sync (see above);
+		// no endpoints changed, so only the organizations count as updates.
+		assert.Equal(t, 3, lrzaReport.CountUpdated)
 
 		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
 		t.Run("assert updated organization in query directory", func(t *testing.T) {
-			org, err := searchOrg(queryFHIRClient, harnessDetail.Care2CureURA)
+			org, err := searchOrg(queryFHIRClient, lrza.Care2CureURA)
 			require.NoError(t, err)
 			require.NotNil(t, org)
 			assert.Contains(t, org.Alias, "Updated Alias", "Organization alias should be updated")
 		})
 	})
-	t.Run("new child organization in care provider Administration Directory", func(t *testing.T) {
+	t.Run("new child organization in the central mCSD addressing directory", func(t *testing.T) {
 		harnessDetail := harness.Start(t)
 		// Test verifies _since parameter correctly enables incremental sync by:
 		// 1. Doing baseline sync to establish timestamps
@@ -140,21 +130,19 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		// First sync to establish baseline timestamps
 		response1 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-		// First sync should behave like Test_mCSDUpdateClient - LRZa should create 3 resources
-		// (one mCSD-directory endpoint per org: Sunflower, Care2Cure, Plataan).
-		lrzaReport1 := mapEntryContains(response1, "lrza-mcsd-admin")
-		require.NotNil(t, lrzaReport1, "LRZa report should exist in first sync")
-		assert.Equal(t, 3, lrzaReport1.CountCreated, "LRZa should create 3 resources in first sync")
+		// First sync should behave like Test_mCSDUpdateClient - the directory should
+		// create 8 resources (3 organizations + 5 endpoints).
+		lrzaReport1 := mapEntryContains(response1, "lrza-root-directory")
+		require.NotNil(t, lrzaReport1, "directory report should exist in first sync")
+		assert.Equal(t, 8, lrzaReport1.CountCreated, "directory should create 8 resources in first sync")
 
 		// Create new child organization after first sync - should be found by next incremental sync
-		// Use discovered directory (care2cure-admin) since they sync all resource types including Organizations
-		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
+		lrzaFHIRClient := fhirclient.New(harnessDetail.LRZaFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
 			UsePostSearch: false,
 		})
 
-		// Find the parent organization with URA 00000030 in care2cure directory
-		parentURA := "00000030"
-		parentOrg, err := searchOrg(care2CureFHIRClient, parentURA)
+		// Find the parent organization with URA 00000030 in the central directory
+		parentOrg, err := searchOrg(lrzaFHIRClient, lrza.Care2CureURA)
 		require.NoError(t, err, "Failed to search for parent organization")
 		require.NotNil(t, parentOrg, "Parent organization with URA 00000030 should exist")
 		require.NotNil(t, parentOrg.Id, "Parent organization should have an ID")
@@ -181,12 +169,12 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		}
 
 		var createdChildOrg fhir.Organization
-		err = care2CureFHIRClient.CreateWithContext(t.Context(), childOrg, &createdChildOrg)
+		err = lrzaFHIRClient.CreateWithContext(t.Context(), childOrg, &createdChildOrg)
 		require.NoError(t, err, "Failed to create new child organization for incremental test")
 
 		// Verify the child organization was actually created by reading it back
 		var readBackChildOrg fhir.Organization
-		err = care2CureFHIRClient.ReadWithContext(t.Context(), "Organization/"+*createdChildOrg.Id, &readBackChildOrg)
+		err = lrzaFHIRClient.ReadWithContext(t.Context(), "Organization/"+*createdChildOrg.Id, &readBackChildOrg)
 		require.NoError(t, err, "Failed to read back created child organization")
 		require.Equal(t, childOrgName, *readBackChildOrg.Name, "Child organization name should match")
 		require.NotNil(t, readBackChildOrg.PartOf, "Child organization should have partOf reference")
@@ -195,17 +183,17 @@ func Test_mCSDUpdateClient_IncrementalUpdates(t *testing.T) {
 		response2 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		// Second sync should find our test child organization via _since parameter
-		care2CureReport2 := mapEntryContains(response2, "care2cure-admin")
-		require.NotNil(t, care2CureReport2, "Care2Cure report should exist in second sync")
-		assert.Equal(t, 1, care2CureReport2.CountCreated, "Care2Cure should find exactly 1 resource (our test child organization) via _since parameter")
+		lrzaReport2 := mapEntryContains(response2, "lrza-root-directory")
+		require.NotNil(t, lrzaReport2, "directory report should exist in second sync")
+		assert.Equal(t, 1, lrzaReport2.CountCreated, "directory should find exactly 1 resource (our test child organization) via _since parameter")
 
 		// Third sync - should find nothing (no new resources since second sync)
 		response3 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		// Third sync should find 0 resources (nothing new since second sync)
-		care2CureReport3 := mapEntryContains(response3, "care2cure-admin")
-		require.NotNil(t, care2CureReport3, "Care2Cure report should exist in third sync")
-		assert.Equal(t, 0, care2CureReport3.CountCreated, "Care2Cure should find 0 resources in third sync (nothing new)")
+		lrzaReport3 := mapEntryContains(response3, "lrza-root-directory")
+		require.NotNil(t, lrzaReport3, "directory report should exist in third sync")
+		assert.Equal(t, 0, lrzaReport3.CountCreated, "directory should find 0 resources in third sync (nothing new)")
 	})
 }
 
@@ -262,14 +250,12 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		// First, do an initial sync to handle any existing testdata
 		_ = invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-		// Use care2cure FHIR server as the source (discovered directory)
-		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
+		lrzaFHIRClient := fhirclient.New(harnessDetail.LRZaFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
 			UsePostSearch: false,
 		})
 
-		// Find the parent organization with URA 00000030 in care2cure directory
-		parentURA := "00000030"
-		parentOrg, err := searchOrg(care2CureFHIRClient, parentURA)
+		// Find the parent organization with URA 00000030 in the central directory
+		parentOrg, err := searchOrg(lrzaFHIRClient, lrza.Care2CureURA)
 		require.NoError(t, err, "Failed to search for parent organization")
 		require.NotNil(t, parentOrg, "Parent organization with URA 00000030 should exist")
 		require.NotNil(t, parentOrg.Id, "Parent organization should have an ID")
@@ -298,7 +284,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		}
 
 		var createdChildOrg fhir.Organization
-		err = care2CureFHIRClient.CreateWithContext(t.Context(), childOrg, &createdChildOrg)
+		err = lrzaFHIRClient.CreateWithContext(t.Context(), childOrg, &createdChildOrg)
 		require.NoError(t, err, "Failed to create child organization")
 
 		// 2. Update child organization (first PUT)
@@ -306,7 +292,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		createdChildOrg.Name = &updatedName1
 
 		var updatedChildOrg1 fhir.Organization
-		err = care2CureFHIRClient.UpdateWithContext(t.Context(), "Organization/"+*createdChildOrg.Id, createdChildOrg, &updatedChildOrg1)
+		err = lrzaFHIRClient.UpdateWithContext(t.Context(), "Organization/"+*createdChildOrg.Id, createdChildOrg, &updatedChildOrg1)
 		require.NoError(t, err, "Failed to update child organization (first time)")
 
 		// 3. Update child organization again (second PUT)
@@ -314,7 +300,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		updatedChildOrg1.Name = &updatedName2
 
 		var updatedChildOrg2 fhir.Organization
-		err = care2CureFHIRClient.UpdateWithContext(t.Context(), "Organization/"+*updatedChildOrg1.Id, updatedChildOrg1, &updatedChildOrg2)
+		err = lrzaFHIRClient.UpdateWithContext(t.Context(), "Organization/"+*updatedChildOrg1.Id, updatedChildOrg1, &updatedChildOrg2)
 		require.NoError(t, err, "Failed to update child organization (second time)")
 
 		// Verify the source child organization now has version 3 after POST(v1) + PUT(v2) + PUT(v3)
@@ -326,9 +312,9 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		updateReport := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
 		// Check that no errors occurred during sync
-		care2CureReport := mapEntryContains(updateReport, "care2cure-admin")
-		require.NotNil(t, care2CureReport, "Care2Cure report should exist")
-		require.Empty(t, care2CureReport.Errors, "Should not have errors with conditional _source updates")
+		lrzaReport := mapEntryContains(updateReport, "lrza-root-directory")
+		require.NotNil(t, lrzaReport, "directory report should exist")
+		require.Empty(t, lrzaReport.Errors, "Should not have errors with conditional _source updates")
 
 		// 5. Verify only ONE child organization exists in query directory with the latest name
 		queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
@@ -365,14 +351,12 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		// First, do an initial sync to handle any existing testdata
 		_ = invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-		// Use care2cure FHIR server as the source (discovered directory)
-		care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
+		lrzaFHIRClient := fhirclient.New(harnessDetail.LRZaFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
 			UsePostSearch: false,
 		})
 
-		// Find the parent organization with URA 00000030 in care2cure directory
-		parentURA := "00000030"
-		parentOrg, err := searchOrg(care2CureFHIRClient, parentURA)
+		// Find the parent organization with URA 00000030 in the central directory
+		parentOrg, err := searchOrg(lrzaFHIRClient, lrza.Care2CureURA)
 		require.NoError(t, err, "Failed to search for parent organization")
 		require.NotNil(t, parentOrg, "Parent organization with URA 00000030 should exist")
 		require.NotNil(t, parentOrg.Id, "Parent organization should have an ID")
@@ -401,7 +385,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		}
 
 		var createdChildOrg fhir.Organization
-		err = care2CureFHIRClient.CreateWithContext(t.Context(), childOrg, &createdChildOrg)
+		err = lrzaFHIRClient.CreateWithContext(t.Context(), childOrg, &createdChildOrg)
 		require.NoError(t, err, "Failed to create child organization for deletion test")
 
 		// 2. First sync - should create the child organization in query directory
@@ -422,14 +406,14 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		require.NotNil(t, foundChildOrg1.PartOf, "Child organization should have partOf reference before deletion")
 
 		// 3. Delete the child organization from source
-		err = care2CureFHIRClient.DeleteWithContext(t.Context(), "Organization/"+*createdChildOrg.Id)
+		err = lrzaFHIRClient.DeleteWithContext(t.Context(), "Organization/"+*createdChildOrg.Id)
 		require.NoError(t, err, "Failed to delete child organization from source")
 
 		// 4. Second sync - should process the deletion
 		updateReport := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-		care2CureReport2 := mapEntryContains(updateReport, "care2cure-admin")
-		require.NotNil(t, care2CureReport2, "Care2Cure report should exist after deletion")
+		lrzaReport2 := mapEntryContains(updateReport, "lrza-root-directory")
+		require.NotNil(t, lrzaReport2, "directory report should exist after deletion")
 
 		// 5. Verify child organization is deleted from query directory
 		searchResults2 := fhir.Bundle{}
@@ -443,7 +427,7 @@ func Test_DuplicateResourceHandling(t *testing.T) {
 		require.Len(t, searchResults2.Entry, 0, "Should have 0 child organizations in query directory after DELETE is processed")
 
 		// Verify the DeleteCount is 1 in the sync report (confirming DELETE was processed)
-		require.Equal(t, 1, care2CureReport2.CountDeleted, "DELETE operations should be processed and counted")
+		require.Equal(t, 1, lrzaReport2.CountDeleted, "DELETE operations should be processed and counted")
 	})
 }
 
@@ -452,15 +436,15 @@ func Test_URAIdentifierChange(t *testing.T) {
 
 	harnessDetail := harness.Start(t)
 
-	care2CureFHIRClient := fhirclient.New(harnessDetail.Care2CureFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
+	lrzaFHIRClient := fhirclient.New(harnessDetail.LRZaFHIRBaseURL, http.DefaultClient, &fhirclient.Config{
 		UsePostSearch: false,
 	})
 
 	// Find the parent organization with URA 00000030
-	authoritativeURA := "00000030"
+	authoritativeURA := lrza.Care2CureURA
 	nonAuthoritativeURA := "99999999"
 
-	parentOrg, err := searchOrg(care2CureFHIRClient, authoritativeURA)
+	parentOrg, err := searchOrg(lrzaFHIRClient, authoritativeURA)
 	require.NoError(t, err, "Failed to search for parent organization")
 	require.NotNil(t, parentOrg, "Parent organization with URA 00000030 should exist")
 	require.NotNil(t, parentOrg.Id, "Parent organization should have an ID")
@@ -475,12 +459,12 @@ func Test_URAIdentifierChange(t *testing.T) {
 		}
 	}
 
-	err = care2CureFHIRClient.Update("Organization/"+*updatedOrg.Id, updatedOrg, nil)
+	err = lrzaFHIRClient.Update("Organization/"+*updatedOrg.Id, updatedOrg, nil)
 	require.NoError(t, err, "Failed to update organization URA identifier")
 
 	// Verify the URA was changed to non-authoritative value
 	var verifyOrg fhir.Organization
-	err = care2CureFHIRClient.Read("Organization/"+*updatedOrg.Id, &verifyOrg)
+	err = lrzaFHIRClient.Read("Organization/"+*updatedOrg.Id, &verifyOrg)
 	require.NoError(t, err)
 	foundNonAuthURA := false
 	for _, identifier := range verifyOrg.Identifier {
@@ -496,15 +480,15 @@ func Test_URAIdentifierChange(t *testing.T) {
 	response1 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 	require.NotNil(t, response1)
 
-	care2CureReport1 := mapEntryContains(response1, "care2cure-admin")
-	require.NotNil(t, care2CureReport1, "Care2Cure report should exist in first sync")
+	lrzaReport1 := mapEntryContains(response1, "lrza-root-directory")
+	require.NotNil(t, lrzaReport1, "directory report should exist in first sync")
 
 	// Log the first sync report
 	t.Logf("First sync report: Created=%d, Updated=%d, Deleted=%d",
-		care2CureReport1.CountCreated, care2CureReport1.CountUpdated, care2CureReport1.CountDeleted)
+		lrzaReport1.CountCreated, lrzaReport1.CountUpdated, lrzaReport1.CountDeleted)
 
 	// The organization with non-authoritative URA won't be synced to query directory
-	firstSyncTotal := care2CureReport1.CountCreated + care2CureReport1.CountUpdated
+	firstSyncTotal := lrzaReport1.CountCreated + lrzaReport1.CountUpdated
 
 	t.Log("Step 3: Change organization URA back to authoritative URA (00000030)")
 	// Now change it back to the authoritative URA
@@ -516,12 +500,12 @@ func Test_URAIdentifierChange(t *testing.T) {
 		}
 	}
 
-	err = care2CureFHIRClient.Update("Organization/"+*updatedOrg2.Id, updatedOrg2, nil)
+	err = lrzaFHIRClient.Update("Organization/"+*updatedOrg2.Id, updatedOrg2, nil)
 	require.NoError(t, err, "Failed to update organization URA back to authoritative value")
 
 	// Verify the URA was changed back
 	var verifyOrg2 fhir.Organization
-	err = care2CureFHIRClient.Read("Organization/"+*updatedOrg2.Id, &verifyOrg2)
+	err = lrzaFHIRClient.Read("Organization/"+*updatedOrg2.Id, &verifyOrg2)
 	require.NoError(t, err)
 	foundAuthURA := false
 	for _, identifier := range verifyOrg2.Identifier {
@@ -536,24 +520,24 @@ func Test_URAIdentifierChange(t *testing.T) {
 	t.Log("Step 4: Second sync - should detect URA change and rerun without _since, syncing all resources")
 	response2 := invokeUpdate(t, harnessDetail.KnooppuntInternalBaseURL)
 
-	care2CureReport2 := mapEntryContains(response2, "care2cure-admin")
-	require.NotNil(t, care2CureReport2, "Care2Cure report should exist in second sync")
+	lrzaReport2 := mapEntryContains(response2, "lrza-root-directory")
+	require.NotNil(t, lrzaReport2, "directory report should exist in second sync")
 
 	// Log the second sync report
 	t.Logf("Second sync report: Created=%d, Updated=%d, Deleted=%d, Errors=%v, Warnings=%v",
-		care2CureReport2.CountCreated, care2CureReport2.CountUpdated, care2CureReport2.CountDeleted,
-		care2CureReport2.Errors, care2CureReport2.Warnings)
+		lrzaReport2.CountCreated, lrzaReport2.CountUpdated, lrzaReport2.CountDeleted,
+		lrzaReport2.Errors, lrzaReport2.Warnings)
 
 	// The system should have detected the URA change (from non-auth to auth) and rerun the full query
 	// This should sync MORE resources than the first sync because now the authoritative URA is present
-	secondSyncTotal := care2CureReport2.CountCreated + care2CureReport2.CountUpdated
+	secondSyncTotal := lrzaReport2.CountCreated + lrzaReport2.CountUpdated
 	t.Logf("First sync total: %d, Second sync total: %d", firstSyncTotal, secondSyncTotal)
 
 	require.True(t, secondSyncTotal > firstSyncTotal,
 		"Second sync should process more resources after URA changed from non-authoritative to authoritative")
 
 	// Verify no errors occurred during the sync
-	assert.Empty(t, care2CureReport2.Errors, "Should have no errors during sync with URA change")
+	assert.Empty(t, lrzaReport2.Errors, "Should have no errors during sync with URA change")
 
 	// Verify the organization is searchable by the authoritative URA in the query directory
 	queryFHIRClient := fhirclient.New(harnessDetail.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)

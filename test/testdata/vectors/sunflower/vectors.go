@@ -8,6 +8,9 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
+// URA is Zorgcentrum De Zonnebloem's (Care Home Sunflower's) URA number.
+const URA = "00000020"
+
 // EndpointAddressEnvVar overrides the address published in Zonnebloem's mCSD
 // Endpoint.
 //
@@ -30,78 +33,10 @@ func EndpointAddress() string {
 	return "http://localhost:7050/fhir/sunflower-patients"
 }
 
-func AdminHAPITenant() hapi.Tenant {
-	return hapi.Tenant{
-		Name: "sunflower-admin",
-		ID:   5,
-	}
-}
-
 func PatientsHAPITenant() hapi.Tenant {
 	return hapi.Tenant{
 		Name: "sunflower-patients",
 		ID:   7,
-	}
-}
-
-func Organization() fhir.Organization {
-	return fhir.Organization{
-		Id: to.Ptr("e5909595-767e-41c1-9b00-a23ddf33e5d1"),
-		Meta: &fhir.Meta{
-			Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization"},
-		},
-		Name: to.Ptr("Sunflower Care Home"),
-		Identifier: []fhir.Identifier{
-			{
-				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
-				Value:  to.Ptr("00000020"),
-			},
-		},
-		Endpoint: []fhir.Reference{
-			{
-				Reference: to.Ptr("Endpoint/f8a9c2d1-4567-489a-bcde-123456789abc"),
-				Type:      to.Ptr("Endpoint"),
-			},
-			{
-				Reference: to.Ptr("Endpoint/3c1f0b6e-2d84-4a15-9f77-6b0e2a5c8d31"),
-				Type:      to.Ptr("Endpoint"),
-			},
-		},
-	}
-}
-
-func Endpoints() []fhir.Endpoint {
-	return []fhir.Endpoint{
-		{
-			Id:      to.Ptr("f8a9c2d1-4567-489a-bcde-123456789abc"),
-			Address: EndpointAddress(),
-			Meta: &fhir.Meta{
-				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
-			},
-			Status: fhir.EndpointStatusActive,
-			ConnectionType: fhir.Coding{
-				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/endpoint-connection-type"),
-				Code:   to.Ptr("fhir"),
-			},
-			Period: &fhir.Period{
-				Start: to.Ptr("2025-01-01T00:00:00Z"),
-			},
-		},
-		{
-			Id:      to.Ptr("3c1f0b6e-2d84-4a15-9f77-6b0e2a5c8d31"),
-			Address: AuthorizationServerAddress(),
-			Meta: &fhir.Meta{
-				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
-			},
-			Status: fhir.EndpointStatusActive,
-			ConnectionType: fhir.Coding{
-				System: to.Ptr("http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-authorization-server-cs"),
-				Code:   to.Ptr("oauth-nuts"),
-			},
-			Period: &fhir.Period{
-				Start: to.Ptr("2025-01-01T00:00:00Z"),
-			},
-		},
 	}
 }
 
@@ -115,7 +50,7 @@ func AuthorizationServerAddress() string {
 	if v := os.Getenv(AuthorizationServerEnvVar); v != "" {
 		return v
 	}
-	return "http://localhost:8080/nuts/oauth2/00000020"
+	return "http://localhost:8080/nuts/oauth2/" + URA
 }
 
 // AuthorizationServerEnvVar overrides the published authorization server, for a
@@ -140,15 +75,6 @@ func Patients() []fhir.Patient {
 			},
 		},
 	}
-}
-
-func AdminResources() []fhir.HasId {
-	var resources []fhir.HasId
-	for _, endpoint := range Endpoints() {
-		resources = append(resources, to.Ptr(endpoint))
-	}
-	resources = append(resources, to.Ptr(Organization()))
-	return resources
 }
 
 func PatientsResources() []fhir.HasId {

@@ -91,6 +91,15 @@ type Config struct {
 
 type DirectoryConfig struct {
 	FHIRBaseURL string `koanf:"fhirbaseurl"`
+	// Direct marks this directory as a plain source whose own resources are
+	// synced directly into the query directory, instead of being treated as a
+	// root/discovery-only directory. A discoverable (non-Direct) directory's
+	// Organizations are discovery pointers only and are never themselves synced
+	// — only the mcsd-directory-payload Endpoints it uses to point at further
+	// admin directories are (see buildUpdateTransaction's isDiscoverableDirectory
+	// gate). Defaults to false (discoverable/root behavior) so existing configs
+	// are unaffected.
+	Direct bool `koanf:"direct"`
 }
 
 type UpdateReport map[string]DirectoryUpdateReport
@@ -145,8 +154,13 @@ func New(config Config) (*Component, error) {
 		updateMux:              &sync.RWMutex{},
 	}
 	for _, rootDirectory := range config.AdministrationDirectories {
-		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, rootDirectoryResourceTypes, true, "", ""); err != nil {
-			return nil, fmt.Errorf("register root administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
+		discover := !rootDirectory.Direct
+		resourceTypes := rootDirectoryResourceTypes
+		if rootDirectory.Direct {
+			resourceTypes = defaultDirectoryResourceTypes
+		}
+		if err := result.registerAdministrationDirectory(context.Background(), rootDirectory.FHIRBaseURL, resourceTypes, discover, "", ""); err != nil {
+			return nil, fmt.Errorf("register administration directory (url=%s): %w", rootDirectory.FHIRBaseURL, err)
 		}
 	}
 	if result.config.DirectoryResourceTypes == nil || len(result.config.DirectoryResourceTypes) == 0 {

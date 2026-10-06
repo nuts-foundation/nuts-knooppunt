@@ -27,7 +27,7 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-func zonnebloemURA() string { return *sunflower.Organization().Identifier[0].Value }
+func zonnebloemURA() string { return sunflower.URA }
 
 // sharePlataanAs publishes De Plataan's localization records for one patient
 // under clientID, which is what a demo run does and what "restored to the seeded
@@ -208,8 +208,6 @@ func TestResetGlobal_PreservesPartitions(t *testing.T) {
 		sunflower.PatientsHAPITenant(),
 		plataan.PatientsHAPITenant(),
 		nvi.HAPITenant(),
-		sunflower.AdminHAPITenant(),
-		plataan.AdminHAPITenant(),
 		lrza.HAPITenant(),
 	} {
 		var bundle fhir.Bundle
