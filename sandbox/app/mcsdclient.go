@@ -40,37 +40,33 @@ type sourceAddress struct {
 // authorizationServerSystem is the GF code system whose codes name an
 // authorization server on Endpoint.connectionType. Its oauth-nuts code is what
 // this demo's nodes speak.
-// https://minvws.github.io/generiekefuncties-docs/en/CodeSystem-nl-gf-authorization-server-cs.html
-const authorizationServerSystem = "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-authorization-server-cs"
+// https://build.fhir.org/ig/minvws/generiekefuncties-docs/branches/1.0.0/en/artifacts.html
+const authorizationServerSystem = "http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-authorization-server-cs"
 
 const authorizationServerNuts = "oauth-nuts"
 
-// fhirDataConnectionTypes are the codings this chain accepts as "a FHIR base to
-// read a patient summary from". Two entries, because the spec's connection types
-// value set draws FHIR REST from the HL7 code system while the endpoints seeded
-// in this repo carry a system that is in neither value set. Accepting only the
-// seeded one would reject a conformant directory; accepting only the spec's
-// would reject this demo's own.
+// fhirDataConnectionSystem and fhirDataConnectionCode are the coding this chain
+// accepts as "a FHIR base to read a patient summary from": FHIR REST, which the
+// GF connection types value set draws from the HL7 code system.
 //
-// A list rather than "anything that is not an authorization server": a directory
-// entry is not limited to the kinds this chain knows, and an organization that
-// also publishes an imaging or document service would otherwise have that
-// service handed the bearer token and a patient search carrying the BSN.
-var fhirDataConnectionTypes = map[string]string{
-	"http://fhir.nl/fhir/NamingSystem/endpoint-connection-type":      "fhir",
-	"http://terminology.hl7.org/CodeSystem/endpoint-connection-type": "hl7-fhir-rest",
-}
+// One coding rather than "anything that is not an authorization server": a
+// directory entry is not limited to the kinds this chain knows, and an
+// organization that also publishes an imaging or document service would
+// otherwise have that service handed the bearer token and a patient search
+// carrying the BSN.
+const (
+	fhirDataConnectionSystem = "http://terminology.hl7.org/CodeSystem/endpoint-connection-type"
+	fhirDataConnectionCode   = "hl7-fhir-rest"
+)
 
 // mcsdResolveFunc builds the addressing step: a URA in, the addresses the
 // directory publishes for it out.
 //
 // Endpoint selection is narrower than the Addressing spec requires. It honours
-// status and period, and matches connectionType against fhirDataConnectionTypes
-// and the authorization-server coding, but it does not match payloadType at all:
-// the seeded endpoints carry none, although the profile makes it 1..*, so
-// matching on it would reject every data endpoint in this demo. The cost is that
-// an endpoint serving a payload this retrieval cannot use is accepted as readily
-// as one that can. Recorded in sandbox/app/README.md as a known deviation rather
+// status and period, and matches connectionType against the FHIR REST and
+// authorization-server codings, but it does not match payloadType at all, so an
+// endpoint serving a payload this retrieval cannot use is accepted as readily as
+// one that can. Recorded in sandbox/app/README.md as a known deviation rather
 // than worked around silently.
 func mcsdResolveFunc(hapiBaseURL *url.URL) func(context.Context, string) (sourceAddress, error) {
 	directory := hapiBaseURL.JoinPath(mcsdQueryTenant, "Organization")
@@ -162,11 +158,10 @@ func isAuthorizationServer(endpoint fhir.Endpoint) bool {
 // servesFHIRData reports whether the endpoint is one this chain can read a
 // patient summary from.
 func servesFHIRData(endpoint fhir.Endpoint) bool {
-	if endpoint.ConnectionType.System == nil || endpoint.ConnectionType.Code == nil {
-		return false
-	}
-	code, known := fhirDataConnectionTypes[*endpoint.ConnectionType.System]
-	return known && code == *endpoint.ConnectionType.Code
+	return endpoint.ConnectionType.System != nil &&
+		*endpoint.ConnectionType.System == fhirDataConnectionSystem &&
+		endpoint.ConnectionType.Code != nil &&
+		*endpoint.ConnectionType.Code == fhirDataConnectionCode
 }
 
 // splitDirectoryBundle separates the matched Organization from the included

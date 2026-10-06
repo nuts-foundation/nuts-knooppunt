@@ -784,7 +784,7 @@ func TestAuthorize_NeedsNoDataEndpointOfItsOwn(t *testing.T) {
 		    "endpoint":[{"reference":"Endpoint/pl-oauth","type":"Endpoint"}]}},
 		  {"search":{"mode":"include"},"resource":{"resourceType":"Endpoint","id":"pl-oauth",
 		    "status":"active","address":"http://published.example/nuts/oauth2/00000010",
-		    "connectionType":{"system":"http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-authorization-server-cs","code":"oauth-nuts"}}}
+		    "connectionType":{"system":"http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-authorization-server-cs","code":"oauth-nuts"}}}
 		]}`))
 	}))
 	t.Cleanup(directory.Close)

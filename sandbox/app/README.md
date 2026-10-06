@@ -201,14 +201,12 @@ Six limitations are carried deliberately:
 
 - **Endpoint selection matches `connectionType` but not `payloadType`.** It honours `status` and
   `period` at the precision FHIR dateTime allows, both SHALLs. An `oauth-nuts` Endpoint is
-  the authorization server, and a data endpoint has to carry one of two codings: the spec's
-  `http://terminology.hl7.org/CodeSystem/endpoint-connection-type|hl7-fhir-rest`, or
-  `http://fhir.nl/fhir/NamingSystem/endpoint-connection-type|fhir`, which is what this repo seeds and
-  is in neither GF value set. Every other kind is ignored rather than treated as a FHIR base.
-  `payloadType` is not matched at all: the seeded endpoints carry none, although the profile makes it
-  `1..*`, so matching on it would reject every data endpoint in this demo. That cuts both ways. It
-  recognizes fewer kinds of service than the spec, and it will also accept a FHIR endpoint serving a
-  payload this retrieval cannot use, because nothing here reads what an endpoint says it serves. Where
+  the authorization server, and a data endpoint has to carry the spec's
+  `http://terminology.hl7.org/CodeSystem/endpoint-connection-type|hl7-fhir-rest`. Every other kind is
+  ignored rather than treated as a FHIR base. `payloadType` is not matched at all. That cuts both
+  ways. It recognizes fewer kinds of service than the spec, and it will also accept a FHIR endpoint
+  serving a payload this retrieval cannot use, because nothing here reads what an endpoint says it
+  serves. Where
   several endpoints qualify it takes the first, and an unreadable `period` bound reads as no bound.
 - **The sub-check breakdown is narration.** The authorization specification makes the decision a single
   `allow` boolean and everything else informational, and the sandbox talks to the source's PEP, which
