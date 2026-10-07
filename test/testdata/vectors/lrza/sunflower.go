@@ -6,22 +6,20 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
+const careHomeSunflowerID = "e5909595-767e-41c1-9b00-a23ddf33e5d1"
+
 // CareHomeSunflower is Zorgcentrum De Zonnebloem's (Care Home Sunflower's)
 // mCSD Organization resource, as it appears in the central addressing
 // directory.
 func CareHomeSunflower() fhir.Organization {
 	return fhir.Organization{
-		Id: to.Ptr("e5909595-767e-41c1-9b00-a23ddf33e5d1"),
+		Id: to.Ptr(careHomeSunflowerID),
 		Meta: &fhir.Meta{
-			Profile: []string{"http://fhir.generiekefuncties.nl/csd/StructureDefinition/nl-gf-organization"},
+			Profile: []string{organizationProfile},
 		},
-		Name: to.Ptr("Sunflower Care Home"),
-		Identifier: []fhir.Identifier{
-			{
-				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
-				Value:  to.Ptr(sunflower.URA),
-			},
-		},
+		Name:       to.Ptr("Sunflower Care Home"),
+		Identifier: []fhir.Identifier{uraIdentifier(sunflower.URA)},
+		Type:       sbiType("8710", "Residential nursing care activities"),
 		Endpoint: []fhir.Reference{
 			{
 				Reference: to.Ptr("Endpoint/f8a9c2d1-4567-489a-bcde-123456789abc"),
@@ -39,32 +37,22 @@ func CareHomeSunflower() fhir.Organization {
 // endpoints, published directly in the central addressing directory (no more
 // pointer to a separate per-org admin tenant).
 //
-// Codings follow https://build.fhir.org/ig/minvws/generiekefuncties-docs/branches/1.0.0/en/artifacts.html:
-// connectionType from the NL GF Connection Types ValueSet
-// (nl-gf-connection-types-vs); the FHIR endpoint's payloadType lists the
-// nl-gf-data-categories-cs categories Sunflower's patients tenant actually
-// holds for the demo pool (see test/testdata/README.md). The authorization
-// server endpoint has no documented/canonical payloadType for the oauth-nuts
-// connection type, so it's omitted rather than guessed.
+// The FHIR endpoint's payloadType lists the nl-gf-data-categories-cs categories
+// Sunflower's patients tenant actually holds for the demo pool (see
+// test/testdata/README.md).
 func CareHomeSunflowerEndpoints() []fhir.Endpoint {
 	return []fhir.Endpoint{
 		{
 			Id:      to.Ptr("f8a9c2d1-4567-489a-bcde-123456789abc"),
 			Address: sunflower.EndpointAddress(),
 			Meta: &fhir.Meta{
-				Profile: []string{"http://fhir.generiekefuncties.nl/csd/StructureDefinition/nl-gf-endpoint"},
+				Profile: []string{endpointProfile},
 			},
-			Status: fhir.EndpointStatusActive,
-			ConnectionType: fhir.Coding{
-				System: to.Ptr("http://terminology.hl7.org/CodeSystem/endpoint-connection-type"),
-				Code:   to.Ptr("hl7-fhir-rest"),
-			},
-			PayloadType: []fhir.CodeableConcept{
-				{Coding: []fhir.Coding{{System: to.Ptr("http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-data-categories-cs"), Code: to.Ptr("Patient")}}},
-				{Coding: []fhir.Coding{{System: to.Ptr("http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-data-categories-cs"), Code: to.Ptr("AllergyIntolerance")}}},
-				{Coding: []fhir.Coding{{System: to.Ptr("http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-data-categories-cs"), Code: to.Ptr("MedicationRequest")}}},
-				{Coding: []fhir.Coding{{System: to.Ptr("http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-data-categories-cs"), Code: to.Ptr("Condition")}}},
-			},
+			Status:               fhir.EndpointStatusActive,
+			ConnectionType:       fhirRESTConnection(),
+			ManagingOrganization: managedBy(careHomeSunflowerID),
+			PayloadType:          dataCategories("Patient", "AllergyIntolerance", "MedicationRequest", "Condition"),
+			PayloadMimeType:      []string{fhirR4MimeType},
 			Period: &fhir.Period{
 				Start: to.Ptr("2025-01-01T00:00:00Z"),
 			},
@@ -73,13 +61,12 @@ func CareHomeSunflowerEndpoints() []fhir.Endpoint {
 			Id:      to.Ptr("3c1f0b6e-2d84-4a15-9f77-6b0e2a5c8d31"),
 			Address: sunflower.AuthorizationServerAddress(),
 			Meta: &fhir.Meta{
-				Profile: []string{"http://fhir.generiekefuncties.nl/csd/StructureDefinition/nl-gf-endpoint"},
+				Profile: []string{endpointProfile},
 			},
-			Status: fhir.EndpointStatusActive,
-			ConnectionType: fhir.Coding{
-				System: to.Ptr("http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-authorization-server-cs"),
-				Code:   to.Ptr("oauth-nuts"),
-			},
+			Status:               fhir.EndpointStatusActive,
+			ConnectionType:       oauthNutsConnection(),
+			ManagingOrganization: managedBy(careHomeSunflowerID),
+			PayloadType:          noPayload(),
 			Period: &fhir.Period{
 				Start: to.Ptr("2025-01-01T00:00:00Z"),
 			},
@@ -100,27 +87,18 @@ func CareHomeSunflowerHealthcareServices() []fhir.HealthcareService {
 		{
 			Id: to.Ptr("6d2b9e41-0c7a-4f38-b5e2-8a14c3f7d920"),
 			Meta: &fhir.Meta{
-				Profile: []string{"http://fhir.generiekefuncties.nl/csd/StructureDefinition/nl-gf-healthcareservice"},
+				Profile: []string{healthcareServiceProfile},
 			},
 			Identifier: []fhir.Identifier{
 				{
-					Use:    to.Ptr(fhir.IdentifierUseOfficial),
-					System: to.Ptr("http://zonnebloem.example.org/fhir/NamingSystem/healthcareservice"),
-					Value:  to.Ptr("de-vlinder"),
-					Assigner: &fhir.Reference{
-						Identifier: &fhir.Identifier{
-							Type: &fhir.CodeableConcept{Coding: []fhir.Coding{{
-								System: to.Ptr("http://terminology.hl7.org/CodeSystem/provenance-participant-type"),
-								Code:   to.Ptr("custodian"),
-							}}},
-							System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
-							Value:  to.Ptr(sunflower.URA),
-						},
-					},
+					Use:      to.Ptr(fhir.IdentifierUseOfficial),
+					System:   to.Ptr("http://zonnebloem.example.org/fhir/NamingSystem/healthcareservice"),
+					Value:    to.Ptr("de-vlinder"),
+					Assigner: custodian(URANamingSystem, sunflower.URA),
 				},
 			},
 			Active:     to.Ptr(true),
-			ProvidedBy: &fhir.Reference{Reference: to.Ptr("Organization/e5909595-767e-41c1-9b00-a23ddf33e5d1"), Type: to.Ptr("Organization")},
+			ProvidedBy: &fhir.Reference{Reference: to.Ptr("Organization/" + careHomeSunflowerID), Type: to.Ptr("Organization")},
 			Type: []fhir.CodeableConcept{{Coding: []fhir.Coding{{
 				System:  to.Ptr("http://terminology.hl7.org/CodeSystem/service-type"),
 				Code:    to.Ptr("4"),

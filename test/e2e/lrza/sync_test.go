@@ -97,6 +97,9 @@ func Test_LRZASync(t *testing.T) {
 						var endpoint fhir.Endpoint
 						require.NoError(t, query.Read(*ref.Reference, &endpoint), "reference %s should resolve locally", *ref.Reference)
 						gotAddresses = append(gotAddresses, endpoint.Address)
+						// The circular reference back, which the spec names as the reason
+						// no load order resolves every reference.
+						assert.Equal(t, "Organization/"+*org.Id, *endpoint.ManagingOrganization.Reference)
 					}
 					var expectedAddresses []string
 					for _, endpoint := range expected.endpoints {
@@ -286,7 +289,7 @@ func readLocalCopy[T any](t *testing.T, h harness.Details, query fhirclient.Clie
 func searchOrg(t *testing.T, client fhirclient.Client, ura string) fhir.Organization {
 	t.Helper()
 	var bundle fhir.Bundle
-	require.NoError(t, client.Search("Organization", url.Values{"identifier": []string{coding.URANamingSystem + "|" + ura}}, &bundle))
+	require.NoError(t, client.Search("Organization", url.Values{"identifier": []string{coding.URAOIDNamingSystem + "|" + ura}}, &bundle))
 	require.Len(t, bundle.Entry, 1, "expected exactly one organization with URA %s", ura)
 	var organization fhir.Organization
 	require.NoError(t, json.Unmarshal(bundle.Entry[0].Resource, &organization))

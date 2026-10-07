@@ -53,7 +53,7 @@ func organizationBundleWith(references []string, endpointsJSON ...string) string
 	        "resourceType": "Organization",
 	        "id": "zonnebloem",
 	        "name": "Zorgcentrum De Zonnebloem",
-	        "identifier": [{"system": "http://fhir.nl/fhir/NamingSystem/ura", "value": "00000020"}],
+	        "identifier": [{"system": "urn:oid:2.16.528.1.1007.3.3", "value": "00000020"}],
 	        "endpoint": [` + refs + `]
 	      }
 	    }` + included + `
@@ -91,7 +91,7 @@ func TestMCSDResolve_SearchesTheQueryDirectoryByURA(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "/fhir/knpt-mcsd-query/Organization", gotPath)
-	assert.Equal(t, "http://fhir.nl/fhir/NamingSystem/ura|00000020", gotQuery.Get("identifier"))
+	assert.Equal(t, "urn:oid:2.16.528.1.1007.3.3|00000020", gotQuery.Get("identifier"))
 	assert.Equal(t, "Organization:endpoint", gotQuery.Get("_include"))
 	assert.Equal(t, "00000020", source.URA)
 	assert.Equal(t, "Zorgcentrum De Zonnebloem", source.Name)
@@ -230,7 +230,7 @@ func TestMCSDResolve_ResolvesAnEndpointReferencedByAbsoluteURL(t *testing.T) {
 	        "resourceType": "Organization",
 	        "id": "zonnebloem",
 	        "name": "Zorgcentrum De Zonnebloem",
-	        "identifier": [{"system": "http://fhir.nl/fhir/NamingSystem/ura", "value": "00000020"}],
+	        "identifier": [{"system": "urn:oid:2.16.528.1.1007.3.3", "value": "00000020"}],
 	        "endpoint": [{"reference": "` + absolute + `", "type": "Endpoint"}]
 	      }
 	    },
