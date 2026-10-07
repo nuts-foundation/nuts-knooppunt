@@ -6,7 +6,6 @@ services:
       - "8081:8081"
     environment:
       KNPT_MCSDADMIN_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-admin
-      KNPT_MCSD_QUERY_FHIRBASEURL: http://hapi-fhir:7050/fhir/knpt-mcsd-query
       KNPT_NVI_BASEURL: http://hapi-fhir:7050/fhir/nvi
       KNPT_TRACING_OTLPENDPOINT: ${KNPT_TRACING_OTLPENDPOINT:-aspire-dashboard:18890}
       # The PDP's Policy Information Point resolves Patient/<id> to a BSN, which
