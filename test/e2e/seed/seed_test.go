@@ -530,7 +530,7 @@ func invokeLRZAUpdate(t *testing.T, internalBaseURL *url.URL) {
 
 func searchOrg(client fhirclient.Client, ura string) (*fhir.Organization, error) {
 	var searchResult fhir.Bundle
-	err := client.Search("Organization", url.Values{"identifier": []string{coding.URANamingSystem + "|" + ura}}, &searchResult)
+	err := client.Search("Organization", url.Values{"identifier": []string{coding.URAOIDNamingSystem + "|" + ura}}, &searchResult)
 	if err != nil {
 		return nil, err
 	}

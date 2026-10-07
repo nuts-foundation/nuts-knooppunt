@@ -252,7 +252,7 @@ Expect a searchset Bundle with at least one `List`.
 ```bash
 QUERY_DIR='http://localhost:7050/fhir/knpt-mcsd-query'
 
-ENDPOINT_REF=$(curl -s "$QUERY_DIR/Organization?identifier=http://fhir.nl/fhir/NamingSystem/ura|00000020" \
+ENDPOINT_REF=$(curl -s "$QUERY_DIR/Organization?identifier=urn:oid:2.16.528.1.1007.3.3|00000020" \
   | jq -r '.entry[0].resource.endpoint[0].reference')
 echo "$ENDPOINT_REF"
 ```
