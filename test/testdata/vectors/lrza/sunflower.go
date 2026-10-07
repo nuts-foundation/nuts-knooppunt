@@ -86,3 +86,50 @@ func CareHomeSunflowerEndpoints() []fhir.Endpoint {
 		},
 	}
 }
+
+// CareHomeSunflowerHealthcareServices are Sunflower's services: ward De
+// Vlinder, the sublocation the GF Sandbox shows for De Zonnebloem (see
+// sandbox/DESIGN.md §5.1), which a FHIR R4 Endpoint alone cannot express.
+//
+// Conforms to nl-gf-healthcareservice: a custodian-assigned identifier
+// (nl-gf-custodianassignedidentifier, assigned by Sunflower's URA), a type from
+// nl-gf-service-types-vs, and the organization providing it. It is served
+// through Sunflower's FHIR endpoint.
+func CareHomeSunflowerHealthcareServices() []fhir.HealthcareService {
+	return []fhir.HealthcareService{
+		{
+			Id: to.Ptr("6d2b9e41-0c7a-4f38-b5e2-8a14c3f7d920"),
+			Meta: &fhir.Meta{
+				Profile: []string{"http://fhir.generiekefuncties.nl/csd/StructureDefinition/nl-gf-healthcareservice"},
+			},
+			Identifier: []fhir.Identifier{
+				{
+					Use:    to.Ptr(fhir.IdentifierUseOfficial),
+					System: to.Ptr("http://zonnebloem.example.org/fhir/NamingSystem/healthcareservice"),
+					Value:  to.Ptr("de-vlinder"),
+					Assigner: &fhir.Reference{
+						Identifier: &fhir.Identifier{
+							Type: &fhir.CodeableConcept{Coding: []fhir.Coding{{
+								System: to.Ptr("http://terminology.hl7.org/CodeSystem/provenance-participant-type"),
+								Code:   to.Ptr("custodian"),
+							}}},
+							System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
+							Value:  to.Ptr(sunflower.URA),
+						},
+					},
+				},
+			},
+			Active:     to.Ptr(true),
+			ProvidedBy: &fhir.Reference{Reference: to.Ptr("Organization/e5909595-767e-41c1-9b00-a23ddf33e5d1"), Type: to.Ptr("Organization")},
+			Type: []fhir.CodeableConcept{{Coding: []fhir.Coding{{
+				System:  to.Ptr("http://terminology.hl7.org/CodeSystem/service-type"),
+				Code:    to.Ptr("4"),
+				Display: to.Ptr("Aged Residential Care"),
+			}}}},
+			Name: to.Ptr("Afdeling De Vlinder"),
+			Endpoint: []fhir.Reference{
+				{Reference: to.Ptr("Endpoint/f8a9c2d1-4567-489a-bcde-123456789abc"), Type: to.Ptr("Endpoint")},
+			},
+		},
+	}
+}
