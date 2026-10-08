@@ -7,7 +7,7 @@
 # from test/e2e/pep/certs, which live outside this module's own directory.
 #
 #   docker build -f test/testdata/Dockerfile .
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
