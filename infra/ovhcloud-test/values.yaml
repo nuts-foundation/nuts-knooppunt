@@ -86,9 +86,6 @@ config:
   lrza:
     lrzabaseurl: "http://fhir:8080/fhir/lrza-root-directory"
     querybaseurl: "http://fhir:8080/fhir/knpt-mcsd-query"
-  mcsd:
-    query:
-      fhirbaseurl: "http://fhir:8080/fhir/knpt-mcsd-query"
   # Pseudonymize through mock-prs with the same authn flow as against the
   # ministry, as docker-compose.sandbox.yml does: a client certificate, a
   # token request to the mock's stand-in token endpoint, a bearer on the PRS
