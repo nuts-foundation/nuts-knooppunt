@@ -206,7 +206,7 @@ hosted) and again on every reset.
 Each organization gets, via the idempotent bootstrap: a did:web plus a wallet-held `X509Credential` carrying the URA in
 its certificate SAN (issued from the demo UZI-style certificate with the didx509 toolkit and stored through the holder
 endpoint, as `test/e2e/pep/authorization_test.go` does; not from the mock VC issuer, which is not on this path), an mCSD
-Organization plus Endpoint entry in the LRZa admin directory (plus the
+Organization plus Endpoint entry in the central LRZa directory (plus the
 Location/HealthcareService entries that back the "sublocation" line in the retrieve modal, e.g. ward De Vlinder at De
 Zonnebloem: a FHIR R4 Endpoint alone cannot express a ward), and a tenant registration for pseudonymization.
 
