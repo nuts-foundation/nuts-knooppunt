@@ -86,9 +86,11 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	//
 	// Central mCSD addressing directory: every care organization's own
 	// Organization + Endpoint resources, in one directory (Care2Cure,
-	// Sunflower/Zonnebloem, Plataan).
+	// Sunflower/Zonnebloem, Plataan). Organizations and Endpoints reference each
+	// other (Organization.endpoint, Endpoint.managingOrganization), so no write
+	// order satisfies HAPI's referential integrity check; one transaction does.
 	//
-	if err := putResources(ctx, lrzaRootDirectoryHAPITenant.FHIRClient(hapiBaseURL), lrza.Resources()); err != nil {
+	if err := putResourcesInTransaction(ctx, lrzaRootDirectoryHAPITenant.FHIRClient(hapiBaseURL), lrza.Resources()); err != nil {
 		return nil, fmt.Errorf("seed mCSD addressing directory resources: %w", err)
 	}
 
@@ -148,6 +150,29 @@ func ExpungeAll(hapiBaseURL *url.URL) error {
 			},
 		},
 	}, nil, fhirclient.AtPath("/$expunge"))
+}
+
+// putResourcesInTransaction PUT-upserts the resources by their fixed ids into
+// the given tenant in one transaction, for resources that reference each other.
+func putResourcesInTransaction(ctx context.Context, client fhirclient.Client, resources []fhir.HasId) error {
+	tx := fhir.Bundle{Type: fhir.BundleTypeTransaction}
+	for _, resource := range resources {
+		data, err := json.Marshal(resource)
+		if err != nil {
+			return err
+		}
+		tx.Entry = append(tx.Entry, fhir.BundleEntry{
+			Resource: data,
+			Request: &fhir.BundleEntryRequest{
+				Method: fhir.HTTPVerbPUT,
+				Url:    caramel.ResourceType(resource) + "/" + *resource.GetId(),
+			},
+		})
+	}
+	if err := client.CreateWithContext(ctx, tx, nil, fhirclient.AtPath("/")); err != nil {
+		return fmt.Errorf("upsert transaction: %w", err)
+	}
+	return nil
 }
 
 // putResources PUT-upserts each resource by its fixed id into the given tenant.

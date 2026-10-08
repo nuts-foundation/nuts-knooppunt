@@ -75,7 +75,9 @@ func mcsdResolveFunc(hapiBaseURL *url.URL) func(context.Context, string) (source
 	return func(ctx context.Context, ura string) (sourceAddress, error) {
 		query := *directory
 		query.RawQuery = url.Values{
-			"identifier": {coding.URANamingSystem + "|" + ura},
+			// The addressing data identifies organizations by URA under the
+			// IG's OID system, not the http://fhir.nl one the NVI still uses.
+			"identifier": {coding.URAOIDNamingSystem + "|" + ura},
 			// One round trip rather than two: the Addressing spec's own endpoint
 			// discovery use case resolves an organization and its endpoints in a
 			// single search.

@@ -6,6 +6,13 @@ import (
 )
 
 const URANamingSystem = "http://fhir.nl/fhir/NamingSystem/ura"
+
+// URAOIDNamingSystem is the URA identifier system the GF Care Service Directory
+// IG requires: the nl-gf-organization invariants only accept a URA under this
+// system. So far only the addressing data uses it; everything else still uses
+// URANamingSystem.
+// https://build.fhir.org/ig/minvws/generiekefuncties-docs/branches/1.0.0/en/StructureDefinition-nl-gf-organization.html
+const URAOIDNamingSystem = "urn:oid:2.16.528.1.1007.3.3"
 const UZINamingSystem = "http://fhir.nl/fhir/NamingSystem/uzi"
 const KVKNamingSystem = "http://fhir.nl/fhir/NamingSystem/kvk"
 const BSNNamingSystem = "http://fhir.nl/fhir/NamingSystem/bsn"

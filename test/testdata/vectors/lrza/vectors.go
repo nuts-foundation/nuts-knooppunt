@@ -6,7 +6,7 @@ import (
 )
 
 // lrza-root-directory is the single central addressing directory: every care
-// organization's Organization + Endpoint resources.
+// organization's Organization, Endpoint and HealthcareService resources.
 func HAPITenant() hapi.Tenant {
 	return hapi.Tenant{
 		Name: "lrza-root-directory",
@@ -33,6 +33,12 @@ func Endpoints() []fhir.Endpoint {
 	return allEndpoints
 }
 
+// HealthcareServices returns every organization's healthcare services in the
+// central addressing directory.
+func HealthcareServices() []fhir.HealthcareService {
+	return CareHomeSunflowerHealthcareServices()
+}
+
 func Resources() []fhir.HasId {
 	var resources []fhir.HasId
 	for _, endpoint := range Endpoints() {
@@ -40,6 +46,9 @@ func Resources() []fhir.HasId {
 	}
 	for _, org := range Organizations() {
 		resources = append(resources, &org)
+	}
+	for _, service := range HealthcareServices() {
+		resources = append(resources, &service)
 	}
 	return resources
 }
