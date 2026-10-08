@@ -5,8 +5,9 @@ This package provides scripts for injecting test data, for:
 - end-to-end tests
 - local docker compose setups
 
-It creates the following test data structure with multiple mCSD directories, plus
-the GF Sandbox demo-patient pool and its NVI localization registrations.
+It creates the following test data structure with a central mCSD addressing
+directory, plus the GF Sandbox demo-patient pool and its NVI localization
+registrations.
 
 ## Care Organizations
 
@@ -14,40 +15,50 @@ the GF Sandbox demo-patient pool and its NVI localization registrations.
 The consumer/requester hospital in the GF Sandbox BGZ demo. It localizes and
 retrieves a patient's data from De Zonnebloem.
 - URA: 00000010
-- Vector package: `vectors/plataan`
-- HAPI tenants: `plataan-admin` (9, admin directory), `plataan-patients` (10, its
-  own hospital-side clinical data)
+- Vector package: `vectors/plataan` (patient-pool data, URA, endpoint-address
+  env vars) + `vectors/lrza` (its Organization + Endpoint addressing data)
+- HAPI tenants: `plataan-patients` (10, its own hospital-side clinical data)
 
 ### Care Home Sunflower / Zorgcentrum De Zonnebloem
 A fictional elderly-care organization; the source (data holder) of the BGZ in the
 demo. (The `sunflower` vector and "De Zonnebloem" are the same organization.)
 - URA: 00000020
-- HAPI tenants: `sunflower-admin` (5), `sunflower-patients` (7)
+- Vector package: `vectors/sunflower` (patient-pool data) + `vectors/lrza`
+  (addressing data)
+- HAPI tenants: `sunflower-patients` (7)
 
 ### Care2Cure Hospital
-A fictional hospital organization (second source, future scenarios).
+A fictional hospital organization (second source, future scenarios), with no
+patient-pool data of its own.
 - URA: 00000030
+- Vector package: `vectors/lrza`
 
 ## mCSD Directory Structure
 
-### Root Directory (LRZa)
-The Dutch Landelijk Register Zorgaanbieders, a national registry of care providers.
-It is the authentic source for organization names and URAs (primary identifier of
-care organizations).
+### Central Addressing Directory (`lrza-root-directory`)
+One directory (`vectors/lrza`, HAPI tenant `lrza-root-directory`) holds every
+care organization's Organization + Endpoint resources directly — no per-org
+admin tenant, no discovery hop. Each organization gets its own file
+(`sunflower.go`, `plataan.go`, `care2cure.go`) for readability.
 
-**Contains:**
-- Organization registrations for all three care organizations (Plataan,
-  Sunflower/Zonnebloem, Care2Cure)
-- mCSD-directory endpoints pointing to each organization's admin directory
+`component/lrza` syncs it wholesale into the query directory, in both compose
+(`KNPT_LRZA_LRZABASEURL`) and the Go e2e harness (`test/e2e/harness`), via
+`POST /lrza/update`.
 
-### Admin Directories
-Each care organization maintains its own admin directory containing:
-- Organization resource with detailed information
-- FHIR endpoints for accessing the organization's services
+`component/mcsd` is **not** used for this directory and has no administration
+directory configured in either. It syncs only a root directory's *discovery
+pointers* — the `mcsd-directory`-payload Endpoints that point at further admin
+directories — and deliberately never syncs a discoverable directory's own
+Organizations (see `buildUpdateTransaction`'s `isDiscoverableDirectory` gate).
+That makes it structurally unable to serve a flattened directory like this one.
+Its decentralized e2e coverage has been retired accordingly; the sync mechanics
+remain covered by the `httptest`-based unit tests in
+`component/mcsd/component_test.go`, and an e2e suite for `component/lrza` is
+still to be written.
 
 ### Query Directory
-The aggregated directory that contains all resources from both root and admin
-directories after the mCSD update process runs.
+The directory that contains the synced addressing resources after
+`POST /lrza/update` runs.
 
 ## GF Sandbox demo-patient pool
 
@@ -94,14 +105,14 @@ records that come back: the NVI rewrites `source.identifier` into a Device
 reference on storage, so a client-side comparison would match nothing and delete
 nothing while every count still looked right.
 
-`vectors.Load` writes the demo organizations into the seeded **local** LRZa tenant
-(`lrza-mcsd-admin`), which is what `KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL` must point
-at in compose. Pointing it at the external test LRZa instead fills the query
-directory with unrelated organizations and none of the demo ones.
+`vectors.Load` writes the demo organizations into the seeded **local** central
+addressing tenant (`lrza-root-directory`), which is what `KNPT_LRZA_LRZABASEURL`
+must point at in compose. Pointing it at the external test LRZA instead fills
+the query directory with unrelated organizations and none of the demo ones.
 
 The compose `init` service runs `Load` + the Nuts subject bootstrap + `SeedNVI` +
-an mCSD update. The update matters: the sync is request-driven (`POST
-/mcsd/update`) with no background timer, so without it the seeded organizations
+an LRZA update. The update matters: the sync is request-driven (`POST
+/lrza/update`) with no background timer, so without it the seeded organizations
 never reach the query directory and the patient is findable but not addressable.
 
 ### Credential issuance
@@ -247,7 +258,8 @@ echo "$ENDPOINT_REF"
 
 Follow the returned `Endpoint/<id>` reference. Note the id is **not** the seeded
 one: the query directory assigns its own ids when it ingests resources from the
-admin directories, so always follow the reference rather than hardcoding an id.
+central addressing directory, so always follow the reference rather than
+hardcoding an id.
 
 ```bash
 curl -s "$QUERY_DIR/$ENDPOINT_REF" | jq -r '.address'
@@ -328,5 +340,5 @@ above proved nothing.
 | "could not resolve host" | Used an in-network hostname from the host shell | Use `localhost:9080`, not `pep-zonnebloem:8080` |
 | Connection refused on `:9080` | PEP not up yet, or host port taken | `docker compose ps`; ports `9080`/`9081` must be free |
 | Discovery registration fails | `bgz-test` not defined, or the CA hash changed | `config/discovery/bgz-test.json`; never regenerate the test CA (see the certs README) |
-| Step 2 finds no Organization | The mCSD sync did not run, or ran against the external LRZa | `docker compose logs init` should show "Running mCSD update"; `KNPT_MCSD_ADMIN_LRZA_FHIRBASEURL` must be the local `lrza-mcsd-admin` tenant |
+| Step 2 finds no Organization | The LRZA sync did not run, or ran against the external LRZA | `docker compose logs init` should show "Running LRZA update"; `KNPT_LRZA_LRZABASEURL` must be the local `lrza-root-directory` tenant |
 | Step 2 returns `null` for the address | Hardcoded Endpoint id | The query directory assigns its own ids — follow `Organization.endpoint[0].reference` instead |

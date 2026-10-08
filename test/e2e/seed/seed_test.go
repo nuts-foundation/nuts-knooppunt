@@ -27,7 +27,7 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-func zonnebloemURA() string { return *sunflower.Organization().Identifier[0].Value }
+func zonnebloemURA() string { return sunflower.URA }
 
 // sharePlataanAs publishes De Plataan's localization records for one patient
 // under clientID, which is what a demo run does and what "restored to the seeded
@@ -129,9 +129,9 @@ func TestPoolBSNsPassElfproef(t *testing.T) {
 func TestSeed_PlataanOrganizationInQueryDirectory(t *testing.T) {
 	h := harness.Start(t)
 
-	// Run the mCSD update so the LRZa root + admin directories flow into the
+	// Run the LRZA update so the central addressing directory flows into the
 	// query directory.
-	invokeMCSDUpdate(t, h.KnooppuntInternalBaseURL)
+	invokeLRZAUpdate(t, h.KnooppuntInternalBaseURL)
 
 	queryClient := fhirclient.New(h.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
 	org, err := searchOrg(queryClient, plataan.URA)
@@ -208,8 +208,6 @@ func TestResetGlobal_PreservesPartitions(t *testing.T) {
 		sunflower.PatientsHAPITenant(),
 		plataan.PatientsHAPITenant(),
 		nvi.HAPITenant(),
-		sunflower.AdminHAPITenant(),
-		plataan.AdminHAPITenant(),
 		lrza.HAPITenant(),
 	} {
 		var bundle fhir.Bundle
@@ -523,9 +521,9 @@ func TestRecyclePatient_RestoresTargetLeavesOthersIntact(t *testing.T) {
 
 // --- helpers ---
 
-func invokeMCSDUpdate(t *testing.T, internalBaseURL *url.URL) {
+func invokeLRZAUpdate(t *testing.T, internalBaseURL *url.URL) {
 	t.Helper()
-	resp, err := http.Post(internalBaseURL.JoinPath("mcsd/update").String(), "application/json", nil)
+	resp, err := http.Post(internalBaseURL.JoinPath("lrza/update").String(), "application/json", nil)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 }

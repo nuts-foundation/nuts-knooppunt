@@ -85,7 +85,7 @@ func organizations() []organization {
 		// Zorgcentrum De Zonnebloem (source / data holder).
 		{
 			certKey:     "zonnebloem",
-			subject:     *sunflower.Organization().Identifier[0].Value,
+			subject:     sunflower.URA,
 			fhirBaseURL: sunflower.EndpointAddress(),
 		},
 	}
@@ -167,14 +167,14 @@ func main() {
 		panic("Unable to seed NVI: " + err.Error())
 	}
 
-	// Run the mCSD sync so the seeded admin directories flow into the query
-	// directory. Without this the demo organizations exist but are not
-	// resolvable to an address, and there is no timer that would eventually
-	// do it - AC1 requires the deployment to be addressable with no manual
-	// step.
-	println("Running mCSD update...")
-	if err := invokeMCSDUpdate(internalAPI); err != nil {
-		panic("Unable to run mCSD update: " + err.Error())
+	// Run the LRZA sync so the seeded central addressing directory flows into
+	// the query directory. Without this the demo organizations exist but are
+	// not resolvable to an address, and there is no timer that would
+	// eventually do it - AC1 requires the deployment to be addressable with
+	// no manual step.
+	println("Running LRZA update...")
+	if err := invokeLRZAUpdate(internalAPI); err != nil {
+		panic("Unable to run LRZA update: " + err.Error())
 	}
 
 	println("Seed complete.")
@@ -279,11 +279,11 @@ func loadPrivateKey(path string) (crypto.Signer, error) {
 	return key, nil
 }
 
-// invokeMCSDUpdate triggers a synchronization of the configured mCSD
-// administration directories into the query directory. The sync is
-// request-driven (there is no background timer), so the seed has to ask for it.
-func invokeMCSDUpdate(internalAPI string) error {
-	httpResponse, err := httpClient.Post(internalAPI+"/mcsd/update", "application/json", nil)
+// invokeLRZAUpdate triggers a synchronization of the configured central
+// addressing directory into the query directory. The sync is request-driven
+// (there is no background timer), so the seed has to ask for it.
+func invokeLRZAUpdate(internalAPI string) error {
+	httpResponse, err := httpClient.Post(internalAPI+"/lrza/update", "application/json", nil)
 	if err != nil {
 		return err
 	}

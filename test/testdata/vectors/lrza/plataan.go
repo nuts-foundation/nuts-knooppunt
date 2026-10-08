@@ -1,59 +1,80 @@
 package lrza
 
 import (
-	"net/url"
-
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/plataan"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-// HospitalPlataan is Ziekenhuis De Plataan's Organization as registered in the
-// LRZa root directory (URA 00000010). Its endpoint points at De Plataan's own
-// admin directory, which the mCSD update process then syncs into the query
-// directory.
+// HospitalPlataan is Ziekenhuis De Plataan's mCSD Organization resource, as
+// it appears in the central addressing directory.
 func HospitalPlataan() fhir.Organization {
 	return fhir.Organization{
-		Id: to.Ptr("ea7d76a8-d380-56d4-add9-f27225aa71c6"),
+		Id: to.Ptr("8ae34d4d-89f5-526f-a289-4139de4edd4f"),
 		Meta: &fhir.Meta{
-			Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-organization"},
+			Profile: []string{"http://fhir.generiekefuncties.nl/csd/StructureDefinition/nl-gf-organization"},
 		},
 		Name: to.Ptr("Ziekenhuis De Plataan"),
 		Identifier: []fhir.Identifier{
 			{
 				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),
-				Value:  to.Ptr("00000010"),
+				Value:  to.Ptr(plataan.URA),
 			},
 		},
 		Endpoint: []fhir.Reference{
 			{
-				Reference: to.Ptr("Endpoint/ba13e2aa-7f8e-548d-8a68-31f6adc31bbf"),
+				Reference: to.Ptr("Endpoint/cb75e784-b658-5a2f-acd7-6d513f9b0b43"),
+				Type:      to.Ptr("Endpoint"),
+			},
+			{
+				Reference: to.Ptr("Endpoint/7f2a6c94-51db-4e33-8a0c-9d4e17b3f605"),
 				Type:      to.Ptr("Endpoint"),
 			},
 		},
 	}
 }
 
-func HospitalPlataanEndpoints(hapiBaseURL *url.URL) []fhir.Endpoint {
+// HospitalPlataanEndpoints are De Plataan's FHIR and
+// authorization-server endpoints, published directly in the central
+// addressing directory. See CareHomeSunflowerEndpoints for the coding
+// sources; the FHIR endpoint's payloadType lists the categories De Plataan's
+// patients tenant actually holds for the demo pool (see
+// test/testdata/README.md).
+func HospitalPlataanEndpoints() []fhir.Endpoint {
 	return []fhir.Endpoint{
 		{
-			Id:      to.Ptr("ba13e2aa-7f8e-548d-8a68-31f6adc31bbf"),
-			Address: hapiBaseURL.JoinPath("plataan-admin").String(),
+			Id:      to.Ptr("cb75e784-b658-5a2f-acd7-6d513f9b0b43"),
+			Address: plataan.EndpointAddress(),
 			Meta: &fhir.Meta{
-				Profile: []string{"http://nuts-foundation.github.io/nl-generic-functions-ig/StructureDefinition/nl-gf-endpoint"},
+				Profile: []string{"http://fhir.generiekefuncties.nl/csd/StructureDefinition/nl-gf-endpoint"},
 			},
 			Status: fhir.EndpointStatusActive,
+			ConnectionType: fhir.Coding{
+				System: to.Ptr("http://terminology.hl7.org/CodeSystem/endpoint-connection-type"),
+				Code:   to.Ptr("hl7-fhir-rest"),
+			},
 			PayloadType: []fhir.CodeableConcept{
-				{
-					Coding: []fhir.Coding{
-						{
-							System: to.Ptr("http://nuts-foundation.github.io/nl-generic-functions-ig/CodeSystem/nl-gf-data-exchange-capabilities"),
-							Code:   to.Ptr("http://nuts-foundation.github.io/nl-generic-functions-ig/CapabilityStatement/nl-gf-admin-directory-update-client"),
-						},
-					},
-				},
+				{Coding: []fhir.Coding{{System: to.Ptr("http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-data-categories-cs"), Code: to.Ptr("Patient")}}},
+				{Coding: []fhir.Coding{{System: to.Ptr("http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-data-categories-cs"), Code: to.Ptr("Condition")}}},
+				{Coding: []fhir.Coding{{System: to.Ptr("http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-data-categories-cs"), Code: to.Ptr("MedicationRequest")}}},
 			},
 			Period: &fhir.Period{
-				Start: to.Ptr("2025-05-01T00:00:00Z"),
+				Start: to.Ptr("2025-01-01T00:00:00Z"),
+			},
+		},
+		{
+			Id:      to.Ptr("7f2a6c94-51db-4e33-8a0c-9d4e17b3f605"),
+			Address: plataan.AuthorizationServerAddress(),
+			Meta: &fhir.Meta{
+				Profile: []string{"http://fhir.generiekefuncties.nl/csd/StructureDefinition/nl-gf-endpoint"},
+			},
+			Status: fhir.EndpointStatusActive,
+			ConnectionType: fhir.Coding{
+				System: to.Ptr("http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-authorization-server-cs"),
+				Code:   to.Ptr("oauth-nuts"),
+			},
+			Period: &fhir.Period{
+				Start: to.Ptr("2025-01-01T00:00:00Z"),
 			},
 		},
 	}
