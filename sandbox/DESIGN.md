@@ -193,7 +193,7 @@ Cross-cutting:
 
 One dataset, consistent across every system it touches. Extends the existing test/testdata vectors; applied by an
 idempotent loader that runs at deployment (the init compose service locally, a seed job/hook in the Helm deployment when
-hosted) and again on every reset.
+hosted). Every reset runs its patient part again (section 5.6).
 
 ### 5.1 Organizations
 
@@ -274,11 +274,12 @@ When the user saves in De Zonnebloem's EHR:
 
 ### 5.6 Reset semantics
 
-Reset = expunge the mutable stores (both FHIR datasets, NVI Lists, Mitz subscriptions, step-event retention) and re-run
-the loader. After reset the fixed dataset is exactly restored (semantically identical fixtures; byte identity is not a
-HAPI guarantee), user-created records are gone, and the demo starts clean at step 1. A per-patient recycle also removes
-the records added for that patient in De Zonnebloem's EHR, found by their user-created tag; an untagged record someone
-else added stays until a global reset.
+Reset = expunge the mutable stores (both FHIR datasets, NVI Lists, Mitz subscriptions, step-event retention) and reload
+their fixtures. The directories and the PIP keep what the seed wrote: a demo never changes them, and only the seed is
+configured with the deployment's endpoint addresses. After reset the fixed dataset is exactly restored (semantically
+identical fixtures; byte identity is not a HAPI guarantee), user-created records are gone, and the demo starts clean at
+step 1. A per-patient recycle also removes the records added for that patient in De Zonnebloem's EHR, found by their
+user-created tag; an untagged record someone else added stays until a global reset.
 
 Two gaps against that as implemented, both recorded in `test/testdata/README.md`:
 
@@ -298,10 +299,11 @@ screen renders "Consent subscription started" over a subscription that was never
 detect it, because success is what it was told. `main` acknowledges the quirk in a `NOTE` in `CreateSubscription`; the
 fix belongs in its own PR against that component.
 
-Seeding is idempotent so reset, redeploy and first boot are the same code path. Because demo state is per patient
-(section 5.7), a global reset is rarely needed between demos: presenters consume fresh patients from the pool, and reset
-replenishes the pool once it runs dry. A per-patient recycle (restore one patient to unshared) covers the common case
-without touching anyone else's run. Both are demo-bar actions backed by endpoints, never a redeploy.
+Seeding is idempotent so redeploy and first boot are the same code path, and reset reuses its patient part. Because demo
+state is per patient (section 5.7), a global reset is rarely needed between demos: presenters consume fresh patients
+from the pool, and reset replenishes the pool once it runs dry. A per-patient recycle (restore one patient to unshared)
+covers the common case without touching anyone else's run. Both are demo-bar actions backed by endpoints, never a
+redeploy.
 
 ### 5.7 Demo pool and locking
 
@@ -544,16 +546,16 @@ enriched home with per-item source attribution and marker highlighting.
 Everything in section 5: the plataan vector (URA 00000010), the idempotent bootstrap (did:web, wallet-held
 `X509Credential` for the URA, mCSD Organization plus Endpoint, tenant registration), Anna's two-source clinical data,
 the seeded NVI registration for De Zonnebloem, BSN verification against the RvIG test set, and the reset endpoint
-(expunge mutable stores, re-run the loader, and clear Mitz subscriptions where a mock is configured, reporting a partial
-restore where one is not; see section 5.6). The seed must run both as the
-compose init service and as a job in the hosted deployment; reset reuses it. Seeding covers the whole demo pool (section
-5.7), and the reset endpoint gains a per-patient recycle variant; both respect demo locks. The hosted deployment points
+(expunge mutable stores, reload their fixtures, and clear Mitz subscriptions where a mock is configured, reporting a
+partial restore where one is not; see section 5.6). The seed must run both as the compose init service and as a job in
+the hosted deployment; reset reuses its patient fixtures. Seeding covers the whole demo pool (section 5.7), and the
+reset endpoint gains a per-patient recycle variant; both respect demo locks. The hosted deployment points
 the pseudonymisation component (`prsurl`) at the mock PRS, as offline compose does since PR #561.
 
 - Extends: `test/testdata` vectors, the `init` compose service and its hosted seed-job counterpart, HAPI `$expunge`.
 - Acceptance: a fresh deployment (compose locally, Helm hosted) yields a findable, addressable, retrievable Anna without
-  manual steps; reset returns every store to the published fixture and removes user-created records, without
-  redeploying, within the two limits named in section 5.6.
+  manual steps; reset returns every store a demo changes to the published fixture and removes user-created records,
+  without redeploying, within the two limits named in section 5.6.
 
 ### E6 Step events (capture middleware)
 

@@ -65,8 +65,8 @@ func allTenants() []hapi.Tenant {
 // clinical resources on both the Plataan and Zonnebloem sides.
 //
 // Load is idempotent: every write is a PUT-by-fixed-id upsert and there is no
-// destructive $expunge, so re-running Load (first boot, re-seed, reset) restores
-// the seeded resources without touching resources it does not own. It does not
+// destructive $expunge, so re-running Load (first boot, re-seed) restores the
+// seeded resources without touching resources it does not own. It does not
 // register NVI Lists — those go through the Knooppunt; call SeedNVI for that.
 func Load(hapiBaseURL *url.URL) (*Details, error) {
 	ctx := context.Background()
@@ -106,9 +106,6 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	if err := putResources(ctx, sunflower.AdminHAPITenant().FHIRClient(hapiBaseURL), sunflower.AdminResources()); err != nil {
 		return nil, fmt.Errorf("seed sunflower admin resources: %w", err)
 	}
-	if err := putResources(ctx, sunflower.PatientsHAPITenant().FHIRClient(hapiBaseURL), sunflower.PatientsResources()); err != nil {
-		return nil, fmt.Errorf("seed sunflower patients resources: %w", err)
-	}
 
 	//
 	// Plataan Hospital (consumer/requester)
@@ -118,14 +115,12 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	}
 
 	//
-	// Demo patient pool: Plataan-side data in the plataan-patients tenant,
-	// Zonnebloem-side data in the existing sunflower-patients tenant.
+	// Patients: Zonnebloem's own, and the demo patient pool, with its Plataan-side
+	// data in the plataan-patients tenant and its Zonnebloem-side data in the
+	// existing sunflower-patients tenant.
 	//
-	if err := putResources(ctx, plataan.PatientsHAPITenant().FHIRClient(hapiBaseURL), pool.PlataanResources()); err != nil {
-		return nil, fmt.Errorf("seed pool plataan resources: %w", err)
-	}
-	if err := putResources(ctx, sunflower.PatientsHAPITenant().FHIRClient(hapiBaseURL), pool.ZonnebloemResources()); err != nil {
-		return nil, fmt.Errorf("seed pool zonnebloem resources: %w", err)
+	if err := loadPatientFixtures(ctx, hapiBaseURL); err != nil {
+		return nil, err
 	}
 
 	//
@@ -146,6 +141,22 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 		NVI:  FHIRAPIDetails{FHIRBaseURL: nviTenant.BaseURL(hapiBaseURL)},
 		PIP:  FHIRAPIDetails{FHIRBaseURL: pipTenant.BaseURL(hapiBaseURL)},
 	}, nil
+}
+
+// loadPatientFixtures PUTs the seeded clinical resources into both patient
+// tenants: the stores ResetGlobal clears, and so the only ones it reloads.
+func loadPatientFixtures(ctx context.Context, hapiBaseURL *url.URL) error {
+	zonnebloem := sunflower.PatientsHAPITenant().FHIRClient(hapiBaseURL)
+	if err := putResources(ctx, zonnebloem, sunflower.PatientsResources()); err != nil {
+		return fmt.Errorf("seed sunflower patients resources: %w", err)
+	}
+	if err := putResources(ctx, plataan.PatientsHAPITenant().FHIRClient(hapiBaseURL), pool.PlataanResources()); err != nil {
+		return fmt.Errorf("seed pool plataan resources: %w", err)
+	}
+	if err := putResources(ctx, zonnebloem, pool.ZonnebloemResources()); err != nil {
+		return fmt.Errorf("seed pool zonnebloem resources: %w", err)
+	}
+	return nil
 }
 
 // ExpungeAll removes ALL data from the HAPI server (system-level $expunge),
@@ -231,13 +242,19 @@ func (t SandboxTarget) clientID() string {
 	return t.NVIClientID
 }
 
-// ResetGlobal restores the entire seeded dataset to its fixtures ("restore
-// fixtures" path). It clears the mutable stores — removing any user-created
-// records, which have random ids a plain re-seed cannot overwrite — then re-runs
-// Load (re-PUTs the mCSD/PIP directories and pool resources) and SeedNVI, removes
-// the localization records the sandbox published on De Plataan's side, and clears
-// the mock Mitz's captured consent subscriptions. Every pool patient ends up
-// unshared, which is the state a demo starts from.
+// ResetGlobal restores the seeded dataset to its fixtures ("restore fixtures"
+// path). It clears the mutable stores — removing any user-created records, which
+// have random ids a plain re-seed cannot overwrite — then reloads their fixtures
+// and re-runs SeedNVI, removes the localization records the sandbox published on
+// De Plataan's side, and clears the mock Mitz's captured consent subscriptions.
+// Every pool patient ends up unshared, which is the state a demo starts from.
+//
+// The mCSD directories and the PIP keep what the seed wrote. A demo never
+// changes them, and the addresses in the admin directories depend on the
+// deployment, which configures them on the seed alone (the SEED_* variables in
+// the sunflower and plataan packages). The sandbox runs ResetGlobal without
+// them, so reloading the directories here would publish the localhost defaults
+// in their place.
 //
 // Clearing is per-resource deletion within the tenant, not $expunge; see
 // clearTenant for why the expunge form cannot be used here.
@@ -273,7 +290,7 @@ func ResetGlobal(ctx context.Context, target SandboxTarget) error {
 		}
 	}
 
-	if _, err := Load(hapiBaseURL); err != nil {
+	if err := loadPatientFixtures(ctx, hapiBaseURL); err != nil {
 		return fmt.Errorf("reload fixtures: %w", err)
 	}
 	if err := SeedNVI(ctx, knooppuntInternalBaseURL); err != nil {

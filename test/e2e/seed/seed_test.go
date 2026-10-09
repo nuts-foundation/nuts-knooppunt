@@ -218,6 +218,51 @@ func TestResetGlobal_PreservesPartitions(t *testing.T) {
 	}
 }
 
+// TestResetGlobal_LeavesTheDirectoriesAsSeeded is the regression guard for a
+// reset publishing addresses the seed never published.
+//
+// The FHIR and authorization server addresses in both admin directories depend
+// on the deployment, which configures them on the seed alone, through the SEED_*
+// variables. The Reset button runs ResetGlobal in the sandbox, which does not
+// have them, so a reset that reloaded the directories replaced the deployment's
+// addresses with the localhost defaults. Nothing showed it until the next mCSD
+// update copied them into the query directory.
+func TestResetGlobal_LeavesTheDirectoriesAsSeeded(t *testing.T) {
+	seeded := map[string]string{
+		sunflower.EndpointAddressEnvVar:     "http://pep-zonnebloem.seeded.test/fhir",
+		sunflower.AuthorizationServerEnvVar: "https://knooppunt.seeded.test/nuts/oauth2/00000020",
+		plataan.EndpointAddressEnvVar:       "http://pep-plataan.seeded.test/fhir",
+		plataan.AuthorizationServerEnvVar:   "https://knooppunt.seeded.test/nuts/oauth2/00000010",
+	}
+	for name, address := range seeded {
+		t.Setenv(name, address)
+	}
+	h := harness.Start(t)
+	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
+
+	// The sandbox's environment, which has none of the seed's addresses.
+	for name := range seeded {
+		t.Setenv(name, "")
+	}
+	require.NoError(t, vectors.ResetGlobal(t.Context(), sandboxTarget(t, h)))
+
+	for _, want := range []struct {
+		tenant   hapi.Tenant
+		endpoint string
+		address  string
+	}{
+		{sunflower.AdminHAPITenant(), "f8a9c2d1-4567-489a-bcde-123456789abc", "http://pep-zonnebloem.seeded.test/fhir"},
+		{sunflower.AdminHAPITenant(), "3c1f0b6e-2d84-4a15-9f77-6b0e2a5c8d31", "https://knooppunt.seeded.test/nuts/oauth2/00000020"},
+		{plataan.AdminHAPITenant(), "cb75e784-b658-5a2f-acd7-6d513f9b0b43", "http://pep-plataan.seeded.test/fhir"},
+		{plataan.AdminHAPITenant(), "7f2a6c94-51db-4e33-8a0c-9d4e17b3f605", "https://knooppunt.seeded.test/nuts/oauth2/00000010"},
+	} {
+		var endpoint fhir.Endpoint
+		require.NoError(t, want.tenant.FHIRClient(h.HAPIBaseURL).ReadWithContext(t.Context(), "Endpoint/"+want.endpoint, &endpoint))
+		require.Equalf(t, want.address, endpoint.Address,
+			"%s Endpoint/%s must keep the address the seed published", want.tenant.Name, want.endpoint)
+	}
+}
+
 // TestResetGlobal_RemovesUserCreatedRecordsAndRestoresFixtures covers the other
 // half of the reset contract: records created during a demo have random ids that
 // a fixed-id re-seed cannot overwrite, so the reset must delete them, while the
