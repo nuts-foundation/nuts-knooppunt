@@ -378,7 +378,7 @@ repeat requests. Playback pauses when the viewer is closed or the document is hi
 reduced motion, and remembers an opaque cursor within the tab. Refreshing therefore does not
 automatically animate the entire retained history again.
 
-The functional map places Plataan's access service and Sunflower's authorization server inside
+The functional map places Plataan's access service and De Zonnebloem's authorization server inside
 their respective organization boundaries. The access request depicts the configured source issuer;
 Technical mode retains the actual HTTP call to Plataan's local Nuts service. A returning key requires
 captured token-receipt evidence. The source vault opens separately, only for successful source
@@ -387,7 +387,7 @@ The displayed access requirements describe the demo's contract. They are not ind
 results: the viewer does not receive evidence of each internal policy decision.
 
 Discovery is labeled Find data sources. Confirmed retrieval starts with Request access key, then
-Find patient at Sunflower and separate allergy, condition and medication searches as observed.
+Find patient at De Zonnebloem and separate allergy, condition and medication searches as observed.
 Each source request with captured key-attachment evidence carries the key icon on its outgoing
 packet. Technical mode explains the patient POST search and shows the authorization-presence
 metadata alongside the method, path, headers and body as sent. The icon never follows merely from

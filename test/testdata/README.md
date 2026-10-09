@@ -18,7 +18,7 @@ retrieves a patient's data from De Zonnebloem.
 - HAPI tenants: `plataan-admin` (9, admin directory), `plataan-patients` (10, its
   own hospital-side clinical data)
 
-### Care Home Sunflower / Zorgcentrum De Zonnebloem
+### Zorgcentrum De Zonnebloem
 A fictional elderly-care organization; the source (data holder) of the BGZ in the
 demo. (The `sunflower` vector and "De Zonnebloem" are the same organization.)
 - URA: 00000020
@@ -37,7 +37,7 @@ care organizations).
 
 **Contains:**
 - Organization registrations for all three care organizations (Plataan,
-  Sunflower/Zonnebloem, Care2Cure)
+  Zonnebloem, Care2Cure)
 - mCSD-directory endpoints pointing to each organization's admin directory
 
 ### Admin Directories

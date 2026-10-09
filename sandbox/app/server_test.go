@@ -147,6 +147,70 @@ func TestEhrRedirectsWhenNotSignedIn(t *testing.T) {
 	require.Equal(t, "/demo/login", res.Header.Get("Location"))
 }
 
+// The mux matches a page's path exactly. A URL typed or pasted with a trailing
+// slash, /demo/ehr/ for one, is sent to that page rather than to a 404.
+func TestTrailingSlashRedirectsToTheRoute(t *testing.T) {
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	record := "/demo/ehr/patients/" + pool.Patients()[0].Key
+
+	for _, tc := range []struct {
+		method   string
+		path     string
+		status   int
+		location string
+	}{
+		{http.MethodGet, "/demo/ehr/", http.StatusTemporaryRedirect, "/demo/ehr"},
+		{http.MethodGet, "/demo/", http.StatusTemporaryRedirect, "/demo"},
+		{http.MethodGet, record + "/", http.StatusTemporaryRedirect, record},
+		{http.MethodGet, "/demo/ehr/?notice=patient-busy&from=%2Fdemo", http.StatusTemporaryRedirect, "/demo/ehr?notice=patient-busy&from=%2Fdemo"},
+		// An escaped slash belongs to its segment, and stays escaped.
+		{http.MethodGet, "/demo/ehr/patients/a%2Fb/", http.StatusTemporaryRedirect, "/demo/ehr/patients/a%2Fb"},
+		// The route is looked up for the request's own method. Logout is a POST,
+		// so a GET for it has nowhere to go.
+		{http.MethodPost, "/demo/logout/", http.StatusTemporaryRedirect, "/demo/logout"},
+		{http.MethodGet, "/demo/logout/", http.StatusNotFound, ""},
+		// The file server routes a directory with its slash, and would send
+		// /static/css straight back.
+		{http.MethodGet, "/static/css/", http.StatusOK, ""},
+		// Nothing answers /nope either, so there is nowhere to send it.
+		{http.MethodGet, "/nope/", http.StatusNotFound, ""},
+	} {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			req, err := http.NewRequest(tc.method, srv.URL+tc.path, nil)
+			require.NoError(t, err)
+			res, err := client.Do(req)
+			require.NoError(t, err)
+			defer res.Body.Close()
+			require.Equal(t, tc.status, res.StatusCode)
+			require.Equal(t, tc.location, res.Header.Get("Location"))
+		})
+	}
+}
+
+// A path that starts with two slashes must not come back as a Location that
+// does: a browser reads //evil.example/demo/ehr as the host evil.example.
+func TestTrailingSlashRedirectStaysOnThisSite(t *testing.T) {
+	srv := httptest.NewServer(NewMux(testConfig()))
+	t.Cleanup(srv.Close)
+	client := srv.Client()
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	for _, requested := range []string{"//demo/ehr/", "//evil.example/demo/ehr/"} {
+		t.Run(requested, func(t *testing.T) {
+			res, err := client.Get(srv.URL + requested)
+			require.NoError(t, err)
+			defer res.Body.Close()
+
+			location := res.Header.Get("Location")
+			require.True(t, strings.HasPrefix(location, "/") && !strings.HasPrefix(location, "//"),
+				"the redirect must name a path on this site, got %q", location)
+		})
+	}
+}
+
 func TestLoginRedirectsToDezi(t *testing.T) {
 	srv := httptest.NewServer(NewMux(testConfig()))
 	t.Cleanup(srv.Close)
@@ -1007,11 +1071,10 @@ func TestEhrHomeOffersTheAuthorizeControl(t *testing.T) {
 	require.Contains(t, form, "Show what is in my access token", "the control must say what clicking it does")
 }
 
-// The claims page renders inside the EHR chrome, whose sidebar items are
-// static divs, so its only other controls are sign-out and reset, and both end
-// the demo. Reload is not an exit either: the page is a POST response with no
-// redirect after it, so the browser offers to resubmit the form instead. This
-// link is the only way off the screen that leaves the session standing.
+// The claims page is a POST response with no redirect after it, so reload is not
+// an exit: the browser offers to resubmit the form instead. Sign-out and reset
+// both end the demo, which leaves a link into the EHR as the only way off the
+// screen that keeps the session standing.
 func TestAuthorizeLinksBackToTheEhr(t *testing.T) {
 	srv, client := authorizeSandbox(t, nodeVouchingForTheToken(t).URL)
 

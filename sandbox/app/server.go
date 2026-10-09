@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path"
 	"sort"
 	"strings"
 
@@ -242,7 +243,7 @@ type patientStatus struct {
 // NewMux returns the GF Sandbox HTTP handler. The sandbox is a standalone
 // application on its own port; it is not a knooppunt component (DESIGN.md
 // standing decision 5).
-func NewMux(cfg Config) *http.ServeMux {
+func NewMux(cfg Config) http.Handler {
 	if cfg.Locks == nil {
 		cfg.Locks = NewRegistry()
 	}
@@ -541,7 +542,46 @@ func NewMux(cfg Config) *http.ServeMux {
 	mux.HandleFunc("POST /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.withPatientRun(cfg.handleShare)))
 	mux.HandleFunc("GET /demo/ehr/patients/{key}/retrieve", requireSession(signedIn, cfg.withPatientRun(cfg.handleRetrieveForm)))
 	mux.HandleFunc("POST /demo/ehr/patients/{key}/retrieve", requireSession(signedIn, cfg.withPatientRun(cfg.handleRetrieve)))
-	return mux
+	return redirectTrailingSlash(mux)
+}
+
+// redirectTrailingSlash sends a request for a path the mux has no route for to
+// the same path without its trailing slash, when the mux routes that. The page
+// patterns match their path exactly, so without this /demo/ehr/ is a 404 next
+// to a working /demo/ehr. This is the mux's own /tree to /tree/ redirect the
+// other way round, with the same 307.
+func redirectTrailingSlash(mux *http.ServeMux) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if target, ok := slashlessRoute(mux, r); ok {
+			http.Redirect(w, r, target, http.StatusTemporaryRedirect)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
+}
+
+// slashlessRoute returns r's URL without its trailing slash, if the mux has no
+// route for the path as written and does have one without the slash.
+func slashlessRoute(mux *http.ServeMux, r *http.Request) (string, bool) {
+	escaped := r.URL.EscapedPath()
+	if !strings.HasSuffix(escaped, "/") {
+		return "", false
+	}
+	if _, pattern := mux.Handler(r); pattern != "" {
+		return "", false
+	}
+	// path.Clean rather than trimming the slash: it also collapses a leading //,
+	// where trimming //evil.example/demo/ehr/ would produce a Location a browser
+	// reads as the host evil.example.
+	target, err := url.Parse(path.Clean(escaped))
+	if err != nil {
+		return "", false
+	}
+	if _, pattern := mux.Handler(&http.Request{Method: r.Method, Host: r.Host, URL: target}); pattern == "" {
+		return "", false
+	}
+	target.RawQuery = r.URL.RawQuery
+	return target.String(), true
 }
 
 // demoNotice resolves the notice query param to display text, handling the
