@@ -49,6 +49,8 @@ func actionForRequest(r *http.Request) string {
 			return "discover"
 		}
 		return "retrieve"
+	case strings.HasSuffix(r.URL.Path, "/consent"):
+		return "consent"
 	default:
 		return "record"
 	}
