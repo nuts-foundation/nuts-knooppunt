@@ -1,5 +1,5 @@
 import { createJourneyStrip } from './journey-strip.js';
-import { journeyTargets, subscriptionResult, accessPresentation, callCount } from './journey-model.js';
+import { journeyTargets, subscriptionResult, accessPresentation, callCount, consentPresentation } from './journey-model.js';
 import { createPlayback } from './event-playback.js';
 
 export function createEventFeed(runId, { onStep, onGap, onEnd } = {}) {
@@ -34,6 +34,11 @@ const labels = {
 
 export function eventSummary(event) {
   const subject = event.gf === 'exchange' ? 'Source request' : `${labels[event.gf] || 'Step'} request`;
+  if (event.purpose === 'consent-check') return event.outcome === 'error' ? 'Consent request failed'
+    : `Mitz answered ${event.response?.consentDecision === 'Permit' ? 'permit' : 'deny'}`;
+  if (event.purpose === 'consent-notification') return 'Mitz notification received';
+  if (event.purpose === 'consent-change' && event.outcome === 'ok') return event.request?.body?.decision === 'Permit'
+    ? 'Consent given again in Mitz' : 'Consent withdrawn in Mitz';
   if (event.outcome === 'deny') return `${subject} refused`;
   if (event.outcome === 'error') return `${subject} failed`;
   switch (event.gf) {
@@ -140,7 +145,12 @@ export function mountViewer(dock) {
     if (event.ts) call.append(node('p', 'gf-step-result', `Completed at ${timeLabel(event.ts)}`));
     if (children.length) {
       const internal = node('div', 'gf-internal');
-      internal.append(node('p', 'gf-http-label', 'Internal PRS calls made within this request'));
+      const consentChecks = children.every(child => child.purpose === 'consent-check');
+      internal.append(node('p', 'gf-http-label', consentChecks
+        ? 'Closed question the source asked Mitz for this request'
+        : 'Internal PRS calls made within this request'));
+      if (consentChecks) internal.append(node('p', 'gf-step-result',
+        'Recorded by the mock Mitz and read from its decision log by trace id. De Plataan cannot see this call; the viewer shows it for the demo.'));
       for (const child of children) internal.append(callDetails(child, [], false));
       if (followChanged && document.body.classList.contains('hood-tech') && children.some(child => activeCalls.has(child))) call.open = true;
       call.append(internal);
@@ -149,7 +159,7 @@ export function mountViewer(dock) {
   }
   function technicalCalls(action, state) {
     const container = node('div', 'gf-technical');
-    container.append(node('p', 'gf-step-result', `${result(action)}. Calls below are ordered by completion; internal PRS calls are nested under their parent request.`));
+    container.append(node('p', 'gf-step-result', `${result(action)}. Calls below are ordered by completion; calls made inside a request (PRS, the source's question to Mitz) are nested under it.`));
     const calls = node('ol', 'gf-calls');
     const background = details(`status:${action.id}`, 'gf-background-action', 'Background status reads');
     let backgroundCalls = 0;
@@ -183,6 +193,17 @@ export function mountViewer(dock) {
       const categories = [...new Set(group.events.map(event => event.resourceType).filter(Boolean))];
       if (categories.length) content.append(node('p', 'gf-step-result', categories.join(' · ')));
       if (group.purpose === 'pseudonymization') content.append(node('p', 'gf-step-result', 'Internal PRS evidence for the following NVI calls'));
+      const consent = consentPresentation(group, action);
+      if (group.purpose === 'consent-check') content.append(node('p', 'gf-step-result',
+        consent.state === 'permit' ? 'Before answering, the source asked Mitz whether this patient consents. Mitz answered yes.'
+          : consent.state === 'deny' ? 'The source asked Mitz for this request. Mitz answered no.'
+            : 'The source asked Mitz and got no usable answer.'));
+      if (group.purpose === 'consent-notification') content.append(node('p', 'gf-step-result',
+        group.events.some(event => event.response?.copyRemoved === true)
+          ? 'Through De Plataan’s subscription. The data retrieved earlier was removed from the record.'
+          : 'Through De Plataan’s subscription. Nothing had to be removed from the record.'));
+      if (group.purpose === 'consent-change') content.append(node('p', 'gf-step-result',
+        'Simulated: the demo changed the answer in the mock Mitz, standing in for the patient.'));
       if (current) content.append(node('span', 'gf-stage-now', state.paused ? 'Paused here' : 'Playing this step'));
       const access = accessPresentation(group);
       if (access.requestDescription) content.append(node('p', 'gf-step-result', access.requestDescription));

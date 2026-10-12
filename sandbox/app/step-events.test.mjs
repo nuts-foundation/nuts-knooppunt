@@ -644,3 +644,182 @@ test('a page restored from the back-forward cache reloads, although pagehide cle
   window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
   assert.equal(reloads, 1, 'the closed stream is only restored by a reload');
 });
+
+// Read from the module object, so a name the model does not export yet fails the
+// tests that use it and not the whole file.
+const { buildActionGroups, consentPresentation, consentChangeLabel, journeyTargets } = model;
+
+const exchange = (seq, overrides = {}) => ({
+  runId: 'run-one', seq, gf: 'exchange', outcome: 'ok', durationMs: 20, actionId: 'retrieve-1', action: 'retrieve',
+  purpose: 'exchange', resourceType: 'Patient', callId: `call-${seq}`, ts: new Date(20000 + seq * 10).toISOString(),
+  request: { method: 'POST', path: '/fhir/Patient/_search', tokenAttached: true },
+  response: { status: 200, body: { resourceType: 'Bundle' } }, ...overrides,
+});
+const check = (seq, parent, decision, overrides = {}) => ({
+  runId: 'run-one', seq, gf: 'consent', actor: 'knooppunt', purpose: 'consent-check', parentCallId: parent.callId,
+  actionId: parent.actionId, action: parent.action, resourceType: parent.resourceType, callId: `check-${seq}`,
+  outcome: decision === 'Permit' ? 'ok' : decision ? 'deny' : 'error', durationMs: 1,
+  ts: new Date(Date.parse(parent.ts) - 5).toISOString(),
+  request: { method: 'POST', path: '/geslotenautorisatievraag/xacml3', body: '<Request/>' },
+  response: { status: decision ? 200 : 500, body: '<Response/>', consentDecision: decision || undefined }, ...overrides,
+});
+const stageOf = (action, purpose, resourceType) =>
+  action.stages.find(stage => stage.purpose === purpose && (!resourceType || stage.events[0].resourceType === resourceType));
+
+test('consent events light their own route, and subscriptions keep theirs', () => {
+  assert.equal(journeyTargets({ gf: 'consent', purpose: 'consent-check' }), '#js-mitz, #js-source, #jsp-mitzcheck');
+  assert.equal(journeyTargets({ gf: 'consent', purpose: 'consent-notification' }), '#js-mitz, #jsp-mitzsub');
+  assert.equal(journeyTargets({ gf: 'consent', purpose: 'consent-change' }), '#js-mitz');
+  assert.equal(journeyTargets({ gf: 'consent', purpose: 'subscription' }), '#js-mitz, #jsp-mitzsub');
+  assert.equal(journeyTargets({ gf: 'consent' }), '#js-mitz, #jsp-mitzsub');
+});
+
+test('a consent check is a stage of its own before its source query, and is not called PRS', () => {
+  const patient = exchange(2);
+  const [action] = buildActionGroups([patient, check(3, patient, 'Permit')]);
+  assert.deepEqual(action.stages.map(stage => stage.purpose), ['consent-check', 'exchange']);
+  assert.equal(action.stages[0].label, 'Consent check at Mitz');
+  assert.equal(action.prsUnavailable, false, 'a retrieval has no NVI call to miss PRS evidence for');
+});
+
+test('PRS children keep their own stage and label next to consent checks', () => {
+  const nvi = { ...observed(1, 'registration'), actionId: 'a', callId: 'nvi-1' };
+  const prs = { ...observed(2, 'pseudonymization', { gf: 'pseudonym', parentCallId: 'nvi-1' }), actionId: undefined };
+  const [action] = buildActionGroups([nvi, prs]);
+  assert.deepEqual(action.stages.map(stage => stage.purpose), ['pseudonymization', 'registration']);
+  assert.equal(action.stages[0].label, 'Pseudonymize identifier');
+});
+
+test('consent state for a stage follows the answers attached to its calls', () => {
+  const page1 = exchange(2), page2 = exchange(4, { resourceType: 'Patient' });
+  const cases = [
+    { name: 'permit on every call', events: [page1, check(3, page1, 'Permit'), page2, check(5, page2, 'Permit')], state: 'permit', legend: 'Mitz: permit' },
+    { name: 'deny on any call', events: [page1, check(3, page1, 'Permit'), page2, check(5, page2, 'Deny')], state: 'deny', legend: 'Mitz: deny (permit on 1 of 2 requests)' },
+    { name: 'another decision is a refusal', events: [page1, check(3, page1, 'Indeterminate')], state: 'deny', legend: 'Mitz: deny' },
+    { name: 'an error answer and no refusal', events: [page1, check(3, page1, '')], state: 'error', legend: 'Mitz: no answer' },
+    { name: 'no answer attached to some call', events: [page1, check(3, page1, 'Permit'), page2], state: 'unobserved', legend: 'not observed (permit on 1 of 2 requests)' },
+    { name: 'no answer at all', events: [page1], state: 'unobserved', legend: 'not observed' },
+  ];
+  for (const { name, events, state, legend } of cases) {
+    const [action] = buildActionGroups(events);
+    const presentation = consentPresentation(stageOf(action, 'exchange'), action);
+    assert.equal(presentation.state, state, name);
+    assert.equal(presentation.legend, legend, name);
+  }
+});
+
+test('a consent-check stage presents its own answers', () => {
+  const patient = exchange(2);
+  const [action] = buildActionGroups([patient, check(3, patient, 'Deny')]);
+  const presentation = consentPresentation(stageOf(action, 'consent-check'), action);
+  assert.equal(presentation.state, 'deny');
+});
+
+test('the other locks open only when every call of the stage returned data', () => {
+  const granted = exchange(2);
+  const refused = exchange(2, { outcome: 'deny', response: { status: 403 } });
+  const open = action => consentPresentation(stageOf(action, 'exchange'), action).othersOpen;
+  assert.equal(open(buildActionGroups([granted, check(3, granted, 'Permit')])[0]), true);
+  assert.equal(open(buildActionGroups([granted])[0]), true, 'a grant with no observed consent answer still implies the others');
+  assert.equal(open(buildActionGroups([refused, check(3, refused, 'Permit')])[0]), false, 'the source refused after Mitz permitted');
+  assert.equal(open(buildActionGroups([refused, check(3, refused, 'Deny')])[0]), false);
+});
+
+test('stages that are not source queries have no consent presentation', () => {
+  const [action] = buildActionGroups([observed(1, 'registration')]);
+  assert.equal(consentPresentation(action.stages[0], action), null);
+  assert.equal(consentPresentation(undefined, action), null);
+});
+
+const change = (seq, decision, overrides = {}) => ({
+  runId: 'run-one', seq, gf: 'consent', actor: 'sandbox-backend', purpose: 'consent-change', actionId: 'consent-1', action: 'consent',
+  callId: `change-${seq}`, outcome: 'ok', durationMs: 900, ts: new Date(30000 + 900).toISOString(),
+  request: { method: 'PUT', path: '/mock/consent/[redacted: BSN]', body: { decision, changeId: 'c' } },
+  response: { status: 200, body: {} }, ...overrides,
+});
+const notification = (seq, overrides = {}) => ({
+  runId: 'run-one', seq, gf: 'consent', actor: 'mitz', purpose: 'consent-notification', actionId: 'consent-1', action: 'consent',
+  callId: `notify-${seq}`, outcome: 'ok', durationMs: 0, ts: new Date(30000 + 400).toISOString(),
+  request: { method: 'POST', path: '/mitz/notify', body: {} }, response: { status: 204, copyRemoved: true }, ...overrides,
+});
+
+test('a consent action plays its change before its notification, whatever their timestamps', () => {
+  // The notification completed while the change was still waiting on the mock,
+  // so by completion time it comes first.
+  const [action] = buildActionGroups([change(1, 'Deny'), notification(2)]);
+  assert.equal(action.label, 'Consent changed');
+  assert.deepEqual(action.stages.map(stage => stage.label), ['Patient withdraws consent in Mitz', 'Mitz notification received']);
+  const [replayed] = buildActionGroups([notification(2), change(1, 'Deny')]);
+  assert.deepEqual(replayed.stages.map(stage => stage.purpose), ['consent-change', 'consent-notification'], 'arrival order does not matter either');
+});
+
+// The player, not only the model. Live, the change's stage is already on screen
+// when the notification's event arrives; replayed, the action is rebuilt from
+// its events, where the notification has the earlier timestamp.
+test('a consent action plays its change and then its notification, live and replayed', () => {
+  const { clock, shown, player } = playbackFixture();
+  player.add(change(1, 'Deny')); player.snapshot();
+  clock.tick(1000); assert.deepEqual(shown, ['consent-change']);
+  player.add(notification(2)); player.snapshot();
+  clock.tick(2500); assert.deepEqual(shown, ['consent-change', 'consent-notification']);
+  clock.tick(2500); assert.equal(player.state().status, 'complete');
+
+  player.replay();
+  assert.deepEqual(shown.slice(2), ['consent-change'], 'the replay starts with the change, although the notification completed first');
+  clock.tick(2500); assert.deepEqual(shown.slice(2), ['consent-change', 'consent-notification']);
+});
+
+test('a consent action whose two events arrive together plays in the same order', () => {
+  const { clock, shown, player } = playbackFixture();
+  player.add(change(1, 'Deny')); player.add(notification(2)); player.snapshot();
+  clock.tick(1000); assert.deepEqual(shown, ['consent-change']);
+  clock.tick(2500); assert.deepEqual(shown, ['consent-change', 'consent-notification']);
+});
+
+// The browser half of the retention test in Task 11: the same three events
+// through the feed, across a retention gap, with the fields the viewer groups
+// and orders them by untouched.
+test('the feed accepts the consent events in sequence and leaves their grouping fields alone', () => {
+  const seen = [];
+  const feed = createEventFeed('run-one', { onStep: event => seen.push(event), onGap: first => seen.push(`gap:${first}`) });
+  const patient = exchange(8, { outcome: 'deny', response: { status: 403 } });
+  assert.equal(feed.step(change(1, 'Deny')), true);
+  assert.equal(feed.step(notification(2)), true);
+  feed.gap({ firstSeq: 8 });
+  assert.equal(feed.step(patient), true);
+  assert.equal(feed.step(check(9, patient, 'Deny')), true);
+  assert.deepEqual(seen.map(item => typeof item === 'string' ? item : item.seq), [1, 2, 'gap:8', 8, 9]);
+  assert.equal(seen[1].response.copyRemoved, true);
+  const received = seen[4];
+  assert.equal(received.purpose, 'consent-check');
+  assert.equal(received.parentCallId, patient.callId);
+  assert.equal(received.actionId, patient.actionId);
+  assert.equal(received.action, 'retrieve');
+  assert.equal(received.resourceType, 'Patient');
+  assert.equal(received.response.consentDecision, 'Deny');
+  assert.equal(feed.step({ ...check(9, patient, 'Deny') }), false, 'a sequence number is accepted once');
+  assert.equal(feed.step({ ...check(10, patient, 'Deny'), gf: 'unknown' }), false, 'an event the map has no place for is refused as before');
+});
+
+test('the change is named after what the patient did', () => {
+  assert.equal(consentChangeLabel(change(1, 'Deny')), 'Patient withdraws consent in Mitz');
+  assert.equal(consentChangeLabel(change(1, 'Permit')), 'Patient gives consent again in Mitz');
+  const [action] = buildActionGroups([change(1, 'Permit'), notification(2, { response: { status: 204, copyRemoved: false } })]);
+  assert.equal(action.stages[0].label, 'Patient gives consent again in Mitz');
+});
+
+test('a notification with no change of its own is an action by itself', () => {
+  const [action] = buildActionGroups([notification(1, { actionId: 'unsolicited' })]);
+  assert.deepEqual(action.stages.map(stage => stage.label), ['Mitz notification received']);
+});
+
+test('summaries name consent events for what they are', () => {
+  const patient = exchange(2);
+  assert.equal(eventSummary(check(3, patient, 'Permit')), 'Mitz answered permit');
+  assert.equal(eventSummary(check(3, patient, 'Deny')), 'Mitz answered deny');
+  assert.equal(eventSummary(check(3, patient, '')), 'Consent request failed');
+  assert.equal(eventSummary(change(1, 'Deny')), 'Consent withdrawn in Mitz');
+  assert.equal(eventSummary(change(1, 'Permit')), 'Consent given again in Mitz');
+  assert.equal(eventSummary(notification(2)), 'Mitz notification received');
+  assert.equal(eventSummary({ gf: 'consent', outcome: 'ok', request: { method: 'POST' } }), 'Consent subscription submitted', 'subscriptions read as before');
+});

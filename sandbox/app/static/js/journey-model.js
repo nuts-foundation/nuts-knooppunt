@@ -3,7 +3,13 @@ export function journeyTargets(event) {
     case 'pseudonym': return '#js-prs, #jsp-prs';
     case 'localization': return '#js-nvi, #jsp-share';
     case 'addressing': return '#js-mcsd, #jsp-address';
-    case 'consent': return '#js-mitz, #jsp-mitzsub';
+    case 'consent':
+      // A closed question travels from the source to Mitz; a change is the
+      // patient at Mitz and travels nowhere; a subscription and the notification
+      // it leads to share one route, in opposite directions.
+      if (event.purpose === 'consent-check') return '#js-mitz, #js-source, #jsp-mitzcheck';
+      if (event.purpose === 'consent-change') return '#js-mitz';
+      return '#js-mitz, #jsp-mitzsub';
     case 'authentication': return '#js-nuts, #jsp-keyreq';
     case 'authorization': return isTokenRequest(event) ? '#js-nuts, #js-source, #js-auth-server, #jsp-access' : '#js-nuts, #jsp-keyreq';
     case 'exchange': return '#js-source, #jsp-exchange';
@@ -53,6 +59,7 @@ export function accessPresentation(stage) {
 export const actionLabels = {
   record: 'Record status', 'share-preview': 'Sharing preview', share: 'Share patient',
   subscribe: 'Subscribe to consent', discover: 'Find data sources', retrieve: 'Retrieve source data', authorize: 'Authorize access',
+  consent: 'Consent changed',
 };
 export const purposeLabels = {
   status: 'Background status reads', 'registration-cleanup': 'Check existing registrations',
@@ -60,6 +67,8 @@ export const purposeLabels = {
   subscription: 'Submit Mitz subscription', localization: 'Locate available records',
   addressing: 'Find service address', authorization: 'Request access key',
   exchange: 'Request source data', pseudonymization: 'Pseudonymize identifier',
+  'consent-check': 'Consent check at Mitz', 'consent-notification': 'Mitz notification received',
+  'consent-change': 'Patient changes consent in Mitz',
 };
 export const callIdentity = event => event.callId || `event-${event.seq}`;
 export const callCount = (events, kind = '') => `${events.length} ${kind}call${events.length === 1 ? '' : 's'}`;
@@ -94,6 +103,34 @@ function actionSummary(action) {
   return parts.filter(Boolean).join(' · ') || callCount(action.events, 'observed ');
 }
 
+export const consentChangeLabel = event => event.request?.body?.decision === 'Permit'
+  ? 'Patient gives consent again in Mitz' : 'Patient withdraws consent in Mitz';
+
+const consentChecksOf = (action, call) => action.events.filter(event =>
+  event.purpose === 'consent-check' && event.parentCallId && event.parentCallId === call.callId);
+const checkState = event => event.outcome === 'ok' ? 'permit' : event.outcome === 'deny' ? 'deny' : 'error';
+
+// consentPresentation says what the map may show about consent for one stage,
+// from the answers attached to its source calls and from nothing else. A call
+// with no answer attached was not observed; that is never shown as "not asked".
+export function consentPresentation(stage, action) {
+  if (!stage || !action) return null;
+  let perCall;
+  if (stage.purpose === 'consent-check') perCall = stage.events.map(checkState);
+  else if (stage.events.some(event => event.gf === 'exchange')) {
+    perCall = stage.events.filter(event => event.gf === 'exchange').map(call => {
+      const states = consentChecksOf(action, call).map(checkState);
+      return states.includes('deny') ? 'deny' : states.includes('error') ? 'error' : states.length ? 'permit' : 'unobserved';
+    });
+  } else return null;
+  const state = perCall.includes('deny') ? 'deny' : perCall.includes('error') ? 'error'
+    : perCall.includes('unobserved') ? 'unobserved' : 'permit';
+  const permits = perCall.filter(value => value === 'permit').length;
+  const mixed = state !== 'permit' && permits > 0 ? ` (permit on ${permits} of ${perCall.length} requests)` : '';
+  const legend = { permit: 'Mitz: permit', deny: 'Mitz: deny', error: 'Mitz: no answer', unobserved: 'not observed' }[state] + mixed;
+  return { state, legend, othersOpen: accessPresentation(stage).dataReturned };
+}
+
 export function buildActionGroups(events) {
   const calls = new Map(events.filter(event => event.callId).map(event => [event.callId, event]));
   const actions = new Map();
@@ -117,7 +154,8 @@ export function buildActionGroups(events) {
       let group = groups.at(-1);
       if (group?.key !== key) {
         group = { id: `${action.id}:${callIdentity(event)}`, key, purpose,
-          label: search?.label || (removing ? 'Remove existing registrations' : purposeLabels[purpose] || purpose),
+          label: purpose === 'consent-change' ? consentChangeLabel(event)
+            : search?.label || (removing ? 'Remove existing registrations' : purposeLabels[purpose] || purpose),
           events: [], time: eventTime(event) };
         groups.push(group);
       }
@@ -127,12 +165,22 @@ export function buildActionGroups(events) {
       const parentIds = new Set(group.events.map(callIdentity));
       const children = action.events.filter(event => parentIds.has(event.parentCallId));
       if (group.purpose === 'status') group.events.push(...children);
-      else if (children.length) action.groups.push({
-        id: `${group.id}:prs`, purpose: 'pseudonymization', label: purposeLabels.pseudonymization,
-        events: children, time: group.time, ...aggregate(children),
-      });
+      else for (const [purpose, suffix] of [['pseudonymization', 'prs'], ['consent-check', 'consent']]) {
+        const own = children.filter(child => (child.purpose === 'consent-check' ? 'consent-check' : 'pseudonymization') === purpose);
+        if (own.length) action.groups.push({
+          id: `${group.id}:${suffix}`, purpose, label: purposeLabels[purpose],
+          events: own, time: group.time, ...aggregate(own),
+        });
+      }
       Object.assign(group, aggregate(group.events));
       action.groups.push(group);
+    }
+    // A consent action is ordered by cause, not by completion: its notification
+    // completes while its change is still waiting on the mock.
+    if (action.action === 'consent') {
+      const rank = group => ({ 'consent-change': 0, 'consent-notification': 1 }[group.purpose] ?? 2);
+      action.groups = action.groups.map((group, index) => ({ group, index }))
+        .sort((a, b) => rank(a.group) - rank(b.group) || a.index - b.index).map(({ group }) => group);
     }
     action.stages = isBackgroundAction(action.action) ? [] : action.groups.filter(group => group.purpose !== 'status');
     if (!Number.isFinite(action.time)) action.time = Math.min(...action.events.map(eventTime));
