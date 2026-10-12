@@ -14,7 +14,7 @@ type eventResourceTypeKey struct{}
 type eventAction struct{ id, kind string }
 
 func withEventAction(ctx context.Context, kind string) context.Context {
-	if !eventEnum(kind, "record", "share-preview", "share", "subscribe", "discover", "retrieve", "authorize") {
+	if !eventEnum(kind, "record", "share-preview", "share", "subscribe", "discover", "retrieve", "authorize", "consent") {
 		return ctx
 	}
 	return context.WithValue(ctx, eventActionKey{}, eventAction{id: randomURLSafe(), kind: kind})
@@ -28,7 +28,8 @@ func withEventResourceType(ctx context.Context, resourceType string) context.Con
 }
 
 func withEventPurpose(ctx context.Context, purpose string) context.Context {
-	if !eventEnum(purpose, "status", "registration-cleanup", "registration", "subscription-check", "subscription", "localization", "addressing", "authorization", "exchange", "pseudonymization") {
+	if !eventEnum(purpose, "status", "registration-cleanup", "registration", "subscription-check", "subscription", "localization", "addressing", "authorization", "exchange", "pseudonymization",
+		"consent-change", "consent-notification", "consent-check") {
 		return ctx
 	}
 	return context.WithValue(ctx, eventPurposeKey{}, purpose)

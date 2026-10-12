@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -97,5 +98,40 @@ func mitzSubscribedFunc(mitzMockBaseURL *url.URL, providerURA string) func(conte
 			return false, fmt.Errorf("parse Mitz subscription bundle: %w", err)
 		}
 		return len(bundle.Entry) > 0, nil
+	}
+}
+
+// mitzDecisionsFunc builds the read of the mock Mitz's decision log by trace id.
+// Like the subscription lookup it exists only on the mock, and it is not
+// captured: it is how the viewer learns of a closed question, not a call of the
+// demo. Returns nil when no mock is configured.
+func mitzDecisionsFunc(mitzMockBaseURL *url.URL) func(context.Context, string) ([]mitzDecision, error) {
+	if mitzMockBaseURL == nil {
+		return nil
+	}
+	endpoint := mitzMockBaseURL.JoinPath("mock", "decisions")
+	client := &http.Client{}
+	return func(ctx context.Context, traceID string) ([]mitzDecision, error) {
+		query := *endpoint
+		query.RawQuery = url.Values{"traceid": {traceID}}.Encode()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, query.String(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("build Mitz decision read: %w", err)
+		}
+		res, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("read Mitz decisions: %w", err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("Mitz decision read returned %s", res.Status)
+		}
+		var body struct {
+			Decisions []mitzDecision `json:"decisions"`
+		}
+		if err := json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(&body); err != nil {
+			return nil, fmt.Errorf("parse Mitz decisions: %w", err)
+		}
+		return body.Decisions, nil
 	}
 }

@@ -24,6 +24,8 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type Details struct {
@@ -171,6 +173,14 @@ func start(t *testing.T, options startOptions) Details {
 		SourceSystem:  "test-source",
 	}
 
+	// The Knooppunt installs the W3C propagator only when tracing is configured
+	// (component/tracing). Its handlers and its Mitz client are instrumented
+	// either way, and without an SDK the global tracer keeps the incoming span
+	// context, so the propagator is all a trace id needs to travel from the
+	// PEP's request to the closed question.
+	previousPropagator := otel.GetTextMapPropagator()
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() { otel.SetTextMapPropagator(previousPropagator) })
 	knooppuntInternalURL := startKnooppunt(t, config)
 
 	return Details{

@@ -313,7 +313,9 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 		return
 	}
 
-	retrieval, err := c.retrieveFromSource(r.Context(), *session,
+	// One retrieval is one chain: its source requests carry trace ids and share
+	// one budget for looking up what Mitz answered about them.
+	retrieval, err := c.retrieveFromSource(withConsentEvidence(r.Context(), c.mitzDecisions), *session,
 		sourceAddress{URA: chosen.URA, Name: chosen.Name, Address: chosen.Address,
 			AuthorizationServer: chosen.AuthorizationServer},
 		patient.BSN, chosen.Categories)

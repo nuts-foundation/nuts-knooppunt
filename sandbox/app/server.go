@@ -74,6 +74,9 @@ type Config struct {
 	// render nil as unknown, not as "not subscribed".
 	mitzSubscribe  func(ctx context.Context, bsn string) error
 	mitzSubscribed func(ctx context.Context, bsn string) (bool, error)
+	// mitzDecisions reads the mock's decision log by trace id (evidence.go). Nil
+	// when MITZMOCK_URL is unset, and then no consent answer is ever observed.
+	mitzDecisions func(ctx context.Context, traceID string) ([]mitzDecision, error)
 
 	// The three legs of retrieval (E4), injectable for the same reason the others
 	// are. nviLocalize is not nviLookup: publishing is scoped to our own
@@ -188,6 +191,7 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		}
 		cfg.mitzMockURL = mitzMockURL
 		cfg.mitzSubscribed = mitzSubscribedFunc(mitzMockURL, plataanURA)
+		cfg.mitzDecisions = mitzDecisionsFunc(mitzMockURL)
 	}
 
 	if cfg.HAPIBaseURL == "" {
