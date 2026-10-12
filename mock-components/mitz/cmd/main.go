@@ -2,9 +2,12 @@
 // standalone HTTP server, so docker compose can offer a Mitz consent endpoint
 // without access to the real (national) Mitz.
 //
-// It answers Permit by default. The magic-BSN overrides of the in-process mock
-// apply here too: a request body containing "bsn:deny" yields Deny, and one
-// containing "bsn:error" yields HTTP 500.
+// It answers Permit by default. A request body containing "bsn:deny" yields
+// Deny and one containing "bsn:error" yields HTTP 500; both come before
+// anything else. Beyond that the answer for one patient can be changed and
+// restored under /mock/consent, which also notifies that patient's
+// subscriptions, and the closed questions answered are listed by trace id under
+// /mock/decisions. Neither exists on the national Mitz.
 package main
 
 import (
