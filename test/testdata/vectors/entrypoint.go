@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -61,10 +62,12 @@ func allTenants() []hapi.Tenant {
 // resources), the PIP, and the demo-patient pool's clinical resources on both
 // the Plataan and Zonnebloem sides.
 //
-// Load is idempotent: every write is a PUT-by-fixed-id upsert and there is no
-// destructive $expunge, so re-running Load (first boot, re-seed, reset) restores
-// the seeded resources without touching resources it does not own. It does not
-// register NVI Lists — those go through the Knooppunt; call SeedNVI for that.
+// Load is idempotent: every write is a PUT-by-fixed-id upsert, so re-running Load
+// (first boot, re-seed, reset) restores the seeded resources without touching
+// resources it does not own. The one thing it removes is a resource that holds
+// one of the central directory's ids in a retired tenant; see
+// releaseFromRetiredTenants. It does not register NVI Lists — those go through
+// the Knooppunt; call SeedNVI for that.
 func Load(hapiBaseURL *url.URL) (*Details, error) {
 	ctx := context.Background()
 
@@ -89,7 +92,11 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	// Sunflower/Zonnebloem, Plataan). Organizations and Endpoints reference each
 	// other (Organization.endpoint, Endpoint.managingOrganization), so no write
 	// order satisfies HAPI's referential integrity check; one transaction does.
+	// Their ids are freed first, where a retired tenant holds them.
 	//
+	if err := releaseFromRetiredTenants(ctx, hapiBaseURL, lrza.Resources()); err != nil {
+		return nil, fmt.Errorf("release mCSD addressing directory ids: %w", err)
+	}
 	if err := putResourcesInTransaction(ctx, lrzaRootDirectoryHAPITenant.FHIRClient(hapiBaseURL), lrza.Resources()); err != nil {
 		return nil, fmt.Errorf("seed mCSD addressing directory resources: %w", err)
 	}
@@ -136,7 +143,8 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 // every tenant, not just the ones this package seeds.
 //
 // DANGER: this is unconditionally destructive and is NOT part of the normal seed
-// path (Load is non-destructive and idempotent). It exists for the e2e test
+// path (Load is idempotent and removes nothing but its own ids from the retired
+// tenants). It exists for the e2e test
 // harness, which reuses HAPI containers and needs a clean store between tests.
 // Never point it at a HAPI instance whose contents you care about; for restoring
 // the demo dataset use ResetGlobal, which expunges only the mutable tenants.
@@ -150,6 +158,72 @@ func ExpungeAll(hapiBaseURL *url.URL) error {
 			},
 		},
 	}, nil, fhirclient.AtPath("/$expunge"))
+}
+
+// retiredDirectoryTenants are tenants this seed does not write to, in which a
+// HAPI that kept its data can hold the central directory's Organization and
+// Endpoint ids.
+var retiredDirectoryTenants = []string{"care2cure-admin", "plataan-admin", "sunflower-admin"}
+
+// releaseFromRetiredTenants frees the resources' ids in the retired tenants, so
+// they can be written to another one. As this project runs it, HAPI keeps one
+// pool of client-assigned ids across all its partitions, and a deleted resource
+// holds on to its id until it is expunged.
+//
+// It removes the resources with these ids and nothing else. A resource outside
+// that set that refers to one of them makes the delete fail for its tenant,
+// which then keeps everything; a tenant released before it stays released.
+//
+// It asks for every id rather than searching for what is there. A deleted
+// resource is not in a search result, so a run that stopped between the delete
+// and the expunge would leave ids taken that no later run finds.
+func releaseFromRetiredTenants(ctx context.Context, hapiBaseURL *url.URL, resources []fhir.HasId) error {
+	tenants, err := hapi.TenantNames(ctx, fhirclient.New(hapiBaseURL, http.DefaultClient, nil))
+	if err != nil {
+		return fmt.Errorf("list HAPI tenants: %w", err)
+	}
+	// One transaction per tenant: an Organization and its Endpoints reference
+	// each other, and HAPI only deletes a referenced resource together with what
+	// refers to it. An id the tenant does not hold is not an error in it.
+	deletion := fhir.Bundle{Type: fhir.BundleTypeTransaction}
+	for _, resource := range resources {
+		deletion.Entry = append(deletion.Entry, fhir.BundleEntry{
+			Request: &fhir.BundleEntryRequest{
+				Method: fhir.HTTPVerbDELETE,
+				Url:    caramel.ResourceType(resource) + "/" + *resource.GetId(),
+			},
+		})
+	}
+	for _, name := range retiredDirectoryTenants {
+		if !slices.Contains(tenants, name) {
+			continue
+		}
+		client := hapi.Tenant{Name: name}.FHIRClient(hapiBaseURL)
+		if err := client.CreateWithContext(ctx, deletion, nil, fhirclient.AtPath("/")); err != nil {
+			return fmt.Errorf("delete from %s: %w", name, err)
+		}
+		for _, entry := range deletion.Entry {
+			if err := expungeDeleted(ctx, client, entry.Request.Url); err != nil {
+				return fmt.Errorf("expunge %s from %s: %w", entry.Request.Url, name, err)
+			}
+		}
+	}
+	return nil
+}
+
+// expungeDeleted removes a deleted resource for good, its history included,
+// which is what frees its id. A resource that is not deleted is left as it is,
+// and HAPI answers 404 for one the tenant does not hold, which leaves nothing to
+// do.
+func expungeDeleted(ctx context.Context, client fhirclient.Client, path string) error {
+	err := client.CreateWithContext(ctx, fhir.Parameters{
+		Parameter: []fhir.ParametersParameter{{Name: "expungeDeletedResources", ValueBoolean: to.Ptr(true)}},
+	}, nil, fhirclient.AtPath("/"+path+"/$expunge"))
+	var outcome fhirclient.OperationOutcomeError
+	if errors.As(err, &outcome) && outcome.HttpStatusCode == http.StatusNotFound {
+		return nil
+	}
+	return err
 }
 
 // putResourcesInTransaction PUT-upserts the resources by their fixed ids into

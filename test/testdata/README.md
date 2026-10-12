@@ -93,8 +93,24 @@ cross-checked against the published RvIG test-BSN set and replaced if absent.
 ## Seeding and reset
 
 `vectors.Load(hapiBaseURL)` seeds all FHIR resources (mCSD directories, PIP, and
-the pool on both sides). It is **idempotent and non-destructive**: every write is
-a PUT-by-fixed-id upsert and there is no `$expunge` on the normal path.
+the pool on both sides). It is **idempotent**: every write is a PUT-by-fixed-id
+upsert, and it leaves the resources it does not own alone, with one exception.
+
+Before it writes the central addressing directory, `Load` frees that directory's
+ids in `care2cure-admin`, `plataan-admin` and `sunflower-admin`. This seed does
+not write to those tenants, but a HAPI that kept its data can hold the same
+Organization and Endpoint ids there. As this project runs it, HAPI keeps one pool
+of client-assigned resource ids across all its partitions, so the write fails
+with `HAPI-0825` for as long as another tenant holds one of them.
+
+Per tenant, the resources with these ids are deleted in one transaction and then
+expunged one by one, because a delete alone does not free an id. Nothing else is
+removed: a resource outside that set that refers to one of them makes the
+transaction fail, that tenant keeps everything and `Load` returns the error
+naming it. A tenant released before it stays released. The `$expunge` is
+the instance-level one, which stays inside the tenant it is addressed to; the
+type-level form reaches every partition. A tenant that does not exist is skipped,
+which is every one of them on a fresh HAPI.
 
 `vectors.SeedNVI(ctx, knooppuntInternalBaseURL)` registers each pool patient's NVI
 Lists through the Knooppunt's internal `/nvi` endpoint. It is idempotent via

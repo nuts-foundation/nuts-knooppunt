@@ -43,6 +43,23 @@ func CreateTenant(ctx context.Context, details Tenant, fhirClient fhirclient.Cli
 	return err
 }
 
+// TenantNames returns the names of the partitions the server has.
+func TenantNames(ctx context.Context, fhirClient fhirclient.Client) ([]string, error) {
+	var partitions fhir.Parameters
+	if err := fhirClient.ReadWithContext(ctx, "$partition-management-list-partitions", &partitions); err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, partition := range partitions.Parameter {
+		for _, part := range partition.Part {
+			if part.Name == "name" && part.ValueCode != nil {
+				names = append(names, *part.ValueCode)
+			}
+		}
+	}
+	return names, nil
+}
+
 // shouldIgnorePartitionError determines if a partition creation error should be ignored
 // because it indicates the partition already exists
 func shouldIgnorePartitionError(errorStr string) bool {

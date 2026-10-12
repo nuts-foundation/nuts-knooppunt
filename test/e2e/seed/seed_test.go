@@ -183,6 +183,86 @@ func TestSeed_NVIIsIdempotent(t *testing.T) {
 	}
 }
 
+// An earlier seed gave each organization an admin directory tenant of its own,
+// and wrote there the Organization and Endpoint ids the central directory uses
+// now. A HAPI that seed filled still holds them, and this HAPI keeps one pool of
+// resource ids across all its partitions, so Load failed on its first write with
+// HAPI-0825 and nothing after it ran: the central directory never reached the
+// query directory and no organization could be addressed.
+//
+// The harness expunges HAPI before it loads, so the test puts that state back.
+func TestLoad_TakesOverTheIDsOfAnEarlierSeedsAdminDirectories(t *testing.T) {
+	h := harness.Start(t)
+	require.NoError(t, vectors.ExpungeAll(h.HAPIBaseURL))
+	seedAdminDirectories(t, h.HAPIBaseURL)
+
+	_, err := vectors.Load(h.HAPIBaseURL)
+	require.NoError(t, err)
+
+	invokeLRZAUpdate(t, h.KnooppuntInternalBaseURL)
+	org, err := searchOrg(fhirclient.New(h.MCSDQueryFHIRBaseURL, http.DefaultClient, nil), plataan.URA)
+	require.NoError(t, err)
+	require.NotNil(t, org, "Plataan organization (URA %s) should be in the query directory", plataan.URA)
+}
+
+// A deleted resource keeps its id until it is expunged, and a search no longer
+// returns it. A run that stopped between the delete and the expunge leaves ids
+// taken that a later run can only find by asking for them one by one.
+func TestLoad_TakesOverIDsThatWereDeletedButNotExpunged(t *testing.T) {
+	h := harness.Start(t)
+	require.NoError(t, vectors.ExpungeAll(h.HAPIBaseURL))
+	seedAdminDirectories(t, h.HAPIBaseURL)
+	for _, directory := range adminDirectories() {
+		admin := directory.tenant.FHIRClient(h.HAPIBaseURL)
+		// The endpoints go with it: they name it as their managing organization.
+		require.NoError(t, admin.DeleteWithContext(t.Context(),
+			"Organization/"+*directory.organization.Id, fhirclient.QueryParam("_cascade", "delete")))
+		requireDeletedNotExpunged(t, admin, "Organization/"+*directory.organization.Id)
+		for _, endpoint := range directory.endpoints {
+			requireDeletedNotExpunged(t, admin, "Endpoint/"+*endpoint.Id)
+		}
+	}
+
+	_, err := vectors.Load(h.HAPIBaseURL)
+	require.NoError(t, err)
+
+	central := lrza.HAPITenant().FHIRClient(h.HAPIBaseURL)
+	for _, directory := range adminDirectories() {
+		var organization fhir.Organization
+		require.NoError(t, central.ReadWithContext(t.Context(), "Organization/"+*directory.organization.Id, &organization),
+			"the central directory should hold %s", *directory.organization.Name)
+	}
+}
+
+// Load frees an id by removing the resource that holds it, and nothing else. A
+// resource of someone else's that refers to one of them is in the way: Load says
+// which one and removes neither, where a cascading delete would take it along.
+func TestLoad_DoesNotRemoveWhatRefersToAnIDItFrees(t *testing.T) {
+	h := harness.Start(t)
+	require.NoError(t, vectors.ExpungeAll(h.HAPIBaseURL))
+	seedAdminDirectories(t, h.HAPIBaseURL)
+
+	organization := lrza.CareHomeSunflower()
+	admin := hapi.Tenant{Name: "sunflower-admin"}.FHIRClient(h.HAPIBaseURL)
+	// One of the organization's own endpoints under another id, so it names the
+	// organization as its managing organization.
+	someoneElses := lrza.CareHomeSunflowerEndpoints()[0]
+	someoneElses.Id = to.Ptr("someone-elses")
+	require.NoError(t, admin.UpdateWithContext(t.Context(), "Endpoint/someone-elses", someoneElses, nil))
+
+	_, err := vectors.Load(h.HAPIBaseURL)
+	require.ErrorContains(t, err, "Endpoint/someone-elses")
+
+	var endpoint fhir.Endpoint
+	require.NoError(t, admin.ReadWithContext(t.Context(), "Endpoint/someone-elses", &endpoint))
+	var kept fhir.Organization
+	require.NoError(t, admin.ReadWithContext(t.Context(), "Organization/"+*organization.Id, &kept))
+	for _, own := range lrza.CareHomeSunflowerEndpoints() {
+		require.NoError(t, admin.ReadWithContext(t.Context(), "Endpoint/"+*own.Id, &endpoint),
+			"the tenant should keep everything, the organization's own endpoints included")
+	}
+}
+
 // TestResetGlobal_PreservesPartitions is the regression guard for the reset path
 // destroying HAPI's partition table.
 //
@@ -526,6 +606,59 @@ func invokeLRZAUpdate(t *testing.T, internalBaseURL *url.URL) {
 	resp, err := http.Post(internalBaseURL.JoinPath("lrza/update").String(), "application/json", nil)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
+}
+
+// requireDeletedNotExpunged requires that the resource is deleted and still
+// known: HAPI answers 410 for that, and 404 once it is expunged.
+func requireDeletedNotExpunged(t *testing.T, client fhirclient.Client, path string) {
+	t.Helper()
+	var resource map[string]any
+	err := client.ReadWithContext(t.Context(), path, &resource)
+	var outcome fhirclient.OperationOutcomeError
+	require.ErrorAs(t, err, &outcome, "%s should be deleted", path)
+	require.Equal(t, http.StatusGone, outcome.HttpStatusCode, "%s should be deleted and not expunged", path)
+}
+
+// adminDirectory is one organization's Organization and Endpoint resources as
+// the central directory holds them, placed in an admin tenant of the
+// organization's own: the same ids in a tenant the seed does not write to.
+type adminDirectory struct {
+	tenant       hapi.Tenant
+	organization fhir.Organization
+	endpoints    []fhir.Endpoint
+}
+
+func adminDirectories() []adminDirectory {
+	return []adminDirectory{
+		{hapi.Tenant{Name: "care2cure-admin", ID: 4}, lrza.Care2Cure(), lrza.Care2CureEndpoints()},
+		{hapi.Tenant{Name: "sunflower-admin", ID: 5}, lrza.CareHomeSunflower(), lrza.CareHomeSunflowerEndpoints()},
+		{hapi.Tenant{Name: "plataan-admin", ID: 9}, lrza.HospitalPlataan(), lrza.HospitalPlataanEndpoints()},
+	}
+}
+
+// seedAdminDirectories writes the admin directories to HAPI. An Organization and
+// its Endpoints reference each other, so each directory is one transaction.
+func seedAdminDirectories(t *testing.T, hapiBaseURL *url.URL) {
+	t.Helper()
+	for _, directory := range adminDirectories() {
+		require.NoError(t, hapi.CreateTenant(t.Context(), directory.tenant, fhirclient.New(hapiBaseURL, http.DefaultClient, nil)))
+
+		tx := fhir.Bundle{Type: fhir.BundleTypeTransaction}
+		put := func(path string, resource any) {
+			data, err := json.Marshal(resource)
+			require.NoError(t, err)
+			tx.Entry = append(tx.Entry, fhir.BundleEntry{
+				Resource: data,
+				Request:  &fhir.BundleEntryRequest{Method: fhir.HTTPVerbPUT, Url: path},
+			})
+		}
+		put("Organization/"+*directory.organization.Id, directory.organization)
+		for _, endpoint := range directory.endpoints {
+			put("Endpoint/"+*endpoint.Id, endpoint)
+		}
+		require.NoError(t, directory.tenant.FHIRClient(hapiBaseURL).CreateWithContext(t.Context(), tx, nil, fhirclient.AtPath("/")),
+			"write the %s directory", directory.tenant.Name)
+	}
 }
 
 func searchOrg(client fhirclient.Client, ura string) (*fhir.Organization, error) {
