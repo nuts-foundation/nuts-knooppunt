@@ -907,3 +907,23 @@ func TestRetrieve_AFailureFromBeforeARecycleLeavesTheFreshAnswerAlone(t *testing
 	require.Contains(t, body, "Metoprolol",
 		"the answer retrieved after the recycle is not the failed attempt's to discard")
 }
+
+func TestRetrieve_AnAnswerOvertakenByAWithdrawalNamesTheWithdrawal(t *testing.T) {
+	cfg := retrievalConfig(t)
+	inner := cfg.retrieveFromSource
+	cfg.retrieveFromSource = func(ctx context.Context, session authSession, source sourceAddress, bsn string, categories []string) (sourceRetrieval, error) {
+		cfg.Retrievals.withdraw("anna") // consent is withdrawn while the chain runs
+		return inner(ctx, session, source, bsn, categories)
+	}
+	srv, client := demoServer(t, cfg)
+	openPatient(t, client, srv, "anna")
+
+	res := postForm(t, client, srv, "/demo/ehr/patients/anna/retrieve", sourceConfirmation(t, client, srv, "anna", zonnebloemURA))
+	defer res.Body.Close()
+
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo/ehr/patients/anna?notice=retrieval-withdrawn", res.Header.Get("Location"))
+	status, record := getBody(t, client, srv, "/demo/ehr/patients/anna?notice=retrieval-withdrawn")
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, record, "Consent was withdrawn while the retrieval was running")
+}

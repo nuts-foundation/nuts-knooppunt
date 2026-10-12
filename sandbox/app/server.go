@@ -22,6 +22,7 @@ var notices = map[string]string{
 	"reset-partial":           "Dataset restored, but some state could not be cleared. Check the sandbox logs.",
 	"recycle-done":            "Patient restored to the seeded state.",
 	"retrieval-stale":         "A reset was attempted for this patient while the retrieval was running, so its answer may describe data that has since been replaced and was discarded. Retrieve again.",
+	"retrieval-withdrawn":     "Consent was withdrawn while the retrieval was running, so its answer was discarded and nothing from that source is shown.",
 	"recycle-partial":         "Patient restored, but some state could not be cleared. Check the sandbox logs.",
 	"reset-disabled":          "Reset is unavailable: it needs both KNOOPPUNT_INTERNAL_URL and HAPI_BASE_URL, and one of them is unset. Sharing only needs the first, so it can work while this does not.",
 	"signed-out":              "Signed out. The Dezi session has been cleared.",
@@ -91,6 +92,9 @@ type Config struct {
 
 	// Retrievals holds what each session pulled, for the enriched record.
 	Retrievals *retrievalStore
+	// runtime is what the application and the notification intake share
+	// (runtime.go). Every copy of Config carries the same pointer.
+	runtime *runtimeState
 
 	// mitzMockURL is the mock's base URL, handed to reset and recycle for
 	// subscription cleanup. Nil when MITZMOCK_URL is unset.
@@ -123,6 +127,7 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		KnooppuntInternalURL: getenv("KNOOPPUNT_INTERNAL_URL"),
 		HAPIBaseURL:          getenv("HAPI_BASE_URL"),
 		Locks:                NewRegistry(),
+		runtime:              newRuntimeState(),
 	}
 	if err := cfg.configureEventTraces(getenv); err != nil {
 		return Config{}, err
@@ -257,6 +262,9 @@ func NewMux(cfg Config) http.Handler {
 
 	if cfg.Retrievals == nil {
 		cfg.Retrievals = newRetrievalStore()
+	}
+	if cfg.runtime == nil {
+		cfg.runtime = newRuntimeState()
 	}
 
 	sessions := newSessionStore()

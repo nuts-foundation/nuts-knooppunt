@@ -25,7 +25,12 @@ func (c Config) startPatientRun(session *authSession, key string, switchPatient 
 		return nil
 	}
 	var err error
-	start := func() { _, err = c.Runs.start(lockOwner(session), key, session.ExpiresAt, switchPatient) }
+	start := func() {
+		var id string
+		if id, err = c.Runs.start(lockOwner(session), key, session.ExpiresAt, switchPatient); err == nil {
+			c.Runs.bindSession(id, session.ID)
+		}
+	}
 	if c.sessions != nil {
 		if !c.sessions.storeIfLive(session.ID, start) {
 			return errRunUnavailable

@@ -276,3 +276,23 @@ func TestRunStore_LockLossInvalidatesRun(t *testing.T) {
 	require.False(t, store.append(id, stepEvent{GF: "exchange"}))
 	require.True(t, store.locks.HeldBy("anna", "two"), "cleanup must not release a different owner's lock")
 }
+
+func TestRunStore_RunOfReturnsTheRunAndItsSession(t *testing.T) {
+	locks := NewRegistry()
+	runs := newRunStore(locks)
+	_, _, ok := runs.runOf("owner-1", "anna")
+	require.False(t, ok)
+
+	id, err := runs.start("owner-1", "anna", time.Now().Add(time.Hour), false)
+	require.NoError(t, err)
+	_, _, ok = runs.runOf("owner-1", "anna")
+	require.False(t, ok, "a run that is not bound to a session cannot be published to from outside it")
+
+	runs.bindSession(id, "session-1")
+	runID, sessionID, ok := runs.runOf("owner-1", "anna")
+	require.True(t, ok)
+	require.Equal(t, id, runID)
+	require.Equal(t, "session-1", sessionID)
+	_, _, ok = runs.runOf("owner-2", "anna")
+	require.False(t, ok)
+}

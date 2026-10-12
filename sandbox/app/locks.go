@@ -171,3 +171,14 @@ func (r *Registry) HeldBy(key, owner string) bool {
 	existing, ok := r.locks[key]
 	return ok && existing.owner == owner && existing.expiresAt.After(r.now())
 }
+
+// Owner returns who holds a live lock on key.
+func (r *Registry) Owner(key string) (string, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	existing, ok := r.locks[key]
+	if !ok || !existing.expiresAt.After(r.now()) {
+		return "", false
+	}
+	return existing.owner, true
+}
