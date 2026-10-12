@@ -57,13 +57,20 @@ config:
     # The NVI's URA, the recipient the knooppunt pseudonymizes for: what
     # mock-prs registers a key for (docs/CONFIGURATION.md).
     audience: "90000901"
-  # Same gap, same fix: component/mitz.Enabled() requires mitzbase, and it
-  # was never set. Needed for BGZ authorization (its policy requires Mitz
-  # consent - mock-mitz's closed-question endpoint supplies that answer).
-  # The separate subscription flow (/abonnementen/fhir) mock-mitz doesn't
-  # implement yet - sandbox/DESIGN.md E8, not a config problem.
+  # component/mitz.Enabled() requires mitzbase. BGZ authorization needs it: its
+  # policy requires Mitz consent, which mock-mitz's closed-question endpoint
+  # answers. notifyendpoint becomes the channel.endpoint of the consent
+  # subscriptions the sandbox creates, so mock-mitz delivers its notifications
+  # to this knooppunt, and notifyforwardurl relays them, unchanged, to the
+  # sandbox's private intake. Both are in-cluster addresses, and no ingress
+  # routes to the intake. /mitz/notify itself is on the knooppunt's public
+  # port, which this environment's ingress serves without authentication: a
+  # notification posted to knooppunt.test.gf.nuts.nl is relayed like one from
+  # mock-mitz.
   mitz:
     mitzbase: "http://mock-mitz:8080"
+    notifyendpoint: "http://nuts-knooppunt:8080/mitz/notify"
+    notifyforwardurl: "http://gf-sandbox-mitz-notify:8093/mitz/notify"
   # Same gap once more, for authorization: without a PIP the PDP can't
   # resolve a Patient to a BSN, never asks Mitz for consent, and denies every
   # request with an opaque 403. Matches docker-compose.yml's
@@ -326,6 +333,9 @@ gf-sandbox:
   traceCapture:
     enabled: true
     prsUrl: "http://mock-prs:8080"
+  mitz:
+    notify:
+      enabled: true
 
 seed:
   enabled: true

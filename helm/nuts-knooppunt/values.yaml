@@ -461,6 +461,11 @@ gf-sandbox:
     pullPolicy: Always
   env:
     knooppuntInternalUrl: "http://nuts-knooppunt:8081"
+  # The mock Mitz of this release, for the consent control and reset. The
+  # notification intake is off until an environment turns it on together with
+  # the knooppunt's config.mitz.notifyforwardurl.
+  mitz:
+    mockUrl: "http://mock-mitz:8080"
   # De Zonnebloem's own EHR (sandbox/zonnebloem), the source side of the demo's
   # marker proof, served by the same pod on its own port. Set enabled: true,
   # give it an ingress host with servicePort: 3001, and set publicUrl to that
