@@ -31,6 +31,9 @@ type ClosedQuestionService struct {
 	// deliver notifies the subscribers of a change. Nil until notification.go
 	// sets it in New.
 	deliver func(change consentChange) []notificationResult
+	// notifier posts notifications to subscription endpoints. It follows no
+	// redirect: an endpoint that redirects did not accept the notification.
+	notifier *http.Client
 }
 
 // New creates and starts a mock XACML MITZ server on listenAddr, which is
@@ -51,6 +54,8 @@ func New(listenAddr string) (*ClosedQuestionService, error) {
 		ResponseDecision: "Permit", // Default to Permit
 		ResponseMessage:  "Consent granted",
 	}
+	mitz.notifier = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	mitz.deliver = mitz.deliverChange
 
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
