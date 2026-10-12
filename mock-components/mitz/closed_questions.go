@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -21,6 +22,7 @@ type ClosedQuestionService struct {
 	requests         [][]byte // Store raw XML requests
 	mu               sync.Mutex
 	subscriptions    *subscriptionStore
+	decisions        *decisionLog
 	ResponseDecision string // "Permit" or "Deny"
 	ResponseMessage  string
 }
@@ -37,6 +39,7 @@ func New(listenAddr string) (*ClosedQuestionService, error) {
 	mitz := &ClosedQuestionService{
 		requests:         [][]byte{},
 		subscriptions:    newSubscriptionStore(),
+		decisions:        &decisionLog{},
 		ResponseDecision: "Permit", // Default to Permit
 		ResponseMessage:  "Consent granted",
 	}
@@ -52,6 +55,7 @@ func New(listenAddr string) (*ClosedQuestionService, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /geslotenautorisatievraag/xacml3", mitz.handleXACMLAuthz)
 	mux.HandleFunc("GET /status", mitz.handleStatus)
+	mux.HandleFunc("GET /mock/decisions", mitz.handleDecisions)
 	mux.HandleFunc("POST /abonnementen/fhir/Subscription", mitz.handleCreateSubscription)
 	mux.HandleFunc("GET /abonnementen/fhir/Subscription", mitz.handleSearchSubscriptions)
 	mux.HandleFunc("DELETE /abonnementen/fhir/Subscription", mitz.handleClearSubscriptions)
@@ -99,18 +103,33 @@ func (m *ClosedQuestionService) handleXACMLAuthz(w http.ResponseWriter, r *http.
 	}
 	defer r.Body.Close()
 
+	started := time.Now()
+	subject := parseClosedQuestion(body)
+	entry := Decision{
+		TraceID: traceIDFrom(r.Header.Get("traceparent")), PatientID: subject.PatientID,
+		DataHolderURA: subject.DataHolderURA, RequesterURA: subject.RequesterURA, Request: string(body),
+	}
+	record := func(status int, decision, response string) {
+		entry.Time, entry.DurationMs = time.Now().UTC(), time.Since(started).Milliseconds()
+		entry.Status, entry.Decision, entry.Response = status, decision, response
+		m.decisions.add(entry)
+	}
+
 	// Store raw XML request for verification
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.requests = append(m.requests, body)
-	var decision = m.ResponseDecision
+	decision, message := m.ResponseDecision, m.ResponseMessage
+	m.mu.Unlock()
+
+	// The magic strings come first and are looked for in the raw body, before
+	// anything is decoded, so they keep working for a body that is not XML.
 	if strings.Contains(string(body), "bsn:deny") {
 		decision = "Deny"
 	} else if strings.Contains(string(body), "bsn:error") {
+		record(http.StatusInternalServerError, "", "")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	message := m.ResponseMessage
 
 	// Build XACML SOAP response XML
 	responseXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
@@ -128,7 +147,7 @@ func (m *ClosedQuestionService) handleXACMLAuthz(w http.ResponseWriter, r *http.
   </s:Body>
 </s:Envelope>`, decision, message)
 
-	// Set response headers
+	record(http.StatusOK, decision, responseXML)
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(responseXML))
