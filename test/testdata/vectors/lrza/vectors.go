@@ -1,20 +1,20 @@
 package lrza
 
 import (
-	"net/url"
-
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
+// lrza-root-directory is the single central addressing directory: every care
+// organization's Organization + Endpoint resources.
 func HAPITenant() hapi.Tenant {
 	return hapi.Tenant{
-		Name: "lrza-mcsd-admin",
-		ID:   3,
+		Name: "lrza-root-directory",
+		ID:   11,
 	}
 }
 
-// Organizations returns all organizations in the LRZa root directory
+// Organizations returns every care organization in the central addressing directory.
 func Organizations() []fhir.Organization {
 	return []fhir.Organization{
 		CareHomeSunflower(),
@@ -23,18 +23,19 @@ func Organizations() []fhir.Organization {
 	}
 }
 
-// Endpoints returns all root directory endpoints in the LRZa directory
-func Endpoints(fhirBaseURL *url.URL) []fhir.Endpoint {
+// Endpoints returns every organization's endpoints in the central
+// addressing directory.
+func Endpoints() []fhir.Endpoint {
 	var allEndpoints []fhir.Endpoint
-	allEndpoints = append(allEndpoints, CareHomeSunflowerEndpoints(fhirBaseURL)...)
-	allEndpoints = append(allEndpoints, Care2CureEndpoints(fhirBaseURL)...)
-	allEndpoints = append(allEndpoints, HospitalPlataanEndpoints(fhirBaseURL)...)
+	allEndpoints = append(allEndpoints, CareHomeSunflowerEndpoints()...)
+	allEndpoints = append(allEndpoints, Care2CureEndpoints()...)
+	allEndpoints = append(allEndpoints, HospitalPlataanEndpoints()...)
 	return allEndpoints
 }
 
-func Resources(fhirBaseURL *url.URL) []fhir.HasId {
+func Resources() []fhir.HasId {
 	var resources []fhir.HasId
-	for _, endpoint := range Endpoints(fhirBaseURL) {
+	for _, endpoint := range Endpoints() {
 		resources = append(resources, &endpoint)
 	}
 	for _, org := range Organizations() {

@@ -66,7 +66,7 @@ const authServerEndpoint = `{
   "id": "zb-oauth",
   "status": "active",
   "address": "http://localhost:8080/nuts/oauth2/00000020",
-  "connectionType": {"system": "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-authorization-server-cs", "code": "oauth-nuts"},
+  "connectionType": {"system": "http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-authorization-server-cs", "code": "oauth-nuts"},
   "period": {"start": "2025-01-01T00:00:00Z"}
 }`
 
@@ -75,7 +75,7 @@ const activeEndpoint = `{
   "id": "zb-fhir",
   "status": "active",
   "address": "http://pep-zonnebloem:8080/fhir",
-  "connectionType": {"system": "http://fhir.nl/fhir/NamingSystem/endpoint-connection-type", "code": "fhir"},
+  "connectionType": {"system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type", "code": "hl7-fhir-rest"},
   "period": {"start": "2025-01-01T00:00:00Z"}
 }`
 
@@ -104,7 +104,7 @@ func TestMCSDResolve_DoesNotAddressAnEndpointThatIsNotActive(t *testing.T) {
 	suspended := `{
 	  "resourceType": "Endpoint", "id": "zb-fhir", "status": "suspended",
 	  "address": "http://pep-zonnebloem:8080/fhir",
-	  "connectionType": {"system": "http://fhir.nl/fhir/NamingSystem/endpoint-connection-type", "code": "fhir"}
+	  "connectionType": {"system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type", "code": "hl7-fhir-rest"}
 	}`
 	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(organizationBundle(suspended)))
@@ -123,7 +123,7 @@ func TestMCSDResolve_DoesNotAddressAnEndpointWhosePeriodHasEnded(t *testing.T) {
 	expired := `{
 	  "resourceType": "Endpoint", "id": "zb-fhir", "status": "active",
 	  "address": "http://pep-zonnebloem:8080/fhir",
-	  "connectionType": {"system": "http://fhir.nl/fhir/NamingSystem/endpoint-connection-type", "code": "fhir"},
+	  "connectionType": {"system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type", "code": "hl7-fhir-rest"},
 	  "period": {"start": "2020-01-01T00:00:00Z", "end": "2021-01-01T00:00:00Z"}
 	}`
 	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
@@ -142,7 +142,7 @@ func TestMCSDResolve_IgnoresAnEndpointTheOrganizationDoesNotReference(t *testing
 	stranger := `{
 	  "resourceType": "Endpoint", "id": "someone-else", "status": "active",
 	  "address": "http://pep-elsewhere:8080/fhir",
-	  "connectionType": {"system": "http://fhir.nl/fhir/NamingSystem/endpoint-connection-type", "code": "fhir"}
+	  "connectionType": {"system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type", "code": "hl7-fhir-rest"}
 	}`
 	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(organizationBundle(stranger)))
@@ -194,7 +194,7 @@ func TestMCSDResolve_HonoursDateOnlyPeriodBounds(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			endpoint := `{"resourceType":"Endpoint","id":"zb-fhir","status":"active",
 			  "address":"http://pep-zonnebloem:8080/fhir",
-			  "connectionType":{"system":"http://fhir.nl/fhir/NamingSystem/endpoint-connection-type","code":"fhir"},
+			  "connectionType":{"system":"http://terminology.hl7.org/CodeSystem/endpoint-connection-type","code":"hl7-fhir-rest"},
 			  "period":` + tc.period + `}`
 			base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
 				_, _ = w.Write([]byte(organizationBundle(endpoint)))
@@ -300,7 +300,7 @@ func TestMCSDResolve_IgnoresAnAuthorizationEndpointThatIsNotUsable(t *testing.T)
 	suspended := `{
 	  "resourceType": "Endpoint", "id": "zb-oauth", "status": "suspended",
 	  "address": "http://localhost:8080/nuts/oauth2/00000020",
-	  "connectionType": {"system": "http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-authorization-server-cs", "code": "oauth-nuts"}
+	  "connectionType": {"system": "http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-authorization-server-cs", "code": "oauth-nuts"}
 	}`
 	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(organizationBundleWith(
@@ -336,25 +336,6 @@ func TestMCSDResolve_IgnoresAnEndpointKindItCannotUse(t *testing.T) {
 	assert.Equal(t, "http://pep-zonnebloem:8080/fhir", source.Address,
 		"an imaging service is not where this reads a patient summary")
 	assert.Equal(t, "http://localhost:8080/nuts/oauth2/00000020", source.AuthorizationServer)
-}
-
-// The spec's connection types draw FHIR REST from the HL7 code system; the
-// seeded endpoints in this repo use a system that is in neither value set. Both
-// are accepted so the demo keeps working while the seed is what it is.
-func TestMCSDResolve_AcceptsTheSpecFHIRConnectionType(t *testing.T) {
-	spec := `{
-	  "resourceType": "Endpoint", "id": "zb-fhir", "status": "active",
-	  "address": "http://pep-zonnebloem:8080/fhir",
-	  "connectionType": {"system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type", "code": "hl7-fhir-rest"}
-	}`
-	base := mcsdServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(organizationBundle(spec)))
-	})
-
-	source, err := mcsdResolveFunc(base)(t.Context(), "00000020")
-
-	require.NoError(t, err)
-	assert.Equal(t, "http://pep-zonnebloem:8080/fhir", source.Address)
 }
 
 // An organization publishing only an authorization server is not addressable for

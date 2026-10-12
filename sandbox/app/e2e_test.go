@@ -151,7 +151,7 @@ func startFullChain(t *testing.T) fullChain {
 	t.Setenv(sunflower.EndpointAddressEnvVar, pep.URL.JoinPath("fhir").String())
 	_, err := vectors.Load(h.HAPIBaseURL)
 	require.NoError(t, err)
-	syncMCSD(t, h)
+	syncDirectory(t, h)
 
 	// What the sandbox reads at startup, pointed at this chain.
 	t.Setenv("KNOOPPUNT_INTERNAL_URL", h.KnooppuntInternalBaseURL.String())

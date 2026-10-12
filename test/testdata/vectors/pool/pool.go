@@ -393,7 +393,7 @@ func (p PoolPatient) ZonnebloemCategories() []string { return categoriesOf(p.Zon
 // RecyclePatient and ResetGlobal remove it again, both scoped to PlataanClientID.
 func (p PoolPatient) NVIRegistrations() []nvi.Registration {
 	return []nvi.Registration{{
-		CustodianURA: *sunflower.Organization().Identifier[0].Value,
+		CustodianURA: sunflower.URA,
 		BSN:          p.BSN,
 		ClientID:     ZonnebloemClientID,
 		Categories:   p.ZonnebloemCategories(),

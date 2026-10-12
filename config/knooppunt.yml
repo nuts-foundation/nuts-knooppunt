@@ -3,29 +3,6 @@
 
 strictmode: false
 
-# mCSD (Mobile Care Services Discovery) configuration
-mcsd:
-  # Local FHIR directory configuration
-  query:
-    fhirbaseurl: "http://localhost:8080/fhir"
-
-  # Exclude administration directories from being registered
-  # Use this to prevent your own FHIR server from being added as an admin directory
-  # This avoids syncing your own resources back to yourself
-  adminexclude:
-    - "http://localhost:8080/fhir"  # Exclude own query directory
-    # - "https://fhir.other-excluded.org/fhir"  # Add more exclusions as needed
-
-  # Resource types to synchronize from discovered mCSD directories
-  # If not specified, defaults to: Organization, Endpoint, Location, HealthcareService, PractitionerRole, Practitioner
-  # directoryresourcetypes:
-  #   - "Organization"
-  #   - "Endpoint"
-  #   - "Location"
-  #   - "HealthcareService"
-  #   - "PractitionerRole"
-  #   - "Practitioner"
-
 # LRZA synchronization configuration
 # Syncs the trusted national LRZA mCSD directory into the local query directory.
 # The sync client is only enabled when lrzabaseurl is set.

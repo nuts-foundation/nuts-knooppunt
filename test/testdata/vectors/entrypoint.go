@@ -11,7 +11,6 @@ import (
 	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
-	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/care2cure"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
@@ -50,19 +49,17 @@ func allTenants() []hapi.Tenant {
 		{Name: "knpt-mcsd-query", ID: 2},
 		{Name: "knpt-mcsd-admin", ID: 1},
 		lrza.HAPITenant(),
-		care2cure.AdminHAPITenant(),
-		sunflower.AdminHAPITenant(),
 		sunflower.PatientsHAPITenant(),
 		nvi.HAPITenant(),
 		pip.HAPITenant(),
-		plataan.AdminHAPITenant(),
 		plataan.PatientsHAPITenant(),
 	}
 }
 
-// Load seeds all FHIR test data into HAPI: the mCSD directories (LRZa root plus
-// each organization's admin directory), the PIP, and the demo-patient pool's
-// clinical resources on both the Plataan and Zonnebloem sides.
+// Load seeds all FHIR test data into HAPI: the central mCSD addressing
+// directory (every care organization's own Organization + Endpoint
+// resources), the PIP, and the demo-patient pool's clinical resources on both
+// the Plataan and Zonnebloem sides.
 //
 // Load is idempotent: every write is a PUT-by-fixed-id upsert and there is no
 // destructive $expunge, so re-running Load (first boot, re-seed, reset) restores
@@ -73,7 +70,7 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 
 	knptMCSDAdminHAPITenant := hapi.Tenant{Name: "knpt-mcsd-admin", ID: 1}
 	knptMCSDQueryHAPITenant := hapi.Tenant{Name: "knpt-mcsd-query", ID: 2}
-	lrzaMCSDAdminHAPITenant := lrza.HAPITenant()
+	lrzaRootDirectoryHAPITenant := lrza.HAPITenant()
 	nviTenant := nvi.HAPITenant()
 	pipTenant := pip.HAPITenant()
 
@@ -87,34 +84,19 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 	}
 
 	//
-	// Knooppunt mCSD Admin (LRZa root directory)
+	// Central mCSD addressing directory: every care organization's own
+	// Organization + Endpoint resources, in one directory (Care2Cure,
+	// Sunflower/Zonnebloem, Plataan).
 	//
-	if err := putResources(ctx, lrzaMCSDAdminHAPITenant.FHIRClient(hapiBaseURL), lrza.Resources(hapiBaseURL)); err != nil {
-		return nil, fmt.Errorf("seed LRZa resources: %w", err)
-	}
-
-	//
-	// Care2Cure Hospital
-	//
-	if err := putResources(ctx, care2cure.AdminHAPITenant().FHIRClient(hapiBaseURL), care2cure.Resources()); err != nil {
-		return nil, fmt.Errorf("seed care2cure resources: %w", err)
+	if err := putResources(ctx, lrzaRootDirectoryHAPITenant.FHIRClient(hapiBaseURL), lrza.Resources()); err != nil {
+		return nil, fmt.Errorf("seed mCSD addressing directory resources: %w", err)
 	}
 
 	//
 	// Sunflower / Zonnebloem Care Home (source of the BGZ)
 	//
-	if err := putResources(ctx, sunflower.AdminHAPITenant().FHIRClient(hapiBaseURL), sunflower.AdminResources()); err != nil {
-		return nil, fmt.Errorf("seed sunflower admin resources: %w", err)
-	}
 	if err := putResources(ctx, sunflower.PatientsHAPITenant().FHIRClient(hapiBaseURL), sunflower.PatientsResources()); err != nil {
 		return nil, fmt.Errorf("seed sunflower patients resources: %w", err)
-	}
-
-	//
-	// Plataan Hospital (consumer/requester)
-	//
-	if err := putResources(ctx, plataan.AdminHAPITenant().FHIRClient(hapiBaseURL), plataan.AdminResources()); err != nil {
-		return nil, fmt.Errorf("seed plataan admin resources: %w", err)
 	}
 
 	//
@@ -142,7 +124,7 @@ func Load(hapiBaseURL *url.URL) (*Details, error) {
 				QueryFHIRBaseURL: knptMCSDQueryHAPITenant.BaseURL(hapiBaseURL),
 			},
 		},
-		LRZa: FHIRAPIDetails{FHIRBaseURL: lrzaMCSDAdminHAPITenant.BaseURL(hapiBaseURL)},
+		LRZa: FHIRAPIDetails{FHIRBaseURL: lrzaRootDirectoryHAPITenant.BaseURL(hapiBaseURL)},
 		NVI:  FHIRAPIDetails{FHIRBaseURL: nviTenant.BaseURL(hapiBaseURL)},
 		PIP:  FHIRAPIDetails{FHIRBaseURL: pipTenant.BaseURL(hapiBaseURL)},
 	}, nil
