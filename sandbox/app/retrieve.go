@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,6 +77,9 @@ func (i recordItem) External() bool { return i.Source != plataanName() }
 type recordSection struct {
 	Name  string
 	Items []recordItem
+	// Removed names the sources whose items a consent withdrawal removed from
+	// this section.
+	Removed string
 }
 
 // removal is what a consent withdrawal took out of a patient's record: which
@@ -474,6 +478,7 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 		BodyClass: "hood-open", BodyAttrs: viewerBodyAttrs(true),
 		Active: "dossier", TopTitle: "Authorization · " + chosen.Name, ViewerOpen: true,
 		Session: &view, Patient: &row, Retrieval: &retrieval,
+		Consent: c.consentViewFor(r.Context(), patient, row),
 	})
 }
 
@@ -506,10 +511,20 @@ func (c Config) recordSections(patient pool.PoolPatient, session *authSession) (
 	for _, item := range items {
 		byName[item.Section] = append(byName[item.Section], item)
 	}
+	// A section is shown when it has items or when a consent withdrawal removed
+	// items from it. The second matters most when nothing is left: without it
+	// the section would vanish, and the reader would have no way to tell "the
+	// source had no allergies" from "its allergies were removed".
+	marks := c.Retrievals.marks(patient.Key)
+	removedFrom := strings.Join(marks.Sources, ", ")
 	var sections []recordSection
 	for _, name := range sectionOrder {
-		if grouped := byName[name]; len(grouped) > 0 {
-			sections = append(sections, recordSection{Name: name, Items: grouped})
+		section := recordSection{Name: name, Items: byName[name]}
+		if slices.Contains(marks.Sections, name) {
+			section.Removed = removedFrom
+		}
+		if len(section.Items) > 0 || section.Removed != "" {
+			sections = append(sections, section)
 		}
 	}
 	return sections, sourceNames, retrieved

@@ -927,3 +927,46 @@ func TestRetrieve_AnAnswerOvertakenByAWithdrawalNamesTheWithdrawal(t *testing.T)
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, record, "Consent was withdrawn while the retrieval was running")
 }
+
+func refusing(cfg *Config) {
+	cfg.retrieveFromSource = func(_ context.Context, _ authSession, source sourceAddress, _ string, _ []string) (sourceRetrieval, error) {
+		return sourceRetrieval{Source: source, Outcome: chainRefused,
+			Queries: []queryOutcome{{Label: "Patient", Status: http.StatusForbidden}}}, nil
+	}
+}
+
+func TestAuthorization_ARefusalAfterAWithdrawalNamesTheNotificationAsContext(t *testing.T) {
+	f := newConsentFixture(t, true, refusing)
+	f.change(t, "deny")
+
+	status, body := postFormAndRead(t, f.client, f.srv, "/demo/ehr/patients/anna/retrieve",
+		sourceConfirmation(t, f.client, f.srv, "anna", zonnebloemURA))
+
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, "Access denied by Zorgcentrum De Zonnebloem")
+	require.Contains(t, body, "De Plataan received a Mitz notification at")
+	require.Contains(t, body, "that this patient withdrew consent. The source does not say why it refused.")
+	require.Contains(t, body, "Checked at the source: its policy asks Mitz a closed", "the four rows keep their wording")
+}
+
+func TestAuthorization_ARefusalWithoutANotificationSaysNothingAboutConsent(t *testing.T) {
+	f := newConsentFixture(t, false, refusing)
+
+	_, body := postFormAndRead(t, f.client, f.srv, "/demo/ehr/patients/anna/retrieve",
+		sourceConfirmation(t, f.client, f.srv, "anna", zonnebloemURA))
+
+	require.Contains(t, body, "Access denied by Zorgcentrum De Zonnebloem")
+	require.NotContains(t, body, "received a Mitz notification")
+}
+
+func TestAuthorization_ARefusalAfterARestorationDoesNotMentionAWithdrawal(t *testing.T) {
+	f := newConsentFixture(t, true, refusing)
+	f.change(t, "deny")
+	f.change(t, "permit")
+
+	_, body := postFormAndRead(t, f.client, f.srv, "/demo/ehr/patients/anna/retrieve",
+		sourceConfirmation(t, f.client, f.srv, "anna", zonnebloemURA))
+
+	require.Contains(t, body, "Access denied by Zorgcentrum De Zonnebloem")
+	require.NotContains(t, body, "received a Mitz notification", "the latest notification says consent was given again")
+}
