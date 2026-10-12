@@ -1,11 +1,17 @@
 package main
 
 import (
+	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"regexp"
+	"strings"
 	"testing"
 
+	dezimock "github.com/nuts-foundation/nuts-knooppunt/mock-components/dezi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
@@ -178,30 +184,86 @@ func (c fullChain) openSandbox(t *testing.T) sandbox {
 	t.Helper()
 	cfg, err := NewConfigFromEnv(os.Getenv)
 	require.NoError(t, err)
-	server, client := demoServer(t, cfg)
+	server, client := fullChainSandbox(t, cfg, c.MockDezi)
 	openPatient(t, client, server, c.patient.Key)
 	return sandbox{server: server, client: client, key: c.patient.Key, ura: c.SunflowerURA}
+}
+
+var deziRequestHandle = regexp.MustCompile(`name="request" value="([^"]+)"`)
+
+// fullChainSandbox starts a sandbox that signs in through the mock Dezi's real
+// authorization code flow. demoServer cannot: it points the sandbox at a fake
+// that hands out the fixture attestation for any code.
+//
+// The sandbox's address is reserved before its handler is built, because the
+// callback has to be the same exact URL in three places: the sandbox's own
+// configuration, the mock's allowlist, and the redirect the browser follows.
+func fullChainSandbox(t *testing.T, cfg Config, dezi harness.MockDezi) (*httptest.Server, *http.Client) {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	base := "http://" + listener.Addr().String()
+	callback := base + "/demo/auth/callback"
+
+	authorization := httptest.NewServer(dezimock.NewMux(dezi.Signer, dezimock.DrElAmrani, []string{callback}))
+	t.Cleanup(authorization.Close)
+	t.Setenv("SANDBOX_PUBLIC_URL", base)
+	t.Setenv("DEZI_INTERNAL_BASE_URL", authorization.URL)
+	t.Setenv("DEZI_PUBLIC_AUTHORIZE_URL", authorization.URL+"/authorize")
+
+	server := httptest.NewUnstartedServer(NewMux(cfg))
+	require.NoError(t, server.Listener.Close())
+	server.Listener = listener
+	server.Start()
+	t.Cleanup(server.Close)
+
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
+	client := &http.Client{
+		Jar:           jar,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+
+	// The sandbox sends the browser to Dezi.
+	res, err := client.PostForm(server.URL+"/demo/login", nil)
+	require.NoError(t, err)
+	require.NoError(t, res.Body.Close())
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	authorizeURL := res.Header.Get("Location")
+	require.True(t, strings.HasPrefix(authorizeURL, authorization.URL+"/authorize?"), "login must redirect to the mock Dezi, got %s", authorizeURL)
+
+	// Dezi shows its consent page, which carries the request handle.
+	status, page := getPageWithClient(t, client, authorizeURL)
+	require.Equal(t, http.StatusOK, status, "body: %s", page)
+	handle := deziRequestHandle.FindStringSubmatch(page)
+	require.Len(t, handle, 2, "the consent page must carry a request handle")
+
+	// The practitioner agrees, and Dezi sends the browser back with a code.
+	res, err = client.PostForm(authorization.URL+"/authorize", url.Values{"request": {handle[1]}})
+	require.NoError(t, err)
+	require.NoError(t, res.Body.Close())
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	back := res.Header.Get("Location")
+	require.True(t, strings.HasPrefix(back, callback+"?"), "Dezi must redirect to the sandbox callback, got %s", back)
+
+	res, err = client.Get(back)
+	require.NoError(t, err)
+	require.NoError(t, res.Body.Close())
+	require.Equal(t, http.StatusSeeOther, res.StatusCode)
+	require.Equal(t, "/demo/ehr", res.Header.Get("Location"), "a successful callback lands on the EHR home")
+	return server, client
 }
 
 // retrieve opens the retrieve page and confirms the source it offers. Opening it
 // runs discovery against the real NVI and directory; confirming it is where the
 // sandbox asks the Nuts node for a token.
 //
-// That request is the one leg that cannot pass yet, and the node is right to
-// refuse it: the sandbox signs in against a fixture attestation whose signature
-// is the word "signature" and whose header carries no jku
-// (dezi_fixture_test.go). That is fine for every other test here, because this
-// backend never verifies one, and it is not fine for a real Nuts node, which
-// fetches the signing key at the jku before it will accept the id_token.
-// Finishing this means running mock-components/dezi in process with a real key,
-// serving its JWK set over TLS, trusting that certificate in the node and
-// naming it in NUTS_VCR_DEZI_ALLOWEDJKU:
-// https://github.com/nuts-foundation/nuts-knooppunt/issues/591. Everything
-// before the confirmation runs.
+// The sandbox signs in through the mock Dezi the harness runs in process, so the
+// attestation it sends as id_token carries a signature and a jku the node can
+// resolve.
 func (s sandbox) retrieve(t *testing.T) (int, string) {
 	t.Helper()
 	confirmation := sourceConfirmation(t, s.client, s.server, s.key, s.ura)
-	t.Skip("needs a Dezi that signs with a resolvable jku; see issue #591")
 	return postFormAndRead(t, s.client, s.server, "/demo/ehr/patients/"+s.key+"/retrieve", confirmation)
 }
 

@@ -34,6 +34,9 @@ type Details struct {
 	LRZaFHIRBaseURL          *url.URL
 	SunflowerURA             string
 	MockMitzXACML            *mitzmock.ClosedQuestionService
+	// MockDezi signs the attestations a full-chain test signs in with. Zero
+	// unless the harness was started with a Nuts node.
+	MockDezi MockDezi
 }
 
 type MITZDetails struct {
@@ -76,6 +79,11 @@ func StartWithNuts(t *testing.T, dataHolder hapi.Tenant) Details {
 	caPath := filepath.Join(PEPCertsDir(t), "ca.pem")
 	policyDir := setupNutsEnvironment(t, caPath)
 
+	// Before the node starts: it copies the allowed list into its validator at
+	// configuration time and compares whole URLs.
+	dezi := StartMockDezi(t)
+	t.Setenv("NUTS_VCR_DEZI_ALLOWEDJKU", dezi.JKU)
+
 	// The bgz scope is not in config/policy: its presentation definition pins a
 	// certificate authority fingerprint, so it is rendered per deployment rather
 	// than committed. renderBGZPolicy does for this harness what
@@ -86,7 +94,9 @@ func StartWithNuts(t *testing.T, dataHolder hapi.Tenant) Details {
 	require.NoError(t, os.WriteFile(filepath.Join(policyDir, "bgz.json"),
 		renderBGZPolicy(t, caPath), 0644))
 
-	return start(t, startOptions{nuts: true, pip: &dataHolder})
+	details := start(t, startOptions{nuts: true, pip: &dataHolder})
+	details.MockDezi = dezi
+	return details
 }
 
 // PEPCertsDir is where the committed test certificates live, resolved from this
