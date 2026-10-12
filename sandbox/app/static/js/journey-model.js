@@ -15,7 +15,7 @@ export const isTokenRequest = event => event.gf === 'authorization' &&
   event.request?.method === 'POST' && event.request?.path?.split('?')[0].endsWith('/request-service-access-token');
 
 const sourceSearches = {
-  Patient: { label: 'Find patient at Sunflower', result: 'the patient search result' },
+  Patient: { label: 'Find patient at De Zonnebloem', result: 'the patient search result' },
   AllergyIntolerance: { label: 'Retrieve allergies', result: 'the allergy search result' },
   Condition: { label: 'Retrieve conditions', result: 'the condition search result' },
   MedicationRequest: { label: 'Retrieve medication', result: 'the medication search result' },
@@ -36,16 +36,16 @@ export function accessPresentation(stage) {
   const failed = events.some(event => event.outcome === 'error');
   let description = '';
   if (tokenRequest) description = tokenReceived
-    ? 'Sunflower issued an access key, received through Plataan’s access service.'
+    ? 'De Zonnebloem issued an access key, received through Plataan’s access service.'
     : refused ? 'The access-key request was refused.'
       : failed ? 'The access-key request failed.' : 'Access request completed; receipt of a key was not established.';
   const search = sourceSearch(events[0] || {});
-  if (exchange) description = dataReturned ? `Sunflower returned ${search?.result || 'a data response'}.`
-    : refused ? 'Sunflower refused this request. The vault stays closed.'
+  if (exchange) description = dataReturned ? `De Zonnebloem returned ${search?.result || 'a data response'}.`
+    : refused ? 'De Zonnebloem refused this request. The vault stays closed.'
       : failed ? 'The source request failed. The vault stays closed.' : 'A data response was not established. The vault stays closed.';
   const queryDescription = events[0]?.resourceType === 'Patient'
-    ? 'Find Sunflower’s patient reference. POST sends the search identifier in the body.'
-    : search ? `${search.label} using Sunflower’s patient reference.` : 'Request source data.';
+    ? 'Find De Zonnebloem’s patient reference. POST sends the search identifier in the body.'
+    : search ? `${search.label} using De Zonnebloem’s patient reference.` : 'Request source data.';
   const requestDescription = exchange ? `${tokenAttached ? 'Access key attached' : 'Key attachment not established'} · ${queryDescription}` : '';
   return { tokenRequest, tokenReceived, tokenAttached, dataReturned, exchange, visible: tokenRequest || exchange, description, requestDescription };
 }

@@ -37,7 +37,7 @@ func TestViewerBodyAttrsCarryHoodSignals(t *testing.T) {
 	require.Contains(t, attrs, "hood-open")
 }
 
-// The dock is 560px and reserves 574px beside the content. Opening it by default
+// The dock reserves its 560px beside the content. Opening it by default
 // on a narrow screen leaves less room for the record than one card needs, so the
 // default is conditioned on the same width at which viewer.css starts reserving
 // that room. Below it the dock stays a tab the presenter can still open.

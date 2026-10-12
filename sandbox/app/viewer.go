@@ -6,7 +6,7 @@ import (
 )
 
 // viewerReserveBreakpoint is the viewport width from which the layout can spare
-// the dock its 574px, and therefore also the width from which the dock may open
+// the dock its 560px, and therefore also the width from which the dock may open
 // by default. viewer.css reserves the space at exactly this width; the two are
 // held together by TestViewerBreakpointMatchesTheStylesheet.
 const viewerReserveBreakpoint = "1400"

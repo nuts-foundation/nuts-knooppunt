@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"html/template"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -31,6 +32,16 @@ func TestSidebarRendersBrandSectionsAndActiveItem(t *testing.T) {
 	}
 	require.Equal(t, 1, strings.Count(s, "nav-item active"), "exactly one active item")
 	require.Contains(t, s, "Test environment")
+}
+
+// Patient record is the way back to the patient list from every EHR screen. An
+// anchor, not any element with an href: only an anchor is followed on a click or
+// reached with the keyboard.
+func TestSidebarPatientRecordLinksToThePatientList(t *testing.T) {
+	s := renderPartialForTest(t, "sidebar", page{Active: "dossier"}, "_sidebar.html")
+	link := regexp.MustCompile(`(?s)<a [^>]*href="/demo/ehr"[^>]*>(.*?)</a>`).FindStringSubmatch(s)
+	require.NotNil(t, link, "the sidebar must link to the patient list")
+	require.Contains(t, link[1], "Patient record", "the link must be the Patient record item")
 }
 
 func TestTopbarSessionSlot(t *testing.T) {

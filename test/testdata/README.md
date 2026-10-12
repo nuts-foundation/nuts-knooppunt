@@ -19,7 +19,7 @@ retrieves a patient's data from De Zonnebloem.
   env vars) + `vectors/lrza` (its Organization + Endpoint addressing data)
 - HAPI tenants: `plataan-patients` (10, its own hospital-side clinical data)
 
-### Care Home Sunflower / Zorgcentrum De Zonnebloem
+### Zorgcentrum De Zonnebloem
 A fictional elderly-care organization; the source (data holder) of the BGZ in the
 demo. (The `sunflower` vector and "De Zonnebloem" are the same organization.)
 - URA: 00000020

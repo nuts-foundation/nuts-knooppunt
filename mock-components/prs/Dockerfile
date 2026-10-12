@@ -5,7 +5,7 @@
 # so go.mod/go.sum at the root are needed to build it.
 #
 #   docker build -f mock-components/prs/Dockerfile .
-FROM --platform=$BUILDPLATFORM golang:1.26.1-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH

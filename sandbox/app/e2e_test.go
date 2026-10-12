@@ -34,7 +34,7 @@ func TestAcceptance_FullChain(t *testing.T) {
 		status, body := sandbox.retrieve(t)
 
 		require.Equal(t, http.StatusOK, status, "body: %s", body)
-		require.Contains(t, body, "Access granted by Sunflower Care Home", "the source's own PEP decided this")
+		require.Contains(t, body, "Access granted by Zorgcentrum De Zonnebloem", "the source's own PEP decided this")
 		// That verdict is the Patient search's alone. The source decides every
 		// clinical search separately, and one it refused shows only as data that
 		// never arrived, so each category it holds for this patient has to be on
@@ -56,7 +56,7 @@ func TestAcceptance_FullChain(t *testing.T) {
 		status, body := sandbox.retrieve(t)
 
 		require.Equal(t, http.StatusOK, status, "body: %s", body)
-		require.Contains(t, body, "Access denied by Sunflower Care Home", "the source declined, and the screen says so")
+		require.Contains(t, body, "Access denied by Zorgcentrum De Zonnebloem", "the source declined, and the screen says so")
 		// Any 401 or 403 on the Patient search renders this screen, an expired
 		// token as much as a consent refusal. This one has to be Mitz's.
 		require.Greater(t, chain.MockMitzXACML.RequestCount(), questionsBefore, "the source's policy asked Mitz")

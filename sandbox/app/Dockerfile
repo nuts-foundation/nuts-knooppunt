@@ -1,6 +1,6 @@
 # Build context must be the repo root: the sandbox app is part of the root Go
 # module (see README.md's "Run" section for the `go run`/`go test` path).
-FROM --platform=$BUILDPLATFORM golang:1.26.1-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH

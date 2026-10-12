@@ -1,8 +1,6 @@
 module github.com/nuts-foundation/nuts-knooppunt
 
-go 1.26.1
-
-require github.com/nuts-foundation/nuts-knooppunt/test/testdata v0.5.0
+go 1.27.1
 
 replace github.com/nuts-foundation/nuts-knooppunt/test/testdata => ./test/testdata
 
@@ -21,6 +19,7 @@ require (
 	github.com/lestrrat-go/jwx/v2 v2.1.6
 	github.com/mitchellh/copystructure v1.2.0
 	github.com/nuts-foundation/go-did v0.19.0
+	github.com/nuts-foundation/nuts-knooppunt/test/testdata v0.5.0
 	github.com/nuts-foundation/nuts-node v1.0.1-0.20260417134758-22ceb753a1f5
 	github.com/oapi-codegen/runtime v1.6.0
 	github.com/open-policy-agent/opa v1.12.3

@@ -256,7 +256,7 @@ export function mountViewer(dock) {
     contract.hidden = !access.visible;
     contractStatus.textContent = access.description;
     if (access.visible && !technicalMode) stageDetail.textContent = access.tokenRequest
-      ? access.tokenReceived ? 'Request access → Sunflower · source-issued key → Plataan' : 'Request access through Plataan’s access service → Sunflower'
+      ? access.tokenReceived ? 'Request access → De Zonnebloem · source-issued key → Plataan' : 'Request access through Plataan’s access service → De Zonnebloem'
       : access.requestDescription;
     pause.textContent = state.paused ? 'Resume' : 'Pause';
     pause.disabled = ended;

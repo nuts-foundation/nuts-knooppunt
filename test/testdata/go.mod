@@ -1,6 +1,6 @@
 module github.com/nuts-foundation/nuts-knooppunt/test/testdata
 
-go 1.25.0
+go 1.27.1
 
 require (
 	github.com/SanteonNL/go-fhir-client v0.5.0

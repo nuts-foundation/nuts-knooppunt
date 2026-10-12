@@ -15,7 +15,7 @@ func CareHomeSunflower() fhir.Organization {
 		Meta: &fhir.Meta{
 			Profile: []string{"http://fhir.generiekefuncties.nl/csd/StructureDefinition/nl-gf-organization"},
 		},
-		Name: to.Ptr("Sunflower Care Home"),
+		Name: to.Ptr("Zorgcentrum De Zonnebloem"),
 		Identifier: []fhir.Identifier{
 			{
 				System: to.Ptr("http://fhir.nl/fhir/NamingSystem/ura"),

@@ -568,7 +568,7 @@ test('patient and clinical searches have distinct stages even when both use GET'
   ].map(([method, type], index) => ({ ...step(index + 1), actionId: 'retrieval', action: 'retrieve', purpose: 'exchange', gf: 'exchange', resourceType: type, request: { method, path: `/fhir/${type}`, tokenAttached: true } }));
   const stages = buildActionGroups(calls)[0].stages;
   assert.equal(stages.length, 4, 'patient continuation stays with the patient search; clinical categories remain distinct');
-  assert.deepEqual(stages.map(stage => stage.label), ['Find patient at Sunflower', 'Retrieve allergies', 'Retrieve conditions', 'Retrieve medication']);
+  assert.deepEqual(stages.map(stage => stage.label), ['Find patient at De Zonnebloem', 'Retrieve allergies', 'Retrieve conditions', 'Retrieve medication']);
   assert.equal(stages[0].events.length, 2);
 });
 
@@ -580,7 +580,7 @@ test('technical requests explain key attachment and the patient search without e
   source.send('snapshot', {}); clock.tick(1000);
   const content = element => [element.textContent, ...element.children.map(content)].join(' ');
   const text = content(nodes.get('gf-viewer-steps'));
-  assert.match(text, /Find patient at Sunflower/);
+  assert.match(text, /Find patient at De Zonnebloem/);
   assert.match(text, /Access key attached/);
   assert.match(text, /"Authorization": "Bearer \[redacted: credential\]"/);
   assert.ok(text.includes(' [not captured: body exceeds the 65536-byte capture limit]'), 'a marker is shown as text, not as a quoted JSON string');
