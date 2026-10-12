@@ -38,7 +38,8 @@ patient-pool data of its own.
 ### Central Addressing Directory (`lrza-root-directory`)
 One directory (`vectors/lrza`, HAPI tenant `lrza-root-directory`) holds every
 care organization's Organization + Endpoint resources directly — no per-org
-admin tenant, no discovery hop. Each organization gets its own file
+admin tenant, no discovery hop — plus a HealthcareService for De Zonnebloem's
+ward De Vlinder. Each organization gets its own file
 (`sunflower.go`, `plataan.go`, `care2cure.go`) for readability.
 
 `component/lrza` syncs it wholesale into the query directory, in both compose
@@ -53,8 +54,8 @@ Organizations (see `buildUpdateTransaction`'s `isDiscoverableDirectory` gate).
 That makes it structurally unable to serve a flattened directory like this one.
 Its decentralized e2e coverage has been retired accordingly; the sync mechanics
 remain covered by the `httptest`-based unit tests in
-`component/mcsd/component_test.go`, and an e2e suite for `component/lrza` is
-still to be written.
+`component/mcsd/component_test.go`. `component/lrza` is covered end to end by
+`test/e2e/lrza`.
 
 ### Query Directory
 The directory that contains the synced addressing resources after
@@ -251,7 +252,7 @@ Expect a searchset Bundle with at least one `List`.
 ```bash
 QUERY_DIR='http://localhost:7050/fhir/knpt-mcsd-query'
 
-ENDPOINT_REF=$(curl -s "$QUERY_DIR/Organization?identifier=http://fhir.nl/fhir/NamingSystem/ura|00000020" \
+ENDPOINT_REF=$(curl -s "$QUERY_DIR/Organization?identifier=urn:oid:2.16.528.1.1007.3.3|00000020" \
   | jq -r '.entry[0].resource.endpoint[0].reference')
 echo "$ENDPOINT_REF"
 ```
