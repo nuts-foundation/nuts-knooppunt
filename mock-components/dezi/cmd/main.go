@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	dezimock "github.com/nuts-foundation/nuts-knooppunt/mock-components/dezi"
 )
 
 func env(key, fallback string) string {
@@ -42,7 +44,7 @@ func main() {
 	if keyFileForSigning == "" {
 		log.Print("mock-dezi: signing key generated in memory, it changes on every restart")
 	}
-	mux := NewMux(NewSigner(key, env("DEZI_KEY_ID", "sandbox-dezi-1"), issuer, jku), DrElAmrani, allowedRedirectURIs)
+	mux := dezimock.NewMux(dezimock.NewSigner(key, env("DEZI_KEY_ID", "sandbox-dezi-1"), issuer, jku), dezimock.DrElAmrani, allowedRedirectURIs)
 
 	if certFile != "" && keyFile != "" {
 		go func() {

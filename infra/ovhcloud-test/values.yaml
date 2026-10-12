@@ -275,7 +275,7 @@ mock-dezi:
     # self-signed cert ("GF Sandbox Demo CA" - see helm/mock-dezi's
     # certsSecretName), which the node doesn't trust, failing every
     # retrieve with "certificate signed by unknown authority". /dezi/jwks.json
-    # is on the same mux as /authorize (mock-components/dezi/main.go) - it
+    # is on the same mux as /authorize (mock-components/dezi/cmd/main.go) - it
     # was already reachable on the plain HTTP port, just never exposed
     # there - so routing it through the public ingress instead gets a real,
     # already-trusted Let's Encrypt cert for free, with no cert-trust
