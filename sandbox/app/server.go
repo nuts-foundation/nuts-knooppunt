@@ -79,6 +79,10 @@ type Config struct {
 	// when MITZMOCK_URL is unset, and then no consent answer is ever observed.
 	mitzDecisions func(ctx context.Context, traceID string) ([]mitzDecision, error)
 
+	// mitzNotifyListenAddr is where main serves the notification intake. Empty
+	// leaves it off.
+	mitzNotifyListenAddr string
+
 	// The three legs of retrieval (E4), injectable for the same reason the others
 	// are. nviLocalize is not nviLookup: publishing is scoped to our own
 	// custodian, finding deliberately is not.
@@ -165,6 +169,12 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		if cfg.zonnebloemEHRPort == "" {
 			cfg.zonnebloemEHRPort = "3001"
 		}
+	}
+	if addr := getenv("SANDBOX_MITZ_NOTIFY_LISTEN_ADDR"); addr != "" {
+		if _, _, err := net.SplitHostPort(addr); err != nil {
+			return Config{}, fmt.Errorf("SANDBOX_MITZ_NOTIFY_LISTEN_ADDR must be a host:port listener address: %w", err)
+		}
+		cfg.mitzNotifyListenAddr = addr
 	}
 	if cfg.KnooppuntInternalURL == "" {
 		return cfg, nil
@@ -253,6 +263,15 @@ type patientStatus struct {
 // application on its own port; it is not a knooppunt component (DESIGN.md
 // standing decision 5).
 func NewMux(cfg Config) http.Handler {
+	app, _ := newHandlers(cfg)
+	return app
+}
+
+// newHandlers builds the application and the notification intake from one set
+// of stores. They are served on different listeners, and Config is a value: two
+// separate constructions would give the intake stores of its own, and it would
+// record notifications nobody reads.
+func newHandlers(cfg Config) (app http.Handler, intake http.Handler) {
 	if cfg.Locks == nil {
 		cfg.Locks = NewRegistry()
 	}
@@ -554,7 +573,7 @@ func NewMux(cfg Config) http.Handler {
 	mux.HandleFunc("POST /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.withPatientRun(cfg.handleShare)))
 	mux.HandleFunc("GET /demo/ehr/patients/{key}/retrieve", requireSession(signedIn, cfg.withPatientRun(cfg.handleRetrieveForm)))
 	mux.HandleFunc("POST /demo/ehr/patients/{key}/retrieve", requireSession(signedIn, cfg.withPatientRun(cfg.handleRetrieve)))
-	return redirectTrailingSlash(mux)
+	return redirectTrailingSlash(mux), http.HandlerFunc(cfg.handleMitzNotification)
 }
 
 // redirectTrailingSlash sends a request for a path the mux has no route for to

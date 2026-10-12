@@ -76,6 +76,9 @@ type runtimeState struct {
 
 	// probe is called at the points named above. Nothing but a test sets it.
 	probe atomic.Pointer[func(point, patientKey string)]
+
+	// now is the clock a notification's consent time is held against.
+	now func() time.Time
 }
 
 func newRuntimeState() *runtimeState {
@@ -84,6 +87,7 @@ func newRuntimeState() *runtimeState {
 		notifications: map[string]consentNotification{}, received: map[string]uint64{},
 		watermark: map[string]time.Time{}, issued: map[string]time.Time{}, mockWatermarks: map[string]time.Time{},
 		revision: map[string]uint64{}, resets: map[string]uint64{}, changed: map[string]chan struct{}{},
+		now: time.Now,
 	}
 }
 

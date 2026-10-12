@@ -1,9 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"context"
-	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -13,7 +10,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	dezimock "github.com/nuts-foundation/nuts-knooppunt/mock-components/dezi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
@@ -301,59 +297,4 @@ func (s sandbox) record(t *testing.T) string {
 	status, body := getBody(t, s.client, s.server, "/demo/ehr/patients/"+s.key)
 	require.Equal(t, http.StatusOK, status, "body: %s", body)
 	return body
-}
-
-var runIDAttribute = regexp.MustCompile(`data-run-id="([^"]+)"`)
-
-// runID reads the id of the patient's run from the record page. Rendering the
-// record makes status reads, and those are events of the run: a test that
-// compares what a run holds before and after something reads the id once and
-// uses eventsOf.
-func (s sandbox) runID(t *testing.T) string {
-	t.Helper()
-	match := runIDAttribute.FindStringSubmatch(s.record(t))
-	require.Len(t, match, 2, "the record page must carry the run id")
-	return match[1]
-}
-
-// runEvents is eventsOf for the run the record page names now.
-func (s sandbox) runEvents(t *testing.T) []stepEvent {
-	t.Helper()
-	return s.eventsOf(t, s.runID(t))
-}
-
-// eventsOf reads the step events a run has retained, from the event stream the
-// viewer reads, up to its first snapshot. It renders no page, so it adds
-// nothing to the run it reads.
-func (s sandbox) eventsOf(t *testing.T, runID string) []stepEvent {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.server.URL+"/demo/runs/"+runID+"/events", nil)
-	require.NoError(t, err)
-	res, err := s.client.Do(req)
-	require.NoError(t, err)
-	defer res.Body.Close()
-	require.Equal(t, http.StatusOK, res.StatusCode)
-
-	var events []stepEvent
-	scanner := bufio.NewScanner(res.Body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 8<<20)
-	kind := ""
-	for scanner.Scan() {
-		line := scanner.Text()
-		switch {
-		case strings.HasPrefix(line, "event: "):
-			kind = strings.TrimPrefix(line, "event: ")
-		case strings.HasPrefix(line, "data: ") && kind == "step":
-			var event stepEvent
-			require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event))
-			events = append(events, event)
-		case strings.HasPrefix(line, "data: ") && kind == "snapshot":
-			return events
-		}
-	}
-	require.NoError(t, scanner.Err())
-	t.Fatal("the stream ended before its first snapshot")
-	return nil
 }

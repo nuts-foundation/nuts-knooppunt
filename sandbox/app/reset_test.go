@@ -49,6 +49,17 @@ func demoServer(t *testing.T, cfg Config) (*httptest.Server, *http.Client) {
 	return srv, signInViaDezi(t, srv)
 }
 
+// demoServerWithIntake is demoServer plus the notification intake built from
+// the same runtime state, which is what main serves on its private listener.
+func demoServerWithIntake(t *testing.T, cfg Config) (*httptest.Server, *http.Client, http.Handler) {
+	t.Helper()
+	t.Setenv("DEZI_INTERNAL_BASE_URL", fakeDezi(t).URL)
+	app, intake := newHandlers(cfg)
+	srv := httptest.NewServer(app)
+	t.Cleanup(srv.Close)
+	return srv, signInViaDezi(t, srv), intake
+}
+
 func postForm(t *testing.T, client *http.Client, srv *httptest.Server, path string, form url.Values) *http.Response {
 	t.Helper()
 	res, err := client.Post(srv.URL+path, "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
