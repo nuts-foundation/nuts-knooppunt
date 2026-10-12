@@ -11,9 +11,15 @@
         <p id="gf-stage-detail">Select an action in the timeline to replay it.</p>
       </div>
       <div class="gf-access-contract" id="gf-access-contract" hidden>
-        <strong>De Zonnebloem’s access requirements</strong>
-        <div class="gf-contract-terms"><span>Identity &amp; organization</span><span>Professional role</span><span>Patient consent</span><span>Permitted BGZ query</span></div>
+        <strong>De Zonnebloem’s access checks</strong>
+        <div class="gf-contract-terms">
+          <span class="gf-check" data-check="identity"><i></i><b>Identity &amp; organization</b><em>no key yet</em></span>
+          <span class="gf-check" data-check="role"><i></i><b>Professional role</b><em>no key yet</em></span>
+          <span class="gf-check" data-check="consent" id="gf-check-consent"><i></i><b>Patient consent</b><em>not observed</em></span>
+          <span class="gf-check" data-check="query"><i></i><b>Permitted BGZ query</b><em>no request yet</em></span>
+        </div>
         <p id="gf-contract-status"></p>
+        <p id="gf-contract-legend">De Zonnebloem checks all four when a request arrives with the access key: it reads identity and role from the key, asks Mitz for consent, and tests the request against the BGZ queries its policy allows. The query lock opens when a request passed that test and was served.</p>
       </div>
     </div>
     <div class="dock-info">

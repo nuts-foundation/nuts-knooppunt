@@ -1,4 +1,4 @@
-import { buildActionGroups, callIdentity } from './journey-model.js';
+import { buildActionGroups, callIdentity, stageTimeline } from './journey-model.js';
 
 const systemClock = {
   now: () => performance.now(),
@@ -7,9 +7,12 @@ const systemClock = {
 };
 
 export function createPlayback({ clock = systemClock, onStage, onChange, onCursor,
-  cursor, active = true, stageMs = 2500, settleMs = 1000 } = {}) {
+  cursor, active = true, settleMs = 1000 } = {}) {
   let events = [], groups = [], action = null, stage = null;
-  let timer = null, settling = null, due = 0, remaining = stageMs;
+  // A stage plays for length ms, of which left remained when its timer was last
+  // started, at since. marks are the moments inside it at which the view changes
+  // (stageTimeline): the timer wakes at each of them and at the end.
+  let timer = null, settling = null, length = 0, left = 0, since = 0, marks = [];
   let ready = false, started = false, paused = false, disposed = false, complete = false;
   // A replayed window (page load, retention gap) is applied once at its snapshot
   // rather than regrouped and redrawn per event; later live events apply directly.
@@ -22,8 +25,9 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
     while (watched.size > 256) watched.delete(watched.values().next().value);
     onCursor?.(getCursor());
   }
+  const leftNow = () => timer === null ? left : Math.max(0, left - (clock.now() - since));
   function state() {
-    return { events, groups, action, stage, selected, paused: paused || !active,
+    return { events, groups, action, stage, selected, paused: paused || !active, elapsed: stage ? (length - leftNow()) / 1000 : 0,
       status: disposed ? 'ended' : paused || !active ? 'paused' : stage ? 'playing' : !ready ? 'settling' : complete ? 'complete' : 'waiting' };
   }
   const changed = () => onChange?.(state());
@@ -31,8 +35,14 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
   const pending = group => group?.stages.filter(item => item.events.some(event => !watched.has(callIdentity(event)))) || [];
   function schedule() {
     if (disposed || paused || !active || !stage || timer !== null) return;
-    due = clock.now() + remaining;
-    timer = clock.setTimeout(() => { timer = null; stage = null; advance(); }, remaining);
+    const elapsed = length - left;
+    const mark = marks.find(value => value > elapsed);
+    const wait = mark === undefined ? left : mark - elapsed;
+    since = clock.now();
+    timer = clock.setTimeout(() => {
+      timer = null; left -= wait;
+      if (left > 0) { changed(); schedule(); } else { stage = null; advance(); }
+    }, wait);
   }
   function advance() {
     if (disposed || !ready || paused || !active || stage) return;
@@ -49,7 +59,10 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
       next = pending(action)[0];
     }
     if (next) {
-      stage = next; complete = false; remaining = stageMs;
+      const timeline = stageTimeline(next);
+      stage = next; complete = false; length = left = Math.round(timeline.seconds * 1000);
+      marks = [...new Set([timeline.identity, timeline.role, timeline.consent, timeline.query, timeline.settled]
+        .filter(value => value > 0 && value < timeline.seconds).map(value => Math.round(value * 1000)))].sort((a, b) => a - b);
       remember(next.events);
       onStage?.(next, action);
       schedule();
@@ -58,7 +71,7 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
   }
   function suspend() {
     if (timer !== null) {
-      remaining = Math.max(0, due - clock.now());
+      left = leftNow();
       clock.clearTimeout(timer); timer = null;
     }
   }

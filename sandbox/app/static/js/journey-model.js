@@ -4,10 +4,11 @@ export function journeyTargets(event) {
     case 'localization': return '#js-nvi, #jsp-share';
     case 'addressing': return '#js-mcsd, #jsp-address';
     case 'consent':
-      // A closed question travels from the source to Mitz; a change is the
-      // patient at Mitz and travels nowhere; a subscription and the notification
-      // it leads to share one route, in opposite directions.
-      if (event.purpose === 'consent-check') return '#js-mitz, #js-source, #jsp-mitzcheck';
+      // A closed question travels from the source's authorization and policy
+      // to Mitz; a change is the patient at Mitz and travels nowhere; a
+      // subscription and the notification it leads to share one route, in
+      // opposite directions.
+      if (event.purpose === 'consent-check') return '#js-mitz, #js-source, #js-auth-server, #jsp-mitzcheck';
       if (event.purpose === 'consent-change') return '#js-mitz';
       return '#js-mitz, #jsp-mitzsub';
     case 'authentication': return '#js-nuts, #jsp-keyreq';
@@ -109,26 +110,139 @@ export const consentChangeLabel = event => event.request?.body?.decision === 'Pe
 const consentChecksOf = (action, call) => action.events.filter(event =>
   event.purpose === 'consent-check' && event.parentCallId && event.parentCallId === call.callId);
 const checkState = event => event.outcome === 'ok' ? 'permit' : event.outcome === 'deny' ? 'deny' : 'error';
+const returnedData = event => event.outcome === 'ok' && event.response?.status === 200 && event.response.body?.resourceType === 'Bundle';
+const sourceCallsOf = stage => stage.events.filter(event => event.gf === 'exchange');
+
+// refusalDescription says, beside a refusal by Mitz, what the source's own
+// responses show. That no data left the source is said only when every request
+// of the stage was refused: a page served before the refusal did leave it.
+function refusalDescription(calls) {
+  if (!calls.length) return 'Mitz answered deny.';
+  const refused = calls.filter(call => call.outcome === 'deny').length;
+  if (refused === calls.length) return 'Mitz answered deny. De Zonnebloem refused the request and no data left the source.';
+  const returned = calls.filter(returnedData).length, failed = calls.filter(call => call.outcome === 'error').length;
+  const others = [returned && `${returned} returned data`, failed && `${failed} failed`].filter(Boolean);
+  return `Mitz answered deny. De Zonnebloem refused ${refused} of ${calls.length} requests${others.length ? `; ${others.join(', ')}` : ''}.`;
+}
 
 // consentPresentation says what the map may show about consent for one stage,
 // from the answers attached to its source calls and from nothing else. A call
 // with no answer attached was not observed; that is never shown as "not asked".
 export function consentPresentation(stage, action) {
   if (!stage || !action) return null;
-  let perCall;
-  if (stage.purpose === 'consent-check') perCall = stage.events.map(checkState);
-  else if (stage.events.some(event => event.gf === 'exchange')) {
-    perCall = stage.events.filter(event => event.gf === 'exchange').map(call => {
-      const states = consentChecksOf(action, call).map(checkState);
-      return states.includes('deny') ? 'deny' : states.includes('error') ? 'error' : states.length ? 'permit' : 'unobserved';
-    });
-  } else return null;
+  if (!stage.events.some(event => event.gf === 'exchange')) return null;
+  const perCall = sourceCallsOf(stage).map(call => {
+    const states = consentChecksOf(action, call).map(checkState);
+    return states.includes('deny') ? 'deny' : states.includes('error') ? 'error' : states.length ? 'permit' : 'unobserved';
+  });
   const state = perCall.includes('deny') ? 'deny' : perCall.includes('error') ? 'error'
     : perCall.includes('unobserved') ? 'unobserved' : 'permit';
   const permits = perCall.filter(value => value === 'permit').length;
   const mixed = state !== 'permit' && permits > 0 ? ` (permit on ${permits} of ${perCall.length} requests)` : '';
   const legend = { permit: 'Mitz: permit', deny: 'Mitz: deny', error: 'Mitz: no answer', unobserved: 'not observed' }[state] + mixed;
-  return { state, legend, othersOpen: accessPresentation(stage).dataReturned };
+  return { state, legend, description: state === 'deny' ? refusalDescription(sourceCallsOf(stage)) : '' };
+}
+
+// lockPresentation says what each of the four locks on the source's vault may
+// show while a stage of an action is on the map. All four are decided when a
+// request arrives at the source with the key, and every request is checked
+// anew: a retrieval of four requests opens the locks four times.
+// - identity and role open when the source accepted the key: its policy
+//   enforcement point reads both from the key and hands them to its policy;
+// - consent is Mitz's answer for that request;
+// - query opens when the source served it.
+// Issuing the key opens nothing: the authorization server accepted the
+// presentation, and the key that carries the result has yet to reach the vault.
+// plays marks what the stage decides and therefore shows happening: the stage
+// of a request plays every lock it opens or refuses, each time, also when the
+// action is replayed.
+// elapsed is how many seconds the stage has played. A lock the stage changes
+// shows what it showed before until the stage has reached that change
+// (stageTimeline), so the legend never runs ahead of the map. For a request
+// "before" is the vault as no request left it: four shut locks. Without elapsed
+// the result is the stage's final state, which the map takes and delays itself.
+export function lockPresentation(stage, action, elapsed = Infinity) {
+  const stages = action?.stages || [];
+  const at = stages.findIndex(item => item === stage || (stage?.id && item.id === stage.id));
+  const locks = locksAfter(at < 0 ? (stage ? [stage] : []) : stages.slice(0, at + 1), action);
+  const request = isRequest(stage);
+  const earlier = at > 0 ? stages.slice(0, at) : [];
+  const before = locksAfter(request ? earlier.filter(item => !isRequest(item)) : earlier, action);
+  const timeline = stage ? stageTimeline(stage) : {};
+  for (const [name, lock] of Object.entries(locks)) {
+    lock.plays = request && lock.state !== 'closed';
+    const changes = lock.state !== before[name].state || lock.legend !== before[name].legend;
+    if (changes && elapsed < (timeline[name] ?? 0)) Object.assign(lock, { state: before[name].state, legend: awaiting[name] || before[name].legend, plays: false });
+  }
+  return locks;
+}
+const awaiting = { consent: 'awaiting Mitz’s answer', query: 'awaiting the source’s answer' };
+const isRequest = stage => !!stage?.events?.some(event => event.gf === 'exchange');
+
+// The vault is open while the query lock is and no lock is refused: data that
+// returned did return, also without an observed answer from Mitz, and a
+// refusal shuts the vault as soon as it is known.
+export const vaultOpen = locks => locks?.query.state === 'open' && !['deny', 'error'].includes(locks.consent.state);
+
+// keyAt says what the source's answers show about the key a request carried.
+// A 200 and a 403 come after its policy enforcement point read the key and
+// handed identity and role to its policy (pep/nginx/js/authorize.js); that is
+// read from the status, whether or not the body could be captured. A 401 to a
+// request that carried a key is authentication refused: the status does not say
+// which part of the source refused it. Anything else establishes nothing.
+function keyAt(request) {
+  const calls = request.events.filter(event => event.gf === 'exchange');
+  if (calls.some(call => call.request?.tokenAttached !== true)) return { state: 'closed', legend: 'no key attached' };
+  if (calls.some(call => call.response?.status === 401)) return { state: 'deny', legend: 'authentication refused' };
+  if (calls.every(call => [200, 403].includes(call.response?.status))) return { state: 'open', legend: 'read from the key' };
+  return { state: 'closed', legend: 'not established' };
+}
+
+function locksAfter(shown, action) {
+  const keyRequested = shown.some(item => accessPresentation(item).tokenRequest);
+  const keyIssued = shown.some(item => accessPresentation(item).tokenReceived);
+  const request = shown.filter(isRequest).at(-1);
+  const credential = request ? keyAt(request)
+    : { state: 'closed', legend: keyIssued ? 'carried by the key' : keyRequested ? 'no key issued' : 'no key yet' };
+  const answer = shown.map(item => consentPresentation(item, action)).filter(Boolean).at(-1);
+  const consent = answer
+    ? { state: { permit: 'open', deny: 'deny', error: 'error', unobserved: 'closed' }[answer.state], legend: answer.legend }
+    : { state: 'closed', legend: 'not observed' };
+  const query = !request ? { state: 'closed', legend: 'no request yet' }
+    : accessPresentation(request).dataReturned ? { state: 'open', legend: 'allowed · request served' }
+      : { state: 'closed', legend: 'not served' };
+  return { identity: { ...credential }, role: { ...credential }, consent, query };
+}
+
+// stageTimeline says how long a stage plays and when, in seconds into it, each
+// thing it changes shows: the packets, Mitz's shield, the locks, the vault and
+// the moment its outcome is settled. The map delays its animations by these
+// values and the legend follows them through the playback, so both tell the
+// stage in the order it happened. pending is what the status line says until
+// the outcome is settled.
+//
+// A source request plays in the order it happens: it arrives with the key, the
+// source reads identity and role from the key, its policy asks Mitz and Mitz
+// answers (when that was observed), the query lock and the vault follow, and
+// only then does the source answer. Nothing changes before the request arrived.
+export function stageTimeline(stage) {
+  if (accessPresentation(stage).tokenRequest) return {
+    seconds: 2.5, request: { delay: 0, duration: 1.1 }, response: { delay: 1.2, duration: 1.1 }, identity: 1.2, role: 1.2, settled: 1.2,
+    pending: 'De Plataan presents its credentials to De Zonnebloem’s authorization server.',
+  };
+  if (!isRequest(stage)) return {
+    seconds: 2.5, request: { delay: 0, duration: 1.1 }, response: { delay: 1.2, duration: 1.1 }, settled: 0, pending: '',
+  };
+  if (stage.checks?.length) return {
+    seconds: 4.3, request: { delay: 0, duration: 0.9 }, identity: 0.9, role: 1.1,
+    question: { delay: 1.3, duration: 0.65 }, shield: 1.95, answer: { delay: 2.05, duration: 0.65 },
+    consent: 2.7, query: 2.95, vault: 3.15, response: { delay: 3.15, duration: 1.05 }, settled: 3.15,
+    pending: 'De Zonnebloem checks this request before it answers: it reads the key and its policy asks Mitz.',
+  };
+  return {
+    seconds: 2.5, request: { delay: 0, duration: 0.9 }, identity: 0.9, role: 1.05, consent: 1.2, query: 1.2, vault: 1.35,
+    response: { delay: 1.35, duration: 1.1 }, settled: 1.35, pending: 'De Zonnebloem checks this request before it answers.',
+  };
 }
 
 export function buildActionGroups(events) {
@@ -165,12 +279,17 @@ export function buildActionGroups(events) {
       const parentIds = new Set(group.events.map(callIdentity));
       const children = action.events.filter(event => parentIds.has(event.parentCallId));
       if (group.purpose === 'status') group.events.push(...children);
-      else for (const [purpose, suffix] of [['pseudonymization', 'prs'], ['consent-check', 'consent']]) {
-        const own = children.filter(child => (child.purpose === 'consent-check' ? 'consent-check' : 'pseudonymization') === purpose);
-        if (own.length) action.groups.push({
-          id: `${group.id}:${suffix}`, purpose, label: purposeLabels[purpose],
-          events: own, time: group.time, ...aggregate(own),
+      else {
+        // PRS is called before the NVI request it serves and is a stage before
+        // it. Mitz is asked while the source handles a request, after the
+        // request arrived and before it is answered: those checks belong to the
+        // request's own stage, which plays them in that order.
+        const prs = children.filter(child => child.purpose !== 'consent-check');
+        if (prs.length) action.groups.push({
+          id: `${group.id}:prs`, purpose: 'pseudonymization', label: purposeLabels.pseudonymization,
+          events: prs, time: group.time, ...aggregate(prs),
         });
+        group.checks = children.filter(child => child.purpose === 'consent-check');
       }
       Object.assign(group, aggregate(group.events));
       action.groups.push(group);

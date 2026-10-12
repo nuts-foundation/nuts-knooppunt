@@ -56,7 +56,7 @@
   .hood-dock { position: fixed; top: 0; right: 0; bottom: 0; width: 560px; max-width: calc(100vw - 44px); background: linear-gradient(180deg, #241e17 0%, #191410 100%); color: #f0ebe1; z-index: 160; transform: translateX(105%); transition: transform 0.28s cubic-bezier(0.32,0.72,0.28,1); display: flex; flex-direction: column; box-shadow: -24px 0 70px rgba(0,0,0,0.3); border-left: 1px solid rgba(240,235,225,0.12); }
   .hood-dock.on { transform: none; }
   .dock-map { flex-shrink: 0; padding: 8px 14px 0; }
-  .dock-map svg { width: 100%; height: auto; max-height: 35vh; display: block; margin: 0 auto; }
+  .dock-map svg { width: 100%; height: auto; max-height: 39.1vh; display: block; margin: 0 auto; }
   .dock-info { flex: 1; min-height: 0; border-top: 1px solid rgba(240,235,225,0.1); display: flex; flex-direction: column; }
   .hd-head { padding: 14px 22px 12px; border-bottom: 1px solid rgba(240,235,225,0.1); display: flex; align-items: flex-start; gap: 12px; }
   .hd-eyebrow { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: #7fc7bc; margin-bottom: 4px; }
@@ -135,10 +135,25 @@
   .js-service { fill: #2d2620; stroke: rgba(240,235,225,0.35); stroke-width: 1; }
   .js-path { stroke: #7fc7bc; stroke-width: 1.8; fill: none; opacity: 0; }
   .js-path.lit { opacity: 0.7; }
-  .js-path.lit.deny { stroke: #e59ab8; }
-  .js-path.lit.event-error { stroke: #e9ba72; }
-  .js-dim.lit.deny { filter: drop-shadow(0 0 5px rgba(229,154,184,0.4)); }
-  .js-dim.lit.event-error { filter: drop-shadow(0 0 5px rgba(233,186,114,0.4)); }
+  /* A refusal or failure shows --outcome-delay into the stage (journey-strip.js
+     sets it): at once for an ordinary call, and for a request the source checks
+     first only when its response sets off. */
+  .js-path.lit.deny { animation: gf-path-deny 0.15s linear var(--outcome-delay, 0s) both; }
+  .js-path.lit.event-error { animation: gf-path-error 0.15s linear var(--outcome-delay, 0s) both; }
+  .js-dim.lit.deny { animation: gf-dim-deny 0.15s linear var(--outcome-delay, 0s) both; }
+  .js-dim.lit.event-error { animation: gf-dim-error 0.15s linear var(--outcome-delay, 0s) both; }
+  @keyframes gf-path-deny { to { stroke: #e59ab8; } }
+  @keyframes gf-path-error { to { stroke: #e9ba72; } }
+  @keyframes gf-dim-deny { to { filter: drop-shadow(0 0 5px rgba(229,154,184,0.4)); } }
+  @keyframes gf-dim-error { to { filter: drop-shadow(0 0 5px rgba(233,186,114,0.4)); } }
+  .hood-dock.playback-paused :is(.js-path, .js-dim).lit { animation-play-state: paused; }
+  @media (prefers-reduced-motion: reduce) {
+    .js-path.lit.deny, .js-path.lit.event-error, .js-dim.lit.deny, .js-dim.lit.event-error { animation: none; }
+    .js-path.lit.deny { stroke: #e59ab8; }
+    .js-path.lit.event-error { stroke: #e9ba72; }
+    .js-dim.lit.deny { filter: drop-shadow(0 0 5px rgba(229,154,184,0.4)); }
+    .js-dim.lit.event-error { filter: drop-shadow(0 0 5px rgba(233,186,114,0.4)); }
+  }
   .js-lbl { font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700; fill: #f0ebe1; }
   .js-lbl2 { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 700; fill: #f0ebe1; }
   .js-band { font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; fill: rgba(147,180,240,0.9); }
@@ -171,9 +186,11 @@
   .hood-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
   .gf-tab:focus-visible, .hd-close:focus-visible, .hd-mode button:focus-visible { outline: 2px solid #7fc7bc; outline-offset: 3px; }
 
-  .hood-dock .js-sprite.go { animation: gf-request 1.1s ease-in-out both; }
-  .hood-dock #js-response.go { animation: gf-response 1.1s ease-in-out 1.2s both; }
-  .hood-dock.playback-paused :is(.js-sprite.go, #js-response.go) { animation-play-state: paused; }
+  /* A packet starts --go-delay into its stage and travels for --go-duration;
+     journey-strip.js sets both. Responses and answers run their route back. */
+  .hood-dock .js-sprite.go { animation: gf-request var(--go-duration, 1.1s) ease-in-out var(--go-delay, 0s) both; }
+  .hood-dock :is(#js-response, #js-answer).go { animation-name: gf-response; }
+  .hood-dock.playback-paused .js-sprite.go { animation-play-state: paused; }
   @keyframes gf-request {
     0% { offset-distance: 0%; opacity: 0; }
     12%, 88% { opacity: 1; }
@@ -246,7 +263,7 @@
   .gf-technical summary { overflow-wrap: anywhere; }
   @media (max-width: 600px) {
     .dock-map { padding: 4px 8px 0; }
-    .dock-map svg { max-height: 28vh; }
+    .dock-map svg { max-height: 31.3vh; }
     .gf-map-caption { padding: 6px 6px 8px; min-height: 0; }
     .gf-timeline { padding-left: 5px; }
     .gf-action { padding-left: 13px; }
@@ -260,17 +277,105 @@
   .gf-access-contract { margin: 0 8px 10px; padding: 9px 11px; border: 1px solid rgba(217,180,106,0.35); border-radius: 8px; background: rgba(217,180,106,0.04); }
   .gf-access-contract[hidden] { display: none; }
   .gf-access-contract > strong { color: #e7d9c1; font-size: 13px; font-weight: 600; }
-  .gf-contract-terms { display: flex; flex-wrap: wrap; gap: 5px 7px; margin: 7px 0; }
-  .gf-contract-terms span { font-size: 12px; color: #d8d0c2; border: 1px solid rgba(240,235,225,0.16); border-radius: 4px; padding: 3px 6px; }
-  #gf-contract-status { font-size: 13px; line-height: 1.5; color: #d8d0c2; }
+  #gf-contract-status, #gf-contract-legend { font-size: 13px; line-height: 1.5; color: #d8d0c2; }
   .js-token-icon { display: none; stroke: #d9b46a; fill: none; stroke-width: 1.5; }
   .token-received .js-token-icon, .token-attached .js-token-icon { display: inline; }
   .token-received > rect, .token-attached > rect { stroke: #d9b46a; }
   .token-received #js-response-label, .token-attached #js-request-label { transform: translateX(11px); fill: #d9b46a; }
   #js-vault-door { transform-origin: 482px 304px; }
-  .vault-open #js-vault-door { animation: gf-vault-open 0.5s ease-out 1.1s both; }
+  .vault-open #js-vault-door { animation: gf-vault-open 0.5s ease-out var(--vault-delay, 1.1s) both; }
   .hood-dock.playback-paused .vault-open #js-vault-door { animation-play-state: paused; }
   @keyframes gf-vault-open { from { transform: scaleX(1); } to { transform: scaleX(0.12); } }
   @media (prefers-reduced-motion: reduce) {
     .vault-open #js-vault-door { animation: none; transform: scaleX(0.12); }
   }
+  /* Mitz's answer and the four locks on the source's vault. All four are decided
+     when a request arrives with the key: identity and role as the source reads
+     the key, consent with Mitz's answer for that request, the query lock when
+     the source serves it. Every request is checked anew: its stage starts with
+     the locks shut and each shows its change --lock-delay into the stage. */
+  /* Mitz's answer shows on its shield --mitz-delay into the stage: once the
+     source's question has reached it. */
+  .mitz-permit, .mitz-deny { opacity: 0; }
+  #js-mitz:is(.consent-permit, .consent-deny) .mitz-neutral { animation: gf-mitz-hide 0.15s linear var(--mitz-delay, 0s) both; }
+  #js-mitz.consent-permit .mitz-permit, #js-mitz.consent-deny .mitz-deny { animation: gf-mitz-show 0.2s linear var(--mitz-delay, 0s) both; }
+  #js-mitz.consent-deny { animation: gf-mitz-refuse 0.2s linear var(--mitz-delay, 0s) both; }
+  #js-mitz.consent-error { animation: gf-mitz-fail 0.2s linear var(--mitz-delay, 0s) both; }
+  @keyframes gf-mitz-hide { to { opacity: 0; } }
+  @keyframes gf-mitz-show { to { opacity: 1; } }
+  @keyframes gf-mitz-refuse { to { filter: drop-shadow(0 0 5px rgba(229,154,184,0.4)); } }
+  @keyframes gf-mitz-fail { to { filter: drop-shadow(0 0 5px rgba(233,186,114,0.4)); } }
+  .hood-dock.playback-paused #js-mitz, .hood-dock.playback-paused #js-mitz * { animation-play-state: paused; }
+  .js-lock { transform-box: fill-box; transform-origin: 50% 60%; }
+  .js-lock rect { fill: #241e17; }
+  .js-lock rect, .js-lock path { stroke: #f0ebe1; stroke-width: 2.2; }
+  .js-lock path { fill: none; stroke-linecap: round; }
+  .js-lock .open { opacity: 0; }
+  .js-lock.lock-open { animation: gf-lock-pop 0.45s ease-out var(--lock-delay, 0s) both; }
+  .js-lock.lock-open .closed { animation: gf-lock-hide 0.12s linear var(--lock-delay, 0s) both; }
+  .js-lock.lock-open .open { animation: gf-lock-show 0.3s ease-out var(--lock-delay, 0s) both; }
+  .js-lock.lock-open rect { animation: gf-lock-body 0.3s ease-out var(--lock-delay, 0s) both; }
+  .js-lock.lock-open text { animation: gf-lock-label 0.3s ease-out var(--lock-delay, 0s) both; }
+  @keyframes gf-lock-pop { 0% { transform: scale(1); } 45% { transform: scale(1.3); } 100% { transform: scale(1); } }
+  @keyframes gf-lock-hide { to { opacity: 0; } }
+  @keyframes gf-lock-show { from { opacity: 0; transform: translateY(2.5px); stroke: #f0ebe1; } to { opacity: 1; transform: none; stroke: #b5d18f; } }
+  @keyframes gf-lock-body { to { stroke: #b5d18f; fill: rgba(181,209,143,0.2); } }
+  @keyframes gf-lock-label { to { fill: #b5d18f; } }
+  .hood-dock.playback-paused .js-lock, .hood-dock.playback-paused .js-lock * { animation-play-state: paused; }
+  /* A refusal or a failed answer arrives like an opening does: the lock takes
+     it when the answer reaches the source, with a short jolt for a refusal. */
+  .js-lock.lock-deny { animation: gf-lock-refuse 0.4s ease-out var(--lock-delay, 0s) both; }
+  .js-lock.lock-deny :is(rect, path) { animation: gf-lock-deny-line 0.2s linear var(--lock-delay, 0s) both; }
+  .js-lock.lock-deny rect { animation-name: gf-lock-deny-body; }
+  .js-lock.lock-deny text { animation: gf-lock-deny-label 0.2s linear var(--lock-delay, 0s) both; }
+  .js-lock.lock-error { animation: gf-lock-fail 0.2s linear var(--lock-delay, 0s) both; }
+  .js-lock.lock-error :is(rect, path) { animation: gf-lock-error-line 0.2s linear var(--lock-delay, 0s) both; }
+  @keyframes gf-lock-refuse {
+    0% { transform: none; filter: none; } 25% { transform: translateX(-2px); } 50% { transform: translateX(2px); } 75% { transform: translateX(-1px); }
+    100% { transform: none; filter: drop-shadow(0 0 5px rgba(229,154,184,0.4)); }
+  }
+  @keyframes gf-lock-deny-line { to { stroke: #e59ab8; } }
+  @keyframes gf-lock-deny-body { to { stroke: #e59ab8; fill: rgba(229,154,184,0.18); } }
+  @keyframes gf-lock-deny-label { to { fill: #eaa9c3; } }
+  @keyframes gf-lock-fail { to { filter: drop-shadow(0 0 5px rgba(233,186,114,0.4)); } }
+  @keyframes gf-lock-error-line { to { stroke: #e9ba72; } }
+  @media (prefers-reduced-motion: reduce) {
+    .js-lock.lock-open, .js-lock.lock-open *, .js-lock.lock-deny, .js-lock.lock-deny *, .js-lock.lock-error, .js-lock.lock-error * { animation: none; }
+    #js-mitz, #js-mitz * { animation: none; }
+    #js-mitz:is(.consent-permit, .consent-deny) .mitz-neutral { opacity: 0; }
+    #js-mitz.consent-permit .mitz-permit, #js-mitz.consent-deny .mitz-deny { opacity: 1; }
+    #js-mitz.consent-deny { filter: drop-shadow(0 0 5px rgba(229,154,184,0.4)); }
+    #js-mitz.consent-error { filter: drop-shadow(0 0 5px rgba(233,186,114,0.4)); }
+    .js-lock.lock-open .closed { opacity: 0; }
+    .js-lock.lock-open .open { opacity: 1; stroke: #b5d18f; }
+    .js-lock.lock-open rect { stroke: #b5d18f; fill: rgba(181,209,143,0.2); }
+    .js-lock.lock-open text { fill: #b5d18f; }
+    .js-lock.lock-deny :is(rect, path) { stroke: #e59ab8; }
+    .js-lock.lock-deny rect { fill: rgba(229,154,184,0.18); }
+    .js-lock.lock-deny text { fill: #eaa9c3; }
+    .js-lock.lock-deny { filter: drop-shadow(0 0 5px rgba(229,154,184,0.4)); }
+    .js-lock.lock-error :is(rect, path) { stroke: #e9ba72; }
+    .js-lock.lock-error { filter: drop-shadow(0 0 5px rgba(233,186,114,0.4)); }
+  }
+  /* What De Plataan holds now. One of the three is shown. */
+  .copy-doc, .copy-gone, .copy-label-held, .copy-label-gone { display: none; }
+  .copy-label-empty { fill: rgba(240,235,225,0.72); }
+  #js-copy.copy-held :is(.copy-empty, .copy-label-empty), #js-copy.copy-removed :is(.copy-empty, .copy-label-empty) { display: none; }
+  #js-copy.copy-held :is(.copy-doc, .copy-label-held) { display: inline; }
+  #js-copy.copy-held .copy-label-held { fill: #b5d18f; }
+  #js-copy.copy-removed :is(.copy-gone, .copy-label-gone) { display: inline; }
+  #js-copy.copy-removed .copy-label-gone { fill: #eaa9c3; }
+  #js-copy.copy-removed .copy-gone { filter: drop-shadow(0 0 5px rgba(229,154,184,0.4)); }
+  .gf-check { display: grid; grid-template-columns: 14px 1fr; column-gap: 8px; align-items: center; border: 1px solid rgba(240,235,225,0.34); border-radius: 6px; padding: 6px 9px; }
+  .gf-check i { grid-row: span 2; width: 12px; height: 12px; border-radius: 3px; border: 1.6px solid rgba(240,235,225,0.7); }
+  .gf-check b { font-size: 12px; font-weight: 600; color: #f0ebe1; }
+  .gf-check em { font-style: normal; font-size: 12px; color: #c8bfb2; }
+  .gf-check.open { border: 1px solid rgba(181,209,143,0.7); background: rgba(181,209,143,0.08); }
+  .gf-check.open i { border: 0; background: #b5d18f; }
+  .gf-check.open em { color: #cfe3b3; font-weight: 600; }
+  .gf-check.deny { border: 1px solid rgba(229,154,184,0.8); background: rgba(229,154,184,0.09); }
+  .gf-check.deny i { border: 0; background: #e59ab8; }
+  .gf-check.deny em { color: #f0b6cd; font-weight: 600; }
+  .gf-check.error { border: 1px solid rgba(233,186,114,0.8); }
+  .gf-check.error i { border: 0; background: #e9ba72; }
+  .gf-contract-terms { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; margin: 8px 0; }

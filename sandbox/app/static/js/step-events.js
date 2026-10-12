@@ -1,5 +1,5 @@
 import { createJourneyStrip } from './journey-strip.js';
-import { journeyTargets, subscriptionResult, accessPresentation, callCount, consentPresentation } from './journey-model.js';
+import { journeyTargets, subscriptionResult, accessPresentation, callCount, consentPresentation, lockPresentation, stageTimeline } from './journey-model.js';
 import { createPlayback } from './event-playback.js';
 
 export function createEventFeed(runId, { onStep, onGap, onEnd } = {}) {
@@ -57,6 +57,22 @@ export function eventSummary(event) {
   }
 }
 
+// What a submitted form may take before its navigation is considered not to
+// have happened: the server's write timeout, which no pending request outlives.
+const submitGraceMs = 60_000;
+
+// shouldReload decides whether a record page is behind the record. The page
+// carries the revision it was rendered at; every snapshot carries the current
+// one. Different means reload, which covers a change between rendering and
+// connecting, a reconnect, a missed event and a change that produced no event.
+// After a form on the page was submitted the comparison pauses, so the consent
+// action's own notification does not cancel its redirect.
+export function shouldReload({ pageRevision, snapshotRevision, submittedAt, now }) {
+  if (pageRevision === undefined || pageRevision === null || snapshotRevision === undefined) return false;
+  if (submittedAt !== undefined && now - submittedAt < submitGraceMs) return false;
+  return String(pageRevision) !== String(snapshotRevision);
+}
+
 export function mountViewer(dock) {
   const runId = dock.dataset.runId;
   if (!runId) return;
@@ -72,6 +88,17 @@ export function mountViewer(dock) {
   const replay = dock.querySelector('#gf-replay');
   const skip = dock.querySelector('#gf-skip');
   const live = dock.querySelector('#gf-live');
+  const checks = [...(dock.querySelectorAll?.('.gf-check') || [])];
+  const pageRevision = document.querySelector?.('[data-record-revision]')?.dataset.recordRevision;
+  // The revision of the latest snapshot is kept: the comparison is made again
+  // when a submission's grace ends and when the page is shown again, and
+  // neither of those comes with a snapshot of its own.
+  let submittedAt, latestRevision, graceTimer;
+  const compare = () => {
+    if (!shouldReload({ pageRevision, snapshotRevision: latestRevision, submittedAt, now: Date.now() })) return false;
+    location.reload();
+    return true;
+  };
   const journey = createJourneyStrip(dock.querySelector('.dock-map svg'));
   const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const source = new EventSource(`/demo/runs/${encodeURIComponent(runId)}/events`);
@@ -194,7 +221,7 @@ export function mountViewer(dock) {
       if (categories.length) content.append(node('p', 'gf-step-result', categories.join(' · ')));
       if (group.purpose === 'pseudonymization') content.append(node('p', 'gf-step-result', 'Internal PRS evidence for the following NVI calls'));
       const consent = consentPresentation(group, action);
-      if (group.purpose === 'consent-check') content.append(node('p', 'gf-step-result',
+      if (group.checks?.length) content.append(node('p', 'gf-step-result',
         consent.state === 'permit' ? 'Before answering, the source asked Mitz whether this patient consents. Mitz answered yes.'
           : consent.state === 'deny' ? 'The source asked Mitz for this request. Mitz answered no.'
             : 'The source asked Mitz and got no usable answer.'));
@@ -203,7 +230,9 @@ export function mountViewer(dock) {
           ? 'Through De Plataan’s subscription. The data retrieved earlier was removed from the record.'
           : 'Through De Plataan’s subscription. Nothing had to be removed from the record.'));
       if (group.purpose === 'consent-change') content.append(node('p', 'gf-step-result',
-        'Simulated: the demo changed the answer in the mock Mitz, standing in for the patient.'));
+        group.events.every(event => event.outcome === 'ok')
+          ? 'Simulated: the demo changed the answer in the mock Mitz, standing in for the patient.'
+          : 'Simulated: the demo asked the mock Mitz to change the answer, standing in for the patient. The call failed, so this step does not establish a change.'));
       if (current) content.append(node('span', 'gf-stage-now', state.paused ? 'Paused here' : 'Playing this step'));
       const access = accessPresentation(group);
       if (access.requestDescription) content.append(node('p', 'gf-step-result', access.requestDescription));
@@ -259,7 +288,7 @@ export function mountViewer(dock) {
     list.replaceChildren(state.groups.some(group => group.stages.length) ? timeline : empty, background);
     restoreFocus?.focus?.({ preventScroll: true });
     title.textContent = action ? `${action.label} · ${timeLabel(action.time)}` : 'Action timeline';
-    const states = { settling: 'Preparing playback · waiting up to 1 s for evidence', playing: `${state.selected ? 'Replaying selected action' : 'Playing latest action'} · 2.5 s per step`,
+    const states = { settling: 'Preparing playback · waiting up to 1 s for evidence', playing: `${state.selected ? 'Replaying selected action' : 'Playing latest action'} · slowed for clarity`,
       paused: 'Playback paused', complete: state.selected ? 'Replay complete · Follow latest to resume live playback' : 'Playback complete · select any action to replay', waiting: 'Waiting for an action', ended: 'Playback ended' };
     playbackStatus.textContent = states[state.status];
     if (state.stage) {
@@ -274,8 +303,24 @@ export function mountViewer(dock) {
       stageDetail.textContent = 'Playback is slowed for clarity. HTTP timings remain unchanged.';
     }
     const access = accessPresentation(state.stage);
-    contract.hidden = !access.visible;
-    contractStatus.textContent = access.description;
+    const consent = consentPresentation(state.stage, action);
+    contract.hidden = !access.visible && !consent;
+    // The map delays each change to its moment in the stage. The status line
+    // and the legend follow the same timeline through the playback, so neither
+    // gives the outcome away before the map has shown it.
+    const timing = state.stage ? stageTimeline(state.stage) : null;
+    contractStatus.textContent = timing && state.elapsed < timing.settled ? timing.pending
+      : consent && consent.state === 'deny' ? consent.description : access.description;
+    // The map takes its evidence when a stage starts; an answer that arrives
+    // while the stage is shown has to reach it as well as the legend.
+    if (state.stage) journey.setEvidence({ consent, locks: lockPresentation(state.stage, action) });
+    const locks = lockPresentation(state.stage, action, state.stage ? state.elapsed : Infinity);
+    for (const item of checks) {
+      const lock = locks[item.dataset.check];
+      item.classList.remove('open', 'deny', 'error');
+      if (lock.state !== 'closed') item.classList.add(lock.state);
+      item.querySelector('em').textContent = lock.legend;
+    }
     if (access.visible && !technicalMode) stageDetail.textContent = access.tokenRequest
       ? access.tokenReceived ? 'Request access → De Zonnebloem · source-issued key → Plataan' : 'Request access through Plataan’s access service → De Zonnebloem'
       : access.requestDescription;
@@ -299,7 +344,9 @@ export function mountViewer(dock) {
   }
   const player = createPlayback({
     cursor: saved, active: dock.classList.contains('on') && !document.hidden,
-    onStage: stage => journey.applyStage(stage, { reducedMotion: motion.matches }),
+    onStage: (stage, action) => journey.applyStage(stage, {
+      reducedMotion: motion.matches, consent: consentPresentation(stage, action), locks: lockPresentation(stage, action),
+    }),
     onChange: render,
     onCursor: cursor => {
       try { sessionStorage.setItem(storageKey, JSON.stringify({ runId, ...cursor })); } catch { /* Optional persistence. */ }
@@ -318,6 +365,19 @@ export function mountViewer(dock) {
   visibilityObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
   const visibility = () => player.setActive(dock.classList.contains('on') && !document.hidden);
   document.addEventListener('visibilitychange', visibility, { signal: listeners.signal });
+  // Capture phase, so a form inside any part of the page counts. The pause ends
+  // by itself: when the grace is over the navigation did not happen, and the
+  // page compares with the latest revision it was told, because no further
+  // snapshot may ever come. A page shown again, from the back-forward cache or
+  // after a navigation that did not happen, compares at once.
+  const endPause = () => { clearTimeout(graceTimer); graceTimer = undefined; submittedAt = undefined; compare(); };
+  document.addEventListener('submit', () => {
+    submittedAt = Date.now();
+    clearTimeout(graceTimer);
+    graceTimer = setTimeout(endPause, submitGraceMs);
+  }, { capture: true, signal: listeners.signal });
+  window.addEventListener('pageshow', endPause, { signal: listeners.signal });
+  listeners.signal.addEventListener('abort', () => clearTimeout(graceTimer));
   pause.addEventListener('click', () => player.state().paused ? player.resume() : player.pause(), { signal: listeners.signal });
   replay.addEventListener('click', () => player.replay(), { signal: listeners.signal });
   skip.addEventListener('click', () => player.skip(), { signal: listeners.signal });
@@ -354,6 +414,11 @@ export function mountViewer(dock) {
   source.addEventListener('step', receive(event => feed.step(event)), { signal: listeners.signal });
   source.addEventListener('snapshot', receive(snapshot => {
     if (typeof snapshot?.prsEvidence === 'boolean') prsEvidence = snapshot.prsEvidence;
+    if (snapshot?.record) {
+      journey.setCopy(snapshot.record.copy);
+      latestRevision = snapshot.record.revision;
+      if (compare()) return;
+    }
     player.snapshot(); status.textContent = hasGap ? 'Live · earlier events expired' : 'Live · observed calls received';
   }), { signal: listeners.signal });
   source.addEventListener('replay-gap', receive(gap => feed.gap(gap)), { signal: listeners.signal });
