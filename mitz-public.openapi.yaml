@@ -26,8 +26,10 @@ paths:
       summary: Receive a MITZ consent notification
       description: >
         Public endpoint MITZ calls to notify about consent changes for an
-        active subscription. Currently acknowledges any payload without
-        parsing it.
+        active subscription. Without `mitz.notifyforwardurl` any payload is
+        acknowledged and discarded. With it, the payload is forwarded
+        unchanged to that URL and acknowledged only once the target has
+        answered with a 2xx.
       requestBody:
         required: false
         content:
@@ -37,6 +39,13 @@ paths:
       responses:
         "204":
           description: Acknowledged
+        "413":
+          description: The notification is larger than 1 MiB. Only answered when forwarding is configured.
+        "502":
+          description: >
+            Forwarding is configured and delivery to its target was not
+            confirmed: the target could not be reached, answered late, or
+            answered with anything but a 2xx.
 
 components:
   schemas:

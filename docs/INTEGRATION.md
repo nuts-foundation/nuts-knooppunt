@@ -378,7 +378,25 @@ endpoints.
 
 ### Notification Handling
 
-When consent changes occur, MITZ sends notifications to the configured endpoint.
+When consent changes occur, MITZ sends notifications to the configured endpoint, which is the Knooppunt's
+`/mitz/notify`.
+
+The Knooppunt does not interpret a notification. It acknowledges it with `204` and discards it, unless
+`mitz.notifyforwardurl` is set. With that setting it relays the notification to the configured URL:
+
+- the body is sent on unchanged, with the `Content-Type` it arrived with, in one `POST`;
+- the relay has a timeout of 5 seconds and is not retried;
+- MITZ is answered `204` once the target answered with a 2xx, and `502` in every other case: the target could not be
+  reached, answered late, redirected, or answered with another status;
+- a notification larger than 1 MiB is answered `413` and not relayed.
+
+A `502` after a timeout does not mean the target did not process the notification: it may have, and answered too late.
+
+```yaml
+mitz:
+  notifyendpoint: "https://knooppunt.example.com/mitz/notify"
+  notifyforwardurl: "https://ehr.example.com/consent-notifications"
+```
 
 ## Authentication
 

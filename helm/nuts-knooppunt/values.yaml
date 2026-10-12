@@ -254,6 +254,8 @@ config:
   #   mitzbase: "http://mitz-server:8087/tst-us/mitz"
   #   gatewaysystem: "urn:oid:2.16.840.1.113883.2.4.6.6.1"
   #   sourcesystem: "urn:oid:2.16.840.1.113883.2.4.6.6.90000017"
+  #   notifyendpoint: "http://nuts-knooppunt:8080/mitz/notify"
+  #   notifyforwardurl: "http://ehr:8080/consent-notifications"
 
   # PDP (Policy Decision Point) configuration
   # pdp:

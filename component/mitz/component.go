@@ -32,6 +32,9 @@ type Config struct {
 	SourceSystem   string `koanf:"sourcesystem"`
 	// NotifyEndpoint is the URL for subscription notifications
 	NotifyEndpoint string `koanf:"notifyendpoint"`
+	// NotifyForwardURL is where a received notification is relayed to, unchanged.
+	// Empty leaves /mitz/notify acknowledging and discarding.
+	NotifyForwardURL string `koanf:"notifyforwardurl"`
 }
 
 func (c Config) Enabled() bool {
@@ -48,6 +51,8 @@ type Component struct {
 	gatewaySystem        string
 	sourceSystem         string
 	notifyEndpoint       string
+	notifyForwardURL     string
+	forwardClient        *http.Client
 }
 
 const (
@@ -77,6 +82,13 @@ func New(config Config) (*Component, error) {
 
 	consentCheckEndpoint := baseURL.JoinPath(consentCheckPath).String()
 
+	if config.NotifyForwardURL != "" {
+		forwardURL, err := url.Parse(config.NotifyForwardURL)
+		if err != nil || (forwardURL.Scheme != "http" && forwardURL.Scheme != "https") || forwardURL.Host == "" {
+			return nil, fmt.Errorf("notifyforwardurl must be an absolute http(s) URL, got %q", config.NotifyForwardURL)
+		}
+	}
+
 	return &Component{
 		client:               fhirclient.New(subscriptionURL, httpClient, fhirutil.ClientConfig()),
 		httpClient:           httpClient,
@@ -84,6 +96,11 @@ func New(config Config) (*Component, error) {
 		gatewaySystem:        config.GatewaySystem,
 		sourceSystem:         config.SourceSystem,
 		notifyEndpoint:       config.NotifyEndpoint,
+		notifyForwardURL:     config.NotifyForwardURL,
+		forwardClient: &http.Client{
+			Transport:     tracing.WrapTransport(nil),
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		},
 	}, nil
 }
 
@@ -122,17 +139,23 @@ func createHTTPClient(config Config) (*http.Client, error) {
 //
 // A custom RequestErrorHandlerFunc replaces the generated default (400 Bad Request): MITZ
 // sometimes sends XML bodies despite the fhir+json content type the spec declares, which the
-// generated JSON body binding can't decode. ReceiveMitzNotification doesn't look at request.Body
-// anyway (see its comment), so a body that fails to bind is still acknowledged rather than
-// rejected, matching the previous handler's behavior of never reading the body at all.
+// generated JSON body binding can't decode. Such a notification is acknowledged like any other,
+// and forwarded like any other when a forward URL is configured: the relay works from the bytes
+// captureNotifyBody kept, not from the decoded body.
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	handler := mitzpublic.NewStrictHandlerWithOptions(c, nil, mitzpublic.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			slog.DebugContext(r.Context(), "MITZ notification body could not be decoded, ignoring", logging.Error(err))
-			w.WriteHeader(http.StatusNoContent)
+			w.WriteHeader(c.acknowledge(r.Context()))
 		},
 	})
-	mitzpublic.HandlerFromMux(handler, publicMux)
+	options := mitzpublic.StdHTTPServerOptions{BaseRouter: publicMux}
+	if c.notifyForwardURL != "" {
+		// Outside the strict handler: it has to see the body before the
+		// generated JSON binding consumes it.
+		options.Middlewares = []mitzpublic.MiddlewareFunc{captureNotifyBody}
+	}
+	mitzpublic.HandlerWithOptions(handler, options)
 }
 
 // Start starts the component
@@ -147,13 +170,28 @@ func (c *Component) Stop(ctx context.Context) error {
 
 var _ mitzpublic.StrictServerInterface = (*Component)(nil)
 
-// ReceiveMitzNotification handles FHIR consent bundle notifications
+// acknowledge forwards the notification when that is configured, and returns
+// the status Mitz is answered with: 204, or 502 when delivery to the source
+// system was not confirmed.
+func (c *Component) acknowledge(ctx context.Context) int {
+	if c.notifyForwardURL == "" {
+		return http.StatusNoContent
+	}
+	if err := c.forwardNotification(ctx); err != nil {
+		slog.WarnContext(ctx, "MITZ notification was not forwarded", logging.Error(err))
+		return http.StatusBadGateway
+	}
+	return http.StatusNoContent
+}
+
+// ReceiveMitzNotification handles FHIR consent bundle notifications. The
+// Knooppunt does not interpret them: it acknowledges them, after relaying them
+// to the source system when a forward URL is configured (see acknowledge).
 func (c *Component) ReceiveMitzNotification(ctx context.Context, _ mitzpublic.ReceiveMitzNotificationRequestObject) (mitzpublic.ReceiveMitzNotificationResponseObject, error) {
 	slog.DebugContext(ctx, "Received FHIR consent bundle notification")
-
-	// todo: process it? atm we don't care about it. If we will care, we may have a problem because they seem
-	// to be sending XMLs, which go fhir lib doesn't support yet
-
+	if c.acknowledge(ctx) == http.StatusBadGateway {
+		return mitzpublic.ReceiveMitzNotification502Response{}, nil
+	}
 	return mitzpublic.ReceiveMitzNotification204Response{}, nil
 }
 

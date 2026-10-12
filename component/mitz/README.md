@@ -11,7 +11,8 @@ sharing preferences. This component provides:
 1. **Consent Subscription Management** - Subscribe to consent notifications for specific patient-provider-category
    combinations
 2. **Consent Authorization Queries** - Check if a healthcare provider has consent to access patient data
-3. **Notification Handling** - Receive and process consent change notifications from MITZ
+3. **Notification Handling** - Receive consent change notifications from MITZ and, when configured, relay them
+   unchanged to the source system
 
 ## Architecture
 
@@ -33,6 +34,9 @@ mitz:
 
   # Endpoint URL where MITZ will send consent change notifications
   notifyendpoint: "https://your-app.example.com/mitz/notify"
+
+  # Optional: URL a received notification is relayed to, unchanged (unset: acknowledged and discarded)
+  notifyforwardurl: "https://ehr.example.com/consent-notifications"
 
   # Optional: Gateway and source system OIDs (added as extensions to subscriptions)
   gatewaysystem: "urn:oid:2.16.840.1.113883.2.4.6.6.1"
