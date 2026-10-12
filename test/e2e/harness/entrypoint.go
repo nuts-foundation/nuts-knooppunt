@@ -39,6 +39,9 @@ type Details struct {
 	// MockDezi signs the attestations a full-chain test signs in with. Zero
 	// unless the harness was started with a Nuts node.
 	MockDezi MockDezi
+	// NotifyIntake receives the Mitz notifications the Knooppunt forwards. A
+	// test attaches its sandbox's intake handler to it.
+	NotifyIntake *NotifyIntake
 }
 
 type MITZDetails struct {
@@ -167,10 +170,15 @@ func start(t *testing.T, options startOptions) Details {
 	config.Nuts = nutsnode.Config{Enabled: options.nuts}
 
 	mockMitz := mitzmock.NewClosedQuestionService(t)
+	// /mitz/notify is on the public interface, which this harness serves on its
+	// fixed port; the internal URL startKnooppunt returns is another listener.
+	notifyIntake := startNotifyIntake(t)
 	config.MITZ = mitz.Config{
-		MitzBase:      mockMitz.GetURL(),
-		GatewaySystem: "test-gateway",
-		SourceSystem:  "test-source",
+		MitzBase:         mockMitz.GetURL(),
+		GatewaySystem:    "test-gateway",
+		SourceSystem:     "test-source",
+		NotifyEndpoint:   config.HTTP.PublicInterface.BaseURL + "/mitz/notify",
+		NotifyForwardURL: notifyIntake.URL,
 	}
 
 	// The Knooppunt installs the W3C propagator only when tracing is configured
@@ -191,6 +199,7 @@ func start(t *testing.T, options startOptions) Details {
 		SunflowerURA:             sunflower.URA,
 		Vectors:                  *testData,
 		MockMitzXACML:            mockMitz,
+		NotifyIntake:             notifyIntake,
 	}
 }
 
