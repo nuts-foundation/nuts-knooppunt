@@ -239,6 +239,9 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		KnooppuntInternalBaseURL: knooppuntURL,
 		MitzMockBaseURL:          cfg.mitzMockURL,
 		NVIClientID:              clientID,
+		// What the mock's consent cleanup answered, kept for the handler that
+		// called it: it raises the patients' watermarks to it.
+		OnMitzWatermark: cfg.runtime.noteMockWatermark,
 	}
 	cfg.resetGlobal = func(ctx context.Context) error {
 		return vectors.ResetGlobal(ctx, target)
@@ -668,9 +671,25 @@ func (c Config) handleReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// For writing: this waits for the consent actions already admitted and holds
+	// new ones back, so none changes Mitz while it is being restored. An action
+	// that waited here checks its admission again and finds its session gone.
+	c.runtime.gate.Lock()
+	defer c.runtime.gate.Unlock()
 	resetErr := c.resetGlobal(r.Context())
 	if c.Runs != nil {
 		c.Runs.clear()
+	}
+
+	// Whether or not the restore succeeded, for the reason the sessions go
+	// either way: a failed reset may still have changed the mock. Each patient's
+	// watermark rises, so the notification of a change made before this reset
+	// is ignored however late it is handled.
+	for _, patient := range pool.Patients() {
+		// Inside the patient's transition, and nothing of the kind after the
+		// loop: a withdrawal accepted once a patient's transition is over keeps
+		// the marks it made.
+		c.runtime.reset(patient.Key, patient.BSN, func() { c.Retrievals.clearPatient(patient.Key) })
 	}
 
 	// Sessions go whether or not the restore succeeded. ResetGlobal is not
@@ -725,13 +744,16 @@ func (c Config) handleRecycle(w http.ResponseWriter, r *http.Request) {
 	}
 	// Runs are left alone: the lock check above means none was live, and a run
 	// opened during the restore belongs to the session that opened it.
+	c.runtime.gate.Lock()
+	defer c.runtime.gate.Unlock()
 	err := c.recyclePatient(r.Context(), key)
 	// Unconditionally, including on an ordinary error. RecyclePatient is not
 	// transactional: it PUTs the fixtures back one at a time and verifies
 	// afterwards, so a failure can follow resources it already replaced. An error
 	// response is not a rollback, and a cached answer that may describe replaced
 	// data is not worth keeping either way.
-	c.Retrievals.clearPatient(key)
+	patient, _ := pool.PatientByKey(key)
+	c.runtime.reset(key, patient.BSN, func() { c.Retrievals.clearPatient(key) })
 	if err != nil {
 		// Partial is neither failed nor clean, as in handleReset: the fixtures
 		// were restored and something optional was not cleared. Reporting a
