@@ -47,6 +47,7 @@ type runSnapshot struct {
 	Gap       bool
 	Changed   <-chan struct{}
 	ExpiresAt time.Time
+	Patient   string
 }
 
 type runStore struct {
@@ -213,6 +214,7 @@ func (s *runStore) snapshot(id, owner string, after uint64) (runSnapshot, error)
 	result := runSnapshot{
 		FirstSeq: first, LastSeq: run.seq, Gap: after+1 < first,
 		Changed: run.changed, ExpiresAt: run.expiresAt,
+		Patient: run.scope.patient,
 	}
 	for i, raw := range run.events {
 		if first+uint64(i) > after {
