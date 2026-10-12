@@ -470,11 +470,16 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 
 	attempt := c.subscribe(ctx, patient.BSN)
 	title, detail := "Consent subscription started", "This request registered the subscription at Mitz."
-	// What the subscription is, not what will arrive: the sandbox configures no
-	// notification endpoint and nothing listens for one, so promising delivery
-	// would assert a message the stack cannot send.
-	tail := " Mitz holds it against this patient's consent; delivering the notifications themselves " +
-		"is not wired up in the sandbox, so nothing arrives here when consent changes."
+	// What the subscription is, and where a notification about it goes. Delivery
+	// is promised only when this application has an intake to receive it: the
+	// Knooppunt's side of the route (its notify endpoint on the subscription and
+	// its forward URL) is configured together with the intake and is not visible
+	// from here.
+	delivery := "This EHR has no notification intake configured, so nothing arrives here when consent changes."
+	if c.mitzNotifyListenAddr != "" {
+		delivery = "When consent changes, Mitz notifies the Knooppunt and the Knooppunt forwards the notification to this EHR."
+	}
+	tail := " Mitz holds it against this patient's consent. " + delivery
 	switch attempt.outcome {
 	case mitzUnknown:
 		return &cardResult{
@@ -505,9 +510,7 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 		title = "Registration request accepted"
 		detail = "The Knooppunt accepted the registration request. No lookup is available here to " +
 			"confirm that a subscription now exists, or whether one already did."
-		tail = " Any subscription Mitz holds is held against this patient's consent; delivering the " +
-			"notifications themselves is not wired up in the sandbox, so nothing arrives here when " +
-			"consent changes."
+		tail = " Any subscription Mitz holds is held against this patient's consent. " + delivery
 	case mitzExisting:
 		// Registered, not active: the sandbox sends status "requested", the mock
 		// stores it unchanged, and the lookup only asks whether a Subscription

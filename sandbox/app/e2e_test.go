@@ -113,6 +113,7 @@ func TestAcceptance_FullChain(t *testing.T) {
 		status, body := sandbox.share(t)
 		require.Equal(t, http.StatusOK, status, "body: %s", body)
 		require.Contains(t, body, "Consent subscription", "the share reached Mitz")
+		require.Contains(t, body, "the Knooppunt forwards the notification to this EHR", "and the card says where its notifications go")
 		status, body = sandbox.retrieve(t)
 		require.Equal(t, http.StatusOK, status, "body: %s", body)
 		require.Contains(t, body, "Access granted by Zorgcentrum De Zonnebloem")
@@ -332,6 +333,11 @@ func startFullChain(t *testing.T) fullChain {
 	t.Setenv("KNOOPPUNT_INTERNAL_URL", h.KnooppuntInternalBaseURL.String())
 	t.Setenv("HAPI_BASE_URL", h.HAPIBaseURL.String())
 	t.Setenv("MITZMOCK_URL", h.MockMitzXACML.GetURL())
+	// Where this chain serves the sandbox's notification intake: the listener the
+	// harness reserved for it, which openSandbox attaches the handler to.
+	intakeURL, err := url.Parse(h.NotifyIntake.URL)
+	require.NoError(t, err)
+	t.Setenv("SANDBOX_MITZ_NOTIFY_LISTEN_ADDR", intakeURL.Host)
 
 	anna, ok := pool.PatientByKey("anna")
 	require.True(t, ok)

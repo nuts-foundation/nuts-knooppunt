@@ -536,6 +536,26 @@ func TestShare_CardNamesTheRegisteredCategories(t *testing.T) {
 	require.NotContains(t, body, "BGZ (patient summary)")
 }
 
+// The card says where a notification about this subscription goes, and promises
+// this EHR one only when it has an intake to receive it.
+func TestShare_CardSaysWhetherNotificationsReachThisEHR(t *testing.T) {
+	for name, tc := range map[string]struct{ listenAddr, want, not string }{
+		"with an intake":    {":8093", "the Knooppunt forwards the notification to this EHR", "no notification intake"},
+		"without an intake": {"", "This EHR has no notification intake configured", "forwards the notification"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg, _, anna := shareConfig(t)
+			cfg.mitzNotifyListenAddr = tc.listenAddr
+
+			_, body := openAndShare(t, cfg, anna.Key)
+
+			require.Contains(t, body, "Consent subscription started")
+			require.Contains(t, body, tc.want)
+			require.NotContains(t, body, tc.not)
+		})
+	}
+}
+
 // The base --profile sandbox deployment sets no MITZMOCK_URL, so the preflight
 // cannot run there and the card must not claim this request created anything.
 func TestShare_WithoutALookupTheSuccessCardClaimsNoCreation(t *testing.T) {

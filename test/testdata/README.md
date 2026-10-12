@@ -138,7 +138,8 @@ subject's wallet, which is empty until the credential is stored.
   mutable patient stores (removing user-created records, which have random ids a
   plain re-seed cannot overwrite), then re-runs `Load` + `SeedNVI`, removes the
   localization records the sandbox published on De Plataan's side, and clears the
-  mock Mitz's subscriptions when one is configured. This is the "restore fixtures"
+  mock Mitz's subscriptions and restores its consent answers to the mock's
+  configured default when one is configured. This is the "restore fixtures"
   path, and it returns every pool patient to the unshared state a demo starts from.
 
   Clearing is a search-and-delete per resource type with `_cascade=delete`, **not**
@@ -150,10 +151,12 @@ subject's wallet, which is empty until the credential is stored.
   but asynchronous (a Batch2 job on a 60s maintenance schedule), which is too slow
   for a reset behind a UI button. `TestResetGlobal_PreservesPartitions` guards this.
 - `vectors.RecyclePatient(ctx, target, patientKey)` — restores one patient to its
-  seeded, unshared state (re-registers its NVI Lists, re-PUTs its FHIR resources
-  and clears that patient's consent subscription) without touching any other
-  patient. The subscription delete is scoped to one `providerid`/`patientid` pair
-  precisely so a recycle cannot cancel a concurrent demo's.
+  seeded, unshared state (re-registers its NVI Lists, re-PUTs its FHIR resources,
+  clears that patient's consent subscription and restores that patient's consent
+  answer) without touching any other patient. The subscription delete is scoped
+  to one `providerid`/`patientid` pair and the consent delete to one BSN,
+  precisely so a recycle cannot cancel a concurrent demo's subscription or
+  change another patient's consent.
 
   The client id travels in the target rather than being read from a constant on
   each side: the sandbox publishes under `SANDBOX_NVI_CLIENT_ID` when it is set,
@@ -175,12 +178,21 @@ subject's wallet, which is empty until the credential is stored.
   and `SeedNVI`'s delete-then-create only covers the pool's own BSNs. DESIGN §5.6
   wants those gone; that needs a custodian-scoped listing on the Knooppunt (or the
   seed tracking what it registered).
-- **Mitz subscriptions are only cleared when the mock is configured.**
-  `ResetGlobal` issues a `DELETE /abonnementen/fhir/Subscription` against
-  `SandboxTarget.MitzMockBaseURL`, which the sandbox fills from `MITZMOCK_URL`;
-  `RecyclePatient` issues the same delete scoped to one `providerid`/`patientid`
-  pair, so it cannot cancel a concurrent demo's subscription. With the URL unset
-  the subscription survives, and both paths return `ErrPartialReset` so the UI
+- **Mitz subscriptions and consent answers are only cleaned up when the mock is
+  configured.**
+  `ResetGlobal` issues a `DELETE /abonnementen/fhir/Subscription` and a
+  `DELETE /mock/consent` against `SandboxTarget.MitzMockBaseURL`, which the
+  sandbox fills from `MITZMOCK_URL`; `RecyclePatient` issues the first scoped to
+  one `providerid`/`patientid` pair and the second as `DELETE /mock/consent/{bsn}`,
+  so it cannot cancel a concurrent demo's subscription or change another
+  patient's consent. The two cleanups are independent: both are attempted, and
+  their warnings are joined into one `ErrPartialReset`. A consent delete restores
+  the mock's configured default, sends no notification, and answers with a
+  watermark, a timestamp later than every change the mock stored before it; when
+  `SandboxTarget.OnMitzWatermark` is set it is called with the BSN (empty for all
+  patients) and that watermark, which the sandbox uses to ignore notifications of
+  changes made before the reset. With the URL unset
+  the subscription and the consent answer survive, and both paths return `ErrPartialReset` so the UI
   reports a partial restore: the sandbox subscribes through the Knooppunt, which
   reaches Mitz whether or not `MITZMOCK_URL` was ever set, so reporting a clean
   consent state there would be untrue. Reaching a configured mock and failing is
