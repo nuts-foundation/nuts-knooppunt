@@ -4,7 +4,7 @@
 // Unlike the mcsd component - which discovers peer directories and applies anti-spoofing validation
 // to their contents - lrza syncs from one directory that is trusted wholesale. There is therefore no
 // discovery phase and no per-resource validation: every resource the source returns is imported into
-// the local query directory as-is. The first sync reads the current resources via a full search; once
+// the local query directory as-is, under ids derived from the source's (see localID). The first sync reads the current resources via a full search; once
 // a timestamp has been recorded, later syncs read changes incrementally via _history with _since
 // (which also propagates deletions). Each page of each resource type's feed is deduplicated to one
 // entry per resource (a resource's versions can be split across pages, so dedup state spans the whole
@@ -26,6 +26,7 @@ import (
 	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	"github.com/google/uuid"
 	"github.com/nuts-foundation/nuts-knooppunt/api"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
@@ -51,7 +52,10 @@ var resourceTypes = []string{"Organization", "Location", "HealthcareService", "E
 // into one transaction per page is safe because the query directory accepts resources whose references
 // don't resolve yet (hapi.fhir.enforce_referential_integrity_on_write: false, per
 // https://minvws.github.io/generiekefuncties-docs/en/csd.html) - a resource in one page's transaction
-// may reference a resource that only lands in a later one.
+// may reference a resource that only lands in a later one. That relies on references staying literal
+// (see appendTransactionEntry), and on the query directory creating a placeholder for a missing target
+// (hapi.fhir.auto_create_placeholder_reference_targets: true): HAPI only indexes a reference whose
+// target exists, so without one _include and chained search miss the link even after the target lands.
 const searchPageSize = 100
 
 // clockSkewBuffer is subtracted from local time when a Bundle's meta.lastUpdated is not available,
@@ -207,8 +211,8 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		// Return progress tallied by already-applied pages rather than discarding it, and skip
 		// recordSyncTimestamp below so the next sync retries the whole window from the old
 		// lastUpdateTime instead of skipping past what never got applied. Safe to retry: every write
-		// is a conditional upsert/delete keyed by _source, so re-applying already-applied pages is a
-		// no-op.
+		// is a PUT or DELETE by an id derived from the source's, so re-applying already-applied pages
+		// is a no-op.
 		return run.finalizedReport(), err
 	}
 	c.recordSyncTimestamp(ctx, run)
@@ -321,9 +325,15 @@ func (c *Component) buildTransaction(ctx context.Context, run *syncRun, entries 
 	}
 }
 
-// appendTransactionEntry translates one fetched entry into a conditional upsert or delete against the
-// query directory and appends it to run.tx. Resources are tagged with a deterministic _source so
-// updates are idempotent and deletes target the right resource.
+// appendTransactionEntry translates one fetched entry into an upsert or delete against the query
+// directory and appends it to run.tx. Each resource is written under an id derived from its source
+// URL (see localID), and its references are rewritten to the derived ids of their targets, so an
+// update or delete targets its resource without a lookup. meta.source records where it came from.
+//
+// References stay literal, which is what lets each page be its own transaction. A literal reference
+// to a resource that only lands in a later page is accepted, because the query directory doesn't
+// enforce referential integrity on write (see searchPageSize). A conditional reference would not be:
+// the FHIR server must resolve it within the transaction that carries it.
 //
 // Entries come from two shapes: _history entries (incremental sync) carry a request whose method is
 // POST/PUT (upsert) or DELETE; full-search entries (initial sync) carry only a resource body and no
@@ -333,28 +343,27 @@ func (c *Component) buildTransaction(ctx context.Context, run *syncRun, entries 
 // there is no anti-spoofing validation and no discoverable-directory filtering - every entry is
 // imported as-is.
 func (c *Component) appendTransactionEntry(ctx context.Context, run *syncRun, entry fhir.BundleEntry) error {
-	// A DELETE history entry carries no resource body; translate to a conditional delete keyed by
-	// _source. Everything else (a history upsert, or a full-search result with no request) is an upsert.
+	// A DELETE history entry carries no resource body; its request URL names the resource. Everything
+	// else (a history upsert, or a full-search result with no request) is an upsert.
 	if entry.Request != nil && entry.Request.Method == fhir.HTTPVerbDELETE {
 		resourceType, resourceID, ok := libfhir.TypeAndIDFromReference(entry.Request.Url)
 		if !ok {
 			return fmt.Errorf("invalid DELETE URL format: %s", entry.Request.Url)
 		}
-		sourceURL, err := libfhir.BuildSourceURL(c.config.LRZABaseUrl, resourceType, resourceID)
+		_, id, err := localID(c.config.LRZABaseUrl, resourceType, resourceID)
 		if err != nil {
-			return fmt.Errorf("failed to build source URL for DELETE: %w", err)
+			return fmt.Errorf("failed to derive local id for DELETE: %w", err)
 		}
 		slog.DebugContext(ctx, "Deleting resource", slog.String("type", resourceType), slog.String("id", resourceID))
 		run.tx.Entry = append(run.tx.Entry, fhir.BundleEntry{
 			Request: &fhir.BundleEntryRequest{
 				Method: fhir.HTTPVerbDELETE,
-				Url:    resourceType + "?" + url.Values{"_source": []string{sourceURL}}.Encode(),
+				Url:    resourceType + "/" + id,
 			},
 		})
 		return nil
 	}
 
-	// Upsert: rewrite the resource body to a conditional update keyed by _source.
 	if entry.Resource == nil {
 		return errors.New("entry has neither a resource body nor a DELETE request")
 	}
@@ -369,15 +378,14 @@ func (c *Component) appendTransactionEntry(ctx context.Context, run *syncRun, en
 		return errors.New("resource has no id")
 	}
 	resourceType, resourceID, resource := info.ResourceType, info.ID, info.Resource
-	sourceURL, err := libfhir.BuildSourceURL(c.config.LRZABaseUrl, resourceType, resourceID)
+	sourceURL, id, err := localID(c.config.LRZABaseUrl, resourceType, resourceID)
 	if err != nil {
-		return fmt.Errorf("failed to build source URL: %w", err)
+		return fmt.Errorf("failed to derive local id: %w", err)
 	}
 
 	setResourceSource(resource, sourceURL)
-	// Drop the source's id so the query directory resolves the resource by _source instead.
-	delete(resource, "id")
-	if err := convertReferencesToConditional(resource, c.config.LRZABaseUrl); err != nil {
+	resource["id"] = id
+	if err := convertReferencesToLocal(resource, c.config.LRZABaseUrl); err != nil {
 		return fmt.Errorf("failed to convert references: %w", err)
 	}
 
@@ -390,10 +398,24 @@ func (c *Component) appendTransactionEntry(ctx context.Context, run *syncRun, en
 		Resource: resourceJSON,
 		Request: &fhir.BundleEntryRequest{
 			Method: fhir.HTTPVerbPUT,
-			Url:    resourceType + "?" + url.Values{"_source": []string{sourceURL}}.Encode(),
+			Url:    resourceType + "/" + id,
 		},
 	})
 	return nil
+}
+
+// localID derives the query directory's id for a source resource: a name-based (v5) UUID of its
+// source URL, which is also returned for meta.source. The source's own id can't be reused: a FHIR
+// server that hosts the source directory and the query directory as partitions (as HAPI does in the
+// sandbox and the test harness) requires client-assigned ids to be unique across partitions. Deriving
+// the id from the source URL keeps it deterministic, so writes stay idempotent and references can be
+// rewritten without looking anything up.
+func localID(sourceBaseURL, resourceType, resourceID string) (sourceURL, id string, err error) {
+	sourceURL, err = libfhir.BuildSourceURL(sourceBaseURL, resourceType, resourceID)
+	if err != nil {
+		return "", "", err
+	}
+	return sourceURL, uuid.NewSHA1(uuid.NameSpaceURL, []byte(sourceURL)).String(), nil
 }
 
 // applyTransaction sends the transaction bundle to the query directory and tallies the per-entry
@@ -500,33 +522,29 @@ func setResourceSource(resource map[string]any, source string) {
 	delete(meta, "lastUpdated")
 }
 
-// convertReferencesToConditional rewrites every relative "ResourceType/id" reference in the resource
-// into a deterministic conditional reference keyed by _source, so references resolve against the
-// query directory's copies of the same source resources.
-// conditional references are explained in more detail in the FHR documentation here:
-// http://hl7.org/fhir/R4/http.html#trules
-func convertReferencesToConditional(obj any, sourceBaseURL string) error {
+// convertReferencesToLocal rewrites every relative "ResourceType/id" reference in the resource to
+// the target's id in the query directory (see localID). The target doesn't have to exist yet.
+func convertReferencesToLocal(obj any, sourceBaseURL string) error {
 	switch v := obj.(type) {
 	case map[string]any:
 		if ref, ok := v["reference"].(string); ok {
 			parts := strings.Split(ref, "/")
 			if len(parts) == 2 {
-				resourceType := parts[0]
-				sourceURL, err := libfhir.BuildSourceURL(sourceBaseURL, ref)
+				_, id, err := localID(sourceBaseURL, parts[0], parts[1])
 				if err != nil {
-					return fmt.Errorf("failed to build source URL for reference: %w", err)
+					return fmt.Errorf("failed to derive local id for reference: %w", err)
 				}
-				v["reference"] = resourceType + "?_source=" + url.QueryEscape(sourceURL)
+				v["reference"] = parts[0] + "/" + id
 			}
 		}
 		for _, value := range v {
-			if err := convertReferencesToConditional(value, sourceBaseURL); err != nil {
+			if err := convertReferencesToLocal(value, sourceBaseURL); err != nil {
 				return err
 			}
 		}
 	case []any:
 		for _, item := range v {
-			if err := convertReferencesToConditional(item, sourceBaseURL); err != nil {
+			if err := convertReferencesToLocal(item, sourceBaseURL); err != nil {
 				return err
 			}
 		}

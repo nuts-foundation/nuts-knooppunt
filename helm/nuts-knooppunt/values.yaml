@@ -321,6 +321,14 @@ fhir:
     "hapi.fhir.server_id_strategy": "UUID"
     # Allow storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
     "hapi.fhir.store_meta_source_information": "SOURCE_URI"
+    # The mCSD Query Directory receives resources before resources they reference (Organization <->
+    # Endpoint are circular, and the LRZA sync writes one transaction per page), so it must accept
+    # unresolved references...
+    "hapi.fhir.enforce_referential_integrity_on_write": "false"
+    # ...and index them: HAPI only indexes a reference whose target exists, so it creates a
+    # placeholder (marked with the http://hapifhir.io/fhir/StructureDefinition/resource-placeholder
+    # extension) that the later write fills in. Without it, _include and chained search miss the link.
+    "hapi.fhir.auto_create_placeholder_reference_targets": "true"
     # Prevents encoding of the pipe char in queries
     "server.tomcat.relaxed-query-chars": "|"
     # The FHIR version to use

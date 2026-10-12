@@ -61,6 +61,18 @@ For your own Knooppunt, you need to:
 A multi tenant HAPI server can be used for hosting both the admin and query directory. We recommend to keep this data
 separate, but you can choose to combine the data in a single tenant if so desired.
 
+The Query Directory receives resources before the resources they reference, so its FHIR server must accept and index
+unresolved references. For HAPI FHIR, set:
+
+- `hapi.fhir.enforce_referential_integrity_on_write: false`, so the write isn't rejected, and
+- `hapi.fhir.auto_create_placeholder_reference_targets: true`, so the reference is indexed for `_include` and chained
+  search. HAPI creates a placeholder for the missing target, which the target's own write later fills in. See
+  [placeholder resources](./INTEGRATION.md#querying-the-query-directory-placeholder-resources) for how applications
+  reading the Query Directory recognize them.
+
+The Helm chart sets both in `fhir.configExtra`. Both are server-wide HAPI settings, so they apply to every tenant on the
+same server.
+
 #### Using the mCSD Administration Application
 
 The Knooppunt contains a web-application to manually manage the mCSD Administration Directory entries (e.g. create organizations and endpoints).

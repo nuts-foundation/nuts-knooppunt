@@ -3,10 +3,8 @@ package lrza
 import (
 	"context"
 	"encoding/json"
-	"net/url"
 	"testing"
 
-	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -14,17 +12,33 @@ import (
 
 const testSourceBaseURL = "http://source.example/fhir"
 
-func sourceQuery(t *testing.T, parts ...string) string {
+// localRef is the query directory's reference to the copy of a source resource.
+func localRef(t *testing.T, resourceType, resourceID string) string {
 	t.Helper()
-	sourceURL, err := libfhir.BuildSourceURL(testSourceBaseURL, parts...)
+	_, id, err := localID(testSourceBaseURL, resourceType, resourceID)
 	require.NoError(t, err)
-	return "_source=" + url.QueryEscape(sourceURL)
+	return resourceType + "/" + id
+}
+
+func TestLocalID(t *testing.T) {
+	sourceURL, id, err := localID(testSourceBaseURL, "Organization", "123")
+	require.NoError(t, err)
+	require.Equal(t, "http://source.example/fhir/Organization/123", sourceURL)
+	require.NotEqual(t, "123", id, "the source id must not be reused: it may already exist in another partition of the same server")
+
+	_, again, err := localID(testSourceBaseURL, "Organization", "123")
+	require.NoError(t, err)
+	require.Equal(t, id, again, "the id must be deterministic, so writes are idempotent and references need no lookup")
+
+	_, otherSource, err := localID("http://other.example/fhir", "Organization", "123")
+	require.NoError(t, err)
+	require.NotEqual(t, id, otherSource, "the id must be namespaced by source")
 }
 
 func TestBuildTransaction(t *testing.T) {
 	c := &Component{config: Config{LRZABaseUrl: testSourceBaseURL}}
 
-	t.Run("CREATE/UPDATE becomes a conditional PUT keyed by _source", func(t *testing.T) {
+	t.Run("CREATE/UPDATE becomes a PUT by the derived id", func(t *testing.T) {
 		resource, err := json.Marshal(map[string]any{
 			"resourceType": "Organization",
 			"id":           "123",
@@ -43,28 +57,27 @@ func TestBuildTransaction(t *testing.T) {
 		require.Empty(t, run.report.Warnings)
 		txEntry := run.tx.Entry[0]
 		require.Equal(t, fhir.HTTPVerbPUT, txEntry.Request.Method)
-		require.Equal(t, "Organization?"+sourceQuery(t, "Organization", "123"), txEntry.Request.Url)
+		require.Equal(t, localRef(t, "Organization", "123"), txEntry.Request.Url)
 
 		var got map[string]any
 		require.NoError(t, json.Unmarshal(txEntry.Resource, &got))
-		require.NotContains(t, got, "id", "the source id must be stripped")
+		require.Equal(t, localRef(t, "Organization", "123"), "Organization/"+got["id"].(string))
 
 		meta := got["meta"].(map[string]any)
-		sourceURL, _ := libfhir.BuildSourceURL(testSourceBaseURL, "Organization", "123")
-		require.Equal(t, sourceURL, meta["source"])
+		require.Equal(t, "http://source.example/fhir/Organization/123", meta["source"])
 		require.NotContains(t, meta, "versionId")
 		require.NotContains(t, meta, "lastUpdated")
 
 		partOf := got["partOf"].(map[string]any)
-		require.Equal(t, "Organization?"+sourceQuery(t, "Organization/456"), partOf["reference"], "references must be rewritten to conditional _source references")
+		require.Equal(t, localRef(t, "Organization", "456"), partOf["reference"], "references must be rewritten to the target's derived id")
 	})
 
 	t.Run("a reference to a resource not part of this sync is accepted, not rejected", func(t *testing.T) {
 		// Per https://minvws.github.io/generiekefuncties-docs/en/csd.html, a Local Replica SHALL
 		// accept resources whose references cannot (yet) be resolved - e.g. Organization and Endpoint
 		// reference each other, so neither can always be synced before the other. appendTransactionEntry
-		// only rewrites the reference string to a conditional lookup; it never checks whether the
-		// target exists, here or anywhere else.
+		// only rewrites the reference to the target's derived id; it never checks whether the target
+		// exists, here or anywhere else.
 		resource, err := json.Marshal(map[string]any{
 			"resourceType": "Organization",
 			"id":           "123",
@@ -87,11 +100,10 @@ func TestBuildTransaction(t *testing.T) {
 		require.True(t, ok)
 		require.Len(t, endpoints, 1)
 		endpointRef := endpoints[0].(map[string]any)
-		require.Equal(t, "Endpoint?"+sourceQuery(t, "Endpoint/not-yet-synced"), endpointRef["reference"],
-			"the reference is rewritten to a conditional lookup even though Endpoint/not-yet-synced hasn't been synced yet")
+		require.Equal(t, localRef(t, "Endpoint", "not-yet-synced"), endpointRef["reference"])
 	})
 
-	t.Run("DELETE becomes a conditional DELETE keyed by _source", func(t *testing.T) {
+	t.Run("DELETE becomes a DELETE by the derived id", func(t *testing.T) {
 		run := &syncRun{}
 		c.buildTransaction(context.Background(), run, []fhir.BundleEntry{{
 			Request: &fhir.BundleEntryRequest{Method: fhir.HTTPVerbDELETE, Url: "Organization/789/_history/2"},
@@ -101,11 +113,11 @@ func TestBuildTransaction(t *testing.T) {
 		require.Empty(t, run.report.Warnings)
 		txEntry := run.tx.Entry[0]
 		require.Equal(t, fhir.HTTPVerbDELETE, txEntry.Request.Method)
-		require.Equal(t, "Organization?"+sourceQuery(t, "Organization", "789"), txEntry.Request.Url)
+		require.Equal(t, localRef(t, "Organization", "789"), txEntry.Request.Url)
 		require.Nil(t, txEntry.Resource)
 	})
 
-	t.Run("a full-search entry (no request) becomes a conditional PUT", func(t *testing.T) {
+	t.Run("a full-search entry (no request) becomes a PUT", func(t *testing.T) {
 		// Initial full-sync results are plain searchset entries: a resource body with no request.
 		resource, err := json.Marshal(map[string]any{"resourceType": "Organization", "id": "123"})
 		require.NoError(t, err)
@@ -120,7 +132,7 @@ func TestBuildTransaction(t *testing.T) {
 		require.Empty(t, run.report.Warnings)
 		txEntry := run.tx.Entry[0]
 		require.Equal(t, fhir.HTTPVerbPUT, txEntry.Request.Method)
-		require.Equal(t, "Organization?"+sourceQuery(t, "Organization", "123"), txEntry.Request.Url)
+		require.Equal(t, localRef(t, "Organization", "123"), txEntry.Request.Url)
 		require.NotNil(t, txEntry.Resource)
 	})
 
@@ -140,12 +152,12 @@ func TestTallyTransactionResult(t *testing.T) {
 	// put/del build a request entry and its corresponding response entry (same index, as a FHIR
 	// transaction response preserves request order).
 	put := func(status string) (fhir.BundleEntry, fhir.BundleEntry) {
-		req := fhir.BundleEntry{Request: &fhir.BundleEntryRequest{Method: fhir.HTTPVerbPUT, Url: "Organization?_source=x"}}
+		req := fhir.BundleEntry{Request: &fhir.BundleEntryRequest{Method: fhir.HTTPVerbPUT, Url: "Organization/x"}}
 		resp := fhir.BundleEntry{Response: &fhir.BundleEntryResponse{Status: status}}
 		return req, resp
 	}
 	del := func(status string) (fhir.BundleEntry, fhir.BundleEntry) {
-		req := fhir.BundleEntry{Request: &fhir.BundleEntryRequest{Method: fhir.HTTPVerbDELETE, Url: "Organization?_source=x"}}
+		req := fhir.BundleEntry{Request: &fhir.BundleEntryRequest{Method: fhir.HTTPVerbDELETE, Url: "Organization/x"}}
 		resp := fhir.BundleEntry{Response: &fhir.BundleEntryResponse{Status: status}}
 		return req, resp
 	}

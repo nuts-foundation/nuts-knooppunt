@@ -84,6 +84,42 @@ You can find the mCSD Admin application at:
 http://localhost:8080/mcsdadmin
 ```
 
+### Querying the Query Directory: placeholder resources
+
+Synchronization writes resources into the Query Directory before the resources they reference: an Organization and its
+Endpoints reference each other, and the LRZA sync applies each page of results as its own transaction. So that such a
+reference is still found by `_include` and chained search once its target arrives, the Query Directory (HAPI FHIR with
+`hapi.fhir.auto_create_placeholder_reference_targets: true`, see [DEPLOYMENT.md](./DEPLOYMENT.md#addressing)) creates a
+*placeholder* for a missing target, which the target's own write later fills in.
+
+A placeholder has only an id and this extension:
+
+```json
+{
+  "resourceType": "Endpoint",
+  "id": "4bb9f06f-224b-5550-91fa-babfe9bb7d70",
+  "extension": [
+    {
+      "url": "http://hapifhir.io/fhir/StructureDefinition/resource-placeholder",
+      "valueBoolean": true
+    }
+  ]
+}
+```
+
+Normally a placeholder exists only during a synchronization run. It stays when a reference points at a resource the
+source directory doesn't publish, so applications reading the Query Directory should not assume every resource is
+complete:
+
+- **Ignore resources carrying the extension above.** This applies in particular to resources returned through
+  `_include` or read by following a reference, which can be placeholders.
+- **Search on elements the profile requires** where you can, e.g. `Endpoint?status=active` or
+  `Organization?identifier=<system>|<value>`. A placeholder has none of them, so it never matches. Note that
+  `:missing` searches do not find placeholders, because HAPI doesn't index missing elements by default.
+
+Because a placeholder already exists when its target arrives, the synchronization report counts that write as
+`updated` rather than `created`.
+
 ## NVI
 
 This chapter describes how to integrate with the NVI (Nederlandse VerwijsIndex) service using the Knooppunt.

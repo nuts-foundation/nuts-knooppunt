@@ -35,6 +35,10 @@ func startHAPI(t *testing.T, dockerNetworkName string) *url.URL {
 			// https://minvws.github.io/generiekefuncties-docs/en/csd.html). Without this, writes with
 			// an unresolved reference are rejected.
 			"hapi.fhir.enforce_referential_integrity_on_write": "false",
+			// Match docker-compose.yml: without a placeholder, HAPI never indexes a reference whose
+			// target doesn't exist yet, so _include and chained search miss it even after the target
+			// arrives. A placeholder gives the link a target that the later write fills in.
+			"hapi.fhir.auto_create_placeholder_reference_targets": "true",
 			"NVI_AUDIENCE": "nvi",
 		},
 		WaitingFor: wait.ForHTTP("/fhir/DEFAULT/Account"),
