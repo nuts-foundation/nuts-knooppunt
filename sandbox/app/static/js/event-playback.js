@@ -26,13 +26,23 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
     onCursor?.(getCursor());
   }
   const leftNow = () => timer === null ? left : Math.max(0, left - (clock.now() - since));
+  // The stages still to be played: what is left of a replay, and every stage
+  // that has not been shown at all. Before the first action starts that is the
+  // newest action's; the older ones are taken as shown when it does.
+  function upcoming() {
+    const waiting = started ? groups.flatMap(pending) : pending(latest());
+    return selected ? [...(replayQueue || []), ...waiting] : waiting;
+  }
   function state() {
-    return { events, groups, action, stage, selected, paused: paused || !active, elapsed: stage ? (length - leftNow()) / 1000 : 0,
+    return { events, groups, action, stage, selected, delivered, upcoming: upcoming(), paused: paused || !active, elapsed: stage ? (length - leftNow()) / 1000 : 0,
       status: disposed ? 'ended' : paused || !active ? 'paused' : stage ? 'playing' : !ready ? 'settling' : complete ? 'complete' : 'waiting' };
   }
   const changed = () => onChange?.(state());
   const latest = () => groups.filter(group => group.stages.length).at(-1);
-  const pending = group => group?.stages.filter(item => item.events.some(event => !watched.has(callIdentity(event)))) || [];
+  // A stage is still to be played while any of its events, or of the consent
+  // checks that belong to it, has not been shown.
+  const evidenceOf = item => [...item.events, ...(item.checks || [])];
+  const pending = group => group?.stages.filter(item => evidenceOf(item).some(event => !watched.has(callIdentity(event)))) || [];
   function schedule() {
     if (disposed || paused || !active || !stage || timer !== null) return;
     const elapsed = length - left;
@@ -58,16 +68,18 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
       if (newest && (!action || newest.time >= action.time)) action = newest;
       next = pending(action)[0];
     }
-    if (next) {
-      const timeline = stageTimeline(next);
-      stage = next; complete = false; length = left = Math.round(timeline.seconds * 1000);
-      marks = [...new Set([timeline.identity, timeline.role, timeline.consent, timeline.query, timeline.settled]
-        .filter(value => value > 0 && value < timeline.seconds).map(value => Math.round(value * 1000)))].sort((a, b) => a - b);
-      remember(next.events);
-      onStage?.(next, action);
-      schedule();
-    } else complete = !!action;
+    if (next) show(next); else complete = !!action;
     changed();
+  }
+  // show puts a stage on the map and starts its clock at zero.
+  function show(next) {
+    const timeline = stageTimeline(next);
+    stage = next; complete = false; length = left = Math.round(timeline.seconds * 1000);
+    marks = [...new Set([timeline.identity, timeline.role, timeline.consent, timeline.query, timeline.source, timeline.settled]
+      .filter(value => value > 0 && value < timeline.seconds).map(value => Math.round(value * 1000)))].sort((a, b) => a - b);
+    remember(evidenceOf(next));
+    onStage?.(next, action);
+    schedule();
   }
   function suspend() {
     if (timer !== null) {
@@ -82,6 +94,17 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
       const retained = groups.find(group => group.id === action.id);
       if (!retained) { suspend(); stage = null; replayQueue = null; selected = false; }
       action = retained || latest() || null;
+    }
+    // Regrouping rebuilds every stage. The one being shown and the ones queued
+    // follow by identity, and a stage whose evidence grew while it was shown (a
+    // late answer from Mitz, a further page) starts over with all of it: the
+    // map and the legend then tell the same events from the same moment.
+    const rebuilt = item => action?.stages.find(next => next.id === item.id) || item;
+    if (replayQueue) replayQueue = replayQueue.map(rebuilt);
+    if (stage) {
+      const grew = evidenceOf(rebuilt(stage)).length !== evidenceOf(stage).length;
+      stage = rebuilt(stage);
+      if (grew) { suspend(); show(stage); }
     }
     changed();
   }

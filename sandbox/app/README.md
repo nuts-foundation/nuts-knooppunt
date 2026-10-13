@@ -463,7 +463,11 @@ has arrived, and nothing on the map looks refused before the refusal exists: the
 packets and the lock take that colour when Mitz's answer and the source's response set off. The
 access checks block and the sentence under it follow the same timeline (`stageTimeline` in
 `static/js/journey-model.js`): the playback wakes at each moment the stage changes something, a
-tile takes its new state when the map shows it, and until then says what it is waiting for.
+tile takes its new state when the map shows it, and until then says what it is waiting for. The
+map takes a step's evidence when the step starts. A step whose evidence grows while it is shown, by
+a late answer from Mitz or a further page, starts over with all of it, and a request whose answer
+arrives after it finished playing is played again with it. With reduced motion the map shows a
+step's result at once, and so do the access checks and the sentences.
 An observed error response returns with its status; a transport failure has no invented return.
 A body that was not captured says why, and a call without a body says so. A Mitz subscription
 acknowledgement is not a consent decision. This is a presentation clock: backend calls remain fast and displayed request durations
@@ -493,6 +497,26 @@ that carries the result has yet to reach the vault. Every request is checked ane
 with the four locks and the vault shut and plays each change again, so a retrieval of four requests
 opens them four times. After a withdrawal the key is issued and read as before, so identity and
 role open and consent shuts: consent is not in the key.
+
+The map draws De Zonnebloem only as far as the calls shown so far establish it
+(`sourcePresentation` in `static/js/journey-model.js`), and it reads the two answers by the rules
+the retrieval applies to them. Before a discovery the source is a placeholder. The NVI's answer
+turns it into a URA with the data categories held for this patient: the custodians other than De
+Plataan, by the localization extension and the data category code system, in URA order. The map
+has one box, which stands for the first of them; the step's sentence counts the others. The
+address directory's answer about that URA turns the box into the organization, titled with the
+answer's name, with its authorization and policy, its vault and the four locks, and a bar on the
+box's edge marked WEB ADDRESS when the organization points at a FHIR endpoint that was active and
+within its period at the time of the call; the requests of a retrieval enter and leave through
+that bar. The address itself stays in Technical mode: the seed publishes a service name inside the
+deployment (`SEED_ZONNEBLOEM_ENDPOINT_ADDRESS`), not a public URL. Each change shows when its
+answer is back, 2.3 seconds into a discovery step of 3.3, and the step's sentence says what is
+asked until then and what the answer established after. Every discovery asks anew and starts from
+the placeholder. Outside a discovery the map draws what the run has established, without the
+steps that have yet to be played. A source that was sent a request counts as known by its address,
+not by a name, and a key request establishes nothing: it goes to De Plataan's own access service.
+After a retention gap the placeholder says that the earlier steps expired, and nothing is drawn of
+the source before the run's events are in.
 
 Discovery is labeled Find data sources. Confirmed retrieval starts with Request access key, then
 Find patient at De Zonnebloem and separate allergy, condition and medication searches as observed.
@@ -606,8 +630,9 @@ duplicated client state, fragile SSE reconnect/resume behavior, or the stateful 
 materially).
 
 The design asks for a review of this choice when the consent-revocation flow lands. E8 added, on
-the client: targets and consent states by purpose in `static/js/journey-model.js`, the locks, the
-Mitz shield and the retrieved-copy slot in `static/js/journey-strip.js`, and the record refresh in
+the client: targets, consent states and what is known of the source in
+`static/js/journey-model.js`, the locks, the Mitz shield, the source's box and the retrieved-copy
+slot in `static/js/journey-strip.js`, and the record refresh in
 `static/js/step-events.js`. All three are vanilla modules without a Datastar dependency, and the
 consent control is a plain form post with a redirect. Datastar still carries what it carried
 before, the viewer's open state and its Functional/Technical toggle, in `_viewer.html` alone.

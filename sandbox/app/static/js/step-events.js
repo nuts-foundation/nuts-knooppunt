@@ -1,5 +1,5 @@
 import { createJourneyStrip } from './journey-strip.js';
-import { journeyTargets, subscriptionResult, accessPresentation, callCount, consentPresentation, lockPresentation, stageTimeline } from './journey-model.js';
+import { journeyTargets, subscriptionResult, accessPresentation, callCount, consentPresentation, lockPresentation, stageTimeline, sourcePresentation, discoveryPresentation } from './journey-model.js';
 import { createPlayback } from './event-playback.js';
 
 export function createEventFeed(runId, { onStep, onGap, onEnd } = {}) {
@@ -220,6 +220,8 @@ export function mountViewer(dock) {
       const categories = [...new Set(group.events.map(event => event.resourceType).filter(Boolean))];
       if (categories.length) content.append(node('p', 'gf-step-result', categories.join(' · ')));
       if (group.purpose === 'pseudonymization') content.append(node('p', 'gf-step-result', 'Internal PRS evidence for the following NVI calls'));
+      const discovery = discoveryPresentation(group);
+      if (discovery?.description) content.append(node('p', 'gf-step-result', discovery.description));
       const consent = consentPresentation(group, action);
       if (group.checks?.length) content.append(node('p', 'gf-step-result',
         consent.state === 'permit' ? 'Before answering, the source asked Mitz whether this patient consents. Mitz answered yes.'
@@ -250,7 +252,7 @@ export function mountViewer(dock) {
     const focusedAction = document.activeElement?.dataset?.actionId;
     const technicalMode = document.body.classList.contains('hood-tech');
     const visible = dock.classList.contains('on') && !document.hidden;
-    followChanged = !!state.stage && visible && (state.stage !== lastFollowStage || technicalMode !== lastFollowMode || !lastFollowOpen);
+    followChanged = !!state.stage && visible && (state.stage.id !== lastFollowStage?.id || technicalMode !== lastFollowMode || !lastFollowOpen);
     activeCalls = new Set(state.stage?.events || []);
     activeFunctional = activeTechnical = null;
     for (const detail of list.querySelectorAll('details[data-key]')) {
@@ -307,14 +309,16 @@ export function mountViewer(dock) {
     contract.hidden = !access.visible && !consent;
     // The map delays each change to its moment in the stage. The status line
     // and the legend follow the same timeline through the playback, so neither
-    // gives the outcome away before the map has shown it.
+    // gives the outcome away before the map has shown it. The map takes its
+    // evidence when a stage starts, and the playback starts a stage over when
+    // its evidence grows.
+    // With reduced motion the map shows a stage's result at once, and so do the
+    // legend and the sentences.
     const timing = state.stage ? stageTimeline(state.stage) : null;
-    contractStatus.textContent = timing && state.elapsed < timing.settled ? timing.pending
+    const elapsed = state.stage && !motion.matches ? state.elapsed : Infinity;
+    contractStatus.textContent = timing && elapsed < timing.settled ? timing.pending
       : consent && consent.state === 'deny' ? consent.description : access.description;
-    // The map takes its evidence when a stage starts; an answer that arrives
-    // while the stage is shown has to reach it as well as the legend.
-    if (state.stage) journey.setEvidence({ consent, locks: lockPresentation(state.stage, action) });
-    const locks = lockPresentation(state.stage, action, state.stage ? state.elapsed : Infinity);
+    const locks = lockPresentation(state.stage, action, elapsed);
     for (const item of checks) {
       const lock = locks[item.dataset.check];
       item.classList.remove('open', 'deny', 'error');
@@ -324,6 +328,15 @@ export function mountViewer(dock) {
     if (access.visible && !technicalMode) stageDetail.textContent = access.tokenRequest
       ? access.tokenReceived ? 'Request access → De Zonnebloem · source-issued key → Plataan' : 'Request access through Plataan’s access service → De Zonnebloem'
       : access.requestDescription;
+    // A discovery step says what it asks until its answer is back, and then
+    // what the answer established. The map draws the source as far as the calls
+    // shown so far establish it, once the run's events are in.
+    const discovery = discoveryPresentation(state.stage);
+    if (discovery && !technicalMode) stageDetail.textContent = elapsed < timing.settled ? discovery.pending
+      : discovery.description || stageDetail.textContent;
+    if (state.delivered) journey.setSource(sourcePresentation({
+      stage: state.stage, action, events: state.events, upcoming: state.upcoming, elapsed, partial: hasGap,
+    }), !!state.stage);
     pause.textContent = state.paused ? 'Resume' : 'Pause';
     pause.disabled = ended;
     live.disabled = ended || !state.selected;

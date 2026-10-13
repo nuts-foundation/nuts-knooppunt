@@ -4,6 +4,18 @@ const consentStates = ['consent-permit', 'consent-deny', 'consent-error'];
 const lockStates = { open: 'lock-open', deny: 'lock-deny', error: 'lock-error' };
 
 const mitzRoute = '#js-mitz, #js-auth-server, #jsp-mitzcheck';
+const sourceStates = ['source-pending', 'source-unknown', 'source-located', 'source-addressed'];
+
+// A title longer than the box holds at full size is set smaller, and cut when it
+// does not fit even then.
+const fitTitle = title => ({ text: title.length > 26 ? `${title.slice(0, 25)}…` : title, long: title.length > 16 });
+
+// chipLabels fits data categories to the slots the box has for them: a long one
+// is cut, and what does not fit is counted in the last slot.
+function chipLabels(categories, slots) {
+  const shown = categories.length > slots ? [...categories.slice(0, slots - 1), `+${categories.length - slots + 1} more`] : categories;
+  return shown.map(label => label.length > 11 ? `${label.slice(0, 10)}…` : label);
+}
 
 export function createJourneyStrip(svg) {
   const select = selector => svg?.querySelectorAll(selector) || [];
@@ -17,7 +29,7 @@ export function createJourneyStrip(svg) {
     select('[data-js]').forEach(el => el.classList.toggle('lit', el.dataset.js === '0'));
     select('.deny, .event-error, .token-received, .token-attached').forEach(el => el.classList.remove('deny', 'event-error', 'token-received', 'token-attached'));
   }
-  function reset() { clearStage(); setShield(null); setLocks(null); setVault(false); }
+  function reset() { clearStage(); setShield(null); setLocks(null); setVault(false); setSource(null); }
   // outcome marks a refusal or a failure on what it selects. delay is how far
   // into the stage that shows: nothing looks refused before the refusal exists.
   function outcome(selector, value, delay = 0) {
@@ -82,10 +94,6 @@ export function createJourneyStrip(svg) {
       if (open) { el.getBoundingClientRect(); el.classList.add('vault-open'); }
     });
   }
-  // setEvidence redraws what the stage being shown says about consent and the
-  // locks, and nothing else: an answer can arrive after its request is on the
-  // map, and the animation in progress is left alone.
-  function setEvidence({ consent = null, locks = null } = {}) { setShield(consent); setLocks(locks); setVault(vaultOpen(locks), false, 0); }
   // The answer that travels back from Mitz, in the order the lock takes its
   // state: a refusal, then a failed answer, and a permit only when every answer
   // was one.
@@ -151,6 +159,37 @@ export function createJourneyStrip(svg) {
     }
     if (responses.length) animate('#js-response', path, access.tokenReceived ? 'KEY' : responses.length > 1 ? `${responses[0]} +${responses.length - 1}` : String(responses[0]), result, timing.response);
   }
+  // setSource draws the source as far as it is known (sourcePresentation): a
+  // placeholder, the URA and data categories the NVI named, or the organization
+  // with its checks and vault under the title the answers give it, and a bar on
+  // the box's edge that marks its web address as known when the directory gave
+  // one. After a retention gap the placeholder says the earlier steps are gone.
+  // moving says the change happens in the step being played: it is then shown
+  // happening, and what is known lights up when an answer established it and
+  // while the next question is about it. Otherwise the state is simply drawn,
+  // and a source drawn that way does not appear again when a step starts.
+  // Without a source the box stays empty, as it is before the run's events are
+  // in.
+  function setSource(source, moving = false) {
+    const next = source ? `source-${source.state}` : 'source-pending';
+    select('#js-source').forEach(el => {
+      const changed = !el.classList.contains(next);
+      el.classList.remove(...sourceStates.filter(name => name !== next));
+      el.classList.add(next);
+      el.classList.toggle('source-address', source?.state === 'addressed' && source.address);
+      el.classList.toggle('source-asking', !!source?.asking);
+      el.classList.toggle('source-gap', !!source?.gap);
+      if (!moving) el.classList.remove('source-moving'); else if (changed) el.classList.add('source-moving');
+      if (moving && source.state !== 'unknown' && (changed || source.asking)) el.classList.add('lit');
+    });
+    select('#js-source-ura').forEach(el => { el.textContent = source?.ura ? `URA ${source.ura}` : ''; });
+    const title = fitTitle(source?.title || '');
+    select('#js-source-name').forEach(el => { el.textContent = title.text; el.classList.toggle('src-name-long', title.long); });
+    const chips = [...select('.js-source-chip')], texts = [...select('.js-source-category')];
+    const labels = chipLabels(source?.categories || [], texts.length);
+    texts.forEach((el, index) => { el.textContent = labels[index] || ''; });
+    chips.forEach((el, index) => el.classList.toggle('on', !!labels[index]));
+  }
   function setCopy(state) {
     select('#js-copy').forEach(el => {
       el.classList.remove('copy-held', 'copy-removed');
@@ -159,5 +198,5 @@ export function createJourneyStrip(svg) {
     });
   }
   reset();
-  return { apply: (event, options) => applyStage({ events: [event] }, options), applyStage, setEvidence, reset, stop, setCopy };
+  return { apply: (event, options) => applyStage({ events: [event] }, options), applyStage, setSource, reset, stop, setCopy };
 }

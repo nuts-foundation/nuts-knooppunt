@@ -338,7 +338,7 @@ test('malformed stored cursors are ignored and disposal cancels the initial sett
   clock.tick(10000); assert.deepEqual(shown, []);
 });
 
-function mountFixture(t, { recordRevision } = {}) {
+function mountFixture(t, { recordRevision, reducedMotion = false } = {}) {
   const originals = new Map();
   const replace = (key, value) => { originals.set(key, globalThis[key]); globalThis[key] = value; };
   const clock = fakeClock();
@@ -376,7 +376,7 @@ function mountFixture(t, { recordRevision } = {}) {
   const doc = new Element(); doc.createElement = tag => new Element(tag); doc.body = new Element(); doc.hidden = false;
   doc.querySelector = selector => selector === '[data-record-revision]' && recordRevision !== undefined
     ? { dataset: { recordRevision } } : null;
-  const window = new EventTarget(); window.matchMedia = () => Object.assign(new EventTarget(), { matches: false });
+  const window = new EventTarget(); window.matchMedia = () => Object.assign(new EventTarget(), { matches: reducedMotion });
   const dock = new Element(); dock.dataset.runId = 'run-one'; dock.classes.add('on');
   const nodes = new Map(['gf-viewer-steps', 'gf-stream-status', 'gf-playback-status', 'hd-title', 'gf-stage-caption', 'gf-stage-detail', 'gf-access-contract', 'gf-contract-status', 'gf-pause', 'gf-replay', 'gf-skip', 'gf-live'].map(id => [id, new Element()]));
   nodes.get('gf-viewer-steps').bounds = { top: 100, bottom: 400, height: 300 };
@@ -1087,10 +1087,6 @@ test('the map plays every lock’s change for each request, and once per request
   assert.equal(added.filter(item => item.endsWith(':lock-open')).length, 8, 'the second request opens the four locks again');
   assert.equal(vaultOpenings, 1, 'and the vault after them');
   assert.ok(elements.get('js-vault').classList.contains('vault-open'));
-  // A redraw for evidence that arrives while the request is shown starts nothing over.
-  strip.setEvidence({ consent: { state: 'permit' }, locks: { identity: opening, role: opening, consent: opening, query: opening } });
-  assert.equal(added.filter(item => item.endsWith(':lock-open')).length, 8);
-  assert.equal(vaultOpenings, 1);
 
   // A request Mitz refuses: the key was read, so identity and role open again.
   const refused = exchange(6, { outcome: 'deny', response: { status: 403 } });
@@ -1416,31 +1412,100 @@ test('the grace timer does not outlive the viewer', t => {
 
 // An answer from Mitz is read after its source request is published, and may
 // take up to the evidence deadline: longer than the pause before playback
-// starts. The map then has to follow the legend, without a new stage.
+// starts. A step whose evidence grows while it is shown starts over with all of
+// it, so the map and the legend tell the same step from the same moment.
 for (const paused of [false, true]) {
-  test(`an answer that arrives after its request is on the map reaches the lock too, ${paused ? 'paused' : 'playing'}`, t => {
+  test(`an answer that arrives while its request is shown starts the step over with it, ${paused ? 'paused' : 'playing'}`, t => {
     const { source, clock, elements, checks, mounted } = mountFixture(t);
     countReloads(t);
     const patient = exchange(2, { outcome: 'deny', response: { status: 403 } });
     source.send('step', patient);
     source.send('snapshot', { lastSeq: 2, record: { revision: 0, copy: 'none' } });
     clock.tick(1000); // the refused request plays with no answer from Mitz observed
-    const consent = checks[2];
+    const consent = checks[2], lock = elements.get('js-lock-consent');
     assert.equal(mounted.player.state().stage.purpose, 'exchange');
     assert.equal(consent.em.textContent, 'not observed');
-    assert.ok(!elements.get('js-lock-consent').classList.contains('lock-deny'));
-    clock.tick(1300); // the evidence read took longer than the pause before playback
+    assert.ok(!lock.classList.contains('lock-deny'));
+    clock.tick(100); // the answer arrives before the request has reached the source on the map
     if (paused) mounted.player.pause();
 
     source.send('step', check(3, patient, 'Deny'));
     source.send('snapshot', { lastSeq: 3, record: { revision: 0, copy: 'none' } });
 
-    assert.equal(mounted.player.state().stage.purpose, 'exchange', 'the stage being shown did not change');
+    const state = mounted.player.state();
+    assert.equal(state.stage.checks.length, 1, 'the step being shown is the one with the answer');
+    assert.ok(state.elapsed < 0.05, 'and it starts over');
+    assert.equal(lock.style['--lock-delay'], '2.7s', 'the map shows the refusal at its moment in the step, not at once');
+    assert.equal(elements.get('js-question-label').textContent, 'CONSENT?', 'with the question to Mitz it had not shown');
+    assert.equal(consent.em.textContent, 'awaiting Mitz’s answer', 'and the legend waits with it');
+    if (paused) { clock.tick(10000); assert.equal(consent.em.textContent, 'awaiting Mitz’s answer'); mounted.player.resume(); }
+    clock.tick(2699);
+    assert.equal(consent.em.textContent, 'awaiting Mitz’s answer');
+    clock.tick(1);
     assert.equal(consent.em.textContent, 'Mitz: deny');
-    assert.ok(elements.get('js-lock-consent').classList.contains('lock-deny'), 'the lock on the map says what the legend says');
-    assert.ok(elements.get('js-mitz').classList.contains('consent-deny'), 'and so does the shield');
+    assert.ok(lock.classList.contains('lock-deny'));
+    assert.ok(elements.get('js-mitz').classList.contains('consent-deny'));
   });
 }
+
+test('a second page that arrives while the first is shown starts the step over with both', t => {
+  const { source, clock, nodes, checks, mounted } = mountFixture(t);
+  countReloads(t);
+  const served = exchange(2), later = exchange(4, { outcome: 'deny', response: { status: 403 } });
+  for (const event of [served, check(3, served, 'Permit')]) source.send('step', event);
+  source.send('snapshot', { lastSeq: 3, record: { revision: 0, copy: 'none' } });
+  clock.tick(1000 + 3200);
+  assert.equal(nodes.get('gf-contract-status').textContent, 'De Zonnebloem returned the patient search result.');
+  for (const event of [later, check(5, later, 'Deny')]) source.send('step', event);
+  source.send('snapshot', { lastSeq: 5, record: { revision: 0, copy: 'none' } });
+  assert.equal(mounted.player.state().stage.events.length, 2);
+  assert.ok(mounted.player.state().elapsed < 0.05, 'the step starts over');
+  clock.tick(3150);
+  assert.equal(checks[2].em.textContent, 'Mitz: deny (permit on 1 of 2 requests)');
+  assert.equal(nodes.get('gf-contract-status').textContent, 'Mitz answered deny. De Zonnebloem refused 1 of 2 requests; 1 returned data.');
+});
+
+test('an answer that arrives after its request finished playing brings the request back with it', t => {
+  const { source, clock, elements, checks, mounted } = mountFixture(t);
+  countReloads(t);
+  const patient = exchange(2, { outcome: 'deny', response: { status: 403 } });
+  source.send('step', patient);
+  source.send('snapshot', { lastSeq: 2, record: { revision: 0, copy: 'none' } });
+  clock.tick(1000 + 2500);
+  assert.equal(mounted.player.state().status, 'complete');
+  assert.ok(!elements.get('js-lock-consent').classList.contains('lock-deny'));
+  clock.tick(100); // 3.6 seconds after the request: within the evidence deadline
+  source.send('step', check(3, patient, 'Deny'));
+  source.send('snapshot', { lastSeq: 3, record: { revision: 0, copy: 'none' } });
+  clock.tick(1000);
+  assert.equal(mounted.player.state().stage?.checks.length, 1, 'the request plays again, now with Mitz’s answer');
+  clock.tick(2700);
+  assert.equal(checks[2].em.textContent, 'Mitz: deny');
+  assert.ok(elements.get('js-lock-consent').classList.contains('lock-deny'));
+  clock.tick(1600);
+  assert.equal(mounted.player.state().status, 'complete');
+  clock.tick(5000);
+  assert.equal(mounted.player.state().status, 'complete', 'and once');
+});
+
+// C3: with reduced motion the map shows a step's result at once, so the legend
+// and the sentences do too.
+test('with reduced motion the legend and the sentences show a step’s result at once, as the map does', t => {
+  const { source, clock, elements, checks, nodes, mounted } = mountFixture(t, { reducedMotion: true });
+  countReloads(t);
+  const patient = exchange(2);
+  const found = discovery().map(event => ({ ...event, seq: event.seq + 10, callId: `found-${event.seq}`, ts: new Date(30000 + event.seq * 10).toISOString() }));
+  for (const event of [patient, check(3, patient, 'Permit'), ...found]) source.send('step', event);
+  source.send('snapshot', { lastSeq: 12, record: { revision: 0, copy: 'held' } });
+  clock.tick(1000); // the discovery is the newest action
+  assert.equal(drawnSource(elements.get('js-source')), 'source-located', 'the NVI’s answer is drawn at once');
+  assert.ok(!elements.get('js-source').classList.contains('source-asking'));
+  assert.match(nodes.get('gf-stage-detail').textContent, /^The NVI names URA 00000020/);
+  mounted.player.replay('retrieve-1');
+  assert.ok(elements.get('js-vault').classList.contains('vault-open'));
+  assert.deepEqual(checks.map(item => item.classList.contains('open')), [true, true, true, true], 'no tile waits while the vault is open');
+  assert.equal(nodes.get('gf-contract-status').textContent, 'De Zonnebloem returned the patient search result.');
+});
 
 test('the answer packet of a consent check follows the same order as the lock: refusal, failure, permit', () => {
   const { strip, elements } = stripFor();
@@ -1513,4 +1578,379 @@ test('a consent change whose call failed is described as an attempt', t => {
   source.send('snapshot', { lastSeq: 2, record: { revision: 0, copy: 'held' } });
   clock.tick(1000);
   assert.match(content(nodes.get('gf-viewer-steps')), /Simulated: the demo changed the answer in the mock Mitz, standing in for the patient\./);
+});
+
+// Discovery: what the NVI and the address directory answered about the source.
+const categorySystem = 'http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs';
+const custodianList = (ura, code, coding = [{ system: categorySystem, code }]) => ({ resource: {
+  resourceType: 'List', code: { coding },
+  extension: [{ url: 'http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian',
+    valueReference: { identifier: { system: 'http://fhir.nl/fhir/NamingSystem/ura', value: ura } } }],
+} });
+const bgzLists = ura => ['AllergyIntolerance', 'Condition', 'MedicationRequest', 'Patient'].map(code => custodianList(ura, code));
+// The searchset as the Knooppunt's NVI endpoint answers it: without a resourceType.
+const localize = (seq, lists, overrides = {}) => ({
+  runId: 'run-one', seq, gf: 'localization', purpose: 'localization', outcome: 'ok', durationMs: 12,
+  actionId: 'discover-1', action: 'discover', callId: `call-${seq}`, ts: new Date(15000 + seq * 10).toISOString(),
+  request: { method: 'POST', path: '/nvi/List/_search', headers: { 'X-Tenant-Id': 'http://fhir.nl/fhir/NamingSystem/ura|00000010' } },
+  response: { status: 200, body: { type: 'searchset', total: lists.length, ...(lists.length ? { entry: lists } : {}) } }, ...overrides,
+});
+const zonnebloem = { resourceType: 'Organization', id: 'org-1', name: 'Zorgcentrum De Zonnebloem',
+  identifier: [{ system: 'urn:oid:2.16.528.1.1007.3.3', value: '00000020' }],
+  endpoint: [{ reference: 'Endpoint/fhir-1' }, { reference: 'Endpoint/auth-1' }] };
+const fhirEndpoint = { resourceType: 'Endpoint', id: 'fhir-1', status: 'active', address: 'http://pep-zonnebloem:8080/fhir',
+  connectionType: { system: 'http://terminology.hl7.org/CodeSystem/endpoint-connection-type', code: 'hl7-fhir-rest' } };
+const authEndpoint = { resourceType: 'Endpoint', id: 'auth-1', status: 'active', address: 'https://knooppunt.example/nuts/oauth2/00000020',
+  connectionType: { system: 'http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-authorization-server-cs', code: 'oauth-nuts' } };
+const directoryUrl = resource => `http://directory.example/fhir/${resource.resourceType}/${resource.id}`;
+const resolve = (seq, resources, overrides = {}, ura = '00000020') => ({
+  runId: 'run-one', seq, gf: 'addressing', purpose: 'addressing', outcome: 'ok', durationMs: 9,
+  actionId: 'discover-1', action: 'discover', callId: `call-${seq}`, ts: new Date(15000 + seq * 10).toISOString(),
+  request: { method: 'GET', path: `/fhir/knpt-mcsd-query/Organization?_include=Organization%3Aendpoint&identifier=urn%3Aoid%3A2.16.528.1.1007.3.3%7C${ura}` },
+  response: { status: 200, body: { resourceType: 'Bundle', entry: resources.map(resource => ({ fullUrl: directoryUrl(resource), resource })) } }, ...overrides,
+});
+const discovery = () => [localize(1, [...bgzLists('00000010'), ...bgzLists('00000020')]), resolve(2, [zonnebloem, fhirEndpoint, authEndpoint])];
+const actionOf = (events, id) => model.buildActionGroups(events).find(action => action.id === id);
+const bgzLabels = ['Patient', 'Conditions', 'Allergies', 'Medication'];
+
+test('a discovery draws the source only as far as its answers have established it', () => {
+  const events = discovery(), action = actionOf(events, 'discover-1');
+  const [locating, addressing] = action.stages;
+  const at = (stage, elapsed) => model.sourcePresentation({ stage, action, events, elapsed });
+  assert.deepEqual(at(locating, 0), { state: 'unknown', asking: true, gap: false, ura: '', categories: [], name: '', title: 'Source', address: false });
+  const answered = model.stageTimeline(locating).source;
+  assert.equal(at(locating, answered - 0.01).state, 'unknown', 'until the NVI’s answer is back');
+  const located = { state: 'located', asking: false, gap: false, ura: '00000020', categories: bgzLabels, name: '', title: 'URA 00000020', address: false };
+  assert.deepEqual(at(locating, answered), located, 'the NVI names a URA and its data categories, nothing else');
+  assert.deepEqual(at(addressing, 0), { ...located, asking: true });
+  assert.deepEqual(at(addressing, model.stageTimeline(addressing).source),
+    { state: 'addressed', asking: false, gap: false, ura: '00000020', categories: bgzLabels, name: 'Zorgcentrum De Zonnebloem', title: 'De Zonnebloem', address: true });
+});
+
+test('the organization that asks is not a source of its own', () => {
+  const events = [localize(1, bgzLists('00000010'))], action = actionOf(events, 'discover-1');
+  assert.deepEqual(model.sourcePresentation({ stage: action.stages[0], action, events }),
+    { state: 'unknown', asking: false, gap: false, ura: '', categories: [], name: '', title: 'Source', address: false });
+});
+
+test('outside a discovery the map draws what the run established, without the steps still to be played', () => {
+  const events = [...discovery(), token(3), exchange(4)];
+  const retrieve = actionOf(events, 'retrieve-1');
+  const known = { state: 'addressed', asking: false, gap: false, ura: '00000020', categories: bgzLabels, name: 'Zorgcentrum De Zonnebloem', title: 'De Zonnebloem', address: true };
+  assert.deepEqual(model.sourcePresentation({ events }), known, 'at rest');
+  assert.deepEqual(model.sourcePresentation({ stage: retrieve.stages[0], action: retrieve, events, elapsed: 0 }), known, 'while another action plays');
+  assert.equal(model.sourcePresentation({ events: discovery(), upcoming: actionOf(discovery(), 'discover-1').stages }).state, 'unknown',
+    'a discovery that has yet to be played gives nothing away');
+  assert.deepEqual(model.sourcePresentation({ events: [token(3), exchange(4)] }),
+    { state: 'addressed', asking: false, gap: false, ura: '', categories: [], name: '', title: 'Source', address: true },
+    'a source that was sent a request was known, by its address and not by a name');
+  assert.equal(model.sourcePresentation({ events: [token(3)] }).state, 'unknown',
+    'a key request goes to De Plataan’s own access service and establishes nothing about the source');
+  assert.equal(model.sourcePresentation({ events: [token(3, { outcome: 'error', response: { status: 0 } })] }).address, false);
+  assert.equal(model.sourcePresentation({ events: [observed(1, 'registration')] }).state, 'unknown');
+  assert.equal(model.sourcePresentation().state, 'unknown');
+});
+
+test('every discovery starts from a source that is not known yet', () => {
+  const again = discovery().map(event => ({ ...event, seq: event.seq + 10, callId: `again-${event.seq}`, actionId: 'discover-2',
+    ts: new Date(30000 + event.seq * 10).toISOString() }));
+  const events = [...discovery(), token(3), exchange(4), ...again], action = actionOf(events, 'discover-2');
+  assert.equal(model.sourcePresentation({ stage: action.stages[0], action, events, elapsed: 0 }).state, 'unknown');
+  assert.equal(model.sourcePresentation({ stage: action.stages[1], action, events, elapsed: 0 }).state, 'located');
+});
+
+test('after a retention gap the map says the earlier steps are gone, and claims neither a source nor its absence', () => {
+  const events = [observed(1, 'registration')];
+  assert.deepEqual(model.sourcePresentation({ events, partial: true }),
+    { state: 'unknown', asking: false, gap: true, ura: '', categories: [], name: '', title: 'Source', address: false });
+  assert.equal(model.sourcePresentation({ events: [exchange(4)], partial: true }).gap, false, 'what is retained still counts');
+  const found = discovery(), action = actionOf(found, 'discover-1');
+  const starting = model.sourcePresentation({ stage: action.stages[0], action, events: found, elapsed: 0, partial: true });
+  assert.deepEqual([starting.state, starting.gap], ['unknown', false], 'a discovery still starts anew');
+});
+
+// The same rule as selectSource in mcsdclient.go: an endpoint the organization
+// points at, active, valid at the time of the call, of the exact kind.
+test('the map marks a web address only for an endpoint the retrieval would select', () => {
+  const stateWith = resources => {
+    const events = [localize(1, bgzLists('00000020')), resolve(2, resources)], action = actionOf(events, 'discover-1');
+    const { state, name, address } = model.sourcePresentation({ stage: action.stages[1], action, events });
+    return { state, name, address };
+  };
+  const addressed = address => ({ state: 'addressed', name: 'Zorgcentrum De Zonnebloem', address });
+  const withFhir = change => [zonnebloem, { ...fhirEndpoint, ...change }, authEndpoint];
+  assert.deepEqual(stateWith(withFhir({})), addressed(true));
+  assert.deepEqual(stateWith(withFhir({ status: 'off' })), addressed(false), 'not active');
+  assert.deepEqual(stateWith(withFhir({ address: '' })), addressed(false), 'no address');
+  assert.deepEqual(stateWith(withFhir({ period: { end: '1969-12-31' } })), addressed(false), 'out of service before the call');
+  assert.deepEqual(stateWith(withFhir({ period: { start: '1971' } })), addressed(false), 'not in service yet');
+  assert.deepEqual(stateWith(withFhir({ period: { start: '1969', end: '1970-01-01' } })), addressed(true), 'a date-only end runs through that day');
+  assert.deepEqual(stateWith(withFhir({ period: { end: 'unreadable' } })), addressed(true), 'an unreadable bound is no bound, as in the retrieval');
+  assert.deepEqual(stateWith(withFhir({ connectionType: { system: 'http://example.org/other', code: 'hl7-fhir-rest' } })), addressed(false), 'the code of another vocabulary');
+  assert.deepEqual(stateWith([{ ...zonnebloem, endpoint: [{ reference: 'Endpoint/auth-1' }] }, fhirEndpoint, authEndpoint]), addressed(false),
+    'an endpoint in the answer the organization does not point at');
+  assert.deepEqual(stateWith([{ ...zonnebloem, endpoint: [{ reference: directoryUrl(fhirEndpoint) }] }, fhirEndpoint]), addressed(true), 'an absolute reference');
+  assert.deepEqual(stateWith([zonnebloem, authEndpoint]), addressed(false));
+  assert.deepEqual(stateWith([]), { state: 'located', name: '', address: false }, 'a directory without the organization resolves nothing');
+  const otherServer = { ...authEndpoint, connectionType: { ...authEndpoint.connectionType, code: 'other' } };
+  assert.equal(model.discoveryPresentation(actionOf([resolve(2, [zonnebloem, fhirEndpoint, otherServer])], 'discover-1').stages[0]).description,
+    'The directory resolves URA 00000020 to Zorgcentrum De Zonnebloem and gives the web address of its FHIR API.',
+    'an authorization server of another kind is not the one the retrieval uses');
+});
+
+// D2: one box, one organization. What the NVI named, what the directory was
+// asked and what it answered have to be about the same URA.
+test('with several holders the map draws one of them, and only what was answered about that one', () => {
+  const other = { ...zonnebloem, id: 'org-2', name: 'Huisartsenpraktijk De Linde', identifier: [{ system: 'urn:oid:2.16.528.1.1007.3.3', value: '00000030' }] };
+  const lists = [...bgzLists('00000010'), custodianList('00000030', 'Patient'), ...bgzLists('00000020')];
+  const both = [localize(1, lists), resolve(2, [zonnebloem, fhirEndpoint, authEndpoint]), resolve(3, [other, fhirEndpoint], {}, '00000030')];
+  const drawn = events => { const { state, ura, categories, name, title } = model.sourcePresentation({ events }); return { state, ura, categories, name, title }; };
+  assert.deepEqual(drawn(both), { state: 'addressed', ura: '00000020', categories: bgzLabels, name: 'Zorgcentrum De Zonnebloem', title: 'De Zonnebloem' },
+    'the first holder in URA order, as the retrieval lists them, with the answer about that URA');
+  assert.deepEqual(drawn([both[0], both[2]]), { state: 'located', ura: '00000020', categories: bgzLabels, name: '', title: 'URA 00000020' },
+    'an answer about another organization does not name this one');
+  const [locating, addressing] = actionOf(both, 'discover-1').stages;
+  assert.equal(model.discoveryPresentation(locating).description,
+    'The NVI names URA 00000020 for 4 data categories and 1 other organization. Its name and address are the address directory’s to give.');
+  assert.equal(model.discoveryPresentation(addressing).description,
+    'The directory resolves URA 00000020 to Zorgcentrum De Zonnebloem and gives the web addresses of its FHIR API and its authorization server. It was asked about 1 more organization.');
+  const swapped = actionOf([resolve(2, [other, fhirEndpoint], {}, '00000030'), resolve(3, [zonnebloem, fhirEndpoint, authEndpoint])], 'discover-1').stages[0];
+  assert.match(model.discoveryPresentation(swapped).description, /^The directory resolves URA 00000030 to Huisartsenpraktijk De Linde /,
+    'the URA asked and the organization answered come from the same call');
+});
+
+test('the box is titled with what the directory answered', () => {
+  const titled = organization => model.sourcePresentation({ events: [localize(1, bgzLists('00000020')), resolve(2, [organization, fhirEndpoint])] }).title;
+  assert.equal(titled(zonnebloem), 'De Zonnebloem', 'the name the demo uses for this organization, when the answer names it');
+  assert.equal(titled({ ...zonnebloem, name: 'Huisartsenpraktijk De Linde' }), 'Huisartsenpraktijk De Linde');
+  assert.equal(titled({ ...zonnebloem, name: undefined }), 'URA 00000020', 'an answer without a name leaves the URA');
+});
+
+// D3: the same vocabulary the retrieval reads (nvi.CategoriesOf, custodianOf).
+test('a data category and a custodian are read from the vocabulary that defines them', () => {
+  const categoriesOf = lists => model.sourcePresentation({ events: [localize(1, lists)] }).categories;
+  const foreign = { system: 'http://example.org/other', code: 'Condition' };
+  assert.deepEqual(categoriesOf([custodianList('00000020', 'Patient', [foreign, { system: categorySystem, code: 'Patient' }])]), ['Patient'],
+    'the coding of the data category system, wherever it stands');
+  assert.deepEqual(categoriesOf([custodianList('00000020', 'Condition', [foreign])]), [], 'a code of another vocabulary names no category');
+  const stage = actionOf([localize(1, [custodianList('00000020', 'Condition', [foreign])])], 'discover-1').stages[0];
+  assert.equal(model.discoveryPresentation(stage).description, 'The NVI names URA 00000020. Its name and address are the address directory’s to give.');
+  const lookalike = custodianList('00000020', 'Patient');
+  lookalike.resource.extension[0].url = 'http://example.org/nl-gf-localization-custodian';
+  assert.equal(model.sourcePresentation({ events: [localize(1, [lookalike])] }).state, 'unknown', 'an extension that only ends the same is not the custodian');
+});
+
+test('without the asking organization on the captured request the map names no holder', () => {
+  const unscoped = localize(1, [...bgzLists('00000010'), ...bgzLists('00000020')], { request: { method: 'POST', path: '/nvi/List/_search', headers: {} } });
+  assert.equal(model.sourcePresentation({ events: [unscoped] }).state, 'unknown', 'it cannot tell De Plataan’s own registration from a find');
+  assert.equal(model.discoveryPresentation(actionOf([unscoped], 'discover-1').stages[0]).description, '');
+});
+
+test('a discovery step says what it asks and what the answer established', () => {
+  const [locating, addressing] = actionOf(discovery(), 'discover-1').stages;
+  assert.deepEqual(model.discoveryPresentation(locating), {
+    pending: 'De Plataan asks the NVI which organizations hold data on this patient.',
+    description: 'The NVI names URA 00000020 for 4 data categories. Its name and address are the address directory’s to give.',
+  });
+  assert.deepEqual(model.discoveryPresentation(addressing), {
+    pending: 'De Plataan asks the address directory who URA 00000020 is and where to reach it.',
+    description: 'The directory resolves URA 00000020 to Zorgcentrum De Zonnebloem and gives the web addresses of its FHIR API and its authorization server.',
+  });
+  const stageWith = events => actionOf(events, 'discover-1').stages.at(-1);
+  assert.equal(model.discoveryPresentation(stageWith([localize(1, [custodianList('00000020', 'Patient')])])).description,
+    'The NVI names URA 00000020 for 1 data category. Its name and address are the address directory’s to give.');
+  assert.equal(model.discoveryPresentation(stageWith([localize(1, bgzLists('00000010'))])).description,
+    'The NVI names no other organization for this patient.');
+  assert.equal(model.discoveryPresentation(stageWith([resolve(2, [zonnebloem, fhirEndpoint])])).description,
+    'The directory resolves URA 00000020 to Zorgcentrum De Zonnebloem and gives the web address of its FHIR API.');
+  assert.equal(model.discoveryPresentation(stageWith([resolve(2, [zonnebloem, authEndpoint])])).description,
+    'The directory resolves URA 00000020 to Zorgcentrum De Zonnebloem. It lists no web address for its FHIR API.');
+  assert.equal(model.discoveryPresentation(stageWith([resolve(2, [])])).description, 'The directory holds no organization with URA 00000020.');
+  assert.equal(model.discoveryPresentation(stageWith([localize(1, [], { outcome: 'error', response: { status: 502 } })])).description, '',
+    'a failed search established nothing');
+  assert.equal(model.discoveryPresentation(actionOf([token(3)], 'retrieve-1').stages[0]), null);
+});
+
+test('a discovery step wakes the view when its answer is back and then plays a second longer', () => {
+  const seen = [];
+  const { clock, shown, player } = playbackFixture({ onChange: state => { if (state.stage) seen.push(`${state.stage.purpose}@${state.elapsed.toFixed(1)}`); } });
+  for (const event of discovery()) player.add(event);
+  player.snapshot(); clock.tick(1000);
+  assert.deepEqual(shown, ['localization']);
+  seen.length = 0;
+  clock.tick(2299); assert.deepEqual(seen, []);
+  clock.tick(1); assert.deepEqual(seen, ['localization@2.3'], 'the NVI’s answer is back');
+  clock.tick(999); assert.deepEqual(shown, ['localization']);
+  clock.tick(1); assert.deepEqual(shown, ['localization', 'addressing']);
+  clock.tick(3299); assert.equal(player.state().status, 'playing');
+  clock.tick(1); assert.equal(player.state().status, 'complete');
+});
+
+test('the playback says which steps are still to be played', () => {
+  const { clock, player } = playbackFixture();
+  const upcoming = () => player.state().upcoming.map(stage => stage.purpose);
+  for (const event of discovery()) player.add(event);
+  player.snapshot();
+  assert.deepEqual(upcoming(), ['localization', 'addressing'], 'before the action starts');
+  clock.tick(1000); assert.deepEqual(upcoming(), ['addressing'], 'the step being played is not to come');
+  clock.tick(6600); assert.deepEqual(upcoming(), []);
+  player.add(token(3)); player.add(exchange(4));
+  assert.deepEqual(upcoming(), ['authorization', 'exchange'], 'a newer action that has yet to start');
+  player.snapshot(); clock.tick(1000);
+  assert.deepEqual(upcoming(), ['exchange']);
+  player.replay('discover-1');
+  assert.deepEqual(upcoming(), ['addressing', 'exchange'], 'a replay counts what is left of it, and what has not played at all');
+});
+
+test('what arrives during a selected replay is still to be played', () => {
+  const { clock, player } = playbackFixture();
+  player.add(observed(1, 'registration'));
+  player.snapshot(); clock.tick(3500);
+  player.replay('action-one'); player.pause();
+  for (const event of discovery()) player.add({ ...event, seq: event.seq + 10, callId: `late-${event.seq}` });
+  player.snapshot(); clock.tick(1000);
+  assert.deepEqual(player.state().upcoming.map(stage => stage.purpose), ['localization', 'addressing']);
+  assert.equal(model.sourcePresentation(player.state()).state, 'unknown', 'so a discovery that has not played gives nothing away');
+  player.followLatest();
+  assert.deepEqual(player.state().upcoming.map(stage => stage.purpose), ['addressing']);
+});
+
+const sourceStates = ['source-pending', 'source-unknown', 'source-located', 'source-addressed'];
+const drawnSource = box => sourceStates.filter(name => box.classList.contains(name)).join();
+const knownSource = (state, overrides = {}) => ({ state, asking: false, gap: false, ura: '00000020', categories: bgzLabels, name: '', title: 'URA 00000020', address: false, ...overrides });
+
+test('the map draws the source box as far as it is known', () => {
+  const { strip, elements, svg } = stripFor();
+  const box = elements.get('js-source');
+  const chips = () => svg.querySelectorAll('.js-source-chip').map((chip, index) =>
+    chip.classList.contains('on') ? svg.querySelectorAll('.js-source-category')[index].textContent : null);
+  assert.equal(drawnSource(box), 'source-pending', 'nothing is drawn of the source before it is told what is known');
+  strip.setSource(knownSource('unknown', { ura: '', categories: [] }));
+  assert.equal(drawnSource(box), 'source-unknown');
+  assert.deepEqual(chips(), [null, null, null, null, null, null]);
+  strip.setSource(knownSource('located'));
+  assert.equal(drawnSource(box), 'source-located');
+  assert.equal(elements.get('js-source-ura').textContent, 'URA 00000020');
+  assert.deepEqual(chips(), [...bgzLabels, null, null]);
+  assert.ok(!box.classList.contains('source-address'));
+  strip.setSource(knownSource('addressed', { name: 'Zorgcentrum De Zonnebloem', title: 'De Zonnebloem', address: true }));
+  assert.equal(drawnSource(box), 'source-addressed');
+  assert.equal(elements.get('js-source-name').textContent, 'De Zonnebloem');
+  assert.ok(!elements.get('js-source-name').classList.contains('src-name-long'));
+  strip.setSource(knownSource('addressed', { title: 'Huisartsenpraktijk Linde' }));
+  assert.equal(elements.get('js-source-name').textContent, 'Huisartsenpraktijk Linde');
+  assert.ok(elements.get('js-source-name').classList.contains('src-name-long'), 'a long name is set smaller to fit the box');
+  strip.setSource(knownSource('addressed', { title: 'Stichting Samenwerkende Zorgcentra Noord' }));
+  assert.equal(elements.get('js-source-name').textContent, 'Stichting Samenwerkende Z…');
+  strip.setSource(knownSource('unknown', { ura: '', categories: [], gap: true }));
+  assert.ok(box.classList.contains('source-gap'), 'a placeholder after a retention gap says the earlier steps are gone');
+  strip.setSource(knownSource('addressed', { name: 'Zorgcentrum De Zonnebloem', title: 'De Zonnebloem', address: true }));
+  assert.ok(!box.classList.contains('source-gap'));
+  assert.ok(box.classList.contains('source-address'), 'with the web address the directory gave marked');
+  strip.setSource(knownSource('addressed', { name: 'Zorgcentrum De Zonnebloem' }));
+  assert.ok(!box.classList.contains('source-address'), 'an organization without a web address has none marked');
+  strip.reset();
+  assert.equal(drawnSource(box), 'source-pending');
+});
+
+test('the map marks that the source’s web address is known, and does not show the address', () => {
+  const template = readFileSync(new URL('./templates/_journey_svg.html', import.meta.url), 'utf8');
+  const marker = template.match(/<g class="src-address">([\s\S]*?)<\/g>/)?.[1] || '';
+  assert.deepEqual([...marker.matchAll(/<text\b[^>]*>([^<]*)<\/text>/g)].map(match => match[1]), ['WEB ADDRESS']);
+  assert.match(marker, /rotate\(-90\b/, 'written along the bar on the source’s edge');
+});
+
+test('more data categories than the box holds are counted, and a long one is cut', () => {
+  const { strip, svg } = stripFor();
+  const texts = () => svg.querySelectorAll('.js-source-category').map(item => item.textContent);
+  strip.setSource(knownSource('located', { categories: [...bgzLabels, 'Encounter', 'Procedure', 'Immunization', 'Observation'] }));
+  assert.deepEqual(texts(), [...bgzLabels, 'Encounter', '+3 more']);
+  strip.setSource(knownSource('located', { categories: ['MedicationStatement'] }));
+  assert.deepEqual(texts(), ['Medication…', '', '', '', '', '']);
+});
+
+test('a change of the source in the step being played is shown happening; otherwise it is simply drawn', () => {
+  const { strip, elements } = stripFor();
+  const box = elements.get('js-source');
+  strip.setSource(knownSource('unknown', { ura: '', categories: [], asking: true }), true);
+  assert.ok(box.classList.contains('source-asking'));
+  assert.ok(!box.classList.contains('lit'), 'a placeholder is not lit up');
+  strip.setSource(knownSource('located'), true);
+  assert.ok(box.classList.contains('source-moving'));
+  assert.ok(box.classList.contains('lit'), 'what the answer established lights up');
+  assert.ok(!box.classList.contains('source-asking'));
+  box.classList.remove('lit');
+  strip.setSource(knownSource('located'), true);
+  assert.ok(!box.classList.contains('lit'), 'an unchanged source is left alone');
+  strip.setSource(knownSource('located', { asking: true }), true);
+  assert.ok(box.classList.contains('lit'), 'the source the directory is asked about stays lit');
+  box.classList.remove('lit');
+  strip.setSource(knownSource('addressed', { address: true }));
+  assert.ok(!box.classList.contains('source-moving'));
+  assert.ok(!box.classList.contains('lit'));
+  strip.setSource(knownSource('addressed', { address: true }), true);
+  assert.ok(!box.classList.contains('source-moving'), 'a source drawn at rest does not appear again when a step starts');
+});
+
+test('a mounted viewer shows the source appear during a discovery, and says what each answer established', t => {
+  const { source, clock, elements, nodes, mounted } = mountFixture(t);
+  const box = elements.get('js-source'), detail = nodes.get('gf-stage-detail');
+  assert.equal(drawnSource(box), 'source-pending', 'nothing is drawn of the source before the run’s events are in');
+  for (const event of discovery()) source.send('step', event);
+  assert.equal(drawnSource(box), 'source-pending');
+  source.send('snapshot', { lastSeq: 2 });
+  assert.equal(drawnSource(box), 'source-unknown', 'the discovery has yet to play');
+  assert.ok(!box.classList.contains('source-moving'), 'at rest the state is simply drawn');
+
+  clock.tick(1000); // the NVI is asked
+  assert.equal(drawnSource(box), 'source-unknown');
+  assert.ok(box.classList.contains('source-asking'));
+  assert.equal(detail.textContent, 'De Plataan asks the NVI which organizations hold data on this patient.');
+  clock.tick(2299);
+  assert.equal(drawnSource(box), 'source-unknown', 'until the answer is back');
+  clock.tick(1);
+  assert.equal(drawnSource(box), 'source-located');
+  assert.ok(box.classList.contains('source-moving'), 'the change is shown happening');
+  assert.equal(elements.get('js-source-ura').textContent, 'URA 00000020');
+  assert.equal(detail.textContent, 'The NVI names URA 00000020 for 4 data categories. Its name and address are the address directory’s to give.');
+
+  clock.tick(1000); // the directory is asked
+  assert.equal(drawnSource(box), 'source-located');
+  assert.equal(detail.textContent, 'De Plataan asks the address directory who URA 00000020 is and where to reach it.');
+  assert.ok(!box.classList.contains('source-address'));
+  clock.tick(2300);
+  assert.equal(drawnSource(box), 'source-addressed');
+  assert.ok(box.classList.contains('source-address'));
+  assert.match(detail.textContent, /^The directory resolves URA 00000020 to Zorgcentrum De Zonnebloem and gives the web addresses/);
+
+  clock.tick(1000);
+  assert.equal(mounted.player.state().status, 'complete');
+  assert.equal(drawnSource(box), 'source-addressed', 'what the run established stays drawn');
+  const content = element => [element.textContent, ...element.children.map(content)].join(' ');
+  const steps = content(nodes.get('gf-viewer-steps'));
+  assert.match(steps, /The NVI names URA 00000020 for 4 data categories\. Its name and address are the address directory’s to give\./);
+  assert.match(steps, /The directory resolves URA 00000020 to Zorgcentrum De Zonnebloem/);
+
+  mounted.player.replay();
+  assert.equal(drawnSource(box), 'source-unknown', 'a replay asks anew');
+});
+
+test('a mounted viewer says after a retention gap that the earlier steps are gone', t => {
+  const { source, elements } = mountFixture(t);
+  const box = elements.get('js-source');
+  source.send('replay-gap', { firstSeq: 8 });
+  assert.equal(drawnSource(box), 'source-pending');
+  source.send('step', observed(8, 'registration'));
+  source.send('snapshot', { lastSeq: 8 });
+  assert.equal(drawnSource(box), 'source-unknown', 'missing evidence proves nothing, in either direction');
+  assert.ok(box.classList.contains('source-gap'));
+});
+
+test('in technical mode a discovery step keeps its HTTP summary', t => {
+  const { source, clock, nodes, doc } = mountFixture(t);
+  doc.body.classes.add('hood-tech');
+  for (const event of discovery()) source.send('step', event);
+  source.send('snapshot', { lastSeq: 2 });
+  clock.tick(1000);
+  assert.equal(nodes.get('gf-stage-detail').textContent, 'POST → NVI · HTTP 200 ← NVI');
 });

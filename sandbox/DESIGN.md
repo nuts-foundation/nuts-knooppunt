@@ -196,7 +196,7 @@ Cross-cutting:
   consent lock shuts, the source refuses and the earlier copy is removed): no protocol detail. The four locks are on
   the source's vault and are all decided when a request arrives there with the key: identity and role as the source
   reads the key, consent by Mitz's answer, shown on Mitz's shield, and then the query. Issuing the key opens
-  nothing. The map also shows what De Plataan holds of the source's data at that moment. **Technical** adds the captured request per step (method, path, status) and the
+  nothing. The map also shows what De Plataan holds of the source's data at that moment, and it draws the source only as far as discovery has established it: a placeholder first, a URA with its data categories once the NVI has answered, and De Zonnebloem with its web address marked once the address directory has. **Technical** adds the captured request per step (method, path, status) and the
   interior OTel spans (PRS, PEP introspection, PDP). An "open the full journey" page shows the same run as a large
   animated journey map (Functional) or as the trace layout (Technical). Functional is the default.
 - Demo language is English; Dutch scheme and system names (Mitz, NVI, Dezi, UZI, BSN, URA, BGZ) stay as proper nouns.

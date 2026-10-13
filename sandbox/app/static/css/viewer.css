@@ -366,6 +366,41 @@
   #js-copy.copy-removed :is(.copy-gone, .copy-label-gone) { display: inline; }
   #js-copy.copy-removed .copy-label-gone { fill: #eaa9c3; }
   #js-copy.copy-removed .copy-gone { filter: drop-shadow(0 0 5px rgba(229,154,184,0.4)); }
+  /* How much of the source the map draws (sourcePresentation): a placeholder,
+     what the NVI named, or the organization the directory resolved that to. One
+     layer shows, and the web address the directory gave joins the third as a
+     bar on the box's edge; before the run's events are in, none does. A
+     change in the step being played (source-moving) fades in part by part,
+     otherwise the state is simply drawn. While a discovery waits for its answer
+     the parts still unknown pulse. These are animations, not transitions, so
+     that a paused playback holds them. */
+  .src-box { fill: #2d2620; stroke: rgba(240,235,225,0.45); stroke-width: 1.3; stroke-dasharray: 5 4; }
+  .source-located .src-box { stroke: #93b4f0; }
+  .source-addressed .src-box { stroke: #b5d18f; stroke-dasharray: none; }
+  .src-skeleton, .src-located, .src-full > *, .src-address, .js-source-chip { opacity: 0; }
+  .source-unknown .src-skeleton, .source-located .src-located, .source-addressed .src-full > *,
+  .source-address .src-address, .js-source-chip.on { opacity: 1; }
+  .src-wait { fill: rgba(240,235,225,0.13); }
+  .src-note-gap, .source-gap .src-note-unknown { display: none; }
+  .source-gap .src-note-gap { display: inline; }
+  .src-name-long { font-size: 11px; }
+  .js-source-chip rect { fill: rgba(147,180,240,0.1); stroke: #93b4f0; stroke-width: 1.2; }
+  .src-address rect { fill: #1d2a27; stroke: #7fc7bc; stroke-width: 1.3; }
+  .src-address text { letter-spacing: 0.02em; }
+  .source-moving.source-unknown .src-skeleton, .source-moving.source-located .src-located,
+  .source-moving.source-addressed .src-full > * { animation: gf-source-in 0.45s ease both; }
+  .source-moving.source-addressed .src-full > :nth-child(2) { animation-delay: 0.12s; }
+  .source-moving.source-addressed .src-full > :nth-child(3) { animation-delay: 0.24s; }
+  .source-moving.source-addressed .src-full > :nth-child(4) { animation-delay: 0.36s; }
+  .source-moving.source-address .src-address { animation: gf-source-dock 0.45s ease 0.5s both; }
+  .source-asking .src-wait { animation: gf-source-wait 0.9s ease-in-out infinite alternate; }
+  @keyframes gf-source-in { from { opacity: 0; } }
+  @keyframes gf-source-dock { from { opacity: 0; transform: translateX(-10px); } }
+  @keyframes gf-source-wait { to { fill: rgba(240,235,225,0.3); } }
+  .hood-dock.playback-paused #js-source, .hood-dock.playback-paused #js-source * { animation-play-state: paused; }
+  @media (prefers-reduced-motion: reduce) {
+    #js-source, #js-source * { animation: none; }
+  }
   .gf-check { display: grid; grid-template-columns: 14px 1fr; column-gap: 8px; align-items: center; border: 1px solid rgba(240,235,225,0.34); border-radius: 6px; padding: 6px 9px; }
   .gf-check i { grid-row: span 2; width: 12px; height: 12px; border-radius: 3px; border: 1.6px solid rgba(240,235,225,0.7); }
   .gf-check b { font-size: 12px; font-weight: 600; color: #f0ebe1; }

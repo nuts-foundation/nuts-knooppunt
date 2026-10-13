@@ -9,7 +9,7 @@
   .sb-link:hover { opacity: 1; }
 
 .sb-right form { display: inline; }
-.sb-notice { margin-left: 12px; font-size: 11.5px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 2px 9px; }
+.sb-notice { margin-left: 12px; font-size: 12px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.3); border-radius: 4px; padding: 2px 9px; }
 
 .shell-page { max-width: 880px; margin: 0 auto; padding: 56px 24px 64px; font-family: 'Fira Sans', sans-serif; }
 .shell-page h1 { font-family: var(--f-serif); font-size: 34px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }

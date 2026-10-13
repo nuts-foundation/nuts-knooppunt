@@ -230,6 +230,12 @@ export function stageTimeline(stage) {
     seconds: 2.5, request: { delay: 0, duration: 1.1 }, response: { delay: 1.2, duration: 1.1 }, identity: 1.2, role: 1.2, settled: 1.2,
     pending: 'De Plataan presents its credentials to De Zonnebloem’s authorization server.',
   };
+  // A discovery step changes what the map draws of the source (source), once
+  // its answer is back, and plays a second longer so that change can be read.
+  if (isDiscoveryStage(stage)) return {
+    seconds: 3.3, request: { delay: 0, duration: 1.1 }, response: { delay: 1.2, duration: 1.1 }, source: 2.3, settled: 2.3,
+    pending: discoveryPresentation(stage).pending,
+  };
   if (!isRequest(stage)) return {
     seconds: 2.5, request: { delay: 0, duration: 1.1 }, response: { delay: 1.2, duration: 1.1 }, settled: 0, pending: '',
   };
@@ -243,6 +249,164 @@ export function stageTimeline(stage) {
     seconds: 2.5, request: { delay: 0, duration: 0.9 }, identity: 0.9, role: 1.05, consent: 1.2, query: 1.2, vault: 1.35,
     response: { delay: 1.35, duration: 1.1 }, settled: 1.35, pending: 'De Zonnebloem checks this request before it answers.',
   };
+}
+
+// What the NVI and the address directory answered about the source, read from
+// the answers themselves and by the rules the retrieval itself applies to them
+// (nvi.CustodiansOf and nvi.CategoriesOf, handleRetrieve, selectSource in
+// mcsdclient.go), so the map shows nothing the retrieval would not act on.
+const dataCategorySystem = 'http://minvws.github.io/generiekefuncties-docs/CodeSystem/nl-gf-data-categories-cs';
+const custodianExtension = 'http://minvws.github.io/generiekefuncties-docs/StructureDefinition/nl-gf-localization-custodian';
+const fhirData = ['http://terminology.hl7.org/CodeSystem/endpoint-connection-type', 'hl7-fhir-rest'];
+const nutsAuthorizationServer = ['http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-authorization-server-cs', 'oauth-nuts'];
+const categoryLabels = { Patient: 'Patient', Condition: 'Conditions', AllergyIntolerance: 'Allergies', MedicationRequest: 'Medication' };
+// The name the demo's texts use for its one source organization.
+const sourceName = 'De Zonnebloem';
+const isDiscoveryStage = stage => stage?.purpose === 'localization' || stage?.purpose === 'addressing';
+const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+// A search answer's entries, or null when the call returned none to read. The
+// Knooppunt's NVI endpoint answers its searchset without a resourceType.
+const entriesOf = event => {
+  const body = event.outcome === 'ok' ? event.response?.body : null;
+  return body?.resourceType === 'Bundle' || body?.type === 'searchset' ? body.entry || [] : null;
+};
+
+// holdersIn reads a localization answer: per organization other than the one
+// that asks, in URA order, the data categories the NVI lists for it. The NVI
+// names a holder by its URA; who that is and where to reach it is the
+// directory's to answer. Without the asking organization's URA on the captured
+// request an own registration cannot be told from a find, and nothing is read.
+function holdersIn(event) {
+  const entries = event.purpose === 'localization' ? entriesOf(event) : null;
+  const own = String(event.request?.headers?.['X-Tenant-Id'] || '').split('|')[1];
+  if (!entries || !own) return null;
+  const holders = new Map();
+  for (const { resource } of entries) {
+    if (resource?.resourceType !== 'List') continue;
+    const ura = resource.extension?.find(item => item.url === custodianExtension)?.valueReference?.identifier?.value;
+    if (!ura || ura === own) continue;
+    const code = resource.code?.coding?.find(coding => coding.system === dataCategorySystem && coding.code)?.code;
+    holders.set(ura, [...(holders.get(ura) || []), ...(code ? [code] : [])]);
+  }
+  const known = Object.keys(categoryLabels);
+  const rank = code => known.indexOf(code) + 1 || known.length + 1;
+  return [...holders].sort(([a], [b]) => (a > b) - (a < b)).map(([ura, codes]) => ({
+    ura, categories: [...new Set(codes)].sort((a, b) => rank(a) - rank(b)).map(code => categoryLabels[code] || code),
+  }));
+}
+
+// A FHIR dateTime bound at the precision it was written; an end runs to the
+// last instant it names. A bound that cannot be read is no bound.
+function periodBound(value, end) {
+  if (typeof value !== 'string') return null;
+  const [, year, month, day] = value.match(/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/) || [];
+  if (!year) { const at = Date.parse(value); return Number.isNaN(at) ? null : at; }
+  if (!end) return Date.UTC(+year, month ? +month - 1 : 0, day ? +day : 1);
+  return (day ? Date.UTC(+year, +month - 1, +day + 1) : month ? Date.UTC(+year, +month, 1) : Date.UTC(+year + 1, 0, 1)) - 1;
+}
+
+// directoryAnswerIn reads an addressing answer: the URA that was asked and the
+// organization the directory holds for it, with whether one of the endpoints
+// that organization points at is a FHIR endpoint, or its authorization server,
+// that was active and within its period when the call was made.
+function directoryAnswerIn(event) {
+  const entries = event.gf === 'addressing' ? entriesOf(event) : null;
+  if (!entries) return null;
+  const ura = new URLSearchParams(event.request?.path?.split('?')[1] || '').get('identifier')?.split('|').pop() || '';
+  const organization = entries.map(entry => entry.resource).find(resource => resource?.resourceType === 'Organization');
+  if (!organization) return { ura, organization: null };
+  const endpoints = new Map();
+  for (const { resource, fullUrl } of entries) {
+    if (resource?.resourceType !== 'Endpoint') continue;
+    if (resource.id) endpoints.set(`Endpoint/${resource.id}`, resource);
+    if (fullUrl) endpoints.set(fullUrl, resource);
+  }
+  const at = Date.parse(event.ts) || Date.now();
+  const usable = (organization.endpoint || []).map(item => endpoints.get(item.reference)).filter(endpoint => {
+    if (endpoint?.status !== 'active' || !endpoint.address) return false;
+    const from = periodBound(endpoint.period?.start, false), until = periodBound(endpoint.period?.end, true);
+    return !(from !== null && at < from) && !(until !== null && at > until);
+  });
+  const has = ([system, code]) => usable.some(endpoint => endpoint.connectionType?.system === system && endpoint.connectionType?.code === code);
+  return { ura, organization: { name: organization.name || '', address: has(fhirData), authorizationServer: has(nutsAuthorizationServer) } };
+}
+
+// sourcePresentation says how much of the source the map may draw: nothing
+// (unknown), the URA and data categories the NVI named (located), or the
+// organization the directory resolved that URA to (addressed), with address set
+// when a web address for its data is known. The NVI and the directory each
+// answer one half, and the map shows each half arrive. The map has one box: it
+// stands for the first holder the NVI named, and only an answer about that URA
+// names it. title is what the box is called: the name the demo uses when the
+// directory's answer carries it, else the answer's own name, else the URA.
+// - While a discovery plays, the source is what that discovery has established
+//   so far: every discovery asks anew and starts from a source not known yet.
+//   elapsed is how many seconds the stage has played; its answer counts once it
+//   is back (stageTimeline's source), and asking is set until then.
+// - Otherwise it is what the run has established, leaving out the stages still
+//   to be played (upcoming): a discovery about to play gives nothing away. A
+//   source that was sent a request was known by its address, not by a name; a
+//   key request goes to De Plataan's own access service and establishes
+//   nothing. After a retention gap (partial) missing evidence proves nothing
+//   either way, and gap says so.
+export function sourcePresentation({ stage = null, action = null, events = [], upcoming = [], elapsed = Infinity, partial = false } = {}) {
+  const stages = action?.stages || [];
+  const discovering = !!stage && stages.some(isDiscoveryStage);
+  let evidence, asking = false;
+  if (discovering) {
+    const at = stages.findIndex(item => item === stage || (stage.id && item.id === stage.id));
+    asking = elapsed < (stageTimeline(stage).source ?? 0);
+    evidence = [...stages.slice(0, Math.max(at, 0)), ...(asking ? [] : [stage])].flatMap(item => item.events);
+  } else {
+    const later = new Set(upcoming.flatMap(item => item.events.map(callIdentity)));
+    evidence = events.filter(event => !later.has(callIdentity(event)));
+  }
+  const holder = evidence.map(holdersIn).filter(Boolean).at(-1)?.[0];
+  const answers = evidence.map(directoryAnswerIn).filter(answer => answer?.organization);
+  const ura = holder?.ura || answers.at(-1)?.ura || '';
+  const organization = answers.filter(answer => answer.ura === ura).at(-1)?.organization;
+  const called = evidence.some(event => event.gf === 'exchange');
+  const state = organization || called ? 'addressed' : holder ? 'located' : 'unknown';
+  const name = organization?.name || '';
+  return {
+    state, asking, gap: partial && !discovering && state === 'unknown', ura, categories: holder?.categories || [], name,
+    title: name.includes(sourceName) ? sourceName : name || (ura ? `URA ${ura}` : 'Source'), address: !!organization?.address || called,
+  };
+}
+
+// discoveryPresentation says what a discovery step asks and what its answer
+// established; null for any other step. An answer that could not be read
+// established nothing and has no description. A step of several calls is told
+// by its first, with the URA asked and the organization answered from that one
+// call, and the others are counted.
+export function discoveryPresentation(stage) {
+  const events = stage?.events || [];
+  if (stage?.purpose === 'localization') {
+    const holders = events.map(holdersIn).filter(Boolean).at(-1);
+    const [first, ...others] = holders || [];
+    return {
+      pending: 'De Plataan asks the NVI which organizations hold data on this patient.',
+      description: !holders ? '' : !first ? 'The NVI names no other organization for this patient.'
+        : `The NVI names URA ${first.ura}${first.categories.length ? ` for ${plural(first.categories.length, 'data category', 'data categories')}` : ''}${
+          others.length ? ` and ${plural(others.length, 'other organization', 'other organizations')}` : ''}. Its name and address are the address directory’s to give.`,
+    };
+  }
+  if (stage?.purpose === 'addressing') {
+    const answer = events[0] ? directoryAnswerIn(events[0]) : null;
+    const ura = answer?.ura || new URLSearchParams(events[0]?.request?.path?.split('?')[1] || '').get('identifier')?.split('|').pop() || '';
+    const subject = ura ? `URA ${ura}` : 'the organization';
+    const organization = answer?.organization;
+    const resolved = `The directory resolves ${subject} to ${organization?.name || 'an organization'}`;
+    const more = events.length > 1 ? ` It was asked about ${plural(events.length - 1, 'more organization', 'more organizations')}.` : '';
+    return {
+      pending: `De Plataan asks the address directory who ${subject} is and where to reach it.`,
+      description: !answer ? '' : (!organization ? `The directory holds no organization with ${subject}.`
+        : !organization.address ? `${resolved}. It lists no web address for its FHIR API.`
+          : organization.authorizationServer ? `${resolved} and gives the web addresses of its FHIR API and its authorization server.`
+            : `${resolved} and gives the web address of its FHIR API.`) + more,
+    };
+  }
+  return null;
 }
 
 export function buildActionGroups(events) {

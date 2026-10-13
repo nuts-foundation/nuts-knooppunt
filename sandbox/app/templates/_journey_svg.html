@@ -52,9 +52,30 @@
       <text class="js-lbl2 copy-label-gone" x="80" y="394">Removed from memory</text>
     </g>
   </g>
-  <g class="js-dim" data-js="1" id="js-source">
-    <rect x="308" y="230" width="194" height="188" rx="11" fill="#2d2620" stroke="#b5d18f" stroke-width="1.3"/>
-    <text class="js-lbl" x="324" y="252">De Zonnebloem</text>
+  <g class="js-dim source-pending" data-js="1" id="js-source">
+    <rect class="src-box" x="308" y="230" width="194" height="188" rx="11"/>
+    <g class="src-skeleton">
+      <rect class="src-wait" x="324" y="242" width="96" height="12" rx="4"/>
+      <rect class="src-wait" x="320" y="268" width="80" height="44" rx="7"/>
+      <rect class="src-wait" x="426" y="276" width="56" height="56" rx="5"/>
+      <rect class="src-wait" x="320" y="378" width="154" height="20" rx="5"/>
+      <text class="js-lbl2 src-note-unknown" x="405" y="358" text-anchor="middle">Source not known yet</text>
+      <text class="js-lbl2 src-note-gap" x="405" y="358" text-anchor="middle">Earlier steps expired</text>
+    </g>
+    <g class="src-located">
+      <text class="js-lbl" id="js-source-ura" x="324" y="252"></text>
+      <text class="js-lbl2" x="324" y="272">holds for this patient</text>
+      <g class="js-source-chip"><rect x="324" y="282" width="78" height="18" rx="9"/><text class="js-lbl2 js-source-category" x="363" y="295" text-anchor="middle"></text></g>
+      <g class="js-source-chip"><rect x="408" y="282" width="78" height="18" rx="9"/><text class="js-lbl2 js-source-category" x="447" y="295" text-anchor="middle"></text></g>
+      <g class="js-source-chip"><rect x="324" y="304" width="78" height="18" rx="9"/><text class="js-lbl2 js-source-category" x="363" y="317" text-anchor="middle"></text></g>
+      <g class="js-source-chip"><rect x="408" y="304" width="78" height="18" rx="9"/><text class="js-lbl2 js-source-category" x="447" y="317" text-anchor="middle"></text></g>
+      <g class="js-source-chip"><rect x="324" y="326" width="78" height="18" rx="9"/><text class="js-lbl2 js-source-category" x="363" y="339" text-anchor="middle"></text></g>
+      <g class="js-source-chip"><rect x="408" y="326" width="78" height="18" rx="9"/><text class="js-lbl2 js-source-category" x="447" y="339" text-anchor="middle"></text></g>
+      <text class="js-lbl2" x="397" y="366" text-anchor="middle">No name or address yet</text>
+      <rect class="src-wait" x="320" y="378" width="154" height="20" rx="5"/>
+    </g>
+    <g class="src-full">
+    <text class="js-lbl" id="js-source-name" x="324" y="252">De Zonnebloem</text>
     <g id="js-auth-server" data-js="1">
       <rect class="js-service" x="320" y="268" width="80" height="44" rx="7"/>
       <text class="js-lbl2" x="360" y="288" text-anchor="middle">Authorization</text>
@@ -76,6 +97,11 @@
       <g class="js-lock" id="js-lock-role" data-lock="role"><rect x="358" y="382" width="20" height="15" rx="3"/><path class="closed" d="M 362 382 V 376 a6 6 0 0 1 12 0 V 382"/><path class="open" d="M 362 382 V 374 a6 6 0 0 1 11.5 -2.4"/><text class="js-lbl2" x="368" y="411" text-anchor="middle">Role</text></g>
       <g class="js-lock" id="js-lock-consent" data-lock="consent"><rect x="403" y="382" width="20" height="15" rx="3"/><path class="closed" d="M 407 382 V 376 a6 6 0 0 1 12 0 V 382"/><path class="open" d="M 407 382 V 374 a6 6 0 0 1 11.5 -2.4"/><text class="js-lbl2" x="413" y="411" text-anchor="middle">Consent</text></g>
       <g class="js-lock" id="js-lock-query" data-lock="query"><rect x="454" y="382" width="20" height="15" rx="3"/><path class="closed" d="M 458 382 V 376 a6 6 0 0 1 12 0 V 382"/><path class="open" d="M 458 382 V 374 a6 6 0 0 1 11.5 -2.4"/><text class="js-lbl2" x="464" y="411" text-anchor="middle">Query</text></g>
+    </g>
+    </g>
+    <g class="src-address">
+      <rect x="292" y="240" width="16" height="168" rx="5"/>
+      <text class="js-lbl2" x="300" y="286" text-anchor="middle" dominant-baseline="central" transform="rotate(-90 300 286)">WEB ADDRESS</text>
     </g>
   </g>
   <path id="jsp-prs" class="js-path" data-js="1" d="M 72 230 V 144"/>
