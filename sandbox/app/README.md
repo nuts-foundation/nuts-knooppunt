@@ -465,9 +465,12 @@ access checks block and the sentence under it follow the same timeline (`stageTi
 `static/js/journey-model.js`): the playback wakes at each moment the stage changes something, a
 tile takes its new state when the map shows it, and until then says what it is waiting for. The
 map takes a step's evidence when the step starts. A step whose evidence grows while it is shown, by
-a late answer from Mitz or a further page, starts over with all of it, and a request whose answer
-arrives after it finished playing is played again with it. With reduced motion the map shows a
-step's result at once, and so do the access checks and the sentences.
+a late answer from Mitz or a further page, starts over with all of it. In automatic playback a
+request whose answer arrives after it finished playing is played again with it; during a selected
+replay that answer is part of the next replay. Evidence counts as shown once its step has played,
+so an answer that arrives while the viewer is closed or paused still plays after a reload. With
+reduced motion the map shows a step's result at once, and so do the access checks and the
+sentences; a change of that preference starts the step being shown over.
 An observed error response returns with its status; a transport failure has no invented return.
 A body that was not captured says why, and a call without a body says so. A Mitz subscription
 acknowledgement is not a consent decision. This is a presentation clock: backend calls remain fast and displayed request durations

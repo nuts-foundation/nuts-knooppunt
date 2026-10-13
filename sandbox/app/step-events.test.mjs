@@ -376,7 +376,8 @@ function mountFixture(t, { recordRevision, reducedMotion = false } = {}) {
   const doc = new Element(); doc.createElement = tag => new Element(tag); doc.body = new Element(); doc.hidden = false;
   doc.querySelector = selector => selector === '[data-record-revision]' && recordRevision !== undefined
     ? { dataset: { recordRevision } } : null;
-  const window = new EventTarget(); window.matchMedia = () => Object.assign(new EventTarget(), { matches: reducedMotion });
+  const media = Object.assign(new EventTarget(), { matches: reducedMotion });
+  const window = new EventTarget(); window.matchMedia = () => media;
   const dock = new Element(); dock.dataset.runId = 'run-one'; dock.classes.add('on');
   const nodes = new Map(['gf-viewer-steps', 'gf-stream-status', 'gf-playback-status', 'hd-title', 'gf-stage-caption', 'gf-stage-detail', 'gf-access-contract', 'gf-contract-status', 'gf-pause', 'gf-replay', 'gf-skip', 'gf-live'].map(id => [id, new Element()]));
   nodes.get('gf-viewer-steps').bounds = { top: 100, bottom: 400, height: 300 };
@@ -406,7 +407,7 @@ function mountFixture(t, { recordRevision, reducedMotion = false } = {}) {
   replace('setTimeout', clock.setTimeout); replace('clearTimeout', clock.clearTimeout);
   t.after(() => { for (const [key, value] of originals) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; } });
   const mounted = mountViewer(dock);
-  return { mounted, source, doc, window, dock, nodes, clock, observer, saved, elements, checks };
+  return { mounted, source, doc, window, dock, nodes, clock, observer, saved, elements, checks, media };
 }
 
 test('mounted SSE viewer preserves inspectable category calls and cleans up on run end', t => {
@@ -1507,6 +1508,29 @@ test('with reduced motion the legend and the sentences show a step’s result at
   assert.equal(nodes.get('gf-contract-status').textContent, 'De Zonnebloem returned the patient search result.');
 });
 
+// R4: the preference can change while a step is shown, also while it is paused.
+test('a change of the reduced-motion preference starts the step over, so map and text keep agreeing', t => {
+  const { source, clock, elements, checks, mounted, media } = mountFixture(t);
+  countReloads(t);
+  const patient = exchange(2);
+  for (const event of [patient, check(3, patient, 'Permit')]) source.send('step', event);
+  source.send('snapshot', { lastSeq: 3, record: { revision: 0, copy: 'held' } });
+  clock.tick(1000 + 1500);
+  mounted.player.pause();
+  const consent = checks[2], lock = elements.get('js-lock-consent');
+  assert.equal(consent.em.textContent, 'awaiting Mitz’s answer');
+
+  media.matches = true; media.dispatchEvent(new Event('change'));
+  assert.equal(lock.style['--lock-delay'], '0s', 'the map shows the result at once');
+  assert.equal(consent.em.textContent, 'Mitz: permit', 'and so does the legend, also while paused');
+  assert.deepEqual(checks.map(item => item.classList.contains('open')), [true, true, true, true]);
+
+  media.matches = false; media.dispatchEvent(new Event('change'));
+  assert.equal(lock.style['--lock-delay'], '2.7s', 'back to motion, the step plays from its start');
+  assert.equal(consent.em.textContent, 'awaiting Mitz’s answer');
+  assert.deepEqual(checks.map(item => item.classList.contains('open')), [false, false, false, false]);
+});
+
 test('the answer packet of a consent check follows the same order as the lock: refusal, failure, permit', () => {
   const { strip, elements } = stripFor();
   const label = () => elements.get('js-answer-label').textContent;
@@ -1686,6 +1710,10 @@ test('the map marks a web address only for an endpoint the retrieval would selec
   assert.deepEqual(stateWith(withFhir({ period: { start: '1971' } })), addressed(false), 'not in service yet');
   assert.deepEqual(stateWith(withFhir({ period: { start: '1969', end: '1970-01-01' } })), addressed(true), 'a date-only end runs through that day');
   assert.deepEqual(stateWith(withFhir({ period: { end: 'unreadable' } })), addressed(true), 'an unreadable bound is no bound, as in the retrieval');
+  assert.deepEqual(stateWith(withFhir({ period: { start: '1971-01-01T00:00:00+01:00' } })), addressed(false), 'a timestamp bound');
+  for (const start of ['1971-02-30', '1971-02-30T00:00:00Z', '1971-01-01 00:00', '1971-01-01T00:00Z', '1971-13']) {
+    assert.deepEqual(stateWith(withFhir({ period: { start } })), addressed(true), `${start} is not a date the retrieval reads, so it is no bound`);
+  }
   assert.deepEqual(stateWith(withFhir({ connectionType: { system: 'http://example.org/other', code: 'hl7-fhir-rest' } })), addressed(false), 'the code of another vocabulary');
   assert.deepEqual(stateWith([{ ...zonnebloem, endpoint: [{ reference: 'Endpoint/auth-1' }] }, fhirEndpoint, authEndpoint]), addressed(false),
     'an endpoint in the answer the organization does not point at');
@@ -1800,6 +1828,95 @@ test('the playback says which steps are still to be played', () => {
   assert.deepEqual(upcoming(), ['exchange']);
   player.replay('discover-1');
   assert.deepEqual(upcoming(), ['addressing', 'exchange'], 'a replay counts what is left of it, and what has not played at all');
+});
+
+// The cursor keeps 256 call ids and the playback 256 events. An id may only be
+// dropped once its event is gone, or a step that was shown counts as unshown.
+test('a long run does not turn a step that was shown into one still to be played', () => {
+  const { clock, player } = playbackFixture();
+  const first = exchange(1), second = exchange(3);
+  for (const event of [first, check(2, first, 'Permit'), second, check(4, second, 'Permit')]) player.add(event);
+  player.snapshot(); clock.tick(1000 + 4300);
+  assert.equal(model.sourcePresentation(player.state()).state, 'addressed');
+  for (let seq = 5; seq < 259; seq++) player.add(observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
+  player.snapshot(); clock.tick(1000 + 2500);
+  const state = player.state();
+  assert.equal(state.status, 'complete');
+  assert.ok(state.events.includes(second), 'the second request is still retained');
+  assert.deepEqual(state.upcoming.map(stage => stage.purpose), [], 'and it was shown');
+  assert.equal(model.sourcePresentation(state).state, 'addressed', 'so the source it was sent to stays drawn');
+  assert.ok(player.cursor().callIds.length <= 256);
+});
+
+test('a long action does not play a step again because its ids left the cursor', () => {
+  const { clock, shown, player } = playbackFixture();
+  const first = exchange(1), second = exchange(3);
+  for (const event of [first, check(2, first, 'Permit'), second, check(4, second, 'Permit')]) player.add(event);
+  player.snapshot(); clock.tick(1000 + 4300);
+  assert.deepEqual(shown, ['exchange'], 'the patient step has played, and its four ids are in the cursor');
+  for (let seq = 5; seq < 259; seq++) player.add(exchange(seq, { resourceType: 'Condition', request: { method: 'GET', path: '/fhir/Condition', tokenAttached: true } }));
+  player.snapshot(); clock.tick(1000 + 2500);
+  assert.deepEqual(shown, ['exchange', 'exchange']);
+  assert.ok(player.state().events.includes(second), 'the second patient page is still retained');
+  clock.tick(20000);
+  assert.deepEqual(shown, ['exchange', 'exchange'], 'the patient step is not played a second time');
+  assert.equal(player.state().status, 'complete');
+});
+
+test('an answer that comes in for an older action does not hide what that action showed', () => {
+  const { clock, player } = playbackFixture();
+  const patient = exchange(2);
+  player.add(patient); player.snapshot(); clock.tick(1000 + 2500);
+  player.add(observed(5, 'registration', { ts: new Date(40000).toISOString() }));
+  player.snapshot(); clock.tick(1000 + 2500);
+  assert.equal(player.state().action.id, 'action-one');
+  player.add(check(6, patient, 'Permit')); player.snapshot(); clock.tick(1000);
+  assert.deepEqual(player.state().upcoming.map(stage => stage.purpose), [], 'an older action is not gone back to');
+  assert.equal(model.sourcePresentation(player.state()).state, 'addressed', 'and the request it showed still counts');
+});
+
+// Events are retained in the order they arrived and a step keeps its identity
+// by its earliest call, so a step can lose a call and stay the same step.
+test('a step that loses an event to the retention bound does not start over', () => {
+  const { clock, player } = playbackFixture();
+  const first = exchange(1), second = exchange(3);
+  for (const event of [second, first]) player.add(event); // the later page was delivered first
+  player.snapshot(); clock.tick(1000 + 500);
+  assert.deepEqual(player.state().stage.events, [first, second]);
+  for (let seq = 5; seq < 260; seq++) player.add(observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
+  assert.deepEqual(player.state().stage.events, [first], 'the page delivered first fell out of the retained window');
+  assert.equal(player.state().elapsed, 0.5, 'and the step plays on');
+});
+
+// Evidence counts as shown once its step has played. A step that starts over
+// while the viewer is hidden or paused has not played.
+test('an answer that arrives while the viewer is hidden is not marked as shown before it plays', () => {
+  const { clock, player } = playbackFixture();
+  const patient = exchange(2, { outcome: 'deny', response: { status: 403 } }), answer = check(3, patient, 'Deny');
+  player.add(patient); player.snapshot(); clock.tick(1000 + 100);
+  player.setActive(false);
+  player.add(answer); player.snapshot(); clock.tick(5000);
+  assert.ok(!player.cursor().callIds.includes(answer.callId), 'hidden, the answer has not been shown');
+  const reloaded = playbackFixture({ cursor: player.cursor() });
+  for (const event of [patient, answer]) reloaded.player.add(event);
+  reloaded.player.snapshot(); reloaded.clock.tick(1000);
+  assert.deepEqual(reloaded.shown, ['exchange'], 'after a reload the request plays with its answer');
+  assert.equal(reloaded.player.state().stage.checks.length, 1);
+  player.setActive(true);
+  assert.ok(player.cursor().callIds.includes(answer.callId), 'shown, it is marked');
+});
+
+test('during a selected replay a late answer waits for the next replay', () => {
+  const { clock, shown, player } = playbackFixture();
+  const patient = exchange(2, { outcome: 'deny', response: { status: 403 } });
+  player.add(patient); player.snapshot(); clock.tick(1000 + 2500);
+  player.replay('retrieve-1'); clock.tick(2500);
+  assert.equal(shown.length, 2);
+  player.add(check(3, patient, 'Deny')); player.snapshot(); clock.tick(10000);
+  assert.equal(shown.length, 2, 'the selection is not left for it');
+  player.replay('retrieve-1');
+  assert.equal(shown.length, 3);
+  assert.equal(player.state().stage.checks.length, 1, 'the next replay has the answer');
 });
 
 test('what arrives during a selected replay is still to be played', () => {

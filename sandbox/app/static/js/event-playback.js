@@ -14,23 +14,36 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
   // (stageTimeline): the timer wakes at each of them and at the end.
   let timer = null, settling = null, length = 0, left = 0, since = 0, marks = [];
   let ready = false, started = false, paused = false, disposed = false, complete = false;
+  // Whether the stage being shown has been marked as shown: that happens when
+  // its clock first runs, not while the viewer is hidden or paused.
+  let acknowledged = true;
   // A replayed window (page load, retention gap) is applied once at its snapshot
   // rather than regrouped and redrawn per event; later live events apply directly.
   let delivered = false;
   const watched = new Set((Array.isArray(cursor?.callIds) ? cursor.callIds : []).filter(id => typeof id === 'string' && id.length <= 160).slice(-256));
   let replayQueue = null, selected = false;
   const getCursor = () => ({ callIds: [...watched].slice(-256) });
+  // remember marks events as shown. The cursor is bounded like the retained
+  // events are, and it gives up the oldest ids first, but never the id of an
+  // event that is still retained: that stage would count as unshown again.
   function remember(records) {
     for (const event of records) watched.add(callIdentity(event));
-    while (watched.size > 256) watched.delete(watched.values().next().value);
+    if (watched.size > 256) {
+      const retained = new Set(events.map(callIdentity));
+      for (const id of watched) {
+        if (watched.size <= 256) break;
+        if (!retained.has(id)) watched.delete(id);
+      }
+    }
     onCursor?.(getCursor());
   }
   const leftNow = () => timer === null ? left : Math.max(0, left - (clock.now() - since));
   // The stages still to be played: what is left of a replay, and every stage
-  // that has not been shown at all. Before the first action starts that is the
-  // newest action's; the older ones are taken as shown when it does.
+  // that has not been shown, of the action being shown and of newer ones. An
+  // older action is not gone back to. Before the first action starts it is the
+  // newest action's stages; the older ones are taken as shown when it does.
   function upcoming() {
-    const waiting = started ? groups.flatMap(pending) : pending(latest());
+    const waiting = started ? groups.filter(group => !action || group.time >= action.time).flatMap(pending) : pending(latest());
     return selected ? [...(replayQueue || []), ...waiting] : waiting;
   }
   function state() {
@@ -45,6 +58,7 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
   const pending = group => group?.stages.filter(item => evidenceOf(item).some(event => !watched.has(callIdentity(event)))) || [];
   function schedule() {
     if (disposed || paused || !active || !stage || timer !== null) return;
+    if (!acknowledged) { acknowledged = true; remember(evidenceOf(stage)); }
     const elapsed = length - left;
     const mark = marks.find(value => value > elapsed);
     const wait = mark === undefined ? left : mark - elapsed;
@@ -71,13 +85,14 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
     if (next) show(next); else complete = !!action;
     changed();
   }
-  // show puts a stage on the map and starts its clock at zero.
+  // show puts a stage on the map and starts its clock at zero. The stage is
+  // marked as shown when that clock runs (schedule).
   function show(next) {
     const timeline = stageTimeline(next);
     stage = next; complete = false; length = left = Math.round(timeline.seconds * 1000);
     marks = [...new Set([timeline.identity, timeline.role, timeline.consent, timeline.query, timeline.source, timeline.settled]
       .filter(value => value > 0 && value < timeline.seconds).map(value => Math.round(value * 1000)))].sort((a, b) => a - b);
-    remember(evidenceOf(next));
+    acknowledged = false;
     onStage?.(next, action);
     schedule();
   }
@@ -102,7 +117,7 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
     const rebuilt = item => action?.stages.find(next => next.id === item.id) || item;
     if (replayQueue) replayQueue = replayQueue.map(rebuilt);
     if (stage) {
-      const grew = evidenceOf(rebuilt(stage)).length !== evidenceOf(stage).length;
+      const grew = evidenceOf(rebuilt(stage)).length > evidenceOf(stage).length;
       stage = rebuilt(stage);
       if (grew) { suspend(); show(stage); }
     }
@@ -131,6 +146,9 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
       }, settleMs);
     },
     pause() { paused = true; suspend(); changed(); },
+    // restage starts the stage being shown over, for a change in how it is to
+    // be presented.
+    restage() { if (disposed || !stage) return; suspend(); show(stage); changed(); },
     resume() { paused = false; resumeClock(); },
     setActive(value) { active = value; if (!active) suspend(); else resumeClock(); changed(); },
     replay(actionId = action?.id || latest()?.id) {

@@ -398,6 +398,8 @@
   @keyframes gf-source-dock { from { opacity: 0; transform: translateX(-10px); } }
   @keyframes gf-source-wait { to { fill: rgba(240,235,225,0.3); } }
   .hood-dock.playback-paused #js-source, .hood-dock.playback-paused #js-source * { animation-play-state: paused; }
+  /* The source lights up with the animations above; a transition would run on through a pause. */
+  #js-source { transition: none; }
   @media (prefers-reduced-motion: reduce) {
     #js-source, #js-source * { animation: none; }
   }

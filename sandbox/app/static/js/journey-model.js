@@ -295,13 +295,18 @@ function holdersIn(event) {
   }));
 }
 
-// A FHIR dateTime bound at the precision it was written; an end runs to the
-// last instant it names. A bound that cannot be read is no bound.
+// A FHIR dateTime bound in one of the forms the retrieval reads (mcsdclient.go):
+// a year, a month, a date or an RFC 3339 timestamp. An end runs to the last
+// instant it names. Anything else is no bound, a date that does not exist
+// included: Date would roll it over into the next month.
 function periodBound(value, end) {
-  if (typeof value !== 'string') return null;
-  const [, year, month, day] = value.match(/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/) || [];
-  if (!year) { const at = Date.parse(value); return Number.isNaN(at) ? null : at; }
-  if (!end) return Date.UTC(+year, month ? +month - 1 : 0, day ? +day : 1);
+  const [, year, month, day, time] = typeof value === 'string' &&
+    value.match(/^(\d{4})(?:-(\d{2})(?:-(\d{2})(T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?)?)?$/) || [];
+  if (!year) return null;
+  const start = new Date(Date.UTC(+year, month ? +month - 1 : 0, day ? +day : 1));
+  if (start.getUTCFullYear() !== +year || (month && start.getUTCMonth() !== +month - 1) || (day && start.getUTCDate() !== +day)) return null;
+  if (time) { const at = Date.parse(value); return Number.isNaN(at) ? null : at; }
+  if (!end) return start.getTime();
   return (day ? Date.UTC(+year, +month - 1, +day + 1) : month ? Date.UTC(+year, +month, 1) : Date.UTC(+year + 1, 0, 1)) - 1;
 }
 

@@ -395,8 +395,11 @@ export function mountViewer(dock) {
   replay.addEventListener('click', () => player.replay(), { signal: listeners.signal });
   skip.addEventListener('click', () => player.skip(), { signal: listeners.signal });
   live.addEventListener('click', () => player.followLatest(), { signal: listeners.signal });
+  // The preference decides how a step is shown on the map and in the text, so a
+  // change of it starts the step being shown over: both then follow the same rule.
   motion.addEventListener('change', () => {
     if (motion.matches) journey.stop();
+    player.restage();
   }, { signal: listeners.signal });
   function cleanup() {
     source.close(); visibilityObserver.disconnect(); listeners.abort(); player.dispose(); journey.reset();
