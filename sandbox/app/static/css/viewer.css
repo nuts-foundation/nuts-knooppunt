@@ -357,10 +357,11 @@
     .js-lock.lock-error :is(rect, path) { stroke: #e9ba72; }
     .js-lock.lock-error { filter: drop-shadow(0 0 5px rgba(233,186,114,0.4)); }
   }
-  /* What De Plataan holds now. One of the three is shown. */
-  .copy-doc, .copy-gone, .copy-label-held, .copy-label-gone { display: none; }
+  /* What De Plataan holds now, as the stream last said it: one of the three,
+     and nothing before the stream has said it. */
+  .copy-empty, .copy-doc, .copy-gone, .copy-label-empty, .copy-label-held, .copy-label-gone { display: none; }
   .copy-label-empty { fill: rgba(240,235,225,0.72); }
-  #js-copy.copy-held :is(.copy-empty, .copy-label-empty), #js-copy.copy-removed :is(.copy-empty, .copy-label-empty) { display: none; }
+  #js-copy.copy-none :is(.copy-empty, .copy-label-empty) { display: inline; }
   #js-copy.copy-held :is(.copy-doc, .copy-label-held) { display: inline; }
   #js-copy.copy-held .copy-label-held { fill: #b5d18f; }
   #js-copy.copy-removed :is(.copy-gone, .copy-label-gone) { display: inline; }

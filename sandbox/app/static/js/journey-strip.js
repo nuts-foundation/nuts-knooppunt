@@ -190,11 +190,12 @@ export function createJourneyStrip(svg) {
     texts.forEach((el, index) => { el.textContent = labels[index] || ''; });
     chips.forEach((el, index) => el.classList.toggle('on', !!labels[index]));
   }
+  // setCopy shows what De Plataan holds of the source's data, as the stream
+  // said it: none, held or removed. Until then the slot shows nothing.
   function setCopy(state) {
     select('#js-copy').forEach(el => {
-      el.classList.remove('copy-held', 'copy-removed');
-      if (state === 'held') el.classList.add('copy-held');
-      if (state === 'removed') el.classList.add('copy-removed');
+      el.classList.remove('copy-none', 'copy-held', 'copy-removed');
+      if (['none', 'held', 'removed'].includes(state)) el.classList.add(`copy-${state}`);
     });
   }
   reset();

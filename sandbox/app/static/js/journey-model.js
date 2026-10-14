@@ -361,13 +361,15 @@ function directoryAnswerIn(event) {
 //   so far: every discovery asks anew and starts from a source not known yet.
 //   elapsed is how many seconds the stage has played; its answer counts once it
 //   is back (stageTimeline's source), and asking is set until then.
-// - Otherwise it is what the run has established, leaving out the stages still
-//   to be played (upcoming): a discovery about to play gives nothing away. A
+// - Otherwise it is what the run has established, leaving out the evidence
+//   that has yet to be shown (unshown, by call id): a discovery about to play
+//   gives nothing away, and an answer that comes in later does not take back
+//   the request it belongs to, which was shown. A
 //   source that was sent a request was known by its address, not by a name; a
 //   key request goes to De Plataan's own access service and establishes
 //   nothing. After a retention gap (partial) missing evidence proves nothing
 //   either way, and gap says so.
-export function sourcePresentation({ stage = null, action = null, events = [], upcoming = [], elapsed = Infinity, partial = false } = {}) {
+export function sourcePresentation({ stage = null, action = null, events = [], unshown = [], elapsed = Infinity, partial = false } = {}) {
   const stages = action?.stages || [];
   const discovering = !!stage && stages.some(isDiscoveryStage);
   let evidence, asking = false;
@@ -376,7 +378,7 @@ export function sourcePresentation({ stage = null, action = null, events = [], u
     asking = elapsed < (stageTimeline(stage).source ?? 0);
     evidence = [...stages.slice(0, Math.max(at, 0)), ...(asking ? [] : [stage])].flatMap(item => item.events);
   } else {
-    const later = new Set(upcoming.flatMap(item => item.events.map(callIdentity)));
+    const later = new Set(unshown);
     evidence = events.filter(event => !later.has(callIdentity(event)));
   }
   const holder = evidence.map(holdersIn).filter(Boolean).at(-1)?.[0];

@@ -429,7 +429,8 @@ deployment correlates PRS spans. `record` describes the run's patient at the mom
 written: its record revision, a counter that only increases, and whether this session holds
 retrieved data in its memory (`copy`: `none`, `held`, or `removed` once a withdrawal took it). The
 map shows that as "Data held in memory" in De Plataan's box: the data is in no store of De
-Plataan's and goes with the session. A snapshot is also written
+Plataan's and goes with the session. Until the first snapshot the slot shows nothing, because what
+the session holds is not known yet. A snapshot is also written
 when the revision advances and no step is new, so an open stream learns of a change that produced
 no event.
 `event: run-ended` closes an active stream when its run ends. These are transport control records,
@@ -463,14 +464,19 @@ has arrived, and nothing on the map looks refused before the refusal exists: the
 packets and the lock take that colour when Mitz's answer and the source's response set off. The
 access checks block and the sentence under it follow the same timeline (`stageTimeline` in
 `static/js/journey-model.js`): the playback wakes at each moment the stage changes something, a
-tile takes its new state when the map shows it, and until then says what it is waiting for. The
-map takes a step's evidence when the step starts. A step whose evidence grows while it is shown, by
-a late answer from Mitz or a further page, starts over with all of it. In automatic playback a
-request whose answer arrives after it finished playing is played again with it; during a selected
-replay that answer is part of the next replay. Evidence counts as shown once its step has played,
-so an answer that arrives while the viewer is closed or paused still plays after a reload. With
-reduced motion the map shows a step's result at once, and so do the access checks and the
-sentences; a change of that preference starts the step being shown over.
+tile takes its new state when the map shows it, and until then says what it is waiting for. The map
+takes a step's evidence when the step starts, and the access checks, the sentences and the action's
+entry in the timeline tell that same evidence until the step ends: an event that leaves the retained
+window meanwhile changes none of them. A step that gains evidence while it is shown, by a late
+answer from Mitz or a further page, starts over with all of it. In automatic playback a request
+whose answer arrives after it finished playing is played again with it, while its action is still
+the one being played; during a selected replay that answer is part of the next replay. Evidence
+counts as shown once its step has played, so an answer that arrives while the viewer is closed or
+paused still plays after a reload. The playback's clock is the real one: a timer that fires late, or
+time spent drawing, moves the step on by as much as it took, and a moment the step passed while the
+view was being drawn is shown at once. With reduced motion the map shows a step's result at once,
+and so do the access checks and the sentences; a change of that preference starts the step being
+shown over.
 An observed error response returns with its status; a transport failure has no invented return.
 A body that was not captured says why, and a call without a body says so. A Mitz subscription
 acknowledgement is not a consent decision. This is a presentation clock: backend calls remain fast and displayed request durations
@@ -516,7 +522,9 @@ deployment (`SEED_ZONNEBLOEM_ENDPOINT_ADDRESS`), not a public URL. Each change s
 answer is back, 2.3 seconds into a discovery step of 3.3, and the step's sentence says what is
 asked until then and what the answer established after. Every discovery asks anew and starts from
 the placeholder. Outside a discovery the map draws what the run has established, without the
-steps that have yet to be played. A source that was sent a request counts as known by its address,
+evidence that has yet to be shown: a discovery that has not played gives nothing away, and an
+answer that comes in later does not take back the request it belongs to, which was shown. A source
+that was sent a request counts as known by its address,
 not by a name, and a key request establishes nothing: it goes to De Plataan's own access service.
 After a retention gap the placeholder says that the earlier steps expired, and nothing is drawn of
 the source before the run's events are in.

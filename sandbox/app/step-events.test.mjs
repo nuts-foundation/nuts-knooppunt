@@ -145,10 +145,12 @@ function fakeClock() {
       while (true) {
         const task = [...timers].sort((a, b) => a[1].at - b[1].at)[0];
         if (!task || task[1].at > end) break;
-        now = task[1].at; timers.delete(task[0]); task[1].fn();
+        now = Math.max(now, task[1].at); timers.delete(task[0]); task[1].fn();
       }
-      now = end;
+      now = Math.max(now, end);
     },
+    // stall lets time pass without running a timer, as a busy browser does.
+    stall(ms) { now += ms; },
     pending: () => timers.size,
   };
 }
@@ -404,7 +406,7 @@ function mountFixture(t, { recordRevision, reducedMotion = false } = {}) {
   replace('document', doc); replace('window', window); replace('MutationObserver', Observer);
   replace('EventSource', Source); replace('AbortController', Controller);
   replace('sessionStorage', { getItem: key => saved.get(key), setItem: (key, value) => saved.set(key, value), removeItem: key => saved.delete(key) });
-  replace('setTimeout', clock.setTimeout); replace('clearTimeout', clock.clearTimeout);
+  replace('setTimeout', clock.setTimeout); replace('clearTimeout', clock.clearTimeout); replace('performance', { now: clock.now });
   t.after(() => { for (const [key, value] of originals) { if (value === undefined) delete globalThis[key]; else globalThis[key] = value; } });
   const mounted = mountViewer(dock);
   return { mounted, source, doc, window, dock, nodes, clock, observer, saved, elements, checks, media };
@@ -559,6 +561,18 @@ test('auto-scroll follows step and mode changes but leaves inspection alone betw
   clock.tick(2500);
   assert.equal(list.scrolls.length, 3, 'the next active step follows playback');
   mounted.cleanup();
+});
+
+test('a step that starts over with a late answer is not followed again', t => {
+  const { mounted, source, clock, nodes } = mountFixture(t);
+  countReloads(t);
+  const list = nodes.get('gf-viewer-steps');
+  const patient = exchange(2);
+  source.send('step', patient); source.send('snapshot', { lastSeq: 2, record: { revision: 0, copy: 'none' } }); clock.tick(1000);
+  const followed = list.scrolls.length;
+  source.send('step', check(3, patient, 'Permit'));
+  assert.ok(mounted.player.state().elapsed < 0.05, 'the step starts over');
+  assert.equal(list.scrolls.length, followed, 'it is the same step, so the list stays where the presenter left it');
 });
 
 test('each source request visibly carries only an observed attached key', () => {
@@ -1189,6 +1203,7 @@ test('the retrieved copy shows the snapshot’s state and survives stage changes
   assert.ok(!elements.get('js-copy').classList.contains('copy-held'));
   strip.setCopy('none');
   assert.ok(!elements.get('js-copy').classList.contains('copy-removed'));
+  assert.ok(elements.get('js-copy').classList.contains('copy-none'));
 });
 
 // What De Plataan has of the source's data is in a session's memory and nowhere
@@ -1204,6 +1219,199 @@ test('the legend says what the query check tests', () => {
   const viewer = readFileSync(new URL('./templates/_viewer.html', import.meta.url), 'utf8');
   const legend = viewer.match(/id="gf-contract-legend">([^<]*)</)?.[1] || '';
   assert.match(legend, /tests the request against the BGZ queries its policy allows\. The query lock opens when a request passed that test and was served\.$/);
+});
+
+// A mounted viewer receives every event as a new object from the stream, so
+// whether an event is still retained is told by its call id.
+const retains = (state, event) => state.events.some(item => item.callId === event.callId);
+
+// Events can leave the retained window while their step is shown. The map took
+// the step's evidence when it started, so the legend and the caption keep
+// telling that evidence until the step ends.
+test('evidence that leaves the retained window while its step is shown leaves the step as it was shown', t => {
+  const { source, clock, elements, checks, nodes, mounted, media } = mountFixture(t);
+  countReloads(t);
+  const first = exchange(1), second = exchange(3);
+  for (const event of [first, check(2, first, 'Permit'), second, check(4, second, 'Permit')]) source.send('step', event);
+  source.send('snapshot', { lastSeq: 4, record: { revision: 0, copy: 'held' } });
+  clock.tick(1000 + 4300);
+  mounted.player.replay('retrieve-1');
+  clock.tick(2800); mounted.player.pause();
+  const consent = checks[2];
+  assert.equal(consent.em.textContent, 'Mitz: permit');
+  for (let seq = 5; seq < 259; seq++) source.send('step', observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
+  source.send('snapshot', { lastSeq: 258, record: { revision: 0, copy: 'held' } });
+  assert.ok(!retains(mounted.player.state(), first) && retains(mounted.player.state(), second), 'the first request and its answer left the retained window');
+  assert.equal(consent.em.textContent, 'Mitz: permit', 'the legend tells the step as the map shows it');
+  assert.ok(elements.get('js-lock-consent').classList.contains('lock-open'));
+  assert.equal(nodes.get('gf-stage-caption').textContent, 'Step 1 of 1 · Find patient at De Zonnebloem');
+  clock.tick(10000);
+  assert.equal(consent.em.textContent, 'Mitz: permit');
+  media.matches = true; media.dispatchEvent(new Event('change'));
+  assert.ok(elements.get('js-lock-consent').classList.contains('lock-open'), 'starting the step over keeps the evidence it was shown with');
+  assert.equal(consent.em.textContent, 'Mitz: permit');
+});
+
+test('a queued step that lost only its first call is still played', () => {
+  const { clock, shown, player } = playbackFixture();
+  const conditionsAt = seq => exchange(seq, { resourceType: 'Condition', request: { method: 'GET', path: '/fhir/Condition', tokenAttached: true } });
+  const patient = exchange(1), first = conditionsAt(3), second = conditionsAt(5);
+  player.add(first); player.add(patient); player.add(second); // the first conditions page was delivered first
+  for (let seq = 7; seq < 260; seq++) player.add(observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
+  player.snapshot(); clock.tick(1000 + 2500);
+  player.replay('retrieve-1');
+  const played = shown.length;
+  player.add(observed(260, 'registration', { ts: new Date(42600).toISOString() }));
+  assert.ok(!player.state().events.includes(first) && player.state().events.includes(second), 'only the first conditions page left');
+  clock.tick(2500);
+  assert.equal(shown.length, played + 1, 'the conditions step plays with the page it still holds');
+  assert.deepEqual(player.state().stage.events, [second]);
+});
+
+test('a refused request whose evidence left the retained window is still told as refused by Mitz', t => {
+  const { source, clock, nodes, mounted } = mountFixture(t);
+  countReloads(t);
+  const patient = exchange(1, { outcome: 'deny', response: { status: 403 } });
+  // The key request was delivered last, so it stays when the request and its answer leave.
+  for (const event of [patient, check(2, patient, 'Deny'), token(4)]) source.send('step', event);
+  source.send('snapshot', { lastSeq: 4, record: { revision: 0, copy: 'none' } });
+  clock.tick(1000 + 2500 + 4300);
+  mounted.player.replay('retrieve-1');
+  clock.tick(2500 + 3500); mounted.player.pause();
+  const said = 'Mitz answered deny. De Zonnebloem refused the request and no data left the source.';
+  assert.equal(nodes.get('gf-contract-status').textContent, said);
+  for (let seq = 5; seq < 260; seq++) source.send('step', observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
+  const retained = mounted.player.state().events;
+  assert.ok(!retained.some(event => event.callId === patient.callId) && retained.some(event => event.callId === 'token-4'), 'the request and its answer left, the action stays');
+  assert.equal(nodes.get('gf-contract-status').textContent, said);
+});
+
+test('a discovery step keeps drawing what it established when earlier evidence leaves the retained window', t => {
+  const { source, clock, elements, mounted } = mountFixture(t);
+  countReloads(t);
+  const box = elements.get('js-source');
+  for (const event of discovery()) source.send('step', event);
+  for (let seq = 3; seq < 256; seq++) source.send('step', observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
+  source.send('snapshot', { lastSeq: 255, record: { revision: 0, copy: 'none' } });
+  clock.tick(1000 + 2500);
+  mounted.player.replay('discover-1');
+  clock.tick(3300 + 500); mounted.player.pause(); // the directory is being asked about the URA the NVI named
+  assert.equal(drawnSource(box), 'source-located');
+  for (const seq of [256, 257]) source.send('step', observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
+  assert.ok(!mounted.player.state().events.some(event => event.gf === 'localization' && event.purpose === 'localization'), 'the NVI answer left the retained window');
+  assert.equal(drawnSource(box), 'source-located', 'the step still shows what the NVI named');
+});
+
+test('a queued step whose calls all left the retained window is not played', () => {
+  const { clock, shown, player } = playbackFixture();
+  const patient = exchange(1), conditions = exchange(3, { resourceType: 'Condition', request: { method: 'GET', path: '/fhir/Condition', tokenAttached: true } });
+  player.add(conditions); player.add(patient); // the later step was delivered first
+  for (let seq = 5; seq < 259; seq++) player.add(observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
+  player.snapshot(); clock.tick(1000 + 2500);
+  player.replay('retrieve-1');
+  const played = shown.length;
+  assert.equal(player.state().stage.events[0], patient);
+  player.add(observed(259, 'registration', { ts: new Date(42590).toISOString() }));
+  assert.ok(!player.state().events.includes(conditions), 'the conditions request left the retained window');
+  clock.tick(2500 + 2500);
+  assert.equal(shown.length, played, 'the replay ends after the patient step');
+  assert.equal(player.state().status, 'complete');
+});
+
+const descendants = element => [element, ...element.children.flatMap(descendants)];
+const text = element => [element.textContent, ...element.children.map(text)].join(' ');
+const playingRows = nodes => descendants(nodes.get('gf-viewer-steps')).filter(element => /^gf-stage gf-step-\w+ gf-stage-current$/.test(element.className || ''));
+
+test('a step whose evidence left the retained window keeps its place in the action', t => {
+  const { source, clock, checks, nodes, mounted } = mountFixture(t);
+  countReloads(t);
+  const patient = exchange(1), conditions = exchange(3, { resourceType: 'Condition', request: { method: 'GET', path: '/fhir/Condition', tokenAttached: true } });
+  for (const event of [patient, check(2, patient, 'Permit'), conditions, check(4, conditions, 'Permit')]) source.send('step', event);
+  source.send('snapshot', { lastSeq: 4, record: { revision: 0, copy: 'held' } });
+  clock.tick(1000 + 4300 + 4300);
+  mounted.player.replay('retrieve-1');
+  clock.tick(2800); mounted.player.pause();
+  assert.equal(nodes.get('gf-stage-caption').textContent, 'Step 1 of 2 · Find patient at De Zonnebloem');
+  for (let seq = 5; seq < 259; seq++) source.send('step', observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
+  assert.ok(!retains(mounted.player.state(), patient) && retains(mounted.player.state(), conditions), 'the patient request left, the conditions request stays');
+  assert.equal(nodes.get('gf-stage-caption').textContent, 'Step 1 of 2 · Find patient at De Zonnebloem');
+  assert.equal(checks[2].em.textContent, 'Mitz: permit');
+  const [row] = playingRows(nodes);
+  assert.match(text(row), /^\s*1\s+Find patient at De Zonnebloem /, 'the timeline still has the step being played, in its place');
+});
+
+test('a call of the step being shown stays open in the inspector after it left the retained window', t => {
+  const { source, clock, nodes, mounted, doc, observer } = mountFixture(t);
+  countReloads(t);
+  const patient = exchange(1), conditions = exchange(3, { resourceType: 'Condition', request: { method: 'GET', path: '/fhir/Condition', tokenAttached: true } });
+  for (const event of [patient, check(2, patient, 'Permit'), conditions, check(4, conditions, 'Permit')]) source.send('step', event);
+  source.send('snapshot', { lastSeq: 4, record: { revision: 0, copy: 'held' } });
+  clock.tick(1000 + 4300 + 4300);
+  mounted.player.replay('retrieve-1');
+  clock.tick(2800); mounted.player.pause();
+  for (let seq = 5; seq < 259; seq++) source.send('step', observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
+  assert.ok(!retains(mounted.player.state(), patient) && retains(mounted.player.state(), conditions));
+  doc.body.classes.add('hood-tech'); observer.callback();
+  const call = key => descendants(nodes.get('gf-viewer-steps')).find(element => element.tag === 'details' && element.dataset.key === key);
+  call('call:1').open = true; call('call:3').open = true;
+  mounted.player.pause(); // a redraw with nothing new: another event would push the conditions call out as well
+  assert.equal(call('call:3').open, true);
+  assert.equal(call('call:1').open, true, 'the call the step was shown with stays open while the step is shown');
+  mounted.player.resume(); clock.tick(1500 + 4300 + 1000);
+  assert.equal(call('call:1'), undefined, 'once the step has ended its expired call is gone');
+});
+
+test('the playing step’s row tells the evidence the map shows', t => {
+  const { source, clock, checks, nodes, mounted } = mountFixture(t);
+  countReloads(t);
+  const first = exchange(1), second = exchange(3);
+  for (const event of [first, second, check(4, second, 'Permit')]) source.send('step', event);
+  source.send('snapshot', { lastSeq: 4, record: { revision: 0, copy: 'held' } });
+  clock.tick(1000 + 4300);
+  mounted.player.replay('retrieve-1');
+  clock.tick(2800); mounted.player.pause();
+  const consent = 'not observed (permit on 1 of 2 requests)';
+  assert.equal(checks[2].em.textContent, consent);
+  for (let seq = 5; seq < 259; seq++) source.send('step', observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
+  assert.ok(!retains(mounted.player.state(), first) && retains(mounted.player.state(), second), 'the first page left the retained window');
+  assert.equal(checks[2].em.textContent, consent);
+  const rows = playingRows(nodes);
+  assert.equal(rows.length, 1);
+  assert.match(text(rows[0]), /Completed · 2 calls · HTTP 200/, 'the row counts the calls the step was shown with');
+  assert.match(text(rows[0]), /Mitz’s answer was not observed for every request of this step\./);
+});
+
+// A redraw can take longer than the gap to the next mark. The view that follows
+// it shows the moment the map has reached, not the one the redraw started at.
+test('a redraw that takes past a mark is followed by the view at that mark', t => {
+  const { source, clock, checks, nodes } = mountFixture(t);
+  countReloads(t);
+  const patient = exchange(2);
+  for (const event of [patient, check(3, patient, 'Permit')]) source.send('step', event);
+  source.send('snapshot', { lastSeq: 3, record: { revision: 0, copy: 'held' } });
+  clock.tick(1000); // the step starts
+  const list = nodes.get('gf-viewer-steps'), replace = list.replaceChildren.bind(list);
+  let slow = false;
+  list.replaceChildren = (...children) => { if (slow) { slow = false; clock.stall(250); } replace(...children); };
+  clock.tick(899); slow = true;
+  clock.tick(1); // the identity mark; this redraw takes 250 ms, past the role mark at 1.1 s
+  clock.tick(0);
+  assert.equal(checks[1].em.textContent, 'read from the key', 'the role as the map shows it by now');
+});
+
+// V3: the slot says what De Plataan holds only once the stream has said it.
+test('what De Plataan holds is not drawn before the stream has said it', t => {
+  const { source, elements } = mountFixture(t);
+  const copy = elements.get('js-copy');
+  const states = () => ['copy-none', 'copy-held', 'copy-removed'].filter(name => copy.classList.contains(name));
+  assert.deepEqual(states(), [], 'before the first snapshot the slot shows no state');
+  source.send('snapshot', { lastSeq: 0, record: { revision: 0, copy: 'held' } });
+  assert.deepEqual(states(), ['copy-held']);
+  source.send('snapshot', { lastSeq: 0, record: { revision: 0, copy: 'none' } });
+  assert.deepEqual(states(), ['copy-none']);
+  const css = readFileSync(new URL('./static/css/viewer.css', import.meta.url), 'utf8');
+  assert.match(css, /\.copy-empty, \.copy-doc, \.copy-gone, \.copy-label-empty, \.copy-label-held, \.copy-label-gone \{ display: none; \}/, 'no label shows by default');
+  assert.match(css, /#js-copy\.copy-none :is\(\.copy-empty, \.copy-label-empty\) \{ display: inline; \}/, 'the empty slot shows once the stream said so');
 });
 
 // countReloads replaces location for the length of a test.
@@ -1663,7 +1871,7 @@ test('outside a discovery the map draws what the run established, without the st
   const known = { state: 'addressed', asking: false, gap: false, ura: '00000020', categories: bgzLabels, name: 'Zorgcentrum De Zonnebloem', title: 'De Zonnebloem', address: true };
   assert.deepEqual(model.sourcePresentation({ events }), known, 'at rest');
   assert.deepEqual(model.sourcePresentation({ stage: retrieve.stages[0], action: retrieve, events, elapsed: 0 }), known, 'while another action plays');
-  assert.equal(model.sourcePresentation({ events: discovery(), upcoming: actionOf(discovery(), 'discover-1').stages }).state, 'unknown',
+  assert.equal(model.sourcePresentation({ events: discovery(), unshown: discovery().map(event => event.callId) }).state, 'unknown',
     'a discovery that has yet to be played gives nothing away');
   assert.deepEqual(model.sourcePresentation({ events: [token(3), exchange(4)] }),
     { state: 'addressed', asking: false, gap: false, ura: '', categories: [], name: '', title: 'Source', address: true },
@@ -1719,7 +1927,9 @@ test('the map marks a web address only for an endpoint the retrieval would selec
   for (const start of ['1971-01-01T1:00:00Z', '1971-01-01T00:00:00,5Z', '1971-01-01T00:00:00+24:00', '1970-12-31T23:59:00-00:60']) {
     assert.deepEqual(stateWith(withFhir({ period: { start } })), addressed(false), `${start} is a bound the retrieval reads`);
   }
-  assert.deepEqual(stateWith(withFhir({ period: { end: '0050' } })), addressed(false), 'the year 50, not 1950');
+  const inYear100 = period => model.sourcePresentation({ events: [localize(1, bgzLists('00000020')),
+    resolve(2, withFhir({ period }), { ts: '0100-01-01T00:00:00.000Z' })] }).address;
+  assert.deepEqual([inYear100({ start: '0050' }), inYear100({ end: '0050' })], [true, false], 'the year 50, not 1950: a call in the year 100 is after both');
   assert.deepEqual(stateWith(withFhir({ period: { end: '1969-12-31T23:00:15.020-01:00' } })), addressed(true), 'an offset west of UTC: the end is the instant of the call');
   // The call was at 00:00:15.020: a bound a fraction of a millisecond away decides it as it does in the retrieval.
   assert.deepEqual(stateWith(withFhir({ period: { start: '1970-01-01T00:00:15.0200005Z' } })), addressed(false), 'not in service yet by half a microsecond');
@@ -1827,20 +2037,80 @@ test('a discovery step wakes the view when its answer is back and then plays a s
   clock.tick(1); assert.equal(player.state().status, 'complete');
 });
 
-test('the playback says which steps are still to be played', () => {
+test('the playback says which evidence has yet to be shown', () => {
   const { clock, player } = playbackFixture();
-  const upcoming = () => player.state().upcoming.map(stage => stage.purpose);
+  const unshown = () => [...player.state().unshown].sort();
   for (const event of discovery()) player.add(event);
   player.snapshot();
-  assert.deepEqual(upcoming(), ['localization', 'addressing'], 'before the action starts');
-  clock.tick(1000); assert.deepEqual(upcoming(), ['addressing'], 'the step being played is not to come');
-  clock.tick(6600); assert.deepEqual(upcoming(), []);
+  assert.deepEqual(unshown(), ['call-1', 'call-2'], 'before the action starts');
+  clock.tick(1000); assert.deepEqual(unshown(), ['call-2'], 'the step being played has been shown');
+  clock.tick(6600); assert.deepEqual(unshown(), []);
   player.add(token(3)); player.add(exchange(4));
-  assert.deepEqual(upcoming(), ['authorization', 'exchange'], 'a newer action that has yet to start');
+  assert.deepEqual(unshown(), ['call-4', 'token-3'], 'a newer action that has yet to start');
   player.snapshot(); clock.tick(1000);
-  assert.deepEqual(upcoming(), ['exchange']);
+  assert.deepEqual(unshown(), ['call-4']);
   player.replay('discover-1');
-  assert.deepEqual(upcoming(), ['addressing', 'exchange'], 'a replay counts what is left of it, and what has not played at all');
+  assert.deepEqual(unshown(), ['call-4'], 'a replay shows again what was shown; what never played still waits');
+});
+
+// What has been shown stays established: an answer that comes in later makes
+// its step one to play again, but the request it belongs to was shown.
+test('an answer that comes in after its request was shown does not take the request back', () => {
+  const { clock, player } = playbackFixture();
+  const patient = exchange(2, { outcome: 'deny', response: { status: 403 } }), answer = check(3, patient, 'Deny');
+  for (const event of [token(1), patient]) player.add(event);
+  player.snapshot(); clock.tick(1000 + 2500 + 2500);
+  assert.equal(model.sourcePresentation(player.state()).state, 'addressed', 'the source was called');
+  player.replay('retrieve-1'); clock.tick(2500 + 2500);
+  player.add(answer); player.snapshot(); clock.tick(1000);
+  assert.deepEqual([...player.state().unshown], [answer.callId], 'the answer has yet to be shown');
+  assert.equal(model.sourcePresentation(player.state()).state, 'addressed', 'the request it belongs to was shown');
+  const reloaded = playbackFixture({ cursor: player.cursor() });
+  for (const event of [token(1), patient, answer]) reloaded.player.add(event);
+  reloaded.player.snapshot();
+  assert.equal(model.sourcePresentation(reloaded.player.state()).state, 'addressed', 'also after a reload');
+});
+
+test('an answer that comes in while its request is paused does not take the request back', () => {
+  const { clock, player } = playbackFixture();
+  const patient = exchange(2, { outcome: 'deny', response: { status: 403 } });
+  player.add(patient); player.snapshot(); clock.tick(1000 + 500);
+  player.pause();
+  player.add(check(3, patient, 'Deny')); player.snapshot();
+  assert.equal(player.state().stage.checks.length, 1);
+  assert.equal(model.sourcePresentation(player.state()).state, 'addressed');
+});
+
+// A timer can fire late when the browser is busy. The step's clock is the real
+// one: the view is drawn at the moment the timer ran, with everything up to it.
+test('a timer that fires late draws the step at the real moment', () => {
+  const seen = [];
+  const { clock, player } = playbackFixture({ onChange: state => { if (state.stage?.purpose === 'exchange') seen.push(+state.elapsed.toFixed(2)); } });
+  const patient = exchange(2);
+  for (const event of [patient, check(3, patient, 'Permit')]) player.add(event);
+  player.snapshot(); clock.tick(1000);
+  seen.length = 0;
+  clock.stall(3000); clock.tick(0); // the mark at 0.9 s runs 3 s into the step
+  assert.deepEqual(seen, [3]);
+  player.pause();
+  assert.equal(+player.state().elapsed.toFixed(2), 3, 'a pause keeps the real moment');
+  player.resume(); clock.tick(1299);
+  assert.equal(player.state().status, 'playing');
+  clock.tick(1);
+  assert.equal(player.state().status, 'complete', 'and the step still lasts 4.3 seconds');
+});
+
+test('time spent drawing the view counts toward the step', () => {
+  let drawing = 0;
+  const { clock, player } = playbackFixture({ onChange: () => clock.stall(drawing) });
+  const patient = exchange(2);
+  for (const event of [patient, check(3, patient, 'Permit')]) player.add(event);
+  player.snapshot(); clock.tick(1000);
+  const started = clock.now();
+  drawing = 50; // every redraw takes 50 ms
+  clock.tick(2000);
+  drawing = 0;
+  assert.equal(+player.state().elapsed.toFixed(3), (clock.now() - started) / 1000, 'no time is lost to drawing');
 });
 
 // The cursor keeps 256 call ids and the playback 256 events. An id may only be
@@ -1856,7 +2126,7 @@ test('a long run does not turn a step that was shown into one still to be played
   const state = player.state();
   assert.equal(state.status, 'complete');
   assert.ok(state.events.includes(second), 'the second request is still retained');
-  assert.deepEqual(state.upcoming.map(stage => stage.purpose), [], 'and it was shown');
+  assert.deepEqual([...state.unshown], [], 'and it was shown');
   assert.equal(model.sourcePresentation(state).state, 'addressed', 'so the source it was sent to stays drawn');
   assert.ok(player.cursor().callIds.length <= 256);
 });
@@ -1884,21 +2154,22 @@ test('an answer that comes in for an older action does not hide what that action
   player.snapshot(); clock.tick(1000 + 2500);
   assert.equal(player.state().action.id, 'action-one');
   player.add(check(6, patient, 'Permit')); player.snapshot(); clock.tick(1000);
-  assert.deepEqual(player.state().upcoming.map(stage => stage.purpose), [], 'an older action is not gone back to');
+  assert.deepEqual([...player.state().unshown], [], 'an older action is not gone back to');
   assert.equal(model.sourcePresentation(player.state()).state, 'addressed', 'and the request it showed still counts');
 });
 
 // Events are retained in the order they arrived and a step keeps its identity
 // by its earliest call, so a step can lose a call and stay the same step.
-test('a step that loses an event to the retention bound does not start over', () => {
+test('a step that loses an event to the retention bound plays on as it was shown', () => {
   const { clock, player } = playbackFixture();
   const first = exchange(1), second = exchange(3);
   for (const event of [second, first]) player.add(event); // the later page was delivered first
   player.snapshot(); clock.tick(1000 + 500);
   assert.deepEqual(player.state().stage.events, [first, second]);
   for (let seq = 5; seq < 260; seq++) player.add(observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
-  assert.deepEqual(player.state().stage.events, [first], 'the page delivered first fell out of the retained window');
-  assert.equal(player.state().elapsed, 0.5, 'and the step plays on');
+  assert.ok(!player.state().events.includes(second), 'the page delivered first fell out of the retained window');
+  assert.deepEqual(player.state().stage.events, [first, second], 'the step keeps the evidence it was shown with');
+  assert.equal(player.state().elapsed, 0.5, 'and plays on');
 });
 
 // The window can be full when an answer comes in, so the step gains the answer
@@ -1956,10 +2227,10 @@ test('what arrives during a selected replay is still to be played', () => {
   player.replay('action-one'); player.pause();
   for (const event of discovery()) player.add({ ...event, seq: event.seq + 10, callId: `late-${event.seq}` });
   player.snapshot(); clock.tick(1000);
-  assert.deepEqual(player.state().upcoming.map(stage => stage.purpose), ['localization', 'addressing']);
+  assert.deepEqual([...player.state().unshown].sort(), ['late-1', 'late-2']);
   assert.equal(model.sourcePresentation(player.state()).state, 'unknown', 'so a discovery that has not played gives nothing away');
   player.followLatest();
-  assert.deepEqual(player.state().upcoming.map(stage => stage.purpose), ['addressing']);
+  assert.deepEqual([...player.state().unshown], ['late-2']);
 });
 
 const sourceStates = ['source-pending', 'source-unknown', 'source-located', 'source-addressed'];

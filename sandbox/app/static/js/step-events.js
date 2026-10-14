@@ -226,7 +226,8 @@ export function mountViewer(dock) {
       if (group.checks?.length) content.append(node('p', 'gf-step-result',
         consent.state === 'permit' ? 'Before answering, the source asked Mitz whether this patient consents. Mitz answered yes.'
           : consent.state === 'deny' ? 'The source asked Mitz for this request. Mitz answered no.'
-            : 'The source asked Mitz and got no usable answer.'));
+            : consent.state === 'unobserved' ? 'Mitz’s answer was not observed for every request of this step.'
+              : 'The source asked Mitz and got no usable answer.'));
       if (group.purpose === 'consent-notification') content.append(node('p', 'gf-step-result',
         group.events.some(event => event.response?.copyRemoved === true)
           ? 'Through De Plataan’s subscription. The data retrieved earlier was removed from the record.'
@@ -258,13 +259,19 @@ export function mountViewer(dock) {
     for (const detail of list.querySelectorAll('details[data-key]')) {
       if (detail.open) openDetails.add(detail.dataset.key); else openDetails.delete(detail.dataset.key);
     }
-    const retainedKeys = new Set(['background', ...state.groups.flatMap(action => [action.id, `status:${action.id}`]), ...state.events.map(event => `call:${event.seq}`)]);
+    // What can be opened is what is drawn: the retained calls, and the calls of
+    // the action being played as it was pinned with the stage being shown.
+    const drawnEvents = [...state.events, ...(state.stage ? state.stageAction?.events || [] : [])];
+    const retainedKeys = new Set(['background', ...state.groups.flatMap(action => [action.id, `status:${action.id}`]), ...drawnEvents.map(event => `call:${event.seq}`)]);
     for (const key of openDetails) if (!retainedKeys.has(key)) openDetails.delete(key);
     for (const key of knownDetails) if (!retainedKeys.has(key)) knownDetails.delete(key);
     const action = state.action || state.groups.filter(group => group.stages.length).at(-1);
     const timeline = node('ol', 'gf-timeline');
     let restoreFocus;
-    for (const item of state.groups.filter(group => group.stages.length)) {
+    // The action being played is drawn as it was pinned with the stage being
+    // shown (see the playback), so its entry tells the evidence the map shows.
+    const pinned = item => state.stage && state.stageAction?.id === item.id ? state.stageAction : item;
+    for (const item of state.groups.filter(group => group.stages.length).map(pinned)) {
       const selected = action?.id === item.id;
       const entry = node('li', `gf-action gf-step-${item.outcome}${selected ? ' gf-action-selected' : ''}`);
       const button = node('button', 'gf-action-select');
@@ -293,8 +300,11 @@ export function mountViewer(dock) {
     const states = { settling: 'Preparing playback · waiting up to 1 s for evidence', playing: `${state.selected ? 'Replaying selected action' : 'Playing latest action'} · slowed for clarity`,
       paused: 'Playback paused', complete: state.selected ? 'Replay complete · Follow latest to resume live playback' : 'Playback complete · select any action to replay', waiting: 'Waiting for an action', ended: 'Playback ended' };
     playbackStatus.textContent = states[state.status];
+    // The stage being shown is told from the action it was pinned with, as the
+    // map was drawn from it.
+    const stageAction = state.stage ? state.stageAction : action;
     if (state.stage) {
-      stageCaption.textContent = `Step ${action.stages.findIndex(group => isCurrentStage(group, state)) + 1} of ${action.stages.length} · ${state.stage.label}`;
+      stageCaption.textContent = `Step ${stageAction.stages.indexOf(state.stage) + 1} of ${stageAction.stages.length} · ${state.stage.label}`;
       const service = serviceName(state.stage.events[0]?.gf);
       const methods = [...new Set(state.stage.events.map(event => event.request?.method))].filter(Boolean).join(', ');
       const replies = [...new Set(state.stage.events.map(responseLabel))].join(', ');
@@ -305,7 +315,7 @@ export function mountViewer(dock) {
       stageDetail.textContent = 'Playback is slowed for clarity. HTTP timings remain unchanged.';
     }
     const access = accessPresentation(state.stage);
-    const consent = consentPresentation(state.stage, action);
+    const consent = consentPresentation(state.stage, stageAction);
     contract.hidden = !access.visible && !consent;
     // The map delays each change to its moment in the stage. The status line
     // and the legend follow the same timeline through the playback, so neither
@@ -318,7 +328,7 @@ export function mountViewer(dock) {
     const elapsed = state.stage && !motion.matches ? state.elapsed : Infinity;
     contractStatus.textContent = timing && elapsed < timing.settled ? timing.pending
       : consent && consent.state === 'deny' ? consent.description : access.description;
-    const locks = lockPresentation(state.stage, action, elapsed);
+    const locks = lockPresentation(state.stage, stageAction, elapsed);
     for (const item of checks) {
       const lock = locks[item.dataset.check];
       item.classList.remove('open', 'deny', 'error');
@@ -335,7 +345,7 @@ export function mountViewer(dock) {
     if (discovery && !technicalMode) stageDetail.textContent = elapsed < timing.settled ? discovery.pending
       : discovery.description || stageDetail.textContent;
     if (state.delivered) journey.setSource(sourcePresentation({
-      stage: state.stage, action, events: state.events, upcoming: state.upcoming, elapsed, partial: hasGap,
+      stage: state.stage, action: stageAction, events: state.events, unshown: state.unshown, elapsed, partial: hasGap,
     }), !!state.stage);
     pause.textContent = state.paused ? 'Resume' : 'Pause';
     pause.disabled = ended;
