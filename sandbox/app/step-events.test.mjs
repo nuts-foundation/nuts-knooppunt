@@ -1711,9 +1711,22 @@ test('the map marks a web address only for an endpoint the retrieval would selec
   assert.deepEqual(stateWith(withFhir({ period: { start: '1969', end: '1970-01-01' } })), addressed(true), 'a date-only end runs through that day');
   assert.deepEqual(stateWith(withFhir({ period: { end: 'unreadable' } })), addressed(true), 'an unreadable bound is no bound, as in the retrieval');
   assert.deepEqual(stateWith(withFhir({ period: { start: '1971-01-01T00:00:00+01:00' } })), addressed(false), 'a timestamp bound');
-  for (const start of ['1971-02-30', '1971-02-30T00:00:00Z', '1971-01-01 00:00', '1971-01-01T00:00Z', '1971-13']) {
+  for (const start of ['1971-02-30', '1971-02-30T00:00:00Z', '1971-01-01 00:00', '1971-01-01T00:00Z', '1971-13',
+    '1971-01-01T24:00:00Z', '1971-01-01T23:59:60Z', '1971-01-01T00:00:00+25:00', '1971-01-01t00:00:00Z']) {
     assert.deepEqual(stateWith(withFhir({ period: { start } })), addressed(true), `${start} is not a date the retrieval reads, so it is no bound`);
   }
+  // What Go's time.Parse reads beyond the strict form (mcsdclient.go parses with it).
+  for (const start of ['1971-01-01T1:00:00Z', '1971-01-01T00:00:00,5Z', '1971-01-01T00:00:00+24:00', '1970-12-31T23:59:00-00:60']) {
+    assert.deepEqual(stateWith(withFhir({ period: { start } })), addressed(false), `${start} is a bound the retrieval reads`);
+  }
+  assert.deepEqual(stateWith(withFhir({ period: { end: '0050' } })), addressed(false), 'the year 50, not 1950');
+  assert.deepEqual(stateWith(withFhir({ period: { end: '1969-12-31T23:00:15.020-01:00' } })), addressed(true), 'an offset west of UTC: the end is the instant of the call');
+  // The call was at 00:00:15.020: a bound a fraction of a millisecond away decides it as it does in the retrieval.
+  assert.deepEqual(stateWith(withFhir({ period: { start: '1970-01-01T00:00:15.0200005Z' } })), addressed(false), 'not in service yet by half a microsecond');
+  assert.deepEqual(stateWith(withFhir({ period: { end: '1970-01-01T00:00:15.0199995Z' } })), addressed(false), 'out of service by half a microsecond');
+  assert.deepEqual(stateWith(withFhir({ period: { start: '1970-01-01T00:00:15.020Z', end: '1970-01-01T00:00:15.020Z' } })), addressed(true), 'both bounds include the instant');
+  const atEpoch = [localize(1, bgzLists('00000020')), resolve(2, withFhir({ period: { end: '1970-01-01T00:00:00Z' } }), { ts: '1970-01-01T00:00:00.000Z' })];
+  assert.equal(model.sourcePresentation({ events: atEpoch }).address, true, 'a call at the epoch was made at that time, not at an unknown one');
   assert.deepEqual(stateWith(withFhir({ connectionType: { system: 'http://example.org/other', code: 'hl7-fhir-rest' } })), addressed(false), 'the code of another vocabulary');
   assert.deepEqual(stateWith([{ ...zonnebloem, endpoint: [{ reference: 'Endpoint/auth-1' }] }, fhirEndpoint, authEndpoint]), addressed(false),
     'an endpoint in the answer the organization does not point at');
@@ -1886,6 +1899,23 @@ test('a step that loses an event to the retention bound does not start over', ()
   for (let seq = 5; seq < 260; seq++) player.add(observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
   assert.deepEqual(player.state().stage.events, [first], 'the page delivered first fell out of the retained window');
   assert.equal(player.state().elapsed, 0.5, 'and the step plays on');
+});
+
+// The window can be full when an answer comes in, so the step gains the answer
+// as it loses its oldest page: what is new decides, not how much there is.
+test('a step that gains an answer as it loses a page to the retention bound starts over with the answer', () => {
+  const { clock, player } = playbackFixture();
+  const first = exchange(1), second = exchange(3);
+  player.add(second); player.add(first); // the later page was delivered first, so it is the oldest retained event
+  for (let seq = 5; seq < 259; seq++) player.add(observed(seq, 'registration', { ts: new Date(40000 + seq * 10).toISOString() }));
+  player.snapshot(); clock.tick(1000);
+  player.replay('retrieve-1');
+  assert.deepEqual(player.state().stage.events, [first, second]);
+  clock.tick(500);
+  player.add(check(2, first, 'Permit'));
+  const { stage, elapsed } = player.state();
+  assert.deepEqual([stage.events, stage.checks.length], [[first], 1], 'the answer came in and the earliest delivered page went out');
+  assert.ok(elapsed < 0.05, 'the step starts over with the answer');
 });
 
 // Evidence counts as shown once its step has played. A step that starts over

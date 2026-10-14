@@ -111,15 +111,16 @@ export function createPlayback({ clock = systemClock, onStage, onChange, onCurso
       action = retained || latest() || null;
     }
     // Regrouping rebuilds every stage. The one being shown and the ones queued
-    // follow by identity, and a stage whose evidence grew while it was shown (a
+    // follow by identity, and a stage that gained evidence while it was shown (a
     // late answer from Mitz, a further page) starts over with all of it: the
-    // map and the legend then tell the same events from the same moment.
+    // map and the legend then tell the same events from the same moment. An
+    // event that only left the retained window starts nothing over.
     const rebuilt = item => action?.stages.find(next => next.id === item.id) || item;
     if (replayQueue) replayQueue = replayQueue.map(rebuilt);
     if (stage) {
-      const grew = evidenceOf(rebuilt(stage)).length > evidenceOf(stage).length;
+      const known = new Set(evidenceOf(stage).map(callIdentity));
       stage = rebuilt(stage);
-      if (grew) { suspend(); show(stage); }
+      if (evidenceOf(stage).some(event => !known.has(callIdentity(event)))) { suspend(); show(stage); }
     }
     changed();
   }

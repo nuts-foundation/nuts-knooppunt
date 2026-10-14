@@ -295,19 +295,32 @@ function holdersIn(event) {
   }));
 }
 
-// A FHIR dateTime bound in one of the forms the retrieval reads (mcsdclient.go):
-// a year, a month, a date or an RFC 3339 timestamp. An end runs to the last
-// instant it names. Anything else is no bound, a date that does not exist
-// included: Date would roll it over into the next month.
+// A FHIR dateTime bound as the retrieval reads it (parseFHIRDateTime in
+// mcsdclient.go, with Go's time.Parse): a year, a month, a date, or an RFC 3339
+// timestamp, whose hour may have one digit, whose fraction may follow a comma
+// and whose offset may reach 24 hours. An end runs to the last instant it
+// names. Anything else is no bound, a date or a time that does not exist
+// included. The bound is in whole milliseconds, rounded so that an instant in
+// whole milliseconds is inside it exactly when the retrieval would say so.
 function periodBound(value, end) {
-  const [, year, month, day, time] = typeof value === 'string' &&
-    value.match(/^(\d{4})(?:-(\d{2})(?:-(\d{2})(T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))?)?)?$/) || [];
-  if (!year) return null;
-  const start = new Date(Date.UTC(+year, month ? +month - 1 : 0, day ? +day : 1));
-  if (start.getUTCFullYear() !== +year || (month && start.getUTCMonth() !== +month - 1) || (day && start.getUTCDate() !== +day)) return null;
-  if (time) { const at = Date.parse(value); return Number.isNaN(at) ? null : at; }
-  if (!end) return start.getTime();
-  return (day ? Date.UTC(+year, +month - 1, +day + 1) : month ? Date.UTC(+year, +month, 1) : Date.UTC(+year + 1, 0, 1)) - 1;
+  const parts = typeof value === 'string' && value.match(
+    /^(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{1,2}):(\d{2}):(\d{2})(?:[.,](\d+))?(?:Z|([+-])(\d{2}):(\d{2})))?)?)?$/);
+  if (!parts) return null;
+  const [, y, mo, d, h, mi, s, fraction = '', sign, oh, om] = parts;
+  const year = Number(y), month = mo ? Number(mo) : 1, day = d ? Number(d) : 1;
+  // setUTCFullYear, unlike Date.UTC, reads the years 0 to 99 as they are.
+  const midnight = (yy, mm, dd) => { const at = new Date(0); at.setUTCFullYear(yy, mm - 1, dd); return at.getTime(); };
+  const date = new Date(midnight(year, month, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  if (h !== undefined) {
+    const [hour, minute, second] = [h, mi, s].map(Number);
+    if (hour > 23 || minute > 59 || second > 59 || Number(oh) > 24 || Number(om) > 60) return null;
+    const offset = sign ? (sign === '-' ? -1 : 1) * (Number(oh) * 60 + Number(om)) : 0;
+    const millis = Number(fraction.padEnd(9, '0').slice(0, 9)) / 1e6;
+    return date.getTime() + ((hour * 60 + minute - offset) * 60 + second) * 1000 + (end ? Math.floor(millis) : Math.ceil(millis));
+  }
+  if (!end) return date.getTime();
+  return (d ? midnight(year, month, day + 1) : mo ? midnight(year, month + 1, 1) : midnight(year + 1, 1, 1)) - 1;
 }
 
 // directoryAnswerIn reads an addressing answer: the URA that was asked and the
@@ -326,7 +339,7 @@ function directoryAnswerIn(event) {
     if (resource.id) endpoints.set(`Endpoint/${resource.id}`, resource);
     if (fullUrl) endpoints.set(fullUrl, resource);
   }
-  const at = Date.parse(event.ts) || Date.now();
+  const called = Date.parse(event.ts), at = Number.isNaN(called) ? Date.now() : called;
   const usable = (organization.endpoint || []).map(item => endpoints.get(item.reference)).filter(endpoint => {
     if (endpoint?.status !== 'active' || !endpoint.address) return false;
     const from = periodBound(endpoint.period?.start, false), until = periodBound(endpoint.period?.end, true);
