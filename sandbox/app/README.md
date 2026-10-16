@@ -104,7 +104,8 @@ defaults instead of extending them.
 | `SANDBOX_BGZ_SCOPE` | `bgz` | the scope requested. Must be a key in the definition the node loads, which the sandbox renders to `sandbox/.certs/policy/bgz.json` from `sandbox/policy/bgz.json.template`, or the node answers `invalid_scope` |
 | `SANDBOX_FACILITY_TYPE` | `Z3` | the facility type asserted in the organization context credential, the only thing on this path that carries one |
 | `SANDBOX_NVI_CLIENT_ID` | `gf-sandbox-plataan` | `List.source.identifier` on published localization records. Synthetic: no NVI OAuth client is registered for the demo, and this is not the `gf-sandbox` client id used on the Dezi flow. The client id is the scope a registration is deleted by, so recycle and the global reset receive this same value in `vectors.SandboxTarget` rather than reaching for the compiled-in default; overriding it here therefore also moves what those clean up. |
-| `MITZMOCK_URL` | unset | Base URL of the mock Mitz. Enables subscription reconciliation and the consent-subscription cleanup in reset and recycle. Unset means the share flow reports an unreconciled Mitz error as unknown rather than failed, and both cleanup paths report a partial restore rather than a clean one. The sandbox compose overlay sets it; the base `--profile sandbox` invocation does not. |
+| `MITZMOCK_URL` | unset | Base URL of the mock Mitz. Enables subscription reconciliation, the consent control on the record and its read of Mitz's current answer, the consent evidence in the viewer (the mock's decision log), and the cleanup of subscriptions and consent answers in reset and recycle. Unset means the share flow reports an unreconciled Mitz error as unknown rather than failed, the record offers no consent control, every consent answer in the viewer reads "not observed", and both cleanup paths report a partial restore rather than a clean one. The sandbox compose overlay sets it; the base `--profile sandbox` invocation does not. |
+| `SANDBOX_MITZ_NOTIFY_LISTEN_ADDR` | unset | `host:port` of the private listener for the Mitz notifications the Knooppunt forwards (`POST /mitz/notify`), `:8093` in Compose and Helm. Unset leaves the intake off: a consent change still takes effect at Mitz and the record reports it as not notified. A value that is not a listener address stops startup |
 | `ZONNEBLOEM_EHR_PUBLIC_URL` | unset | where the browser reaches De Zonnebloem's EHR (`sandbox/zonnebloem`). Shows the "Proof it really works" card on the patient record, linking there in a new tab. Unset hides the card; a value that is not an absolute http(s) URL stops startup |
 | `ZONNEBLOEM_FHIR_BASE_URL` | unset | De Zonnebloem's own FHIR store. When set, this process also serves De Zonnebloem's EHR on `ZONNEBLOEM_EHR_PORT`, reading and writing that store only. Unset leaves the EHR off; a value that is not an absolute http(s) URL stops startup |
 | `ZONNEBLOEM_EHR_PORT` | `3001` | listen port for De Zonnebloem's EHR |
@@ -244,6 +245,88 @@ both. A seed run reports success on HTTP 200 without reading the update report, 
 failure can sit inside a 200, so "seed complete" is not proof that an endpoint reached
 `knpt-mcsd-query`.
 
+## Consent revocation (E8)
+
+The optional ending of the story: the patient withdraws consent at Mitz, the hospital hears of it
+through its subscription, the data it retrieved from De Zonnebloem leaves the record, and a new
+retrieval is refused at a fresh consent check.
+
+1. The presenter uses the consent control on the record's optional-ending card:
+   `POST /demo/ehr/patients/{key}/consent` with `decision` `deny` or `permit`.
+2. The sandbox changes the mock Mitz's answer for this patient with `PUT /mock/consent/{bsn}`.
+3. The mock stores the answer and, before it replies, posts a notification Bundle to the
+   `channel.endpoint` of every subscription for that BSN. That is the Knooppunt's `/mitz/notify`,
+   which the Knooppunt put on the subscription from its `mitz.notifyendpoint`.
+4. The Knooppunt forwards the body unchanged to its `mitz.notifyforwardurl`, the sandbox's private
+   intake, and answers the mock 204.
+5. The intake maps the BSN to a pool patient, records the notification and, for a withdrawal,
+   drops what any session retrieved about that patient.
+6. The control call returns. The action publishes its own event and then the notification's, and
+   redirects to the record, which renders the final state.
+7. A new retrieval asks the source. Its PEP asks the PDP, the PDP asks Mitz, the mock answers Deny
+   for this BSN, the PEP answers 403 on the Patient search and the chain stops.
+
+Giving consent again is the same flow with `permit`.
+
+**What the notification decides.** Only what the EHR shows: the banner on the record, the removal
+of the retrieved copy and the bell. It grants and refuses nothing. Steps 3 to 5 can fail without
+touching step 7, because the refusal comes from the closed question the source's PDP asks for
+every decision. Removing the retrieved copy on De Plataan's notification is demo behaviour and not
+a Mitz rule ([DESIGN.md §10](../DESIGN.md#10-open-points), deviation 1). The refusal screen adds
+one sentence when a withdrawal notification is on record: that De Plataan received it, and when.
+The source does not say why it refused.
+
+**Ordering.** It holds at three places. The mock handles the changes for one BSN one at a time,
+each together with its delivery, and its cleanups wait for them, so notifications leave in the
+order of the changes. The sandbox runs one consent action per patient at a time, behind a mutex
+per patient; reset and recycle wait for the actions already admitted, through a gate the actions
+hold for reading, and an action that had to wait checks again that its session still holds the
+patient before it acts. And because a notification can still be on its way when the mock's part
+is over, the sandbox keeps a watermark per patient: the consent time of the last notification it
+accepted, raised by a reset or recycle to the watermark the mock answers its cleanup with. A
+notification whose consent time is not later is ignored. That one rule covers a duplicate, a
+notification overtaken by a newer one, and one from before a reset, however late it arrives.
+
+**Notices.** The record names what the sandbox itself established, and nothing more:
+
+| Notice | Established |
+| --- | --- |
+| `consent-withdrawn`, `consent-restored` | The change call succeeded and the intake recorded a notification of that decision for this patient during it |
+| `consent-withdrawn-unnotified` | The withdrawal happened at Mitz and no notification arrived here. The record shows what it showed before; a new retrieval is refused all the same |
+| `consent-restored-unnotified` | Consent was given again at Mitz and no notification arrived here. The record keeps the earlier notification and removal until something replaces them; a new retrieval is decided by the answer Mitz gives then |
+| `consent-failed` | The call failed and Mitz still gives its earlier answer |
+| `consent-unknown` | The call failed and Mitz could not be asked what it answers |
+| `retrieval-withdrawn` | A retrieval was running when the withdrawal arrived, and its answer was discarded |
+| `mitz-disabled` | `MITZMOCK_URL` is unset |
+
+A call that failed or timed out is followed by a read of Mitz's answer. When Mitz gives the
+requested answer the change happened, and one of the first four notices applies.
+
+**The notification intake.** A listener of its own on `SANDBOX_MITZ_NOTIFY_LISTEN_ADDR`, serving
+`POST /mitz/notify` with a 1 MiB body limit. It has no authentication: no host port is published
+and no ingress routes to it, so only the Knooppunt's relay reaches it. That relay accepts what
+arrives on the Knooppunt's `/mitz/notify`, which is on its public interface. Where that interface
+is served without authentication, as on the hosted test environment and on local compose, which
+publishes the Knooppunt's port 8080, a notification posted there is forwarded like one from Mitz.
+It accepts this shape and nothing wider:
+
+- `Content-Type` `application/fhir+json`; anything else is answered 415.
+- A `transaction` Bundle with an `id` and exactly one Consent whose `status` is `active`, whose
+  `provision.type` is `permit` or `deny`, and whose `dateTime` is a full RFC 3339 timestamp.
+- `Consent.patient.reference` resolves to exactly one Patient entry, by `fullUrl` or by
+  `Patient/<id>`, with exactly one identifier in the BSN naming system.
+- The Consent's actor with role `CST` resolves the same way to exactly one Organization entry
+  with exactly one identifier in the URA naming system.
+- `Consent.dateTime` is at most one minute ahead of the sandbox's clock, the skew between two
+  machines. An accepted time is the patient's watermark from then on, and a watermark only rises:
+  a time far ahead would shut out every later notification until the process restarts.
+
+Anything else is answered 400 and changes nothing. A valid notification about another
+organization than De Plataan, or about a BSN outside the pool, is answered 204 and ignored.
+This is the shape of the `vzvz.fhir.mitz` 3.8.0 example, which mock Mitz sends. The notification
+captured from the Mitz test environment, with a Consent per set of provider categories, is refused
+(DESIGN.md section 10, deviation 6).
+
 ## Architecture
 
 A standalone Go binary, not a knooppunt component (DESIGN.md standing decision 5: this backend will be the only
@@ -343,8 +426,16 @@ A connection without a cursor replays the retained window. A reconnect's `Last-E
 continues after event 3. Malformed, foreign-run and future cursors return 400. If older events were
 discarded, `event: replay-gap` with `data: {"firstSeq":17}` precedes the retained window; the viewer
 clears its partial history and shows the gap. An initial replay and each batch of new steps end with
-`event: snapshot` and `data: {"lastSeq":17,"prsEvidence":true}`; this has no SSE ID and marks the
-delivery boundary for the viewer. `prsEvidence` says whether this deployment correlates PRS spans.
+`event: snapshot` and `data: {"lastSeq":17,"prsEvidence":true,"record":{"revision":4,"copy":"held"}}`;
+this has no SSE ID and marks the delivery boundary for the viewer. `prsEvidence` says whether this
+deployment correlates PRS spans. `record` describes the run's patient at the moment the snapshot is
+written: its record revision, a counter that only increases, and whether this session holds
+retrieved data in its memory (`copy`: `none`, `held`, or `removed` once a withdrawal took it). The
+map shows that as "Data held in memory" in De Plataan's box: the data is in no store of De
+Plataan's and goes with the session. Until the first snapshot the slot shows nothing, because what
+the session holds is not known yet. A snapshot is also written
+when the revision advances and no step is new, so an open stream learns of a change that produced
+no event.
 `event: run-ended` closes an active stream when its run ends. These are transport control records,
 separate from GF step records. Fifteen-second keepalive
 comments do not renew the run lease. Each write has a 10-second deadline, cleared while idle, so a
@@ -368,6 +459,27 @@ position alone, so details can be inspected between steps.
 
 The journey map plays observed stages at about 2.5 seconds each, identifies the selected action and
 current step, and uses the same anchored path for the outgoing request and returning HTTP response.
+A source request is one step played in the order it happens, about 4.3 seconds when it carries a
+consent check: the request arrives with the access key, identity and role open as the source reads
+the key, De Zonnebloem's policy asks Mitz and the answer returns, the consent and query locks and
+the vault follow, and only then does the response travel back. Nothing changes before the request
+has arrived, and nothing on the map looks refused before the refusal exists: the routes, the
+packets and the lock take that colour when Mitz's answer and the source's response set off. The
+access checks block and the sentence under it follow the same timeline (`stageTimeline` in
+`static/js/journey-model.js`): the playback wakes at each moment the stage changes something, a
+tile takes its new state when the map shows it, and until then says what it is waiting for. The map
+takes a step's evidence when the step starts, and the access checks, the sentences and the action's
+entry in the timeline tell that same evidence until the step ends: an event that leaves the retained
+window meanwhile changes none of them. A step that gains evidence while it is shown, by a late
+answer from Mitz or a further page, starts over with all of it. In automatic playback a request
+whose answer arrives after it finished playing is played again with it, while its action is still
+the one being played; during a selected replay that answer is part of the next replay. Evidence
+counts as shown once its step has played, so an answer that arrives while the viewer is closed or
+paused still plays after a reload. The playback's clock is the real one: a timer that fires late, or
+time spent drawing, moves the step on by as much as it took, and a moment the step passed while the
+view was being drawn is shown at once. With reduced motion the map shows a step's result at once,
+and so do the access checks and the sentences; a change of that preference starts the step being
+shown over.
 An observed error response returns with its status; a transport failure has no invented return.
 A body that was not captured says why, and a call without a body says so. A Mitz subscription
 acknowledgement is not a consent decision. This is a presentation clock: backend calls remain fast and displayed request durations
@@ -376,13 +488,49 @@ repeat requests. Playback pauses when the viewer is closed or the document is hi
 reduced motion, and remembers an opaque cursor within the tab. Refreshing therefore does not
 automatically animate the entire retained history again.
 
-The functional map places Plataan's access service and De Zonnebloem's authorization server inside
-their respective organization boundaries. The access request depicts the configured source issuer;
+The functional map places Plataan's access service and De Zonnebloem's authorization and policy
+inside their respective organization boundaries. The access request depicts the configured source issuer;
 Technical mode retains the actual HTTP call to Plataan's local Nuts service. A returning key requires
 captured token-receipt evidence. The source vault opens separately, only for successful source
 queries with captured Bundle responses; refused, failed or unestablished responses keep it closed.
-The displayed access requirements describe the demo's contract. They are not individual check
-results: the viewer does not receive evidence of each internal policy decision.
+The access checks block lists the four checks of the demo's contract as four locks on De
+Zonnebloem's vault. All four are decided when a request arrives there with the access key, in this
+order. Identity and role open when the source accepted the key: its policy enforcement point
+introspects the key on every request and hands identity and role to its policy, so a 200 or a 403
+shows the key was read, whether or not the body could be captured. A 401 to a request that carried
+the key reads "authentication refused": the status does not say which part of the source refused
+it. Consent takes Mitz's recorded answer for the
+request being shown. The query lock stands for the policy's test of the request against the BGZ
+2017 queries it lists (`is_allowed_query` in `component/pdp/policies/bgz/policy.rego`); the source
+answers with a status and no reasons, so the lock opens when the source serves that request with a
+Bundle, which the policy allows only for one of those queries.
+Issuing the key opens nothing: the authorization server accepted the presentation, and the key
+that carries the result has yet to reach the vault. Every request is checked anew: its step starts
+with the four locks and the vault shut and plays each change again, so a retrieval of four requests
+opens them four times. After a withdrawal the key is issued and read as before, so identity and
+role open and consent shuts: consent is not in the key.
+
+The map draws De Zonnebloem only as far as the calls shown so far establish it
+(`sourcePresentation` in `static/js/journey-model.js`), and it reads the two answers by the rules
+the retrieval applies to them. Before a discovery the source is a placeholder. The NVI's answer
+turns it into a URA with the data categories held for this patient: the custodians other than De
+Plataan, by the localization extension and the data category code system, in URA order. The map
+has one box, which stands for the first of them; the step's sentence counts the others. The
+address directory's answer about that URA turns the box into the organization, titled with the
+answer's name, with its authorization and policy, its vault and the four locks, and a bar on the
+box's edge marked WEB ADDRESS when the organization points at a FHIR endpoint that was active and
+within its period at the time of the call; the requests of a retrieval enter and leave through
+that bar. The address itself stays in Technical mode: the seed publishes a service name inside the
+deployment (`SEED_ZONNEBLOEM_ENDPOINT_ADDRESS`), not a public URL. Each change shows when its
+answer is back, 2.3 seconds into a discovery step of 3.3, and the step's sentence says what is
+asked until then and what the answer established after. Every discovery asks anew and starts from
+the placeholder. Outside a discovery the map draws what the run has established, without the
+evidence that has yet to be shown: a discovery that has not played gives nothing away, and an
+answer that comes in later does not take back the request it belongs to, which was shown. A source
+that was sent a request counts as known by its address,
+not by a name, and a key request establishes nothing: it goes to De Plataan's own access service.
+After a retention gap the placeholder says that the earlier steps expired, and nothing is drawn of
+the source before the run's events are in.
 
 Discovery is labeled Find data sources. Confirmed retrieval starts with Request access key, then
 Find patient at De Zonnebloem and separate allergy, condition and medication searches as observed.
@@ -392,8 +540,43 @@ metadata alongside the method, path, headers and body as sent. The icon never fo
 an earlier token response; its evidence belongs to the outgoing request itself.
 
 PRS motion requires an actual correlated span. The map does not infer individual policy decisions
-from successful HTTP responses. PEP/PDP and inbound Mitz notifications still require their own
-producers.
+from successful HTTP responses. Inbound Mitz notifications are produced by the notification intake
+and Mitz's answers by the decision log read below; PEP introspection and PDP spans have no
+producer.
+
+Consent revocation adds three purposes to the stream, all with `gf: "consent"`:
+
+| Purpose | Actor | Meaning |
+| --- | --- | --- |
+| `consent-change` | `sandbox-backend` | The simulated patient act: the `PUT` to the mock |
+| `consent-notification` | `mitz` | The inbound notification as the intake received it: `POST /mitz/notify`, body redacted like any other, response status 204 |
+| `consent-check` | `knooppunt` | One closed question from the mock's decision log: the XACML request and response as text, outcome `ok` for Permit, `deny` for any other decision, `error` when the mock answered with an error status |
+
+`response.consentDecision` on a `consent-check` carries the XACML decision, so a consumer does not
+parse XML; it is empty for the error outcome. `response.copyRemoved` on a `consent-notification`
+says whether the intake removed retrieved data on receiving it. In a consent action the viewer
+orders the change before its notification, whatever their timestamps. A `consent-check` is not a
+step of its own in the timeline: it belongs to the step of the source request it was asked for, and
+Technical mode nests it under that request.
+
+What the viewer shows as Mitz's answer to a source request is established per HTTP call, by trace
+context, never by timing or counting. Every source request of a retrieval carries a `traceparent`
+header with a trace id generated for that one request. The source's PEP passes its request headers
+on to its PDP call, a Knooppunt whose tracing is configured puts the same trace id on its closed
+question, and the mock records the id with its answer. When the capture publishes the source
+request's event it asks the mock for the entries under that id, with 2 seconds per read and 4
+seconds per chain, and each entry becomes a `consent-check` child of that request. A failed or slow
+read never fails the retrieval. No child event means no answer was observed for this request,
+which is what a Knooppunt without trace propagation gives for every request. The viewer shows
+that as "not observed", never as "Mitz was not asked".
+
+A record page carries the revision it was rendered at and compares it with `record.revision` on
+every snapshot, the first one included, and reloads when they differ. That covers a change between
+rendering and connecting, a reconnect, a missed event and a change that produced no event. Once a
+form on the page has been submitted the comparison pauses, so a consent action's own notification
+does not cancel its redirect. It resumes when the page is shown again, or after 60 seconds, the
+server's write timeout, for a navigation that did not happen. Pages without a revision never
+reload.
 
 ### Private PRS trace receiver
 
@@ -460,6 +643,30 @@ the same SSE contract. Fallback triggers are listed in DESIGN.md §3 (bespoke cl
 duplicated client state, fragile SSE reconnect/resume behavior, or the stateful viewer/forms work slowing down
 materially).
 
+The design asks for a review of this choice when the consent-revocation flow lands. E8 added, on
+the client: targets, consent states and what is known of the source in
+`static/js/journey-model.js`, the locks, the Mitz shield, the source's box and the retrieved-copy
+slot in `static/js/journey-strip.js`, and the record refresh in
+`static/js/step-events.js`. All three are vanilla modules without a Datastar dependency, and the
+consent control is a plain form post with a redirect. Datastar still carries what it carried
+before, the viewer's open state and its Functional/Technical toggle, in `_viewer.html` alone.
+Against the three triggers:
+
+- **Bespoke client JavaScript or duplicated client state.** The JavaScript that grew is the
+  viewer's own model and map driver, which a Preact + htm shape would keep as they are; none of it
+  works around Datastar. The record refresh holds no copy of the record: it compares a revision
+  number and reloads the server-rendered page. Not met.
+- **Fragile SSE reconnect or resume.** The stream is read with native `EventSource`. E8 added a
+  field to the snapshot and a snapshot on a revision advance; cursors, replay and reconnection are
+  unchanged, and the refresh rule is the same on a first connection and on a reconnect. Not met.
+- **Slower implementation and testing of the stateful viewer and forms.** The viewer's behaviour,
+  the mounted legend and the refresh timer are tested under Node without a browser or a framework
+  (`step-events.test.mjs`); the form needed no client code. Not met.
+
+Datastar stays. What the review does show is that it carries little: the stateful parts of the
+viewer are framework-free, so the fallback would be a small migration and the choice costs little
+either way.
+
 Datastar's event-attribute grammar is `data-on:click` (colon-separated), not `data-on-click`, as verified against
 the vendored v1.0.2 bundle. Keep this form when adding interactivity.
 
@@ -497,14 +704,22 @@ should compose these primitives and partials.
   found, `POST` the same path runs the confirmed chain and renders the authorization result. Both
   need a session that holds the patient: the GET sends one that does not back to the patient list,
   the POST answers 409.
+- Consent revocation (E8): `POST /demo/ehr/patients/{key}/consent` changes consent through the
+  mock Mitz's control. The sandbox calls four mock-only endpoints, which the national Mitz does not
+  have: `PUT /mock/consent/{bsn}` and `GET /mock/consent/{bsn}` for the control and the card,
+  `DELETE /mock/consent` and `DELETE /mock/consent/{bsn}` through `vectors.ResetGlobal` and
+  `vectors.RecyclePatient`, and `GET /mock/decisions?traceid=` for the consent evidence. On the
+  Knooppunt it depends on two settings: `mitz.notifyendpoint`, which becomes the subscription's
+  `channel.endpoint`, and `mitz.notifyforwardurl`, where the Knooppunt relays a received
+  notification, which is this application's intake on `SANDBOX_MITZ_NOTIFY_LISTEN_ADDR`.
 - The GF viewer (E6): `static/js/step-events.js` mounts on `#hood-dock` when it carries a
   `data-run-id`, reads that run's event stream and renders into `#gf-viewer-steps`; the journey map
   is driven through `createJourneyStrip` in `static/js/journey-strip.js`. Both consume the DESIGN.md §7
   step-event schema.
 
 The journey map highlights observed calls only: refusal is pink and failure amber, applied to the call
-concerned. It does not infer a consent refusal from an unrelated 403, animate unobserved interior
-calls, or play the wireframe's withdrawal scene.
+concerned. It shows a consent refusal only where Mitz's answer was recorded for that request. It does
+not infer one from a 403 and does not animate unobserved interior calls.
 
 ## Provenance
 

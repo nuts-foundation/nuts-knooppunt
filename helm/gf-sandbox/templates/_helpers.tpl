@@ -92,3 +92,7 @@ private OTLP listener requires.
 {{- define "gf-sandbox.otlpServiceName" -}}
 {{- printf "%s-otlp" (include "gf-sandbox.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
+
+{{- define "gf-sandbox.mitzNotifyServiceName" -}}
+{{- printf "%s-mitz-notify" (include "gf-sandbox.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}

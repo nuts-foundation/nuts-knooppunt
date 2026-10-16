@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -229,6 +230,12 @@ type SandboxTarget struct {
 	// SANDBOX_NVI_CLIENT_ID is unset. Not the seed: SeedNVI publishes De
 	// Zonnebloem's registrations, under pool.ZonnebloemClientID.
 	NVIClientID string
+
+	// OnMitzWatermark is called with the watermark a consent cleanup at the mock
+	// answered: every change stored before the cleanup has an earlier changedAt.
+	// bsn is the patient the cleanup was for, or "" for the cleanup of
+	// everything. Not called when the mock gave no answer. Optional.
+	OnMitzWatermark func(bsn string, watermark time.Time)
 }
 
 func (t SandboxTarget) clientID() string {
@@ -242,9 +249,10 @@ func (t SandboxTarget) clientID() string {
 // fixtures" path). It clears the mutable stores — removing any user-created
 // records, which have random ids a plain re-seed cannot overwrite — then re-runs
 // Load (re-PUTs the mCSD/PIP directories and pool resources) and SeedNVI, removes
-// the localization records the sandbox published on De Plataan's side, and clears
-// the mock Mitz's captured consent subscriptions. Every pool patient ends up
-// unshared, which is the state a demo starts from.
+// the localization records the sandbox published on De Plataan's side, clears
+// the mock Mitz's captured consent subscriptions and restores its consent
+// answers to the configured default. Every pool patient ends up unshared, which
+// is the state a demo starts from.
 //
 // Clearing is per-resource deletion within the tenant, not $expunge; see
 // clearTenant for why the expunge form cannot be used here.
@@ -308,7 +316,7 @@ func ResetGlobal(ctx context.Context, target SandboxTarget) error {
 
 	// Last, and its error returned last: a partial-cleanup warning must not mask
 	// a real restoration failure above it.
-	if err := clearMitzSubscriptions(ctx, target.MitzMockBaseURL, url.Values{}); err != nil {
+	if err := clearMitzState(ctx, target, url.Values{}, ""); err != nil {
 		return err
 	}
 	return unsharedOrPartial(stillShared)
@@ -366,10 +374,60 @@ func clearMitzSubscriptions(ctx context.Context, mitzMockBaseURL *url.URL, scope
 	return nil
 }
 
+// clearMitzConsent restores the mock Mitz's consent answers to its configured
+// default, for one patient or, with an empty bsn, for all, and returns the
+// watermark the mock answered. Like clearMitzSubscriptions it reports a mock
+// that is unconfigured or unreachable as ErrPartialReset: a consent override
+// that survives a reset is exactly the kind of state a clean reset claims is
+// gone.
+func clearMitzConsent(ctx context.Context, mitzMockBaseURL *url.URL, bsn string) (time.Time, error) {
+	if mitzMockBaseURL == nil {
+		return time.Time{}, fmt.Errorf("%w: no mock Mitz is configured, so consent answers were not restored", ErrPartialReset)
+	}
+	endpoint := mitzMockBaseURL.JoinPath("mock", "consent")
+	if bsn != "" {
+		endpoint = endpoint.JoinPath(bsn)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint.String(), nil)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%w: build Mitz consent cleanup request: %w", ErrPartialReset, err)
+	}
+	// Longer than the subscription cleanup: the mock makes this wait for a
+	// change that is still being delivered, which may take its whole budget.
+	res, err := (&http.Client{Timeout: 12 * time.Second}).Do(req)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%w: Mitz consent answers were not restored: %w", ErrPartialReset, err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return time.Time{}, fmt.Errorf("%w: Mitz consent cleanup returned %s", ErrPartialReset, res.Status)
+	}
+	var answer struct {
+		Watermark time.Time `json:"watermark"`
+	}
+	if err := json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&answer); err != nil || answer.Watermark.IsZero() {
+		return time.Time{}, fmt.Errorf("%w: Mitz consent cleanup answered no watermark", ErrPartialReset)
+	}
+	return answer.Watermark, nil
+}
+
+// clearMitzState runs both cleanups at the mock. They are independent, so both
+// are attempted and their warnings joined; errors.Is still finds
+// ErrPartialReset in the result.
+func clearMitzState(ctx context.Context, target SandboxTarget, scope url.Values, bsn string) error {
+	subscriptionsErr := clearMitzSubscriptions(ctx, target.MitzMockBaseURL, scope)
+	watermark, consentErr := clearMitzConsent(ctx, target.MitzMockBaseURL, bsn)
+	if consentErr == nil && target.OnMitzWatermark != nil {
+		target.OnMitzWatermark(bsn, watermark)
+	}
+	return errors.Join(subscriptionsErr, consentErr)
+}
+
 // RecyclePatient restores a single pool patient to its seeded, unshared state
 // without touching any other patient: it removes that patient's De Plataan NVI
-// registration and consent subscription, re-registers De Zonnebloem's, and
-// re-PUTs its seeded FHIR resources by fixed id.
+// registration and consent subscription, restores the mock Mitz's consent
+// answer for that patient to the configured default, re-registers De
+// Zonnebloem's, and re-PUTs its seeded FHIR resources by fixed id.
 //
 // The subscription is part of that state (DESIGN §5.7): left behind, it returns
 // a patient who is unshared in the NVI and still subscribed at Mitz, so the next
@@ -416,9 +474,9 @@ func RecyclePatient(ctx context.Context, target SandboxTarget, patientKey string
 	// Scoped to this patient: clearing the store would cancel a concurrent demo's
 	// subscription, the one thing a per-patient recycle promises not to do. After
 	// the restore steps, so a cleanup warning cannot mask a failure above it.
-	if err := clearMitzSubscriptions(ctx, target.MitzMockBaseURL, url.Values{
+	if err := clearMitzState(ctx, target, url.Values{
 		"providerid": {plataan.URA}, "patientid": {patient.BSN},
-	}); err != nil {
+	}, patient.BSN); err != nil {
 		return err
 	}
 

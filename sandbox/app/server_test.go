@@ -1087,3 +1087,17 @@ func TestAuthorizeLinksBackToTheEhr(t *testing.T) {
 
 	require.Contains(t, string(raw), `href="/demo/ehr"`, "the claims page must offer a way back into the EHR")
 }
+
+func TestConfig_TheNotifyListenerAddressMustBeAHostPort(t *testing.T) {
+	env := func(values map[string]string) func(string) string {
+		return func(key string) string { return values[key] }
+	}
+	cfg, err := NewConfigFromEnv(env(map[string]string{"SANDBOX_MITZ_NOTIFY_LISTEN_ADDR": ":8093"}))
+	require.NoError(t, err)
+	require.Equal(t, ":8093", cfg.mitzNotifyListenAddr)
+	_, err = NewConfigFromEnv(env(map[string]string{"SANDBOX_MITZ_NOTIFY_LISTEN_ADDR": "8093"}))
+	require.ErrorContains(t, err, "SANDBOX_MITZ_NOTIFY_LISTEN_ADDR")
+	cfg, err = NewConfigFromEnv(env(nil))
+	require.NoError(t, err)
+	require.Empty(t, cfg.mitzNotifyListenAddr)
+}

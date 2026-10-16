@@ -24,6 +24,8 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 type Details struct {
@@ -34,6 +36,12 @@ type Details struct {
 	LRZaFHIRBaseURL          *url.URL
 	SunflowerURA             string
 	MockMitzXACML            *mitzmock.ClosedQuestionService
+	// MockDezi signs the attestations a full-chain test signs in with. Zero
+	// unless the harness was started with a Nuts node.
+	MockDezi MockDezi
+	// NotifyIntake receives the Mitz notifications the Knooppunt forwards. A
+	// test attaches its sandbox's intake handler to it.
+	NotifyIntake *NotifyIntake
 }
 
 type MITZDetails struct {
@@ -76,6 +84,11 @@ func StartWithNuts(t *testing.T, dataHolder hapi.Tenant) Details {
 	caPath := filepath.Join(PEPCertsDir(t), "ca.pem")
 	policyDir := setupNutsEnvironment(t, caPath)
 
+	// Before the node starts: it copies the allowed list into its validator at
+	// configuration time and compares whole URLs.
+	dezi := StartMockDezi(t)
+	t.Setenv("NUTS_VCR_DEZI_ALLOWEDJKU", dezi.JKU)
+
 	// The bgz scope is not in config/policy: its presentation definition pins a
 	// certificate authority fingerprint, so it is rendered per deployment rather
 	// than committed. renderBGZPolicy does for this harness what
@@ -86,7 +99,9 @@ func StartWithNuts(t *testing.T, dataHolder hapi.Tenant) Details {
 	require.NoError(t, os.WriteFile(filepath.Join(policyDir, "bgz.json"),
 		renderBGZPolicy(t, caPath), 0644))
 
-	return start(t, startOptions{nuts: true, pip: &dataHolder})
+	details := start(t, startOptions{nuts: true, pip: &dataHolder})
+	details.MockDezi = dezi
+	return details
 }
 
 // PEPCertsDir is where the committed test certificates live, resolved from this
@@ -155,12 +170,25 @@ func start(t *testing.T, options startOptions) Details {
 	config.Nuts = nutsnode.Config{Enabled: options.nuts}
 
 	mockMitz := mitzmock.NewClosedQuestionService(t)
+	// /mitz/notify is on the public interface, which this harness serves on its
+	// fixed port; the internal URL startKnooppunt returns is another listener.
+	notifyIntake := startNotifyIntake(t)
 	config.MITZ = mitz.Config{
-		MitzBase:      mockMitz.GetURL(),
-		GatewaySystem: "test-gateway",
-		SourceSystem:  "test-source",
+		MitzBase:         mockMitz.GetURL(),
+		GatewaySystem:    "test-gateway",
+		SourceSystem:     "test-source",
+		NotifyEndpoint:   config.HTTP.PublicInterface.BaseURL + "/mitz/notify",
+		NotifyForwardURL: notifyIntake.URL,
 	}
 
+	// The Knooppunt installs the W3C propagator only when tracing is configured
+	// (component/tracing). Its handlers and its Mitz client are instrumented
+	// either way, and without an SDK the global tracer keeps the incoming span
+	// context, so the propagator is all a trace id needs to travel from the
+	// PEP's request to the closed question.
+	previousPropagator := otel.GetTextMapPropagator()
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+	t.Cleanup(func() { otel.SetTextMapPropagator(previousPropagator) })
 	knooppuntInternalURL := startKnooppunt(t, config)
 
 	return Details{
@@ -171,6 +199,7 @@ func start(t *testing.T, options startOptions) Details {
 		SunflowerURA:             sunflower.URA,
 		Vectors:                  *testData,
 		MockMitzXACML:            mockMitz,
+		NotifyIntake:             notifyIntake,
 	}
 }
 

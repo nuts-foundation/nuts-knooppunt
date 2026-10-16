@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -275,4 +276,76 @@ func TestRunStore_LockLossInvalidatesRun(t *testing.T) {
 	require.True(t, store.locks.Lock("anna", "two"))
 	require.False(t, store.append(id, stepEvent{GF: "exchange"}))
 	require.True(t, store.locks.HeldBy("anna", "two"), "cleanup must not release a different owner's lock")
+}
+
+func TestRunStore_RunOfReturnsTheRunAndItsSession(t *testing.T) {
+	locks := NewRegistry()
+	runs := newRunStore(locks)
+	_, _, ok := runs.runOf("owner-1", "anna")
+	require.False(t, ok)
+
+	id, err := runs.start("owner-1", "anna", time.Now().Add(time.Hour), false)
+	require.NoError(t, err)
+	_, _, ok = runs.runOf("owner-1", "anna")
+	require.False(t, ok, "a run that is not bound to a session cannot be published to from outside it")
+
+	runs.bindSession(id, "session-1")
+	runID, sessionID, ok := runs.runOf("owner-1", "anna")
+	require.True(t, ok)
+	require.Equal(t, id, runID)
+	require.Equal(t, "session-1", sessionID)
+	_, _, ok = runs.runOf("owner-2", "anna")
+	require.False(t, ok)
+}
+
+// The three consent events go through retention, and come back out of a replay
+// window, with everything the viewer groups and orders them by.
+func TestRunStore_KeepsWhatTheViewerNeedsOfTheConsentEvents(t *testing.T) {
+	store, now := eventStoreAt(t)
+	store.maxEvents = 3
+	id, err := store.start("one", "anna", now.Add(time.Hour), true)
+	require.NoError(t, err)
+	removed := true
+	for _, event := range []stepEvent{
+		{GF: "exchange", Outcome: "ok", CallID: "c-0"}, // falls out of the window
+		{GF: "consent", Actor: "sandbox-backend", Purpose: "consent-change", Action: "consent", ActionID: "a-1", CallID: "c-1", Outcome: "ok"},
+		{GF: "consent", Actor: "mitz", Purpose: "consent-notification", Action: "consent", ActionID: "a-1", CallID: "c-2", Outcome: "ok",
+			Response: eventResponse{Status: http.StatusNoContent, CopyRemoved: &removed}},
+		{GF: "consent", Actor: "knooppunt", Purpose: "consent-check", Action: "retrieve", ActionID: "a-2", CallID: "c-4", ParentCallID: "c-3",
+			ResourceType: "Patient", Outcome: "deny", Response: eventResponse{Status: http.StatusOK, ConsentDecision: "Deny"}},
+	} {
+		require.True(t, store.append(id, event))
+	}
+
+	window, err := store.snapshot(id, "one", 0)
+	require.NoError(t, err)
+	require.True(t, window.Gap, "the first event is outside the window")
+	require.Equal(t, uint64(2), window.FirstSeq)
+	events := decodedSteps(t, window)
+	require.Len(t, events, 3)
+	change, notification, check := events[0], events[1], events[2]
+	require.Equal(t, []uint64{2, 3, 4}, []uint64{change.Seq, notification.Seq, check.Seq})
+
+	require.Equal(t, "consent-change", change.Purpose)
+	require.Equal(t, "consent", change.Action)
+	require.Equal(t, "consent-notification", notification.Purpose)
+	require.Equal(t, "mitz", notification.Actor)
+	require.Equal(t, change.ActionID, notification.ActionID)
+	require.NotNil(t, notification.Response.CopyRemoved)
+	require.True(t, *notification.Response.CopyRemoved)
+
+	require.Equal(t, "consent-check", check.Purpose)
+	require.Equal(t, "knooppunt", check.Actor)
+	require.Equal(t, "retrieve", check.Action)
+	require.Equal(t, "a-2", check.ActionID)
+	require.Equal(t, "c-3", check.ParentCallID)
+	require.Equal(t, "Patient", check.ResourceType)
+	require.Equal(t, "Deny", check.Response.ConsentDecision)
+
+	// As the stream writes them: the optional fields are absent where they do
+	// not apply, so a consumer can tell "not removed" from "not a notification".
+	require.NotContains(t, string(window.Events[0]), "copyRemoved")
+	require.NotContains(t, string(window.Events[0]), "consentDecision")
+	require.Contains(t, string(window.Events[1]), `"copyRemoved":true`)
+	require.Contains(t, string(window.Events[2]), `"consentDecision":"Deny"`)
 }

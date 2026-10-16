@@ -37,6 +37,7 @@ type eventRun struct {
 	bytes          int
 	changed        chan struct{}
 	sources        *sourceSelection
+	sessionID      string
 }
 
 type runSnapshot struct {
@@ -46,6 +47,7 @@ type runSnapshot struct {
 	Gap       bool
 	Changed   <-chan struct{}
 	ExpiresAt time.Time
+	Patient   string
 }
 
 type runStore struct {
@@ -212,6 +214,7 @@ func (s *runStore) snapshot(id, owner string, after uint64) (runSnapshot, error)
 	result := runSnapshot{
 		FirstSeq: first, LastSeq: run.seq, Gap: after+1 < first,
 		Changed: run.changed, ExpiresAt: run.expiresAt,
+		Patient: run.scope.patient,
 	}
 	for i, raw := range run.events {
 		if first+uint64(i) > after {
@@ -257,4 +260,28 @@ func (s *runStore) release(owner, patient string) bool {
 		return true
 	}
 	return s.locks.Release(patient, owner)
+}
+
+// bindSession records which session a run belongs to. The owner a run is keyed
+// by is a digest of the session id and cannot be turned back into it, and
+// publishing an event that did not come from that session's own request needs
+// the id for the liveness guard.
+func (s *runStore) bindSession(runID, sessionID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if run := s.runs[runID]; run != nil {
+		run.sessionID = sessionID
+	}
+}
+
+// runOf returns the live run of owner for patient and the session it belongs to.
+func (s *runStore) runOf(owner, patient string) (runID, sessionID string, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.prune(s.now())
+	run := s.runs[s.currentID[runScope{owner, patient}]]
+	if run == nil || run.sessionID == "" {
+		return "", "", false
+	}
+	return run.id, run.sessionID, true
 }

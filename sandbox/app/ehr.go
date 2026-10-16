@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
 
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 )
 
@@ -129,7 +131,13 @@ func (c Config) handlePatientRecord(w http.ResponseWriter, r *http.Request, sess
 		http.Error(w, "unknown patient: "+r.PathValue("key"), http.StatusNotFound)
 		return
 	}
+	// First, before the share status, the notification, the marks and the
+	// sections: a change during rendering then leaves the page with an older
+	// revision than the stream reports, and it reloads. Read last, the page
+	// would carry the new revision over old data and never notice.
+	revision, _ := c.runtime.recordState(patient.Key)
 	row := c.rowFor(patient, c.patientShareStatus(r.Context(), patient.BSN), session)
+	consent := c.consentViewFor(r.Context(), patient, row)
 	sections, sourceNames, retrieved := c.recordSections(patient, session)
 	view := session.view()
 	render(w, "ehr-record.html", page{
@@ -140,7 +148,64 @@ func (c Config) handlePatientRecord(w http.ResponseWriter, r *http.Request, sess
 		Session: &view, Patient: &row, Notice: demoNotice(r),
 		Sections: sections, SourceNames: sourceNames, Retrieval: retrieved,
 		ZonnebloemEHRURL: c.ZonnebloemEHRURL,
+		RecordRevision:   revision, Consent: consent, Alert: consent.Notified,
 	})
+}
+
+// consentView is the consent part of the record page: the demo's control over
+// the mock Mitz, and what Mitz told De Plataan through its subscription. They
+// are kept apart on the page too. The control is the demo standing in for the
+// patient; the notification is something this EHR received.
+type consentView struct {
+	Control    bool
+	Readable   bool
+	Withdrawn  bool
+	Subscribed bool
+	Unknown    bool
+	GivenName  string
+
+	Notified       bool
+	NotifiedDeny   bool
+	NotifiedAt     string
+	RemovedSources []string
+}
+
+// consentViewFor reads what the record shows about consent. The state read is
+// bounded by the client's own timeout, so a mock that cannot be reached costs
+// the page that long and no more, and the card says it could not be read.
+func (c Config) consentViewFor(ctx context.Context, patient pool.PoolPatient, row patientRow) *consentView {
+	view := &consentView{
+		Control:    c.mitzSetConsent != nil && c.mitzConsentState != nil,
+		Subscribed: row.Subscribed, Unknown: row.SubscriptionUnknown,
+		RemovedSources: c.Retrievals.marks(patient.Key).Sources,
+	}
+	if len(patient.Name.Given) > 0 {
+		view.GivenName = patient.Name.Given[0]
+	}
+	if view.Control {
+		state, err := c.mitzConsentState(ctx, patient.BSN)
+		if err != nil {
+			// Logged because the card tells the presenter the log carries the
+			// reason. The error of a failed request names its URL, and the URL
+			// carries the BSN, so that is taken out; the last four digits are
+			// enough to match the line to a row.
+			slog.WarnContext(ctx, "Mitz consent state could not be read; the record's consent card says so",
+				"patient", nvi.LastFourOfBSN(patient.BSN),
+				"reason", strings.ReplaceAll(err.Error(), patient.BSN, "[bsn]"))
+		} else {
+			view.Readable, view.Withdrawn = true, state.Decision == "Deny"
+			// Every answer about a change is kept for a reset that gets no
+			// watermark from the mock.
+			if !state.ChangedAt.IsZero() {
+				c.runtime.noteIssued(patient.Key, state.ChangedAt)
+			}
+		}
+	}
+	if notification, ok := c.runtime.notification(patient.Key); ok {
+		view.Notified, view.NotifiedDeny = true, notification.Decision == "deny"
+		view.NotifiedAt = notification.ReceivedAt.UTC().Format("15:04") + " UTC"
+	}
+	return view
 }
 
 // rowFor builds the row the list, record and share screens render for one
@@ -405,11 +470,16 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 
 	attempt := c.subscribe(ctx, patient.BSN)
 	title, detail := "Consent subscription started", "This request registered the subscription at Mitz."
-	// What the subscription is, not what will arrive: the sandbox configures no
-	// notification endpoint and nothing listens for one, so promising delivery
-	// would assert a message the stack cannot send.
-	tail := " Mitz holds it against this patient's consent; delivering the notifications themselves " +
-		"is not wired up in the sandbox, so nothing arrives here when consent changes."
+	// What the subscription is, and where a notification about it goes. Delivery
+	// is promised only when this application has an intake to receive it: the
+	// Knooppunt's side of the route (its notify endpoint on the subscription and
+	// its forward URL) is configured together with the intake and is not visible
+	// from here.
+	delivery := "This EHR has no notification intake configured, so nothing arrives here when consent changes."
+	if c.mitzNotifyListenAddr != "" {
+		delivery = "When consent changes, Mitz notifies the Knooppunt and the Knooppunt forwards the notification to this EHR."
+	}
+	tail := " Mitz holds it against this patient's consent. " + delivery
 	switch attempt.outcome {
 	case mitzUnknown:
 		return &cardResult{
@@ -440,9 +510,7 @@ func (c Config) shareMitz(ctx context.Context, patient pool.PoolPatient, nviFail
 		title = "Registration request accepted"
 		detail = "The Knooppunt accepted the registration request. No lookup is available here to " +
 			"confirm that a subscription now exists, or whether one already did."
-		tail = " Any subscription Mitz holds is held against this patient's consent; delivering the " +
-			"notifications themselves is not wired up in the sandbox, so nothing arrives here when " +
-			"consent changes."
+		tail = " Any subscription Mitz holds is held against this patient's consent. " + delivery
 	case mitzExisting:
 		// Registered, not active: the sandbox sends status "requested", the mock
 		// stores it unchanged, and the lookup only asks whether a Subscription

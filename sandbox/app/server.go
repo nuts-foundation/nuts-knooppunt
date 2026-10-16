@@ -12,28 +12,36 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/pool"
 )
 
 var notices = map[string]string{
-	"reset-done":              "Dataset restored to the seeded fixtures.",
-	"reset-partial":           "Dataset restored, but some state could not be cleared. Check the sandbox logs.",
-	"recycle-done":            "Patient restored to the seeded state.",
-	"retrieval-stale":         "A reset was attempted for this patient while the retrieval was running, so its answer may describe data that has since been replaced and was discarded. Retrieve again.",
-	"recycle-partial":         "Patient restored, but some state could not be cleared. Check the sandbox logs.",
-	"reset-disabled":          "Reset is unavailable: it needs both KNOOPPUNT_INTERNAL_URL and HAPI_BASE_URL, and one of them is unset. Sharing only needs the first, so it can work while this does not.",
-	"signed-out":              "Signed out. The Dezi session has been cleared.",
-	"patient-busy":            "That patient is in use by another demo run. Pick a different one.",
-	"patient-not-open":        "Open the patient first: finding where its data is held needs the patient open in this session.",
-	"mitz-retry-done":         "Consent subscription started.",
-	"mitz-retry-existing":     "The Mitz lookup found an existing consent subscription for this patient. No registration request was sent.",
-	"mitz-retry-reconciled":   "The retry failed, but the lookup afterwards found a consent subscription for this patient. Whether it already existed or resulted from this retry could not be established.",
-	"mitz-retry-acknowledged": "The Knooppunt accepted the registration request. No lookup is available here to confirm that a subscription now exists.",
-	"mitz-retry-failed":       "Mitz confirms there is still no subscription. The call failed; try again.",
-	"mitz-retry-unknown":      "The call failed and Mitz could not be asked whether it went through anyway. Check the record before retrying: another attempt may create a second subscription.",
-	"mitz-disabled":           "Mitz is not wired up in this environment.",
+	"reset-done":                   "Dataset restored to the seeded fixtures.",
+	"reset-partial":                "Dataset restored, but some state could not be cleared. Check the sandbox logs.",
+	"recycle-done":                 "Patient restored to the seeded state.",
+	"retrieval-stale":              "A reset was attempted for this patient while the retrieval was running, so its answer may describe data that has since been replaced and was discarded. Retrieve again.",
+	"retrieval-withdrawn":          "Consent was withdrawn while the retrieval was running, so its answer was discarded and nothing from that source is shown.",
+	"consent-withdrawn":            "Consent withdrawn at Mitz. De Plataan received the notification through its subscription.",
+	"consent-withdrawn-unnotified": "Consent withdrawn at Mitz. No notification arrived here, so this record shows what it showed before; a new retrieval is refused all the same.",
+	"consent-restored":             "Consent given again at Mitz. De Plataan received the notification through its subscription.",
+	"consent-restored-unnotified":  "Consent given again at Mitz. No notification arrived here.",
+	"consent-failed":               "The consent change did not happen: the call failed and Mitz still gives its earlier answer.",
+	"consent-unknown":              "The call failed and Mitz could not be asked what it answers now, so it is not known whether consent changed.",
+	"recycle-partial":              "Patient restored, but some state could not be cleared. Check the sandbox logs.",
+	"reset-disabled":               "Reset is unavailable: it needs both KNOOPPUNT_INTERNAL_URL and HAPI_BASE_URL, and one of them is unset. Sharing only needs the first, so it can work while this does not.",
+	"signed-out":                   "Signed out. The Dezi session has been cleared.",
+	"patient-busy":                 "That patient is in use by another demo run. Pick a different one.",
+	"patient-not-open":             "Open the patient first: finding where its data is held needs the patient open in this session.",
+	"mitz-retry-done":              "Consent subscription started.",
+	"mitz-retry-existing":          "The Mitz lookup found an existing consent subscription for this patient. No registration request was sent.",
+	"mitz-retry-reconciled":        "The retry failed, but the lookup afterwards found a consent subscription for this patient. Whether it already existed or resulted from this retry could not be established.",
+	"mitz-retry-acknowledged":      "The Knooppunt accepted the registration request. No lookup is available here to confirm that a subscription now exists.",
+	"mitz-retry-failed":            "Mitz confirms there is still no subscription. The call failed; try again.",
+	"mitz-retry-unknown":           "The call failed and Mitz could not be asked whether it went through anyway. Check the record before retrying: another attempt may create a second subscription.",
+	"mitz-disabled":                "Mitz is not wired up in this environment.",
 }
 
 // Config holds the sandbox backend's runtime dependencies. The two URLs point at
@@ -74,6 +82,17 @@ type Config struct {
 	// render nil as unknown, not as "not subscribed".
 	mitzSubscribe  func(ctx context.Context, bsn string) error
 	mitzSubscribed func(ctx context.Context, bsn string) (bool, error)
+	// mitzDecisions reads the mock's decision log by trace id (evidence.go). Nil
+	// when MITZMOCK_URL is unset, and then no consent answer is ever observed.
+	mitzDecisions func(ctx context.Context, traceID string) ([]mitzDecision, error)
+	// mitzSetConsent and mitzConsentState change and read the mock's answer for
+	// one patient (mitzclient.go). Nil when MITZMOCK_URL is unset.
+	mitzSetConsent   func(ctx context.Context, bsn, decision, changeID string) (time.Time, error)
+	mitzConsentState func(ctx context.Context, bsn string) (mitzConsentStatus, error)
+
+	// mitzNotifyListenAddr is where main serves the notification intake. Empty
+	// leaves it off.
+	mitzNotifyListenAddr string
 
 	// The three legs of retrieval (E4), injectable for the same reason the others
 	// are. nviLocalize is not nviLookup: publishing is scoped to our own
@@ -88,6 +107,9 @@ type Config struct {
 
 	// Retrievals holds what each session pulled, for the enriched record.
 	Retrievals *retrievalStore
+	// runtime is what the application and the notification intake share
+	// (runtime.go). Every copy of Config carries the same pointer.
+	runtime *runtimeState
 
 	// mitzMockURL is the mock's base URL, handed to reset and recycle for
 	// subscription cleanup. Nil when MITZMOCK_URL is unset.
@@ -120,6 +142,7 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		KnooppuntInternalURL: getenv("KNOOPPUNT_INTERNAL_URL"),
 		HAPIBaseURL:          getenv("HAPI_BASE_URL"),
 		Locks:                NewRegistry(),
+		runtime:              newRuntimeState(),
 	}
 	if err := cfg.configureEventTraces(getenv); err != nil {
 		return Config{}, err
@@ -158,6 +181,12 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 			cfg.zonnebloemEHRPort = "3001"
 		}
 	}
+	if addr := getenv("SANDBOX_MITZ_NOTIFY_LISTEN_ADDR"); addr != "" {
+		if _, _, err := net.SplitHostPort(addr); err != nil {
+			return Config{}, fmt.Errorf("SANDBOX_MITZ_NOTIFY_LISTEN_ADDR must be a host:port listener address: %w", err)
+		}
+		cfg.mitzNotifyListenAddr = addr
+	}
 	if cfg.KnooppuntInternalURL == "" {
 		return cfg, nil
 	}
@@ -188,6 +217,9 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		}
 		cfg.mitzMockURL = mitzMockURL
 		cfg.mitzSubscribed = mitzSubscribedFunc(mitzMockURL, plataanURA)
+		cfg.mitzDecisions = mitzDecisionsFunc(mitzMockURL)
+		cfg.mitzSetConsent = mitzSetConsentFunc(mitzMockURL)
+		cfg.mitzConsentState = mitzConsentStateFunc(mitzMockURL)
 	}
 
 	if cfg.HAPIBaseURL == "" {
@@ -207,6 +239,9 @@ func NewConfigFromEnv(getenv func(string) string) (Config, error) {
 		KnooppuntInternalBaseURL: knooppuntURL,
 		MitzMockBaseURL:          cfg.mitzMockURL,
 		NVIClientID:              clientID,
+		// What the mock's consent cleanup answered, kept for the handler that
+		// called it: it raises the patients' watermarks to it.
+		OnMitzWatermark: cfg.runtime.noteMockWatermark,
 	}
 	cfg.resetGlobal = func(ctx context.Context) error {
 		return vectors.ResetGlobal(ctx, target)
@@ -244,6 +279,15 @@ type patientStatus struct {
 // application on its own port; it is not a knooppunt component (DESIGN.md
 // standing decision 5).
 func NewMux(cfg Config) http.Handler {
+	app, _ := newHandlers(cfg)
+	return app
+}
+
+// newHandlers builds the application and the notification intake from one set
+// of stores. They are served on different listeners, and Config is a value: two
+// separate constructions would give the intake stores of its own, and it would
+// record notifications nobody reads.
+func newHandlers(cfg Config) (app http.Handler, intake http.Handler) {
 	if cfg.Locks == nil {
 		cfg.Locks = NewRegistry()
 	}
@@ -253,6 +297,9 @@ func NewMux(cfg Config) http.Handler {
 
 	if cfg.Retrievals == nil {
 		cfg.Retrievals = newRetrievalStore()
+	}
+	if cfg.runtime == nil {
+		cfg.runtime = newRuntimeState()
 	}
 
 	sessions := newSessionStore()
@@ -542,7 +589,8 @@ func NewMux(cfg Config) http.Handler {
 	mux.HandleFunc("POST /demo/ehr/patients/{key}/share", requireSession(signedIn, cfg.withPatientRun(cfg.handleShare)))
 	mux.HandleFunc("GET /demo/ehr/patients/{key}/retrieve", requireSession(signedIn, cfg.withPatientRun(cfg.handleRetrieveForm)))
 	mux.HandleFunc("POST /demo/ehr/patients/{key}/retrieve", requireSession(signedIn, cfg.withPatientRun(cfg.handleRetrieve)))
-	return redirectTrailingSlash(mux)
+	mux.HandleFunc("POST /demo/ehr/patients/{key}/consent", requireSession(signedIn, cfg.withPatientRun(cfg.handleConsent)))
+	return redirectTrailingSlash(mux), http.HandlerFunc(cfg.handleMitzNotification)
 }
 
 // redirectTrailingSlash sends a request for a path the mux has no route for to
@@ -623,9 +671,25 @@ func (c Config) handleReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// For writing: this waits for the consent actions already admitted and holds
+	// new ones back, so none changes Mitz while it is being restored. An action
+	// that waited here checks its admission again and finds its session gone.
+	c.runtime.gate.Lock()
+	defer c.runtime.gate.Unlock()
 	resetErr := c.resetGlobal(r.Context())
 	if c.Runs != nil {
 		c.Runs.clear()
+	}
+
+	// Whether or not the restore succeeded, for the reason the sessions go
+	// either way: a failed reset may still have changed the mock. Each patient's
+	// watermark rises, so the notification of a change made before this reset
+	// is ignored however late it is handled.
+	for _, patient := range pool.Patients() {
+		// Inside the patient's transition, and nothing of the kind after the
+		// loop: a withdrawal accepted once a patient's transition is over keeps
+		// the marks it made.
+		c.runtime.reset(patient.Key, patient.BSN, func() { c.Retrievals.clearPatient(patient.Key) })
 	}
 
 	// Sessions go whether or not the restore succeeded. ResetGlobal is not
@@ -680,13 +744,16 @@ func (c Config) handleRecycle(w http.ResponseWriter, r *http.Request) {
 	}
 	// Runs are left alone: the lock check above means none was live, and a run
 	// opened during the restore belongs to the session that opened it.
+	c.runtime.gate.Lock()
+	defer c.runtime.gate.Unlock()
 	err := c.recyclePatient(r.Context(), key)
 	// Unconditionally, including on an ordinary error. RecyclePatient is not
 	// transactional: it PUTs the fixtures back one at a time and verifies
 	// afterwards, so a failure can follow resources it already replaced. An error
 	// response is not a rollback, and a cached answer that may describe replaced
 	// data is not worth keeping either way.
-	c.Retrievals.clearPatient(key)
+	patient, _ := pool.PatientByKey(key)
+	c.runtime.reset(key, patient.BSN, func() { c.Retrievals.clearPatient(key) })
 	if err != nil {
 		// Partial is neither failed nor clean, as in handleReset: the fixtures
 		// were restored and something optional was not cleared. Reporting a

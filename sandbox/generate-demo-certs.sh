@@ -218,7 +218,7 @@ certificate_issued_by() {
   openssl verify -CAfile "$2" "$1" >/dev/null 2>&1
 }
 
-# The type, not merely that it parses. mock-components/dezi/keys.go
+# The type, not merely that it parses. mock-components/dezi/cmd/keys.go
 # type-asserts *rsa.PrivateKey and exits with "is a %T, not an RSA private key"
 # on anything else, so a perfectly valid EC key here is a stack that does not
 # start. openssl pkey, which this used to use, accepts every key type openssl
@@ -351,7 +351,7 @@ openssl x509 -req -in "$STAGE/mock-dezi.csr" -CA "$STAGE/ca.pem" -CAkey "$STAGE/
   -extfile "$STAGE/mock-dezi.ext"
 
 echo "Generating mock Dezi attestation signing key..."
-# mock-components/dezi/keys.go accepts either PKCS#1 or PKCS#8, but new keys
+# mock-components/dezi/cmd/keys.go accepts either PKCS#1 or PKCS#8, but new keys
 # are still written as PKCS#1 here for continuity with keys already deployed
 # in that format. OpenSSL 3 defaults genrsa to PKCS#8; -traditional restores
 # PKCS#1. LibreSSL, the macOS default, predates that flag and rejects it

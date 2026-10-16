@@ -1,7 +1,7 @@
 {{define "content"}}{{template "ehr-layout" .}}{{end}}
 
 {{define "ehr-content"}}
-<main class="content">
+<main class="content"{{if .Patient}} data-record-revision="{{.RecordRevision}}"{{end}}>
   {{with .Patient}}
   <div class="card">
     <header class="page-header pat-head">
@@ -63,6 +63,20 @@
   </div>
   {{end}}
 
+  {{with .Consent}}{{if .Notified}}
+  <div class="mitz-note">
+    <span class="nic">!</span>
+    <div>
+      <b>Notification via your Mitz subscription · {{.NotifiedAt}}</b>
+      {{if .NotifiedDeny}}
+      <span>{{$.Patient.Name}} has withdrawn consent for data sharing.{{with .RemovedSources}} The data retrieved earlier from {{join . ", "}} has been removed from this record.{{end}}</span>
+      {{else}}
+      <span>{{$.Patient.Name}} has given consent for data sharing again. Data held by other care providers can be retrieved again.</span>
+      {{end}}
+    </div>
+  </div>
+  {{end}}{{end}}
+
   {{with .Retrieval}}{{if and .Granted .Incomplete}}
   <div class="confirm-card unknown">
     <h2><span class="unk-ic">!</span>This overview is not the whole picture</h2>
@@ -88,6 +102,7 @@
         <span class="src {{if .External}}zb{{else}}zmc{{end}}">{{.Source}}</span>
       </div>
       {{end}}
+      {{with .Removed}}<div class="data-empty">Data from {{.}} removed after consent withdrawal.</div>{{end}}
     </div>
     {{end}}
     <div class="card">
@@ -96,6 +111,9 @@
         {{range .SourceNames}}
         <div class="data-item"><div><b>{{.}}</b></div></div>
         {{end}}
+        {{with .Consent}}{{range .RemovedSources}}
+        <div class="data-item"><div><b>{{.}}</b><div class="meta">No longer available · consent withdrawn</div></div><span class="src grey">Revoked</span></div>
+        {{end}}{{end}}
     </div>
     {{with .ZonnebloemEHRURL}}
     <div class="card">
@@ -104,6 +122,38 @@
         <div class="card-action"><a class="btn ghost" href="{{.}}" target="_blank" rel="noopener">Open De Zonnebloem's EHR&nbsp;&nbsp;↗</a></div>
     </div>
     {{end}}
+    {{with .Consent}}{{if .Control}}
+    <div class="card demo-ending">
+        <h2>Optional ending: consent withdrawn</h2>
+        {{if not .Readable}}
+        <div class="h-sub">Whether consent is given cannot be read from Mitz right now, so nothing can be simulated from here. The sandbox log carries the reason.</div>
+        {{else if .Withdrawn}}
+        <div class="h-sub">Consent is withdrawn at Mitz (simulated). A new retrieval is refused at the source's consent check, whether or not a notification arrived here.</div>
+        <div class="card-action">
+          <a class="btn solid" href="/demo/ehr/patients/{{$.Patient.Key}}/retrieve">Try to retrieve again</a>
+        </div>
+        <div class="card-action">
+          <form method="post" action="/demo/ehr/patients/{{$.Patient.Key}}/consent">
+            <input type="hidden" name="decision" value="permit">
+            <button class="btn ghost" type="submit">Simulate: {{.GivenName}} gives consent again</button>
+          </form>
+        </div>
+        {{else}}
+        <div class="h-sub">What happens when {{.GivenName}} withdraws consent in Mitz? This stands in for the patient acting in Mitz; what follows comes back through the real paths.</div>
+        <div class="card-action">
+          <form method="post" action="/demo/ehr/patients/{{$.Patient.Key}}/consent">
+            <input type="hidden" name="decision" value="deny">
+            <button class="btn ghost" type="submit">Simulate: {{.GivenName}} withdraws consent</button>
+          </form>
+        </div>
+        {{end}}
+        {{if .Readable}}{{if .Unknown}}
+        <div class="btn-sub">Whether De Plataan holds a consent subscription for this patient could not be established, so a notification may not arrive here.</div>
+        {{else if not .Subscribed}}
+        <div class="btn-sub">De Plataan has no consent subscription for this patient, so no notification will arrive here.</div>
+        {{end}}{{end}}
+    </div>
+    {{end}}{{end}}
   </div>
 </main>
 {{end}}

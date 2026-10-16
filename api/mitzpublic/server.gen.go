@@ -191,6 +191,22 @@ func (response ReceiveMitzNotification204Response) VisitReceiveMitzNotificationR
 	return nil
 }
 
+type ReceiveMitzNotification413Response struct {
+}
+
+func (response ReceiveMitzNotification413Response) VisitReceiveMitzNotificationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(413)
+	return nil
+}
+
+type ReceiveMitzNotification502Response struct {
+}
+
+func (response ReceiveMitzNotification502Response) VisitReceiveMitzNotificationResponse(w http.ResponseWriter) error {
+	w.WriteHeader(502)
+	return nil
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// ReceiveMitzNotification Receive a MITZ consent notification

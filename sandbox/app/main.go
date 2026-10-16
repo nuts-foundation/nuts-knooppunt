@@ -75,10 +75,36 @@ func main() {
 		log.Printf("gf-sandbox: De Zonnebloem's EHR listening on :%s, store %s", cfg.zonnebloemEHRPort, cfg.zonnebloemFHIRBaseURL)
 	}
 
+	app, intake := newHandlers(cfg)
+	if cfg.mitzNotifyListenAddr != "" {
+		listener, err := net.Listen("tcp", cfg.mitzNotifyListenAddr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		// In-memory work only, so short timeouts: the Knooppunt gives its forward
+		// five seconds.
+		notifyServer := &http.Server{
+			Handler:           intake,
+			ReadHeaderTimeout: 3 * time.Second,
+			ReadTimeout:       3 * time.Second,
+			WriteTimeout:      3 * time.Second,
+			IdleTimeout:       30 * time.Second,
+			MaxHeaderBytes:    8192,
+		}
+		go func() {
+			if err := notifyServer.Serve(listener); err != nil && err != http.ErrServerClosed {
+				log.Fatal(err)
+			}
+		}()
+		log.Printf("gf-sandbox private Mitz notification intake listening on %s", cfg.mitzNotifyListenAddr)
+	} else {
+		log.Printf("gf-sandbox: Mitz notification intake disabled (set SANDBOX_MITZ_NOTIFY_LISTEN_ADDR to enable)")
+	}
+
 	log.Printf("gf-sandbox listening on :%s", port)
 	server := &http.Server{
 		Addr:    ":" + port,
-		Handler: NewMux(cfg),
+		Handler: app,
 		// WriteTimeout is the loosest of the three: the share POST waits on the
 		// NVI and Mitz, each already bounded well inside it.
 		ReadHeaderTimeout: 5 * time.Second,

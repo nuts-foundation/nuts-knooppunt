@@ -26,6 +26,15 @@ services:
     environment:
       KNPT_TRACING_OTLPENDPOINT: sandbox-otel-collector:4318
       OTEL_BSP_SCHEDULE_DELAY: "250"
+      # The consent subscription the sandbox creates gets this as its
+      # channel.endpoint, so the mock Mitz delivers a notification to the
+      # Knooppunt, as Mitz delivers to the exchange system. The Knooppunt
+      # relays it, unchanged, to the sandbox's private intake. Both are plain
+      # HTTP inside this network. The intake's port 8093 is not published. The
+      # Knooppunt's public port 8080 is, by the base file, so a notification
+      # posted to it from the host is relayed like one from the mock Mitz.
+      KNPT_MITZ_NOTIFYENDPOINT: http://knooppunt:8080/mitz/notify
+      KNPT_MITZ_NOTIFYFORWARDURL: http://gf-sandbox:8093/mitz/notify
       # Trust the mock Dezi's JWK Set so the node can verify attestations minted
       # by mock-components/dezi. Setting this REPLACES the built-in defaults
       # rather than adding to them (nuts-node vcr/vcr.go:170-184), so both
@@ -166,8 +175,14 @@ services:
     environment:
       # Lets a reset clear captured consent subscriptions, and lets the record
       # screen reconcile a subscription whose response never arrived. Unset means
-      # both degrade to "unknown" rather than failing.
+      # both degrade to "unknown" rather than failing. It also enables the
+      # demo's consent control and the consent evidence in the viewer: the
+      # sandbox sets and reads a patient's consent here and reads Mitz's answer
+      # to a request from the mock's decision log.
       MITZMOCK_URL: http://mitzmock:8080
+      # Where the Knooppunt forwards Mitz notifications to. A listener of its
+      # own, reachable inside this network only.
+      SANDBOX_MITZ_NOTIFY_LISTEN_ADDR: ":8093"
       SANDBOX_OTLP_LISTEN_ADDR: ":4318"
       SANDBOX_OTLP_TOKEN: ${SANDBOX_OTLP_TOKEN:-sandbox-local-trace-ingest}
       SANDBOX_PRS_URL: http://mock-prs:8080
