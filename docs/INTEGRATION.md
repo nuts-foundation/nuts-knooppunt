@@ -381,16 +381,23 @@ endpoints.
 When consent changes occur, MITZ sends notifications to the configured endpoint, which is the Knooppunt's
 `/mitz/notify`.
 
-The Knooppunt does not interpret a notification. It acknowledges it with `204` and discards it, unless
-`mitz.notifyforwardurl` is set. With that setting it relays the notification to the configured URL:
+The Knooppunt does not interpret a notification, and it does not authenticate its sender: `/mitz/notify` is on the
+public interface and takes a `POST` from anyone who can reach it. A notification larger than 1 MiB is answered `413`.
+Any other is acknowledged with `204` and discarded, unless `mitz.notifyforwardurl` is set. With that setting it relays
+the notification to the configured URL:
 
 - the body is sent on unchanged, with the `Content-Type` it arrived with, in one `POST`;
 - the relay has a timeout of 5 seconds and is not retried;
 - MITZ is answered `204` once the target answered with a 2xx, and `502` in every other case: the target could not be
-  reached, answered late, redirected, or answered with another status;
-- a notification larger than 1 MiB is answered `413` and not relayed.
+  reached, answered late, redirected, or answered with another status.
 
 A `502` after a timeout does not mean the target did not process the notification: it may have, and answered too late.
+
+The relay passes on whatever reaches `/mitz/notify`, so restrict who can reach it before you set
+`mitz.notifyforwardurl`, at the edge where your deployment terminates TLS: with an allow-list of the addresses MITZ
+delivers from, for instance. The Knooppunt cannot do this itself, because it does not see that edge. The target
+receives the notification as unauthenticated input and should treat it so: check what it acts on, and expect
+duplicates and notifications it did not ask for.
 
 ```yaml
 mitz:

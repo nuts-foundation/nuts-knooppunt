@@ -141,20 +141,18 @@ func createHTTPClient(config Config) (*http.Client, error) {
 // sometimes sends XML bodies despite the fhir+json content type the spec declares, which the
 // generated JSON body binding can't decode. Such a notification is acknowledged like any other,
 // and forwarded like any other when a forward URL is configured: the relay works from the bytes
-// captureNotifyBody kept, not from the decoded body.
+// captureNotifyBody kept, not from the decoded body. captureNotifyBody also bounds every
+// notification to 1 MiB, whether or not it is forwarded.
 func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *http.ServeMux) {
 	handler := mitzpublic.NewStrictHandlerWithOptions(c, nil, mitzpublic.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-			slog.DebugContext(r.Context(), "MITZ notification body could not be decoded, ignoring", logging.Error(err))
+			slog.DebugContext(r.Context(), "MITZ notification body could not be decoded", logging.Error(err))
 			w.WriteHeader(c.acknowledge(r.Context()))
 		},
 	})
-	options := mitzpublic.StdHTTPServerOptions{BaseRouter: publicMux}
-	if c.notifyForwardURL != "" {
-		// Outside the strict handler: it has to see the body before the
-		// generated JSON binding consumes it.
-		options.Middlewares = []mitzpublic.MiddlewareFunc{captureNotifyBody}
-	}
+	// Outside the strict handler: it has to see the body before the generated
+	// JSON binding consumes it.
+	options := mitzpublic.StdHTTPServerOptions{BaseRouter: publicMux, Middlewares: []mitzpublic.MiddlewareFunc{captureNotifyBody}}
 	mitzpublic.HandlerWithOptions(handler, options)
 }
 

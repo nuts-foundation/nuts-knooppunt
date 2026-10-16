@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// notifyBodyLimit bounds a notification that is to be forwarded.
+// notifyBodyLimit bounds a notification, forwarded or not.
 const notifyBodyLimit = 1 << 20
 
 // forwardTimeout bounds the relay to the source system. A variable so a test

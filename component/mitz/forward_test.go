@@ -116,19 +116,19 @@ func TestForward_AnswersBadGatewayWhenDeliveryIsNotConfirmed(t *testing.T) {
 	})
 }
 
-func TestForward_RefusesABodyOverTheLimit(t *testing.T) {
+func TestNotify_RefusesABodyOverTheLimitWithAndWithoutForwarding(t *testing.T) {
 	target := newForwardTarget(t)
 	big := []byte(`{"x":"` + strings.Repeat("a", notifyBodyLimit) + `"}`)
 	require.Equal(t, http.StatusRequestEntityTooLarge, notify(t, target.server.URL, "application/fhir+json", big))
 	require.Empty(t, target.bodies)
+	require.Equal(t, http.StatusRequestEntityTooLarge, notify(t, "", "application/fhir+json", big))
 }
 
-func TestForward_UnsetLeavesTheEndpointAsItWas(t *testing.T) {
+func TestForward_UnsetAcknowledgesWithoutRelaying(t *testing.T) {
 	for _, tc := range []struct{ name, contentType, body string }{
 		{"json", "application/fhir+json", `{"resourceType":"Bundle"}`},
 		{"xml", "application/fhir+json", `<Bundle/>`},
 		{"empty", "", ``},
-		{"oversized", "application/fhir+json", `{"x":"` + strings.Repeat("a", notifyBodyLimit) + `"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, http.StatusNoContent, notify(t, "", tc.contentType, []byte(tc.body)))

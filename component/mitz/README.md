@@ -35,7 +35,8 @@ mitz:
   # Endpoint URL where MITZ will send consent change notifications
   notifyendpoint: "https://your-app.example.com/mitz/notify"
 
-  # Optional: URL a received notification is relayed to, unchanged (unset: acknowledged and discarded)
+  # Optional: URL a received notification is relayed to, unchanged (unset: acknowledged and discarded).
+  # /mitz/notify does not authenticate its sender: restrict it at the edge first, see docs/INTEGRATION.md.
   notifyforwardurl: "https://ehr.example.com/consent-notifications"
 
   # Optional: Gateway and source system OIDs (added as extensions to subscriptions)
