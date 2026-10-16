@@ -30,7 +30,16 @@ func startHAPI(t *testing.T, dockerNetworkName string) *url.URL {
 			// resources with _cascade=delete, which HAPI rejects unless this is
 			// on. Without it the harness cannot reproduce compose's behaviour.
 			"hapi.fhir.allow_cascading_deletes": "true",
-			"NVI_AUDIENCE":                      "nvi",
+			// Match docker-compose.yml: mCSD directories can legitimately receive a resource before a
+			// resource it references (e.g. Organization <-> Endpoint are circular, per
+			// https://minvws.github.io/generiekefuncties-docs/en/csd.html). Without this, writes with
+			// an unresolved reference are rejected.
+			"hapi.fhir.enforce_referential_integrity_on_write": "false",
+			// Match docker-compose.yml: without a placeholder, HAPI never indexes a reference whose
+			// target doesn't exist yet, so _include and chained search miss it even after the target
+			// arrives. A placeholder gives the link a target that the later write fills in.
+			"hapi.fhir.auto_create_placeholder_reference_targets": "true",
+			"NVI_AUDIENCE": "nvi",
 		},
 		WaitingFor: wait.ForHTTP("/fhir/DEFAULT/Account"),
 		LogConsumerCfg: &testcontainers.LogConsumerConfig{

@@ -129,6 +129,18 @@ services:
       hapi.fhir.server_id_strategy: UUID
       # Allow storing of meta.source as provided by the client (used by mCSD to reference the originating resource)
       hapi.fhir.store_meta_source_information: SOURCE_URI
+      # mCSD directories can legitimately receive a resource before a resource
+      # it references (e.g. Organization <-> Endpoint are circular, per
+      # https://minvws.github.io/generiekefuncties-docs/en/csd.html), and the
+      # LRZA sync writes one transaction per page. Rejecting those writes would
+      # break sync.
+      hapi.fhir.enforce_referential_integrity_on_write: false
+      # Accepting the write is not enough: HAPI never indexes a reference whose
+      # target doesn't exist yet, so _include and chained search would miss it
+      # even after the target arrives. A placeholder (marked with the
+      # http://hapifhir.io/fhir/StructureDefinition/resource-placeholder
+      # extension) gives the link a target, which the later write fills in.
+      hapi.fhir.auto_create_placeholder_reference_targets: true
 
       NVI_AUDIENCE: nvi
       NVI_TENANT: nvi

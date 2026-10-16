@@ -70,8 +70,11 @@ func Test_LRZASync(t *testing.T) {
 
 			report := sync(t, h.KnooppuntInternalBaseURL)
 
-			// The vectors, plus the Locations and the affiliation added above.
-			assertReport(t, report, len(lrza.Resources())+locationCount+1, 0)
+			// The vectors, plus the Locations and the affiliation added above. A resource referenced
+			// by one synced before it already exists as a placeholder when it lands, so it counts as
+			// updated rather than created.
+			filled := placeholderFilledEndpoints()
+			assertReport(t, report, len(lrza.Resources())+locationCount+1-filled, filled)
 			assert.Equal(t, locationCount, countByIdentifierSystem(t, query, "Location"))
 		}},
 		{"initial load copies organizations with their endpoints", func(t *testing.T) {
@@ -266,6 +269,26 @@ func assertReport(t *testing.T, report api.DirectoryUpdateReport, created, updat
 	assert.Equal(t, 0, *report.Deleted, "deleted")
 	assert.Empty(t, *report.Warnings, "warnings")
 	assert.Empty(t, *report.Errors, "errors")
+}
+
+// placeholderFilledEndpoints counts the fixture Endpoints that an Organization
+// or HealthcareService references. Both sync before Endpoints, so the query
+// directory creates a placeholder for each of these, which the Endpoint's own
+// write then fills in. Every other fixture reference points back in the sync
+// order.
+func placeholderFilledEndpoints() int {
+	referenced := map[string]bool{}
+	for _, organization := range lrza.Organizations() {
+		for _, endpoint := range organization.Endpoint {
+			referenced[*endpoint.Reference] = true
+		}
+	}
+	for _, service := range lrza.HealthcareServices() {
+		for _, endpoint := range service.Endpoint {
+			referenced[*endpoint.Reference] = true
+		}
+	}
+	return len(referenced)
 }
 
 // sourceURL is the meta.source the update client gives the local copy of a
