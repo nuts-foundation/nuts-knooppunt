@@ -669,7 +669,11 @@ subscription. The open question on the authorization breakdown source (section 1
   5. **JSON only.** Both payload types are valid Mitz; the mock sends `application/fhir+json` and the sandbox accepts
      nothing else.
   6. **No provider-category granularity.** A decision applies to every consulting category; the notification lists the
-     ten active codes.
+     ten active codes. The notification captured from the Mitz test environment
+     (`component/mitz/example/example_notification_bundle.xml`) splits them: an active permit Consent for one category
+     and an inactive Consent, without `provision.type`, for six others, under the profile `Consent-Mitz-Notify` rather
+     than the package's `nl-vzvz-mitz-Consent-Notify`. The sandbox intake accepts exactly one active Consent and refuses
+     that shape; it does not read the profile.
   7. **No birth date.** The subscription carries no `PatientBirthdate`: the pool patients are synthetic and no date is
      treated as verified.
   8. **Ordered timestamps and a caller's id.** The mock gives every change a `Consent.dateTime` strictly later than

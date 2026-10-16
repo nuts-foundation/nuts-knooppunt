@@ -323,6 +323,9 @@ It accepts this shape and nothing wider:
 
 Anything else is answered 400 and changes nothing. A valid notification about another
 organization than De Plataan, or about a BSN outside the pool, is answered 204 and ignored.
+This is the shape of the `vzvz.fhir.mitz` 3.8.0 example, which mock Mitz sends. The notification
+captured from the Mitz test environment, with a Consent per set of provider categories, is refused
+(DESIGN.md section 10, deviation 6).
 
 ## Architecture
 

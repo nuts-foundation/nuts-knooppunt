@@ -44,18 +44,27 @@ type identified struct {
 	} `json:"identifier"`
 }
 
-// readConsentNotification reads a Mitz consent notification, and accepts one
-// shape and nothing wider: a transaction Bundle with an id and exactly one
-// Consent, active, with an explicit permit or deny and a full timestamp, whose
-// patient and custodian references each resolve to exactly one entry carrying
-// exactly one BSN or URA. A Bundle that leaves any of that open is refused, so
-// the wrong patient's data is never removed on a guess.
 // consentTimeSkew is how far ahead of this application's clock a
 // notification's consent time may be: the difference between two machines'
 // clocks, and no more. An accepted time becomes the patient's watermark, which
 // only rises, so a time far ahead would make every later notification look old.
 const consentTimeSkew = time.Minute
 
+// readConsentNotification reads a Mitz consent notification, and accepts one
+// shape and nothing wider: a transaction Bundle with an id and exactly one
+// Consent, active, with an explicit permit or deny and a full timestamp, whose
+// patient and custodian references each resolve to exactly one entry carrying
+// exactly one BSN or URA. A Bundle that leaves any of that open is refused, so
+// the wrong patient's data is never removed on a guess.
+//
+// That is the shape of the vzvz.fhir.mitz 3.8.0 example, which mock Mitz sends.
+// The notification captured from the Mitz test environment
+// (component/mitz/example/example_notification_bundle.xml) has another: a
+// Consent per set of provider categories, the inactive one without
+// provision.type. This intake refuses it: the demo's consent is one answer for
+// every category (sandbox/DESIGN.md section 10, deviation 6), and it has no
+// rule for a notification that splits them. The two also name different
+// profiles, which does not matter here: meta.profile is not read.
 func readConsentNotification(body []byte) (consentBundle, error) {
 	var bundle struct {
 		ResourceType string        `json:"resourceType"`

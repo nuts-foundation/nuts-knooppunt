@@ -138,10 +138,7 @@ func (m *ClosedQuestionService) handlePutConsent(w http.ResponseWriter, r *http.
 	change := consentChange{BSN: bsn, Decision: request.Decision, ChangeID: request.ChangeID, ChangedAt: m.clock.next()}
 	m.consent.set(bsn, consentOverride{Decision: change.Decision, ChangedAt: change.ChangedAt})
 
-	results := []notificationResult{}
-	if m.deliver != nil {
-		results = m.deliver(change)
-	}
+	results := m.deliverChange(change)
 	writeMockJSON(w, map[string]any{
 		"bsn": bsn, "decision": change.Decision, "changeId": change.ChangeID,
 		"changedAt": change.ChangedAt.Format(time.RFC3339Nano), "notifications": results,
