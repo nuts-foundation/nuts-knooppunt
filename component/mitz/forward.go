@@ -48,7 +48,9 @@ func captureNotifyBody(next http.Handler) http.Handler {
 // forwardNotification relays the captured notification to the configured URL,
 // unchanged. Nil means the target confirmed it with a 2xx. An error means
 // delivery was not confirmed; after a timeout the target may still have
-// processed it. Nothing here retries.
+// processed it. Nothing here retries: MITZ redelivers a notification it got no
+// acknowledgement for (PvE Aansluiting Uitwisselingssystemen 3.8.0,
+// AUS-TR-e0150).
 func (c *Component) forwardNotification(ctx context.Context) error {
 	body, ok := ctx.Value(notifyBodyKey{}).(notifyBody)
 	if !ok {

@@ -57,6 +57,9 @@ Sandbox's viewer reads them by trace id to show Mitz's answer to a source reques
   decision log and the subscriptions, and drop them. Local compose publishes it on the host's port
   8087; the Helm chart has no ingress, so only workloads in the cluster reach it.
 - One subscription per provider and patient: a second one for the same pair returns the first.
+- No notification retries: each subscription gets at most one delivery attempt per change, where Mitz
+  retries a notification it got no acknowledgement for until it is delivered (PvE Aansluiting
+  Uitwisselingssystemen 3.8.0, AUS-TR-e0150).
 - The notification's shape and timing: `sandbox/DESIGN.md` section 10 lists those deviations.
 
 ## Run
