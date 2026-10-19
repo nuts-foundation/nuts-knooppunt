@@ -4,6 +4,10 @@ A flow double for [Dezi](https://www.dezi.nl), built for the GF Sandbox (`sandbo
 **This is not a Dezi implementation and must not be treated as one.** It reproduces just enough of
 the v0.7 flow to sign a synthetic practitioner in and hand out an attestation the Nuts node accepts.
 
+This directory is a library, `package dezimock`: the signer, the persona and the HTTP handlers. The
+command that serves it is in `cmd/`, with the loading of the signing key. A test that needs a
+signing Dezi in process imports the library and serves `NewMux` itself.
+
 ## Deliberate deviations
 
 - Userinfo returns a plain JSON envelope `{verklaring_id, verklaring}`. The published v0.7 response
@@ -32,7 +36,7 @@ service is not profile-gated, so a sandbox-only setting there would change the s
 
 ## Run
 
-    go run ./mock-components/dezi
+    go run ./mock-components/dezi/cmd
     go test ./mock-components/dezi/...
 
 Or, containerized alongside the rest of the demo:

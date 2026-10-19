@@ -48,10 +48,12 @@ type eventRequest struct {
 }
 
 type eventResponse struct {
-	Status        int               `json:"status"`
-	Headers       map[string]string `json:"headers"`
-	Body          any               `json:"body"`
-	TokenReceived bool              `json:"tokenReceived,omitempty"`
+	Status          int               `json:"status"`
+	Headers         map[string]string `json:"headers"`
+	Body            any               `json:"body"`
+	TokenReceived   bool              `json:"tokenReceived,omitempty"`
+	ConsentDecision string            `json:"consentDecision,omitempty"`
+	CopyRemoved     *bool             `json:"copyRemoved,omitempty"`
 }
 
 type eventCaptureKey struct{}
@@ -104,10 +106,28 @@ func (t *captureTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	applyEventAction(req.Context(), &event)
 	credential := strings.Fields(req.Header.Get("Authorization"))
 	event.Request.TokenAttached = t.gf == "exchange" && len(credential) == 2 && strings.EqualFold(credential[0], "Bearer")
+	evidence, traceID := (*consentEvidence)(nil), ""
+	if t.gf == "exchange" {
+		if evidence = consentEvidenceFrom(req.Context()); evidence != nil {
+			if header, id, ok := newTraceparent(); ok {
+				req, traceID = withTraceparent(req, header), id
+			} else {
+				evidence = nil
+			}
+		}
+	}
 	publish := func() {
 		event.DurationMs = time.Since(started).Milliseconds()
 		event.TS = time.Now().UTC()
 		capture.emit(event)
+		if evidence == nil {
+			return
+		}
+		// After the request's own event, so the answer is published as its child.
+		// The mock recorded it before the source could answer this request.
+		for _, decision := range evidence.decisions(traceID) {
+			capture.emit(consentCheckEvent(event, decision, redact))
+		}
 	}
 	if capture.traces != nil {
 		req = capture.traces.prepare(req, event, capture.emit, capture.live)

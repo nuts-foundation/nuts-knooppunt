@@ -322,7 +322,7 @@ func TestGeneratorRegeneratesMaterialThatDoesNotHangTogether(t *testing.T) {
 		{
 			// A real, parseable private key of the wrong type. mock-dezi
 			// type-asserts *rsa.PrivateKey and exits with "is a %T, not an RSA
-			// private key" (mock-components/dezi/keys.go), so "it parses" is
+			// private key" (mock-components/dezi/cmd/keys.go), so "it parses" is
 			// not the property that decides whether the stack starts.
 			name: "the signing key is not RSA",
 			mutate: func(t *testing.T, out string) {
@@ -569,7 +569,7 @@ func requireMaterialHangsTogether(t *testing.T, out string) {
 	require.NoError(t, err)
 	require.Equal(t, root0, trusted, "the knooppunt's trust store copy must be the root itself")
 
-	// The type, not merely that it parses: mock-components/dezi/keys.go
+	// The type, not merely that it parses: mock-components/dezi/cmd/keys.go
 	// type-asserts *rsa.PrivateKey and exits fatally on anything else, so an
 	// EC key here is a stack that does not start.
 	require.IsType(t, &rsa.PrivateKey{}, parsePrivateKey(t, filepath.Join(out, "dezi-signing.key")),

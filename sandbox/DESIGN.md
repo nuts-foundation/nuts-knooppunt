@@ -39,7 +39,8 @@ v1 definition of done for /demo, aligned with the acceptance criteria of #532:
 - Retrieval requires explicit user confirmation before data is pulled.
 - The authorization result page shows all sub-checks with the demo disclaimer.
 - Every data element on the enriched home screen is visually attributable to its source.
-- Consent revocation triggers a notification, removes the source's data, and blocks re-retrieval.
+- Consent revocation triggers a notification that reaches the EHR through the Knooppunt, removes the source's data,
+  and blocks re-retrieval.
 - Synthetic data only; the demo runs from a hosted environment whose fixed dataset is ensured at deployment (idempotent
   seed job) and restorable at any moment via the reset action, without redeploying. `docker compose` remains the offline
   development path (the demo-ehr and PEP services currently sit behind compose profiles; E5 makes the sandbox set
@@ -81,13 +82,14 @@ Two user-facing applications on top of the existing mocked stack:
 | **De Zonnebloem's EHR**  | The elderly care institution's own record system: client list, client record read from its own FHIR store, an allergy entry form, and removal of the allergies the demo added. A Go package (`sandbox/zonnebloem`) that the gf-sandbox process serves on its own port and URL | Its own green look, deliberately different (6.3)    | own port, :3001 |
 | Nuts Knooppunt           | Real GF components: NVI, mCSD, PDP, Mitz client, Nuts node proxy                                                                                                                                                                                                                                                                                | n/a                                                 | :8080 public, :8081 internal                                                                                                                        |
 | PRS (pseudonymization)   | **mocked, offline and hosted**: the compose overlay (since PR #561) and the hosted deployment (`helm/mock-prs`) point `prsurl` at `mock-components/prs`, a mock modelled on acceptance PRS v0.0.18 that performs real OPRF on ristretto255 and stands in for the ministry's token endpoint, so the Knooppunt's own authn flow runs unchanged. The fake NVI de-tokenizes through the mock, which holds its recipient key; it cannot open what the acceptance PRS encrypts for the real NVI. The built-in fake pseudonymizer is now only reached when `prsurl` is unset, which the e2e harness still does. Scope: acceptance v0.0.18 checks no scope value, the service's `main` requires `prs:oprf`, and the acceptance OAuth service documents `epd:read`; see `docs/prs-contract.md` | n/a                                                 | :8080, sandbox helper :8081 (neither published)                                                                                                     |
-| Mocked national services | fake-NVI backing store (HAPI), fake LRZa, mock Mitz (user-controllable answer, subscriptions and notifications), mock Dezi (signed v0.7 attestation over an authorization code flow), mock VC issuer (`HealthcareProviderRoleTypeCredential` over OID4VCI; still in compose on :3000, but not on the sandbox authentication path, see E2)                                                                                                                                                                                   | n/a                                                 | existing compose ports                                                                                                                              |
+| Mocked national services | fake-NVI backing store (HAPI), fake LRZa, mock Mitz (a consent answer per patient that the presenter changes, subscriptions, notifications to their subscribers, and a log of the closed questions it answered, by trace id), mock Dezi (signed v0.7 attestation over an authorization code flow), mock VC issuer (`HealthcareProviderRoleTypeCredential` over OID4VCI; still in compose on :3000, but not on the sandbox authentication path, see E2)                                                                                                                                                                                   | n/a                                                 | existing compose ports                                                                                                                              |
 
 Mitz is mocked deliberately for `/demo`; none of the sandbox organizations or URAs need registration in the real Mitz
 for v1. Consent is the national-state answer the presenter changes live and reset restores per pool patient. Using
 test-Mitz would add onboarding, availability and shared-state dependencies, and changing the answer from the demo would
 require a consent-registration interface that the Knooppunt does not implement. The Knooppunt-side path remains real:
-`component/mitz` sends XACML closed authorization questions and creates FHIR subscriptions against the mock. Real
+`component/mitz` sends XACML closed authorization questions, creates FHIR subscriptions against the mock, and relays
+the notifications it receives on `/mitz/notify`, unchanged, to the sandbox's private intake. Real
 test-Mitz connectivity remains a separate component-testing track, while national onboarding belongs to the post-v1
 `/connect` mode 2. PRS is mocked for another reason: pseudonymization is stateless from the demo's perspective, but the
 fake NVI can only de-tokenize what a PRS holding its recipient key produces, and the acceptance PRS encrypts for the
@@ -167,12 +169,19 @@ cross-cutting below). Screens (the wireframe numbers these 1-8, splitting record
    with the marker word highlighted and a chip saying it carries a demo marker from the source system. Nothing
    retrieved says who typed it, so the chip claims no authorship.
 7. **Consent revocation (GF Toestemming, optional ending)**: the patient revokes consent in Mitz. In the demo, the
-   "withdraw consent" control on the enriched record's optional-ending card flips the mock Mitz answer and presents that
-   as the patient having acted in the Mitz portal. The subscription notification is a UX event only: demo plumbing shows
-   it to the practitioner and removes previously retrieved Zonnebloem data from the overview; it does not grant or deny
-   access. On the next retrieval attempt the PEP asks the PDP for a new authorization decision, the PDP performs a fresh
-   Mitz closed question, and the BGZ policy denies the request fail-closed when consent is absent. Access enforcement
-   therefore remains correct even if notification delivery is delayed or fails.
+   "withdraw consent" control on the enriched record's optional-ending card changes the mock Mitz's answer for this
+   patient and presents that as the patient having acted in the Mitz portal. Mitz notifies the address the subscription
+   carries, the Knooppunt's `/mitz/notify`, and the Knooppunt forwards the notification to the EHR, which shows it to
+   the practitioner and removes the data it retrieved from De Zonnebloem. The notification is a UX event only: it does
+   not grant or deny access. On the next retrieval attempt the PEP asks the PDP for a new authorization decision, the
+   PDP performs a fresh Mitz closed question, and the BGZ policy denies the request fail-closed when consent is absent.
+   Access enforcement therefore remains correct even if notification delivery is delayed or fails. Giving consent again
+   is the same flow with the other answer. Two things are stated as what they are:
+   - The removal is demo behaviour, not a Mitz rule. A Mitz subscription reports consent about the subscriber's own
+     data; the demo models a withdrawal as global per patient, so the EHR removes the copy it retrieved from the
+     source on that notification (section 10, deviation 1).
+   - The refusal screen shows the source's verdict and one sentence of context: that De Plataan received a Mitz
+     notification, and when. The source does not say why it refused, and the screen does not say it for the source.
 
 Cross-cutting:
 
@@ -181,9 +190,13 @@ Cross-cutting:
   login and collapses to a tab on the screen edge. It follows the demo live: a compact journey strip (national registers
   above, the two organizations below) animates every step, with the step details underneath. Two modes: **Functional**
   narrates the unlocking metaphor in plain language (a pointer lands in the referral index, a pin drops on the found
-  source, proof travels, a key comes back, three locks open, the question document travels with the key, the vault
-  swings open and the answer returns filled in; on revocation a refusal travels back instead of a key and the earlier
-  copy is removed): no protocol detail. **Technical** adds the captured request per step (method, path, status) and the
+  source, proof travels, a key comes back, the question document travels with the key, on its arrival the identity
+  and role locks open, the source asks Mitz and the consent lock opens, the query lock opens, the vault swings open
+  and the answer returns filled in; after a withdrawal the key still comes back and is read, Mitz answers no, the
+  consent lock shuts, the source refuses and the earlier copy is removed): no protocol detail. The four locks are on
+  the source's vault and are all decided when a request arrives there with the key: identity and role as the source
+  reads the key, consent by Mitz's answer, shown on Mitz's shield, and then the query. Issuing the key opens
+  nothing. The map also shows what De Plataan holds of the source's data at that moment, and it draws the source only as far as discovery has established it: a placeholder first, a URA with its data categories once the NVI has answered, and De Zonnebloem with its web address marked once the address directory has. **Technical** adds the captured request per step (method, path, status) and the
   interior OTel spans (PRS, PEP introspection, PDP). An "open the full journey" page shows the same run as a large
   animated journey map (Functional) or as the trace layout (Technical). Functional is the default.
 - Demo language is English; Dutch scheme and system names (Mitz, NVI, Dezi, UZI, BSN, URA, BGZ) stay as proper nouns.
@@ -252,8 +265,8 @@ it.
 | "Zonnebloem has a record for pseudonym(BSN)"         | NVI List resource (fake-NVI store), seeded                                                                                                                                                                                                                                                                                                                                                                                                                                         | Knooppunt NVI component, queried by the sandbox backend |
 | "De Plataan has a record for pseudonym(BSN)"         | NVI List resource, published during the patiëntaanmelding (step 3)                                                                                                                                                                                                                                                                                                                                                                                                                 | same                                                    |
 | Zonnebloem's endpoints (FHIR, authorization server)  | Central addressing directory (`lrza-root-directory`), synced to the query directory by the LRZA client. Two separate Endpoints: the FHIR API (`hl7-fhir-rest`) and the authorization server (`oauth-nuts`) — addressing publishes where each lives and has no opinion on what enforces policy there. The published FHIR address is Zonnebloem's PEP, because the PEP is what fronts its FHIR API in this stack; pointing it straight at HAPI would publish an unprotected path to the data. Both addresses are deployment-aware (compose-internal hostname locally, cluster URL when hosted) via `SEED_ZONNEBLOEM_ENDPOINT_ADDRESS` / `SEED_ZONNEBLOEM_AUTH_SERVER_ADDRESS` | Knooppunt LRZA sync, queried by the sandbox backend     |
-| Anna's consent (share with treating physicians: yes) | mock Mitz, answer flippable via the withdraw-consent control on the enriched record                                                                                                                                                                                                                                                                                                                                                                                                | PDP during the authorization step                       |
-| De Plataan's Mitz subscription for Anna              | mock Mitz, created during the patiëntaanmelding. It carries no `channel.endpoint`: the composed Knooppunt configures no `notifyendpoint` and the sandbox has nothing listening, so the subscription exists but no notification is delivered until E8 builds the receiving side. The share screen says so rather than promising delivery                                                                                                                                                                                                                                                                                                                                                                                            | sandbox backend (renders the step 7 notification)       |
+| Anna's consent (share with treating physicians: yes) | mock Mitz, one answer per patient: the mock's configured answer until the demo's consent control on the enriched record changes it, and again once reset or recycle restores it | PDP during the authorization step                       |
+| De Plataan's Mitz subscription for Anna              | mock Mitz, created during the patiëntaanmelding. It carries the Knooppunt's `/mitz/notify` as `channel.endpoint` (the Knooppunt's `notifyendpoint`), so the mock delivers a notification there and the Knooppunt forwards it to the sandbox's private intake (its `notifyforwardurl`). A stack that sets neither creates the subscription without an endpoint and nothing is delivered; the share screen says whether this sandbox has an intake                                                                                                                                                                                                                                                                                                                                                                                            | sandbox backend (renders the step 7 notification)       |
 | Access policy (BGZ scope requires Mitz consent)      | OPA bundles in the PDP                                                                                                                                                                                                                                                                                                                                                                                                                                                             | PEP and PDP on inbound retrieval                        |
 | Dezi session claims of S. el Amrani                 | mock Dezi login; the attestation becomes a `DeziUserCredential` inside the Nuts node                                                                                                                                                                                                                                                                                                                                                                                                                     | top bar display, PDP authentication and role sub-checks |
 
@@ -274,7 +287,8 @@ When the user saves in De Zonnebloem's EHR:
 
 ### 5.6 Reset semantics
 
-Reset = expunge the mutable stores (both FHIR datasets, NVI Lists, Mitz subscriptions, step-event retention) and re-run
+Reset = expunge the mutable stores (both FHIR datasets, NVI Lists, Mitz subscriptions and consent answers, step-event
+retention) and re-run
 the loader. After reset the fixed dataset is exactly restored (semantically identical fixtures; byte identity is not a
 HAPI guarantee), user-created records are gone, and the demo starts clean at step 1. A per-patient recycle also removes
 the records added for that patient in De Zonnebloem's EHR, found by their user-created tag; an untagged record someone
@@ -282,12 +296,18 @@ else added stays until a global reset.
 
 Two gaps against that as implemented, both recorded in `test/testdata/README.md`:
 
-- Reset and recycle clear Mitz subscriptions only where a mock is configured. E3 gave the standalone `mitzmock` a
-  subscription store and a `DELETE` that takes an optional `providerid`/`patientid` scope; `ResetGlobal` clears
-  everything and `RecyclePatient` clears one pair, both when `MITZMOCK_URL` is set. The compose overlay sets it, the
-  base file does not, so a stack brought up without the overlay leaves a running demo's subscription in place — and
-  says so: both paths return `ErrPartialReset` and the UI reports a partial restore rather than a clean one. Reset
-  also leaves the accumulated raw XACML request bodies.
+- Reset and recycle clear Mitz subscriptions and restore its consent answers only where a mock is configured. The
+  standalone `mitzmock` has a subscription store with a `DELETE` that takes an optional `providerid`/`patientid`
+  scope, and a consent store with a `DELETE` for one patient or for all; `ResetGlobal` clears everything and
+  `RecyclePatient` clears one pair and one patient's answer, both when `MITZMOCK_URL` is set. The two cleanups are
+  independent: both are attempted and their warnings joined. The compose overlay sets the variable, the base file does
+  not, so a stack brought up without the overlay leaves a running demo's subscription and consent answer in place,
+  and says so: both paths return `ErrPartialReset` and the UI reports a partial restore rather than a clean one. Reset
+  also leaves the accumulated raw XACML request bodies; the mock's decision log is cleared with the consent answers.
+
+  A notification can still be on its way when a reset finishes. The mock answers each consent cleanup with a
+  watermark, a timestamp later than every change it stored before it, and the sandbox ignores a notification whose
+  consent time is not later than its patient's watermark.
 - NVI Lists registered under a BSN outside the pool survive, because the NVI tenant's pseudonymization interceptor
   rejects a List search that is not scoped to a patient, subject or source, so they cannot be enumerated to be deleted.
 
@@ -363,8 +383,9 @@ demo-ehr is reference material for the EMR guises; the sandbox backend and De Zo
 E6 implements capture for patient-run outbound calls and the live viewer. The precise implemented
 retention, redaction, ownership and reconnect contract is documented in
 [the application README](app/README.md#step-events-e6). PRS spans are correlated through a private
-OTLP receiver in the sandbox overlay. Other interior-span and inbound-notification producers
-remain separate integrations. The viewer groups requests by action and purpose, with a separate
+OTLP receiver in the sandbox overlay, Mitz's answers to closed questions are read from the mock's
+decision log by trace id, and the sandbox's notification intake produces the inbound Mitz
+notification. Other interior spans (PEP introspection, PDP) remain separate integrations. The viewer groups requests by action and purpose, with a separate
 playback clock for readable animations of observed calls.
 
 The sandbox backend emits one step event per proxied call:
@@ -402,8 +423,19 @@ The sandbox backend emits one step event per proxied call:
 }
 ```
 
-- The patiëntaanmelding (NVI publish, Mitz subscribe) and the inbound Mitz consent notification are events in the same
-  stream, with `gf: "localization"` and `gf: "consent"` respectively.
+- The patiëntaanmelding (NVI publish, Mitz subscribe) and consent revocation are events in the same stream, with
+  `gf: "localization"` and `gf: "consent"` respectively.
+- Consent revocation has three purposes, all `gf: "consent"`: `consent-change` (actor `sandbox-backend`), the
+  simulated patient act, which is the call that changes the mock's answer; `consent-notification` (actor `mitz`), the
+  inbound notification as the sandbox's intake received it; and `consent-check` (actor `knooppunt`), one closed
+  question as the mock recorded it, a child of the source request that caused it. `response.consentDecision` on a
+  `consent-check` carries the XACML decision, and `response.copyRemoved` on a `consent-notification` says whether the
+  intake removed retrieved data on receiving it.
+- A consent answer is shown only when the mock recorded it under the trace id of that one source request. Nothing
+  pairs an answer with a request by timing or by counting; a request without a recorded answer reads "not observed",
+  never "Mitz was not asked".
+- The stream's `snapshot` control record carries a `record` object for the run's patient: its record revision and
+  whether this session holds a retrieved copy (`none`, `held` or `removed`).
 - Transport: SSE to the browser for the run's own events; bounded in-memory retention (survives a page refresh within
   the window).
 - Secret redaction: an event carries the call as sent and received. Credentials (authorization headers, cookies,
@@ -513,8 +545,8 @@ sharing an existing local record, not creating a patient; no clinical data leave
 
 - Extends: Knooppunt NVI List API (called through the sandbox backend; (re)registration needs defined idempotency
   semantics, the API today does an unconditional create); mitzmock already captures subscriptions, so the E3 delta is the
-  subscription itself. Controllable consent changes and notification delivery are E8: E3 creates a subscription with no
-  `channel.endpoint`, because no `notifyendpoint` is configured and nothing here receives one.
+  subscription itself. Controllable consent changes and notification delivery are E8, and the subscription's
+  `channel.endpoint` is whatever the Knooppunt's `notifyendpoint` says, which the sandbox overlay sets for E8.
 - Acceptance: after registration the NVI holds a List for pseudonym (BSN) with holder URA 00000010, the mock Mitz holds
   a subscription for De Plataan, and both facts are shown in the confirmation cards without claiming more than the calls
   established: the cards distinguish a subscription this request started from one it found, and an outcome nobody could
@@ -584,16 +616,19 @@ it, and the EHR removes only records that carry it, never a seeded one. It needs
 
 ### E8 Consent revocation (GF Consent)
 
-Give `mock-components/mitz` a consent toggle and the subscription/notification flow: flipping consent notifies
-subscribers (the E3 subscription), the EHR shows the Mitz notification and removes De Zonnebloem's data from the
-overview, and a new retrieval independently triggers a fresh closed question and fails on the consent sub-check
-(fail-closed) with the deny breakdown. Notification processing is demo UX plumbing, not an authorization dependency.
+`mock-components/mitz` holds a consent answer per patient behind a mock-only control, notifies that patient's
+subscribers (the E3 subscription) when it changes, and logs the closed questions it answers. The Knooppunt's
+`/mitz/notify` relays a received notification, unchanged, to one configured address, the sandbox's private intake. The
+EHR shows the Mitz notification and removes De Zonnebloem's data from the overview, and a new retrieval independently
+triggers a fresh closed question and is refused on it (fail-closed); the viewer shows Mitz's answer where the mock
+recorded it for that request. Notification processing is demo UX plumbing, not an authorization dependency.
 
-- Extends: `mock-components/mitz`, the Knooppunt's `/mitz/notify` handler (which today logs the notification and discards the
-  body), sandbox backend (notification intake and correlation to the patient), the bell/notification UI.
+- Extends: `mock-components/mitz`, the Knooppunt's `/mitz/notify` handler (`mitz.notifyforwardurl`; without it the
+  handler acknowledges a notification and discards the body), the sandbox backend (consent control, notification
+  intake and its correlation to the patient, consent evidence), the record's notification banner and the GF viewer.
 - Acceptance: the #532 revocation criteria hold: notification received, source data removed from the overview,
   re-retrieval blocked by a fresh consent check even if the notification is delayed or lost; restoring consent restores
-  the happy path.
+  the happy path; reset and recycle restore the configured consent answer.
 
 ### Sequencing
 
@@ -617,9 +652,34 @@ subscription. The open question on the authorization breakdown source (section 1
   could disagree with the one actually enforced.
 - Scope of the mock Dezi login: which claims the stub issues (name, role, UZI, URA) and how they flow into the token/PDP
   input.
-- Mitz subscription and notification shape in the mock: no national spec is implemented in `mitzmock` yet, and the
-  current `/mitz/notify` handler logs and discards notifications. Keep the mock's interface minimal and swappable, and
-  make E8's run-scoped notification delivery explicitly independent from authorization enforcement.
+- Mitz subscription and notification shape in the mock. Settled by E8 against the FHIR package `vzvz.fhir.mitz`
+  3.8.0 (all of its profiles have status `draft`): the mock's subscription and its notification Bundle follow the
+  package's profile and example. Eight deviations are deliberate:
+  1. **Whose consent the subscription is about.** A Mitz subscription belongs to the dossier-holding provider and
+     reports consent about making that provider's own data available. The demo models a withdrawal as global per
+     patient, so the EHR removes the copy it retrieved from De Zonnebloem on De Plataan's notification. That removal
+     is demo behaviour, not a Mitz rule.
+  2. **Plain HTTP.** The profile asks for an HTTPS `channel.endpoint`; inside the compose network and the cluster the
+     endpoints are `http://`.
+  3. **Mock-only interfaces.** The consent control and the decision log under `/mock/` exist only on the mock. The
+     national Mitz has neither; consent is registered through its Toestemmingsbericht interface.
+  4. **Gateway and source system.** The profile requires both extensions. Local compose sets both through
+     `config/knooppunt.yml`, with that file's example OIDs; the hosted configuration sets neither. The mock validates
+     neither.
+  5. **JSON only.** Both payload types are valid Mitz; the mock sends `application/fhir+json` and the sandbox accepts
+     nothing else.
+  6. **No provider-category granularity.** A decision applies to every consulting category; the notification lists the
+     ten active codes. The notification captured from the Mitz test environment
+     (`component/mitz/example/example_notification_bundle.xml`) splits them: an active permit Consent for one category
+     and an inactive Consent, without `provision.type`, for six others, under the profile `Consent-Mitz-Notify` rather
+     than the package's `nl-vzvz-mitz-Consent-Notify`. The sandbox intake accepts exactly one active Consent and refuses
+     that shape; it does not read the profile.
+  7. **No birth date.** The subscription carries no `PatientBirthdate`: the pool patients are synthetic and no date is
+     treated as verified.
+  8. **Ordered timestamps and a caller's id.** The mock gives every change a `Consent.dateTime` strictly later than
+     any it issued before, and the sandbox orders and fences notifications by it and refuses one more than a minute
+     ahead of its own clock; the package gives that element no ordering guarantee. The mock also uses an id the caller
+     supplies as the notification's `Bundle.id`.
 - Naming: "GF Sandbox" and "Plataan EHR" are working titles. Issue #532 called the hospital "Ziekenhuis
   ZMC", but ZMC is the abbreviation of a real hospital and demo organizations must be fictional; hence "Ziekenhuis De
   Plataan", following the botanical naming of the demo organizations (the existing `sunflower` vector maps to De

@@ -1,0 +1,20 @@
+{{- if .Values.mitz.notify.enabled }}
+# The sandbox's private intake for Mitz notifications, for the Knooppunt only.
+# A Service of its own, so it stays ClusterIP whatever service.type is and no
+# ingress rule for service.port reaches it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "gf-sandbox.mitzNotifyServiceName" . }}
+  labels:
+    {{- include "gf-sandbox.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.mitz.notify.listenPort }}
+      targetPort: mitz-notify
+      protocol: TCP
+      name: mitz-notify
+  selector:
+    {{- include "gf-sandbox.selectorLabels" . | nindent 4 }}
+{{- end }}

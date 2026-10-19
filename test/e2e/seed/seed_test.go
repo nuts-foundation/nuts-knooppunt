@@ -7,8 +7,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
 	"net/url"
+	"strings"
 	"testing"
+	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/bsnutil"
@@ -590,4 +594,117 @@ func TestRecyclePatient_RemovesThatPatientsUserCreatedRecords(t *testing.T) {
 	assert.True(t, allergyExists(t, h, annaUntagged), "an untagged record is not the recycle's to remove")
 	assert.True(t, allergyExists(t, h, bramTagged), "another patient's addition must survive")
 	requireSeededAllergyRestored(t, h, anna, "the seeded allergy carries no tag and must stay")
+}
+
+func setConsentAtMock(t *testing.T, h harness.Details, bsn, decision string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPut, h.MockMitzXACML.GetURL()+"/mock/consent/"+bsn,
+		strings.NewReader(`{"decision":"`+decision+`"}`))
+	require.NoError(t, err)
+	res, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+}
+
+func consentAtMock(t *testing.T, h harness.Details, bsn string) (decision string, overridden bool) {
+	t.Helper()
+	res, err := http.Get(h.MockMitzXACML.GetURL() + "/mock/consent/" + bsn)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	var body struct {
+		Decision   string `json:"decision"`
+		Overridden bool   `json:"overridden"`
+	}
+	require.NoError(t, json.NewDecoder(res.Body).Decode(&body))
+	return body.Decision, body.Overridden
+}
+
+func TestResetGlobal_RestoresTheConfiguredConsentAndReportsTheWatermark(t *testing.T) {
+	h := harness.Start(t)
+	h.MockMitzXACML.SetResponse("Deny", "No consent found") // a configured default other than Permit
+	patients := pool.Patients()
+	setConsentAtMock(t, h, patients[0].BSN, "Permit")
+	setConsentAtMock(t, h, patients[1].BSN, "Permit")
+
+	var reported []string
+	var watermark time.Time
+	target := sandboxTarget(t, h)
+	target.OnMitzWatermark = func(bsn string, w time.Time) { reported, watermark = append(reported, bsn), w }
+
+	require.NoError(t, vectors.ResetGlobal(t.Context(), target))
+
+	for _, p := range patients[:2] {
+		decision, overridden := consentAtMock(t, h, p.BSN)
+		require.False(t, overridden)
+		require.Equal(t, "Deny", decision, "the default is the configured one, not a hardcoded Permit")
+	}
+	require.Equal(t, []string{""}, reported, "one watermark, for the whole mock")
+	require.False(t, watermark.IsZero())
+}
+
+func TestRecyclePatient_ClearsOnlyThatPatientsConsent(t *testing.T) {
+	h := harness.Start(t)
+	h.MockMitzXACML.SetResponse("Deny", "No consent found") // a configured default other than Permit
+	require.NoError(t, vectors.SeedNVI(t.Context(), h.KnooppuntInternalBaseURL))
+	patients := pool.Patients()
+	recycled, other := patients[0], patients[1]
+	setConsentAtMock(t, h, recycled.BSN, "Permit")
+	setConsentAtMock(t, h, other.BSN, "Permit")
+
+	var reported []string
+	target := sandboxTarget(t, h)
+	target.OnMitzWatermark = func(bsn string, _ time.Time) { reported = append(reported, bsn) }
+
+	require.NoError(t, vectors.RecyclePatient(t.Context(), target, recycled.Key))
+
+	decision, overridden := consentAtMock(t, h, recycled.BSN)
+	require.False(t, overridden)
+	require.Equal(t, "Deny", decision, "back to the configured default, not to a hardcoded Permit")
+	decision, overridden = consentAtMock(t, h, other.BSN)
+	require.True(t, overridden, "a concurrent demo's consent is left alone")
+	require.Equal(t, "Permit", decision)
+	require.Equal(t, []string{recycled.BSN}, reported)
+}
+
+// The two cleanups are independent. A mock that refuses the first must still be
+// asked for the second, and the caller hears of both.
+func TestResetGlobal_AttemptsTheConsentCleanupWhenTheSubscriptionCleanupFails(t *testing.T) {
+	h := harness.Start(t)
+	anna := pool.Patients()[0]
+	setConsentAtMock(t, h, anna.BSN, "Deny")
+	mock, err := url.Parse(h.MockMitzXACML.GetURL())
+	require.NoError(t, err)
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/abonnementen/") {
+			http.Error(w, "subscriptions are down", http.StatusServiceUnavailable)
+			return
+		}
+		httputil.NewSingleHostReverseProxy(mock).ServeHTTP(w, r)
+	}))
+	t.Cleanup(proxy.Close)
+	proxyURL, err := url.Parse(proxy.URL)
+	require.NoError(t, err)
+	target := sandboxTarget(t, h)
+	target.MitzMockBaseURL = proxyURL
+
+	err = vectors.ResetGlobal(t.Context(), target)
+
+	require.ErrorIs(t, err, vectors.ErrPartialReset)
+	require.ErrorContains(t, err, "503")
+	_, overridden := consentAtMock(t, h, anna.BSN)
+	require.False(t, overridden, "the consent cleanup ran although the subscription cleanup failed")
+}
+
+func TestResetGlobal_WithoutAMockReportsNoWatermark(t *testing.T) {
+	h := harness.Start(t)
+	called := false
+	target := sandboxTarget(t, h)
+	target.MitzMockBaseURL = nil
+	target.OnMitzWatermark = func(string, time.Time) { called = true }
+
+	err := vectors.ResetGlobal(t.Context(), target)
+
+	require.ErrorIs(t, err, vectors.ErrPartialReset)
+	require.False(t, called, "no mock answered, so there is no watermark to report")
 }

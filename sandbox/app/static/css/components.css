@@ -166,3 +166,13 @@
   .claims, .claims tbody, .claims tr, .claims th, .claims td { display: block; width: 100%; }
   .kv-table td, .claims td { border-top: 0; padding-top: 0; }
 }
+
+/* A notification the EHR received through its Mitz subscription. */
+.mitz-note { border: 1px solid var(--plum-soft); border-left: 3px solid var(--plum); background: var(--card); border-radius: 13px; padding: 14px 18px; display: flex; gap: 13px; align-items: flex-start; margin-bottom: 16px; box-shadow: var(--shadow); }
+.mitz-note .nic { width: 34px; height: 34px; border-radius: 50%; background: var(--plum-soft); color: var(--plum); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 15px; font-weight: 700; }
+.mitz-note b { font-size: 14px; display: block; font-family: var(--f-serif); font-weight: 600; }
+.mitz-note span { font-size: 11.5px; color: var(--text2); }
+.mitz-note > div { min-width: 0; }
+/* A demo control, not EHR content: the sand of the demo's own notices. */
+.card.demo-ending { border-color: var(--sand-line); background: var(--sand-soft); }
+.card.demo-ending .h-sub, .card.demo-ending .btn-sub { color: var(--sand-ink); }
