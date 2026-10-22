@@ -35,6 +35,14 @@ tags:
       Zorgaanbieders, the Dutch government's central registry of care
       providers. Resources follow the mCSD (Mobile Care Services Discovery)
       profile.
+
+      The `/lrza/fhir` operations are the write path: they register and
+      update a tenant's own addressable entities (Organization, Location,
+      HealthcareService, Endpoint) in the LRZA, acting as the ITI-130-NL
+      Data Source. The Knooppunt fills in the profile, identifier and
+      Endpoint details the GF Care Service Directory IG requires, checks
+      that the tenant only writes its own resources, validates them, and
+      turns a delete into a withdrawal by status. Ids are the LRZA's own.
   - name: pdp
     description: >
       Authorization Function. The Policy Decision Point (PDP)
@@ -128,6 +136,255 @@ paths:
                     type: string
                 example:
                   error: "Failed to update LRZA: connection refused"
+
+  /lrza/fhir:
+    post:
+      tags: [lrza]
+      summary: Register addressing resources in the LRZA with a transaction Bundle
+      operationId: submitLrzaTransaction
+      description: >
+        Submits a FHIR transaction Bundle (all-or-nothing) to the LRZA. Each
+        entry is processed like the single-resource operations below: entries
+        may use `POST` (create), `PUT` (update) or `DELETE` (rewritten to a
+        withdrawal `PUT`). Entries may reference each other through
+        `urn:uuid:` fullUrls. When a signing key is configured for the
+        tenant, a Provenance is signed for each changed entry afterwards; a
+        signing failure is reported as a warning issue in the response's
+        `OperationOutcome` entry, not as a failed request.
+      parameters:
+        - $ref: "#/components/parameters/TenantID"
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: "#/components/schemas/FHIRResource"
+            example:
+              resourceType: Bundle
+              type: transaction
+              entry:
+                - fullUrl: "urn:uuid:9c2a5f61-3c1e-4d0b-8a7e-0f1d3c4b5a69"
+                  resource:
+                    resourceType: Endpoint
+                    status: active
+                    connectionType:
+                      system: "http://terminology.hl7.org/CodeSystem/endpoint-connection-type"
+                      code: hl7-fhir-rest
+                    payloadType:
+                      - coding:
+                          - system: "http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-data-categories-cs"
+                            code: Patient
+                    address: "https://fhir.example.org/r4"
+                  request:
+                    method: POST
+                    url: Endpoint
+      responses:
+        "200":
+          description: Transaction-response Bundle from the LRZA
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "403":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "412":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "422":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "429":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
+
+  /lrza/fhir/{resourceType}:
+    post:
+      tags: [lrza]
+      summary: Register an addressing resource in the LRZA
+      operationId: createLrzaResource
+      description: >
+        Creates the resource in the LRZA. The Knooppunt adds the nl-gf
+        `meta.profile`, normalizes the URA identifier, generates a
+        custodian-assigned identifier where one is required, and defaults an
+        Endpoint's `managingOrganization` to the tenant's Organization. The
+        resource must belong to the tenant (see the `lrza` tag).
+      parameters:
+        - $ref: "#/components/parameters/TenantID"
+        - $ref: "#/components/parameters/LrzaResourceType"
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: "#/components/schemas/FHIRResource"
+            example:
+              resourceType: Location
+              status: active
+              name: "Locatie Centrum"
+              type:
+                - coding:
+                    - system: "http://terminology.hl7.org/CodeSystem/v3-RoleCode"
+                      code: HOSP
+              managingOrganization:
+                reference: "Organization/e5909595-767e-41c1-9b00-a23ddf33e5d1"
+      responses:
+        "201":
+          description: The resource as stored by the LRZA
+          headers:
+            Location:
+              $ref: "#/components/headers/Location"
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Warning:
+              $ref: "#/components/headers/Warning"
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "403":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "422":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "429":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
+
+  /lrza/fhir/{resourceType}/{id}:
+    get:
+      tags: [lrza]
+      summary: Read an addressing resource from the LRZA
+      operationId: readLrzaResource
+      description: >
+        Reads the current version from the LRZA itself (not from the local
+        Query Directory), so the returned `ETag` can be used as `If-Match`
+        on a subsequent update. Only resources the tenant owns can be read
+        here.
+      parameters:
+        - $ref: "#/components/parameters/TenantID"
+        - $ref: "#/components/parameters/LrzaResourceType"
+        - $ref: "#/components/parameters/LrzaResourceID"
+      responses:
+        "200":
+          description: The resource
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "403":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "404":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "429":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
+    put:
+      tags: [lrza]
+      summary: Update an addressing resource in the LRZA
+      operationId: updateLrzaResource
+      description: >
+        Updates the resource in the LRZA. Both the current version in the
+        LRZA and the new version must belong to the tenant. A client
+        `If-Match` is forwarded unchanged; without one, the Knooppunt sends
+        the version it read for the ownership check. A stale version is
+        rejected with `412`: re-read the resource, re-apply your change and
+        try again.
+      parameters:
+        - $ref: "#/components/parameters/TenantID"
+        - $ref: "#/components/parameters/LrzaResourceType"
+        - $ref: "#/components/parameters/LrzaResourceID"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: "#/components/schemas/FHIRResource"
+      responses:
+        "200":
+          description: The resource as stored by the LRZA
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Warning:
+              $ref: "#/components/headers/Warning"
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "403":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "404":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "412":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "422":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "429":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
+    delete:
+      tags: [lrza]
+      summary: Withdraw an addressing resource from the LRZA
+      operationId: withdrawLrzaResource
+      description: >
+        Resources are not deleted from the LRZA; this withdraws the resource
+        by a status change instead: Organization and HealthcareService get
+        `active=false`, Location `status=inactive`, Endpoint `status=off`
+        with `period.end` set to now. Returns the withdrawn resource.
+      parameters:
+        - $ref: "#/components/parameters/TenantID"
+        - $ref: "#/components/parameters/LrzaResourceType"
+        - $ref: "#/components/parameters/LrzaResourceID"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: The withdrawn resource as stored by the LRZA
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Warning:
+              $ref: "#/components/headers/Warning"
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/FHIRResource"
+        "400":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "403":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "404":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "412":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "422":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "429":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "500":
+          $ref: "#/components/responses/OperationOutcomeError"
+        "503":
+          $ref: "#/components/responses/OperationOutcomeError"
 
   /pdp:
     post:
@@ -786,6 +1043,58 @@ components:
         type: integer
       example: 20
 
+    LrzaResourceType:
+      name: resourceType
+      in: path
+      required: true
+      description: >
+        The addressing resource type. OrganizationAffiliation (the mandate a
+        care provider grants its IT vendor), Provenance (created by the
+        Knooppunt itself), Practitioner and PractitionerRole are rejected
+        with `403`.
+      schema:
+        type: string
+        enum: [Organization, Location, HealthcareService, Endpoint]
+
+    LrzaResourceID:
+      name: id
+      in: path
+      required: true
+      description: The resource's id in the LRZA.
+      schema:
+        type: string
+
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: >
+        Version the update applies to, as a weak ETag (`W/"<versionId>"`).
+        Forwarded to the LRZA unchanged. When absent, the Knooppunt sends the
+        version it read for the ownership check.
+      schema:
+        type: string
+      example: 'W/"3"'
+
+  headers:
+    ETag:
+      description: Version of the stored resource, as a weak ETag (`W/"<versionId>"`).
+      schema:
+        type: string
+      example: 'W/"1"'
+    Location:
+      description: URL of the created resource version in the LRZA.
+      schema:
+        type: string
+      example: "https://lrza.example.org/fhir/Location/123/_history/1"
+    Warning:
+      description: >
+        Set when the mutation succeeded but signing its Provenance failed.
+        Signing is optional in the IG, so this doesn't undo the mutation.
+      schema:
+        type: string
+      example: '199 knooppunt "Provenance signing failed"'
+
   responses:
     OperationOutcomeError:
       description: Request rejected; body is a FHIR OperationOutcome.
@@ -849,6 +1158,18 @@ components:
       x-go-type: fhir.Subscription
       x-go-type-import:
         path: github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir
+
+    FHIRResource:
+      type: object
+      description: >
+        Any FHIR R4 resource, passed through as raw JSON so that every
+        element (including extensions) is preserved. For the `/lrza/fhir`
+        operations: an Organization, Location, HealthcareService or Endpoint
+        following the GF Care Service Directory profiles, or a Bundle.
+      additionalProperties: true
+      # encoding/json is imported by the generated code already; an x-go-type-import would
+      # import it twice.
+      x-go-type: json.RawMessage
 
     FHIROperationOutcome:
       type: object
