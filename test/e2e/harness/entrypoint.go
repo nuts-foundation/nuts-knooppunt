@@ -130,10 +130,12 @@ func start(t *testing.T, options startOptions) Details {
 	// configured: component/mcsd only syncs a root directory's discovery
 	// pointers (mcsd-directory-payload Endpoints), and this directory holds
 	// each organization's own Organization/Endpoint resources instead.
-	config.LRZA = lrza.Config{
-		LRZABaseUrl:  testData.LRZa.FHIRBaseURL.String(),
-		QueryBaseUrl: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
-	}
+	//
+	// Registration (the write path) is enabled too, with the seeded directory acting as the LRZA.
+	config.LRZA = lrza.DefaultConfig()
+	config.LRZA.LRZABaseUrl = testData.LRZa.FHIRBaseURL.String()
+	config.LRZA.QueryBaseUrl = testData.Knooppunt.MCSD.QueryFHIRBaseURL.String()
+	config.LRZA.Registration.Enabled = true
 	config.MCSD.QueryDirectory = mcsd.DirectoryConfig{
 		FHIRBaseURL: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
 	}
