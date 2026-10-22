@@ -10,6 +10,9 @@
 // entry per resource (a resource's versions can be split across pages, so dedup state spans the whole
 // feed) and applied to the query directory as its own FHIR transaction, so memory use and FHIR
 // transaction size are both bounded by the page size rather than by the size of the source directory.
+//
+// The package also implements the write path to the LRZA, when lrza.registration.enabled is set: a
+// proxy through which tenants register their own addressing resources (see registration.go).
 package lrza
 
 import (
@@ -30,6 +33,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/api"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/httpauth"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
@@ -63,7 +67,12 @@ const searchPageSize = 100
 var clockSkewBuffer = 2 * time.Second
 
 func DefaultConfig() Config {
-	return Config{}
+	return Config{
+		Registration: RegistrationConfig{
+			SyncAfterWrite: true,
+			URAAssignerKVK: coding.DefaultURAAssignerKVK,
+		},
+	}
 }
 
 type Config struct {
@@ -78,6 +87,42 @@ type Config struct {
 	// (tlscertfile/tlskeyfile/tlskeypassword/tlscafile). The national LRZA environment requires a
 	// client certificate; the local query directory connection does not use these.
 	tlsutil.Config `koanf:",squash"`
+	// Registration configures the write path: registering and updating tenants' addressing
+	// resources in the LRZA (see registration.go).
+	Registration RegistrationConfig `koanf:"registration"`
+}
+
+// RegistrationConfig configures the LRZA registration proxy, through which tenants register their
+// addressing resources in the LRZA. It uses the same base URL, mTLS certificate and OAuth2 settings as
+// the sync client: the LRZA authorizes the certificate (the IT vendor), not the tenant.
+type RegistrationConfig struct {
+	// Enabled turns on the /lrza/fhir operations.
+	Enabled bool `koanf:"enabled"`
+	// SyncAfterWrite requests an LRZA sync into the query directory after every successful write, so
+	// the change shows up locally without waiting for the next scheduled sync. Only applies when
+	// querybaseurl is set.
+	SyncAfterWrite bool `koanf:"syncafterwrite"`
+	// URAAssignerKVK is the KvK number set as the assigner of a URA identifier, as the
+	// CustodianAssignedIdentifier profile requires.
+	URAAssignerKVK string `koanf:"uraassignerkvk"`
+	// Mandate optionally makes the Knooppunt check, before writing, that the tenant has granted the
+	// IT vendor the mandate the LRZA requires. The LRZA checks this itself either way; checking up
+	// front gives a clearer error.
+	Mandate MandateConfig `koanf:"mandate"`
+	// Signing holds the signing certificate and key per tenant, keyed by the tenant's URA. When a
+	// tenant has one, every write is followed by a signed Provenance (see provenance.go).
+	Signing map[string]tlsutil.Config `koanf:"signing"`
+}
+
+// MandateConfig identifies the OrganizationAffiliation a tenant must have registered in the LRZA to
+// authorize the IT vendor (the operator of this Knooppunt) to write on its behalf.
+type MandateConfig struct {
+	// Code is the affiliation code the mandate must carry, as a FHIR token (system|code). Leave empty
+	// to skip the check.
+	Code string `koanf:"code"`
+	// Vendor is the identifier of the IT vendor's Organization, the affiliation's
+	// participatingOrganization, as a FHIR token (system|value).
+	Vendor string `koanf:"vendor"`
 }
 
 // UpdateReport summarizes the outcome of a single sync cycle.
@@ -97,6 +142,14 @@ type Component struct {
 
 	lastUpdateTime string // _since value for the next incremental sync; empty means full sync
 	updateMux      *sync.Mutex
+
+	// registrar serves the /lrza/fhir write operations; nil when registration is disabled.
+	registrar *registrar
+	// syncRequests carries requests for a sync after a write. It has capacity 1, so a burst of
+	// writes collapses into a single pending sync (see requestSync).
+	syncRequests chan struct{}
+	stopSync     context.CancelFunc
+	syncDone     chan struct{}
 }
 
 // syncRun holds the state of a single sync cycle, threaded through each step (fetch -> build -> apply
@@ -133,12 +186,27 @@ func New(config Config) (*Component, error) {
 		return nil, fmt.Errorf("invalid LRZA query directory FHIR base URL (url=%s): %w", config.QueryBaseUrl, err)
 	}
 
-	return &Component{
+	result := &Component{
 		config:          config,
 		fhirLRZAClient:  fhirclient.New(sourceBaseURL, sourceHTTPClient, &fhirclient.Config{UsePostSearch: false}),
 		fhirQueryClient: fhirclient.New(queryBaseURL, tracing.NewHTTPClient(), &fhirclient.Config{UsePostSearch: false}),
 		updateMux:       &sync.Mutex{},
-	}, nil
+		syncRequests:    make(chan struct{}, 1),
+	}
+	if config.Registration.Enabled {
+		// The write path shares the sync client's HTTP client: same mTLS certificate, tracing and
+		// OAuth2, and the same retry transport, whose rule is method-aware (see retryTransport).
+		result.registrar, err = newRegistrar(config.Registration, config.LRZABaseUrl, result.fhirLRZAClient, result.requestSync)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
+// RegistrationEnabled reports whether the /lrza/fhir write operations are served.
+func (c *Component) RegistrationEnabled() bool {
+	return c.registrar != nil
 }
 
 // newSourceHTTPClient builds the HTTP client used to talk to the trusted source directory. It layers,
@@ -169,12 +237,58 @@ func newSourceHTTPClient(config Config) (*http.Client, error) {
 func (c *Component) Start() error {
 	slog.Info("Starting LRZA sync component",
 		logging.FHIRServer(c.config.LRZABaseUrl),
-		slog.Any("resourceTypes", resourceTypes))
+		slog.Any("resourceTypes", resourceTypes),
+		slog.Bool("registration", c.RegistrationEnabled()))
 
+	if c.syncAfterWrite() {
+		ctx, cancel := context.WithCancel(context.Background())
+		c.stopSync = cancel
+		c.syncDone = make(chan struct{})
+		go c.runRequestedSyncs(ctx)
+	}
 	return nil
 }
 
-func (c *Component) Stop(_ context.Context) error { return nil }
+func (c *Component) Stop(_ context.Context) error {
+	if c.stopSync != nil {
+		c.stopSync()
+		<-c.syncDone
+	}
+	return nil
+}
+
+// syncAfterWrite reports whether a write triggers a sync into the query directory.
+func (c *Component) syncAfterWrite() bool {
+	return c.RegistrationEnabled() && c.config.Registration.SyncAfterWrite && c.config.QueryBaseUrl != ""
+}
+
+// requestSync asks for a sync after a write, without waiting for it. If a sync is already pending
+// the request is dropped: that pending sync will pick up this write too.
+func (c *Component) requestSync() {
+	if !c.syncAfterWrite() {
+		return
+	}
+	select {
+	case c.syncRequests <- struct{}{}:
+	default:
+	}
+}
+
+// runRequestedSyncs runs a sync for every request on syncRequests until ctx is cancelled. update
+// holds updateMux, so these serialize with syncs triggered through /lrza/update.
+func (c *Component) runRequestedSyncs(ctx context.Context) {
+	defer close(c.syncDone)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-c.syncRequests:
+			if _, err := c.update(ctx); err != nil && ctx.Err() == nil {
+				slog.ErrorContext(ctx, "LRZA sync after write failed", logging.Error(err))
+			}
+		}
+	}
+}
 
 // RegisterHttpHandlers registers no routes: /lrza/update is served through the generated
 // OpenAPI strict server, wired up in strictAPIServer.RegisterHttpHandlers in package cmd.

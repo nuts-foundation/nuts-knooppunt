@@ -40,12 +40,20 @@ import (
 type OperationOutcomeResponse struct {
 	StatusCode int
 	Outcome    FHIROperationOutcome
+	// Header holds optional extra response headers, e.g. a Retry-After passed through from an
+	// upstream server.
+	Header http.Header
 }
 
 func (r OperationOutcomeResponse) Write(w http.ResponseWriter) error {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(r.Outcome); err != nil {
 		return err
+	}
+	for key, values := range r.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
 	}
 	w.Header().Set("Content-Type", "application/fhir+json")
 	w.WriteHeader(r.StatusCode)
@@ -56,7 +64,7 @@ func (r OperationOutcomeResponse) Write(w http.ResponseWriter) error {
 // NewOperationOutcomeResponse logs err and builds the OperationOutcomeResponse it should be
 // returned as: the HTTP status code and FHIR OperationOutcome body are both derived from err via
 // fhirapi.StatusCodeForError/OperationOutcomeForError. Shared by every operation whose declared
-// error response is OperationOutcomeError (currently NVI and MITZ) — not specific to either.
+// error response is OperationOutcomeError (currently NVI, MITZ and LRZA registration) — not specific to any of them.
 func NewOperationOutcomeResponse(ctx context.Context, err error) OperationOutcomeResponse {
 	slog.ErrorContext(ctx, "FHIR API error", logging.Error(err))
 	return OperationOutcomeResponse{StatusCode: fhirapi.StatusCodeForError(err), Outcome: fhirapi.OperationOutcomeForError(err)}
@@ -91,5 +99,25 @@ func (r OperationOutcomeResponse) VisitSearchNVIListsFormResponse(w http.Respons
 }
 
 func (r OperationOutcomeResponse) VisitCreateMitzSubscriptionResponse(w http.ResponseWriter) error {
+	return r.Write(w)
+}
+
+func (r OperationOutcomeResponse) VisitSubmitLrzaTransactionResponse(w http.ResponseWriter) error {
+	return r.Write(w)
+}
+
+func (r OperationOutcomeResponse) VisitCreateLrzaResourceResponse(w http.ResponseWriter) error {
+	return r.Write(w)
+}
+
+func (r OperationOutcomeResponse) VisitReadLrzaResourceResponse(w http.ResponseWriter) error {
+	return r.Write(w)
+}
+
+func (r OperationOutcomeResponse) VisitUpdateLrzaResourceResponse(w http.ResponseWriter) error {
+	return r.Write(w)
+}
+
+func (r OperationOutcomeResponse) VisitWithdrawLrzaResourceResponse(w http.ResponseWriter) error {
 	return r.Write(w)
 }
