@@ -306,7 +306,7 @@ func TestRegistration_Enrichment(t *testing.T) {
 			"assigner": coding.Custodian(coding.URAOIDNamingSystem, sunflowerURA),
 		})}, stored["identifier"])
 		assert.Equal(t, `W/"1"`, resp.Header().Get("ETag"))
-		assert.Contains(t, resp.Header().Get("Location"), "/"+stored.reference()+"/_history/1")
+		assert.Equal(t, "/lrza/fhir/"+stored.reference()+"/_history/1", resp.Header().Get("Location"))
 	})
 
 	t.Run("an update without the AssignedId keeps the current one", func(t *testing.T) {
@@ -562,6 +562,7 @@ func TestRegistration_Transaction(t *testing.T) {
 		require.Len(t, entries, 3)
 
 		endpointRef := entries[0].(map[string]any)["resource"].(map[string]any)["id"].(string)
+		assert.Equal(t, "Endpoint/"+endpointRef+"/_history/1", entries[0].(map[string]any)["response"].(map[string]any)["location"], "relative to the Knooppunt, not the LRZA")
 		storedService := lrza.get(resource(entries[1].(map[string]any)["resource"].(map[string]any)).reference())
 		assert.Equal(t, []any{map[string]any{"reference": "Endpoint/" + endpointRef}}, storedService["endpoint"])
 		assert.NotEmpty(t, storedService["identifier"], "AssignedId generated")
@@ -703,6 +704,28 @@ func TestRegistration_SyncAfterWrite(t *testing.T) {
 		}, 5*time.Second, 10*time.Millisecond, "the sync reads every resource type, the last being OrganizationAffiliation")
 		require.NoError(t, c.Stop(context.Background()))
 	})
+}
+
+func TestRelativeLocation(t *testing.T) {
+	stored := []byte(`{"resourceType":"Endpoint","id":"123","meta":{"versionId":"2"}}`)
+	tests := []struct {
+		name         string
+		stored       []byte
+		lrzaLocation string
+		expected     string
+	}{
+		{name: "from the stored resource", stored: stored, lrzaLocation: "https://lrza.example.org/fhir/Endpoint/other/_history/9", expected: "Endpoint/123/_history/2"},
+		{name: "stored resource without versionId", stored: []byte(`{"resourceType":"Endpoint","id":"123"}`), expected: "Endpoint/123"},
+		{name: "absolute LRZA location", lrzaLocation: "https://lrza.example.org/fhir/Endpoint/123/_history/2", expected: "Endpoint/123/_history/2"},
+		{name: "absolute LRZA location without version", lrzaLocation: "https://lrza.example.org/fhir/Endpoint/123", expected: "Endpoint/123"},
+		{name: "relative LRZA location", lrzaLocation: "Endpoint/123/_history/2", expected: "Endpoint/123/_history/2"},
+		{name: "neither", expected: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, relativeLocation(tt.stored, tt.lrzaLocation))
+		})
+	}
 }
 
 func TestVersionConflictStatus(t *testing.T) {

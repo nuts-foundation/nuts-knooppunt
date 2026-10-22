@@ -1083,10 +1083,12 @@ components:
         type: string
       example: 'W/"1"'
     Location:
-      description: URL of the created resource version in the LRZA.
+      description: >
+        Path of the created resource version at the Knooppunt. The LRZA's own
+        URL is not passed on.
       schema:
         type: string
-      example: "https://lrza.example.org/fhir/Location/123/_history/1"
+      example: "/lrza/fhir/Location/123/_history/1"
     Warning:
       description: >
         Set when the mutation succeeded but signing its Provenance failed.
