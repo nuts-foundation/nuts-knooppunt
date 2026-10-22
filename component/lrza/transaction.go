@@ -148,8 +148,24 @@ func (r *registrar) transaction(ctx context.Context, tenantURA string, body []by
 	}
 
 	w.signTransactionResult(ctx, &result)
+	rewriteResponseLocations(&result)
 	w.requestSync()
 	return json.Marshal(result)
+}
+
+// rewriteResponseLocations makes the entries' response.location relative to the Knooppunt's FHIR base,
+// rather than the LRZA's (see relativeLocation).
+func rewriteResponseLocations(result *fhir.Bundle) {
+	for i, entry := range result.Entry {
+		if entry.Response == nil || entry.Response.Location == nil {
+			continue
+		}
+		if location := relativeLocation(entry.Resource, *entry.Response.Location); location != "" {
+			result.Entry[i].Response.Location = &location
+		} else {
+			result.Entry[i].Response.Location = nil
+		}
+	}
 }
 
 // parseTransactionEntry checks an entry is a write the proxy supports, and parses its resource.

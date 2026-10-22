@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -306,9 +307,11 @@ func (w *writeContext) prepare(ctx context.Context, res resource, current resour
 // finish runs the steps after a successful write: signing a Provenance and requesting a sync.
 func (w *writeContext) finish(ctx context.Context, stored []byte, headers fhirclient.Headers) *writeResult {
 	result := &writeResult{
-		body:     stored,
-		etag:     etagOf(headers, stored),
-		location: headers.Get("Location"),
+		body: stored,
+		etag: etagOf(headers, stored),
+	}
+	if location := relativeLocation(stored, headers.Get("Location")); location != "" {
+		result.location = "/lrza/fhir/" + location
 	}
 	if err := w.signProvenance(ctx, stored); err != nil {
 		slog.WarnContext(ctx, "LRZA write succeeded, but signing its Provenance failed", logging.Error(err))
@@ -343,6 +346,31 @@ func etagOf(headers fhirclient.Headers, stored []byte) string {
 	if json.Unmarshal(stored, &res) == nil {
 		if versionID := res.versionID(); versionID != "" {
 			return `W/"` + versionID + `"`
+		}
+	}
+	return ""
+}
+
+// relativeLocation is the location of a written resource version relative to the FHIR base, e.g.
+// "Location/123/_history/1". The LRZA's own location isn't passed on to the client as is, since it
+// reveals the LRZA's base URL, and the client should talk to the Knooppunt anyway. It is derived from
+// the stored resource, or else from the trailing segments of the LRZA's location; "" if neither has it.
+func relativeLocation(stored []byte, lrzaLocation string) string {
+	var res resource
+	if json.Unmarshal(stored, &res) == nil && res.resourceType() != "" && res.id() != "" {
+		if versionID := res.versionID(); versionID != "" {
+			return res.reference() + "/_history/" + versionID
+		}
+		return res.reference()
+	}
+	if parsed, err := url.Parse(lrzaLocation); err == nil {
+		segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+		n := len(segments)
+		switch {
+		case n >= 4 && segments[n-2] == "_history":
+			return strings.Join(segments[n-4:], "/")
+		case n >= 2 && segments[n-2] != "" && segments[n-1] != "":
+			return strings.Join(segments[n-2:], "/")
 		}
 	}
 	return ""

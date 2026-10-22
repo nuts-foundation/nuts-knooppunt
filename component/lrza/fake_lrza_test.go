@@ -249,7 +249,7 @@ func (f *fakeLRZA) transaction(w http.ResponseWriter, body []byte) {
 			"resource": stored,
 			"response": map[string]any{
 				"status":   status,
-				"location": stored.reference() + "/_history/" + stored.versionID(),
+				"location": f.server.URL + "/" + stored.reference() + "/_history/" + stored.versionID(),
 				"etag":     `W/"` + stored.versionID() + `"`,
 			},
 		})
