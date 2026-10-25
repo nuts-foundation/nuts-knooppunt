@@ -347,9 +347,12 @@ mvn test
 
 ## Build & Run with docker
 
+The HAPI image (`mock-components/hapi/Dockerfile`) builds this interceptor together with the mock LRZA
+(`mock-components/lrza`):
+
 ```bash
-docker build . -t nvi
-docker run -p 8080:8080 nvi
+docker build -t knooppunt-hapi:local -f mock-components/hapi/Dockerfile mock-components
+docker run -p 8080:8080 knooppunt-hapi:local
 ```
 
 ### Interact

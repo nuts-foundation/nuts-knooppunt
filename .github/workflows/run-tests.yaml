@@ -39,7 +39,34 @@ jobs:
     - name: Download dependencies
       run: go mod download
 
+    # The e2e tests run against this build of the HAPI image (mock-components/hapi) rather than the
+    # published :main, so a change to the mock NVI or LRZA is tested in the pull request that makes it.
+    - name: Build the HAPI image with the mock interceptors
+      run: docker build -t knooppunt-hapi:ci -f mock-components/hapi/Dockerfile mock-components
+
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+        cache: maven
+        cache-dependency-path: mock-components/**/pom.xml
+
+    # The LRZA interceptor's profile validation tests need the IG packages, which the image build
+    # downloaded; they are taken from there rather than downloaded twice.
+    - name: Run mock interceptor tests
+      env:
+        LRZA_PACKAGES_DIR: ${{ runner.temp }}/lrza-packages
+      run: |
+        container=$(docker create knooppunt-hapi:ci)
+        docker cp "$container:/app/lrza-packages" "$LRZA_PACKAGES_DIR"
+        docker rm "$container"
+        mvn -B test -f mock-components/lrza/hapi-lrza-interceptor/pom.xml
+        mvn -B test -f mock-components/nvi/hapi-pseudonimization-interceptor/pom.xml
+
     - name: Run Go tests
+      env:
+        KNPT_HAPI_IMAGE: knooppunt-hapi:ci
       run: go test -p 1 -v ./...
 
     - name: Run shared NVI client tests

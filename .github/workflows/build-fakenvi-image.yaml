@@ -1,4 +1,6 @@
 ---
+# The HAPI image with the mock interceptors baked in: the NVI (mock-components/nvi) and the LRZA
+# (mock-components/lrza). Still published as fake-nvi; renaming it touches compose, helm and CI.
 name: "Build Fake NVI Docker image"
 
 on:
@@ -10,6 +12,8 @@ on:
       - main
     paths:
       - mock-components/nvi/**
+      - mock-components/lrza/**
+      - mock-components/hapi/**
       - .github/workflows/build-fakenvi-image.yaml
   workflow_call:
 
@@ -81,8 +85,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: mock-components/nvi/hapi-pseudonimization-interceptor
-          file: mock-components/nvi/hapi-pseudonimization-interceptor/Dockerfile
+          context: mock-components
+          file: mock-components/hapi/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}

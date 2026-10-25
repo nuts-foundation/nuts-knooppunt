@@ -156,12 +156,13 @@ services:
 
   # With the mock PRS in play the tokens the knooppunt registers are real
   # blinded values, which the fake-nvi image cannot turn into a pseudonym.
-  # Build the interceptor from source so the PRS-backed resolver in
+  # Build the interceptors from source so the PRS-backed resolver in
   # mock-components/nvi is used before a new fake-nvi image is published, and
   # tell it where the mock PRS's sandbox helper is.
   hapi-fhir:
     build:
-      context: ./mock-components/nvi/hapi-pseudonimization-interceptor
+      context: ./mock-components
+      dockerfile: hapi/Dockerfile
     # The base file names the published image. With both image and build and
     # no pull policy, Compose pulls first and only builds when the pull fails
     # (compose spec, build: "Using build and image"), which would run the old

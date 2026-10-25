@@ -1,0 +1,6 @@
+# The build context is mock-components/; only the two interceptor modules are needed.
+*
+!nvi/hapi-pseudonimization-interceptor/pom.xml
+!nvi/hapi-pseudonimization-interceptor/src
+!lrza/hapi-lrza-interceptor/pom.xml
+!lrza/hapi-lrza-interceptor/src

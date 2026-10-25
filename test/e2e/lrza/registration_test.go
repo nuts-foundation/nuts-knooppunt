@@ -2,15 +2,18 @@ package lrza
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
@@ -20,14 +23,24 @@ import (
 )
 
 // Test_LRZARegistration drives the registration proxy (the write path to the LRZA) against the
-// seeded Central Addressing Directory, which stands in for the LRZA. Like Test_LRZASync, the steps
-// build on each other's state, so the test stops at the first failing step.
+// seeded Central Addressing Directory, which stands in for the LRZA: the mock LRZA
+// (mock-components/lrza) authorizes writes by the care provider's mandate, refuses a DELETE or an
+// update without If-Match, validates against the IG's profiles and verifies Provenance signatures.
+// Every write below therefore also proves the Knooppunt sends what the LRZA accepts. Like
+// Test_LRZASync, the steps build on each other's state, so the test stops at the first failing step.
+//
+// The Knooppunt's own mandate check (lrza.registration.mandate) is off, so a missing mandate is the
+// mock's 403, passed through.
 func Test_LRZARegistration(t *testing.T) {
-	h := harness.Start(t)
-	source := fhirclient.New(h.LRZaFHIRBaseURL, http.DefaultClient, nil)
+	h := harness.StartWithLRZASigning(t, map[string]tlsutil.Config{sunflower.URA: signingCertificate(t)})
+	// Reads the directory to check what the Knooppunt wrote, as the operator: a read as anyone else
+	// would take a failure armed for the Knooppunt.
+	source := h.LRZAOperator
 	query := fhirclient.New(h.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
 	client := &registrationClient{t: t, h: h, tenant: coding.URANamingSystem + "|" + sunflower.URA}
+	care2CureClient := &registrationClient{t: t, h: h, tenant: coding.URANamingSystem + "|" + lrza.Care2CureURA}
 	sunflowerOrganizationID := *lrza.CareHomeSunflower().Id
+	care2CureMandate := lrza.Mandate("5f0e7c3a-2b1d-4c9e-8a7f-1e2d3c4b5a6f", *lrza.Care2Cure().Id, lrza.Care2CureURA)
 
 	var endpointID, locationID string
 	steps := []struct {
@@ -142,6 +155,51 @@ func Test_LRZARegistration(t *testing.T) {
 			stale := client.do(http.MethodPut, "Location/"+locationID, read.header.Get("ETag"), location)
 			assert.Equal(t, http.StatusPreconditionFailed, stale.status, string(stale.body))
 		}},
+		{"rate limiting is waited out", func(t *testing.T) {
+			read := client.do(http.MethodGet, "Location/"+locationID, "", nil)
+			require.Equal(t, http.StatusOK, read.status, string(read.body))
+			var location map[string]any
+			require.NoError(t, json.Unmarshal(read.body, &location))
+			location["name"] = "Zonnebloem, locatie Noord (rate limited)"
+
+			armFailure(t, h, http.StatusTooManyRequests, 2, 1, http.MethodPut)
+			resp := client.do(http.MethodPut, "Location/"+locationID, read.header.Get("ETag"), location)
+
+			require.Equal(t, http.StatusOK, resp.status, string(resp.body))
+			assert.Equal(t, 0, armedFailures(t, h), "both 429s were answered, and retried")
+		}},
+		{"a create the LRZA failed is not retried", func(t *testing.T) {
+			armFailure(t, h, http.StatusServiceUnavailable, 1, 0, http.MethodPost)
+			resp := client.do(http.MethodPost, "Endpoint", "", map[string]any{
+				"resourceType":   "Endpoint",
+				"status":         "active",
+				"connectionType": map[string]any{"system": coding.EndpointConnectionTypeSystem, "code": "hl7-fhir-rest"},
+				"payloadType": []any{map[string]any{"coding": []any{map[string]any{
+					"system": coding.CSDDataCategoriesSystem, "code": "Patient",
+				}}}},
+				"address": "https://zonnebloem.example.org/fhir/not-retried",
+			})
+
+			// A retry would have succeeded: only one failure was armed. A POST may have been applied
+			// before a 5xx, so the Knooppunt leaves retrying it to the client.
+			assert.Equal(t, http.StatusServiceUnavailable, resp.status, string(resp.body))
+			assert.Equal(t, 0, armedFailures(t, h))
+		}},
+		{"a resource that passes local validation but not the profile is rejected by the LRZA", func(t *testing.T) {
+			resp := client.do(http.MethodPost, "Endpoint", "", map[string]any{
+				"resourceType":   "Endpoint",
+				"status":         "active",
+				"connectionType": map[string]any{"system": coding.EndpointConnectionTypeSystem, "code": "hl7-fhir-rest"},
+				// The right code system, which is all the Knooppunt checks, but no code of it.
+				"payloadType": []any{map[string]any{"coding": []any{map[string]any{
+					"system": coding.CSDDataCategoriesSystem, "code": "NoSuchCategory",
+				}}}},
+				"address": "https://zonnebloem.example.org/fhir/invalid",
+			})
+
+			require.Equal(t, http.StatusUnprocessableEntity, resp.status, string(resp.body))
+			assert.Contains(t, string(resp.body), "nl-gf-payloadtype-req", "the LRZA's OperationOutcome is passed through")
+		}},
 		{"withdraw the Location", func(t *testing.T) {
 			resp := client.do(http.MethodDelete, "Location/"+locationID, "", nil)
 			require.Equal(t, http.StatusOK, resp.status, string(resp.body))
@@ -158,6 +216,68 @@ func Test_LRZARegistration(t *testing.T) {
 				return ok && local.Status != nil && *local.Status == fhir.LocationStatusInactive
 			}, 30*time.Second, 500*time.Millisecond)
 		}},
+		{"every write was signed, and the LRZA verified the signatures", func(t *testing.T) {
+			assert.Empty(t, client.warnings, "a write whose Provenance was rejected carries a warning")
+			for _, target := range []string{"Endpoint/" + endpointID, "Location/" + locationID} {
+				var provenances fhir.Bundle
+				require.NoError(t, source.Search("Provenance", url.Values{"target": {target}}, &provenances))
+				assert.NotEmpty(t, provenances.Entry, "a Provenance for %s", target)
+			}
+		}},
+		{"the LRZA rejects a Provenance whose signature does not verify", func(t *testing.T) {
+			// The Endpoint's: it hasn't changed since it was signed, so its Provenance verifies as is.
+			var provenances fhir.Bundle
+			require.NoError(t, source.Search("Provenance", url.Values{"target": {"Endpoint/" + endpointID}}, &provenances))
+			require.NotEmpty(t, provenances.Entry)
+			var provenance map[string]any
+			require.NoError(t, json.Unmarshal(provenances.Entry[0].Resource, &provenance))
+			delete(provenance, "id")
+			delete(provenance, "meta")
+
+			resent := lrzaDirect(t, h, http.MethodPost, "Provenance", "", "", provenance)
+			require.Equal(t, http.StatusCreated, resent.status, "the Provenance as signed: %s", resent.body)
+
+			signature := provenance["signature"].([]any)[0].(map[string]any)
+			compact, err := base64.StdEncoding.DecodeString(signature["data"].(string))
+			require.NoError(t, err)
+			// Another signature value: a character from its middle, as the last also carries padding.
+			at := len(compact) - 20
+			compact[at] = map[bool]byte{true: 'B', false: 'A'}[compact[at] == 'A']
+			signature["data"] = base64.StdEncoding.EncodeToString(compact)
+
+			resp := lrzaDirect(t, h, http.MethodPost, "Provenance", "", "", provenance)
+
+			require.Equal(t, http.StatusUnprocessableEntity, resp.status, string(resp.body))
+			assert.Contains(t, string(resp.body), "does not match")
+		}},
+		{"a care provider that granted no mandate is refused by the LRZA", func(t *testing.T) {
+			resp := care2CureClient.do(http.MethodPost, "Endpoint", "", care2CureEndpoint())
+
+			require.Equal(t, http.StatusForbidden, resp.status, string(resp.body))
+			assert.Contains(t, string(resp.body), "has not granted", "the LRZA's OperationOutcome is passed through")
+		}},
+		{"once the care provider grants the mandate, the write succeeds", func(t *testing.T) {
+			grant := lrzaDirect(t, h, http.MethodPost, "OrganizationAffiliation", lrza.CareProviderCaller(lrza.Care2CureURA), "", care2CureMandate)
+			require.Equal(t, http.StatusCreated, grant.status, string(grant.body))
+			var granted fhir.OrganizationAffiliation
+			require.NoError(t, json.Unmarshal(grant.body, &granted))
+			care2CureMandate.Id = granted.Id
+
+			resp := care2CureClient.do(http.MethodPost, "Endpoint", "", care2CureEndpoint())
+			assert.Equal(t, http.StatusCreated, resp.status, string(resp.body))
+		}},
+		{"once the care provider revokes the mandate, the write is refused again", func(t *testing.T) {
+			var current fhir.OrganizationAffiliation
+			var headers fhirclient.Headers
+			require.NoError(t, source.Read("OrganizationAffiliation/"+*care2CureMandate.Id, &current, fhirclient.ResponseHeaders(&headers)))
+			current.Active = new(false)
+			revoke := lrzaDirect(t, h, http.MethodPut, "OrganizationAffiliation/"+*current.Id,
+				lrza.CareProviderCaller(lrza.Care2CureURA), headers.Get("ETag"), current)
+			require.Equal(t, http.StatusOK, revoke.status, string(revoke.body))
+
+			resp := care2CureClient.do(http.MethodPost, "Endpoint", "", care2CureEndpoint())
+			assert.Equal(t, http.StatusForbidden, resp.status, string(resp.body))
+		}},
 	}
 	for _, step := range steps {
 		if !t.Run(step.name, step.run) {
@@ -166,11 +286,27 @@ func Test_LRZARegistration(t *testing.T) {
 	}
 }
 
+// care2CureEndpoint is an Endpoint Care2Cure registers, for the mandate steps.
+func care2CureEndpoint() map[string]any {
+	return map[string]any{
+		"resourceType":   "Endpoint",
+		"status":         "active",
+		"connectionType": map[string]any{"system": coding.EndpointConnectionTypeSystem, "code": "hl7-fhir-rest"},
+		"payloadType": []any{map[string]any{"coding": []any{map[string]any{
+			"system": coding.CSDDataCategoriesSystem, "code": "CareServiceEntities",
+		}}}},
+		"address": "https://example.com/care2curehospital/fhir/registration-e2e",
+	}
+}
+
 // registrationClient calls the Knooppunt's /lrza/fhir operations for one tenant.
 type registrationClient struct {
 	t      *testing.T
 	h      harness.Details
 	tenant string
+	// warnings collects the Warning headers of the responses: the Knooppunt reports a write whose
+	// Provenance the LRZA rejected that way.
+	warnings []string
 }
 
 type registrationResponse struct {
@@ -203,6 +339,12 @@ func (c *registrationClient) do(method, path, ifMatch string, body any) registra
 	defer response.Body.Close()
 	data, err := io.ReadAll(response.Body)
 	require.NoError(c.t, err)
+	if warning := response.Header.Get("Warning"); warning != "" {
+		c.warnings = append(c.warnings, method+" "+path+": "+warning)
+	}
+	if bytes.Contains(data, []byte("Provenance signing failed")) {
+		c.warnings = append(c.warnings, method+" "+path+": "+string(data))
+	}
 	return registrationResponse{status: response.StatusCode, header: response.Header, body: data}
 }
 
