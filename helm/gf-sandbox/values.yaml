@@ -107,6 +107,18 @@ traceCapture:
       limits:
         memory: 128Mi
 
+# Consent revocation (sandbox/app/README.md, "Consent revocation"). mockUrl is
+# the mock Mitz's base URL: it enables the demo's consent control, the read of
+# Mitz's answer and of its decision log, and the cleanup of consent state on
+# reset. notify is the private listener the Knooppunt forwards Mitz
+# notifications to (its config.mitz.notifyforwardurl). It gets a ClusterIP
+# service of its own (<fullname>-mitz-notify), which no ingress routes to.
+mitz:
+  mockUrl: ""
+  notify:
+    enabled: false
+    listenPort: 8093
+
 volumes: []
 volumeMounts: []
 

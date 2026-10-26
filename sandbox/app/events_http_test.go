@@ -7,7 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -80,14 +82,14 @@ func TestEventHTTP_ReplayLiveDeliveryAndResume(t *testing.T) {
 	require.Equal(t, id, event.RunID)
 	frame = readEventFrame(t, reader)
 	require.Equal(t, "snapshot", frame.event)
-	require.JSONEq(t, `{"lastSeq":2,"prsEvidence":false}`, frame.data)
+	require.JSONEq(t, `{"lastSeq":2,"prsEvidence":false,"record":{"revision":0,"copy":"none"}}`, frame.data)
 	require.True(t, cfg.Runs.append(id, stepEvent{GF: "exchange", Outcome: "deny"}))
 	frame = readEventFrame(t, reader)
 	require.Equal(t, id+":3", frame.id)
 	require.Contains(t, frame.data, `"outcome":"deny"`)
 	frame = readEventFrame(t, reader)
 	require.Equal(t, "snapshot", frame.event)
-	require.JSONEq(t, `{"lastSeq":3,"prsEvidence":false}`, frame.data)
+	require.JSONEq(t, `{"lastSeq":3,"prsEvidence":false,"record":{"revision":0,"copy":"none"}}`, frame.data)
 	cfg.Runs.clearPatient("anna")
 	frame = readEventFrame(t, reader)
 	require.Equal(t, "run-ended", frame.event)
@@ -388,6 +390,9 @@ func TestEventHTTP_ActualPatientCallsAreRedactedBeforeRetention(t *testing.T) {
 func TestEventHTTP_HTTP2ConnectionSurvivesIdleBetweenWrites(t *testing.T) {
 	cfg := testConfig()
 	cfg.Runs = newRunStore(cfg.Locks)
+	// The handler is called directly, so the stores newHandlers gives every
+	// Config are set here.
+	cfg.Retrievals, cfg.runtime = newRetrievalStore(), newRuntimeState()
 	session := &authSession{ID: "test-session", ExpiresAt: time.Now().Add(time.Hour)}
 	id, err := cfg.Runs.start(lockOwner(session), "anna", session.ExpiresAt, true)
 	require.NoError(t, err)
@@ -414,4 +419,232 @@ func TestEventHTTP_HTTP2ConnectionSurvivesIdleBetweenWrites(t *testing.T) {
 	emit := time.AfterFunc(11*time.Second, func() { cfg.Runs.append(id, stepEvent{GF: "exchange", Outcome: "ok"}) })
 	defer emit.Stop()
 	require.Equal(t, id+":1", readEventFrame(t, reader).id)
+}
+
+var runIDAttribute = regexp.MustCompile(`data-run-id="([^"]+)"`)
+
+// runID reads the id of the patient's run from the record page. Rendering the
+// record makes status reads, and those are events of the run: a test that
+// compares what a run holds before and after something reads the id once and
+// uses eventsOf.
+func (s sandbox) runID(t *testing.T) string {
+	t.Helper()
+	match := runIDAttribute.FindStringSubmatch(s.record(t))
+	require.Len(t, match, 2, "the record page must carry the run id")
+	return match[1]
+}
+
+// runEvents is eventsOf for the run the record page names now.
+func (s sandbox) runEvents(t *testing.T) []stepEvent {
+	t.Helper()
+	return s.eventsOf(t, s.runID(t))
+}
+
+// eventsOf reads the step events a run has retained, from the event stream the
+// viewer reads, up to its first snapshot. It renders no page, so it adds
+// nothing to the run it reads.
+func (s sandbox) eventsOf(t *testing.T, runID string) []stepEvent {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.server.URL+"/demo/runs/"+runID+"/events", nil)
+	require.NoError(t, err)
+	res, err := s.client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+
+	var events []stepEvent
+	scanner := bufio.NewScanner(res.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 8<<20)
+	kind := ""
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case strings.HasPrefix(line, "event: "):
+			kind = strings.TrimPrefix(line, "event: ")
+		case strings.HasPrefix(line, "data: ") && kind == "step":
+			var event stepEvent
+			require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event))
+			events = append(events, event)
+		case strings.HasPrefix(line, "data: ") && kind == "snapshot":
+			return events
+		}
+	}
+	require.NoError(t, scanner.Err())
+	t.Fatal("the stream ended before its first snapshot")
+	return nil
+}
+
+// streamFrames reads SSE frames from an open stream until n snapshots were
+// seen or the timeout passes, and returns the snapshots' data.
+func streamSnapshots(t *testing.T, client *http.Client, url string, n int, during func()) []string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	require.NoError(t, err)
+	res, err := client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	require.Equal(t, http.StatusOK, res.StatusCode)
+
+	var snapshots []string
+	scanner := bufio.NewScanner(res.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 8<<20)
+	kind := ""
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case strings.HasPrefix(line, "event: "):
+			kind = strings.TrimPrefix(line, "event: ")
+		case strings.HasPrefix(line, "data: ") && kind == "snapshot":
+			snapshots = append(snapshots, strings.TrimPrefix(line, "data: "))
+			if len(snapshots) == 1 && during != nil {
+				during()
+			}
+			if len(snapshots) == n {
+				return snapshots
+			}
+		}
+	}
+	t.Fatalf("the stream ended after %d of %d snapshots: %v", len(snapshots), n, scanner.Err())
+	return nil
+}
+
+func runURL(t *testing.T, f intakeFixture) string {
+	t.Helper()
+	status, record := getBody(t, f.client, f.srv, "/demo/ehr/patients/anna")
+	require.Equal(t, http.StatusOK, status)
+	match := runIDAttribute.FindStringSubmatch(record)
+	require.Len(t, match, 2)
+	return f.srv.URL + "/demo/runs/" + match[1] + "/events"
+}
+
+func TestStream_TheSnapshotCarriesTheRecordsRevisionAndCopy(t *testing.T) {
+	f := newIntakeFixture(t) // a copy is held
+	revision, _ := f.cfg.runtime.recordState("anna")
+
+	snapshots := streamSnapshots(t, f.client, runURL(t, f), 1, nil)
+
+	var snapshot struct {
+		LastSeq     uint64 `json:"lastSeq"`
+		PRSEvidence *bool  `json:"prsEvidence"`
+		Record      struct {
+			Revision uint64 `json:"revision"`
+			Copy     string `json:"copy"`
+		} `json:"record"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(snapshots[0]), &snapshot))
+	require.NotNil(t, snapshot.PRSEvidence, "the existing fields stay")
+	require.Equal(t, revision, snapshot.Record.Revision)
+	require.Equal(t, "held", snapshot.Record.Copy)
+}
+
+func TestStream_CopyIsNoneHeldOrRemoved(t *testing.T) {
+	f := newIntakeFixture(t)
+	copyOf := func() string {
+		var snapshot struct {
+			Record struct {
+				Copy string `json:"copy"`
+			} `json:"record"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(streamSnapshots(t, f.client, runURL(t, f), 1, nil)[0]), &snapshot))
+		return snapshot.Record.Copy
+	}
+	require.Equal(t, "held", copyOf())
+	f.cfg.Retrievals.withdraw("anna")
+	require.Equal(t, "removed", copyOf())
+	f.cfg.Retrievals.clearMarks("anna")
+	require.Equal(t, "none", copyOf())
+}
+
+// The gap this closes: a change to the record that produces no step. Without a
+// snapshot of its own an open page would never learn of it.
+func TestStream_ARevisionAdvanceWithoutANewStepWritesASnapshot(t *testing.T) {
+	f := newIntakeFixture(t)
+
+	snapshots := streamSnapshots(t, f.client, runURL(t, f), 2, func() {
+		f.cfg.Retrievals.withdraw("anna") // no event is appended
+		f.cfg.runtime.advance("anna")
+	})
+
+	var first, second struct {
+		LastSeq uint64 `json:"lastSeq"`
+		Record  struct {
+			Revision uint64 `json:"revision"`
+			Copy     string `json:"copy"`
+		} `json:"record"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(snapshots[0]), &first))
+	require.NoError(t, json.Unmarshal([]byte(snapshots[1]), &second))
+	require.Equal(t, first.LastSeq, second.LastSeq, "no step was new")
+	require.Greater(t, second.Record.Revision, first.Record.Revision)
+	require.Equal(t, "removed", second.Record.Copy)
+}
+
+func TestStream_AnUnchangedRecordWritesNoFurtherSnapshot(t *testing.T) {
+	f := newIntakeFixture(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 400*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, runURL(t, f), nil)
+	require.NoError(t, err)
+	res, err := f.client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body) // ends at the deadline
+	require.Equal(t, 1, strings.Count(string(body), "event: snapshot"), "a quiet stream does not spin")
+}
+
+func TestStream_AnotherPatientsAdvanceWakesNothingHere(t *testing.T) {
+	f := newIntakeFixture(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 400*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, runURL(t, f), nil)
+	require.NoError(t, err)
+	res, err := f.client.Do(req)
+	require.NoError(t, err)
+	defer res.Body.Close()
+	f.cfg.runtime.advance(f.second.Key)
+	body, _ := io.ReadAll(res.Body)
+	require.Equal(t, 1, strings.Count(string(body), "event: snapshot"))
+}
+
+// A snapshot's revision and its copy state are one reading. The retrieval store
+// is held shut here, so the snapshot stops at the point where it reads the
+// store. If it holds the state mutex there, and keeps holding it, no change to
+// the record can come between its revision and its copy: every such change is
+// made under that mutex.
+func TestStream_ASnapshotReadsTheStoreInsideTheStateMutex(t *testing.T) {
+	f := newIntakeFixture(t)
+	state, store := f.cfg.runtime, f.cfg.Retrievals
+	stateHeld := func() bool {
+		if state.stateMu.TryLock() {
+			state.stateMu.Unlock()
+			return false
+		}
+		return true
+	}
+
+	store.mu.Lock()
+	openStore := sync.OnceFunc(store.mu.Unlock)
+	t.Cleanup(openStore)
+	taken := make(chan recordSnapshot, 1)
+	go func() {
+		snapshot, _ := f.cfg.recordSnapshotFor(f.owner, f.anna.Key)
+		taken <- snapshot
+	}()
+
+	const reason = "the snapshot reads the retrieval store without holding the state mutex, so a withdrawal can come between its revision and its copy"
+	require.Eventually(t, stateHeld, 5*time.Second, time.Millisecond, reason)
+	require.Never(t, func() bool { return !stateHeld() }, 50*time.Millisecond, time.Millisecond, reason)
+
+	openStore()
+	select {
+	case snapshot := <-taken:
+		revision, _ := state.recordState(f.anna.Key)
+		require.Equal(t, recordSnapshot{Revision: revision, Copy: "held"}, snapshot)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the snapshot did not return")
+	}
 }

@@ -18,7 +18,7 @@ RUN go mod download && go mod verify
 # in the context into a reusable builder layer. An allowlist keeps new key
 # locations out by default instead of requiring a matching .dockerignore rule.
 COPY ./mock-components/dezi ./mock-components/dezi
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /mock-dezi ./mock-components/dezi
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /mock-dezi ./mock-components/dezi/cmd
 
 FROM alpine:3.22.0
 COPY --from=builder /mock-dezi /mock-dezi

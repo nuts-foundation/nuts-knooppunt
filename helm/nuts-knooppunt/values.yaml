@@ -254,6 +254,8 @@ config:
   #   mitzbase: "http://mitz-server:8087/tst-us/mitz"
   #   gatewaysystem: "urn:oid:2.16.840.1.113883.2.4.6.6.1"
   #   sourcesystem: "urn:oid:2.16.840.1.113883.2.4.6.6.90000017"
+  #   notifyendpoint: "http://nuts-knooppunt:8080/mitz/notify"
+  #   notifyforwardurl: "http://ehr:8080/consent-notifications"
 
   # PDP (Policy Decision Point) configuration
   # pdp:
@@ -467,6 +469,11 @@ gf-sandbox:
     pullPolicy: Always
   env:
     knooppuntInternalUrl: "http://nuts-knooppunt:8081"
+  # The mock Mitz of this release, for the consent control and reset. The
+  # notification intake is off until an environment turns it on together with
+  # the knooppunt's config.mitz.notifyforwardurl.
+  mitz:
+    mockUrl: "http://mock-mitz:8080"
   # De Zonnebloem's own EHR (sandbox/zonnebloem), the source side of the demo's
   # marker proof, served by the same pod on its own port. Set enabled: true,
   # give it an ingress host with servicePort: 3001, and set publicUrl to that

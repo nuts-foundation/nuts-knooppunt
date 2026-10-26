@@ -29,6 +29,9 @@
       <h1>Access denied by {{.Source.Name}}</h1>
       <div class="asub">The source refused the request. No data left {{.Source.Name}}, and this
       screen has none to show.</div>
+      {{with $.Consent}}{{if and .Notified .NotifiedDeny}}
+      <div class="asub">De Plataan received a Mitz notification at {{.NotifiedAt}} that this patient withdrew consent. The source does not say why it refused.</div>
+      {{end}}{{end}}
     </div>
   </div>
   {{else}}

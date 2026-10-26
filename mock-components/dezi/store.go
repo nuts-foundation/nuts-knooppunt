@@ -1,4 +1,4 @@
-package main
+package dezimock
 
 import (
 	"crypto/rand"

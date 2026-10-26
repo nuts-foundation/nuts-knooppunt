@@ -76,6 +76,14 @@ spec:
             - name: SANDBOX_TRACE_SERVICE_NAME
               value: {{ .Values.traceCapture.serviceName | quote }}
             {{- end }}
+            {{- with .Values.mitz.mockUrl }}
+            - name: MITZMOCK_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.mitz.notify.enabled }}
+            - name: SANDBOX_MITZ_NOTIFY_LISTEN_ADDR
+              value: ":{{ .Values.mitz.notify.listenPort }}"
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -88,6 +96,11 @@ spec:
             {{- if .Values.traceCapture.enabled }}
             - name: otlp
               containerPort: {{ .Values.traceCapture.listenPort }}
+              protocol: TCP
+            {{- end }}
+            {{- if .Values.mitz.notify.enabled }}
+            - name: mitz-notify
+              containerPort: {{ .Values.mitz.notify.listenPort }}
               protocol: TCP
             {{- end }}
           {{- with .Values.livenessProbe }}

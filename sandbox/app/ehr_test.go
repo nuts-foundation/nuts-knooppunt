@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -532,6 +536,26 @@ func TestShare_CardNamesTheRegisteredCategories(t *testing.T) {
 	require.NotContains(t, body, "BGZ (patient summary)")
 }
 
+// The card says where a notification about this subscription goes, and promises
+// this EHR one only when it has an intake to receive it.
+func TestShare_CardSaysWhetherNotificationsReachThisEHR(t *testing.T) {
+	for name, tc := range map[string]struct{ listenAddr, want, not string }{
+		"with an intake":    {":8093", "the Knooppunt forwards the notification to this EHR", "no notification intake"},
+		"without an intake": {"", "This EHR has no notification intake configured", "forwards the notification"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg, _, anna := shareConfig(t)
+			cfg.mitzNotifyListenAddr = tc.listenAddr
+
+			_, body := openAndShare(t, cfg, anna.Key)
+
+			require.Contains(t, body, "Consent subscription started")
+			require.Contains(t, body, tc.want)
+			require.NotContains(t, body, tc.not)
+		})
+	}
+}
+
 // The base --profile sandbox deployment sets no MITZMOCK_URL, so the preflight
 // cannot run there and the card must not claim this request created anything.
 func TestShare_WithoutALookupTheSuccessCardClaimsNoCreation(t *testing.T) {
@@ -963,4 +987,200 @@ func TestShare_ConcurrentSubmitsSerialize(t *testing.T) {
 	}
 	require.Equal(t, 1, started, "only the request that created the subscription may say it started it")
 	require.Equal(t, 1, existing, "the other must report that it found one")
+}
+
+var recordRevisionAttribute = regexp.MustCompile(`data-record-revision="(\d+)"`)
+
+func recordOf(t *testing.T, f consentFixture) string {
+	t.Helper()
+	status, body := getBody(t, f.client, f.srv, "/demo/ehr/patients/anna")
+	require.Equal(t, http.StatusOK, status, "body: %s", body)
+	return body
+}
+
+func TestRecord_AfterAWithdrawalShowsTheNotificationAndWhatWasRemoved(t *testing.T) {
+	f := newConsentFixture(t, true)
+	f.change(t, "deny")
+
+	record := recordOf(t, f)
+
+	require.Contains(t, record, `class="mitz-note"`)
+	require.Contains(t, record, "Notification via your Mitz subscription")
+	require.Contains(t, record, "has withdrawn consent for data sharing")
+	require.Contains(t, record, "The data retrieved earlier from Zorgcentrum De Zonnebloem has been removed from this record.")
+	require.Contains(t, record, "Data from Zorgcentrum De Zonnebloem removed after consent withdrawal.")
+	require.Contains(t, record, "No longer available · consent withdrawn")
+	require.Contains(t, record, `<span class="src grey">Revoked</span>`)
+	require.Contains(t, record, `class="bdot"`, "the bell shows its dot")
+	require.NotContains(t, record, "Allergies item", "none of the source's items is left")
+}
+
+func TestRecord_ASectionThatLostItsOnlyItemsIsStillShown(t *testing.T) {
+	f := newConsentFixture(t, true) // the stored copy has one section, Allergies
+	before := recordOf(t, f)
+	require.Contains(t, before, "<h2>Allergies</h2>")
+	f.change(t, "deny")
+	after := recordOf(t, f)
+	require.Contains(t, after, "<h2>Allergies</h2>", "a section with only removal marks is rendered, with its empty line")
+}
+
+func TestRecord_AfterARestorationSaysSoAndMarksNothingAsRemoved(t *testing.T) {
+	f := newConsentFixture(t, true)
+	f.change(t, "deny")
+	f.change(t, "permit")
+
+	record := recordOf(t, f)
+
+	require.Contains(t, record, "has given consent for data sharing again")
+	require.Contains(t, record, "Data held by other care providers can be retrieved again.")
+	require.NotContains(t, record, "No longer available")
+	require.NotContains(t, record, "removed after consent withdrawal")
+}
+
+func TestRecord_CarriesTheRevisionItWasRenderedAt(t *testing.T) {
+	f := newConsentFixture(t, true)
+	revision, _ := f.cfg.runtime.recordState("anna")
+	match := recordRevisionAttribute.FindStringSubmatch(recordOf(t, f))
+	require.Len(t, match, 2)
+	require.Equal(t, fmt.Sprint(revision), match[1])
+}
+
+// A change while the page is being rendered must leave the page behind the
+// stream, never ahead of it: the revision is read before anything else.
+func TestRecord_ReadsItsRevisionBeforeItsData(t *testing.T) {
+	cfg := retrievalConfig(t)
+	cfg.Locks = NewRegistry()
+	cfg.Runs = newRunStore(cfg.Locks)
+	cfg.runtime = newRuntimeState()
+	lookup := cfg.nviLookup
+	cfg.nviLookup = func(ctx context.Context, bsn string) (nviRecords, error) {
+		cfg.runtime.advance("anna") // something changes during the first read the page makes
+		return lookup(ctx, bsn)
+	}
+	srv, client := demoServer(t, cfg)
+	openPatient(t, client, srv, "anna")
+	before, _ := cfg.runtime.recordState("anna")
+
+	_, body := getBody(t, client, srv, "/demo/ehr/patients/anna")
+
+	match := recordRevisionAttribute.FindStringSubmatch(body)
+	require.Len(t, match, 2)
+	require.Equal(t, fmt.Sprint(before), match[1], "the page carries the revision from before the change, so the stream's newer one makes it reload")
+}
+
+func TestRecord_TheDemoCard(t *testing.T) {
+	t.Run("consent given offers the withdrawal", func(t *testing.T) {
+		f := newConsentFixture(t, true)
+		record := recordOf(t, f)
+		require.Contains(t, record, "Optional ending: consent withdrawn")
+		require.Contains(t, record, `action="/demo/ehr/patients/anna/consent"`)
+		require.Contains(t, record, `name="decision" value="deny"`)
+		require.Contains(t, record, "Simulate: Anna withdraws consent")
+		require.NotContains(t, record, `name="decision" value="permit"`)
+	})
+	t.Run("consent withdrawn offers the restoration and a new retrieval", func(t *testing.T) {
+		f := newConsentFixture(t, true)
+		f.change(t, "deny")
+		record := recordOf(t, f)
+		require.Contains(t, record, "Consent is withdrawn at Mitz (simulated).")
+		require.Contains(t, record, `name="decision" value="permit"`)
+		require.Contains(t, record, "Simulate: Anna gives consent again")
+		require.Contains(t, record, `href="/demo/ehr/patients/anna/retrieve"`)
+		require.Contains(t, record, "Try to retrieve again")
+	})
+	// Review Focus 1: a sandbox that restarted knows nothing; the mock does.
+	t.Run("withdrawn at Mitz with nothing on record here", func(t *testing.T) {
+		f := newConsentFixture(t, false)
+		f.mock.with(func(m *consentMock) { m.decision[f.anna.BSN] = "Deny" })
+		record := recordOf(t, f)
+		require.Contains(t, record, "Consent is withdrawn at Mitz (simulated).")
+		require.Contains(t, record, "Simulate: Anna gives consent again")
+		require.NotContains(t, record, `class="mitz-note"`, "no notification was received, so none is shown")
+	})
+	// Review Focus 2: the page renders although Mitz cannot be read.
+	t.Run("the mock cannot be read", func(t *testing.T) {
+		f := newConsentFixture(t, false)
+		f.mock.server.Close() // connection refused: the error names the URL, and the URL carries the BSN
+		logged := captureLog(t)
+		record := recordOf(t, f) // requires 200
+		require.Contains(t, record, "Whether consent is given cannot be read from Mitz right now")
+		require.NotContains(t, record, `name="decision"`)
+		// The card sends the presenter to the log, so the log has to carry the
+		// reason: matched to the patient by four digits, and without the BSN.
+		line := logged.String()
+		require.Contains(t, line, "Mitz consent state could not be read")
+		require.Contains(t, line, "connection refused")
+		require.Contains(t, line, "****"+f.anna.BSN[len(f.anna.BSN)-4:])
+		require.NotContains(t, line, f.anna.BSN)
+	})
+	t.Run("without a subscription it says no notification will arrive", func(t *testing.T) {
+		f := newConsentFixture(t, false, shared(false))
+		record := recordOf(t, f)
+		require.Contains(t, record, "De Plataan has no consent subscription for this patient, so no notification will arrive here.")
+	})
+	t.Run("no mock configured shows no card", func(t *testing.T) {
+		cfg := retrievalConfig(t)
+		srv, client := demoServer(t, cfg)
+		openPatient(t, client, srv, "anna")
+		_, record := getBody(t, client, srv, "/demo/ehr/patients/anna")
+		require.NotContains(t, record, "Optional ending")
+	})
+}
+
+// Review Focus 5: the notification came while nobody had the patient open.
+func TestRecord_ShowsANotificationReceivedBeforeThePatientWasOpened(t *testing.T) {
+	cfg := retrievalConfig(t)
+	cfg.Locks = NewRegistry()
+	cfg.Runs = newRunStore(cfg.Locks)
+	cfg.runtime = newRuntimeState()
+	srv, client, intake := demoServerWithIntake(t, cfg)
+	anna := pool.Patients()[0]
+	require.Equal(t, http.StatusNoContent, deliver(t, intake, "application/fhir+json", notificationJSON("change-1", anna.BSN, plataanURA, "deny", t0)))
+
+	openPatient(t, client, srv, "anna")
+	_, record := getBody(t, client, srv, "/demo/ehr/patients/anna")
+
+	require.Contains(t, record, "has withdrawn consent for data sharing")
+	require.NotContains(t, record, "has been removed from this record", "nothing had been retrieved, so nothing is claimed to be removed")
+}
+
+// logBuffer is a buffer the server's goroutines write to and the test reads.
+type logBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (l *logBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *logBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
+
+// captureLog routes the default logger into a buffer for the length of the
+// test. No test in this package runs in parallel, so replacing the default is
+// safe.
+func captureLog(t *testing.T) *logBuffer {
+	t.Helper()
+	captured := &logBuffer{}
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(captured, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return captured
+}
+
+// shared makes the patient read as shared through the NVI, with or without a
+// consent subscription at Mitz.
+func shared(subscribed bool) func(*Config) {
+	return func(cfg *Config) {
+		cfg.nviLookup = func(context.Context, string) (nviRecords, error) {
+			return nviRecords{Count: 1, Categories: []string{"Patient"}}, nil
+		}
+		cfg.mitzSubscribed = func(context.Context, string) (bool, error) { return subscribed, nil }
+	}
 }

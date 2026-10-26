@@ -1,4 +1,4 @@
-package main
+package dezimock
 
 // Practitioner is the synthetic healthcare professional this mock attests to.
 // Field names follow the Dezi v0.7 subject rather than the Dutch claim names.

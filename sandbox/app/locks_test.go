@@ -132,3 +132,16 @@ func TestRegistry_HeldBy(t *testing.T) {
 	*now = now.Add(2 * time.Minute)
 	require.False(t, r.HeldBy("anna", "session-a"), "an expired lease is not held")
 }
+
+func TestRegistry_OwnerNamesTheHolderOfALiveLock(t *testing.T) {
+	registry := NewRegistry()
+	_, ok := registry.Owner("anna")
+	require.False(t, ok)
+	require.True(t, registry.Lock("anna", "owner-1"))
+	owner, ok := registry.Owner("anna")
+	require.True(t, ok)
+	require.Equal(t, "owner-1", owner)
+	registry.Release("anna", "owner-1")
+	_, ok = registry.Owner("anna")
+	require.False(t, ok)
+}

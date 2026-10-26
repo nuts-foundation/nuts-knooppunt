@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -102,4 +103,99 @@ func TestPatientShareStatus_SubscriptionUnknownWhenTheQueryFails(t *testing.T) {
 	require.True(t, status.Shared)
 	require.True(t, status.SubscriptionUnknown)
 	require.False(t, status.Subscribed)
+}
+
+const consentChangeID = "4bf92f35-77b3-4da6-a3ce-929d0e0e4736"
+
+var consentChangedAt = time.Date(2026, 10, 12, 14, 4, 55, 100_000_000, time.UTC)
+
+func TestMitzSetConsent_PutsTheDecisionWithItsChangeIDAndReturnsWhenItChanged(t *testing.T) {
+	base := mitzServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPut, r.Method)
+		assert.Equal(t, "/mock/consent/999900006", r.URL.Path)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		body, _ := io.ReadAll(r.Body)
+		assert.JSONEq(t, `{"decision":"Deny","changeId":"`+consentChangeID+`"}`, string(body))
+		_, _ = w.Write([]byte(`{"bsn":"999900006","decision":"Deny","changeId":"` + consentChangeID + `","changedAt":"2026-10-12T14:04:55.1Z","notifications":[]}`))
+	})
+	// The act is an event of the run: the call goes through the capture transport.
+	var events []stepEvent
+	ctx := withEventCapture(t.Context(), func(event stepEvent) { events = append(events, event) }, true)
+
+	changedAt, err := mitzSetConsentFunc(base)(ctx, "999900006", "Deny", consentChangeID)
+
+	require.NoError(t, err)
+	require.True(t, changedAt.Equal(consentChangedAt), "got %s", changedAt)
+	require.Len(t, events, 1)
+	require.Equal(t, "consent", events[0].GF)
+	require.Equal(t, "consent-change", events[0].Purpose)
+	require.Equal(t, "ok", events[0].Outcome)
+}
+
+func TestMitzSetConsent_ANon200AndAnUnparseableAnswerAreErrors(t *testing.T) {
+	for name, tc := range map[string]struct {
+		answer func(http.ResponseWriter)
+		reason string
+	}{
+		"refused":     {func(w http.ResponseWriter) { http.Error(w, "decision must be Permit or Deny", http.StatusBadRequest) }, "consent change returned 400"},
+		"unparseable": {func(w http.ResponseWriter) { _, _ = w.Write([]byte(`not json`)) }, "parse consent change answer"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			base := mitzServer(t, func(w http.ResponseWriter, _ *http.Request) { tc.answer(w) })
+			_, err := mitzSetConsentFunc(base)(t.Context(), "999900006", "Deny", consentChangeID)
+			require.ErrorContains(t, err, tc.reason)
+		})
+	}
+}
+
+func TestMitzConsentState_ReadsWhatTheMockAnswersNow(t *testing.T) {
+	base := mitzServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "/mock/consent/999900006", r.URL.Path)
+		_, _ = w.Write([]byte(`{"bsn":"999900006","decision":"Deny","overridden":true,"changedAt":"2026-10-12T14:04:55.1Z"}`))
+	})
+	// A status read, not an act of the demo: it produces no event.
+	var events []stepEvent
+	ctx := withEventCapture(t.Context(), func(event stepEvent) { events = append(events, event) }, true)
+
+	state, err := mitzConsentStateFunc(base)(ctx, "999900006")
+
+	require.NoError(t, err)
+	require.Equal(t, "Deny", state.Decision)
+	require.True(t, state.Overridden)
+	require.True(t, state.ChangedAt.Equal(consentChangedAt))
+	require.Empty(t, events)
+}
+
+func TestMitzConsentState_TheConfiguredDefaultHasNoChangeTime(t *testing.T) {
+	base := mitzServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"bsn":"999900006","decision":"Permit","overridden":false}`))
+	})
+
+	state, err := mitzConsentStateFunc(base)(t.Context(), "999900006")
+
+	require.NoError(t, err)
+	require.Equal(t, mitzConsentStatus{Decision: "Permit"}, state)
+}
+
+func TestMitzConsentState_RefusesAnAnswerItCannotUse(t *testing.T) {
+	for name, tc := range map[string]struct {
+		answer func(http.ResponseWriter)
+		reason string
+	}{
+		"unavailable":      {func(w http.ResponseWriter) { http.Error(w, "down", http.StatusServiceUnavailable) }, "consent state returned 503"},
+		"unparseable":      {func(w http.ResponseWriter) { _, _ = w.Write([]byte(`not json`)) }, "parse consent state"},
+		"another decision": {func(w http.ResponseWriter) { _, _ = w.Write([]byte(`{"decision":"Indeterminate"}`)) }, `consent state carried decision "Indeterminate"`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			base := mitzServer(t, func(w http.ResponseWriter, _ *http.Request) { tc.answer(w) })
+			_, err := mitzConsentStateFunc(base)(t.Context(), "999900006")
+			require.ErrorContains(t, err, tc.reason)
+		})
+	}
+}
+
+func TestMitzConsentClients_NilBaseIsUnconfigured(t *testing.T) {
+	require.Nil(t, mitzSetConsentFunc(nil))
+	require.Nil(t, mitzConsentStateFunc(nil))
 }

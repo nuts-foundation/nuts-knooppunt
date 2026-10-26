@@ -296,3 +296,19 @@ func (m *ClosedQuestionService) handleClearSubscriptions(w http.ResponseWriter, 
 	m.subscriptions.clear()
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// forPatient returns the subscriptions about one patient, of every provider, in
+// the order they were created.
+func (s *subscriptionStore) forPatient(patientID string) []fhir.Subscription {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []fhir.Subscription
+	for _, sub := range s.byKey {
+		params, err := url.ParseQuery(strings.TrimPrefix(sub.Criteria, "Consent?"))
+		if err == nil && params.Get("patientid") == patientID {
+			out = append(out, sub)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return idSequence(*out[i].Id) < idSequence(*out[j].Id) })
+	return out
+}

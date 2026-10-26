@@ -53,6 +53,13 @@ type page struct {
 
 	// ZonnebloemEHRURL links the record page to De Zonnebloem's EHR.
 	ZonnebloemEHRURL string
+
+	// RecordRevision is the revision of what the record showed when this page was
+	// rendered; the viewer compares it with the stream's and reloads when the
+	// record has changed since. Consent is what Mitz told De Plataan about this
+	// patient, and the state of the demo's consent control.
+	RecordRevision uint64
+	Consent        *consentView
 }
 
 // claim is one introspected value, rendered on the authorization page.
@@ -85,7 +92,7 @@ func init() {
 
 func renderPage(w io.Writer, pageFile string, data page) error {
 	files := append([]string{"templates/base.html", "templates/" + pageFile}, partials...)
-	t, err := template.ParseFS(tmplFS, files...)
+	t, err := template.New("page").Funcs(template.FuncMap{"join": strings.Join}).ParseFS(tmplFS, files...)
 	if err != nil {
 		return fmt.Errorf("parse %s: %w", pageFile, err)
 	}

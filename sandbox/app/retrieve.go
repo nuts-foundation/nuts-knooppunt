@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,6 +77,17 @@ func (i recordItem) External() bool { return i.Source != plataanName() }
 type recordSection struct {
 	Name  string
 	Items []recordItem
+	// Removed names the sources whose items a consent withdrawal removed from
+	// this section.
+	Removed string
+}
+
+// removal is what a consent withdrawal took out of a patient's record: which
+// sources, and which sections of the record lost items. The record shows it
+// until something replaces it.
+type removal struct {
+	Sources  []string
+	Sections []string
 }
 
 // retrievalStore keeps what each session retrieved, per patient. In memory and
@@ -91,12 +105,26 @@ type retrievalStore struct {
 	// answer that was already on its way back. A counter rather than a flag: two
 	// recycles during one retrieval must not look like none.
 	discarded map[string]uint64
+
+	// removed holds, per patient, what a consent withdrawal removed. It lives
+	// here, not with the notification, because it changes together with what the
+	// store holds: the take-and-mark of a withdrawal and the store-and-clear of a
+	// granted retrieval each happen under mu, with the generation check, so
+	// neither can undo the other out of order, and a patient never has marks and
+	// a held copy at once.
+	removed map[string]removal
+
+	// cause says why this patient's retrievals were last discarded, for the
+	// notice a retrieval overtaken by it redirects to.
+	cause map[string]string
 }
 
 func newRetrievalStore() *retrievalStore {
 	return &retrievalStore{
 		byOwner:   map[string]map[string]sourceRetrieval{},
 		discarded: map[string]uint64{},
+		removed:   map[string]removal{},
+		cause:     map[string]string{},
 	}
 }
 
@@ -126,6 +154,11 @@ func (s *retrievalStore) putIfCurrent(owner, patientKey string, generation uint6
 		s.byOwner[owner] = map[string]sourceRetrieval{}
 	}
 	s.byOwner[owner][patientKey] = retrieval
+	// Any granted retrieval, also one that returned no items: the source served
+	// the request, which it does not do without consent.
+	if retrieval.Granted() {
+		delete(s.removed, patientKey)
+	}
 	return true
 }
 
@@ -172,6 +205,85 @@ func (s *retrievalStore) clearPatient(patientKey string) {
 		delete(byPatient, patientKey)
 	}
 	s.discarded[patientKey]++
+	delete(s.removed, patientKey)
+	s.cause[patientKey] = "reset"
+}
+
+// withdraw is what a consent withdrawal does to the store: it drops what every
+// session retrieved about the patient and remembers what was removed, in one
+// step. It reports whether there was anything to remove. Marks accumulate: a
+// second withdrawal that finds nothing leaves the earlier ones.
+func (s *retrievalStore) withdraw(patientKey string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	marks := s.removed[patientKey]
+	removed := false
+	for _, byPatient := range s.byOwner {
+		retrieval, ok := byPatient[patientKey]
+		if !ok {
+			continue
+		}
+		delete(byPatient, patientKey)
+		if !retrieval.Granted() || len(retrieval.Items) == 0 {
+			continue
+		}
+		removed = true
+		if !slices.Contains(marks.Sources, retrieval.Source.Name) {
+			marks.Sources = append(marks.Sources, retrieval.Source.Name)
+		}
+		for _, item := range retrieval.Items {
+			if !slices.Contains(marks.Sections, item.Section) {
+				marks.Sections = append(marks.Sections, item.Section)
+			}
+		}
+	}
+	sort.Strings(marks.Sources)
+	sort.Strings(marks.Sections)
+	if len(marks.Sources) > 0 {
+		s.removed[patientKey] = marks
+	}
+	s.discarded[patientKey]++
+	s.cause[patientKey] = "withdrawal"
+	return removed
+}
+
+// clearMarks drops the removal marks: consent was given again.
+func (s *retrievalStore) clearMarks(patientKey string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.removed, patientKey)
+}
+
+func (s *retrievalStore) marks(patientKey string) removal {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	marks := s.removed[patientKey]
+	return removal{Sources: slices.Clone(marks.Sources), Sections: slices.Clone(marks.Sections)}
+}
+
+// holds reports whether this session holds retrieved items for the patient that
+// the record renders.
+func (s *retrievalStore) holds(owner, patientKey string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	retrieval, ok := s.byOwner[owner][patientKey]
+	return ok && retrieval.Granted() && len(retrieval.Items) > 0
+}
+
+// copyState reports, in one read, whether this session holds retrieved items
+// for the patient that the record renders and whether removal marks are set. A
+// snapshot uses it instead of holds and marks, which are two reads.
+func (s *retrievalStore) copyState(owner, patientKey string) (held, removed bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	retrieval, ok := s.byOwner[owner][patientKey]
+	return ok && retrieval.Granted() && len(retrieval.Items) > 0, len(s.removed[patientKey].Sources) > 0
+}
+
+func (s *retrievalStore) discardCause(patientKey string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cause[patientKey]
 }
 
 // localizeSources runs the two lookup legs of the chain: the NVI says which
@@ -313,7 +425,9 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 		return
 	}
 
-	retrieval, err := c.retrieveFromSource(r.Context(), *session,
+	// One retrieval is one chain: its source requests carry trace ids and share
+	// one budget for looking up what Mitz answered about them.
+	retrieval, err := c.retrieveFromSource(withConsentEvidence(r.Context(), c.mitzDecisions), *session,
 		sourceAddress{URA: chosen.URA, Name: chosen.Name, Address: chosen.Address,
 			AuthorizationServer: chosen.AuthorizationServer},
 		patient.BSN, chosen.Categories)
@@ -321,7 +435,9 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 		// The attempt is over and it produced nothing. Leaving the previous
 		// answer in place would present it as the result of this one, which is
 		// the same claim a refused or failed chain is not allowed to make.
-		c.Retrievals.forgetIfCurrent(lockOwner(session), patient.Key, generation)
+		c.runtime.change(patient.Key, func() {
+			c.Retrievals.forgetIfCurrent(lockOwner(session), patient.Key, generation)
+		})
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -332,19 +448,26 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 	// session lock rather than before it.
 	current := false
 	if c.sessions != nil && !c.sessions.storeIfLive(session.ID, func() {
-		current = c.Retrievals.putIfCurrent(lockOwner(session), patient.Key, generation, retrieval)
+		// Session mutex, then state mutex, then the retrieval store's: the order of
+		// the plan's Phase D.
+		c.runtime.change(patient.Key, func() {
+			current = c.Retrievals.putIfCurrent(lockOwner(session), patient.Key, generation, retrieval)
+		})
 	}) {
 		http.Redirect(w, r, "/demo/login", http.StatusSeeOther)
 		return
 	}
 	if !current {
-		// The answer describes the source as it was before the reset, and the
-		// reset is not known to have succeeded: it clears the cache on an error
-		// too, because a failed recycle can still have replaced resources.
-		// Rendering the authorization screen over it would offer a link to data
-		// the record cannot show, so the run starts again from the record
-		// instead, saying what happened rather than what was restored.
-		http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice=retrieval-stale", http.StatusSeeOther)
+		// The answer describes the source as it was before this patient's
+		// retrievals were discarded. Rendering the authorization screen over it
+		// would offer a link to data the record cannot show, so the run starts
+		// again from the record, saying what overtook it: a reset, which is not
+		// known to have succeeded, or a withdrawal of consent.
+		notice := "retrieval-stale"
+		if c.Retrievals.discardCause(patient.Key) == "withdrawal" {
+			notice = "retrieval-withdrawn"
+		}
+		http.Redirect(w, r, "/demo/ehr/patients/"+patient.Key+"?notice="+notice, http.StatusSeeOther)
 		return
 	}
 
@@ -355,6 +478,7 @@ func (c Config) handleRetrieve(w http.ResponseWriter, r *http.Request, session *
 		BodyClass: "hood-open", BodyAttrs: viewerBodyAttrs(true),
 		Active: "dossier", TopTitle: "Authorization · " + chosen.Name, ViewerOpen: true,
 		Session: &view, Patient: &row, Retrieval: &retrieval,
+		Consent: c.consentViewFor(r.Context(), patient, row),
 	})
 }
 
@@ -387,10 +511,20 @@ func (c Config) recordSections(patient pool.PoolPatient, session *authSession) (
 	for _, item := range items {
 		byName[item.Section] = append(byName[item.Section], item)
 	}
+	// A section is shown when it has items or when a consent withdrawal removed
+	// items from it. The second matters most when nothing is left: without it
+	// the section would vanish, and the reader would have no way to tell "the
+	// source had no allergies" from "its allergies were removed".
+	marks := c.Retrievals.marks(patient.Key)
+	removedFrom := strings.Join(marks.Sources, ", ")
 	var sections []recordSection
 	for _, name := range sectionOrder {
-		if grouped := byName[name]; len(grouped) > 0 {
-			sections = append(sections, recordSection{Name: name, Items: grouped})
+		section := recordSection{Name: name, Items: byName[name]}
+		if slices.Contains(marks.Sections, name) {
+			section.Removed = removedFrom
+		}
+		if len(section.Items) > 0 || section.Removed != "" {
+			sections = append(sections, section)
 		}
 	}
 	return sections, sourceNames, retrieved

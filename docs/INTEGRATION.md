@@ -414,7 +414,38 @@ endpoints.
 
 ### Notification Handling
 
-When consent changes occur, MITZ sends notifications to the configured endpoint.
+When consent changes occur, MITZ sends notifications to the configured endpoint, which is the Knooppunt's
+`/mitz/notify`.
+
+The Knooppunt does not interpret a notification, and it does not authenticate its sender: `/mitz/notify` is on the
+public interface and takes a `POST` from anyone who can reach it. A notification larger than 1 MiB is answered `413`.
+Any other is acknowledged with `204` and discarded, unless `mitz.notifyforwardurl` is set. With that setting it relays
+the notification to the configured URL:
+
+- the body is sent on unchanged, with the `Content-Type` it arrived with, in one `POST`;
+- the relay has a timeout of 5 seconds, and the Knooppunt does not retry it;
+- MITZ is answered `204` once the target answered with a 2xx, and `502` in every other case: the target could not be
+  reached, answered late, redirected, or answered with another status.
+
+MITZ retries a notification it got no acknowledgement for until it is delivered (PvE Aansluiting Uitwisselingssystemen
+3.8.0, AUS-TR-e0150). A `502` after a timeout does not mean the target did not process the notification: it may have,
+and answered too late, so the target can receive it again. The relay holds nothing itself. The MITZ implementation
+guide (Migreren-Abonneren-Notificeren-Registreren Toestemming 3.8.0.ad1) has an exchange system buffer a notification,
+answer MITZ, and deliver it to the source system on its own; this relay attempts delivery synchronously, acknowledges
+with `204` only after the target's 2xx, and otherwise answers `502`, leaving redelivery to MITZ.
+
+The relay passes on whatever reaches `/mitz/notify`, so restrict who can reach it before you set
+`mitz.notifyforwardurl`, at the edge where your deployment terminates TLS: require mutual TLS and accept only MITZ's
+own PKIoverheid certificate, not every certificate its CA issued. MITZ authenticates with that certificate on the
+connections it sets up as well (PvE Aansluiting Uitwisselingssystemen 3.8.0, AUS-BVL-e4010). The Knooppunt cannot do
+this itself, because it does not see that edge. The target receives the notification as unauthenticated input and
+should treat it so: check what it acts on, and expect duplicates and notifications it did not ask for.
+
+```yaml
+mitz:
+  notifyendpoint: "https://knooppunt.example.com/mitz/notify"
+  notifyforwardurl: "https://ehr.example.com/consent-notifications"
+```
 
 ## Authentication
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -25,7 +26,12 @@ func (c Config) startPatientRun(session *authSession, key string, switchPatient 
 		return nil
 	}
 	var err error
-	start := func() { _, err = c.Runs.start(lockOwner(session), key, session.ExpiresAt, switchPatient) }
+	start := func() {
+		var id string
+		if id, err = c.Runs.start(lockOwner(session), key, session.ExpiresAt, switchPatient); err == nil {
+			c.Runs.bindSession(id, session.ID)
+		}
+	}
 	if c.sessions != nil {
 		if !c.sessions.storeIfLive(session.ID, start) {
 			return errRunUnavailable
@@ -143,6 +149,8 @@ func (c Config) handleEvents(w http.ResponseWriter, r *http.Request, session *au
 	heartbeat := time.NewTicker(eventHeartbeat)
 	defer heartbeat.Stop()
 	initial := true
+	var sentRevision uint64
+	var recordChanged <-chan struct{}
 	for {
 		if snapshot.Gap && !write(fmt.Sprintf("event: replay-gap\ndata: {\"firstSeq\":%d}\n\n", snapshot.FirstSeq)) {
 			return
@@ -155,17 +163,24 @@ func (c Config) handleEvents(w http.ResponseWriter, r *http.Request, session *au
 			sequence++
 		}
 		after = snapshot.LastSeq
-		if initial || len(snapshot.Events) > 0 {
-			if !write(fmt.Sprintf("event: snapshot\ndata: {\"lastSeq\":%d,\"prsEvidence\":%t}\n\n", after, c.eventTraces != nil)) {
+		record, changed := c.recordSnapshotFor(owner, snapshot.Patient)
+		recordChanged = changed
+		// Also when no step is new: a retrieval stored after its last captured
+		// call, or a consent change that was not notified, changes the record
+		// without producing an event.
+		if initial || len(snapshot.Events) > 0 || record.Revision != sentRevision {
+			frame, err := json.Marshal(map[string]any{"lastSeq": after, "prsEvidence": c.eventTraces != nil, "record": record})
+			if err != nil || !write("event: snapshot\ndata: "+string(frame)+"\n\n") {
 				return
 			}
-			initial = false
+			initial, sentRevision = false, record.Revision
 		}
 		expiry := time.NewTimer(time.Until(snapshot.ExpiresAt))
 		select {
 		case <-r.Context().Done():
 			expiry.Stop()
 			return
+		case <-recordChanged:
 		case <-snapshot.Changed:
 		case <-expiry.C:
 		case <-heartbeat.C:
@@ -181,4 +196,33 @@ func (c Config) handleEvents(w http.ResponseWriter, r *http.Request, session *au
 			return
 		}
 	}
+}
+
+// recordSnapshot is what an open record page compares itself with: the
+// revision of what the record shows for the patient, and whether this session
+// holds retrieved data for it. It is read when a snapshot is written, so it is
+// the state now, also while an older action is replayed.
+type recordSnapshot struct {
+	Revision uint64 `json:"revision"`
+	Copy     string `json:"copy"`
+}
+
+// recordSnapshotFor reads the two together and returns the channel that is
+// closed at the patient's next revision advance. Together means inside the
+// state mutex: every change to the retrieval store that the record shows is
+// made in one of the state's transitions, so the copy read here is the copy of
+// exactly this revision.
+func (c Config) recordSnapshotFor(owner, patientKey string) (recordSnapshot, <-chan struct{}) {
+	state := recordSnapshot{Copy: "none"}
+	revision, changed := c.runtime.snapshot(patientKey, func() {
+		held, removed := c.Retrievals.copyState(owner, patientKey)
+		switch {
+		case removed:
+			state.Copy = "removed"
+		case held:
+			state.Copy = "held"
+		}
+	})
+	state.Revision = revision
+	return state, changed
 }
