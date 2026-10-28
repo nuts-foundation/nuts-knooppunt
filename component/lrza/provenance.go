@@ -17,8 +17,9 @@ import (
 	"github.com/lestrrat-go/jwx/v2/cert"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jws"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/certutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
+	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 )
 
 // Provenance signing (optional in the IG): after a write, the tenant signs the stored resource, and a
@@ -42,16 +43,12 @@ type signer struct {
 	chain *cert.Chain
 }
 
-func loadSigner(config tlsutil.Config) (*signer, error) {
-	certificate, err := tlsutil.LoadClientCertificate(config.TLSCertFile, config.TLSKeyFile, config.TLSKeyPassword)
+func loadSigner(config SigningConfig) (*signer, error) {
+	keyPair, err := certutil.Load(config.CertFile, config.KeyFile, config.KeyPassword)
 	if err != nil {
 		return nil, err
 	}
-	key, ok := certificate.PrivateKey.(crypto.Signer)
-	if !ok {
-		return nil, fmt.Errorf("unsupported private key type %T", certificate.PrivateKey)
-	}
-	return newSigner(key, certificate.Certificate)
+	return newSigner(keyPair.PrivateKey, keyPair.Chain)
 }
 
 // newSigner creates a signer for a key and its certificate chain (DER, leaf first).
@@ -147,59 +144,54 @@ func (s *signer) signDetached(payload []byte, signingTime time.Time) ([]byte, er
 	return jws.Sign(nil, jws.WithKey(s.alg, s.key, jws.WithProtectedHeaders(headers)), jws.WithDetachedPayload(payload))
 }
 
-// signProvenance signs a stored resource and registers the Provenance carrying the signature. It
-// does nothing for a tenant without a signer.
-func (w *writeContext) signProvenance(ctx context.Context, stored []byte) error {
-	s := w.signers[w.tenantURA]
-	if s == nil {
-		return nil
+// signProvenance signs a stored resource and registers the Provenance carrying the signature: the
+// tenant's Organization (in the LRZA) is both the agent (author) and the signer.
+func signProvenance(ctx context.Context, client fhirclient.Client, s *signer, tenantURA string, organization libfhir.Resource, now time.Time, stored []byte) error {
+	if organization == nil {
+		return fmt.Errorf("the tenant's Organization (URA %s) is not registered in the LRZA", tenantURA)
 	}
-	provenance, err := w.buildProvenance(ctx, s, stored)
+	provenance, err := buildProvenance(s, tenantURA, organization.Reference(), now, stored)
 	if err != nil {
 		return err
 	}
 	var headers fhirclient.Headers
 	var status int
-	if err := w.client.CreateWithContext(ctx, provenance, nil, fhirclient.ResponseHeaders(&headers), fhirclient.ResponseStatusCode(&status)); err != nil {
+	if err := client.CreateWithContext(ctx, provenance, nil, fhirclient.ResponseHeaders(&headers), fhirclient.ResponseStatusCode(&status)); err != nil {
 		return upstreamError("register the Provenance at", err, status, headers.Header)
 	}
 	return nil
 }
 
-// buildProvenance builds the Provenance for a stored resource, signed by the tenant: the tenant's
-// Organization is both the agent (author) and the signer.
-func (w *writeContext) buildProvenance(ctx context.Context, s *signer, stored []byte) (resource, error) {
-	target, err := parseResource(stored)
+// buildProvenance builds the Provenance for a stored resource, signed with s on behalf of the tenant,
+// whose Organization is organizationReference.
+func buildProvenance(s *signer, tenantURA, organizationReference string, now time.Time, stored []byte) (libfhir.Resource, error) {
+	target, err := libfhir.ParseResource(stored)
 	if err != nil {
 		return nil, err
 	}
-	if target.id() == "" {
+	if target.ID() == "" {
 		return nil, errors.New("the stored resource has no id")
 	}
-	targetReference := target.reference()
-	if versionID := target.versionID(); versionID != "" {
+	targetReference := target.Reference()
+	if versionID := target.VersionID(); versionID != "" {
 		targetReference += "/_history/" + versionID
 	}
 	canonical, err := canonicalize(stored)
 	if err != nil {
 		return nil, fmt.Errorf("failed to canonicalize the resource: %w", err)
 	}
-	now := w.now().UTC()
+	now = now.UTC()
 	compact, err := s.signDetached(canonical, now)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign the resource: %w", err)
 	}
-	organization, err := w.findTenantOrganization(ctx)
-	if err != nil {
-		return nil, err
-	}
 	who := map[string]any{
-		"reference":  organization.reference(),
+		"reference":  organizationReference,
 		"type":       "Organization",
-		"identifier": map[string]any{"system": coding.URAOIDNamingSystem, "value": w.tenantURA},
+		"identifier": map[string]any{"system": coding.URAOIDNamingSystem, "value": tenantURA},
 	}
 	recorded := now.Format(time.RFC3339)
-	return resource{
+	return libfhir.Resource{
 		"resourceType": "Provenance",
 		"target":       []any{map[string]any{"reference": targetReference}},
 		"recorded":     recorded,

@@ -8,13 +8,16 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/google/uuid"
 	"github.com/nuts-foundation/nuts-knooppunt/api"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
+	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -34,65 +37,17 @@ import (
 //  5. the write itself, a delete being rewritten to a withdrawal by status (withdraw.go);
 //  6. an optional signed Provenance (provenance.go), and a sync of the change into the query directory.
 
-// writableResourceTypes are the resource types a tenant registers through the proxy.
+// writableResourceTypes are the resource types a tenant registers through the proxy: the ones the IG
+// lets a Data Source create and update. This has to be an allowlist, even though the LRZA rejects
+// some other types itself (an OrganizationAffiliation written by the IT vendor, say): every write goes
+// out under the vendor's certificate, and tenant ownership can only be checked for these four. The
+// LRZA accepts a Provenance from a Data Source, for instance, so forwarding one unchecked would let a
+// tenant sign off on another tenant's resource.
 var writableResourceTypes = map[string]bool{
 	"Organization":      true,
 	"Location":          true,
 	"HealthcareService": true,
 	"Endpoint":          true,
-}
-
-// forbiddenResourceTypes are rejected with 403 rather than 400, since they are valid LRZA resource
-// types the proxy deliberately does not write, each with its reason.
-var forbiddenResourceTypes = map[string]string{
-	"OrganizationAffiliation": "the mandate is granted by the care provider itself; the IT vendor may not write it",
-	"Provenance":              "Provenance resources are created by the Knooppunt itself",
-	"Practitioner":            "Practitioner is out of scope of the Care Services Directory",
-	"PractitionerRole":        "PractitionerRole is out of scope of the Care Services Directory",
-}
-
-// resource is a FHIR resource as generic JSON, so that every element the client sent - including
-// ones this code doesn't know about, such as extensions - is forwarded unchanged.
-type resource map[string]any
-
-func parseResource(data []byte) (resource, error) {
-	var result resource
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fhirapi.BadRequestError("request body is not a valid FHIR resource: "+err.Error(), err)
-	}
-	if result == nil {
-		return nil, fhirapi.BadRequestError("request body is not a valid FHIR resource", nil)
-	}
-	return result, nil
-}
-
-func (r resource) resourceType() string {
-	value, _ := r["resourceType"].(string)
-	return value
-}
-
-func (r resource) id() string {
-	value, _ := r["id"].(string)
-	return value
-}
-
-// reference is the relative reference to this resource, e.g. "Organization/123".
-func (r resource) reference() string {
-	return r.resourceType() + "/" + r.id()
-}
-
-func (r resource) versionID() string {
-	meta, _ := r["meta"].(map[string]any)
-	value, _ := meta["versionId"].(string)
-	return value
-}
-
-// clone returns a deep copy, so a resource read once can be both checked and modified.
-func (r resource) clone() resource {
-	data, _ := json.Marshal(r)
-	var result resource
-	_ = json.Unmarshal(data, &result)
-	return result
 }
 
 // registrar implements the /lrza/fhir operations.
@@ -140,60 +95,51 @@ type writeResult struct {
 	body     json.RawMessage
 	etag     string
 	location string
-	// warning is set when the write succeeded, but signing its Provenance failed.
-	warning string
 }
 
-// writeContext holds the state of one request: who it is for, and what it has read from the LRZA
-// so far, so that a reference followed more than once (e.g. the tenant's Organization) is read once.
+// writeContext holds the state of one request: who it is for, and a client that remembers what it has
+// read from the LRZA, so a reference followed more than once (e.g. the tenant's Organization) is read
+// once.
 type writeContext struct {
 	*registrar
 	tenantURA string
-	// cache holds LRZA reads by relative reference ("Organization/123"). A nil value records that
-	// the resource doesn't exist.
-	cache map[string]resource
-	// bundle holds the resources of a transaction by fullUrl and, for updates, by relative
-	// reference, so references between entries resolve to the version being written.
-	bundle map[string]resource
-	// tenantOrganization caches the tenant's URA Organization; see tenantOrganization.
-	tenantOrganization resource
+	// client is a caching client over the registrar's, for this request only.
+	client fhirclient.Client
+	owners *ownershipChecker
+	// tenantOrganizationFound and tenantOrganizationResult memoize tenantOrganization.
+	tenantOrganizationFound  bool
+	tenantOrganizationResult libfhir.Resource
 }
 
 func (r *registrar) newWriteContext(tenantURA string) *writeContext {
+	client := libfhir.NewCachingClient(r.client)
 	return &writeContext{
 		registrar: r,
 		tenantURA: tenantURA,
-		cache:     map[string]resource{},
-		bundle:    map[string]resource{},
+		client:    client,
+		owners: &ownershipChecker{
+			client:    client,
+			baseURL:   r.baseURL,
+			tenantURA: tenantURA,
+			bundle:    map[string]libfhir.Resource{},
+		},
 	}
 }
 
 // checkResourceType rejects resource types the proxy doesn't write.
 func checkResourceType(resourceType string) error {
-	if reason, forbidden := forbiddenResourceTypes[resourceType]; forbidden {
-		return forbiddenError(fmt.Sprintf("resource type %s can't be written through the Knooppunt: %s", resourceType, reason))
-	}
 	if !writableResourceTypes[resourceType] {
 		return fhirapi.BadRequestError(fmt.Sprintf("unsupported resource type: %s (expected Organization, Location, HealthcareService or Endpoint)", resourceType), nil)
 	}
 	return nil
 }
 
-// parseRequestResource parses a request body and checks it is of the resource type of the request
-// path, and (for an update) has the id of the request path.
-func parseRequestResource(body []byte, resourceType, id string) (resource, error) {
-	res, err := parseResource(body)
+// parseRequestResource parses a request body as a resource of the type (and, for an update, with the
+// id) of the request path.
+func parseRequestResource(body []byte, resourceType, id string) (libfhir.Resource, error) {
+	res, err := libfhir.ParseResourceOfType(body, resourceType, id)
 	if err != nil {
-		return nil, err
-	}
-	if res.resourceType() != resourceType {
-		return nil, fhirapi.BadRequestError(fmt.Sprintf("resourceType %q does not match the request path (%s)", res.resourceType(), resourceType), nil)
-	}
-	if id != "" {
-		if res.id() != "" && res.id() != id {
-			return nil, fhirapi.BadRequestError(fmt.Sprintf("resource id %q does not match the request path (%s)", res.id(), id), nil)
-		}
-		res["id"] = id
+		return nil, fhirapi.BadRequestError("invalid request body: "+err.Error(), err)
 	}
 	return res, nil
 }
@@ -226,7 +172,7 @@ func (r *registrar) readResource(ctx context.Context, tenantURA, resourceType, i
 	if err != nil {
 		return nil, err
 	}
-	if err := w.requireOwned(ctx, current, "the resource does not belong to the tenant"); err != nil {
+	if err := w.owners.requireOwned(ctx, current, "the resource does not belong to the tenant"); err != nil {
 		return nil, err
 	}
 	body, err := json.Marshal(current)
@@ -249,7 +195,7 @@ func (r *registrar) updateResource(ctx context.Context, tenantURA, resourceType,
 	if err != nil {
 		return nil, err
 	}
-	if err := w.requireOwned(ctx, current, "the current version in the LRZA does not belong to the tenant"); err != nil {
+	if err := w.owners.requireOwned(ctx, current, "the current version in the LRZA does not belong to the tenant"); err != nil {
 		return nil, err
 	}
 	if err := w.prepare(ctx, res, current); err != nil {
@@ -271,13 +217,13 @@ func (r *registrar) withdrawResource(ctx context.Context, tenantURA, resourceTyp
 	if err != nil {
 		return nil, err
 	}
-	if err := w.requireOwned(ctx, current, "the current version in the LRZA does not belong to the tenant"); err != nil {
+	if err := w.owners.requireOwned(ctx, current, "the current version in the LRZA does not belong to the tenant"); err != nil {
 		return nil, err
 	}
 	if err := w.checkMandate(ctx); err != nil {
 		return nil, err
 	}
-	withdrawn := current.clone()
+	withdrawn := current.Clone()
 	if err := withdraw(withdrawn, r.now()); err != nil {
 		return nil, err
 	}
@@ -291,11 +237,11 @@ func (r *registrar) withdrawResource(ctx context.Context, tenantURA, resourceTyp
 // prepare runs the pipeline steps before a write of a new version of a resource: enrichment,
 // ownership of the new version, local validation and the mandate check. current is the version in
 // the LRZA, or nil for a create.
-func (w *writeContext) prepare(ctx context.Context, res resource, current resource) error {
-	if err := w.enrich(ctx, res, current); err != nil {
+func (w *writeContext) prepare(ctx context.Context, res, current libfhir.Resource) error {
+	if err := enrich(ctx, res, current, w.enrichOptions()); err != nil {
 		return err
 	}
-	if err := w.checkNewVersion(ctx, res); err != nil {
+	if err := w.owners.checkNewVersion(ctx, res); err != nil {
 		return err
 	}
 	if issues := validateResource(res); len(issues) > 0 {
@@ -313,25 +259,113 @@ func (w *writeContext) finish(ctx context.Context, stored []byte, headers fhircl
 	if location := relativeLocation(stored, headers.Get("Location")); location != "" {
 		result.location = "/lrza/fhir/" + location
 	}
+	// Signing is optional in the IG, so a failure doesn't undo the write. It is only logged: it's the
+	// operator's signing configuration that needs fixing, nothing the client could act on.
 	if err := w.signProvenance(ctx, stored); err != nil {
 		slog.WarnContext(ctx, "LRZA write succeeded, but signing its Provenance failed", logging.Error(err))
-		result.warning = fmt.Sprintf(`199 knooppunt "Provenance signing failed: %s"`, strings.ReplaceAll(err.Error(), `"`, `'`))
 	}
 	w.requestSync()
 	return result
 }
 
+// enrichOptions is what enrichment needs to know about this request.
+func (w *writeContext) enrichOptions() enrichOptions {
+	return enrichOptions{
+		tenantURA:          w.tenantURA,
+		uraAssignerKVK:     w.config.URAAssignerKVK,
+		tenantOrganization: w.tenantOrganizationReference,
+		newUUID:            w.newUUID,
+	}
+}
+
+// tenantOrganizationReference returns the reference to the tenant's URA Organization: an entry of the
+// transaction being processed, or else the Organization in the LRZA. It is a 422 if there is neither:
+// a care provider is registered in the LRZA before its Endpoints are.
+func (w *writeContext) tenantOrganizationReference(ctx context.Context) (string, error) {
+	keys := make([]string, 0, len(w.owners.bundle))
+	for key := range w.owners.bundle {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys) // a deterministic choice, should there be more than one
+	for _, key := range keys {
+		res := w.owners.bundle[key]
+		if res.ResourceType() == "Organization" && slices.Contains(uraValues(res), w.tenantURA) {
+			return key, nil
+		}
+	}
+	organization, err := w.tenantOrganization(ctx)
+	if err != nil {
+		return "", err
+	}
+	if organization == nil {
+		return "", unprocessableError(fmt.Sprintf("the tenant's Organization (URA %s) is not registered in the LRZA; register it first", w.tenantURA))
+	}
+	return organization.Reference(), nil
+}
+
+// tenantOrganization finds the tenant's Organization in the LRZA by its URA; nil if it isn't
+// registered. The search is done once per request.
+func (w *writeContext) tenantOrganization(ctx context.Context) (libfhir.Resource, error) {
+	if w.tenantOrganizationFound {
+		return w.tenantOrganizationResult, nil
+	}
+	var searchSet fhir.Bundle
+	query := url.Values{"identifier": []string{coding.URAOIDNamingSystem + "|" + w.tenantURA}}
+	if err := w.client.SearchWithContext(ctx, "Organization", query, &searchSet); err != nil {
+		return nil, &fhirapi.Error{Message: "Failed to search the tenant's Organization in the LRZA", Cause: err, IssueType: fhir.IssueTypeTransient}
+	}
+	w.tenantOrganizationFound = true
+	for _, entry := range searchSet.Entry {
+		if entry.Search != nil && entry.Search.Mode != nil && *entry.Search.Mode != fhir.SearchEntryModeMatch {
+			continue
+		}
+		res, err := libfhir.ParseResource(entry.Resource)
+		if err != nil || res.ResourceType() != "Organization" {
+			continue
+		}
+		w.tenantOrganizationResult = res
+		break
+	}
+	return w.tenantOrganizationResult, nil
+}
+
+// checkMandate checks the tenant granted the configured mandate; it does nothing without one.
+func (w *writeContext) checkMandate(ctx context.Context) error {
+	if w.mandate == nil {
+		return nil
+	}
+	organization, err := w.tenantOrganization(ctx)
+	if err != nil {
+		return err
+	}
+	return w.mandate.check(ctx, w.client, w.owners.resolve, w.tenantURA, organization)
+}
+
+// signProvenance signs a stored resource for a tenant with a signing key; it does nothing for others.
+func (w *writeContext) signProvenance(ctx context.Context, stored []byte) error {
+	s := w.signers[w.tenantURA]
+	if s == nil {
+		return nil
+	}
+	signingTime := w.now()
+	organization, err := w.tenantOrganization(ctx)
+	if err != nil {
+		return err
+	}
+	return signProvenance(ctx, w.client, s, w.tenantURA, organization, signingTime, stored)
+}
+
 // ifMatchFor is the If-Match to send with an update: the client's own, unchanged, or else the version
 // the ownership check read. The latter also closes the gap between that check and the write: if
 // someone else changed the resource in between, the LRZA rejects the write with 412.
-func ifMatchFor(clientIfMatch *string, etag string, current resource) string {
+func ifMatchFor(clientIfMatch *string, etag string, current libfhir.Resource) string {
 	if clientIfMatch != nil && *clientIfMatch != "" {
 		return *clientIfMatch
 	}
 	if etag != "" {
 		return etag
 	}
-	if versionID := current.versionID(); versionID != "" {
+	if versionID := current.VersionID(); versionID != "" {
 		return `W/"` + versionID + `"`
 	}
 	return ""
@@ -342,9 +376,8 @@ func etagOf(headers fhirclient.Headers, stored []byte) string {
 	if etag := headers.Get("ETag"); etag != "" {
 		return etag
 	}
-	var res resource
-	if json.Unmarshal(stored, &res) == nil {
-		if versionID := res.versionID(); versionID != "" {
+	if res, err := libfhir.ParseResource(stored); err == nil {
+		if versionID := res.VersionID(); versionID != "" {
 			return `W/"` + versionID + `"`
 		}
 	}
@@ -356,12 +389,11 @@ func etagOf(headers fhirclient.Headers, stored []byte) string {
 // reveals the LRZA's base URL, and the client should talk to the Knooppunt anyway. It is derived from
 // the stored resource, or else from the trailing segments of the LRZA's location; "" if neither has it.
 func relativeLocation(stored []byte, lrzaLocation string) string {
-	var res resource
-	if json.Unmarshal(stored, &res) == nil && res.resourceType() != "" && res.id() != "" {
-		if versionID := res.versionID(); versionID != "" {
-			return res.reference() + "/_history/" + versionID
+	if res, err := libfhir.ParseResource(stored); err == nil && res.ResourceType() != "" && res.ID() != "" {
+		if versionID := res.VersionID(); versionID != "" {
+			return res.Reference() + "/_history/" + versionID
 		}
-		return res.reference()
+		return res.Reference()
 	}
 	if parsed, err := url.Parse(lrzaLocation); err == nil {
 		segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
@@ -377,7 +409,7 @@ func relativeLocation(stored []byte, lrzaLocation string) string {
 }
 
 // readCurrent reads the current version of a resource from the LRZA, with its ETag.
-func (w *writeContext) readCurrent(ctx context.Context, resourceType, id string) (resource, string, error) {
+func (w *writeContext) readCurrent(ctx context.Context, resourceType, id string) (libfhir.Resource, string, error) {
 	var data []byte
 	var headers fhirclient.Headers
 	var status int
@@ -386,45 +418,17 @@ func (w *writeContext) readCurrent(ctx context.Context, resourceType, id string)
 	if err != nil {
 		return nil, "", upstreamError("read "+resourceType+"/"+id+" from", err, status, headers.Header)
 	}
-	res, err := parseResource(data)
+	res, err := libfhir.ParseResource(data)
 	if err != nil {
 		return nil, "", &fhirapi.Error{Message: "LRZA returned an invalid resource", Cause: err, IssueType: fhir.IssueTypeException}
 	}
-	w.cache[resourceType+"/"+id] = res
 	return res, headers.Get("ETag"), nil
 }
 
-// lookup reads a resource from the LRZA by relative reference, through the request's cache. It
-// returns nil (and no error) if the resource doesn't exist.
-func (w *writeContext) lookup(ctx context.Context, resourceType, id string) (resource, error) {
-	key := resourceType + "/" + id
-	if res, ok := w.cache[key]; ok {
-		return res, nil
-	}
-	var data []byte
-	var headers fhirclient.Headers
-	var status int
-	err := w.client.ReadWithContext(ctx, key, &data, fhirclient.ResponseHeaders(&headers), fhirclient.ResponseStatusCode(&status))
-	if status == http.StatusNotFound || status == http.StatusGone {
-		w.cache[key] = nil
-		return nil, nil
-	}
-	if err != nil {
-		return nil, upstreamError("read "+key+" from", err, status, headers.Header)
-	}
-	res, err := parseResource(data)
-	if err != nil {
-		return nil, &fhirapi.Error{Message: "LRZA returned an invalid resource", Cause: err, IssueType: fhir.IssueTypeException}
-	}
-	w.cache[key] = res
-	return res, nil
-}
+// create and update write a resource with fhirclient.ReturnRepresentation, so they return the resource
+// as the LRZA stored it - with its id and versionId - which is returned to the client and signed.
 
-// preferRepresentation asks the LRZA to return the stored resource, which is returned to the client
-// and signed.
-var preferRepresentation = http.Header{"Prefer": []string{"return=representation"}}
-
-func (w *writeContext) create(ctx context.Context, res resource) ([]byte, fhirclient.Headers, error) {
+func (w *writeContext) create(ctx context.Context, res libfhir.Resource) ([]byte, fhirclient.Headers, error) {
 	data, err := json.Marshal(res)
 	if err != nil {
 		return nil, fhirclient.Headers{}, err
@@ -432,36 +436,29 @@ func (w *writeContext) create(ctx context.Context, res resource) ([]byte, fhircl
 	var stored []byte
 	var headers fhirclient.Headers
 	var status int
-	err = w.client.CreateWithContext(ctx, data, &stored,
-		fhirclient.RequestHeaders(preferRepresentation),
+	err = w.client.CreateWithContext(ctx, data, &stored, fhirclient.ReturnRepresentation(),
 		fhirclient.ResponseHeaders(&headers), fhirclient.ResponseStatusCode(&status))
 	if err != nil {
-		return nil, headers, upstreamError("create "+res.resourceType()+" at", err, status, headers.Header)
+		return nil, headers, upstreamError("create "+res.ResourceType()+" at", err, status, headers.Header)
 	}
-	stored, err = w.ensureRepresentation(ctx, stored, headers.Get("Location"), res.resourceType())
-	return stored, headers, err
+	return stored, headers, nil
 }
 
-func (w *writeContext) update(ctx context.Context, res resource, ifMatch string) ([]byte, fhirclient.Headers, error) {
-	requestHeaders := preferRepresentation.Clone()
+func (w *writeContext) update(ctx context.Context, res libfhir.Resource, ifMatch string) ([]byte, fhirclient.Headers, error) {
+	requestHeaders := http.Header{}
 	if ifMatch != "" {
 		requestHeaders.Set("If-Match", ifMatch)
 	}
 	var stored []byte
 	var headers fhirclient.Headers
 	var status int
-	err := w.client.UpdateWithContext(ctx, res.reference(), res, &stored,
+	err := w.client.UpdateWithContext(ctx, res.Reference(), res, &stored, fhirclient.ReturnRepresentation(),
 		fhirclient.RequestHeaders(requestHeaders),
 		fhirclient.ResponseHeaders(&headers), fhirclient.ResponseStatusCode(&status))
 	if err != nil {
-		return nil, headers, upstreamError("update "+res.reference()+" at", err, versionConflictStatus(status, ifMatch != ""), headers.Header)
+		return nil, headers, upstreamError("update "+res.Reference()+" at", err, versionConflictStatus(status, ifMatch != ""), headers.Header)
 	}
-	location := headers.Get("Location")
-	if location == "" {
-		location = res.reference()
-	}
-	stored, err = w.ensureRepresentation(ctx, stored, location, res.resourceType())
-	return stored, headers, err
+	return stored, headers, nil
 }
 
 // versionConflictStatus maps a 409 Conflict on a write that carried If-Match to 412 Precondition
@@ -472,24 +469,6 @@ func versionConflictStatus(status int, withIfMatch bool) int {
 		return http.StatusPreconditionFailed
 	}
 	return status
-}
-
-// ensureRepresentation returns the stored resource. An LRZA that ignores Prefer: return=representation
-// returns no body, in which case the resource is read from the location it was written to.
-func (w *writeContext) ensureRepresentation(ctx context.Context, stored []byte, location, resourceType string) ([]byte, error) {
-	if len(strings.TrimSpace(string(stored))) > 0 {
-		return stored, nil
-	}
-	if location == "" {
-		return nil, &fhirapi.Error{Message: "LRZA returned neither the stored " + resourceType + " nor its location", IssueType: fhir.IssueTypeException}
-	}
-	var data []byte
-	var headers fhirclient.Headers
-	var status int
-	if err := w.client.ReadWithContext(ctx, location, &data, fhirclient.ResponseHeaders(&headers), fhirclient.ResponseStatusCode(&status)); err != nil {
-		return nil, upstreamError("read the stored "+resourceType+" from", err, status, headers.Header)
-	}
-	return data, nil
 }
 
 // registrationError is an error with its own HTTP status and OperationOutcome, for the cases
@@ -588,9 +567,6 @@ func optionalHeader(value string) *string {
 }
 
 func (c *Component) SubmitLrzaTransaction(ctx context.Context, request api.SubmitLrzaTransactionRequestObject) (api.SubmitLrzaTransactionResponseObject, error) {
-	if c.registrar == nil {
-		return nil, errors.New("LRZA registration is disabled")
-	}
 	result, err := c.registrar.transaction(ctx, request.Params.XTenantID.URA(), *request.Body)
 	if err != nil {
 		return errorResponse(ctx, err), nil
@@ -611,9 +587,6 @@ func (r transactionResponse) VisitSubmitLrzaTransactionResponse(w http.ResponseW
 }
 
 func (c *Component) CreateLrzaResource(ctx context.Context, request api.CreateLrzaResourceRequestObject) (api.CreateLrzaResourceResponseObject, error) {
-	if c.registrar == nil {
-		return nil, errors.New("LRZA registration is disabled")
-	}
 	result, err := c.registrar.createResource(ctx, request.Params.XTenantID.URA(), string(request.ResourceType), *request.Body)
 	if err != nil {
 		return errorResponse(ctx, err), nil
@@ -623,15 +596,11 @@ func (c *Component) CreateLrzaResource(ctx context.Context, request api.CreateLr
 		Headers: api.CreateLrzaResource201ResponseHeaders{
 			ETag:     optionalHeader(result.etag),
 			Location: optionalHeader(result.location),
-			Warning:  optionalHeader(result.warning),
 		},
 	}, nil
 }
 
 func (c *Component) ReadLrzaResource(ctx context.Context, request api.ReadLrzaResourceRequestObject) (api.ReadLrzaResourceResponseObject, error) {
-	if c.registrar == nil {
-		return nil, errors.New("LRZA registration is disabled")
-	}
 	result, err := c.registrar.readResource(ctx, request.Params.XTenantID.URA(), string(request.ResourceType), request.Id)
 	if err != nil {
 		return errorResponse(ctx, err), nil
@@ -643,9 +612,6 @@ func (c *Component) ReadLrzaResource(ctx context.Context, request api.ReadLrzaRe
 }
 
 func (c *Component) UpdateLrzaResource(ctx context.Context, request api.UpdateLrzaResourceRequestObject) (api.UpdateLrzaResourceResponseObject, error) {
-	if c.registrar == nil {
-		return nil, errors.New("LRZA registration is disabled")
-	}
 	result, err := c.registrar.updateResource(ctx, request.Params.XTenantID.URA(), string(request.ResourceType), request.Id, request.Params.IfMatch, *request.Body)
 	if err != nil {
 		return errorResponse(ctx, err), nil
@@ -653,16 +619,12 @@ func (c *Component) UpdateLrzaResource(ctx context.Context, request api.UpdateLr
 	return api.UpdateLrzaResource200ApplicationFhirPlusJSONResponse{
 		Body: api.FHIRResource(result.body),
 		Headers: api.UpdateLrzaResource200ResponseHeaders{
-			ETag:    optionalHeader(result.etag),
-			Warning: optionalHeader(result.warning),
+			ETag: optionalHeader(result.etag),
 		},
 	}, nil
 }
 
 func (c *Component) WithdrawLrzaResource(ctx context.Context, request api.WithdrawLrzaResourceRequestObject) (api.WithdrawLrzaResourceResponseObject, error) {
-	if c.registrar == nil {
-		return nil, errors.New("LRZA registration is disabled")
-	}
 	result, err := c.registrar.withdrawResource(ctx, request.Params.XTenantID.URA(), string(request.ResourceType), request.Id, request.Params.IfMatch)
 	if err != nil {
 		return errorResponse(ctx, err), nil
@@ -670,8 +632,7 @@ func (c *Component) WithdrawLrzaResource(ctx context.Context, request api.Withdr
 	return api.WithdrawLrzaResource200ApplicationFhirPlusJSONResponse{
 		Body: api.FHIRResource(result.body),
 		Headers: api.WithdrawLrzaResource200ResponseHeaders{
-			ETag:    optionalHeader(result.etag),
-			Warning: optionalHeader(result.warning),
+			ETag: optionalHeader(result.etag),
 		},
 	}, nil
 }

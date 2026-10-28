@@ -9,6 +9,7 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
+	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -25,9 +26,9 @@ type txEntry struct {
 	resourceType string
 	id           string
 	// res is the version to write; for a DELETE, the withdrawn current version.
-	res resource
+	res libfhir.Resource
 	// current is the version in the LRZA (PUT and DELETE), with its ETag.
-	current     resource
+	current     libfhir.Resource
 	currentETag string
 }
 
@@ -55,10 +56,10 @@ func (r *registrar) transaction(ctx context.Context, tenantURA string, body []by
 		// a literal reference like Organization/123 to the resource with that id, so letting an
 		// entry claim it would let the ownership check pass for a reference to someone else's.
 		if entry.FullUrl != nil && strings.HasPrefix(*entry.FullUrl, "urn:") && parsed.res != nil {
-			w.bundle[*entry.FullUrl] = parsed.res
+			w.owners.bundle[*entry.FullUrl] = parsed.res
 		}
 		if parsed.method == fhir.HTTPVerbPUT {
-			w.bundle[parsed.resourceType+"/"+parsed.id] = parsed.res
+			w.owners.bundle[parsed.resourceType+"/"+parsed.id] = parsed.res
 		}
 	}
 
@@ -71,12 +72,12 @@ func (r *registrar) transaction(ctx context.Context, tenantURA string, body []by
 		if err != nil {
 			return nil, entryError(entry.index, err)
 		}
-		if err := w.requireOwned(ctx, current, fmt.Sprintf("entry[%d]: the current version in the LRZA does not belong to the tenant", entry.index)); err != nil {
+		if err := w.owners.requireOwned(ctx, current, fmt.Sprintf("entry[%d]: the current version in the LRZA does not belong to the tenant", entry.index)); err != nil {
 			return nil, err
 		}
 		entry.current, entry.currentETag = current, etag
 		if entry.method == fhir.HTTPVerbDELETE {
-			entry.res = current.clone()
+			entry.res = current.Clone()
 			if err := withdraw(entry.res, r.now()); err != nil {
 				return nil, entryError(entry.index, err)
 			}
@@ -88,7 +89,7 @@ func (r *registrar) transaction(ctx context.Context, tenantURA string, body []by
 		if entry.method == fhir.HTTPVerbDELETE {
 			continue
 		}
-		if err := w.enrich(ctx, entry.res, entry.current); err != nil {
+		if err := enrich(ctx, entry.res, entry.current, w.enrichOptions()); err != nil {
 			return nil, entryError(entry.index, err)
 		}
 	}
@@ -97,7 +98,7 @@ func (r *registrar) transaction(ctx context.Context, tenantURA string, body []by
 		if entry.method == fhir.HTTPVerbDELETE {
 			continue
 		}
-		if err := w.checkNewVersion(ctx, entry.res); err != nil {
+		if err := w.owners.checkNewVersion(ctx, entry.res); err != nil {
 			return nil, entryError(entry.index, err)
 		}
 		for _, issue := range validateResource(entry.res) {
@@ -137,7 +138,7 @@ func (r *registrar) transaction(ctx context.Context, tenantURA string, body []by
 	var headers fhirclient.Headers
 	var status int
 	err := w.client.CreateWithContext(ctx, bundle, &result, fhirclient.AtPath("/"),
-		fhirclient.RequestHeaders(preferRepresentation),
+		fhirclient.ReturnRepresentation(),
 		fhirclient.ResponseHeaders(&headers), fhirclient.ResponseStatusCode(&status))
 	if err != nil {
 		withIfMatch := false
@@ -233,8 +234,7 @@ func entryError(index int, err error) error {
 }
 
 // signTransactionResult signs a Provenance for every entry the transaction changed. A failure doesn't
-// undo the transaction: signing is optional. It is reported as a warning issue in the entry's
-// response.outcome instead.
+// undo the transaction: signing is optional. It is only logged, as for a single write (see finish).
 func (w *writeContext) signTransactionResult(ctx context.Context, result *fhir.Bundle) {
 	if w.signers[w.tenantURA] == nil {
 		return
@@ -246,32 +246,14 @@ func (w *writeContext) signTransactionResult(ctx context.Context, result *fhir.B
 		stored := []byte(entry.Resource)
 		var err error
 		if len(stored) == 0 && entry.Response.Location != nil {
-			stored, err = w.ensureRepresentation(ctx, nil, *entry.Response.Location, "resource")
+			// The LRZA didn't return the stored resource in the entry: read it.
+			err = w.client.ReadWithContext(ctx, *entry.Response.Location, &stored)
 		}
 		if err == nil {
 			err = w.signProvenance(ctx, stored)
 		}
 		if err != nil {
 			slog.WarnContext(ctx, "LRZA transaction succeeded, but signing a Provenance failed", slog.Int("entry", i), logging.Error(err))
-			result.Entry[i].Response.Outcome = addWarning(entry.Response.Outcome, "Provenance signing failed: "+err.Error())
 		}
 	}
-}
-
-// addWarning adds a warning issue to an entry's response.outcome, creating it if absent.
-func addWarning(outcome json.RawMessage, message string) json.RawMessage {
-	var parsed fhir.OperationOutcome
-	if len(outcome) > 0 {
-		_ = json.Unmarshal(outcome, &parsed)
-	}
-	parsed.Issue = append(parsed.Issue, fhir.OperationOutcomeIssue{
-		Severity:    fhir.IssueSeverityWarning,
-		Code:        fhir.IssueTypeIncomplete,
-		Diagnostics: &message,
-	})
-	data, err := json.Marshal(parsed)
-	if err != nil {
-		return outcome
-	}
-	return data
 }

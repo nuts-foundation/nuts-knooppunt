@@ -72,42 +72,36 @@ func (s *strictAPIServer) TriggerLrzaSync(ctx context.Context, r api.TriggerLrza
 	return s.lrza.TriggerLrzaSync(ctx, r)
 }
 
-// lrzaRegistrationEnabled reports whether the /lrza/fhir write operations are served: the LRZA
-// component must be enabled, and registration turned on in its configuration.
-func (s *strictAPIServer) lrzaRegistrationEnabled() bool {
-	return s.lrza != nil && s.lrza.RegistrationEnabled()
-}
-
 func (s *strictAPIServer) SubmitLrzaTransaction(ctx context.Context, r api.SubmitLrzaTransactionRequestObject) (api.SubmitLrzaTransactionResponseObject, error) {
-	if !s.lrzaRegistrationEnabled() {
+	if s.lrza == nil {
 		return nil, errComponentDisabled
 	}
 	return s.lrza.SubmitLrzaTransaction(ctx, r)
 }
 
 func (s *strictAPIServer) CreateLrzaResource(ctx context.Context, r api.CreateLrzaResourceRequestObject) (api.CreateLrzaResourceResponseObject, error) {
-	if !s.lrzaRegistrationEnabled() {
+	if s.lrza == nil {
 		return nil, errComponentDisabled
 	}
 	return s.lrza.CreateLrzaResource(ctx, r)
 }
 
 func (s *strictAPIServer) ReadLrzaResource(ctx context.Context, r api.ReadLrzaResourceRequestObject) (api.ReadLrzaResourceResponseObject, error) {
-	if !s.lrzaRegistrationEnabled() {
+	if s.lrza == nil {
 		return nil, errComponentDisabled
 	}
 	return s.lrza.ReadLrzaResource(ctx, r)
 }
 
 func (s *strictAPIServer) UpdateLrzaResource(ctx context.Context, r api.UpdateLrzaResourceRequestObject) (api.UpdateLrzaResourceResponseObject, error) {
-	if !s.lrzaRegistrationEnabled() {
+	if s.lrza == nil {
 		return nil, errComponentDisabled
 	}
 	return s.lrza.UpdateLrzaResource(ctx, r)
 }
 
 func (s *strictAPIServer) WithdrawLrzaResource(ctx context.Context, r api.WithdrawLrzaResourceRequestObject) (api.WithdrawLrzaResourceResponseObject, error) {
-	if !s.lrzaRegistrationEnabled() {
+	if s.lrza == nil {
 		return nil, errComponentDisabled
 	}
 	return s.lrza.WithdrawLrzaResource(ctx, r)

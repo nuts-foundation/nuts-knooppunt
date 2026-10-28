@@ -3,6 +3,7 @@ package lrza
 import (
 	"encoding/json"
 	"fmt"
+	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,9 @@ import (
 	"sync"
 	"testing"
 )
+
+// resource is shorthand for the generic FHIR resource the registration code works with.
+type resource = libfhir.Resource
 
 // fakeLRZA is an in-memory FHIR server standing in for the LRZA: read, search by identifier or
 // primary-organization, create, versioned update honoring If-Match, and transactions resolving
@@ -25,6 +29,9 @@ type fakeLRZA struct {
 	requests  []recordedRequest
 	// failures holds status codes to answer the next requests with, in order, before handling them.
 	failures []int
+	// minimal makes creates and updates answer without the stored resource, as an LRZA ignoring
+	// Prefer: return=representation would.
+	minimal bool
 }
 
 type recordedRequest struct {
@@ -38,7 +45,7 @@ func newFakeLRZA(t *testing.T, resources ...resource) *fakeLRZA {
 	t.Helper()
 	f := &fakeLRZA{t: t, resources: map[string]resource{}}
 	for _, res := range resources {
-		f.put(res.clone())
+		f.put(res.Clone())
 	}
 	f.server = httptest.NewServer(http.HandlerFunc(f.handle))
 	t.Cleanup(f.server.Close)
@@ -48,8 +55,8 @@ func newFakeLRZA(t *testing.T, resources ...resource) *fakeLRZA {
 // put stores a resource as a new version, returning that version.
 func (f *fakeLRZA) put(res resource) resource {
 	version := 1
-	if existing, ok := f.resources[res.reference()]; ok {
-		version, _ = strconv.Atoi(existing.versionID())
+	if existing, ok := f.resources[res.Reference()]; ok {
+		version, _ = strconv.Atoi(existing.VersionID())
 		version++
 	}
 	meta, _ := res["meta"].(map[string]any)
@@ -58,14 +65,14 @@ func (f *fakeLRZA) put(res resource) resource {
 		res["meta"] = meta
 	}
 	meta["versionId"] = strconv.Itoa(version)
-	f.resources[res.reference()] = res
+	f.resources[res.Reference()] = res
 	return res
 }
 
 func (f *fakeLRZA) get(reference string) resource {
 	f.mux.Lock()
 	defer f.mux.Unlock()
-	return f.resources[reference].clone()
+	return f.resources[reference].Clone()
 }
 
 // requestsTo returns the recorded requests with the given method and path.
@@ -125,6 +132,14 @@ func (f *fakeLRZA) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeResource(w, http.StatusOK, res)
+	case r.Method == http.MethodGet && len(parts) == 4 && parts[2] == "_history":
+		// Only the current version is kept, so that's the only one that can be read.
+		res, ok := f.resources[parts[0]+"/"+parts[1]]
+		if !ok || res.VersionID() != parts[3] {
+			writeOutcome(w, http.StatusNotFound, "version not found")
+			return
+		}
+		writeResource(w, http.StatusOK, res)
 	case r.Method == http.MethodGet && len(parts) == 1:
 		f.search(w, parts[0], r)
 	case r.Method == http.MethodPost && len(parts) == 1 && parts[0] == "":
@@ -137,8 +152,8 @@ func (f *fakeLRZA) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		res["id"] = f.newID()
 		stored := f.put(res)
-		w.Header().Set("Location", f.server.URL+"/"+stored.reference()+"/_history/"+stored.versionID())
-		writeResource(w, http.StatusCreated, stored)
+		w.Header().Set("Location", f.server.URL+"/"+stored.Reference()+"/_history/"+stored.VersionID())
+		f.writeWritten(w, http.StatusCreated, stored)
 	case r.Method == http.MethodPut && len(parts) == 2:
 		var res resource
 		if err := json.Unmarshal(body, &res); err != nil {
@@ -154,7 +169,7 @@ func (f *fakeLRZA) handle(w http.ResponseWriter, r *http.Request) {
 		if !existed {
 			status = http.StatusCreated
 		}
-		writeResource(w, status, f.put(res))
+		f.writeWritten(w, status, f.put(res))
 	default:
 		writeOutcome(w, http.StatusBadRequest, "unsupported request")
 	}
@@ -170,7 +185,7 @@ func (f *fakeLRZA) checkIfMatch(reference, ifMatch string) (int, string) {
 		return 0, ""
 	}
 	current, ok := f.resources[reference]
-	if !ok || ifMatch != `W/"`+current.versionID()+`"` {
+	if !ok || ifMatch != `W/"`+current.VersionID()+`"` {
 		return http.StatusPreconditionFailed, "version conflict: " + ifMatch
 	}
 	return 0, ""
@@ -179,12 +194,12 @@ func (f *fakeLRZA) checkIfMatch(reference, ifMatch string) (int, string) {
 func (f *fakeLRZA) search(w http.ResponseWriter, resourceType string, r *http.Request) {
 	var matches []any
 	for _, res := range f.resources {
-		if res.resourceType() != resourceType {
+		if res.ResourceType() != resourceType {
 			continue
 		}
 		if token := r.URL.Query().Get("identifier"); token != "" {
 			found := false
-			for _, identifier := range identifiers(res) {
+			for _, identifier := range res.Identifiers() {
 				if fmt.Sprintf("%v|%v", identifier["system"], identifier["value"]) == token {
 					found = true
 				}
@@ -226,7 +241,7 @@ func (f *fakeLRZA) transaction(w http.ResponseWriter, body []byte) {
 		switch entry.Request.Method {
 		case http.MethodPost:
 			bundle.Entry[i].Resource["id"] = f.newID()
-			references[entry.FullUrl] = entry.Resource.reference()
+			references[entry.FullUrl] = entry.Resource.Reference()
 		case http.MethodPut:
 			if status, message := f.checkIfMatch(entry.Request.Url, entry.Request.IfMatch); status != 0 {
 				writeOutcome(w, status, message)
@@ -241,7 +256,7 @@ func (f *fakeLRZA) transaction(w http.ResponseWriter, body []byte) {
 	for _, entry := range bundle.Entry {
 		replaceReferences(map[string]any(entry.Resource), references)
 		status := "201 Created"
-		if _, existed := f.resources[entry.Resource.reference()]; existed {
+		if _, existed := f.resources[entry.Resource.Reference()]; existed {
 			status = "200 OK"
 		}
 		stored := f.put(entry.Resource)
@@ -249,8 +264,8 @@ func (f *fakeLRZA) transaction(w http.ResponseWriter, body []byte) {
 			"resource": stored,
 			"response": map[string]any{
 				"status":   status,
-				"location": f.server.URL + "/" + stored.reference() + "/_history/" + stored.versionID(),
-				"etag":     `W/"` + stored.versionID() + `"`,
+				"location": f.server.URL + "/" + stored.Reference() + "/_history/" + stored.VersionID(),
+				"etag":     `W/"` + stored.VersionID() + `"`,
 			},
 		})
 	}
@@ -275,8 +290,18 @@ func replaceReferences(value any, references map[string]string) {
 	}
 }
 
+// writeWritten answers a create or update: with the stored resource, or without it when minimal.
+func (f *fakeLRZA) writeWritten(w http.ResponseWriter, status int, res resource) {
+	if !f.minimal {
+		writeResource(w, status, res)
+		return
+	}
+	w.Header().Set("ETag", `W/"`+res.VersionID()+`"`)
+	w.WriteHeader(status)
+}
+
 func writeResource(w http.ResponseWriter, status int, res resource) {
-	w.Header().Set("ETag", `W/"`+res.versionID()+`"`)
+	w.Header().Set("ETag", `W/"`+res.VersionID()+`"`)
 	writeJSON(w, status, res)
 }
 

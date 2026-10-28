@@ -18,7 +18,6 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -98,7 +97,7 @@ func TestRegistration_Provenance(t *testing.T) {
 	require.NoError(t, os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600))
 	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)}), 0600))
 	withSigning := func(config *Config) {
-		config.Registration.Signing = map[string]tlsutil.Config{sunflowerURA: {TLSCertFile: certFile, TLSKeyFile: keyFile}}
+		config.Registration.Signing = map[string]SigningConfig{sunflowerURA: {CertFile: certFile, KeyFile: keyFile}}
 	}
 
 	t.Run("a write is followed by a signed Provenance", func(t *testing.T) {
@@ -108,7 +107,6 @@ func TestRegistration_Provenance(t *testing.T) {
 		resp := createResource(t, c, sunflowerURA, testLocation("", "sunflower"))
 
 		require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
-		assert.Empty(t, resp.Header().Get("Warning"))
 		stored := resp.resource(t)
 		provenances := lrza.requestsTo(http.MethodPost, "/Provenance")
 		require.Len(t, provenances, 1)
@@ -127,7 +125,7 @@ func TestRegistration_Provenance(t *testing.T) {
 			} `json:"signature"`
 		}
 		require.NoError(t, json.Unmarshal(provenances[0].body, &provenance))
-		assert.Equal(t, []map[string]any{{"reference": stored.reference() + "/_history/1"}}, provenance.Target)
+		assert.Equal(t, []map[string]any{{"reference": stored.Reference() + "/_history/1"}}, provenance.Target)
 		expectedWho := map[string]any{
 			"reference":  "Organization/sunflower",
 			"type":       "Organization",
@@ -177,7 +175,7 @@ func TestRegistration_Provenance(t *testing.T) {
 		resp := createResource(t, c, sunflowerURA, location)
 
 		require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
-		assert.Contains(t, resp.Header().Get("Warning"), "Provenance signing failed")
+		assert.Empty(t, lrza.requestsTo(http.MethodPost, "/Provenance"), "no Provenance without the tenant's Organization")
 	})
 
 	t.Run("each changed entry of a transaction is signed", func(t *testing.T) {

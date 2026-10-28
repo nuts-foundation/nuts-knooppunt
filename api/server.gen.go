@@ -1969,7 +1969,6 @@ type CreateLrzaResourceResponseObject interface {
 type CreateLrzaResource201ResponseHeaders struct {
 	ETag     *string
 	Location *string
-	Warning  *string
 }
 
 type CreateLrzaResource201ApplicationFhirPlusJSONResponse struct {
@@ -1989,9 +1988,6 @@ func (response CreateLrzaResource201ApplicationFhirPlusJSONResponse) VisitCreate
 	}
 	if response.Headers.Location != nil {
 		w.Header().Set("Location", fmt.Sprint(*response.Headers.Location))
-	}
-	if response.Headers.Warning != nil {
-		w.Header().Set("Warning", fmt.Sprint(*response.Headers.Warning))
 	}
 	w.WriteHeader(201)
 	_, err := buf.WriteTo(w)
@@ -2095,8 +2091,7 @@ type WithdrawLrzaResourceResponseObject interface {
 }
 
 type WithdrawLrzaResource200ResponseHeaders struct {
-	ETag    *string
-	Warning *string
+	ETag *string
 }
 
 type WithdrawLrzaResource200ApplicationFhirPlusJSONResponse struct {
@@ -2113,9 +2108,6 @@ func (response WithdrawLrzaResource200ApplicationFhirPlusJSONResponse) VisitWith
 	w.Header().Set("Content-Type", "application/fhir+json")
 	if response.Headers.ETag != nil {
 		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
-	}
-	if response.Headers.Warning != nil {
-		w.Header().Set("Warning", fmt.Sprint(*response.Headers.Warning))
 	}
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
@@ -2368,8 +2360,7 @@ type UpdateLrzaResourceResponseObject interface {
 }
 
 type UpdateLrzaResource200ResponseHeaders struct {
-	ETag    *string
-	Warning *string
+	ETag *string
 }
 
 type UpdateLrzaResource200ApplicationFhirPlusJSONResponse struct {
@@ -2386,9 +2377,6 @@ func (response UpdateLrzaResource200ApplicationFhirPlusJSONResponse) VisitUpdate
 	w.Header().Set("Content-Type", "application/fhir+json")
 	if response.Headers.ETag != nil {
 		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
-	}
-	if response.Headers.Warning != nil {
-		w.Header().Set("Warning", fmt.Sprint(*response.Headers.Warning))
 	}
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)

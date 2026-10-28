@@ -12,6 +12,7 @@ import (
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/api"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tenants"
 	"github.com/stretchr/testify/assert"
@@ -27,7 +28,7 @@ const (
 var testNow = time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
 
 func uraIdentifierJSON(ura string) map[string]any {
-	return toJSONMap(coding.URAIdentifier(ura, coding.DefaultURAAssignerKVK))
+	return libfhir.ToJSONMap(coding.URAIdentifier(ura, coding.DefaultURAAssignerKVK))
 }
 
 func organizationRef(id string) map[string]any {
@@ -87,13 +88,12 @@ func testEndpoint(id, organizationID string) resource {
 	return res
 }
 
-// newTestComponent creates a component with registration enabled against a fake LRZA, with a fast
-// retry transport, a fixed clock and fixed generated UUIDs.
+// newTestComponent creates a component against a fake LRZA, with a fast retry transport, a fixed
+// clock and fixed generated UUIDs.
 func newTestComponent(t *testing.T, lrza *fakeLRZA, configure ...func(*Config)) *Component {
 	t.Helper()
 	config := DefaultConfig()
 	config.LRZABaseUrl = lrza.server.URL
-	config.Registration.Enabled = true
 	for _, fn := range configure {
 		fn(&config)
 	}
@@ -134,7 +134,7 @@ func (r response) resource(t *testing.T) resource {
 func (r response) diagnostics(t *testing.T) []string {
 	t.Helper()
 	res := r.resource(t)
-	require.Equal(t, "OperationOutcome", res.resourceType(), r.Body.String())
+	require.Equal(t, "OperationOutcome", res.ResourceType(), r.Body.String())
 	var result []string
 	for _, issue := range res["issue"].([]any) {
 		diagnostics, _ := issue.(map[string]any)["diagnostics"].(string)
@@ -147,7 +147,7 @@ func createResource(t *testing.T, c *Component, ura string, res resource) respon
 	t.Helper()
 	body := api.FHIRResource(mustJSON(t, res))
 	result, err := c.CreateLrzaResource(context.Background(), api.CreateLrzaResourceRequestObject{
-		ResourceType: api.CreateLrzaResourceParamsResourceType(res.resourceType()),
+		ResourceType: api.CreateLrzaResourceParamsResourceType(res.ResourceType()),
 		Params:       api.CreateLrzaResourceParams{XTenantID: tenant(ura)},
 		Body:         &body,
 	})
@@ -161,8 +161,8 @@ func updateResource(t *testing.T, c *Component, ura string, res resource, ifMatc
 	t.Helper()
 	body := api.FHIRResource(mustJSON(t, res))
 	result, err := c.UpdateLrzaResource(context.Background(), api.UpdateLrzaResourceRequestObject{
-		ResourceType: api.UpdateLrzaResourceParamsResourceType(res.resourceType()),
-		Id:           res.id(),
+		ResourceType: api.UpdateLrzaResourceParamsResourceType(res.ResourceType()),
+		Id:           res.ID(),
 		Params:       api.UpdateLrzaResourceParams{XTenantID: tenant(ura), IfMatch: ifMatch},
 		Body:         &body,
 	})
@@ -213,12 +213,12 @@ func submitTransaction(t *testing.T, c *Component, ura string, bundle any) respo
 
 func TestRegistration_Ownership(t *testing.T) {
 	withURA := func(ura string) resource {
-		org := testDirectory()[0].clone()
+		org := testDirectory()[0].Clone()
 		org["identifier"] = []any{uraIdentifierJSON(ura)}
 		return org
 	}
 	withEndpoint := func(endpointID string) resource {
-		org := testDirectory()[0].clone()
+		org := testDirectory()[0].Clone()
 		org["endpoint"] = []any{map[string]any{"reference": "Endpoint/" + endpointID}}
 		return org
 	}
@@ -260,16 +260,26 @@ func TestRegistration_Ownership(t *testing.T) {
 		})
 	}
 
-	t.Run("rejected resource types", func(t *testing.T) {
+	t.Run("unsupported resource types", func(t *testing.T) {
 		lrza := newFakeLRZA(t, testDirectory()...)
 		c := newTestComponent(t, lrza)
-		for _, resourceType := range []string{"OrganizationAffiliation", "Provenance", "Practitioner", "PractitionerRole"} {
+		for _, resourceType := range []string{"OrganizationAffiliation", "Provenance", "Practitioner", "PractitionerRole", "Patient"} {
 			resp := createResource(t, c, sunflowerURA, resource{"resourceType": resourceType})
-			assert.Equal(t, http.StatusForbidden, resp.Code, resourceType)
+			assert.Equal(t, http.StatusBadRequest, resp.Code, resourceType)
+			assert.Contains(t, resp.diagnostics(t)[0], "unsupported resource type", resourceType)
 		}
-		resp := createResource(t, c, sunflowerURA, resource{"resourceType": "Patient"})
-		assert.Equal(t, http.StatusBadRequest, resp.Code)
 		assert.Empty(t, lrza.writes())
+	})
+
+	t.Run("an Organization followed more than once in a request is read once", func(t *testing.T) {
+		lrza := newFakeLRZA(t, testDirectory()...)
+		c := newTestComponent(t, lrza)
+
+		// Both the current and the new version are managed by Sunflower.
+		resp := updateResource(t, c, sunflowerURA, testLocation("sunflower-location", "sunflower"), nil)
+
+		require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+		assert.Len(t, lrza.requestsTo(http.MethodGet, "/Organization/sunflower"), 1)
 	})
 
 	t.Run("read", func(t *testing.T) {
@@ -279,7 +289,7 @@ func TestRegistration_Ownership(t *testing.T) {
 		own := readResource(t, c, sunflowerURA, "Location", "sunflower-location")
 		require.Equal(t, http.StatusOK, own.Code, own.Body.String())
 		assert.Equal(t, `W/"1"`, own.Header().Get("ETag"))
-		assert.Equal(t, "sunflower-location", own.resource(t).id())
+		assert.Equal(t, "sunflower-location", own.resource(t).ID())
 
 		foreign := readResource(t, c, sunflowerURA, "Location", "care2cure-location")
 		assert.Equal(t, http.StatusForbidden, foreign.Code)
@@ -297,21 +307,56 @@ func TestRegistration_Enrichment(t *testing.T) {
 		resp := createResource(t, c, sunflowerURA, testLocation("", "sunflower"))
 
 		require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
-		stored := lrza.get(resp.resource(t).reference())
+		stored := lrza.get(resp.resource(t).Reference())
 		assert.Equal(t, []any{profile.CSDLocation}, stored["meta"].(map[string]any)["profile"])
-		assert.Equal(t, []any{toJSONMap(map[string]any{
+		assert.Equal(t, []any{libfhir.ToJSONMap(map[string]any{
 			"use":      "official",
 			"system":   coding.RFC3986NamingSystem,
 			"value":    "urn:uuid:" + testUUID,
 			"assigner": coding.Custodian(coding.URAOIDNamingSystem, sunflowerURA),
 		})}, stored["identifier"])
 		assert.Equal(t, `W/"1"`, resp.Header().Get("ETag"))
-		assert.Equal(t, "/lrza/fhir/"+stored.reference()+"/_history/1", resp.Header().Get("Location"))
+		assert.Equal(t, "/lrza/fhir/"+stored.Reference()+"/_history/1", resp.Header().Get("Location"))
+	})
+
+	t.Run("the client's own identifier becomes the AssignedId, with the tenant as custodian", func(t *testing.T) {
+		lrza := newFakeLRZA(t, testDirectory()...)
+		c := newTestComponent(t, lrza)
+
+		location := testLocation("", "sunflower")
+		location["identifier"] = []any{map[string]any{"system": "https://ehr.example/locations", "value": "loc-42"}}
+		resp := createResource(t, c, sunflowerURA, location)
+
+		require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
+		stored := lrza.get(resp.resource(t).Reference())
+		assert.Equal(t, []any{map[string]any{
+			"use":      "official",
+			"system":   "https://ehr.example/locations",
+			"value":    "loc-42",
+			"assigner": libfhir.ToJSONMap(coding.Custodian(coding.URAOIDNamingSystem, sunflowerURA)),
+		}}, stored["identifier"], "completed rather than a urn:uuid generated next to it")
+	})
+
+	t.Run("an identifier the client gave an assigner is kept as is", func(t *testing.T) {
+		lrza := newFakeLRZA(t, testDirectory()...)
+		c := newTestComponent(t, lrza)
+
+		assigned := map[string]any{
+			"system":   "https://ehr.example/locations",
+			"value":    "loc-42",
+			"assigner": libfhir.ToJSONMap(coding.Custodian(coding.KVKOIDNamingSystem, "12345678")),
+		}
+		location := testLocation("", "sunflower")
+		location["identifier"] = []any{assigned}
+		resp := createResource(t, c, sunflowerURA, location)
+
+		require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
+		assert.Equal(t, []any{assigned}, lrza.get(resp.resource(t).Reference())["identifier"])
 	})
 
 	t.Run("an update without the AssignedId keeps the current one", func(t *testing.T) {
 		current := testLocation("sunflower-location", "sunflower")
-		assignedID := map[string]any{"system": "http://example.org/locations", "value": "loc-1", "assigner": toJSONMap(coding.Custodian(coding.URAOIDNamingSystem, sunflowerURA))}
+		assignedID := map[string]any{"system": "http://example.org/locations", "value": "loc-1", "assigner": libfhir.ToJSONMap(coding.Custodian(coding.URAOIDNamingSystem, sunflowerURA))}
 		current["identifier"] = []any{assignedID}
 		directory := append(testDirectory()[:3], current)
 		lrza := newFakeLRZA(t, directory...)
@@ -333,13 +378,13 @@ func TestRegistration_Enrichment(t *testing.T) {
 			config.Registration.URAAssignerKVK = "12345678"
 		})
 
-		org := testDirectory()[0].clone()
+		org := testDirectory()[0].Clone()
 		org["identifier"] = []any{map[string]any{"system": coding.URANamingSystem, "value": sunflowerURA}}
 		resp := updateResource(t, c, sunflowerURA, org, nil)
 
 		require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 		stored := lrza.get("Organization/sunflower")
-		assert.Equal(t, []any{toJSONMap(coding.URAIdentifier(sunflowerURA, "12345678"))}, stored["identifier"])
+		assert.Equal(t, []any{libfhir.ToJSONMap(coding.URAIdentifier(sunflowerURA, "12345678"))}, stored["identifier"])
 	})
 
 	t.Run("Endpoint gets the tenant's Organization and the FHIR version", func(t *testing.T) {
@@ -351,7 +396,7 @@ func TestRegistration_Enrichment(t *testing.T) {
 		resp := createResource(t, c, sunflowerURA, endpoint)
 
 		require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
-		stored := lrza.get(resp.resource(t).reference())
+		stored := lrza.get(resp.resource(t).Reference())
 		assert.Equal(t, organizationRef("sunflower"), stored["managingOrganization"])
 		assert.Equal(t, []any{coding.FHIRR4JSONMimeType}, stored["payloadMimeType"])
 		assert.Equal(t, []any{"http://example.org/own-profile", profile.CSDEndpoint}, stored["meta"].(map[string]any)["profile"])
@@ -366,7 +411,7 @@ func TestRegistration_Enrichment(t *testing.T) {
 		resp := createResource(t, c, sunflowerURA, endpoint)
 
 		require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
-		stored := lrza.get(resp.resource(t).reference())
+		stored := lrza.get(resp.resource(t).Reference())
 		assert.Equal(t, organizationRef("sunflower-ward"), stored["managingOrganization"])
 		assert.Equal(t, []any{"application/fhir+json; fhirVersion=4.0.1"}, stored["payloadMimeType"])
 	})
@@ -431,6 +476,20 @@ func TestRegistration_IfMatch(t *testing.T) {
 		assert.Equal(t, `W/"7"`, puts[0].header.Get("If-Match"))
 	})
 
+	t.Run("an LRZA answering without the stored resource has it read", func(t *testing.T) {
+		lrza := newFakeLRZA(t, testDirectory()...)
+		lrza.minimal = true
+		c := newTestComponent(t, lrza)
+
+		created := createResource(t, c, sunflowerURA, testLocation("", "sunflower"))
+		updated := updateResource(t, c, sunflowerURA, testLocation("sunflower-location", "sunflower"), nil)
+
+		require.Equal(t, http.StatusCreated, created.Code, created.Body.String())
+		assert.Equal(t, "generated-1", created.resource(t).ID(), "read from the Location")
+		require.Equal(t, http.StatusOK, updated.Code, updated.Body.String())
+		assert.Equal(t, "2", updated.resource(t).VersionID(), "read from the URL written to")
+	})
+
 	t.Run("a 429 is passed through with its Retry-After once retries are used up", func(t *testing.T) {
 		lrza := newFakeLRZA(t, testDirectory()...)
 		c := newTestComponent(t, lrza)
@@ -464,7 +523,7 @@ func TestRegistration_Withdraw(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
 			stored := lrza.get(tc.resourceType + "/" + tc.id)
-			assert.Equal(t, "2", stored.versionID(), "withdrawn by an update, not deleted")
+			assert.Equal(t, "2", stored.VersionID(), "withdrawn by an update, not deleted")
 			tc.check(t, stored)
 			puts := lrza.requestsTo(http.MethodPut, "/"+tc.resourceType+"/"+tc.id)
 			require.Len(t, puts, 1)
@@ -512,7 +571,7 @@ func TestRegistration_Mandate(t *testing.T) {
 	})
 
 	t.Run("not granted", func(t *testing.T) {
-		inactive := affiliation.clone()
+		inactive := affiliation.Clone()
 		inactive["active"] = false
 		lrza := newFakeLRZA(t, append(testDirectory(), inactive)...)
 		c := newTestComponent(t, lrza, configure)
@@ -526,7 +585,6 @@ func TestRegistration_Mandate(t *testing.T) {
 
 	t.Run("invalid configuration", func(t *testing.T) {
 		config := DefaultConfig()
-		config.Registration.Enabled = true
 		config.Registration.Mandate = MandateConfig{Code: code}
 		_, err := New(config)
 		assert.ErrorContains(t, err, "mandate.vendor")
@@ -563,7 +621,7 @@ func TestRegistration_Transaction(t *testing.T) {
 
 		endpointRef := entries[0].(map[string]any)["resource"].(map[string]any)["id"].(string)
 		assert.Equal(t, "Endpoint/"+endpointRef+"/_history/1", entries[0].(map[string]any)["response"].(map[string]any)["location"], "relative to the Knooppunt, not the LRZA")
-		storedService := lrza.get(resource(entries[1].(map[string]any)["resource"].(map[string]any)).reference())
+		storedService := lrza.get(resource(entries[1].(map[string]any)["resource"].(map[string]any)).Reference())
 		assert.Equal(t, []any{map[string]any{"reference": "Endpoint/" + endpointRef}}, storedService["endpoint"])
 		assert.NotEmpty(t, storedService["identifier"], "AssignedId generated")
 		storedEndpoint := lrza.get("Endpoint/" + endpointRef)
@@ -606,7 +664,7 @@ func TestRegistration_Transaction(t *testing.T) {
 
 		// The Organization entry claims the fullUrl of care2cure's Organization; the LRZA would
 		// resolve the Location's reference to the real one.
-		ownOrganization := testDirectory()[0].clone()
+		ownOrganization := testDirectory()[0].Clone()
 		delete(ownOrganization, "id")
 		bundle := map[string]any{
 			"resourceType": "Bundle", "type": "transaction",
@@ -672,37 +730,58 @@ func TestRegistration_SyncAfterWrite(t *testing.T) {
 		assert.Empty(t, c.syncRequests)
 	})
 
-	t.Run("no sync when disabled", func(t *testing.T) {
-		lrza := newFakeLRZA(t, testDirectory()...)
-		c := newTestComponent(t, lrza, func(config *Config) {
-			config.QueryBaseUrl = "http://query.example/fhir"
-			config.Registration.SyncAfterWrite = false
-		})
-
-		createResource(t, c, sunflowerURA, testLocation("", "sunflower"))
-
-		assert.Empty(t, c.syncRequests)
-	})
-
-	t.Run("a requested sync runs, and Stop ends the goroutine", func(t *testing.T) {
-		var syncs int
+	// syncs counts the syncs the fake LRZA has seen: every sync reads each resource type once, the last
+	// being OrganizationAffiliation.
+	syncs := func(lrza *fakeLRZA) int {
+		return len(lrza.requestsTo(http.MethodGet, "/OrganizationAffiliation"))
+	}
+	startWithQueryDirectory := func(t *testing.T, delay time.Duration) (*Component, *fakeLRZA) {
+		t.Helper()
+		original := syncAfterWriteDelay
+		syncAfterWriteDelay = delay
+		t.Cleanup(func() { syncAfterWriteDelay = original })
 		query := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]any{"resourceType": "Bundle", "type": "transaction-response"})
 		}))
-		defer query.Close()
+		t.Cleanup(query.Close)
 		lrza := newFakeLRZA(t)
 		c := newTestComponent(t, lrza, func(config *Config) {
 			config.QueryBaseUrl = query.URL
 		})
 		require.NoError(t, c.Start())
+		t.Cleanup(func() { _ = c.Stop(context.Background()) })
+		return c, lrza
+	}
+
+	t.Run("a requested sync runs after the delay", func(t *testing.T) {
+		c, lrza := startWithQueryDirectory(t, 10*time.Millisecond)
 
 		c.requestSync()
 
-		require.Eventually(t, func() bool {
-			syncs = len(lrza.requestsTo(http.MethodGet, "/OrganizationAffiliation"))
-			return syncs > 0
-		}, 5*time.Second, 10*time.Millisecond, "the sync reads every resource type, the last being OrganizationAffiliation")
+		require.Eventually(t, func() bool { return syncs(lrza) == 1 }, 5*time.Second, 5*time.Millisecond)
+	})
+
+	t.Run("requests during the delay are covered by one sync", func(t *testing.T) {
+		c, lrza := startWithQueryDirectory(t, 200*time.Millisecond)
+
+		for range 5 {
+			c.requestSync()
+			time.Sleep(10 * time.Millisecond)
+		}
+
+		require.Eventually(t, func() bool { return syncs(lrza) == 1 }, 5*time.Second, 5*time.Millisecond)
+		// Give a wrongly scheduled second sync the time to show up.
+		time.Sleep(400 * time.Millisecond)
+		assert.Equal(t, 1, syncs(lrza))
+	})
+
+	t.Run("Stop ends a pending sync without running it", func(t *testing.T) {
+		c, lrza := startWithQueryDirectory(t, time.Hour)
+
+		c.requestSync()
 		require.NoError(t, c.Stop(context.Background()))
+
+		assert.Equal(t, 0, syncs(lrza))
 	})
 }
 

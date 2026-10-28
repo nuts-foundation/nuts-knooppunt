@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -38,33 +39,25 @@ func parseMandate(config MandateConfig) (*mandate, error) {
 	return &mandate{codeSystem: *code.System, code: *code.Value, vendorSystem: *vendor.System, vendor: *vendor.Value}, nil
 }
 
-// checkMandate returns a 403 unless the tenant granted the configured mandate. It does nothing when no
-// mandate is configured.
-func (w *writeContext) checkMandate(ctx context.Context) error {
-	if w.mandate == nil {
-		return nil
-	}
-	organization, err := w.findTenantOrganization(ctx)
-	if err != nil {
-		var regErr *registrationError
-		if errors.As(err, &regErr) {
-			// The tenant's Organization isn't registered yet, so no mandate can exist either. Its very
-			// first registration has to be done by the care provider itself.
-			return forbiddenError(fmt.Sprintf("the tenant (URA %s) has not granted the mandate: its Organization is not registered in the LRZA", w.tenantURA))
-		}
-		return err
+// check returns a 403 unless the tenant granted the mandate. organization is the tenant's Organization
+// in the LRZA, nil if it isn't registered. resolve follows a reference to the vendor's Organization.
+func (m *mandate) check(ctx context.Context, client fhirclient.Client, resolve resolveFunc, tenantURA string, organization libfhir.Resource) error {
+	if organization == nil {
+		// The tenant's Organization isn't registered yet, so no mandate can exist either. Its very first
+		// registration has to be done by the care provider itself.
+		return forbiddenError(fmt.Sprintf("the tenant (URA %s) has not granted the mandate: its Organization is not registered in the LRZA", tenantURA))
 	}
 	var searchSet fhir.Bundle
-	query := url.Values{"primary-organization": []string{organization.reference()}}
-	if err := w.client.SearchWithContext(ctx, "OrganizationAffiliation", query, &searchSet); err != nil {
+	query := url.Values{"primary-organization": []string{organization.Reference()}}
+	if err := client.SearchWithContext(ctx, "OrganizationAffiliation", query, &searchSet); err != nil {
 		return &fhirapi.Error{Message: "Failed to search the tenant's mandates in the LRZA", Cause: err, IssueType: fhir.IssueTypeTransient}
 	}
 	for _, entry := range searchSet.Entry {
-		affiliation, err := parseResource(entry.Resource)
-		if err != nil || affiliation.resourceType() != "OrganizationAffiliation" {
+		affiliation, err := libfhir.ParseResource(entry.Resource)
+		if err != nil || affiliation.ResourceType() != "OrganizationAffiliation" {
 			continue
 		}
-		granted, err := w.grants(ctx, affiliation)
+		granted, err := m.grants(ctx, resolve, affiliation)
 		if err != nil {
 			return err
 		}
@@ -73,12 +66,15 @@ func (w *writeContext) checkMandate(ctx context.Context) error {
 		}
 	}
 	return forbiddenError(fmt.Sprintf("the tenant (URA %s) has not granted the mandate (%s|%s) to %s|%s; the care provider registers it as an OrganizationAffiliation in the LRZA",
-		w.tenantURA, w.mandate.codeSystem, w.mandate.code, w.mandate.vendorSystem, w.mandate.vendor))
+		tenantURA, m.codeSystem, m.code, m.vendorSystem, m.vendor))
 }
 
-// grants reports whether an affiliation is the configured mandate: active, with the mandate's code,
-// and with the vendor as participatingOrganization.
-func (w *writeContext) grants(ctx context.Context, affiliation resource) (bool, error) {
+// resolveFunc follows a reference to a resource of the expected type (see ownershipChecker.resolve).
+type resolveFunc func(ctx context.Context, expectedType string, ref map[string]any) (libfhir.Resource, error)
+
+// grants reports whether an affiliation is the mandate: active, with the mandate's code, and with the
+// vendor as participatingOrganization.
+func (m *mandate) grants(ctx context.Context, resolve resolveFunc, affiliation libfhir.Resource) (bool, error) {
 	if active, ok := affiliation["active"].(bool); ok && !active {
 		return false, nil
 	}
@@ -89,7 +85,7 @@ func (w *writeContext) grants(ctx context.Context, affiliation resource) (bool, 
 		codings, _ := concept["coding"].([]any)
 		for _, c := range codings {
 			coding, _ := c.(map[string]any)
-			if coding["system"] == w.mandate.codeSystem && coding["code"] == w.mandate.code {
+			if coding["system"] == m.codeSystem && coding["code"] == m.code {
 				hasCode = true
 			}
 		}
@@ -102,17 +98,17 @@ func (w *writeContext) grants(ctx context.Context, affiliation resource) (bool, 
 		return false, nil
 	}
 	if identifier, ok := participant["identifier"].(map[string]any); ok {
-		return identifier["system"] == w.mandate.vendorSystem && identifier["value"] == w.mandate.vendor, nil
+		return identifier["system"] == m.vendorSystem && identifier["value"] == m.vendor, nil
 	}
-	vendor, err := w.resolve(ctx, "Organization", participant)
+	vendor, err := resolve(ctx, "Organization", participant)
 	if errors.Is(err, errUnresolvable) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	for _, identifier := range identifiers(vendor) {
-		if identifier["system"] == w.mandate.vendorSystem && identifier["value"] == w.mandate.vendor {
+	for _, identifier := range vendor.Identifiers() {
+		if identifier["system"] == m.vendorSystem && identifier["value"] == m.vendor {
 			return true, nil
 		}
 	}

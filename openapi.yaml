@@ -148,9 +148,9 @@ paths:
         may use `POST` (create), `PUT` (update) or `DELETE` (rewritten to a
         withdrawal `PUT`). Entries may reference each other through
         `urn:uuid:` fullUrls. When a signing key is configured for the
-        tenant, a Provenance is signed for each changed entry afterwards; a
-        signing failure is reported as a warning issue in the response's
-        `OperationOutcome` entry, not as a failed request.
+        tenant, a Provenance is signed for each changed entry afterwards.
+        Signing is optional in the IG, so a signing failure is logged by the
+        Knooppunt and doesn't fail the request.
       parameters:
         - $ref: "#/components/parameters/TenantID"
       requestBody:
@@ -238,8 +238,6 @@ paths:
               $ref: "#/components/headers/Location"
             ETag:
               $ref: "#/components/headers/ETag"
-            Warning:
-              $ref: "#/components/headers/Warning"
           content:
             application/fhir+json:
               schema:
@@ -321,8 +319,6 @@ paths:
           headers:
             ETag:
               $ref: "#/components/headers/ETag"
-            Warning:
-              $ref: "#/components/headers/Warning"
           content:
             application/fhir+json:
               schema:
@@ -363,8 +359,6 @@ paths:
           headers:
             ETag:
               $ref: "#/components/headers/ETag"
-            Warning:
-              $ref: "#/components/headers/Warning"
           content:
             application/fhir+json:
               schema:
@@ -1048,10 +1042,8 @@ components:
       in: path
       required: true
       description: >
-        The addressing resource type. OrganizationAffiliation (the mandate a
-        care provider grants its IT vendor), Provenance (created by the
-        Knooppunt itself), Practitioner and PractitionerRole are rejected
-        with `403`.
+        The addressing resource type: the ones the IG lets a Data Source
+        create and update. Any other type is rejected with `400`.
       schema:
         type: string
         enum: [Organization, Location, HealthcareService, Endpoint]
@@ -1089,13 +1081,6 @@ components:
       schema:
         type: string
       example: "/lrza/fhir/Location/123/_history/1"
-    Warning:
-      description: >
-        Set when the mutation succeeded but signing its Provenance failed.
-        Signing is optional in the IG, so this doesn't undo the mutation.
-      schema:
-        type: string
-      example: '199 knooppunt "Provenance signing failed"'
 
   responses:
     OperationOutcomeError:

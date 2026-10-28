@@ -27,24 +27,23 @@ lrza:
 
   # Registration: the write path, through which tenants register their own Organizations,
   # Locations, HealthcareServices and Endpoints in the LRZA (POST/PUT/DELETE /lrza/fhir/...).
-  # Uses the same base URL and client certificate as the sync above: the LRZA authorizes this
-  # certificate (the IT vendor), and each care provider grants it a mandate.
+  # Available whenever lrzabaseurl is set, using the same base URL and client certificate as the
+  # sync above: the LRZA authorizes this certificate (the IT vendor), and each care provider grants
+  # it a mandate. Every write is followed by a sync into the query directory (if querybaseurl is set).
   #registration:
-  #  enabled: true
-  #  # Sync the change into the query directory after every write (requires querybaseurl).
-  #  syncafterwrite: true
-  #  # KvK number set as the assigner of URA identifiers.
+  #  # KvK number of the authority that issues URAs, set as the assigner of URA identifiers.
   #  uraassignerkvk: "50000535"
   #  # Optional: check up front that the tenant granted the mandate (an OrganizationAffiliation with
   #  # this code and this vendor as participatingOrganization), for a clearer error than the LRZA's.
   #  mandate:
   #    code: "<affiliation code system>|<code>"
   #    vendor: "http://kvk.nl|<vendor KvK number>"
-  #  # Optional: per tenant URA, the certificate and key to sign a Provenance for every write with.
+  #  # Optional: per tenant URA, the certificate and key to sign a Provenance for every write with
+  #  # (PEM, or a .p12/.pfx file with certfile and keypassword only).
   #  signing:
   #    "00000020":
-  #      tlscertfile: "/path/to/tenant-signing-cert.pem"
-  #      tlskeyfile: "/path/to/tenant-signing-key.pem"
+  #      certfile: "/path/to/tenant-signing-cert.pem"
+  #      keyfile: "/path/to/tenant-signing-key.pem"
 
 # mCSD Admin configuration
 mcsdadmin:

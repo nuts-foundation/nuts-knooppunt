@@ -20,7 +20,6 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/nutsnode"
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pdp"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
 	"github.com/nuts-foundation/nuts-knooppunt/mock-components/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
@@ -121,7 +120,7 @@ func PEPCertsDir(t *testing.T) string {
 // StartWithLRZASigning is Start with Provenance signing configured for the
 // LRZA registration proxy: per tenant URA, the certificate and key it signs
 // every write with (lrza.registration.signing).
-func StartWithLRZASigning(t *testing.T, signing map[string]tlsutil.Config) Details {
+func StartWithLRZASigning(t *testing.T, signing map[string]lrza.SigningConfig) Details {
 	t.Helper()
 	return start(t, startOptions{lrzaSigning: signing})
 }
@@ -133,7 +132,7 @@ type startOptions struct {
 	// the generic policy information point the PDP tests read from.
 	pip *hapi.Tenant
 	// lrzaSigning is the LRZA registration proxy's Provenance signing config.
-	lrzaSigning map[string]tlsutil.Config
+	lrzaSigning map[string]lrza.SigningConfig
 }
 
 func start(t *testing.T, options startOptions) Details {
@@ -163,11 +162,10 @@ func start(t *testing.T, options startOptions) Details {
 	// pointers (mcsd-directory-payload Endpoints), and this directory holds
 	// each organization's own Organization/Endpoint resources instead.
 	//
-	// Registration (the write path) is enabled too, with the seeded directory acting as the LRZA.
+	// The registration proxy (the write path) uses the seeded directory as the LRZA too.
 	config.LRZA = lrza.DefaultConfig()
 	config.LRZA.LRZABaseUrl = testData.LRZa.FHIRBaseURL.String()
 	config.LRZA.QueryBaseUrl = testData.Knooppunt.MCSD.QueryFHIRBaseURL.String()
-	config.LRZA.Registration.Enabled = true
 	config.LRZA.Registration.Signing = options.lrzaSigning
 	config.MCSD.QueryDirectory = mcsd.DirectoryConfig{
 		FHIRBaseURL: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),

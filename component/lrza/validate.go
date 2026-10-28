@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -42,12 +43,12 @@ var payloadTypeSystems = []string{coding.CSDDataCategoriesSystem, coding.Endpoin
 var assignerSystems = []string{coding.URAOIDNamingSystem, coding.KVKOIDNamingSystem}
 
 // validateResource validates a resource about to be written, returning the problems found.
-func validateResource(res resource) []validationIssue {
-	v := &validator{resourceType: res.resourceType()}
+func validateResource(res libfhir.Resource) []validationIssue {
+	v := &validator{resourceType: res.ResourceType()}
 	v.prohibited(res, "implicitRules")
-	v.noModifierExtensions(res, res.resourceType())
+	v.noModifierExtensions(res, res.ResourceType())
 	v.assignerSystems(res)
-	switch res.resourceType() {
+	switch res.ResourceType() {
 	case "Organization":
 		v.required(res, "identifier", "name", "type")
 		uras := uraValues(res)
@@ -92,7 +93,7 @@ func (v *validator) add(code fhir.IssueType, expression, message string) {
 }
 
 // required reports each of the elements that is missing or empty.
-func (v *validator) required(res resource, elements ...string) {
+func (v *validator) required(res libfhir.Resource, elements ...string) {
 	for _, element := range elements {
 		if !present(res[element]) {
 			v.add(fhir.IssueTypeRequired, v.resourceType+"."+element, fmt.Sprintf("%s.%s is required", v.resourceType, element))
@@ -100,7 +101,7 @@ func (v *validator) required(res resource, elements ...string) {
 	}
 }
 
-func (v *validator) prohibited(res resource, element string) {
+func (v *validator) prohibited(res libfhir.Resource, element string) {
 	if _, ok := res[element]; ok {
 		v.add(fhir.IssueTypeStructure, v.resourceType+"."+element, fmt.Sprintf("%s.%s is not allowed", v.resourceType, element))
 	}
@@ -110,7 +111,7 @@ func (v *validator) prohibited(res resource, element string) {
 // them, as a modifier changes the meaning of the resource in ways a consumer can't know about.
 func (v *validator) noModifierExtensions(value any, path string) {
 	switch typed := value.(type) {
-	case resource:
+	case libfhir.Resource:
 		v.noModifierExtensions(map[string]any(typed), path)
 	case map[string]any:
 		for key, child := range typed {
@@ -129,8 +130,8 @@ func (v *validator) noModifierExtensions(value any, path string) {
 
 // assignerSystems checks the assigner-identifier-system invariant: the assigner of an identifier is
 // identified by URA or KvK.
-func (v *validator) assignerSystems(res resource) {
-	for i, identifier := range identifiers(res) {
+func (v *validator) assignerSystems(res libfhir.Resource) {
+	for i, identifier := range res.Identifiers() {
 		assigner, _ := identifier["assigner"].(map[string]any)
 		assignerIdentifier, _ := assigner["identifier"].(map[string]any)
 		if assignerIdentifier == nil {
@@ -144,7 +145,7 @@ func (v *validator) assignerSystems(res resource) {
 }
 
 // noHomeUse reports items of a list element with use 'home'.
-func (v *validator) noHomeUse(res resource, element, message string) {
+func (v *validator) noHomeUse(res libfhir.Resource, element, message string) {
 	items, _ := res[element].([]any)
 	for i, item := range items {
 		if typed, ok := item.(map[string]any); ok && typed["use"] == "home" {

@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
+	lrzacomponent "github.com/nuts-foundation/nuts-knooppunt/component/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
@@ -192,7 +192,7 @@ func mockFail(t *testing.T, h harness.Details, method, query string) lrzaRespons
 
 // signingCertificate writes a self-signed certificate and key for a care provider to sign Provenances
 // with. The mock LRZA verifies the signature against it, not its trust: it has no trust anchors.
-func signingCertificate(t *testing.T) tlsutil.Config {
+func signingCertificate(t *testing.T) lrzacomponent.SigningConfig {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -209,8 +209,8 @@ func signingCertificate(t *testing.T) tlsutil.Config {
 	require.NoError(t, err)
 
 	dir := t.TempDir()
-	config := tlsutil.Config{TLSCertFile: filepath.Join(dir, "signing.pem"), TLSKeyFile: filepath.Join(dir, "signing.key")}
-	require.NoError(t, os.WriteFile(config.TLSCertFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600))
-	require.NoError(t, os.WriteFile(config.TLSKeyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0600))
+	config := lrzacomponent.SigningConfig{CertFile: filepath.Join(dir, "signing.pem"), KeyFile: filepath.Join(dir, "signing.key")}
+	require.NoError(t, os.WriteFile(config.CertFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600))
+	require.NoError(t, os.WriteFile(config.KeyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}), 0600))
 	return config
 }

@@ -11,9 +11,9 @@ import (
 	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
+	lrzacomponent "github.com/nuts-foundation/nuts-knooppunt/component/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/profile"
-	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
@@ -32,7 +32,7 @@ import (
 // The Knooppunt's own mandate check (lrza.registration.mandate) is off, so a missing mandate is the
 // mock's 403, passed through.
 func Test_LRZARegistration(t *testing.T) {
-	h := harness.StartWithLRZASigning(t, map[string]tlsutil.Config{sunflower.URA: signingCertificate(t)})
+	h := harness.StartWithLRZASigning(t, map[string]lrzacomponent.SigningConfig{sunflower.URA: signingCertificate(t)})
 	// Reads the directory to check what the Knooppunt wrote, as the operator: a read as anyone else
 	// would take a failure armed for the Knooppunt.
 	source := h.LRZAOperator
@@ -217,7 +217,8 @@ func Test_LRZARegistration(t *testing.T) {
 			}, 30*time.Second, 500*time.Millisecond)
 		}},
 		{"every write was signed, and the LRZA verified the signatures", func(t *testing.T) {
-			assert.Empty(t, client.warnings, "a write whose Provenance was rejected carries a warning")
+			// The LRZA only stores a Provenance whose signature verifies, so finding one per written
+			// resource proves both.
 			for _, target := range []string{"Endpoint/" + endpointID, "Location/" + locationID} {
 				var provenances fhir.Bundle
 				require.NoError(t, source.Search("Provenance", url.Values{"target": {target}}, &provenances))
@@ -304,9 +305,6 @@ type registrationClient struct {
 	t      *testing.T
 	h      harness.Details
 	tenant string
-	// warnings collects the Warning headers of the responses: the Knooppunt reports a write whose
-	// Provenance the LRZA rejected that way.
-	warnings []string
 }
 
 type registrationResponse struct {
@@ -339,12 +337,6 @@ func (c *registrationClient) do(method, path, ifMatch string, body any) registra
 	defer response.Body.Close()
 	data, err := io.ReadAll(response.Body)
 	require.NoError(c.t, err)
-	if warning := response.Header.Get("Warning"); warning != "" {
-		c.warnings = append(c.warnings, method+" "+path+": "+warning)
-	}
-	if bytes.Contains(data, []byte("Provenance signing failed")) {
-		c.warnings = append(c.warnings, method+" "+path+": "+string(data))
-	}
 	return registrationResponse{status: response.StatusCode, header: response.Header, body: data}
 }
 
@@ -353,7 +345,10 @@ func findLocalCopy[T any](t *testing.T, h harness.Details, query fhirclient.Clie
 	t.Helper()
 	var result T
 	var bundle fhir.Bundle
-	if err := query.Search(resourceType, map[string][]string{"_source": {sourceURL(h, resourceType, sourceID)}}, &bundle); err != nil || len(bundle.Entry) != 1 {
+	// HAPI caches search results (for 60s by default), so a poll that starts before the sync has written
+	// the copy would keep getting the cached empty result: ask for a fresh one.
+	noCache := fhirclient.RequestHeaders(http.Header{"Cache-Control": []string{"no-cache"}})
+	if err := query.Search(resourceType, map[string][]string{"_source": {sourceURL(h, resourceType, sourceID)}}, &bundle, noCache); err != nil || len(bundle.Entry) != 1 {
 		return result, false
 	}
 	if err := json.Unmarshal(bundle.Entry[0].Resource, &result); err != nil {

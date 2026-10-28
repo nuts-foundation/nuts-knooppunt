@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
+	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 )
 
 // Withdrawal. The IG says resources SHOULD NOT be deleted from the LRZA, but withdrawn by a status
@@ -14,8 +15,8 @@ import (
 // withdraw changes res, the current version of a resource, into its withdrawn version:
 // Organization and HealthcareService get active=false, Location status=inactive, and Endpoint
 // status=off with its period ending now.
-func withdraw(res resource, now time.Time) error {
-	switch res.resourceType() {
+func withdraw(res libfhir.Resource, now time.Time) error {
+	switch res.ResourceType() {
 	case "Organization", "HealthcareService":
 		res["active"] = false
 	case "Location":
@@ -29,7 +30,7 @@ func withdraw(res resource, now time.Time) error {
 		}
 		period["end"] = now.UTC().Format(time.RFC3339)
 	default:
-		return fhirapi.BadRequestError(fmt.Sprintf("can't withdraw a %s", res.resourceType()), nil)
+		return fhirapi.BadRequestError(fmt.Sprintf("can't withdraw a %s", res.ResourceType()), nil)
 	}
 	return nil
 }
