@@ -72,6 +72,41 @@ func (s *strictAPIServer) TriggerLrzaSync(ctx context.Context, r api.TriggerLrza
 	return s.lrza.TriggerLrzaSync(ctx, r)
 }
 
+func (s *strictAPIServer) SubmitLrzaTransaction(ctx context.Context, r api.SubmitLrzaTransactionRequestObject) (api.SubmitLrzaTransactionResponseObject, error) {
+	if s.lrza == nil {
+		return nil, errComponentDisabled
+	}
+	return s.lrza.SubmitLrzaTransaction(ctx, r)
+}
+
+func (s *strictAPIServer) CreateLrzaResource(ctx context.Context, r api.CreateLrzaResourceRequestObject) (api.CreateLrzaResourceResponseObject, error) {
+	if s.lrza == nil {
+		return nil, errComponentDisabled
+	}
+	return s.lrza.CreateLrzaResource(ctx, r)
+}
+
+func (s *strictAPIServer) ReadLrzaResource(ctx context.Context, r api.ReadLrzaResourceRequestObject) (api.ReadLrzaResourceResponseObject, error) {
+	if s.lrza == nil {
+		return nil, errComponentDisabled
+	}
+	return s.lrza.ReadLrzaResource(ctx, r)
+}
+
+func (s *strictAPIServer) UpdateLrzaResource(ctx context.Context, r api.UpdateLrzaResourceRequestObject) (api.UpdateLrzaResourceResponseObject, error) {
+	if s.lrza == nil {
+		return nil, errComponentDisabled
+	}
+	return s.lrza.UpdateLrzaResource(ctx, r)
+}
+
+func (s *strictAPIServer) WithdrawLrzaResource(ctx context.Context, r api.WithdrawLrzaResourceRequestObject) (api.WithdrawLrzaResourceResponseObject, error) {
+	if s.lrza == nil {
+		return nil, errComponentDisabled
+	}
+	return s.lrza.WithdrawLrzaResource(ctx, r)
+}
+
 func (s *strictAPIServer) ListAuthorizationPolicyBundles(ctx context.Context, r api.ListAuthorizationPolicyBundlesRequestObject) (api.ListAuthorizationPolicyBundlesResponseObject, error) {
 	if s.pdp == nil {
 		return nil, errComponentDisabled
@@ -188,10 +223,10 @@ func (s *strictAPIServer) RegisterHttpHandlers(_ *http.ServeMux, internalMux *ht
 	})
 	api.HandlerWithOptions(handler, api.StdHTTPServerOptions{
 		BaseRouter: internalMux,
-		// NVI/MITZ params (the X-Tenant-ID header, search query params) are the only ones
-		// declared in openapi.yaml, so this is only ever hit for those two components' routes;
-		// respond the same way their own code does for a bad/missing request: a FHIR
-		// OperationOutcome, not the framework's plain-text default.
+		// NVI/MITZ/LRZA registration params (the X-Tenant-ID and If-Match headers, path and
+		// search query params) are the only ones declared in openapi.yaml, so this is only ever
+		// hit for those components' routes; respond the same way their own code does for a
+		// bad/missing request: a FHIR OperationOutcome, not the framework's plain-text default.
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			badRequestErr := fhirapi.BadRequestError(err.Error(), err)
 			slog.ErrorContext(r.Context(), "FHIR API error", logging.Error(badRequestErr))

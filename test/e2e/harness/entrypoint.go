@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"testing"
 
+	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/cmd"
 	"github.com/nuts-foundation/nuts-knooppunt/component/http"
 	"github.com/nuts-foundation/nuts-knooppunt/component/lrza"
@@ -22,6 +23,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/mock-components/mitz"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/hapi"
+	lrzavectors "github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/sunflower"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -42,6 +44,10 @@ type Details struct {
 	// NotifyIntake receives the Mitz notifications the Knooppunt forwards. A
 	// test attaches its sandbox's intake handler to it.
 	NotifyIntake *NotifyIntake
+	// LRZAOperator reads and writes the LRZA partition as the operator, skipping the mock LRZA's rules
+	// (mock-components/lrza) and armed failures: for a test that sets the directory up or inspects it,
+	// rather than going through the Knooppunt.
+	LRZAOperator  fhirclient.Client
 }
 
 type MITZDetails struct {
@@ -111,12 +117,22 @@ func PEPCertsDir(t *testing.T) string {
 	return filepath.Join(repoRoot(t), "test", "e2e", "pep", "certs")
 }
 
-// startOptions is what StartWithNuts changes about Start.
+// StartWithLRZASigning is Start with Provenance signing configured for the
+// LRZA registration proxy: per tenant URA, the certificate and key it signs
+// every write with (lrza.registration.signing).
+func StartWithLRZASigning(t *testing.T, signing map[string]lrza.SigningConfig) Details {
+	t.Helper()
+	return start(t, startOptions{lrzaSigning: signing})
+}
+
+// startOptions is what StartWithNuts and StartWithLRZASigning change about Start.
 type startOptions struct {
 	nuts bool
 	// pip is the tenant the policy decision point resolves patients in. Nil is
 	// the generic policy information point the PDP tests read from.
 	pip *hapi.Tenant
+	// lrzaSigning is the LRZA registration proxy's Provenance signing config.
+	lrzaSigning map[string]lrza.SigningConfig
 }
 
 func start(t *testing.T, options startOptions) Details {
@@ -145,10 +161,12 @@ func start(t *testing.T, options startOptions) Details {
 	// configured: component/mcsd only syncs a root directory's discovery
 	// pointers (mcsd-directory-payload Endpoints), and this directory holds
 	// each organization's own Organization/Endpoint resources instead.
-	config.LRZA = lrza.Config{
-		LRZABaseUrl:  testData.LRZa.FHIRBaseURL.String(),
-		QueryBaseUrl: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
-	}
+	//
+	// The registration proxy (the write path) uses the seeded directory as the LRZA too.
+	config.LRZA = lrza.DefaultConfig()
+	config.LRZA.LRZABaseUrl = testData.LRZa.FHIRBaseURL.String()
+	config.LRZA.QueryBaseUrl = testData.Knooppunt.MCSD.QueryFHIRBaseURL.String()
+	config.LRZA.Registration.Signing = options.lrzaSigning
 	config.MCSD.QueryDirectory = mcsd.DirectoryConfig{
 		FHIRBaseURL: testData.Knooppunt.MCSD.QueryFHIRBaseURL.String(),
 	}
@@ -196,6 +214,7 @@ func start(t *testing.T, options startOptions) Details {
 		HAPIBaseURL:              hapiBaseURL,
 		MCSDQueryFHIRBaseURL:     testData.Knooppunt.MCSD.QueryFHIRBaseURL,
 		LRZaFHIRBaseURL:          testData.LRZa.FHIRBaseURL,
+		LRZAOperator:             lrzavectors.HAPITenant().FHIRClient(hapiBaseURL),
 		SunflowerURA:             sunflower.URA,
 		Vectors:                  *testData,
 		MockMitzXACML:            mockMitz,

@@ -25,6 +25,26 @@ lrza:
   # the system trust store). When set, it replaces the system trust store.
   #tlscafile: "certs/proeftuin/provider.com-uzi-external-intermediate/uzi-ca.crt"
 
+  # Registration: the write path, through which tenants register their own Organizations,
+  # Locations, HealthcareServices and Endpoints in the LRZA (POST/PUT/DELETE /lrza/fhir/...).
+  # Available whenever lrzabaseurl is set, using the same base URL and client certificate as the
+  # sync above: the LRZA authorizes this certificate (the IT vendor), and each care provider grants
+  # it a mandate. Every write is followed by a sync into the query directory (if querybaseurl is set).
+  #registration:
+  #  # KvK number of the authority that issues URAs, set as the assigner of URA identifiers.
+  #  uraassignerkvk: "50000535"
+  #  # Optional: check up front that the tenant granted the mandate (an OrganizationAffiliation with
+  #  # this code and this vendor as participatingOrganization), for a clearer error than the LRZA's.
+  #  mandate:
+  #    code: "<affiliation code system>|<code>"
+  #    vendor: "http://kvk.nl|<vendor KvK number>"
+  #  # Optional: per tenant URA, the certificate and key to sign a Provenance for every write with
+  #  # (PEM, or a .p12/.pfx file with certfile and keypassword only).
+  #  signing:
+  #    "00000020":
+  #      certfile: "/path/to/tenant-signing-cert.pem"
+  #      keyfile: "/path/to/tenant-signing-key.pem"
+
 # mCSD Admin configuration
 mcsdadmin:
   # Base URL for FHIR server used by admin interface

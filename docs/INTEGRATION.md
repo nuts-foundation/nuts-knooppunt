@@ -5,6 +5,7 @@ This document describes how to integrate with the Knooppunt.
 ## Table of Contents
 
 - [Addressing](#addressing)
+    - [Registering addressing resources in the LRZA](#registering-addressing-resources-in-the-lrza)
 - [Localization (NVI)](#nvi)
 - [Online Consent (MITZ)](#consent-mitz)
 - [Authentication](#authentication)
@@ -119,6 +120,139 @@ complete:
 
 Because a placeholder already exists when its target arrives, the synchronization report counts that write as
 `updated` rather than `created`.
+
+### Registering addressing resources in the LRZA
+
+Besides reading the LRZA, the Knooppunt can write to it: your EHR registers and updates the care provider's own
+addressable entities (Organization, Location, HealthcareService and Endpoint) through the Knooppunt, which acts as the
+ITI-130-NL *Data Source* of the
+[GF Care Service Directory IG](https://build.fhir.org/ig/minvws/generiekefuncties-docs/branches/1.0.0/en/csd.html).
+It is available whenever the LRZA connection is configured (`lrza.lrzabaseurl`, see
+[CONFIGURATION.md](./CONFIGURATION.md)).
+
+The Knooppunt connects to the LRZA as the *authorized party* (the IT vendor): one mTLS certificate serves every tenant.
+Before writes succeed, each care provider must grant the vendor a mandate, by registering an `OrganizationAffiliation`
+in the LRZA itself (the vendor may not write it). Set `lrza.registration.mandate` to have the Knooppunt check for it
+up front.
+
+All operations are on the internal interface and require the `X-Tenant-ID` header (see [NVI](#nvi)). Ids are the
+LRZA's own: the id the LRZA assigns on create is the id you read, update and withdraw by.
+
+| Operation                                    | Effect                                                                                           |
+|----------------------------------------------|--------------------------------------------------------------------------------------------------|
+| `POST /lrza/fhir`                            | Transaction Bundle (all-or-nothing). Entries may `POST`, `PUT` or `DELETE`, and refer to each other by `urn:uuid` fullUrl. |
+| `POST /lrza/fhir/{resourceType}`             | Create. Returns `201` with `Location` and `ETag`.                                                |
+| `GET /lrza/fhir/{resourceType}/{id}`         | Read the current version from the LRZA itself (not the Query Directory), with its `ETag`.         |
+| `PUT /lrza/fhir/{resourceType}/{id}`         | Update. Optional `If-Match`.                                                                     |
+| `DELETE /lrza/fhir/{resourceType}/{id}`      | Withdraw: a status change, not a delete (see below). Returns the withdrawn resource.             |
+
+For example, registering a FHIR endpoint:
+
+```http
+POST http://localhost:8081/lrza/fhir/Endpoint
+X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000020
+Content-Type: application/fhir+json
+
+{
+  "resourceType": "Endpoint",
+  "status": "active",
+  "connectionType": {
+    "system": "http://terminology.hl7.org/CodeSystem/endpoint-connection-type",
+    "code": "hl7-fhir-rest"
+  },
+  "payloadType": [
+    {
+      "coding": [
+        {
+          "system": "http://fhir.generiekefuncties.nl/csd/CodeSystem/nl-gf-data-categories-cs",
+          "code": "Patient"
+        }
+      ]
+    }
+  ],
+  "address": "https://fhir.example.org/r4"
+}
+```
+
+and then linking it to the care provider's Organization, using the `ETag` of the version read:
+
+```http
+GET http://localhost:8081/lrza/fhir/Organization/e5909595-767e-41c1-9b00-a23ddf33e5d1
+X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000020
+
+PUT http://localhost:8081/lrza/fhir/Organization/e5909595-767e-41c1-9b00-a23ddf33e5d1
+X-Tenant-ID: http://fhir.nl/fhir/NamingSystem/ura|00000020
+If-Match: W/"3"
+Content-Type: application/fhir+json
+
+{ ...the Organization as read, with the Endpoint added to "endpoint"... }
+```
+
+#### Which resources a tenant may write
+
+The LRZA authorizes the Knooppunt's certificate, not the tenant, so the Knooppunt makes sure each tenant only writes its
+own resources:
+
+- An Organization belongs to the tenant when it carries the tenant's URA (`urn:oid:2.16.528.1.1007.3.3`), or when its
+  `partOf` chain leads to one that does (a department).
+- A Location, HealthcareService or Endpoint belongs to the tenant when its `managingOrganization` (Location, Endpoint)
+  or `providedBy` (HealthcareService) does.
+- An update or withdrawal requires both the current version in the LRZA and the new version to belong to the tenant,
+  so a resource can't be moved away from another tenant.
+- `Organization.endpoint`, `Location.endpoint` and `HealthcareService.endpoint` may only refer to Endpoints the tenant
+  manages.
+- Only Organization, Location, HealthcareService and Endpoint can be written: the types the IG lets a Data Source
+  write, and the ones whose owner the Knooppunt can check. OrganizationAffiliation (the mandate) is registered by the
+  care provider itself, and Provenance resources are created by the Knooppunt.
+
+#### What the Knooppunt fills in
+
+You can send plain FHIR R4; the Knooppunt adds what the IG's profiles require. It never overwrites an element you set.
+
+- The nl-gf profile in `meta.profile` (`http://fhir.generiekefuncties.nl/csd/StructureDefinition/nl-gf-*`).
+- URA identifiers: `http://fhir.nl/fhir/NamingSystem/ura` becomes `urn:oid:2.16.528.1.1007.3.3`, with `use=official`
+  and the custodian `assigner` the CustodianAssignedIdentifier profile requires.
+- A custodian-assigned identifier for a Location, HealthcareService, or Organization without a URA. If you send your own
+  identifier for the resource (`system` and `value`, no `assigner`), the tenant is set as its custodian `assigner`, so
+  the resource is identifiable in the LRZA by the id your EHR already uses. An update that leaves it out keeps the
+  current version's; otherwise one is generated (`urn:ietf:rfc:3986` / `urn:uuid:<uuid>`).
+- Endpoint: `managingOrganization` defaults to the tenant's Organization in the LRZA; a `hl7-fhir-rest` Endpoint
+  without a FHIR version in `payloadMimeType` gets `application/fhir+json; fhirVersion=4.0`.
+
+#### Withdrawal
+
+The IG asks not to delete resources from the LRZA, so consumers see them go inactive. A `DELETE` (also in a
+transaction) is rewritten to an update of the current version: Organization and HealthcareService get `active=false`,
+Location `status=inactive`, and Endpoint `status=off` with `period.end` set to now.
+
+#### Optimistic locking
+
+Every update carries an `If-Match`. If you send one, it is forwarded unchanged; if you don't, the Knooppunt sends the
+version it read for the ownership check (in a transaction: `request.ifMatch`). When someone else changed the resource
+in the meantime, the LRZA answers `412 Precondition Failed`: read the resource again, re-apply your change and retry.
+
+#### Errors
+
+Errors are returned as an `OperationOutcome`. The LRZA's own OperationOutcome is passed through, so you see why it
+rejected a request.
+
+| Status        | Meaning                                                                                           |
+|---------------|---------------------------------------------------------------------------------------------------|
+| `400`         | Malformed request, or a resource type other than Organization, Location, HealthcareService or Endpoint. |
+| `403`         | Not the tenant's resource, or no mandate (checked by the LRZA, or up front with `mandate` configured). |
+| `404`         | The resource doesn't exist in the LRZA.                                                            |
+| `412`         | Stale version (see above).                                                                         |
+| `422`         | Failed validation, with one issue (and `expression`) per problem; by the Knooppunt or by the LRZA.  |
+| `429`, `5xx`  | The LRZA is rate limiting or unavailable. The Knooppunt already retried (`429` always, `5xx` only for reads, updates and withdrawals, never for a create or transaction); `Retry-After` is passed on. |
+
+#### After a write
+
+- When `lrza.querybaseurl` is set, every write requests an LRZA sync into the Query Directory, so the change shows up
+  there shortly, without waiting for the next `/lrza/update`. The sync starts about 5 seconds after the write, so a
+  burst of writes is picked up by one sync.
+- When a signing certificate is configured for the tenant (`lrza.registration.signing.<ura>`), the Knooppunt signs the
+  stored resource (a detached JWS over its `json#static` canonical form) and registers a Provenance carrying the
+  signature. Signing is optional in the IG, so a signing failure doesn't undo the write; the Knooppunt logs it.
 
 ## NVI
 

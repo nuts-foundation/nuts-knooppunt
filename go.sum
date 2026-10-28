@@ -44,8 +44,6 @@ github.com/PaesslerAG/jsonpath v0.1.0/go.mod h1:4BzmtoM/PI8fPO4aQGIusjGxGir2BzcV
 github.com/PaesslerAG/jsonpath v0.1.2-0.20230323094847-3484786d6f97 h1:XIsQOSBJi/9Bexr+rjUpuYi0IkQ+YqNKKlE7Yt/sw9Q=
 github.com/PaesslerAG/jsonpath v0.1.2-0.20230323094847-3484786d6f97/go.mod h1:zTyVtYhYjcHpfCtqnCMxejgp0pEEwb/xJzhn05NrkJk=
 github.com/RaveNoX/go-jsoncommentstrip v1.0.0/go.mod h1:78ihd09MekBnJnxpICcwzCMzGrKSKYe4AqU6PDYYpjk=
-github.com/SanteonNL/go-fhir-client v0.6.1 h1:d98ekb+XGHmarvoGoTKyke5M9DMpfMjClg+qogrY4kE=
-github.com/SanteonNL/go-fhir-client v0.6.1/go.mod h1:CcU6J3vgxsdjTWry0s2BAJcV6SvdaRTsry9ixR7zqc4=
 github.com/agnivade/levenshtein v1.2.1 h1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KOX7eoM=
 github.com/agnivade/levenshtein v1.2.1/go.mod h1:QVVI16kDrtSuwcpd0p1+xMC6Z/VfhtCyDIjcwga4/DU=
 github.com/alexandrevicenzi/go-sse v1.6.0 h1:3KvOzpuY7UrbqZgAtOEmub9/V5ykr7Myudw+PA+H1Ik=
@@ -532,6 +530,8 @@ github.com/nuts-foundation/crypto-ecies v0.0.0-20211207143025-5b84f9efce2b h1:80
 github.com/nuts-foundation/crypto-ecies v0.0.0-20211207143025-5b84f9efce2b/go.mod h1:6YUioYirD6/8IahZkoS4Ypc8xbeJW76Xdk1QKcziNTM=
 github.com/nuts-foundation/go-did v0.19.0 h1:8QILQoHuzuwMoi35Etnz8Zho0R5kdXnOmPqtt0g2LlI=
 github.com/nuts-foundation/go-did v0.19.0/go.mod h1:4od1gAmCi9HjHTQGEvHC8pLeuXdXACxidAcdA52YScc=
+github.com/nuts-foundation/go-fhir-client v0.0.0-20261028134914-328b8af9fea2 h1:7pTws1zm3tYRZ+d/W2d8uu9igRtKCBgVICQRxttBxfk=
+github.com/nuts-foundation/go-fhir-client v0.0.0-20261028134914-328b8af9fea2/go.mod h1:CcU6J3vgxsdjTWry0s2BAJcV6SvdaRTsry9ixR7zqc4=
 github.com/nuts-foundation/go-leia/v4 v4.3.0 h1:R0qGISIeg2q/PCQTC9cuoBtA6cFu4WBV2DbmSOWKZyM=
 github.com/nuts-foundation/go-leia/v4 v4.3.0/go.mod h1:Gw6bXqJLOAmHSiXJJYbVoj+Mowp/PoBRywO0ZPsVzA0=
 github.com/nuts-foundation/go-stoabs v1.11.1 h1:ZQOeRKzC1+AfW6Ve5kBJMo+zYhHLBUI4KrLWKYkxoeI=
