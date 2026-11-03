@@ -38,11 +38,12 @@ import (
 // exact missing method. If you add a new operation's error handling and the compiler doesn't
 // complain, you don't need a new method here.
 type OperationOutcomeResponse struct {
-	StatusCode int
+	// StatusCode is the HTTP status of the response, not part of the body.
+	StatusCode int `json:"-"`
 	Outcome    FHIROperationOutcome
 	// Header holds optional extra response headers, e.g. a Retry-After passed through from an
-	// upstream server.
-	Header http.Header
+	// upstream server. They are sent as HTTP headers only, never in the body.
+	Header http.Header `json:"-"`
 }
 
 func (r OperationOutcomeResponse) Write(w http.ResponseWriter) error {
