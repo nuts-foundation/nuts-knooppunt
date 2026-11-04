@@ -548,49 +548,6 @@ func TestRegistration_Withdraw(t *testing.T) {
 	})
 }
 
-func TestRegistration_Mandate(t *testing.T) {
-	const code = "http://example.org/affiliation-types|data-source"
-	const vendor = "http://kvk.nl|87654321"
-	configure := func(config *Config) {
-		config.Registration.Mandate = MandateConfig{Code: code, Vendor: vendor}
-	}
-	affiliation := resource{
-		"resourceType": "OrganizationAffiliation", "id": "mandate", "active": true,
-		"organization":              organizationRef("sunflower"),
-		"participatingOrganization": map[string]any{"identifier": map[string]any{"system": "http://kvk.nl", "value": "87654321"}},
-		"code":                      []any{map[string]any{"coding": []any{map[string]any{"system": "http://example.org/affiliation-types", "code": "data-source"}}}},
-	}
-
-	t.Run("granted", func(t *testing.T) {
-		lrza := newFakeLRZA(t, append(testDirectory(), affiliation)...)
-		c := newTestComponent(t, lrza, configure)
-
-		resp := createResource(t, c, sunflowerURA, testLocation("", "sunflower"))
-
-		assert.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
-	})
-
-	t.Run("not granted", func(t *testing.T) {
-		inactive := affiliation.Clone()
-		inactive["active"] = false
-		lrza := newFakeLRZA(t, append(testDirectory(), inactive)...)
-		c := newTestComponent(t, lrza, configure)
-
-		resp := createResource(t, c, sunflowerURA, testLocation("", "sunflower"))
-
-		require.Equal(t, http.StatusForbidden, resp.Code, resp.Body.String())
-		assert.Contains(t, resp.diagnostics(t)[0], "has not granted the mandate")
-		assert.Empty(t, lrza.writes())
-	})
-
-	t.Run("invalid configuration", func(t *testing.T) {
-		config := DefaultConfig()
-		config.Registration.Mandate = MandateConfig{Code: code}
-		_, err := New(config)
-		assert.ErrorContains(t, err, "mandate.vendor")
-	})
-}
-
 func TestRegistration_Transaction(t *testing.T) {
 	t.Run("entries referring to each other, and a delete rewritten to a withdrawal", func(t *testing.T) {
 		lrza := newFakeLRZA(t, testDirectory()...)

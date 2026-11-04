@@ -132,8 +132,8 @@ It is available whenever the LRZA connection is configured (`lrza.lrzabaseurl`, 
 
 The Knooppunt connects to the LRZA as the *authorized party* (the IT vendor): one mTLS certificate serves every tenant.
 Before writes succeed, each care provider must grant the vendor a mandate, by registering an `OrganizationAffiliation`
-in the LRZA itself (the vendor may not write it). Set `lrza.registration.mandate` to have the Knooppunt check for it
-up front.
+in the LRZA itself (the vendor may not write it). Without it, the LRZA refuses the write with `403`, which the Knooppunt
+passes on.
 
 All operations are on the internal interface and require the `X-Tenant-ID` header (see [NVI](#nvi)). Ids are the
 LRZA's own: the id the LRZA assigns on create is the id you read, update and withdraw by.
@@ -239,7 +239,7 @@ rejected a request.
 | Status        | Meaning                                                                                           |
 |---------------|---------------------------------------------------------------------------------------------------|
 | `400`         | Malformed request, or a resource type other than Organization, Location, HealthcareService or Endpoint. |
-| `403`         | Not the tenant's resource, or no mandate (checked by the LRZA, or up front with `mandate` configured). |
+| `403`         | Not the tenant's resource (checked by the Knooppunt), or no mandate (checked by the LRZA). |
 | `404`         | The resource doesn't exist in the LRZA.                                                            |
 | `412`         | Stale version (see above).                                                                         |
 | `422`         | Failed validation, with one issue (and `expression`) per problem; by the Knooppunt or by the LRZA.  |

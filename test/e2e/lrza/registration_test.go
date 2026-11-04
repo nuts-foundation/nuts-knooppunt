@@ -29,8 +29,8 @@ import (
 // Every write below therefore also proves the Knooppunt sends what the LRZA accepts. Like
 // Test_LRZASync, the steps build on each other's state, so the test stops at the first failing step.
 //
-// The Knooppunt's own mandate check (lrza.registration.mandate) is off, so a missing mandate is the
-// mock's 403, passed through.
+// The Knooppunt doesn't check the mandate itself, so a missing mandate is the mock's 403, passed
+// through.
 func Test_LRZARegistration(t *testing.T) {
 	h := harness.StartWithLRZASigning(t, map[string]lrzacomponent.SigningConfig{sunflower.URA: signingCertificate(t)})
 	// Reads the directory to check what the Knooppunt wrote, as the operator: a read as anyone else

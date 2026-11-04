@@ -110,9 +110,6 @@ func (r *registrar) transaction(ctx context.Context, tenantURA string, body []by
 	if len(issues) > 0 {
 		return nil, validationError(issues)
 	}
-	if err := w.checkMandate(ctx); err != nil {
-		return nil, err
-	}
 
 	// Rewrite the entries to what is sent: a DELETE becomes a PUT of the withdrawn version, and every
 	// update carries the client's ifMatch or the version the ownership check read.

@@ -58,7 +58,6 @@ type registrar struct {
 	// baseURL is the LRZA's FHIR base URL, to recognize absolute references to it.
 	baseURL     string
 	requestSync func()
-	mandate     *mandate
 	// signers holds the Provenance signer per tenant URA.
 	signers map[string]*signer
 	now     func() time.Time
@@ -66,10 +65,6 @@ type registrar struct {
 }
 
 func newRegistrar(config RegistrationConfig, baseURL string, client fhirclient.Client, requestSync func()) (*registrar, error) {
-	mandate, err := parseMandate(config.Mandate)
-	if err != nil {
-		return nil, err
-	}
 	signers := make(map[string]*signer, len(config.Signing))
 	for ura, signingConfig := range config.Signing {
 		s, err := loadSigner(signingConfig)
@@ -83,7 +78,6 @@ func newRegistrar(config RegistrationConfig, baseURL string, client fhirclient.C
 		client:      client,
 		baseURL:     strings.TrimSuffix(baseURL, "/"),
 		requestSync: requestSync,
-		mandate:     mandate,
 		signers:     signers,
 		now:         time.Now,
 		newUUID:     uuid.NewString,
@@ -220,9 +214,6 @@ func (r *registrar) withdrawResource(ctx context.Context, tenantURA, resourceTyp
 	if err := w.owners.requireOwned(ctx, current, "the current version in the LRZA does not belong to the tenant"); err != nil {
 		return nil, err
 	}
-	if err := w.checkMandate(ctx); err != nil {
-		return nil, err
-	}
 	withdrawn := current.Clone()
 	if err := withdraw(withdrawn, r.now()); err != nil {
 		return nil, err
@@ -235,8 +226,9 @@ func (r *registrar) withdrawResource(ctx context.Context, tenantURA, resourceTyp
 }
 
 // prepare runs the pipeline steps before a write of a new version of a resource: enrichment,
-// ownership of the new version, local validation and the mandate check. current is the version in
-// the LRZA, or nil for a create.
+// ownership of the new version and local validation. current is the version in the LRZA, or nil for
+// a create. Whether the tenant granted the IT vendor the mandate to write is the LRZA's to check: it
+// answers 403 otherwise, which is passed through.
 func (w *writeContext) prepare(ctx context.Context, res, current libfhir.Resource) error {
 	if err := enrich(ctx, res, current, w.enrichOptions()); err != nil {
 		return err
@@ -247,7 +239,7 @@ func (w *writeContext) prepare(ctx context.Context, res, current libfhir.Resourc
 	if issues := validateResource(res); len(issues) > 0 {
 		return validationError(issues)
 	}
-	return w.checkMandate(ctx)
+	return nil
 }
 
 // finish runs the steps after a successful write: signing a Provenance and requesting a sync.
@@ -327,18 +319,6 @@ func (w *writeContext) tenantOrganization(ctx context.Context) (libfhir.Resource
 		break
 	}
 	return w.tenantOrganizationResult, nil
-}
-
-// checkMandate checks the tenant granted the configured mandate; it does nothing without one.
-func (w *writeContext) checkMandate(ctx context.Context) error {
-	if w.mandate == nil {
-		return nil
-	}
-	organization, err := w.tenantOrganization(ctx)
-	if err != nil {
-		return err
-	}
-	return w.mandate.check(ctx, w.client, w.owners.resolve, w.tenantURA, organization)
 }
 
 // signProvenance signs a stored resource for a tenant with a signing key; it does nothing for others.

@@ -100,12 +100,9 @@ type RegistrationConfig struct {
 	// to assigner.identifier.value of every URA identifier, since the CustodianAssignedIdentifier
 	// profile requires each identifier to name the party that assigned it:
 	// https://build.fhir.org/ig/minvws/generiekefuncties-docs/branches/1.0.0/en/StructureDefinition-nl-gf-custodianassignedidentifier.html
-	// Not to be confused with Mandate.Vendor, which is this Knooppunt operator's own KvK number.
+	// Not to be confused with the KvK number of this Knooppunt's operator (the IT vendor), which care
+	// providers name in the mandate (OrganizationAffiliation) they grant it.
 	URAAssignerKVK string `koanf:"uraassignerkvk"`
-	// Mandate optionally makes the Knooppunt check, before writing, that the tenant has granted the
-	// IT vendor the mandate the LRZA requires. The LRZA checks this itself either way; checking up
-	// front gives a clearer error.
-	Mandate MandateConfig `koanf:"mandate"`
 	// Signing holds the signing certificate and key per tenant, keyed by the tenant's URA. When a
 	// tenant has one, every write is followed by a signed Provenance (see provenance.go).
 	Signing map[string]SigningConfig `koanf:"signing"`
@@ -121,17 +118,6 @@ type SigningConfig struct {
 	KeyFile string `koanf:"keyfile"`
 	// KeyPassword decrypts a .p12/.pfx file.
 	KeyPassword string `koanf:"keypassword"`
-}
-
-// MandateConfig identifies the OrganizationAffiliation a tenant must have registered in the LRZA to
-// authorize the IT vendor (the operator of this Knooppunt) to write on its behalf.
-type MandateConfig struct {
-	// Code is the affiliation code the mandate must carry, as a FHIR token (system|code). Leave empty
-	// to skip the check.
-	Code string `koanf:"code"`
-	// Vendor is the identifier of the IT vendor's Organization, the affiliation's
-	// participatingOrganization, as a FHIR token (system|value).
-	Vendor string `koanf:"vendor"`
 }
 
 // UpdateReport summarizes the outcome of a single sync cycle.

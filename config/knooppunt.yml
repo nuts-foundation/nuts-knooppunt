@@ -33,11 +33,6 @@ lrza:
   #registration:
   #  # KvK number of the authority that issues URAs, set as the assigner of URA identifiers.
   #  uraassignerkvk: "50000535"
-  #  # Optional: check up front that the tenant granted the mandate (an OrganizationAffiliation with
-  #  # this code and this vendor as participatingOrganization), for a clearer error than the LRZA's.
-  #  mandate:
-  #    code: "<affiliation code system>|<code>"
-  #    vendor: "http://kvk.nl|<vendor KvK number>"
   #  # Optional: per tenant URA, the certificate and key to sign a Provenance for every write with
   #  # (PEM, or a .p12/.pfx file with certfile and keypassword only).
   #  signing:
