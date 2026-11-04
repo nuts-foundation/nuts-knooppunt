@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -128,6 +129,28 @@ func checkResourceType(resourceType string) error {
 	return nil
 }
 
+// fhirIDPattern is the pattern of the FHIR id datatype: https://hl7.org/fhir/R4/datatypes.html#id
+var fhirIDPattern = regexp.MustCompile(`^[A-Za-z0-9\-.]{1,64}$`)
+
+// validID reports whether id is a FHIR id that is safe to use as a URL path segment. "." and ".."
+// match the pattern, but a URL path resolves them rather than passing them on.
+func validID(id string) bool {
+	return fhirIDPattern.MatchString(id) && id != "." && id != ".."
+}
+
+// checkResource rejects resource types the proxy doesn't write, and ids that aren't FHIR ids. The id
+// is part of the URL of the LRZA request, so an id like "../OrganizationAffiliation/1" (which the
+// router decodes from ..%2F...) would otherwise address another resource than the path says.
+func checkResource(resourceType, id string) error {
+	if err := checkResourceType(resourceType); err != nil {
+		return err
+	}
+	if !validID(id) {
+		return fhirapi.BadRequestError(fmt.Sprintf("invalid resource id: %q (expected a FHIR id: 1-64 letters, digits, '-' and '.')", id), nil)
+	}
+	return nil
+}
+
 // parseRequestResource parses a request body as a resource of the type (and, for an update, with the
 // id) of the request path.
 func parseRequestResource(body []byte, resourceType, id string) (libfhir.Resource, error) {
@@ -158,7 +181,7 @@ func (r *registrar) createResource(ctx context.Context, tenantURA, resourceType 
 }
 
 func (r *registrar) readResource(ctx context.Context, tenantURA, resourceType, id string) (*writeResult, error) {
-	if err := checkResourceType(resourceType); err != nil {
+	if err := checkResource(resourceType, id); err != nil {
 		return nil, err
 	}
 	w := r.newWriteContext(tenantURA)
@@ -177,7 +200,7 @@ func (r *registrar) readResource(ctx context.Context, tenantURA, resourceType, i
 }
 
 func (r *registrar) updateResource(ctx context.Context, tenantURA, resourceType, id string, ifMatch *string, body []byte) (*writeResult, error) {
-	if err := checkResourceType(resourceType); err != nil {
+	if err := checkResource(resourceType, id); err != nil {
 		return nil, err
 	}
 	res, err := parseRequestResource(body, resourceType, id)
@@ -203,7 +226,7 @@ func (r *registrar) updateResource(ctx context.Context, tenantURA, resourceType,
 }
 
 func (r *registrar) withdrawResource(ctx context.Context, tenantURA, resourceType, id string, ifMatch *string) (*writeResult, error) {
-	if err := checkResourceType(resourceType); err != nil {
+	if err := checkResource(resourceType, id); err != nil {
 		return nil, err
 	}
 	w := r.newWriteContext(tenantURA)
@@ -402,7 +425,19 @@ func (w *writeContext) readCurrent(ctx context.Context, resourceType, id string)
 	if err != nil {
 		return nil, "", &fhirapi.Error{Message: "LRZA returned an invalid resource", Cause: err, IssueType: fhir.IssueTypeException}
 	}
+	if err := checkReturned(res, resourceType, id); err != nil {
+		return nil, "", err
+	}
 	return res, headers.Get("ETag"), nil
+}
+
+// checkReturned checks that the LRZA returned the resource that was read, so the checks that follow
+// are made against the resource the request is about.
+func checkReturned(res libfhir.Resource, resourceType, id string) error {
+	if res.ResourceType() != resourceType || res.ID() != id {
+		return &fhirapi.Error{Message: fmt.Sprintf("LRZA returned %s when %s/%s was read", res.Reference(), resourceType, id), IssueType: fhir.IssueTypeException}
+	}
+	return nil
 }
 
 // create and update write a resource with fhirclient.ReturnRepresentation, so they return the resource

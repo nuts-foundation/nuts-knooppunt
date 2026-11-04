@@ -200,7 +200,8 @@ own resources:
 - An update or withdrawal requires both the current version in the LRZA and the new version to belong to the tenant,
   so a resource can't be moved away from another tenant.
 - `Organization.endpoint`, `Location.endpoint` and `HealthcareService.endpoint` may only refer to Endpoints the tenant
-  manages.
+  manages, and `HealthcareService.location` and `Location.partOf` only to Locations the tenant manages.
+- Resource ids must be FHIR ids (1-64 letters, digits, `-` and `.`); anything else is rejected with `400`.
 - Only Organization, Location, HealthcareService and Endpoint can be written: the types the IG lets a Data Source
   write, and the ones whose owner the Knooppunt can check. OrganizationAffiliation (the mandate) is registered by the
   care provider itself, and Provenance resources are created by the Knooppunt.

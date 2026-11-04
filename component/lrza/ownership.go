@@ -123,28 +123,64 @@ func (o *ownershipChecker) organizationOwnership(ctx context.Context, organizati
 	return o.organizationOwnership(ctx, parent, depth+1)
 }
 
-// checkNewVersion checks that the version about to be written belongs to the tenant, and that it
-// only links Endpoints the tenant manages: otherwise a tenant could claim another tenant's Endpoint.
+// link is an element by which a resource links another resource, of the given type.
+type link struct {
+	element, resourceType string
+}
+
+// links are, per resource type, the links to resources that must belong to the tenant too, so a
+// tenant can't claim another tenant's resources: publish its Endpoint, offer a service at its
+// Location, or put a Location in its building. (Organization.partOf is part of the ownership check
+// itself.)
+var links = map[string][]link{
+	"Organization":      {{"endpoint", "Endpoint"}},
+	"Location":          {{"endpoint", "Endpoint"}, {"partOf", "Location"}},
+	"HealthcareService": {{"endpoint", "Endpoint"}, {"location", "Location"}},
+}
+
+// checkNewVersion checks that the version about to be written belongs to the tenant, and that the
+// resources it links (see links) do too.
 func (o *ownershipChecker) checkNewVersion(ctx context.Context, res libfhir.Resource) error {
 	if err := o.requireOwned(ctx, res, res.ResourceType()+" does not belong to the tenant"); err != nil {
 		return err
 	}
-	endpoints, _ := res["endpoint"].([]any)
-	for i, item := range endpoints {
-		ref, _ := item.(map[string]any)
-		if ref == nil {
-			continue
+	for _, l := range links[res.ResourceType()] {
+		for _, r := range references(res, l.element) {
+			path, ref := res.ResourceType()+"."+r.path, r.ref
+			linked, err := o.resolve(ctx, l.resourceType, ref)
+			if errors.Is(err, errUnresolvable) {
+				return forbiddenError(fmt.Sprintf("%s (%s) does not refer to a %s in the LRZA", path, describeReference(ref), l.resourceType))
+			}
+			if err != nil {
+				return err
+			}
+			if err := o.requireOwned(ctx, linked, fmt.Sprintf("%s (%s) refers to a %s the tenant does not manage", path, describeReference(ref), l.resourceType)); err != nil {
+				return err
+			}
 		}
-		endpoint, err := o.resolve(ctx, "Endpoint", ref)
-		if errors.Is(err, errUnresolvable) {
-			return forbiddenError(fmt.Sprintf("%s.endpoint[%d] (%s) does not refer to an Endpoint in the LRZA", res.ResourceType(), i, describeReference(ref)))
+	}
+	return nil
+}
+
+// reference is a reference in a resource, with its FHIRPath-like path relative to the resource.
+type reference struct {
+	path string
+	ref  map[string]any
+}
+
+// references returns the references in a resource's element, a single one or a list, in order.
+func references(res libfhir.Resource, element string) []reference {
+	switch value := res[element].(type) {
+	case map[string]any:
+		return []reference{{path: element, ref: value}}
+	case []any:
+		var result []reference
+		for i, item := range value {
+			if ref, ok := item.(map[string]any); ok {
+				result = append(result, reference{path: fmt.Sprintf("%s[%d]", element, i), ref: ref})
+			}
 		}
-		if err != nil {
-			return err
-		}
-		if err := o.requireOwned(ctx, endpoint, fmt.Sprintf("%s.endpoint[%d] (%s) refers to an Endpoint the tenant does not manage", res.ResourceType(), i, describeReference(ref))); err != nil {
-			return err
-		}
+		return result
 	}
 	return nil
 }
@@ -179,14 +215,18 @@ func (o *ownershipChecker) resolve(ctx context.Context, expectedType string, ref
 	if !ok || resourceType != expectedType {
 		return nil, errUnresolvable
 	}
+	if !validID(id) {
+		return nil, errUnresolvable
+	}
 	if res, ok := o.bundle[resourceType+"/"+id]; ok {
 		return res, nil
 	}
-	return o.read(ctx, resourceType+"/"+id)
+	return o.read(ctx, resourceType, id)
 }
 
 // read reads a resource from the LRZA, returning errUnresolvable if it doesn't exist.
-func (o *ownershipChecker) read(ctx context.Context, reference string) (libfhir.Resource, error) {
+func (o *ownershipChecker) read(ctx context.Context, resourceType, id string) (libfhir.Resource, error) {
+	reference := resourceType + "/" + id
 	var data []byte
 	var headers fhirclient.Headers
 	var status int
@@ -200,6 +240,9 @@ func (o *ownershipChecker) read(ctx context.Context, reference string) (libfhir.
 	res, err := libfhir.ParseResource(data)
 	if err != nil {
 		return nil, &fhirapi.Error{Message: "LRZA returned an invalid resource", Cause: err, IssueType: fhir.IssueTypeException}
+	}
+	if err := checkReturned(res, resourceType, id); err != nil {
+		return nil, err
 	}
 	return res, nil
 }

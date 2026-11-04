@@ -43,6 +43,18 @@ func TestStrictAPIServer_LrzaRegistration(t *testing.T) {
 		assert.Equal(t, "application/fhir+json", recorder.Header().Get("Content-Type"))
 	})
 
+	t.Run("an encoded path in the id is rejected before the LRZA is contacted", func(t *testing.T) {
+		mux := http.NewServeMux()
+		(&strictAPIServer{lrza: newLRZA(t)}).RegisterHttpHandlers(http.NewServeMux(), mux)
+		// The router decodes %2F, so {id} would be "../OrganizationAffiliation/1".
+		request := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/lrza/fhir/Endpoint/..%2FOrganizationAffiliation%2F1", nil)
+		request.Header.Set("X-Tenant-ID", "http://fhir.nl/fhir/NamingSystem/ura|00000020")
+		recorder := httptest.NewRecorder()
+		mux.ServeHTTP(recorder, request)
+		assert.Equal(t, http.StatusBadRequest, recorder.Code)
+		assert.Contains(t, recorder.Body.String(), "invalid resource id")
+	})
+
 	t.Run("a missing tenant header is a 400 OperationOutcome", func(t *testing.T) {
 		mux := http.NewServeMux()
 		(&strictAPIServer{lrza: newLRZA(t)}).RegisterHttpHandlers(http.NewServeMux(), mux)

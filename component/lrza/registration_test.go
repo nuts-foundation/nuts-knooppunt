@@ -3,9 +3,11 @@ package lrza
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -222,6 +224,19 @@ func TestRegistration_Ownership(t *testing.T) {
 		org["endpoint"] = []any{map[string]any{"reference": "Endpoint/" + endpointID}}
 		return org
 	}
+	serviceAt := func(locationID string) resource {
+		return resource{
+			"resourceType": "HealthcareService", "name": "Cardiology",
+			"type":       []any{map[string]any{"text": "cardiology"}},
+			"providedBy": organizationRef("sunflower"),
+			"location":   []any{map[string]any{"reference": "Location/" + locationID}},
+		}
+	}
+	locationIn := func(buildingID string) resource {
+		location := testLocation("", "sunflower")
+		location["partOf"] = map[string]any{"reference": "Location/" + buildingID}
+		return location
+	}
 	for _, tc := range []struct {
 		name     string
 		update   bool
@@ -238,6 +253,11 @@ func TestRegistration_Ownership(t *testing.T) {
 		{name: "linking the tenant's own Endpoint", update: true, res: withEndpoint("sunflower-endpoint"), status: http.StatusOK},
 		{name: "linking another tenant's Endpoint", update: true, res: withEndpoint("care2cure-endpoint"), status: http.StatusForbidden, contains: "Endpoint the tenant does not manage"},
 		{name: "changing the URA of the tenant's Organization", update: true, res: withURA("33333333"), status: http.StatusForbidden, contains: "URA 33333333"},
+		{name: "a service at the tenant's own Location", res: serviceAt("sunflower-location"), status: http.StatusCreated},
+		{name: "a service at another tenant's Location", res: serviceAt("care2cure-location"), status: http.StatusForbidden, contains: "HealthcareService.location[0] (Location/care2cure-location) refers to a Location the tenant does not manage"},
+		{name: "a Location in the tenant's own building", res: locationIn("sunflower-location"), status: http.StatusCreated},
+		{name: "a Location in another tenant's building", res: locationIn("care2cure-location"), status: http.StatusForbidden, contains: "Location.partOf (Location/care2cure-location) refers to a Location the tenant does not manage"},
+		{name: "a Location in a building not in the LRZA", res: locationIn("unknown"), status: http.StatusForbidden, contains: "does not refer to a Location in the LRZA"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			lrza := newFakeLRZA(t, testDirectory()...)
@@ -297,6 +317,60 @@ func TestRegistration_Ownership(t *testing.T) {
 		missing := readResource(t, c, sunflowerURA, "Location", "missing")
 		assert.Equal(t, http.StatusNotFound, missing.Code)
 	})
+}
+
+// TestRegistration_ResourceIDs covers ids that would make the LRZA request address another resource
+// than the path names: the router decodes "..%2F" in {id} to "../", which the FHIR client's
+// url.JoinPath then resolves.
+func TestRegistration_ResourceIDs(t *testing.T) {
+	for _, id := range []string{"../OrganizationAffiliation/mandate", "../Organization/sunflower", "..", ".", "a/b", "", strings.Repeat("x", 65)} {
+		t.Run(fmt.Sprintf("%q is rejected", id), func(t *testing.T) {
+			lrza := newFakeLRZA(t, testDirectory()...)
+			c := newTestComponent(t, lrza)
+
+			read := readResource(t, c, sunflowerURA, "Endpoint", id)
+			withdrawn := withdrawResource(t, c, sunflowerURA, "Endpoint", id)
+			update := testEndpoint("", "sunflower")
+			update["id"] = id
+			updated := updateResource(t, c, sunflowerURA, update, nil)
+
+			for _, resp := range []response{read, withdrawn, updated} {
+				require.Equal(t, http.StatusBadRequest, resp.Code, resp.Body.String())
+				assert.Contains(t, resp.diagnostics(t)[0], "invalid resource id")
+			}
+			assert.Empty(t, lrza.requests, "the LRZA isn't contacted")
+		})
+	}
+
+	t.Run("in a transaction", func(t *testing.T) {
+		lrza := newFakeLRZA(t, testDirectory()...)
+		c := newTestComponent(t, lrza)
+
+		resp := submitTransaction(t, c, sunflowerURA, map[string]any{
+			"resourceType": "Bundle", "type": "transaction",
+			"entry": []any{map[string]any{"request": map[string]any{"method": "DELETE", "url": "Endpoint/.."}}},
+		})
+
+		require.Equal(t, http.StatusBadRequest, resp.Code, resp.Body.String())
+		assert.Contains(t, resp.diagnostics(t)[0], "invalid resource id")
+		assert.Empty(t, lrza.requests)
+	})
+
+	t.Run("a FHIR id with dots and dashes is fine", func(t *testing.T) {
+		lrza := newFakeLRZA(t, testLocation("loc-1.a", "sunflower"), testDirectory()[0])
+		c := newTestComponent(t, lrza)
+
+		resp := readResource(t, c, sunflowerURA, "Location", "loc-1.a")
+
+		assert.Equal(t, http.StatusOK, resp.Code, resp.Body.String())
+	})
+}
+
+func TestCheckReturned(t *testing.T) {
+	asked := resource{"resourceType": "Endpoint", "id": "1"}
+	assert.NoError(t, checkReturned(asked, "Endpoint", "1"))
+	assert.ErrorContains(t, checkReturned(asked, "Organization", "1"), "LRZA returned Endpoint/1 when Organization/1 was read")
+	assert.Error(t, checkReturned(asked, "Endpoint", "2"))
 }
 
 func TestRegistration_Enrichment(t *testing.T) {

@@ -1052,9 +1052,10 @@ components:
       name: id
       in: path
       required: true
-      description: The resource's id in the LRZA.
+      description: The resource's id in the LRZA, a FHIR id.
       schema:
         type: string
+        pattern: '^[A-Za-z0-9\-.]{1,64}$'
 
     IfMatch:
       name: If-Match

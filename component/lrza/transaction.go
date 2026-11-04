@@ -191,6 +191,9 @@ func parseTransactionEntry(index int, entry fhir.BundleEntry) (*txEntry, error) 
 			return nil, fail(fmt.Sprintf("a %s must be to a resource, e.g. Endpoint/123", entry.Request.Method.Code()))
 		}
 		result.resourceType, result.id = parts[0], parts[1]
+		if !validID(result.id) {
+			return nil, fail(fmt.Sprintf("invalid resource id: %q", result.id))
+		}
 	default:
 		return nil, fail(fmt.Sprintf("method %s is not supported (expected POST, PUT or DELETE)", entry.Request.Method.Code()))
 	}
