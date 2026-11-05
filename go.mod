@@ -328,3 +328,5 @@ require (
 )
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
+
+replace github.com/SanteonNL/go-fhir-client => github.com/nuts-foundation/go-fhir-client v0.0.0-20261028134914-328b8af9fea2

@@ -48,6 +48,126 @@ func (e PDPAuthzResponsePoliciesReasonsCode) Valid() bool {
 	}
 }
 
+// Defines values for LrzaResourceType.
+const (
+	LrzaResourceTypeEndpoint          LrzaResourceType = "Endpoint"
+	LrzaResourceTypeHealthcareService LrzaResourceType = "HealthcareService"
+	LrzaResourceTypeLocation          LrzaResourceType = "Location"
+	LrzaResourceTypeOrganization      LrzaResourceType = "Organization"
+)
+
+// Valid indicates whether the value is a known member of the LrzaResourceType enum.
+func (e LrzaResourceType) Valid() bool {
+	switch e {
+	case LrzaResourceTypeEndpoint:
+		return true
+	case LrzaResourceTypeHealthcareService:
+		return true
+	case LrzaResourceTypeLocation:
+		return true
+	case LrzaResourceTypeOrganization:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateLrzaResourceParamsResourceType.
+const (
+	CreateLrzaResourceParamsResourceTypeEndpoint          CreateLrzaResourceParamsResourceType = "Endpoint"
+	CreateLrzaResourceParamsResourceTypeHealthcareService CreateLrzaResourceParamsResourceType = "HealthcareService"
+	CreateLrzaResourceParamsResourceTypeLocation          CreateLrzaResourceParamsResourceType = "Location"
+	CreateLrzaResourceParamsResourceTypeOrganization      CreateLrzaResourceParamsResourceType = "Organization"
+)
+
+// Valid indicates whether the value is a known member of the CreateLrzaResourceParamsResourceType enum.
+func (e CreateLrzaResourceParamsResourceType) Valid() bool {
+	switch e {
+	case CreateLrzaResourceParamsResourceTypeEndpoint:
+		return true
+	case CreateLrzaResourceParamsResourceTypeHealthcareService:
+		return true
+	case CreateLrzaResourceParamsResourceTypeLocation:
+		return true
+	case CreateLrzaResourceParamsResourceTypeOrganization:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WithdrawLrzaResourceParamsResourceType.
+const (
+	WithdrawLrzaResourceParamsResourceTypeEndpoint          WithdrawLrzaResourceParamsResourceType = "Endpoint"
+	WithdrawLrzaResourceParamsResourceTypeHealthcareService WithdrawLrzaResourceParamsResourceType = "HealthcareService"
+	WithdrawLrzaResourceParamsResourceTypeLocation          WithdrawLrzaResourceParamsResourceType = "Location"
+	WithdrawLrzaResourceParamsResourceTypeOrganization      WithdrawLrzaResourceParamsResourceType = "Organization"
+)
+
+// Valid indicates whether the value is a known member of the WithdrawLrzaResourceParamsResourceType enum.
+func (e WithdrawLrzaResourceParamsResourceType) Valid() bool {
+	switch e {
+	case WithdrawLrzaResourceParamsResourceTypeEndpoint:
+		return true
+	case WithdrawLrzaResourceParamsResourceTypeHealthcareService:
+		return true
+	case WithdrawLrzaResourceParamsResourceTypeLocation:
+		return true
+	case WithdrawLrzaResourceParamsResourceTypeOrganization:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReadLrzaResourceParamsResourceType.
+const (
+	ReadLrzaResourceParamsResourceTypeEndpoint          ReadLrzaResourceParamsResourceType = "Endpoint"
+	ReadLrzaResourceParamsResourceTypeHealthcareService ReadLrzaResourceParamsResourceType = "HealthcareService"
+	ReadLrzaResourceParamsResourceTypeLocation          ReadLrzaResourceParamsResourceType = "Location"
+	ReadLrzaResourceParamsResourceTypeOrganization      ReadLrzaResourceParamsResourceType = "Organization"
+)
+
+// Valid indicates whether the value is a known member of the ReadLrzaResourceParamsResourceType enum.
+func (e ReadLrzaResourceParamsResourceType) Valid() bool {
+	switch e {
+	case ReadLrzaResourceParamsResourceTypeEndpoint:
+		return true
+	case ReadLrzaResourceParamsResourceTypeHealthcareService:
+		return true
+	case ReadLrzaResourceParamsResourceTypeLocation:
+		return true
+	case ReadLrzaResourceParamsResourceTypeOrganization:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateLrzaResourceParamsResourceType.
+const (
+	UpdateLrzaResourceParamsResourceTypeEndpoint          UpdateLrzaResourceParamsResourceType = "Endpoint"
+	UpdateLrzaResourceParamsResourceTypeHealthcareService UpdateLrzaResourceParamsResourceType = "HealthcareService"
+	UpdateLrzaResourceParamsResourceTypeLocation          UpdateLrzaResourceParamsResourceType = "Location"
+	UpdateLrzaResourceParamsResourceTypeOrganization      UpdateLrzaResourceParamsResourceType = "Organization"
+)
+
+// Valid indicates whether the value is a known member of the UpdateLrzaResourceParamsResourceType enum.
+func (e UpdateLrzaResourceParamsResourceType) Valid() bool {
+	switch e {
+	case UpdateLrzaResourceParamsResourceTypeEndpoint:
+		return true
+	case UpdateLrzaResourceParamsResourceTypeHealthcareService:
+		return true
+	case UpdateLrzaResourceParamsResourceTypeLocation:
+		return true
+	case UpdateLrzaResourceParamsResourceTypeOrganization:
+		return true
+	default:
+		return false
+	}
+}
+
 // DirectoryUpdateReport Result of one LRZA sync cycle.
 //
 // Example: {"created":1,"deleted":0,"errors":[],"updated":5,"warnings":["Some-warning-message"]}
@@ -90,6 +210,9 @@ type FHIRList = fhir.List
 //
 // Example: {"issue":[{"code":"value","diagnostics":"missing tenant request header: X-Tenant-ID","severity":"error"}],"resourceType":"OperationOutcome"}
 type FHIROperationOutcome = fhir.OperationOutcome
+
+// FHIRResource Any FHIR R4 resource, passed through as raw JSON so that every element (including extensions) is preserved. For the `/lrza/fhir` operations: an Organization, Location, HealthcareService or Endpoint following the GF Care Service Directory profiles, or a Bundle.
+type FHIRResource = json.RawMessage
 
 // FHIRSubscription A FHIR R4 Subscription resource. See https://hl7.org/fhir/R4/subscription.html for its schema; not redefined here.
 type FHIRSubscription = fhir.Subscription
@@ -260,6 +383,15 @@ type PDPAuthzResponsePoliciesReasonsCode string
 // Count defines model for Count.
 type Count = int
 
+// IfMatch defines model for IfMatch.
+type IfMatch = string
+
+// LrzaResourceID defines model for LrzaResourceID.
+type LrzaResourceID = string
+
+// LrzaResourceType defines model for LrzaResourceType.
+type LrzaResourceType string
+
 // TenantID defines model for TenantID.
 type TenantID = tenants.ID
 
@@ -267,6 +399,54 @@ type TenantID = tenants.ID
 //
 // Example: {"issue":[{"code":"value","diagnostics":"missing tenant request header: X-Tenant-ID","severity":"error"}],"resourceType":"OperationOutcome"}
 type OperationOutcomeError = FHIROperationOutcome
+
+// SubmitLrzaTransactionParams defines parameters for SubmitLrzaTransaction.
+type SubmitLrzaTransactionParams struct {
+	// XTenantID The local care organization, who is performing (or on whose behalf) the request is being made, as a FHIR token: `<system>|<value>` where `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
+	XTenantID TenantID `json:"X-Tenant-ID"`
+}
+
+// CreateLrzaResourceParams defines parameters for CreateLrzaResource.
+type CreateLrzaResourceParams struct {
+	// XTenantID The local care organization, who is performing (or on whose behalf) the request is being made, as a FHIR token: `<system>|<value>` where `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
+	XTenantID TenantID `json:"X-Tenant-ID"`
+}
+
+// CreateLrzaResourceParamsResourceType defines parameters for CreateLrzaResource.
+type CreateLrzaResourceParamsResourceType string
+
+// WithdrawLrzaResourceParams defines parameters for WithdrawLrzaResource.
+type WithdrawLrzaResourceParams struct {
+	// XTenantID The local care organization, who is performing (or on whose behalf) the request is being made, as a FHIR token: `<system>|<value>` where `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
+	XTenantID TenantID `json:"X-Tenant-ID"`
+
+	// IfMatch Version the update applies to, as a weak ETag (`W/"<versionId>"`). Forwarded to the LRZA unchanged. When absent, the Knooppunt sends the version it read for the ownership check.
+	IfMatch *IfMatch `json:"If-Match,omitempty"`
+}
+
+// WithdrawLrzaResourceParamsResourceType defines parameters for WithdrawLrzaResource.
+type WithdrawLrzaResourceParamsResourceType string
+
+// ReadLrzaResourceParams defines parameters for ReadLrzaResource.
+type ReadLrzaResourceParams struct {
+	// XTenantID The local care organization, who is performing (or on whose behalf) the request is being made, as a FHIR token: `<system>|<value>` where `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
+	XTenantID TenantID `json:"X-Tenant-ID"`
+}
+
+// ReadLrzaResourceParamsResourceType defines parameters for ReadLrzaResource.
+type ReadLrzaResourceParamsResourceType string
+
+// UpdateLrzaResourceParams defines parameters for UpdateLrzaResource.
+type UpdateLrzaResourceParams struct {
+	// XTenantID The local care organization, who is performing (or on whose behalf) the request is being made, as a FHIR token: `<system>|<value>` where `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
+	XTenantID TenantID `json:"X-Tenant-ID"`
+
+	// IfMatch Version the update applies to, as a weak ETag (`W/"<versionId>"`). Forwarded to the LRZA unchanged. When absent, the Knooppunt sends the version it read for the ownership check.
+	IfMatch *IfMatch `json:"If-Match,omitempty"`
+}
+
+// UpdateLrzaResourceParamsResourceType defines parameters for UpdateLrzaResource.
+type UpdateLrzaResourceParamsResourceType string
 
 // RegisterNVIListBundleParams defines parameters for RegisterNVIListBundle.
 type RegisterNVIListBundleParams struct {
@@ -346,6 +526,15 @@ type GetNVIListParams struct {
 	// XTenantID The local care organization, who is performing (or on whose behalf) the request is being made, as a FHIR token: `<system>|<value>` where `<system>` must be `http://fhir.nl/fhir/NamingSystem/ura`.
 	XTenantID TenantID `json:"X-Tenant-ID"`
 }
+
+// SubmitLrzaTransactionApplicationFhirPlusJSONRequestBody defines body for SubmitLrzaTransaction for application/fhir+json ContentType.
+type SubmitLrzaTransactionApplicationFhirPlusJSONRequestBody = FHIRResource
+
+// CreateLrzaResourceApplicationFhirPlusJSONRequestBody defines body for CreateLrzaResource for application/fhir+json ContentType.
+type CreateLrzaResourceApplicationFhirPlusJSONRequestBody = FHIRResource
+
+// UpdateLrzaResourceApplicationFhirPlusJSONRequestBody defines body for UpdateLrzaResource for application/fhir+json ContentType.
+type UpdateLrzaResourceApplicationFhirPlusJSONRequestBody = FHIRResource
 
 // CreateMitzSubscriptionApplicationFhirPlusJSONRequestBody defines body for CreateMitzSubscription for application/fhir+json ContentType.
 type CreateMitzSubscriptionApplicationFhirPlusJSONRequestBody = FHIRSubscription
@@ -540,6 +729,21 @@ func (a PDPAuthzRequest_Input_Subject) MarshalJSON() ([]byte, error) {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// SubmitLrzaTransaction Register addressing resources in the LRZA with a transaction Bundle
+	// (POST /lrza/fhir)
+	SubmitLrzaTransaction(w http.ResponseWriter, r *http.Request, params SubmitLrzaTransactionParams)
+	// CreateLrzaResource Register an addressing resource in the LRZA
+	// (POST /lrza/fhir/{resourceType})
+	CreateLrzaResource(w http.ResponseWriter, r *http.Request, resourceType CreateLrzaResourceParamsResourceType, params CreateLrzaResourceParams)
+	// WithdrawLrzaResource Withdraw an addressing resource from the LRZA
+	// (DELETE /lrza/fhir/{resourceType}/{id})
+	WithdrawLrzaResource(w http.ResponseWriter, r *http.Request, resourceType WithdrawLrzaResourceParamsResourceType, id LrzaResourceID, params WithdrawLrzaResourceParams)
+	// ReadLrzaResource Read an addressing resource from the LRZA
+	// (GET /lrza/fhir/{resourceType}/{id})
+	ReadLrzaResource(w http.ResponseWriter, r *http.Request, resourceType ReadLrzaResourceParamsResourceType, id LrzaResourceID, params ReadLrzaResourceParams)
+	// UpdateLrzaResource Update an addressing resource in the LRZA
+	// (PUT /lrza/fhir/{resourceType}/{id})
+	UpdateLrzaResource(w http.ResponseWriter, r *http.Request, resourceType UpdateLrzaResourceParamsResourceType, id LrzaResourceID, params UpdateLrzaResourceParams)
 	// TriggerLrzaSync Trigger LRZA synchronization
 	// (POST /lrza/update)
 	TriggerLrzaSync(w http.ResponseWriter, r *http.Request)
@@ -595,6 +799,332 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// SubmitLrzaTransaction operation middleware
+func (siw *ServerInterfaceWrapper) SubmitLrzaTransaction(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SubmitLrzaTransactionParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Tenant-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Tenant-ID")]; found {
+		var XTenantID TenantID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Tenant-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Tenant-ID", valueList[0], &XTenantID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Tenant-ID", Err: err})
+			return
+		}
+
+		params.XTenantID = XTenantID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Tenant-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Tenant-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SubmitLrzaTransaction(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateLrzaResource operation middleware
+func (siw *ServerInterfaceWrapper) CreateLrzaResource(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "resourceType" -------------
+	var resourceType CreateLrzaResourceParamsResourceType
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceType", r.PathValue("resourceType"), &resourceType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceType", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateLrzaResourceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Tenant-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Tenant-ID")]; found {
+		var XTenantID TenantID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Tenant-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Tenant-ID", valueList[0], &XTenantID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Tenant-ID", Err: err})
+			return
+		}
+
+		params.XTenantID = XTenantID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Tenant-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Tenant-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateLrzaResource(w, r, resourceType, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// WithdrawLrzaResource operation middleware
+func (siw *ServerInterfaceWrapper) WithdrawLrzaResource(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "resourceType" -------------
+	var resourceType WithdrawLrzaResourceParamsResourceType
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceType", r.PathValue("resourceType"), &resourceType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceType", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var id LrzaResourceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params WithdrawLrzaResourceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Tenant-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Tenant-ID")]; found {
+		var XTenantID TenantID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Tenant-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Tenant-ID", valueList[0], &XTenantID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Tenant-ID", Err: err})
+			return
+		}
+
+		params.XTenantID = XTenantID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Tenant-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Tenant-ID", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.WithdrawLrzaResource(w, r, resourceType, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReadLrzaResource operation middleware
+func (siw *ServerInterfaceWrapper) ReadLrzaResource(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "resourceType" -------------
+	var resourceType ReadLrzaResourceParamsResourceType
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceType", r.PathValue("resourceType"), &resourceType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceType", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var id LrzaResourceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReadLrzaResourceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Tenant-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Tenant-ID")]; found {
+		var XTenantID TenantID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Tenant-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Tenant-ID", valueList[0], &XTenantID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Tenant-ID", Err: err})
+			return
+		}
+
+		params.XTenantID = XTenantID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Tenant-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Tenant-ID", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReadLrzaResource(w, r, resourceType, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateLrzaResource operation middleware
+func (siw *ServerInterfaceWrapper) UpdateLrzaResource(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "resourceType" -------------
+	var resourceType UpdateLrzaResourceParamsResourceType
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceType", r.PathValue("resourceType"), &resourceType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceType", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "id" -------------
+	var id LrzaResourceID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateLrzaResourceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Tenant-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Tenant-ID")]; found {
+		var XTenantID TenantID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Tenant-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Tenant-ID", valueList[0], &XTenantID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Tenant-ID", Err: err})
+			return
+		}
+
+		params.XTenantID = XTenantID
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Tenant-ID is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Tenant-ID", Err: err})
+		return
+	}
+
+	// ------------- Optional header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = &IfMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateLrzaResource(w, r, resourceType, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // TriggerLrzaSync operation middleware
 func (siw *ServerInterfaceWrapper) TriggerLrzaSync(w http.ResponseWriter, r *http.Request) {
@@ -1280,6 +1810,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/status", wrapper.GetStatus)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/version", wrapper.GetVersion)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/lrza/update", wrapper.TriggerLrzaSync)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/lrza/fhir", wrapper.SubmitLrzaTransaction)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/lrza/fhir/{resourceType}", wrapper.CreateLrzaResource)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/lrza/fhir/{resourceType}/{id}", wrapper.WithdrawLrzaResource)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/lrza/fhir/{resourceType}/{id}", wrapper.ReadLrzaResource)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/lrza/fhir/{resourceType}/{id}", wrapper.UpdateLrzaResource)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/pdp", wrapper.EvaluateDefaultAuthorization)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/pdp/v1/data/knooppunt/authz", wrapper.EvaluateAuthorization)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/pdp/bundles", wrapper.ListAuthorizationPolicyBundles)
@@ -1297,6 +1832,670 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 }
 
 type OperationOutcomeErrorApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+type SubmitLrzaTransactionRequestObject struct {
+	Params SubmitLrzaTransactionParams
+	Body   *SubmitLrzaTransactionApplicationFhirPlusJSONRequestBody
+}
+
+type SubmitLrzaTransactionResponseObject interface {
+	VisitSubmitLrzaTransactionResponse(w http.ResponseWriter) error
+}
+
+type SubmitLrzaTransaction200ApplicationFhirPlusJSONResponse FHIRResource
+
+func (response SubmitLrzaTransaction200ApplicationFhirPlusJSONResponse) VisitSubmitLrzaTransactionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SubmitLrzaTransaction400ApplicationFhirPlusJSONResponse struct {
+	OperationOutcomeErrorApplicationFhirPlusJSONResponse
+}
+
+func (response SubmitLrzaTransaction400ApplicationFhirPlusJSONResponse) VisitSubmitLrzaTransactionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SubmitLrzaTransaction403ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response SubmitLrzaTransaction403ApplicationFhirPlusJSONResponse) VisitSubmitLrzaTransactionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SubmitLrzaTransaction412ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response SubmitLrzaTransaction412ApplicationFhirPlusJSONResponse) VisitSubmitLrzaTransactionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SubmitLrzaTransaction422ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response SubmitLrzaTransaction422ApplicationFhirPlusJSONResponse) VisitSubmitLrzaTransactionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SubmitLrzaTransaction429ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response SubmitLrzaTransaction429ApplicationFhirPlusJSONResponse) VisitSubmitLrzaTransactionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SubmitLrzaTransaction500ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response SubmitLrzaTransaction500ApplicationFhirPlusJSONResponse) VisitSubmitLrzaTransactionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SubmitLrzaTransaction503ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response SubmitLrzaTransaction503ApplicationFhirPlusJSONResponse) VisitSubmitLrzaTransactionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLrzaResourceRequestObject struct {
+	ResourceType CreateLrzaResourceParamsResourceType `json:"resourceType"`
+	Params       CreateLrzaResourceParams
+	Body         *CreateLrzaResourceApplicationFhirPlusJSONRequestBody
+}
+
+type CreateLrzaResourceResponseObject interface {
+	VisitCreateLrzaResourceResponse(w http.ResponseWriter) error
+}
+
+type CreateLrzaResource201ResponseHeaders struct {
+	ETag     *string
+	Location *string
+}
+
+type CreateLrzaResource201ApplicationFhirPlusJSONResponse struct {
+	Body    FHIRResource
+	Headers CreateLrzaResource201ResponseHeaders
+}
+
+func (response CreateLrzaResource201ApplicationFhirPlusJSONResponse) VisitCreateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	if response.Headers.Location != nil {
+		w.Header().Set("Location", fmt.Sprint(*response.Headers.Location))
+	}
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLrzaResource400ApplicationFhirPlusJSONResponse struct {
+	OperationOutcomeErrorApplicationFhirPlusJSONResponse
+}
+
+func (response CreateLrzaResource400ApplicationFhirPlusJSONResponse) VisitCreateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLrzaResource403ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response CreateLrzaResource403ApplicationFhirPlusJSONResponse) VisitCreateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLrzaResource422ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response CreateLrzaResource422ApplicationFhirPlusJSONResponse) VisitCreateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLrzaResource429ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response CreateLrzaResource429ApplicationFhirPlusJSONResponse) VisitCreateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLrzaResource500ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response CreateLrzaResource500ApplicationFhirPlusJSONResponse) VisitCreateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateLrzaResource503ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response CreateLrzaResource503ApplicationFhirPlusJSONResponse) VisitCreateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type WithdrawLrzaResourceRequestObject struct {
+	ResourceType WithdrawLrzaResourceParamsResourceType `json:"resourceType"`
+	Id           LrzaResourceID                         `json:"id"`
+	Params       WithdrawLrzaResourceParams
+}
+
+type WithdrawLrzaResourceResponseObject interface {
+	VisitWithdrawLrzaResourceResponse(w http.ResponseWriter) error
+}
+
+type WithdrawLrzaResource200ResponseHeaders struct {
+	ETag *string
+}
+
+type WithdrawLrzaResource200ApplicationFhirPlusJSONResponse struct {
+	Body    FHIRResource
+	Headers WithdrawLrzaResource200ResponseHeaders
+}
+
+func (response WithdrawLrzaResource200ApplicationFhirPlusJSONResponse) VisitWithdrawLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type WithdrawLrzaResource400ApplicationFhirPlusJSONResponse struct {
+	OperationOutcomeErrorApplicationFhirPlusJSONResponse
+}
+
+func (response WithdrawLrzaResource400ApplicationFhirPlusJSONResponse) VisitWithdrawLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type WithdrawLrzaResource403ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response WithdrawLrzaResource403ApplicationFhirPlusJSONResponse) VisitWithdrawLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type WithdrawLrzaResource404ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response WithdrawLrzaResource404ApplicationFhirPlusJSONResponse) VisitWithdrawLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type WithdrawLrzaResource412ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response WithdrawLrzaResource412ApplicationFhirPlusJSONResponse) VisitWithdrawLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type WithdrawLrzaResource422ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response WithdrawLrzaResource422ApplicationFhirPlusJSONResponse) VisitWithdrawLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type WithdrawLrzaResource429ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response WithdrawLrzaResource429ApplicationFhirPlusJSONResponse) VisitWithdrawLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type WithdrawLrzaResource500ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response WithdrawLrzaResource500ApplicationFhirPlusJSONResponse) VisitWithdrawLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type WithdrawLrzaResource503ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response WithdrawLrzaResource503ApplicationFhirPlusJSONResponse) VisitWithdrawLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReadLrzaResourceRequestObject struct {
+	ResourceType ReadLrzaResourceParamsResourceType `json:"resourceType"`
+	Id           LrzaResourceID                     `json:"id"`
+	Params       ReadLrzaResourceParams
+}
+
+type ReadLrzaResourceResponseObject interface {
+	VisitReadLrzaResourceResponse(w http.ResponseWriter) error
+}
+
+type ReadLrzaResource200ResponseHeaders struct {
+	ETag *string
+}
+
+type ReadLrzaResource200ApplicationFhirPlusJSONResponse struct {
+	Body    FHIRResource
+	Headers ReadLrzaResource200ResponseHeaders
+}
+
+func (response ReadLrzaResource200ApplicationFhirPlusJSONResponse) VisitReadLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReadLrzaResource400ApplicationFhirPlusJSONResponse struct {
+	OperationOutcomeErrorApplicationFhirPlusJSONResponse
+}
+
+func (response ReadLrzaResource400ApplicationFhirPlusJSONResponse) VisitReadLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReadLrzaResource403ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response ReadLrzaResource403ApplicationFhirPlusJSONResponse) VisitReadLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReadLrzaResource404ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response ReadLrzaResource404ApplicationFhirPlusJSONResponse) VisitReadLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReadLrzaResource429ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response ReadLrzaResource429ApplicationFhirPlusJSONResponse) VisitReadLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReadLrzaResource500ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response ReadLrzaResource500ApplicationFhirPlusJSONResponse) VisitReadLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReadLrzaResource503ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response ReadLrzaResource503ApplicationFhirPlusJSONResponse) VisitReadLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLrzaResourceRequestObject struct {
+	ResourceType UpdateLrzaResourceParamsResourceType `json:"resourceType"`
+	Id           LrzaResourceID                       `json:"id"`
+	Params       UpdateLrzaResourceParams
+	Body         *UpdateLrzaResourceApplicationFhirPlusJSONRequestBody
+}
+
+type UpdateLrzaResourceResponseObject interface {
+	VisitUpdateLrzaResourceResponse(w http.ResponseWriter) error
+}
+
+type UpdateLrzaResource200ResponseHeaders struct {
+	ETag *string
+}
+
+type UpdateLrzaResource200ApplicationFhirPlusJSONResponse struct {
+	Body    FHIRResource
+	Headers UpdateLrzaResource200ResponseHeaders
+}
+
+func (response UpdateLrzaResource200ApplicationFhirPlusJSONResponse) VisitUpdateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	if response.Headers.ETag != nil {
+		w.Header().Set("ETag", fmt.Sprint(*response.Headers.ETag))
+	}
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLrzaResource400ApplicationFhirPlusJSONResponse struct {
+	OperationOutcomeErrorApplicationFhirPlusJSONResponse
+}
+
+func (response UpdateLrzaResource400ApplicationFhirPlusJSONResponse) VisitUpdateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLrzaResource403ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response UpdateLrzaResource403ApplicationFhirPlusJSONResponse) VisitUpdateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLrzaResource404ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response UpdateLrzaResource404ApplicationFhirPlusJSONResponse) VisitUpdateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLrzaResource412ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response UpdateLrzaResource412ApplicationFhirPlusJSONResponse) VisitUpdateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLrzaResource422ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response UpdateLrzaResource422ApplicationFhirPlusJSONResponse) VisitUpdateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLrzaResource429ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response UpdateLrzaResource429ApplicationFhirPlusJSONResponse) VisitUpdateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLrzaResource500ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response UpdateLrzaResource500ApplicationFhirPlusJSONResponse) VisitUpdateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateLrzaResource503ApplicationFhirPlusJSONResponse FHIROperationOutcome
+
+func (response UpdateLrzaResource503ApplicationFhirPlusJSONResponse) VisitUpdateLrzaResourceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/fhir+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type TriggerLrzaSyncRequestObject struct {
 }
@@ -2050,6 +3249,21 @@ func (response GetVersion200TextResponse) VisitGetVersionResponse(w http.Respons
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// SubmitLrzaTransaction Register addressing resources in the LRZA with a transaction Bundle
+	// (POST /lrza/fhir)
+	SubmitLrzaTransaction(ctx context.Context, request SubmitLrzaTransactionRequestObject) (SubmitLrzaTransactionResponseObject, error)
+	// CreateLrzaResource Register an addressing resource in the LRZA
+	// (POST /lrza/fhir/{resourceType})
+	CreateLrzaResource(ctx context.Context, request CreateLrzaResourceRequestObject) (CreateLrzaResourceResponseObject, error)
+	// WithdrawLrzaResource Withdraw an addressing resource from the LRZA
+	// (DELETE /lrza/fhir/{resourceType}/{id})
+	WithdrawLrzaResource(ctx context.Context, request WithdrawLrzaResourceRequestObject) (WithdrawLrzaResourceResponseObject, error)
+	// ReadLrzaResource Read an addressing resource from the LRZA
+	// (GET /lrza/fhir/{resourceType}/{id})
+	ReadLrzaResource(ctx context.Context, request ReadLrzaResourceRequestObject) (ReadLrzaResourceResponseObject, error)
+	// UpdateLrzaResource Update an addressing resource in the LRZA
+	// (PUT /lrza/fhir/{resourceType}/{id})
+	UpdateLrzaResource(ctx context.Context, request UpdateLrzaResourceRequestObject) (UpdateLrzaResourceResponseObject, error)
 	// TriggerLrzaSync Trigger LRZA synchronization
 	// (POST /lrza/update)
 	TriggerLrzaSync(ctx context.Context, request TriggerLrzaSyncRequestObject) (TriggerLrzaSyncResponseObject, error)
@@ -2134,6 +3348,164 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// SubmitLrzaTransaction operation middleware
+func (sh *strictHandler) SubmitLrzaTransaction(w http.ResponseWriter, r *http.Request, params SubmitLrzaTransactionParams) {
+	var request SubmitLrzaTransactionRequestObject
+
+	request.Params = params
+
+	var body SubmitLrzaTransactionApplicationFhirPlusJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SubmitLrzaTransaction(ctx, request.(SubmitLrzaTransactionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SubmitLrzaTransaction")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SubmitLrzaTransactionResponseObject); ok {
+		if err := validResponse.VisitSubmitLrzaTransactionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateLrzaResource operation middleware
+func (sh *strictHandler) CreateLrzaResource(w http.ResponseWriter, r *http.Request, resourceType CreateLrzaResourceParamsResourceType, params CreateLrzaResourceParams) {
+	var request CreateLrzaResourceRequestObject
+
+	request.ResourceType = resourceType
+	request.Params = params
+
+	var body CreateLrzaResourceApplicationFhirPlusJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateLrzaResource(ctx, request.(CreateLrzaResourceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateLrzaResource")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateLrzaResourceResponseObject); ok {
+		if err := validResponse.VisitCreateLrzaResourceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// WithdrawLrzaResource operation middleware
+func (sh *strictHandler) WithdrawLrzaResource(w http.ResponseWriter, r *http.Request, resourceType WithdrawLrzaResourceParamsResourceType, id LrzaResourceID, params WithdrawLrzaResourceParams) {
+	var request WithdrawLrzaResourceRequestObject
+
+	request.ResourceType = resourceType
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.WithdrawLrzaResource(ctx, request.(WithdrawLrzaResourceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "WithdrawLrzaResource")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(WithdrawLrzaResourceResponseObject); ok {
+		if err := validResponse.VisitWithdrawLrzaResourceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReadLrzaResource operation middleware
+func (sh *strictHandler) ReadLrzaResource(w http.ResponseWriter, r *http.Request, resourceType ReadLrzaResourceParamsResourceType, id LrzaResourceID, params ReadLrzaResourceParams) {
+	var request ReadLrzaResourceRequestObject
+
+	request.ResourceType = resourceType
+	request.Id = id
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReadLrzaResource(ctx, request.(ReadLrzaResourceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReadLrzaResource")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReadLrzaResourceResponseObject); ok {
+		if err := validResponse.VisitReadLrzaResourceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateLrzaResource operation middleware
+func (sh *strictHandler) UpdateLrzaResource(w http.ResponseWriter, r *http.Request, resourceType UpdateLrzaResourceParamsResourceType, id LrzaResourceID, params UpdateLrzaResourceParams) {
+	var request UpdateLrzaResourceRequestObject
+
+	request.ResourceType = resourceType
+	request.Id = id
+	request.Params = params
+
+	var body UpdateLrzaResourceApplicationFhirPlusJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateLrzaResource(ctx, request.(UpdateLrzaResourceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateLrzaResource")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateLrzaResourceResponseObject); ok {
+		if err := validResponse.VisitUpdateLrzaResourceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // TriggerLrzaSync operation middleware

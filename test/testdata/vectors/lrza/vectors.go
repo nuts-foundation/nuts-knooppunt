@@ -7,10 +7,14 @@ import (
 
 // lrza-root-directory is the single central addressing directory: every care
 // organization's Organization, Endpoint and HealthcareService resources.
+//
+// It is the mock LRZA as well (mock-components/lrza): writes there are authorized like the real
+// LRZA's, so the seed writes as the operator, who skips those rules.
 func HAPITenant() hapi.Tenant {
 	return hapi.Tenant{
-		Name: "lrza-root-directory",
-		ID:   11,
+		Name:     "lrza-root-directory",
+		ID:       11,
+		Operator: true,
 	}
 }
 
@@ -49,6 +53,9 @@ func Resources() []fhir.HasId {
 	}
 	for _, service := range HealthcareServices() {
 		resources = append(resources, &service)
+	}
+	for _, affiliation := range OrganizationAffiliations() {
+		resources = append(resources, &affiliation)
 	}
 	return resources
 }

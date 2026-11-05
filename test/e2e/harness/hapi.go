@@ -2,19 +2,45 @@ package harness
 
 import (
 	"net/url"
+	"os"
+	"regexp"
+	"strings"
 	"testing"
 
+	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+// defaultHAPIImage is the published HAPI image with the mock interceptors (mock-components/hapi).
+const defaultHAPIImage = "ghcr.io/nuts-foundation/fake-nvi:main"
+
+// hapiImageEnv overrides the HAPI image, so a change to the mock interceptors is tested before it is
+// published: build it (docker build -t knooppunt-hapi:local -f mock-components/hapi/Dockerfile
+// mock-components) and run the tests with KNPT_HAPI_IMAGE=knooppunt-hapi:local. CI does the same.
+const hapiImageEnv = "KNPT_HAPI_IMAGE"
+
+// hapiImage is the HAPI image to run, and the name of its (reused) container. An overridden image gets a
+// container of its own, so switching images never reuses a container running the other one.
+func hapiImage() (image, containerName string) {
+	const reusedContainerName = "knooppunt-unittest-fhirstore"
+	image = os.Getenv(hapiImageEnv)
+	if image == "" {
+		return defaultHAPIImage, reusedContainerName
+	}
+	return image, reusedContainerName + "-" + strings.Trim(nonNameCharacters.ReplaceAllString(image, "-"), "-")
+}
+
+var nonNameCharacters = regexp.MustCompile(`[^a-zA-Z0-9_.-]+`)
+
 func startHAPI(t *testing.T, dockerNetworkName string) *url.URL {
-	t.Log("Starting HAPI FHIR server...")
+	image, containerName := hapiImage()
+	t.Logf("Starting HAPI FHIR server (%s)...", image)
 	ctx := t.Context()
 	req := testcontainers.ContainerRequest{
-		Name:         "knooppunt-unittest-fhirstore",
-		Image:        "ghcr.io/nuts-foundation/fake-nvi:main",
+		Name:         containerName,
+		Image:        image,
 		ExposedPorts: []string{"8080/tcp"},
 		//Networks:     []string{dockerNetworkName},
 		Env: map[string]string{
@@ -40,6 +66,10 @@ func startHAPI(t *testing.T, dockerNetworkName string) *url.URL {
 			// arrives. A placeholder gives the link a target that the later write fills in.
 			"hapi.fhir.auto_create_placeholder_reference_targets": "true",
 			"NVI_AUDIENCE": "nvi",
+			// The mock LRZA (mock-components/lrza) takes every request without X-Mock-Caller as this
+			// vendor's, as the real LRZA would from the Knooppunt's certificate. The seed grants it the
+			// mandate for De Zonnebloem and De Plataan (vectors/lrza/mandates.go).
+			"LRZA_CALLER": lrza.VendorCaller(),
 		},
 		WaitingFor: wait.ForHTTP("/fhir/DEFAULT/Account"),
 		LogConsumerCfg: &testcontainers.LogConsumerConfig{

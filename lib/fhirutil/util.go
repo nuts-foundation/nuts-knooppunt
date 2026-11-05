@@ -26,8 +26,10 @@ func FilterIdentifiersBySystem(identifiers []fhir.Identifier, system string) []f
 type ResourceInfo struct {
 	ID           string
 	ResourceType string
-	LastUpdated  *time.Time
-	Resource     map[string]any
+	// VersionID is meta.versionId, or "" if absent.
+	VersionID   string
+	LastUpdated *time.Time
+	Resource    Resource
 }
 
 // ExtractResourceInfo extracts common FHIR resource fields from JSON bytes.
@@ -50,6 +52,8 @@ func ExtractResourceInfo(resourceJSON []byte) (*ResourceInfo, error) {
 	if id, ok := resource["id"].(string); ok {
 		info.ID = id
 	}
+
+	info.VersionID = Resource(resource).VersionID()
 
 	// Extract meta.lastUpdated
 	if meta, ok := resource["meta"].(map[string]any); ok {

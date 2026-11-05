@@ -35,7 +35,8 @@ const (
 
 // uraIdentifier is an organization's URA as the IG's AssignedId slice
 // (nl-gf-custodianassignedidentifier) requires it: official, and naming the
-// party that assigned it.
+// party that assigned it. Mirrors coding.URAIdentifier in the root module (which
+// the LRZA registration proxy uses), since this module doesn't import it.
 func uraIdentifier(ura string) fhir.Identifier {
 	return fhir.Identifier{
 		Use:      to.Ptr(fhir.IdentifierUseOfficial),

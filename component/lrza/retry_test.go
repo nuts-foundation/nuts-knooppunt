@@ -3,8 +3,10 @@ package lrza
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -184,4 +186,76 @@ func TestNewSourceHTTPClientRetriesTransientFailures(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, 2, calls)
+}
+
+// TestRetryTransportMethods covers the method-aware rule: a 429 means the request wasn't processed,
+// so it is retried for every method, but a 5xx or network error may come after the server applied
+// it, so only idempotent methods are retried then - a POST could otherwise register a resource twice.
+func TestRetryTransportMethods(t *testing.T) {
+	newRequest := func(t *testing.T, method string) *http.Request {
+		t.Helper()
+		req, err := http.NewRequestWithContext(context.Background(), method, "http://source.example/fhir/Endpoint", io.NopCloser(strings.NewReader(`{"resourceType":"Endpoint"}`)))
+		require.NoError(t, err)
+		return req
+	}
+
+	for _, tc := range []struct {
+		method    string
+		first     func() (*http.Response, error)
+		wantCalls int
+	}{
+		{http.MethodPost, func() (*http.Response, error) { return statusResponse(http.StatusServiceUnavailable, nil), nil }, 1},
+		{http.MethodPost, func() (*http.Response, error) { return nil, errors.New("connection reset") }, 1},
+		{http.MethodPost, func() (*http.Response, error) {
+			return statusResponse(http.StatusTooManyRequests, http.Header{"Retry-After": []string{"0"}}), nil
+		}, 2},
+		{http.MethodPut, func() (*http.Response, error) { return statusResponse(http.StatusServiceUnavailable, nil), nil }, 2},
+		{http.MethodDelete, func() (*http.Response, error) { return statusResponse(http.StatusBadGateway, nil), nil }, 2},
+	} {
+		first, _ := tc.first()
+		name := tc.method + " after "
+		if first == nil {
+			name += "network error"
+		} else {
+			name += http.StatusText(first.StatusCode)
+		}
+		t.Run(name, func(t *testing.T) {
+			var bodies []string
+			stub := &recordingRoundTripper{responses: []func() (*http.Response, error){
+				tc.first,
+				func() (*http.Response, error) { return statusResponse(http.StatusOK, nil), nil },
+			}, bodies: &bodies}
+
+			transport := &retryTransport{next: stub, maxAttempts: maxRetryAttempts, baseDelay: time.Millisecond, maxDelay: 10 * time.Millisecond}
+			resp, err := transport.RoundTrip(newRequest(t, tc.method))
+
+			require.Equal(t, tc.wantCalls, stub.calls)
+			if tc.wantCalls == 1 {
+				if err == nil {
+					require.NotEqual(t, http.StatusOK, resp.StatusCode)
+				}
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			require.Equal(t, []string{`{"resourceType":"Endpoint"}`, `{"resourceType":"Endpoint"}`}, bodies, "a retry must resend the body")
+		})
+	}
+}
+
+// recordingRoundTripper is like stubRoundTripper, but also records each attempt's request body.
+type recordingRoundTripper struct {
+	responses []func() (*http.Response, error)
+	calls     int
+	bodies    *[]string
+}
+
+func (s *recordingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Body != nil {
+		body, _ := io.ReadAll(req.Body)
+		*s.bodies = append(*s.bodies, string(body))
+	}
+	resp, err := s.responses[s.calls]()
+	s.calls++
+	return resp, err
 }

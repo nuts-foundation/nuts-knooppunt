@@ -70,6 +70,9 @@ workspace "Knooppunt" "Description" {
                     localizationClient = component "Localization Client" "Publishing and localizing patient localization data" {
                         tags "localization"
                     }
+                    addressingClient = component "Addressing Client" "Registering the care provider's addressable entities" {
+                        tags "addressing"
+                    }
                     fhirAPI = component "FHIR API" "Exposes the EHR data through FHIR" {
                         tags "dataexchange,authorization"
                     }
@@ -83,6 +86,9 @@ workspace "Knooppunt" "Description" {
                     tags "addressing,localization,consent,dataexchange,authentication,authorization"
 
                     mcsdSyncer = component "mCSD Update client" "Syncing data from remote mCSD directory and consolidate into a Query Directory" {
+                        tags "addressing"
+                    }
+                    lrzaRegistration = component "LRZA Registration Proxy" "Registers the care provider's addressable entities in the LRZA, checking tenant ownership, enriching and validating them" {
                         tags "addressing"
                     }
                     mcsdAdminApp = component "mCSD Administration Application" "Administering Organization mCSD resources" {
@@ -177,6 +183,28 @@ workspace "Knooppunt" "Description" {
         }
 
         #
+        # GF Addressing: registration in the LRZA (the write path)
+        #
+        # Declared after the localization transactions on purpose: Structurizr derives the
+        # container-level EHR -> Knooppunt arrow from the first component-level relationship between
+        # the two. Declared earlier, this one would label that arrow in the localization views too.
+        # The explicit container-level relationships give the addressing views arrows of their own.
+        xis.ehr -> xis.kp "Register addressable entities in the LRZA\nhttp://knooppunt:8081/lrza/fhir" "FHIR R4" {
+            tags "addressing"
+        }
+        xis.ehr.addressingClient -> xis.kp.lrzaRegistration "Register Organizations, Locations, HealthcareServices and Endpoints\nhttp://knooppunt:8081/lrza/fhir" "FHIR R4" {
+            tags "addressing"
+        }
+        xis.kp.lrzaRegistration -> lrza "ITI-130-NL: Create/update addressable entities (as authorized IT vendor)" "FHIR R4, mTLS" {
+            tags "addressing"
+            url "https://build.fhir.org/ig/minvws/generiekefuncties-docs/branches/1.0.0/en/csd.html"
+        }
+        xis.kp -> lrza "ITI-130-NL: Create/update addressable entities (as authorized IT vendor)" "FHIR R4, mTLS" {
+            tags "addressing"
+            url "https://build.fhir.org/ig/minvws/generiekefuncties-docs/branches/1.0.0/en/csd.html"
+        }
+
+        #
         # GF Consent transactions
         #
         xis.kp.mitzClient -> otv "Perform 'gesloten-vraag'" SOAP {
@@ -251,6 +279,9 @@ workspace "Knooppunt" "Description" {
         }
         component xis.kp "GF_Addressing_ComponentDiagram" {
             title "Knooppunt perspective: component diagram of systems and transactions involved in GF Addressing"
+            # Included first, so the EHR is shown as a whole rather than by its Addressing Client: a
+            # view holds an element or its parent, and the EHR container carries the ITI-90 query.
+            include xis.ehr
             include "element.tag==addressing || relationship.tag==addressing"
             exclude "relationship.tag==localization"
             exclude "relationship.tag==authentication"
@@ -262,12 +293,17 @@ workspace "Knooppunt" "Description" {
         container xis "GF_Localization_ContainerDiagram" {
             title "XIS Perspective: containers, systems and databases involved in GF Localization"
             include "element.tag==localization || relationship.tag==localization"
+            exclude "relationship.tag==addressing"
             exclude "relationship.tag==authentication"
             exclude "relationship.tag==authorization"
             exclude "relationship.tag==dataexchange"
         }
         component xis.kp "GF_Localization_ComponentDiagram" {
             title "Knooppunt perspective: component diagram of systems and transactions involved in GF Localization"
+            # Included first, so the EHR is shown by this component rather than as a whole: a view
+            # holds an element or its parent, and otherwise which one the expression below adds
+            # first depends on Structurizr's internal element order.
+            include xis.ehr.localizationClient
             include "element.tag==localization || relationship.tag==localization"
             exclude "relationship.tag==authentication"
             exclude "relationship.tag==authorization"
@@ -288,6 +324,7 @@ workspace "Knooppunt" "Description" {
         container xis "GF_Authentication_ContainerDiagram" {
             title "XIS Perspective: containers, systems and databases involved in GF Authentication"
             include "element.tag==authentication || relationship.tag==authentication"
+            exclude "relationship.tag==addressing"
             exclude "relationship.tag==localization"
         }
         component xis.kp "GF_Authentication_ComponentDiagram" {
@@ -300,11 +337,16 @@ workspace "Knooppunt" "Description" {
         container xis "GF_Authorization_ContainerDiagram" {
             title "XIS Perspective: containers, systems and databases involved in GF Authorization"
             include "element.tag==authorization || relationship.tag==authorization"
+            exclude "relationship.tag==addressing"
             exclude "relationship.tag==localization"
             exclude "relationship.tag==authentication"
         }
         component xis.kp "GF_Authorization_ComponentDiagram" {
             title "Knooppunt perspective: component diagram of systems and transactions involved in GF Authorization"
+            # Included first, so the EHR is shown by this component rather than as a whole: a view
+            # holds an element or its parent, and otherwise which one the expression below adds
+            # first depends on Structurizr's internal element order.
+            include xis.ehr.fhirAPI
             include "element.tag==authorization || relationship.tag==authorization"
             exclude "relationship.tag==localization"
             exclude "relationship.tag==authentication"

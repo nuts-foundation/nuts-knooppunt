@@ -42,6 +42,12 @@ admin tenant, no discovery hop — plus a HealthcareService for De Zonnebloem's
 ward De Vlinder. Each organization gets its own file
 (`sunflower.go`, `plataan.go`, `care2cure.go`) for readability.
 
+It also holds the mandates (`mandates.go`): the OrganizationAffiliations by which De Zonnebloem and
+De Plataan authorize the IT vendor operating the Knooppunt (ExampleSoft, KvK `90001234`) to register
+their addressing resources. Care2Cure grants none. The directory is the mock LRZA
+(`mock-components/lrza`), which refuses a vendor's writes without that mandate, so the seed writes as
+the operator (`X-Mock-Operator: true`, see `hapi.Tenant.Operator`), whom its rules don't apply to.
+
 `component/lrza` syncs it wholesale into the query directory, in both compose
 (`KNPT_LRZA_LRZABASEURL`) and the Go e2e harness (`test/e2e/harness`), via
 `POST /lrza/update`.

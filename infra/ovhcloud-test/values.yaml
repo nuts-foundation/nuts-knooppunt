@@ -218,6 +218,9 @@ fhir:
   configExtra:
     NVI_AUDIENCE: "nvi"
     NVI_TENANT: "nvi"
+    # The vendor the mock LRZA (lrza-root-directory) takes every write to be from, as in
+    # docker-compose.yml; the seed grants it the mandate for De Zonnebloem and De Plataan.
+    LRZA_CALLER: "http://kvk.nl|90001234"
     "hapi.fhir.allow_cascading_deletes": "true"
     "hapi.fhir.client_id_strategy": "ANY"
     "hapi.fhir.delete_expunge_enabled": "true"

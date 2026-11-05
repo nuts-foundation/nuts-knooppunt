@@ -144,6 +144,11 @@ services:
 
       NVI_AUDIENCE: nvi
       NVI_TENANT: nvi
+      # The mock LRZA (mock-components/lrza) authorizes writes to lrza-root-directory like the real
+      # LRZA: by the care provider's mandate to the IT vendor. Without mTLS it takes every request to be
+      # this vendor's (ExampleSoft, whom the seed grants the mandate for De Zonnebloem and De Plataan).
+      # The seed writes as the operator (X-Mock-Operator: true), whom the rules don't apply to.
+      LRZA_CALLER: "http://kvk.nl|90001234"
       # OpenTelemetry - enables full trace/log visibility into HAPI FHIR
       JAVA_TOOL_OPTIONS: "-javaagent:/app/opentelemetry-javaagent.jar"
       OTEL_SERVICE_NAME: "hapi-fhir"

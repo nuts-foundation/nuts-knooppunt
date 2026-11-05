@@ -37,7 +37,9 @@ const testIdentifierSystem = "http://example.org/lrza-e2e"
 // other's state, so the test stops at the first failing step.
 func Test_LRZASync(t *testing.T) {
 	h := harness.Start(t)
-	source := fhirclient.New(h.LRZaFHIRBaseURL, http.DefaultClient, nil)
+	// The test writes the directory directly, deliberately minimal Locations included, so as the
+	// operator, whom the mock LRZA's rules don't apply to.
+	source := h.LRZAOperator
 	query := fhirclient.New(h.MCSDQueryFHIRBaseURL, http.DefaultClient, nil)
 
 	care2Cure := lrza.Care2Cure()
