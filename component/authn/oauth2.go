@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,50 +35,58 @@ type MinistryAuthConfig struct {
 	TokenEndpoint string `koanf:"tokenendpoint"`
 }
 
-// MinVWSHTTPClient creates an HTTP client suitable for making authenticated requests to the Ministry of Health's APIs.
+// MinVWSHTTPClient returns an HTTP client suitable for making authenticated requests to the Ministry of Health's APIs.
+// Clients are cached per URA number, audience and scope, so connections and access tokens are reused across calls.
+// Callers share the returned client and must not modify it.
 func (c *Component) MinVWSHTTPClient(ctx context.Context, scope []string, uraNumber string, audience string) (*http.Client, error) {
-	return HTTPClient(ctx, scope, uraNumber, audience, c.config.MinVWS)
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	if c.transport == nil {
+		return nil, errors.New("authn component is not started")
+	}
+	key := clientCacheKey(scope, uraNumber, audience)
+	if httpClient, ok := c.clients[key]; ok {
+		return httpClient, nil
+	}
+	httpClient, err := c.newMinVWSHTTPClient(ctx, scope, uraNumber, audience)
+	if err != nil {
+		return nil, err
+	}
+	c.clients[key] = httpClient
+	return httpClient, nil
 }
 
-func HTTPClient(ctx context.Context, scope []string, uraNumber string, targetAudience string, cfg MinistryAuthConfig) (*http.Client, error) {
-	var tlsConfig *tls.Config
-	if cfg.TLSCertFile != "" {
-		var err error
-		tlsConfig, err = tlsutil.CreateTLSConfig(cfg.Config)
-		if err != nil {
-			return nil, fmt.Errorf("TLS is configured but failed to load: %w", err)
-		}
-	}
+func clientCacheKey(scope []string, uraNumber string, audience string) string {
+	return uraNumber + "|" + audience + "|" + strings.Join(slices.Sorted(slices.Values(scope)), " ")
+}
 
-	if cfg.TokenEndpoint == "" {
+func (c *Component) newMinVWSHTTPClient(ctx context.Context, scope []string, uraNumber string, targetAudience string) (*http.Client, error) {
+	tokenEndpoint := c.config.MinVWS.TokenEndpoint
+	if tokenEndpoint == "" {
 		slog.WarnContext(ctx, "MinVWS OAuth2 token endpoint is not configured, not using authentication for MinVWS API calls")
 		// Fallback: if no token endpoint is configured, return a default HTTP client without authentication.
 		return &http.Client{
-			Transport: tracing.WrapTransport(&http.Transport{
-				TLSClientConfig: tlsConfig,
-			}),
+			Transport: tracing.WrapTransport(c.transport),
 		}, nil
 	}
 
-	if tlsConfig == nil {
+	if c.tlsConfig == nil {
 		return nil, errors.New("token endpoint is configured but TLS client certificate is not configured")
 	}
 
-	// Create a base HTTP client with TLS config
-	// Add the base client to the context so oauth2.NewClient uses it
-	ctx = context.WithValue(ctx, oauth2.HTTPClient, &http.Client{
-		Transport: tracing.WrapTransport(&http.Transport{
-			TLSClientConfig: tlsConfig,
-		}),
-	})
-
-	return oauth2.NewClient(ctx, tokenSource{
-		uraNumber:      uraNumber,
-		targetAudience: targetAudience,
-		scope:          scope,
-		tokenEndpoint:  cfg.TokenEndpoint,
-		tlsConfig:      tlsConfig,
-	}), nil
+	return &http.Client{
+		Transport: &oauth2.Transport{
+			Base: tracing.WrapTransport(c.transport),
+			Source: oauth2.ReuseTokenSource(nil, tokenSource{
+				uraNumber:      uraNumber,
+				targetAudience: targetAudience,
+				scope:          slices.Clone(scope),
+				tokenEndpoint:  tokenEndpoint,
+				tlsConfig:      c.tlsConfig,
+				httpClient:     &http.Client{Transport: c.transport},
+			}),
+		},
+	}, nil
 }
 
 // certThumbprint calculates the x5t SHA-256 thumbprint of the certificate.
@@ -94,7 +103,7 @@ type tokenSource struct {
 	scope          []string
 	tokenEndpoint  string
 	tlsConfig      *tls.Config
-	// httpClient is optional and only used for testing
+	// httpClient is used to call the token endpoint
 	httpClient *http.Client
 }
 
@@ -129,18 +138,10 @@ func (t tokenSource) Token() (*oauth2.Token, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sign JWT: %w", err)
 	}
-	tokenHTTPClient := t.httpClient
-	if tokenHTTPClient == nil {
-		tokenHTTPClient = &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: t.tlsConfig,
-			},
-		}
-	}
-	httpResponse, err := tokenHTTPClient.PostForm(t.tokenEndpoint, url.Values{
-		"grant_type":              {"client_credentials"},
-		"scope":                   {strings.Join(t.scope, " ")},
-		"target_audience":         {t.targetAudience},
+	httpResponse, err := t.httpClient.PostForm(t.tokenEndpoint, url.Values{
+		"grant_type":            {"client_credentials"},
+		"scope":                 {strings.Join(t.scope, " ")},
+		"target_audience":       {t.targetAudience},
 		"client_assertion_type": {"urn:ietf:params:oauth:client-assertion-type:jwt-bearer"},
 		"client_assertion":      {string(jwtGrantTokenSigned)},
 	})
@@ -162,6 +163,10 @@ func (t tokenSource) Token() (*oauth2.Token, error) {
 	var token oauth2.Token
 	if err := json.Unmarshal(responseData, &token); err != nil {
 		return nil, fmt.Errorf("unmarshal token response: %w", err)
+	}
+	// expires_in is relative, oauth2.Token only honours the absolute Expiry
+	if token.ExpiresIn > 0 {
+		token.Expiry = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
 	}
 	return &token, nil
 }

@@ -36,6 +36,7 @@ func TestIntegration(t *testing.T) {
 			TokenEndpoint: tokenEndpoint,
 		},
 	})
+	require.NoError(t, authnComponent.Start())
 
 	prsComponent := New(Config{
 		PRSBaseURL: prsBaseURL,
