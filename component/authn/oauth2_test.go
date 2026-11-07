@@ -1,19 +1,28 @@
 package authn
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
 	"github.com/stretchr/testify/assert"
@@ -29,16 +38,282 @@ func TestHTTPClient_IntegrationTest(t *testing.T) {
 			audience      = "https://pseudoniemendienst.proeftuin.gf.irealisatie.nl/"
 			ura           = "URA123456789"
 		)
-		httpClient, err := HTTPClient(t.Context(), []string{"prs:read"}, ura, audience, MinistryAuthConfig{
+		component := New(Config{MinVWS: MinistryAuthConfig{
 			Config:        tlsutil.Config{TLSCertFile: "cert.pem", TLSKeyFile: "cert-key.pem"},
 			TokenEndpoint: tokenEndpoint,
-		})
+		}})
+		require.NoError(t, component.Start())
+		httpClient, err := component.MinVWSHTTPClient(t.Context(), []string{"prs:read"}, ura, audience)
 		require.NoError(t, err)
 
 		httpResponse, err := httpClient.Get("https://example.com")
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, httpResponse.StatusCode)
 	})
+}
+
+func TestComponent_MinVWSHTTPClient(t *testing.T) {
+	const (
+		ura      = "URA123456789"
+		audience = "https://nvi.example.com"
+	)
+	scope := []string{"epd:read", "epd:write"}
+
+	t.Run("reuses the client and its access token", func(t *testing.T) {
+		tokenServer, tokenRequests := startTokenServer(t, 3600)
+		apiServer, authorizations := startAPIServer(t)
+		component := startComponent(t, tokenServer.URL)
+
+		first, err := component.MinVWSHTTPClient(t.Context(), scope, ura, audience)
+		require.NoError(t, err)
+		second, err := component.MinVWSHTTPClient(t.Context(), []string{"epd:write", "epd:read"}, ura, audience)
+		require.NoError(t, err)
+		assert.Same(t, first, second)
+
+		for range 3 {
+			get(t, first, apiServer.URL)
+		}
+		assert.Equal(t, int32(1), tokenRequests.Load())
+		assert.Equal(t, []string{"Bearer token-1", "Bearer token-1", "Bearer token-1"}, authorizations())
+	})
+	t.Run("concurrent callers share one access token", func(t *testing.T) {
+		tokenServer, tokenRequests := startTokenServer(t, 3600)
+		apiServer, _ := startAPIServer(t)
+		component := startComponent(t, tokenServer.URL)
+
+		var wg sync.WaitGroup
+		for range 10 {
+			wg.Go(func() {
+				httpClient, err := component.MinVWSHTTPClient(t.Context(), scope, ura, audience)
+				if assert.NoError(t, err) {
+					get(t, httpClient, apiServer.URL)
+				}
+			})
+		}
+		wg.Wait()
+		assert.Equal(t, int32(1), tokenRequests.Load())
+	})
+	t.Run("separate clients per URA number, audience and scope", func(t *testing.T) {
+		tokenServer, tokenRequests := startTokenServer(t, 3600)
+		apiServer, _ := startAPIServer(t)
+		component := startComponent(t, tokenServer.URL)
+
+		base, err := component.MinVWSHTTPClient(t.Context(), scope, ura, audience)
+		require.NoError(t, err)
+		otherURA, err := component.MinVWSHTTPClient(t.Context(), scope, "URA987654321", audience)
+		require.NoError(t, err)
+		otherAudience, err := component.MinVWSHTTPClient(t.Context(), scope, ura, "https://prs.example.com")
+		require.NoError(t, err)
+		otherScope, err := component.MinVWSHTTPClient(t.Context(), []string{"epd:read"}, ura, audience)
+		require.NoError(t, err)
+		assert.NotSame(t, base, otherURA)
+		assert.NotSame(t, base, otherAudience)
+		assert.NotSame(t, base, otherScope)
+
+		for _, httpClient := range []*http.Client{base, otherURA, otherAudience, otherScope} {
+			get(t, httpClient, apiServer.URL)
+		}
+		assert.Equal(t, int32(4), tokenRequests.Load())
+	})
+	t.Run("requests a new access token when it expires", func(t *testing.T) {
+		// A token that expires within a few seconds is already considered expired, so every call needs a new one.
+		tokenServer, tokenRequests := startTokenServer(t, 1)
+		apiServer, authorizations := startAPIServer(t)
+		component := startComponent(t, tokenServer.URL)
+
+		httpClient, err := component.MinVWSHTTPClient(t.Context(), scope, ura, audience)
+		require.NoError(t, err)
+		get(t, httpClient, apiServer.URL)
+		get(t, httpClient, apiServer.URL)
+
+		assert.Equal(t, int32(2), tokenRequests.Load())
+		assert.Equal(t, []string{"Bearer token-1", "Bearer token-2"}, authorizations())
+	})
+	t.Run("reuses an access token that only has an exp claim", func(t *testing.T) {
+		// Shaped like the MinVWS AS's response: no expires_in, the validity is in the JWT's exp claim
+		accessToken := signedAccessToken(t, time.Now().Add(time.Hour))
+		var tokenRequests atomic.Int32
+		tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tokenRequests.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"access_token":%q,"token_type":"Bearer","scope":"epd:read epd:write"}`, accessToken)
+		}))
+		t.Cleanup(tokenServer.Close)
+		apiServer, _ := startAPIServer(t)
+		component := startComponent(t, tokenServer.URL)
+
+		httpClient, err := component.MinVWSHTTPClient(t.Context(), scope, ura, audience)
+		require.NoError(t, err)
+		get(t, httpClient, apiServer.URL)
+		get(t, httpClient, apiServer.URL)
+
+		assert.Equal(t, int32(1), tokenRequests.Load())
+	})
+	t.Run("without token endpoint, returns a client without authentication", func(t *testing.T) {
+		apiServer, authorizations := startAPIServer(t)
+		component := startComponent(t, "")
+
+		first, err := component.MinVWSHTTPClient(t.Context(), scope, ura, audience)
+		require.NoError(t, err)
+		second, err := component.MinVWSHTTPClient(t.Context(), scope, ura, audience)
+		require.NoError(t, err)
+		assert.Same(t, first, second)
+
+		get(t, first, apiServer.URL)
+		assert.Equal(t, []string{""}, authorizations())
+	})
+	t.Run("token endpoint without certificate", func(t *testing.T) {
+		component := New(Config{MinVWS: MinistryAuthConfig{TokenEndpoint: "https://example.com/token"}})
+		require.NoError(t, component.Start())
+
+		httpClient, err := component.MinVWSHTTPClient(t.Context(), scope, ura, audience)
+		assert.EqualError(t, err, "token endpoint is configured but TLS client certificate is not configured")
+		assert.Nil(t, httpClient)
+	})
+	t.Run("not started", func(t *testing.T) {
+		component := New(Config{})
+
+		httpClient, err := component.MinVWSHTTPClient(t.Context(), scope, ura, audience)
+		assert.EqualError(t, err, "authn component is not started")
+		assert.Nil(t, httpClient)
+	})
+}
+
+func TestComponent_Start(t *testing.T) {
+	t.Run("loads the configured certificate", func(t *testing.T) {
+		certFile, keyFile := writeClientCertificate(t)
+		component := New(Config{MinVWS: MinistryAuthConfig{
+			Config: tlsutil.Config{TLSCertFile: certFile, TLSKeyFile: keyFile},
+		}})
+
+		require.NoError(t, component.Start())
+		require.NotNil(t, component.tlsConfig)
+		assert.Len(t, component.tlsConfig.Certificates, 1)
+	})
+	t.Run("no certificate configured", func(t *testing.T) {
+		component := New(Config{})
+
+		require.NoError(t, component.Start())
+		assert.Nil(t, component.tlsConfig)
+	})
+	t.Run("missing certificate file", func(t *testing.T) {
+		dir := t.TempDir()
+		component := New(Config{MinVWS: MinistryAuthConfig{
+			Config: tlsutil.Config{TLSCertFile: filepath.Join(dir, "cert.pem"), TLSKeyFile: filepath.Join(dir, "key.pem")},
+		}})
+
+		err := component.Start()
+		assert.ErrorContains(t, err, "MinVWS TLS is configured but failed to load")
+	})
+	t.Run("unreadable certificate file", func(t *testing.T) {
+		certFile, keyFile := writeClientCertificate(t)
+		require.NoError(t, os.WriteFile(certFile, []byte("not a certificate"), 0o600))
+		component := New(Config{MinVWS: MinistryAuthConfig{
+			Config: tlsutil.Config{TLSCertFile: certFile, TLSKeyFile: keyFile},
+		}})
+
+		err := component.Start()
+		assert.ErrorContains(t, err, "MinVWS TLS is configured but failed to load")
+	})
+}
+
+// startComponent starts an authn component with a freshly generated client certificate and the given token endpoint.
+func startComponent(t *testing.T, tokenEndpoint string) *Component {
+	t.Helper()
+	certFile, keyFile := writeClientCertificate(t)
+	component := New(Config{MinVWS: MinistryAuthConfig{
+		Config:        tlsutil.Config{TLSCertFile: certFile, TLSKeyFile: keyFile},
+		TokenEndpoint: tokenEndpoint,
+	}})
+	require.NoError(t, component.Start())
+	t.Cleanup(func() {
+		_ = component.Stop(context.Background())
+	})
+	return component
+}
+
+// startTokenServer starts a token endpoint that issues token-1, token-2, ..., each valid for expiresIn seconds.
+func startTokenServer(t *testing.T, expiresIn int) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.PostFormValue("grant_type") != "client_credentials" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		n := requests.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"access_token":"token-%d","token_type":"Bearer","expires_in":%d}`, n, expiresIn)
+	}))
+	t.Cleanup(server.Close)
+	return server, &requests
+}
+
+// signedAccessToken returns a JWT access token that expires at the given time, or has no exp claim if it is zero.
+func signedAccessToken(t *testing.T, expiry time.Time) string {
+	t.Helper()
+	token := jwt.New()
+	require.NoError(t, token.Set(jwt.SubjectKey, "URA123456789"))
+	if !expiry.IsZero() {
+		require.NoError(t, token.Set(jwt.ExpirationKey, expiry))
+	}
+	signed, err := jwt.Sign(token, jwt.WithKey(jwa.HS256, []byte("test-signing-key-of-at-least-32-bytes")))
+	require.NoError(t, err)
+	return string(signed)
+}
+
+// startAPIServer starts a server that records the Authorization header of each request it receives.
+func startAPIServer(t *testing.T) (*httptest.Server, func() []string) {
+	t.Helper()
+	var mux sync.Mutex
+	var authorizations []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mux.Lock()
+		defer mux.Unlock()
+		authorizations = append(authorizations, r.Header.Get("Authorization"))
+	}))
+	t.Cleanup(server.Close)
+	return server, func() []string {
+		mux.Lock()
+		defer mux.Unlock()
+		return slices.Clone(authorizations)
+	}
+}
+
+func get(t *testing.T, httpClient *http.Client, url string) {
+	t.Helper()
+	response, err := httpClient.Get(url)
+	if !assert.NoError(t, err) {
+		return
+	}
+	_ = response.Body.Close()
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+}
+
+// writeClientCertificate writes a self-signed client certificate and its key as PEM files.
+func writeClientCertificate(t *testing.T) (certFile string, keyFile string) {
+	t.Helper()
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "test client"},
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	require.NoError(t, err)
+	keyBytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	certFile = filepath.Join(dir, "cert.pem")
+	keyFile = filepath.Join(dir, "key.pem")
+	require.NoError(t, os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certBytes}), 0o600))
+	require.NoError(t, os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyBytes}), 0o600))
+	return certFile, keyFile
 }
 
 func TestHTTPClient(t *testing.T) {
@@ -146,6 +421,72 @@ func TestTokenSource_Token(t *testing.T) {
 		require.NotNil(t, token)
 		assert.Equal(t, "test-token-123", token.AccessToken)
 		assert.Equal(t, "Bearer", token.TokenType)
+	})
+
+	t.Run("expiry", func(t *testing.T) {
+		inAnHour := time.Now().Add(time.Hour).Truncate(time.Second)
+		jwtAccessToken := signedAccessToken(t, inAnHour)
+		testCases := []struct {
+			name     string
+			response string
+			expiry   time.Time
+			valid    bool
+		}{
+			{
+				name:     "from expires_in",
+				response: `{"access_token":"test-token-123","token_type":"Bearer","expires_in":3600}`,
+				expiry:   inAnHour,
+				valid:    true,
+			},
+			{
+				// The MinVWS AS only sets the exp claim of the access token
+				name:     "from the exp claim of a JWT access token",
+				response: `{"access_token":"` + jwtAccessToken + `","token_type":"Bearer","scope":"read"}`,
+				expiry:   inAnHour,
+				valid:    true,
+			},
+			{
+				name:     "expires_in takes precedence over the exp claim",
+				response: `{"access_token":"` + signedAccessToken(t, time.Now().Add(24*time.Hour)) + `","token_type":"Bearer","expires_in":3600}`,
+				expiry:   inAnHour,
+				valid:    true,
+			},
+			{
+				name:     "unknown for an opaque access token, so it is not reused",
+				response: `{"access_token":"test-token-123","token_type":"Bearer"}`,
+				expiry:   time.Now(),
+				valid:    false,
+			},
+			{
+				name:     "unknown for a JWT access token without exp claim, so it is not reused",
+				response: `{"access_token":"` + signedAccessToken(t, time.Time{}) + `","token_type":"Bearer"}`,
+				expiry:   time.Now(),
+				valid:    false,
+			},
+		}
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				tokenServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(tc.response))
+				}))
+				defer tokenServer.Close()
+
+				ts := tokenSource{
+					uraNumber:      "URA987654321",
+					targetAudience: "https://target.example.com",
+					scope:          []string{"read"},
+					tokenEndpoint:  tokenServer.URL,
+					tlsConfig:      tokenServer.TLS,
+					httpClient:     tokenServer.Client(),
+				}
+
+				token, err := ts.Token()
+				require.NoError(t, err)
+				assert.WithinDuration(t, tc.expiry, token.Expiry, 5*time.Second)
+				assert.Equal(t, tc.valid, token.Valid())
+			})
+		}
 	})
 
 	t.Run("token endpoint returns error", func(t *testing.T) {

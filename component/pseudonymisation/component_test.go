@@ -88,8 +88,8 @@ func newComponentFor(t *testing.T, prs *prsmock.Service, baseURL string) (*Compo
 	return component, call
 }
 
-// authenticatedClient is shaped like what authn.HTTPClient returns
-// (component/authn/oauth2.go:66-80): an oauth2 client that puts the access
+// authenticatedClient is shaped like what authn's MinVWSHTTPClient returns
+// (component/authn/oauth2.go): an oauth2 client that puts the access
 // token in the Authorization header, on a transport that presents the client
 // certificate.
 func authenticatedClient(ctx context.Context, transport http.RoundTripper) *http.Client {
@@ -253,9 +253,9 @@ func TestComponent_IdentifierToToken(t *testing.T) {
 			},
 			TokenEndpoint: prs.GetURL() + "/oauth/token",
 		}
-		component := New(Config{PRSBaseURL: prs.GetURL()}, func(ctx context.Context, scope []string, ura string, audience string) (*http.Client, error) {
-			return authn.HTTPClient(ctx, scope, ura, audience, ministry)
-		})
+		authnComponent := authn.New(authn.Config{MinVWS: ministry})
+		require.NoError(t, authnComponent.Start())
+		component := New(Config{PRSBaseURL: prs.GetURL()}, authnComponent.MinVWSHTTPClient)
 
 		tokenize(t, component, testScope)
 		bearer := strings.TrimPrefix(prs.GetLastExchange().Header.Get("Authorization"), "Bearer ")
