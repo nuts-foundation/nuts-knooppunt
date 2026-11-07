@@ -164,9 +164,21 @@ func (t tokenSource) Token() (*oauth2.Token, error) {
 	if err := json.Unmarshal(responseData, &token); err != nil {
 		return nil, fmt.Errorf("unmarshal token response: %w", err)
 	}
-	// expires_in is relative, oauth2.Token only honours the absolute Expiry
-	if token.ExpiresIn > 0 {
-		token.Expiry = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
-	}
+	token.Expiry = tokenExpiry(token)
 	return &token, nil
+}
+
+// tokenExpiry determines when an access token expires, since the token is reused until then.
+// expires_in is only RECOMMENDED (RFC 6749 section 5.1): the MinVWS AS omits it and puts the validity
+// in the exp claim of the JWT access token instead.
+// If the expiry can't be determined, the token is considered expired right away, so it is not reused.
+func tokenExpiry(token oauth2.Token) time.Time {
+	if token.ExpiresIn > 0 {
+		return time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+	}
+	// The signature is not ours to check: the token is only parsed to read its expiry
+	if accessToken, err := jwt.ParseInsecure([]byte(token.AccessToken)); err == nil && !accessToken.Expiration().IsZero() {
+		return accessToken.Expiration()
+	}
+	return time.Now()
 }

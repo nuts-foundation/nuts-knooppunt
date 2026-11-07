@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
 	"github.com/stretchr/testify/assert"
@@ -128,6 +129,26 @@ func TestComponent_MinVWSHTTPClient(t *testing.T) {
 		assert.Equal(t, int32(2), tokenRequests.Load())
 		assert.Equal(t, []string{"Bearer token-1", "Bearer token-2"}, authorizations())
 	})
+	t.Run("reuses an access token that only has an exp claim", func(t *testing.T) {
+		// Shaped like the MinVWS AS's response: no expires_in, the validity is in the JWT's exp claim
+		accessToken := signedAccessToken(t, time.Now().Add(time.Hour))
+		var tokenRequests atomic.Int32
+		tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tokenRequests.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `{"access_token":%q,"token_type":"Bearer","scope":"epd:read epd:write"}`, accessToken)
+		}))
+		t.Cleanup(tokenServer.Close)
+		apiServer, _ := startAPIServer(t)
+		component := startComponent(t, tokenServer.URL)
+
+		httpClient, err := component.MinVWSHTTPClient(t.Context(), scope, ura, audience)
+		require.NoError(t, err)
+		get(t, httpClient, apiServer.URL)
+		get(t, httpClient, apiServer.URL)
+
+		assert.Equal(t, int32(1), tokenRequests.Load())
+	})
 	t.Run("without token endpoint, returns a client without authentication", func(t *testing.T) {
 		apiServer, authorizations := startAPIServer(t)
 		component := startComponent(t, "")
@@ -226,6 +247,19 @@ func startTokenServer(t *testing.T, expiresIn int) (*httptest.Server, *atomic.In
 	}))
 	t.Cleanup(server.Close)
 	return server, &requests
+}
+
+// signedAccessToken returns a JWT access token that expires at the given time, or has no exp claim if it is zero.
+func signedAccessToken(t *testing.T, expiry time.Time) string {
+	t.Helper()
+	token := jwt.New()
+	require.NoError(t, token.Set(jwt.SubjectKey, "URA123456789"))
+	if !expiry.IsZero() {
+		require.NoError(t, token.Set(jwt.ExpirationKey, expiry))
+	}
+	signed, err := jwt.Sign(token, jwt.WithKey(jwa.HS256, []byte("test-signing-key-of-at-least-32-bytes")))
+	require.NoError(t, err)
+	return string(signed)
 }
 
 // startAPIServer starts a server that records the Authorization header of each request it receives.
@@ -389,26 +423,70 @@ func TestTokenSource_Token(t *testing.T) {
 		assert.Equal(t, "Bearer", token.TokenType)
 	})
 
-	t.Run("sets the expiry from expires_in", func(t *testing.T) {
-		tokenServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"access_token":"test-token-123","token_type":"Bearer","expires_in":3600}`))
-		}))
-		defer tokenServer.Close()
-
-		ts := tokenSource{
-			uraNumber:      "URA987654321",
-			targetAudience: "https://target.example.com",
-			scope:          []string{"read"},
-			tokenEndpoint:  tokenServer.URL,
-			tlsConfig:      tokenServer.TLS,
-			httpClient:     tokenServer.Client(),
+	t.Run("expiry", func(t *testing.T) {
+		inAnHour := time.Now().Add(time.Hour).Truncate(time.Second)
+		jwtAccessToken := signedAccessToken(t, inAnHour)
+		testCases := []struct {
+			name     string
+			response string
+			expiry   time.Time
+			valid    bool
+		}{
+			{
+				name:     "from expires_in",
+				response: `{"access_token":"test-token-123","token_type":"Bearer","expires_in":3600}`,
+				expiry:   inAnHour,
+				valid:    true,
+			},
+			{
+				// The MinVWS AS only sets the exp claim of the access token
+				name:     "from the exp claim of a JWT access token",
+				response: `{"access_token":"` + jwtAccessToken + `","token_type":"Bearer","scope":"read"}`,
+				expiry:   inAnHour,
+				valid:    true,
+			},
+			{
+				name:     "expires_in takes precedence over the exp claim",
+				response: `{"access_token":"` + signedAccessToken(t, time.Now().Add(24*time.Hour)) + `","token_type":"Bearer","expires_in":3600}`,
+				expiry:   inAnHour,
+				valid:    true,
+			},
+			{
+				name:     "unknown for an opaque access token, so it is not reused",
+				response: `{"access_token":"test-token-123","token_type":"Bearer"}`,
+				expiry:   time.Now(),
+				valid:    false,
+			},
+			{
+				name:     "unknown for a JWT access token without exp claim, so it is not reused",
+				response: `{"access_token":"` + signedAccessToken(t, time.Time{}) + `","token_type":"Bearer"}`,
+				expiry:   time.Now(),
+				valid:    false,
+			},
 		}
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				tokenServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(tc.response))
+				}))
+				defer tokenServer.Close()
 
-		token, err := ts.Token()
-		require.NoError(t, err)
-		assert.WithinDuration(t, time.Now().Add(time.Hour), token.Expiry, 5*time.Second)
-		assert.True(t, token.Valid())
+				ts := tokenSource{
+					uraNumber:      "URA987654321",
+					targetAudience: "https://target.example.com",
+					scope:          []string{"read"},
+					tokenEndpoint:  tokenServer.URL,
+					tlsConfig:      tokenServer.TLS,
+					httpClient:     tokenServer.Client(),
+				}
+
+				token, err := ts.Token()
+				require.NoError(t, err)
+				assert.WithinDuration(t, tc.expiry, token.Expiry, 5*time.Second)
+				assert.Equal(t, tc.valid, token.Valid())
+			})
+		}
 	})
 
 	t.Run("token endpoint returns error", func(t *testing.T) {
