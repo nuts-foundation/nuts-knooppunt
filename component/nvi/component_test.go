@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -344,6 +345,32 @@ func TestComponent_RegisterNVIList(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNew(t *testing.T) {
+	t.Run("does not modify the HTTP client from the provider", func(t *testing.T) {
+		var requestCount atomic.Int32
+		nviServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestCount.Add(1)
+			w.Header().Set("Content-Type", "application/fhir+json")
+			_, _ = w.Write([]byte(`{"resourceType":"List","id":"1"}`))
+		}))
+		t.Cleanup(nviServer.Close)
+		transport := &http.Transport{}
+		sharedClient := &http.Client{Transport: transport}
+		component, err := New(Config{FHIRBaseURL: nviServer.URL, Audience: "nvi"}, func(_ context.Context, _ []string, _ string, _ string) (*http.Client, error) {
+			return sharedClient, nil
+		}, nil)
+		require.NoError(t, err)
+
+		for range 2 {
+			_, err := component.readList(t.Context(), "1", "1")
+			require.NoError(t, err)
+		}
+
+		assert.Equal(t, int32(2), requestCount.Load())
+		assert.Same(t, transport, sharedClient.Transport)
+	})
 }
 
 func TestComponent_GetNVIList(t *testing.T) {

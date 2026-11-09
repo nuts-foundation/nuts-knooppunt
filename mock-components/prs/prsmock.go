@@ -843,7 +843,7 @@ func thumbprint(key *rsa.PublicKey) (string, error) {
 // documentation describes it: a client_credentials grant carrying scope and
 // target_audience, authenticated by mTLS, which is assumed to have happened
 // in front of this mock. It issues an opaque token for that target audience.
-// The JWT-bearer client_assertion component/authn adds (oauth2.go:101-147) is
+// The JWT-bearer client_assertion component/authn adds (oauth2.go:110-147) is
 // not in that documentation and is ignored. Which service a token is for is
 // later compared with Options.PublicURL, a configured value, never the
 // request's Host header.

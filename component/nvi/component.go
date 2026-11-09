@@ -15,7 +15,6 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/component/authn"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonymisation"
-	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
@@ -59,16 +58,20 @@ func New(config Config, httpClientFn authn.HTTPClientProvider, pseudonymizer pse
 	return &Component{
 		fhirBaseURL: baseURL,
 		fhirClientFn: func(ctx context.Context, uraNumber string) (fhirclient.Client, error) {
-			// TODO: Cache the HTTP client per URA number, instead of creating a new one for each request.
-			//       That would also allow caching the access tokens obtained from the OAuth2 server.
-			httpClient, err := httpClientFn(ctx, []string{"epd:read", "epd:write"}, uraNumber, baseURL.Scheme+"://"+baseURL.Host)
+			sharedClient, err := httpClientFn(ctx, []string{"epd:read", "epd:write"}, uraNumber, baseURL.Scheme+"://"+baseURL.Host)
 			if err != nil {
 				return nil, err
 			}
-			httpClient.Transport = &loggingTransport{next: tracing.WrapTransport(httpClient.Transport)}
+			// The provider's client is shared, so wrap the transport on a copy
+			httpClient := *sharedClient
+			next := sharedClient.Transport
+			if next == nil {
+				next = http.DefaultTransport
+			}
+			httpClient.Transport = &loggingTransport{next: next}
 			clientConfig := fhirutil.ClientConfig()
 			clientConfig.UsePostSearch = false // nvi doesn't support POST searches
-			return fhirclient.New(baseURL, httpClient, clientConfig), nil
+			return fhirclient.New(baseURL, &httpClient, clientConfig), nil
 		},
 		pseudonymizer: pseudonymizer,
 		audience:      config.Audience,
