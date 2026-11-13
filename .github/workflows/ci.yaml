@@ -187,8 +187,8 @@ jobs:
       - name: Smoke test
         run: infra/ovhcloud-test/smoke-test.sh | tee smoke-test.log
 
-      # Errors only, nothing on success. SLACK_WEBHOOK posts to
-      # #ops-infra-alerts in the Nuts Slack.
+      # Errors only, nothing on success. SLACK_WEBHOOK is a Slack incoming
+      # webhook.
       - name: Notify Slack on failure
         if: failure()
         env:
