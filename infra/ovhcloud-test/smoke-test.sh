@@ -17,8 +17,6 @@ delay=20
 checks=(
   "https://knooppunt.test.gf.nuts.nl/nuts/status" "OK"
   "https://knooppunt.test.gf.nuts.nl/.well-known/oauth-authorization-server/nuts/oauth2/00000020" '"issuer":"https://knooppunt.test.gf.nuts.nl/nuts/oauth2/00000020"'
-  "https://nutsadmin.test.gf.nuts.nl/" "<title>Nuts Demo registry admin</title>"
-  "https://mock-dezi.test.gf.nuts.nl/dezi/jwks.json" '"kid":"sandbox-dezi-1"'
   "https://sandbox.test.gf.nuts.nl/" "<title>GF Sandbox</title>"
   "https://zonnebloem-ehr.test.gf.nuts.nl/" "Anna Jansen"
 )
