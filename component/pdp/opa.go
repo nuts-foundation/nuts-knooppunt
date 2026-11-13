@@ -87,7 +87,11 @@ func (c *Component) evalRegoPolicy(ctx context.Context, policy string, policyInp
 		}
 		sort.Strings(keys)
 		for _, key := range keys {
-			infoLines = append(infoLines, fmt.Sprintf("%s: %v", key, resultMap[key]))
+			// Only boolean rule outcomes are echoed: a rule that evaluates to policy input
+			// (e.g. a BSN) must not end up in the response.
+			if value, ok := resultMap[key].(bool); ok {
+				infoLines = append(infoLines, fmt.Sprintf("%s: %v", key, value))
+			}
 		}
 		if len(infoLines) > 0 {
 			policyResult.Reasons = append(policyResult.Reasons, ResultReason{

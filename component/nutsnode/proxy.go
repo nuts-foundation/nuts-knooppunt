@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 )
@@ -17,9 +17,9 @@ import (
 // - if addRoutePrefix is set, it is prepended to the request URL path before forwarding (this can be useful for /.well-known routes)
 func createProxy(targetAddress *url.URL, rewriter ProxyRequestRewriter) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
-		// Use otelhttp transport for automatic client span creation on outgoing requests.
+		// Use the tracing transport for automatic client span creation on outgoing requests.
 		// This is required for trace context propagation to the proxied service.
-		Transport: otelhttp.NewTransport(http.DefaultTransport),
+		Transport: tracing.WrapTransport(http.DefaultTransport),
 		Rewrite: func(request *httputil.ProxyRequest) {
 			request.SetURL(targetAddress)
 			request.Out.Host = request.In.Host

@@ -6,18 +6,22 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
-	"go.opentelemetry.io/otel/sdk/trace"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var _ component.Lifecycle = (*Component)(nil)
@@ -38,7 +42,7 @@ func DefaultConfig() Config {
 
 type Component struct {
 	config         Config
-	tracerProvider *trace.TracerProvider
+	tracerProvider *sdktrace.TracerProvider
 	loggerProvider *log.LoggerProvider
 	shutdownFuncs  []func(context.Context) error
 }
@@ -90,9 +94,9 @@ func (c *Component) Start() error {
 	c.shutdownFuncs = append(c.shutdownFuncs, traceExporter.Shutdown)
 
 	// Set up trace provider with batch exporter
-	c.tracerProvider = trace.NewTracerProvider(
-		trace.WithBatcher(traceExporter),
-		trace.WithResource(res),
+	c.tracerProvider = sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(traceExporter),
+		sdktrace.WithResource(res),
 	)
 	c.shutdownFuncs = append(c.shutdownFuncs, c.tracerProvider.Shutdown)
 	otel.SetTracerProvider(c.tracerProvider)
@@ -156,19 +160,53 @@ func (c *Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *
 	// Tracing component doesn't expose HTTP endpoints
 }
 
-// WrapTransport wraps an http.RoundTripper with OpenTelemetry instrumentation.
-// If transport is nil, http.DefaultTransport is used.
-// This wrapper centralizes tracing configuration for outbound HTTP calls,
-// allowing future additions like custom options or sampling without changing callers.
-func WrapTransport(transport http.RoundTripper) http.RoundTripper {
-	return otelhttp.NewTransport(transport)
+// TransportOption configures the instrumentation added by WrapTransport and NewHTTPClient.
+type TransportOption func(*urlRedactingTransport)
+
+// WithoutURLPath makes client spans record only the scheme and host of the request URL, for
+// clients whose request paths identify a patient (e.g. Patient/<id>).
+func WithoutURLPath() TransportOption {
+	return func(t *urlRedactingTransport) {
+		t.dropPath = true
+	}
 }
 
-// NewHTTPClient creates an http.Client with OpenTelemetry instrumentation.
-// This wrapper centralizes tracing configuration for outbound HTTP calls,
-// allowing future additions like custom options or sampling without changing callers.
-func NewHTTPClient() *http.Client {
-	return &http.Client{
-		Transport: otelhttp.NewTransport(nil),
+// WrapTransport wraps an http.RoundTripper with OpenTelemetry instrumentation.
+// If transport is nil, http.DefaultTransport is used.
+// This wrapper centralizes tracing configuration for outbound HTTP calls. The client spans it
+// creates record the request URL without its query (see urlRedactingTransport).
+func WrapTransport(transport http.RoundTripper, opts ...TransportOption) http.RoundTripper {
+	if transport == nil {
+		transport = http.DefaultTransport
 	}
+	redacting := &urlRedactingTransport{next: transport}
+	for _, opt := range opts {
+		opt(redacting)
+	}
+	return otelhttp.NewTransport(redacting)
+}
+
+// NewHTTPClient creates an http.Client with OpenTelemetry instrumentation, see WrapTransport.
+func NewHTTPClient(opts ...TransportOption) *http.Client {
+	return &http.Client{
+		Transport: WrapTransport(nil, opts...),
+	}
+}
+
+// urlRedactingTransport overwrites the url.full attribute that otelhttp puts on the client span
+// with the URL without its query: query parameters carry search values such as patient
+// identifiers. otelhttp sets the attribute before calling this transport with the span's
+// context, and setting an attribute again replaces it.
+type urlRedactingTransport struct {
+	next     http.RoundTripper
+	dropPath bool
+}
+
+func (t *urlRedactingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	fullURL := logging.RedactURL(request.URL)
+	if t.dropPath {
+		fullURL = (&url.URL{Scheme: request.URL.Scheme, Host: request.URL.Host}).String()
+	}
+	trace.SpanFromContext(request.Context()).SetAttributes(attribute.String("url.full", fullURL))
+	return t.next.RoundTrip(request)
 }

@@ -7,7 +7,8 @@ package system.log
 
 import rego.v1
 
-# mask redacts BSNs (Dutch social security numbers) from OPA decision logs.
+# mask redacts BSNs (Dutch social security numbers) and other patient data
+# from OPA decision logs.
 # OPA calls this rule for every decision event with the event as `input`, so
 # the original decision input lives at `input.input`. The rule returns
 # JSON-Patch operations describing what to redact.
@@ -35,22 +36,44 @@ mask contains {"op": "upsert", "path": "/input/subject/patient_enrollment_identi
 	is_potential_bsn(input.input.subject.patient_enrollment_identifier)
 }
 
-# --- Structured redactions: search params ----------------------------------
-# search_params.identifier is a [][]string; when any value looks like a BSN
-# we replace the whole key with a placeholder (rather than removing it) so
-# the log still shows the field was present and deliberately redacted.
+# --- Patient-linked fields --------------------------------------------------
+# The patient's logical id, the requested resource's id and the request path
+# (which embeds that id) identify a patient record, so they are redacted too.
 
-mask contains {"op": "upsert", "path": "/input/action/fhir_rest/search_params/identifier", "value": redacted} if {
-	some and_group in input.input.action.fhir_rest.search_params.identifier
-	some value in and_group
-	is_bsn(value)
+mask contains {"op": "upsert", "path": "/input/context/patient_id", "value": redacted} if {
+	input.input.context.patient_id != ""
 }
 
-mask contains {"op": "upsert", "path": "/input/action/fhir_rest/search_params/identifier", "value": redacted} if {
-	some and_group in input.input.action.fhir_rest.search_params.identifier
-	some value in and_group
-	is_potential_bsn(value)
+mask contains {"op": "upsert", "path": "/input/resource/id", "value": redacted} if {
+	input.input.resource.id != ""
 }
+
+mask contains {"op": "upsert", "path": "/input/action/request/path", "value": redacted} if {
+	input.input.action.request.path != ""
+}
+
+# --- Search params ----------------------------------------------------------
+# Any search parameter can carry patient data: identifier with or without a
+# modifier, chained params (patient.identifier, subject:Patient.identifier),
+# patient, subject, _id, ... Matching BSN shapes per parameter is an arms
+# race, so every value is replaced with a placeholder. The keys stay, so the
+# log still shows which parameters were used, unless a key doesn't look like a
+# search parameter name: a malformed query (e.g. "?<system>|<bsn>") turns the
+# value into the key. The whole object is replaced at once: OPA doesn't decode
+# escaped mask paths, so a per-key path would miss keys containing "/" or
+# other characters that need escaping.
+
+mask contains {"op": "upsert", "path": "/input/action/fhir_rest/search_params", "value": redacted_search_params} if {
+	count(input.input.action.fhir_rest.search_params) > 0
+}
+
+redacted_search_params := {search_param_log_key(key): redacted | some key, _ in input.input.action.fhir_rest.search_params}
+
+# Search parameter names, with modifiers (identifier:of-type) and chains
+# (subject:Patient.identifier, _has:Observation:patient:code).
+search_param_log_key(key) := key if {
+	regex.match(`^[A-Za-z_][A-Za-z0-9_.:-]*$`, key)
+} else := redacted
 
 # --- Wholesale redactions: debug-only fields that can embed BSNs -----------
 # These fields are not read by any policy; they exist in the decision input

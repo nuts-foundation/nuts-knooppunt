@@ -388,7 +388,8 @@ func derivePatientBSN(tokens Tokens, rawParams url.Values) (string, error) {
 		return "", errors.New("expected identifier parameter in format 'system|value'")
 	}
 	if parts[0] != coding.BSNNamingSystem {
-		return "", fmt.Errorf("expected identifier system to be '%s', found '%s'", coding.BSNNamingSystem, parts[0])
+		// Don't echo the system: a malformed parameter may put the BSN itself in that position.
+		return "", fmt.Errorf("expected identifier system to be '%s'", coding.BSNNamingSystem)
 	}
 	if parts[1] == "" {
 		return "", errors.New("identifier value is empty")
