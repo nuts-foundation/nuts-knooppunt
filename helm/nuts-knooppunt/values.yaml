@@ -178,6 +178,10 @@ persistence:
 database:
   enabled: false
   instances: 1
+  # PodDisruptionBudget on the primary. With one instance there is no
+  # standby to switch over to, so it blocks draining that node (node pool
+  # replacement, upgrades). Set false for single-instance test clusters.
+  enablePDB: true
   storage:
     size: 5Gi
     # storageClass: ""

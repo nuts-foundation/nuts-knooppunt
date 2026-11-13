@@ -40,6 +40,11 @@ resource "ovh_cloud_project_kube_nodepool" "test" {
   max_nodes     = 2
   autoscale     = false
 
+  # Monthly is cheaper than hourly for nodes that run all month. The pool was
+  # created as monthly in the Control Panel and imported; without this,
+  # Terraform wants hourly.
+  monthly_billed = true
+
   lifecycle {
     create_before_destroy = true
   }
