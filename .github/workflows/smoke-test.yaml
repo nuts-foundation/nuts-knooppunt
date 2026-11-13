@@ -1,0 +1,33 @@
+name: 'Smoke test test environment'
+
+# The sandbox can break between deploys (e.g. a pod evicted for lack of
+# memory, nuts-knooppunt#657). This runs the same check as the deploy in
+# ci.yaml, every hour, and posts to Slack when it fails. Errors only:
+# nothing on success, so a broken sandbox posts once an hour until fixed.
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Smoke test
+        run: infra/ovhcloud-test/smoke-test.sh | tee smoke-test.log
+
+      # SLACK_WEBHOOK posts to #ops-infra-alerts in the Nuts Slack.
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          failures="$(grep '^FAIL' smoke-test.log 2>/dev/null || true)"
+          text=":warning: Sandbox smoke test failed. Run: ${RUN_URL}"
+          [ -n "$failures" ] && text="${text}"$'\n'"${failures}"
+          jq -n --arg text "$text" '{text: $text}' |
+            curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK"

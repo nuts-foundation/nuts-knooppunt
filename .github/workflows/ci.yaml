@@ -180,3 +180,23 @@ jobs:
             --set "mock-prs.image.tag=$tag" \
             --set "gf-sandbox.image.tag=$tag" \
             --set "seed.image.tag=$tag"
+
+      # A deploy that times out (a pod never turns ready within --timeout)
+      # already fails the step above. This catches what Helm can't see: a
+      # host that serves an error or the wrong content.
+      - name: Smoke test
+        run: infra/ovhcloud-test/smoke-test.sh | tee smoke-test.log
+
+      # Errors only, nothing on success. SLACK_WEBHOOK posts to
+      # #ops-infra-alerts in the Nuts Slack.
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          failures="$(grep '^FAIL' smoke-test.log 2>/dev/null || true)"
+          text=":warning: Sandbox deploy of ${COMMIT:0:7} failed. Run: ${RUN_URL}"
+          [ -n "$failures" ] && text="${text}"$'\n'"${failures}"
+          jq -n --arg text "$text" '{text: $text}' |
+            curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK"
