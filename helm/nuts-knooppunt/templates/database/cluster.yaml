@@ -15,6 +15,7 @@ metadata:
     "helm.sh/resource-policy": keep
 spec:
   instances: {{ .Values.database.instances }}
+  enablePDB: {{ .Values.database.enablePDB }}
   primaryUpdateStrategy: unsupervised
   storage:
     size: {{ .Values.database.storage.size }}

@@ -134,6 +134,9 @@ image:
 # every did:web subject were gone on each pod restart.
 database:
   enabled: true
+  # One instance, so a PodDisruptionBudget would block draining the node
+  # Postgres runs on (it did when the node pool was replaced).
+  enablePDB: false
 persistence:
   enabled: true
 # Same CSI volume ownership issue as mock-vc-issuer below: the knooppunt
