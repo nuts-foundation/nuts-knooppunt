@@ -181,8 +181,13 @@ fhir:
   # scheduler packed a rolling update's new pod next to the old one and the
   # node evicted its way out of it; Recreate makes sure there is never a
   # second HAPI to place at all.
+  # The limit (with the heap cap in extraEnv below) keeps HAPI within 1Gi.
+  # Without it HAPI grew to ~1.3Gi, the node ran out of memory and evicted
+  # HAPI and the Postgres pod; over the limit, only HAPI restarts.
   resources:
     requests:
+      memory: 1Gi
+    limits:
       memory: 1Gi
   strategy:
     type: Recreate
@@ -215,6 +220,9 @@ fhir:
     # the subchart does not restart HAPI when only its ConfigMap changes.
     - name: PRS_MOCK_URL
       value: "http://mock-prs:8081"
+    # Heap at 65% of the 1Gi limit, leaving room for the JVM's other memory.
+    - name: JAVA_TOOL_OPTIONS
+      value: "-XX:MaxRAMPercentage=65"
   configExtra:
     NVI_AUDIENCE: "nvi"
     NVI_TENANT: "nvi"
