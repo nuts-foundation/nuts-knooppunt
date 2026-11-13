@@ -98,9 +98,9 @@ on demand.
 
 When the deploy or `infra/ovhcloud-test/smoke-test.sh` fails, CI posts to
 `#ops-infra-alerts` in the Nuts Slack. The smoke test runs after each
-deploy and every hour (`smoke-test.yaml`), and checks that each public host
+deploy and every day at 9:00 Amsterdam winter time (`smoke-test.yaml`), and checks that each public host
 serves real content. Nothing is posted on success.
 
 The Slack incoming webhook URL is the repo secret `SLACK_WEBHOOK` (repo-wide,
-not in the `ovhcloud-test` environment: the hourly check doesn't deploy). It
+not in the `ovhcloud-test` environment: the daily check doesn't deploy). It
 can only post messages; a Slack admin can look it up in the Slack app.

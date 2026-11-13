@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checks that the test environment's public hosts serve real content, not
-# just a 200. Run by ci.yaml after each deploy and by smoke-test.yaml every
-# hour. The Zonnebloem EHR check reads clients from HAPI, so it also fails
+# just a 200. Run by ci.yaml after each deploy and by smoke-test.yaml every day.
+# The Zonnebloem EHR check reads clients from HAPI, so it also fails
 # when HAPI or its database is down.
 #
 # Each check is retried, so a pod that is briefly restarting doesn't fail it.

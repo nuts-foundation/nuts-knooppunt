@@ -2,11 +2,12 @@ name: 'Smoke test test environment'
 
 # The sandbox can break between deploys (e.g. a pod evicted for lack of
 # memory, nuts-knooppunt#657). This runs the same check as the deploy in
-# ci.yaml, every hour, and posts to Slack when it fails. Errors only:
-# nothing on success, so a broken sandbox posts once an hour until fixed.
+# ci.yaml once a day, and posts to Slack when it fails. Errors only: nothing
+# on success.
 on:
   schedule:
-    - cron: '17 * * * *'
+    # 08:00 UTC: 9:00 in Amsterdam in winter, 10:00 in summer.
+    - cron: '0 8 * * *'
   workflow_dispatch:
 
 jobs:
