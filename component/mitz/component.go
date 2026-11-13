@@ -241,19 +241,14 @@ func (c *Component) CheckConsent(ctx context.Context, authzReq xacml.AuthzReques
 		return nil, fmt.Errorf("failed to read consent check response: %w", err)
 	}
 
-	// Redact every BSN-scoped InstanceIdentifier before the body touches a log
-	// or an error chain. MITZ echoes the resource-id (BSN) back in the response
-	// because IncludeInResult="true" is set on the request, and may also include
-	// BSNs we never sent (e.g. of a legal representative).
-	redactedBody := xacml.RedactBSN(string(responseBody))
-
-	slog.DebugContext(ctx, "Received consent check response from MITZ",
-		slog.Int("statusCode", resp.StatusCode),
-		slog.String("responseBody", redactedBody))
+	// The response body is neither logged nor put in an error: MITZ echoes the resource-id (BSN)
+	// back because IncludeInResult="true" is set on the request, and may include BSNs we never
+	// sent (e.g. of a legal representative) in places xacml.RedactBSN doesn't cover.
+	slog.DebugContext(ctx, "Received consent check response from MITZ", slog.Int("statusCode", resp.StatusCode))
 
 	// Check for non-2xx status
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("consent check failed with status %d: %s", resp.StatusCode, redactedBody)
+		return nil, fmt.Errorf("consent check failed with status %d", resp.StatusCode)
 	}
 
 	// Parse the XACML response to extract the decision
@@ -409,37 +404,37 @@ func (c *Component) CreateSubscription(ctx context.Context, resource fhir.Subscr
 			case http.StatusBadRequest:
 				err = &fhirapi.Error{
 					Message:   "FHIR resource does not meet specifications",
-					Cause:     err,
+					Cause:     fhirutil.RedactClientError(err),
 					IssueType: fhir.IssueTypeInvalid,
 				}
 			case http.StatusUnauthorized:
 				err = &fhirapi.Error{
 					Message:   "Not authorized to create subscription at MITZ endpoint",
-					Cause:     err,
+					Cause:     fhirutil.RedactClientError(err),
 					IssueType: fhir.IssueTypeSecurity,
 				}
 			case http.StatusNotFound:
 				err = &fhirapi.Error{
 					Message:   "MITZ endpoint not found",
-					Cause:     err,
+					Cause:     fhirutil.RedactClientError(err),
 					IssueType: fhir.IssueTypeNotFound,
 				}
 			case http.StatusUnprocessableEntity:
 				err = &fhirapi.Error{
 					Message:   "MITZ business rules are not met",
-					Cause:     err,
+					Cause:     fhirutil.RedactClientError(err),
 					IssueType: fhir.IssueTypeBusinessRule,
 				}
 			case http.StatusTooManyRequests:
 				err = &fhirapi.Error{
 					Message:   "Too many requests to MITZ endpoint",
-					Cause:     err,
+					Cause:     fhirutil.RedactClientError(err),
 					IssueType: fhir.IssueTypeThrottled,
 				}
 			default:
 				err = &fhirapi.Error{
 					Message:   "Failed to create subscription at MITZ endpoint",
-					Cause:     err,
+					Cause:     fhirutil.RedactClientError(err),
 					IssueType: fhir.IssueTypeTransient,
 				}
 			}

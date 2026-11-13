@@ -5,8 +5,10 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"slices"
 
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -68,10 +70,11 @@ func enrichPolicyInputWithCapabilityStatement(ctx context.Context, input PolicyI
 
 	statement, err := readCapability(ctx, policy)
 	if err != nil {
+		slog.DebugContext(ctx, "No valid FHIR CapabilityStatement found", slog.String("policy", policy), logging.Error(err))
 		return input, []ResultReason{
 			{
 				Code:        TypeResultCodeInformational,
-				Description: "No valid FHIR CapabilityStatement found for scope: " + err.Error(),
+				Description: "No valid FHIR CapabilityStatement found for scope",
 			},
 		}
 	}

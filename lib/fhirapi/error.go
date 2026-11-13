@@ -23,6 +23,12 @@ func (e Error) Error() string {
 	return fmt.Sprintf("%s: %v", e.Message, e.Cause)
 }
 
+// Unwrap returns the Cause, so errors.As/errors.Is see through an Error (e.g. to redact a FHIR
+// client error it wraps).
+func (e Error) Unwrap() error {
+	return e.Cause
+}
+
 func (e Error) OperationOutcome() fhir.OperationOutcome {
 	return fhir.OperationOutcome{
 		Issue: []fhir.OperationOutcomeIssue{

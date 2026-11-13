@@ -538,7 +538,7 @@ func TestNewPolicyInput(t *testing.T) {
 			}
 			policyInput, err := NewPolicyInput(pdpRequest)
 			assert.Nil(t, policyInput)
-			assert.EqualError(t, err, "patient_bsn: expected identifier system to be 'http://fhir.nl/fhir/NamingSystem/bsn', found 'http://fhir.nl/fhir/NamingSystem/other'")
+			assert.EqualError(t, err, "patient_bsn: expected identifier system to be 'http://fhir.nl/fhir/NamingSystem/bsn'")
 		})
 		t.Run("provided by PEP", func(t *testing.T) {
 			pdpRequest := APIRequest{

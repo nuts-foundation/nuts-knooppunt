@@ -48,11 +48,11 @@ func (c *Component) enrichBSN(ctx context.Context, policyInput *PolicyInput) (*P
 		path := fmt.Sprintf("Patient/%s", policyInput.Context.PatientID)
 		err := client.ReadWithContext(ctx, path, &patient, fhirclient.QueryParam("_elements", "identifier"))
 		if err != nil {
-			slog.WarnContext(ctx, "Failed to get patient identifiers from PIP", logging.Error(err))
+			slog.WarnContext(ctx, "Failed to get patient identifiers from PIP", logging.Error(fhirutil.RedactClientError(err)))
 			return policyInput, []ResultReason{
 				{
 					Code:        TypeResultCodePIPError,
-					Description: fmt.Sprintf("failed to get patient identifiers from PIP, policy input might not be complete: %v", err),
+					Description: "failed to get patient identifiers from PIP, policy input might not be complete",
 				},
 			}
 		}
@@ -106,7 +106,7 @@ func (c *Component) enrichResourceContent(ctx context.Context, policyInput *Poli
 	var content map[string]any
 	err := c.pipClient.ReadWithContext(ctx, path, &content)
 	if err != nil {
-		slog.WarnContext(ctx, "Failed to get resource content from PIP", "url", c.pipClient.Path(path).String(), logging.Error(err))
+		slog.WarnContext(ctx, "Failed to get resource content from PIP", slog.String("resource_type", policyInput.Resource.Type.String()), logging.Error(fhirutil.RedactClientError(err)))
 		return policyInput, []ResultReason{
 			{
 				Code:        TypeResultCodePIPError,
@@ -133,7 +133,7 @@ func (c *Component) enrichConsent(ctx context.Context, policyInput *PolicyInput)
 			"data": []string{policyInput.Resource.Type.String() + "/" + policyInput.Resource.Id},
 		}, &searchResult)
 		if err != nil {
-			slog.ErrorContext(ctx, "PIP consent retrieval failed", logging.Error(err))
+			slog.ErrorContext(ctx, "PIP consent retrieval failed", logging.Error(fhirutil.RedactClientError(err)))
 			return policyInput, []ResultReason{
 				{
 					Code:        TypeResultCodePIPError,
@@ -148,7 +148,7 @@ func (c *Component) enrichConsent(ctx context.Context, policyInput *PolicyInput)
 			return true, nil
 		})
 		if err != nil {
-			slog.ErrorContext(ctx, "PIP consent paginated retrieval failed", logging.Error(err))
+			slog.ErrorContext(ctx, "PIP consent paginated retrieval failed", logging.Error(fhirutil.RedactClientError(err)))
 			return policyInput, []ResultReason{
 				{
 					Code:        TypeResultCodePIPError,

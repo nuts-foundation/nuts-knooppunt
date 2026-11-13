@@ -1,9 +1,11 @@
 package nvi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +18,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/nvi/testdata"
 	"github.com/nuts-foundation/nuts-knooppunt/component/pseudonymisation"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tenants"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/test"
@@ -916,4 +919,101 @@ func TestComponent_identifierToToken(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestComponent_tokenizeFHIRSearchToken(t *testing.T) {
+	const localURA = "1"
+	ctrl := gomock.NewController(t)
+	pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
+	pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, localURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
+	component := Component{pseudonymizer: pseudonymizer}
+
+	t.Run("BSN token is tokenized", func(t *testing.T) {
+		result, err := component.tokenizeFHIRSearchToken(t.Context(), *bsnIdentifier.System+"|"+*bsnIdentifier.Value, localURA, "nvi")
+		require.NoError(t, err)
+		assert.Equal(t, *bsnTokenIdentifier.System+"|"+*bsnTokenIdentifier.Value, result)
+	})
+	t.Run("non-BSN token is returned unchanged", func(t *testing.T) {
+		const searchToken = "http://example.org/device-identifiers|EHR-SYS-2024-001"
+		result, err := component.tokenizeFHIRSearchToken(t.Context(), searchToken, localURA, "nvi")
+		require.NoError(t, err)
+		assert.Equal(t, searchToken, result)
+	})
+	t.Run("BSN token without a value is rejected", func(t *testing.T) {
+		searchToken := *bsnIdentifier.System + "|"
+		_, err := component.tokenizeFHIRSearchToken(t.Context(), searchToken, localURA, "nvi")
+		require.Error(t, err)
+		assert.NotContains(t, err.Error(), searchToken)
+		assert.Equal(t, http.StatusBadRequest, fhirapi.StatusCodeForError(err))
+	})
+}
+
+// TestComponent_NoPatientDataInLogsOrResponses searches by BSN against an NVI that fails, and
+// checks that neither the BSN nor its transport token ends up in the (debug) log output or in
+// the response.
+func TestComponent_NoPatientDataInLogsOrResponses(t *testing.T) {
+	const localURA = "1"
+	bsn := *bsnIdentifier.Value
+	token := *bsnTokenIdentifier.Value
+
+	search := func(t *testing.T, nviURL string) (logOutput string, responseBody string) {
+		t.Helper()
+		var logs bytes.Buffer
+		originalLogger := slog.Default()
+		slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+		t.Cleanup(func() { slog.SetDefault(originalLogger) })
+
+		ctrl := gomock.NewController(t)
+		pseudonymizer := pseudonymisation.NewMockPseudonymizer(ctrl)
+		pseudonymizer.EXPECT().IdentifierToToken(gomock.Any(), bsnIdentifier, localURA, "nvi", "nationale-verwijsindex").Return(&bsnTokenIdentifier, nil).AnyTimes()
+		component, err := New(Config{FHIRBaseURL: nviURL, Audience: "nvi"}, func(_ context.Context, _ []string, _ string, _ string) (*http.Client, error) {
+			return &http.Client{}, nil
+		}, pseudonymizer)
+		require.NoError(t, err)
+
+		result, err := component.SearchNVILists(t.Context(), api.SearchNVIListsRequestObject{
+			Params: api.SearchNVIListsParams{
+				XTenantID:         mustTenantID(t, coding.URANamingSystem+"|"+localURA),
+				PatientIdentifier: to.Ptr(*bsnIdentifier.System + "|" + bsn),
+			},
+		})
+		require.NoError(t, err)
+		httpResponse := httptest.NewRecorder()
+		require.NoError(t, result.VisitSearchNVIListsResponse(httpResponse))
+		assert.GreaterOrEqual(t, httpResponse.Code, 400)
+		return logs.String(), httpResponse.Body.String()
+	}
+	assertNoPatientData := func(t *testing.T, logOutput string, responseBody string) {
+		t.Helper()
+		require.NotEmpty(t, logOutput)
+		for _, value := range []string{bsn, token} {
+			assert.NotContains(t, logOutput, value)
+			assert.NotContains(t, responseBody, value)
+		}
+	}
+
+	t.Run("NVI answers with an OperationOutcome that echoes the search", func(t *testing.T) {
+		nviServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/fhir+json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(fhir.OperationOutcome{Issue: []fhir.OperationOutcomeIssue{{
+				Severity:    fhir.IssueSeverityError,
+				Code:        fhir.IssueTypeInvalid,
+				Diagnostics: to.Ptr("Invalid search: " + r.URL.RawQuery + " (" + r.URL.Query().Get("subject:identifier") + ")"),
+			}}})
+		}))
+		t.Cleanup(nviServer.Close)
+
+		logOutput, responseBody := search(t, nviServer.URL)
+
+		assertNoPatientData(t, logOutput, responseBody)
+	})
+	t.Run("NVI is unreachable", func(t *testing.T) {
+		nviServer := httptest.NewServer(http.NotFoundHandler())
+		nviServer.Close()
+
+		logOutput, responseBody := search(t, nviServer.URL)
+
+		assertNoPatientData(t, logOutput, responseBody)
+	})
 }
