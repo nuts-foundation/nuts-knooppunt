@@ -9,7 +9,7 @@ node pool backing the GF test environment. See
 
 - `ovh_cloud_project_kube.test` — MKS cluster, region `DE1`, free control
   plane plan, `MINIMAL_DOWNTIME` update policy.
-- `ovh_cloud_project_kube_nodepool.test` — 2x `d2-4` nodes, fixed
+- `ovh_cloud_project_kube_nodepool.test` — 2x `d2-8` nodes, fixed
   (autoscaling off). Accepted tradeoff: upgrades may cause brief downtime
   since a drain can leave everything on one node.
 
@@ -32,7 +32,7 @@ export OVH_CONSUMER_KEY=...
 ```
 
 **Current status**: cluster and node pool are applied and running
-(`gf-test`, region DE1, 2x `d2-4`). A credential with write access to
+(`gf-test`, region DE1, 2x `d2-8`). A credential with write access to
 `/cloud/project/*` exists; get one via `api.ovh.com/createToken` scoped to
 that path if you need your own.
 
