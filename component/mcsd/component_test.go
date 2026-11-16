@@ -95,6 +95,39 @@ func TestComponent_update_regression(t *testing.T) {
 	assert.NotNil(t, report[server.URL].Errors, "expected an empty slice")
 }
 
+// The update report is returned to the caller of /mcsd/update, so a failing directory's request URLs
+// and OperationOutcome diagnostics must not end up in it.
+func TestComponent_update_reportErrorIsRedacted(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(fhir.OperationOutcome{Issue: []fhir.OperationOutcomeIssue{{
+			Severity:    fhir.IssueSeverityError,
+			Code:        fhir.IssueTypeException,
+			Diagnostics: to.Ptr("database connection to db.internal failed for " + r.URL.String()),
+		}}})
+	}))
+	t.Cleanup(server.Close)
+	config := DefaultConfig()
+	config.AdministrationDirectories = map[string]DirectoryConfig{
+		"lrza": {FHIRBaseURL: server.URL},
+	}
+	component, err := New(config)
+	require.NoError(t, err)
+	component.fhirQueryClient = &test.StubFHIRClient{}
+	component.fhirAdminClientFn = func(baseURL *url.URL) fhirclient.Client {
+		return fhirclient.New(baseURL, http.DefaultClient, nil)
+	}
+
+	report, err := component.update(context.Background())
+
+	require.NoError(t, err)
+	errs := strings.Join(report[server.URL].Errors, "\n")
+	assert.Contains(t, errs, "OperationOutcome (status=500), issues: [exception error]")
+	assert.NotContains(t, errs, "db.internal")
+	assert.NotContains(t, errs, "/Organization/_history")
+}
+
 func TestComponent_update(t *testing.T) {
 	t.Log("mCSD Component is tested limited here, as it requires running FHIR servers and a lot of data. The main logic is tested in the integration tests.")
 

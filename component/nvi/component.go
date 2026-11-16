@@ -18,6 +18,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
@@ -123,7 +124,7 @@ func (c Component) registerBundle(ctx context.Context, tenantURA string, bundle 
 	if err != nil {
 		return nil, &fhirapi.Error{
 			Message:   "Failed to register Bundle at NVI",
-			Cause:     err,
+			Cause:     fhirutil.RedactClientError(err),
 			IssueType: fhir.IssueTypeTransient,
 		}
 	}
@@ -149,7 +150,7 @@ func (c Component) registerList(ctx context.Context, tenantURA string, list fhir
 	if err != nil {
 		return nil, &fhirapi.Error{
 			Message:   "Failed to register List at NVI",
-			Cause:     err,
+			Cause:     fhirutil.RedactClientError(err),
 			IssueType: fhir.IssueTypeTransient,
 		}
 	}
@@ -168,7 +169,7 @@ func (c Component) readList(ctx context.Context, tenantURA string, id string) (*
 	if err != nil {
 		return nil, &fhirapi.Error{
 			Message:   "Failed to read List at NVI",
-			Cause:     err,
+			Cause:     fhirutil.RedactClientError(err),
 			IssueType: fhir.IssueTypeTransient,
 		}
 	}
@@ -185,7 +186,7 @@ func (c Component) deleteListByID(ctx context.Context, tenantURA string, id stri
 	if err := fhirClient.DeleteWithContext(ctx, "List/"+id); err != nil {
 		return &fhirapi.Error{
 			Message:   "Failed to delete List at NVI",
-			Cause:     err,
+			Cause:     fhirutil.RedactClientError(err),
 			IssueType: fhir.IssueTypeTransient,
 		}
 	}
@@ -208,7 +209,7 @@ func (c Component) deleteListByParams(ctx context.Context, tenantURA string, par
 	if err := fhirClient.DeleteWithContext(ctx, "List?"+deleteParams.Encode()); err != nil {
 		return &fhirapi.Error{
 			Message:   "Failed to delete List at NVI",
-			Cause:     err,
+			Cause:     fhirutil.RedactClientError(err),
 			IssueType: fhir.IssueTypeTransient,
 		}
 	}
@@ -233,7 +234,7 @@ func (c Component) searchList(ctx context.Context, tenantURA string, params url.
 	if err != nil {
 		return nil, &fhirapi.Error{
 			Message:   "Failed to search for List resources at NVI",
-			Cause:     err,
+			Cause:     fhirutil.RedactClientError(err),
 			IssueType: fhir.IssueTypeTransient,
 		}
 	}
@@ -340,16 +341,17 @@ func (c Component) reconcileCustodianExtension(resource *fhir.List, localOrganiz
 
 // tokenizeFHIRSearchToken converts a FHIR search token  (<system>|<value>) to a BSN transport token value.
 func (c Component) tokenizeFHIRSearchToken(ctx context.Context, searchToken string, localOrganizationURA string, audience string) (string, error) {
-	if !strings.HasPrefix(searchToken, coding.BSNNamingSystem+"|") {
+	bsn, isBSN := strings.CutPrefix(searchToken, coding.BSNNamingSystem+"|")
+	if !isBSN {
 		return searchToken, nil
 	}
-	parts := strings.SplitN(searchToken, "|", 2)
-	if len(parts) != 2 {
-		return "", fmt.Errorf("invalid FHIR search token: %s", searchToken)
+	// The token carries a BSN, so it must never end up in an error message or log attribute.
+	if bsn == "" {
+		return "", fhirapi.BadRequestError("invalid BSN search token: missing value", nil)
 	}
 	identifier := fhir.Identifier{
-		System: to.Ptr(parts[0]),
-		Value:  to.Ptr(parts[1]),
+		System: to.Ptr(coding.BSNNamingSystem),
+		Value:  to.Ptr(bsn),
 	}
 	tokenizedIdentifier, err := c.identifierToToken(ctx, identifier, localOrganizationURA, audience)
 	if err != nil {
@@ -463,14 +465,17 @@ type loggingTransport struct {
 	next http.RoundTripper
 }
 
+// RoundTrip logs the request without its query: NVI search and delete parameters carry patient
+// identifiers (transport tokens, or values that were not tokenized at all).
 func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	slog.DebugContext(req.Context(), "NVI request", "method", req.Method, "url", req.URL.String())
+	requestURL := logging.RedactURL(req.URL)
+	slog.DebugContext(req.Context(), "NVI request", "method", req.Method, "url", requestURL)
 	resp, err := t.next.RoundTrip(req)
 	if err != nil {
-		slog.DebugContext(req.Context(), "NVI request failed", "method", req.Method, "url", req.URL.String(), "error", err)
+		slog.DebugContext(req.Context(), "NVI request failed", "method", req.Method, "url", requestURL, logging.Error(fhirutil.RedactClientError(err)))
 		return nil, err
 	}
-	slog.DebugContext(req.Context(), "NVI response", "method", req.Method, "url", req.URL.String(), "status", resp.StatusCode)
+	slog.DebugContext(req.Context(), "NVI response", "method", req.Method, "url", requestURL, "status", resp.StatusCode)
 	return resp, nil
 }
 

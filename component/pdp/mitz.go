@@ -7,6 +7,7 @@ import (
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 )
 
 func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input *PolicyInput) (*PolicyInput, []ResultReason) {
@@ -38,11 +39,11 @@ func (c *Component) enrichPolicyInputWithMitz(ctx context.Context, input *Policy
 	}
 	consentResp, err := c.consentChecker.CheckConsent(ctx, consentReq)
 	if err != nil {
-		slog.WarnContext(ctx, "Mitz consent check failed", "error", err)
+		slog.WarnContext(ctx, "Mitz consent check failed", logging.Error(err))
 		return input, []ResultReason{
 			{
 				Code:        TypeResultCodeInternalError,
-				Description: "could not complete consent check with Mitz: " + err.Error(),
+				Description: "could not complete consent check with Mitz",
 			},
 		}
 	}

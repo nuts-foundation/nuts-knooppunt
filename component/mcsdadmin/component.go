@@ -192,7 +192,7 @@ func newServicePost(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 
-	renderList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, tmpls.MakeServiceListXsProps)
+	renderList[fhir.HealthcareService, tmpls.ServiceListProps](client, w, r, tmpls.MakeServiceListXsProps)
 }
 
 func listOrganizations(w http.ResponseWriter, r *http.Request) {
@@ -288,7 +288,7 @@ func newOrganizationPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	renderList[fhir.Organization, tmpls.OrgListProps](client, w, tmpls.MakeOrgListXsProps)
+	renderList[fhir.Organization, tmpls.OrgListProps](client, w, r, tmpls.MakeOrgListXsProps)
 }
 
 func associateEndpoints(w http.ResponseWriter, req *http.Request) {
@@ -387,14 +387,14 @@ func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 	selectedId := req.PostForm.Get("selected-endpoint")
 	selected, err := findById[fhir.Endpoint](selectedId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w, req, "endpoint not found", err)
 		return
 	}
 
 	orgId := req.PathValue("id")
 	organization, err := findById[fhir.Organization](orgId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w, req, "organization not found", err)
 		return
 	}
 
@@ -417,7 +417,7 @@ func associateEndpointsPost(w http.ResponseWriter, req *http.Request) {
 	var resultOrg fhir.Organization
 	err = client.Update(orgPath, organization, &resultOrg)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, req, "could not update organization", err)
 		return
 	}
 
@@ -439,14 +439,14 @@ func associateHealthcareServiceEndpointsPost(w http.ResponseWriter, req *http.Re
 	selectedId := req.PostForm.Get("selected-endpoint")
 	selected, err := findById[fhir.Endpoint](selectedId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w, req, "endpoint not found", err)
 		return
 	}
 
 	serviceId := req.PathValue("id")
 	service, err := findById[fhir.HealthcareService](serviceId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w, req, "healthcare service not found", err)
 		return
 	}
 
@@ -469,7 +469,7 @@ func associateHealthcareServiceEndpointsPost(w http.ResponseWriter, req *http.Re
 	var resultService fhir.HealthcareService
 	err = client.Update(servicePath, service, &resultService)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, req, "could not update healthcare service", err)
 		return
 	}
 
@@ -491,7 +491,7 @@ func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
 	orgId := req.PathValue("id")
 	organization, err := findById[fhir.Organization](orgId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w, req, "organization not found", err)
 		return
 	}
 
@@ -505,7 +505,7 @@ func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 	if !epFound {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w, req, "endpoint not associated with organization")
 		return
 	}
 
@@ -513,7 +513,7 @@ func associateEndpointsDelete(w http.ResponseWriter, req *http.Request) {
 	var orgResult fhir.Organization
 	err = client.Update(orgPath, organization, &orgResult)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, req, "could not update organization", err)
 		return
 	}
 
@@ -530,7 +530,7 @@ func associateHealthcareServiceEndpointsDelete(w http.ResponseWriter, req *http.
 	serviceId := req.PathValue("id")
 	service, err := findById[fhir.HealthcareService](serviceId)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w, req, "healthcare service not found", err)
 		return
 	}
 
@@ -544,7 +544,7 @@ func associateHealthcareServiceEndpointsDelete(w http.ResponseWriter, req *http.
 		}
 	}
 	if !epFound {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		badRequest(w, req, "endpoint not associated with healthcare service")
 		return
 	}
 
@@ -552,7 +552,7 @@ func associateHealthcareServiceEndpointsDelete(w http.ResponseWriter, req *http.
 	var serviceResult fhir.HealthcareService
 	err = client.Update(servicePath, service, &serviceResult)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, req, "could not update healthcare service", err)
 		return
 	}
 
@@ -564,16 +564,16 @@ func listEndpoints(w http.ResponseWriter, r *http.Request) {
 	renderPaginatedList[fhir.Endpoint, tmpls.EpListProps](client, w, r, tmpls.MakeEpListXsProps)
 }
 
-func newEndpoint(w http.ResponseWriter, _ *http.Request) {
+func newEndpoint(w http.ResponseWriter, r *http.Request) {
 	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not load organizations", err)
 		return
 	}
 
 	healthcareServices, err := findAll[fhir.HealthcareService](client)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not load healthcare services", err)
 		return
 	}
 
@@ -687,7 +687,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 	var resEp fhir.Endpoint
 	err = client.Create(endpoint, &resEp)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not create endpoint", err)
 		return
 	}
 
@@ -711,7 +711,7 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 			var updatedOrg fhir.Organization
 			err = client.Update("Organization/"+*owningOrg.Id, owningOrg, &updatedOrg)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				internalError(w, r, "could not update organization", err)
 				return
 			}
 		} else if strings.HasPrefix(forResourceStr, "HealthcareService/") {
@@ -727,22 +727,20 @@ func newEndpointPost(w http.ResponseWriter, r *http.Request) {
 			var updatedService fhir.HealthcareService
 			err = client.Update("HealthcareService/"+*owningService.Id, owningService, &updatedService)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				internalError(w, r, "could not update healthcare service", err)
 				return
 			}
 		}
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, tmpls.MakeEpListXsProps)
+	renderList[fhir.Endpoint, tmpls.EpListProps](client, w, r, tmpls.MakeEpListXsProps)
 }
 
-func newLocation(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-
+func newLocation(w http.ResponseWriter, r *http.Request) {
 	organizations, err := findAll[fhir.Organization](client)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not load organizations", err)
 		return
 	}
 
@@ -845,7 +843,7 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 		var managingOrg fhir.Organization
 		err = client.Read(reference, &managingOrg)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			internalError(w, r, "could not read managing organization", err)
 			return
 		}
 		location.ManagingOrganization.Display = managingOrg.Name
@@ -854,10 +852,10 @@ func newLocationPost(w http.ResponseWriter, r *http.Request) {
 	var resLoc fhir.Location
 	err = client.Create(location, &resLoc)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		internalError(w, r, "could not create location", err)
 		return
 	}
-	renderList[fhir.Location, tmpls.LocationListProps](client, w, tmpls.MakeLocationListXsProps)
+	renderList[fhir.Location, tmpls.LocationListProps](client, w, r, tmpls.MakeLocationListXsProps)
 }
 
 func listLocations(w http.ResponseWriter, r *http.Request) {
@@ -941,7 +939,7 @@ func newPractitionerRolePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	renderList[fhir.PractitionerRole, tmpls.PractitionerRoleProps](client, w, tmpls.MakePractitionerRoleXsProps)
+	renderList[fhir.PractitionerRole, tmpls.PractitionerRoleProps](client, w, r, tmpls.MakePractitionerRoleXsProps)
 }
 
 func newPractitionerRole(w http.ResponseWriter, r *http.Request) {
@@ -1164,11 +1162,11 @@ func uraIdentifier(uraString string) fhir.Identifier {
 	return identifier
 }
 
-func renderList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.ResponseWriter, dtoFunc func([]R) []DTO) {
+func renderList[R any, DTO any](fhirClient fhirclient.Client, httpResponse http.ResponseWriter, httpRequest *http.Request, dtoFunc func([]R) []DTO) {
 	resourceType := caramel.ResourceType(new(R))
 	items, err := findAll[R](fhirClient)
 	if err != nil {
-		http.Error(httpResponse, err.Error(), http.StatusInternalServerError)
+		internalError(httpResponse, httpRequest, "could not load "+resourceType+" list", err)
 		return
 	}
 	tmpls.RenderWithBase(httpResponse, strings.ToLower(resourceType)+"_list.html", struct {
@@ -1200,7 +1198,7 @@ func renderPaginatedList[R any, DTO any](fhirClient fhirclient.Client, httpRespo
 
 	result, err := findPaginated[R](fhirClient, page, pageSize)
 	if err != nil {
-		http.Error(httpResponse, err.Error(), http.StatusInternalServerError)
+		internalError(httpResponse, httpRequest, "could not load "+resourceType+" list", err)
 		return
 	}
 

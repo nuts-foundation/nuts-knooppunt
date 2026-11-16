@@ -295,7 +295,7 @@ func (c *Component) TriggerLrzaSync(ctx context.Context, _ api.TriggerLrzaSyncRe
 	report, err := c.update(ctx)
 	if err != nil {
 		slog.ErrorContext(ctx, "LRZA update failed", logging.Error(err))
-		return api.TriggerLrzaSync500JSONResponse{Error: new("Failed to update LRZA: " + err.Error())}, nil
+		return api.TriggerLrzaSync500JSONResponse{Error: new("Failed to update LRZA")}, nil
 	}
 	return api.TriggerLrzaSync200JSONResponse(api.DirectoryUpdateReport{
 		Created:  new(report.CountCreated),

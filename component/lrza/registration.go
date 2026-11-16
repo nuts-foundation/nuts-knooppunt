@@ -539,16 +539,19 @@ func unprocessableError(message string) error {
 }
 
 // upstreamError turns a failed LRZA request into the error returned to the client. An LRZA error
-// response is passed through with its status code and OperationOutcome, so the client sees why the
-// LRZA rejected the request; a Retry-After is passed on too. A 401 is our credentials' problem, not
-// the client's, so it becomes a 502. Without a response at all, the LRZA is unavailable (503).
+// response is passed through with its status code; a Retry-After is passed on too. The LRZA's
+// OperationOutcome is only passed through for a 4xx, so the client sees why the LRZA rejected the
+// request; a 5xx's OperationOutcome describes the LRZA's internals, so it gets a generic one. A 401
+// is our credentials' problem, not the client's, so it becomes a 502 with a generic
+// OperationOutcome too. Without a response at all, the LRZA is unavailable (503).
 func upstreamError(action string, err error, status int, header http.Header) error {
 	if status < 300 || status == 0 {
 		return &fhirapi.Error{Message: "Failed to " + action + " the LRZA", Cause: err, IssueType: fhir.IssueTypeTransient}
 	}
 	result := &registrationError{status: status, cause: err}
 	var outcome fhirclient.OperationOutcomeError
-	if errors.As(err, &outcome) && len(outcome.Issue) > 0 {
+	clientError := status >= 400 && status < 500 && status != http.StatusUnauthorized
+	if clientError && errors.As(err, &outcome) && len(outcome.Issue) > 0 {
 		result.outcome = outcome.OperationOutcome
 	} else {
 		result.outcome = fhir.OperationOutcome{Issue: []fhir.OperationOutcomeIssue{
