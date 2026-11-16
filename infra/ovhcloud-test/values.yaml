@@ -134,6 +134,9 @@ image:
 # every did:web subject were gone on each pod restart.
 database:
   enabled: true
+  # One instance, so a PodDisruptionBudget would block draining the node
+  # Postgres runs on (it did when the node pool was replaced).
+  enablePDB: false
 persistence:
   enabled: true
 # Same CSI volume ownership issue as mock-vc-issuer below: the knooppunt
@@ -177,13 +180,17 @@ fhir:
   image:
     repository: ghcr.io/nuts-foundation/fake-nvi
     tag: main
-  # HAPI uses ~900Mi on a node with ~2Gi allocatable. Without a request the
-  # scheduler packed a rolling update's new pod next to the old one and the
-  # node evicted its way out of it; Recreate makes sure there is never a
-  # second HAPI to place at all.
+  # HAPI uses ~1.75Gi on a d2-8 node (~5.8Gi allocatable). Without a request
+  # the scheduler packed a rolling update's new pod next to the old one and
+  # the node evicted its way out of it; Recreate makes sure there is never a
+  # second HAPI to place at all. The limit (with the heap cap in extraEnv
+  # below) stops HAPI from filling a node: without one it sizes its heap from
+  # the whole node and keeps growing.
   resources:
     requests:
-      memory: 1Gi
+      memory: 2Gi
+    limits:
+      memory: 3Gi
   strategy:
     type: Recreate
   # Off on purpose: the subchart would provision a Postgres server of its
@@ -215,6 +222,10 @@ fhir:
     # the subchart does not restart HAPI when only its ConfigMap changes.
     - name: PRS_MOCK_URL
       value: "http://mock-prs:8081"
+    # Heap at 70% of the 3Gi limit (~2.1Gi), leaving room for the JVM's other
+    # memory. The JVM default (25%) would give only ~750Mi.
+    - name: JAVA_TOOL_OPTIONS
+      value: "-XX:MaxRAMPercentage=70"
   configExtra:
     NVI_AUDIENCE: "nvi"
     NVI_TENANT: "nvi"
