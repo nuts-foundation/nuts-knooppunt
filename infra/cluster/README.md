@@ -93,3 +93,14 @@ that was already built and pushed to main - for rollback, or retrying a
 deploy without rebuilding. It only works for a commit that already has
 `sha-<short-sha>` images published; it doesn't build arbitrary commits
 on demand.
+
+### Failure alerts
+
+When the deploy or `infra/ovhcloud-test/smoke-test.sh` fails, CI posts to
+the Nuts Slack. The smoke test runs after each
+deploy and every day at 9:00 Amsterdam winter time (`smoke-test.yaml`), and checks that each public host
+serves real content. Nothing is posted on success.
+
+The Slack incoming webhook URL is the repo secret `SLACK_WEBHOOK` (repo-wide,
+not in the `ovhcloud-test` environment: the daily check doesn't deploy). It
+can only post messages; a Slack admin can look it up in the Slack app.
