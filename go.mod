@@ -1,6 +1,6 @@
 module github.com/nuts-foundation/nuts-knooppunt
 
-go 1.27.1
+go 1.27.4
 
 replace github.com/nuts-foundation/nuts-knooppunt/test/testdata => ./test/testdata
 
