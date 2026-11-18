@@ -40,12 +40,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           # Not cached: the Actions cache is shared with the image builds and
@@ -56,7 +56,7 @@ jobs:
       # commands. In JSON mode govulncheck exits 0 whatever it finds, and
       # non-zero only when it cannot run. The next step decides on the findings.
       - name: Run govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 -format json . > govulncheck.json
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 -format json . > govulncheck.json
 
       - name: Check findings against the accepted list
         run: |
