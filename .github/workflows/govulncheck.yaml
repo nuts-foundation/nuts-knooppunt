@@ -16,10 +16,9 @@ on:
   push:
     branches:
       - main
-  # On pull requests only when the dependencies or the check itself change.
+  # On pull requests only when the dependencies or the check itself change, to
+  # any base branch, so a pull request stacked on another one is checked too.
   pull_request:
-    branches:
-      - main
     paths:
       - go.mod
       - go.sum
