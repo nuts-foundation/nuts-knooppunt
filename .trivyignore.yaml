@@ -1,0 +1,7 @@
+# Findings accepted by the image scan (.github/workflows/image-scan.yaml), which
+# fails on any fixable HIGH or CRITICAL vulnerability that is not listed here.
+# Give every entry a statement (why it is acceptable) and an expired_at date, so
+# an acceptance is revisited instead of forgotten. Trivy enforces neither: an
+# entry without expired_at, or with a misspelled key, never expires. Format:
+# https://trivy.dev/docs/latest/configuration/filtering/#trivyignoreyaml
+vulnerabilities: []
