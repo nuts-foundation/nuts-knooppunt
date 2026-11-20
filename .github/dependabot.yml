@@ -1,9 +1,10 @@
 # Dependabot version updates for the knooppunt, the PEP (a reference implementation)
 # and the sandbox. The mocks in mock-components stand in for external services in
 # tests and demos and are left out where they have their own manifests; see the
-# docker entry for the three that build the root module. Modelled on the nuts-node
-# configuration: weekly on Sunday evening, minor and patch updates grouped, exceptions
-# noted per entry.
+# docker entry for the three that build the root module. Test tooling is left out
+# too: testcontainers-go is ignored, and the PEP's jest tests have no entry. Modelled
+# on the nuts-node configuration: weekly on Sunday evening, minor and patch updates
+# grouped, exceptions noted per entry.
 version: 2
 updates:
   # The workflows reference actions by major tag (actions/checkout@v4), so every
@@ -58,14 +59,12 @@ updates:
       - dependency-name: "github.com/oapi-codegen/runtime"
         versions:
           - ">= 1.9.0"
+      # Used only by the e2e harness, not by the knooppunt binary.
+      - dependency-name: "github.com/testcontainers/testcontainers-go"
     groups:
       go-modules:
         patterns:
           - "*"
-        # Newer versions need a change in test/e2e/harness, so they come as a separate
-        # pull request.
-        exclude-patterns:
-          - "github.com/testcontainers/testcontainers-go"
         update-types:
           - "minor"
           - "patch"
@@ -97,22 +96,3 @@ updates:
     groups:
       docker:
         group-by: "dependency-name"
-
-  # The PEP tests.
-  - package-ecosystem: "npm"
-    directory: "/pep/nginx/js"
-    schedule:
-      interval: "weekly"
-      day: "sunday"
-      time: "23:00"
-      timezone: "Europe/Amsterdam"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-    groups:
-      npm:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
