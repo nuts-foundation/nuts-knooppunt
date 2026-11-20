@@ -1,0 +1,98 @@
+# Dependabot version updates for the knooppunt, the PEP (a reference implementation)
+# and the sandbox. The mocks in mock-components stand in for external services in
+# tests and demos and are left out where they have their own manifests; see the
+# docker entry for the three that build the root module. Test tooling is left out
+# too: testcontainers-go is ignored, and the PEP's jest tests have no entry. Modelled
+# on the nuts-node configuration: weekly on Sunday evening, minor and patch updates
+# grouped, exceptions noted per entry.
+version: 2
+updates:
+  # The workflows reference actions by major tag (actions/checkout@v4), so every
+  # update is a major one. They are grouped into one pull request.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "23:00"
+      timezone: "Europe/Amsterdam"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Direct requirements, plus otellogrus. Most indirect requirements are also
+  # requirements of the embedded nuts-node, and bumping them past what its pinned
+  # commit was built against can break the build. otellogrus is the exception: only
+  # the embedded nuts-node imports it, and it has to move with the otel log API that
+  # the direct otel bumps pull in. Any other indirect module in that position needs
+  # its own allow entry. nuts-node is bumped by hand; go-did and oapi-codegen/runtime
+  # stay at versions the pinned commit builds with. Go itself is raised by hand in
+  # go.mod (build-binaries builds with that version) or by a module bump that needs a
+  # newer Go; merge the golang image bump first.
+  #
+  # test/testdata is left out. The root module includes it through a local replace
+  # directive, so a bump in test/testdata/go.mod alone can leave the root go.mod out of
+  # date ("updates to go.mod needed"). Root bumps do reach the testdata packages in the
+  # root build, but not the seed image, which builds test/testdata on its own; its
+  # dependencies are bumped by hand.
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "23:00"
+      timezone: "Europe/Amsterdam"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    allow:
+      - dependency-type: "direct"
+      - dependency-name: "go.opentelemetry.io/contrib/bridges/otellogrus"
+        dependency-type: "indirect"
+    ignore:
+      - dependency-name: "github.com/nuts-foundation/nuts-node"
+      - dependency-name: "github.com/nuts-foundation/go-did"
+      - dependency-name: "github.com/oapi-codegen/runtime"
+        versions:
+          - ">= 1.9.0"
+      # Used only by the e2e harness, not by the knooppunt binary.
+      - dependency-name: "github.com/testcontainers/testcontainers-go"
+    groups:
+      go-modules:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # The images of the knooppunt, the PEP, the sandbox and its seed, and of the dezi,
+  # mitz and prs mocks: those three build packages of the root module, so they need
+  # the same golang image once the go directive rises. Grouped by image, major versions
+  # included, so one pull request normally bumps an image in every directory that uses
+  # it. Compose files (a separate ecosystem) and Helm values are not covered: CI does
+  # not run the compose stack or the charts' third-party images before merge, so a
+  # bump there would go unverified.
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+      - "/pep/nginx"
+      - "/sandbox/app"
+      - "/test/testdata"
+      - "/mock-components/dezi"
+      - "/mock-components/mitz"
+      - "/mock-components/prs"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "23:00"
+      timezone: "Europe/Amsterdam"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      docker:
+        group-by: "dependency-name"
