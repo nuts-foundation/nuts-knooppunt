@@ -2,11 +2,12 @@
 name: 'Image scan'
 
 # Scans the images that the test environment deploys (ci.yaml) for known
-# vulnerabilities with Trivy, fixable HIGH and CRITICAL findings only. Base image
-# packages and the Go toolchain a binary was built with are only visible in the
-# image, and a published image is not rebuilt when a new CVE appears. A finding
-# that is not accepted in .trivyignore.yaml fails the scan of that image, and
-# scheduled runs then post to Slack. Errors only: nothing on success.
+# vulnerabilities with Trivy, fixable findings only. Base image packages and the
+# Go toolchain a binary was built with are only visible in the image, and a
+# published image is not rebuilt when a new CVE appears. A finding at or above the
+# image's severity threshold (see the matrix) that is not accepted in
+# .trivyignore.yaml fails the scan of that image, and scheduled runs then post to
+# Slack. Errors only: nothing on success.
 on:
   schedule:
     # Weekdays at 08:30 UTC, after govulncheck.
@@ -37,17 +38,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The mocks run on the same cluster, so they are scanned too.
-        image:
-          - nuts-knooppunt
-          - knooppunt-pep
-          - gf-sandbox
-          - knooppunt-sandbox-seed
-          - fake-nvi
-          - mock-vc-issuer
-          - mock-mitz
-          - mock-dezi
-          - mock-prs
+        include:
+          # The images we maintain: high and critical findings.
+          - image: nuts-knooppunt
+            severity: HIGH,CRITICAL
+          - image: knooppunt-pep
+            severity: HIGH,CRITICAL
+          - image: gf-sandbox
+            severity: HIGH,CRITICAL
+          # The seed and the mocks run on the same cluster, so they are scanned too,
+          # but they are test tooling rather than something we ship: only critical
+          # findings fail them.
+          - image: knooppunt-sandbox-seed
+            severity: CRITICAL
+          - image: fake-nvi
+            severity: CRITICAL
+          - image: mock-vc-issuer
+            severity: CRITICAL
+          - image: mock-mitz
+            severity: CRITICAL
+          - image: mock-dezi
+            severity: CRITICAL
+          - image: mock-prs
+            severity: CRITICAL
     steps:
       # Only for .trivyignore.yaml.
       - name: Checkout
@@ -65,7 +78,7 @@ jobs:
           scan-type: image
           image-ref: ghcr.io/nuts-foundation/${{ matrix.image }}:main
           scanners: vuln
-          severity: HIGH,CRITICAL
+          severity: ${{ matrix.severity }}
           ignore-unfixed: true
           trivyignores: .trivyignore.yaml
           exit-code: '1'
@@ -94,6 +107,6 @@ jobs:
             echo "::warning::Could not list the failed scan jobs"
             images=""
           }
-          text=":warning: Image scan failed for ${images:-an unknown image}: fixable HIGH or CRITICAL vulnerabilities, or the scan failed, timed out or was cancelled. Run: ${RUN_URL}"
+          text=":warning: Image scan failed for ${images:-an unknown image}: fixable vulnerabilities at or above the image's severity threshold, or the scan failed, timed out or was cancelled. Run: ${RUN_URL}"
           jq -n --arg text "$text" '{text: $text}' |
             curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK"
