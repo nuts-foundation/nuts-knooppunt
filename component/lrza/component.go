@@ -153,14 +153,21 @@ type Component struct {
 // the query directory rather than one per write.
 var syncAfterWriteDelay = 5 * time.Second
 
-// syncTimeout bounds one sync cycle, full or incremental. It is a guard against a sync that stops making
-// progress, not a size limit, so it must stay well above the duration of a full sync of the LRZA: at about
-// a second per page of searchPageSize resources (the GET plus the query directory's transaction), 30
-// minutes covers some 180,000 resources. Keep the interval of the cron job that triggers /lrza/update
-// above the duration of a full sync too, or its calls wait for each other.
-var syncTimeout = 30 * time.Minute
+// syncTimeout bounds one sync cycle, full or incremental. It is a guard against a sync that never ends (a
+// server that keeps returning a next link, say), not a size limit, so it must stay well above the duration
+// of a full sync: CAPACITY.md estimates 1.5 to 2.5 hours for the LRZA. A sync that stops making progress is
+// caught much earlier, by pageTimeout.
+var syncTimeout = 6 * time.Hour
 
-var errSyncTimeout = errors.New("LRZA sync took longer than its timeout")
+// pageTimeout bounds the time between two processed pages: fetching a page from the LRZA and applying it
+// to the query directory. Each of those is one request bounded by requestTimeout, so this leaves room for
+// both to take their full time.
+var pageTimeout = 5 * time.Minute
+
+var (
+	errSyncTimeout = errors.New("LRZA sync took longer than its timeout")
+	errPageTimeout = errors.New("LRZA sync made no progress within the page timeout")
+)
 
 // syncRun holds the state of a single sync cycle, threaded through each step (fetch -> build -> apply
 // -> record) so the steps take one argument instead of a growing parameter list. The search
@@ -170,6 +177,8 @@ type syncRun struct {
 	// configuration, set at construction
 	queryStart   time.Time
 	searchParams url.Values
+	// pageDone, if set, is called after each page has been applied to the query directory (see update).
+	pageDone func()
 
 	// working state, filled as the run progresses
 	// sourceLastUpdated is the source server's meta.lastUpdated from the first resource type's search
@@ -330,8 +339,9 @@ func (c *Component) TriggerLrzaSync(ctx context.Context, _ api.TriggerLrzaSyncRe
 // once everything has been applied successfully.
 //
 // Only one sync runs at a time. A caller that finds one running waits for it, until its ctx ends. The
-// sync itself is bounded by syncTimeout, so a sync that stops making progress releases the slot instead
-// of blocking every later sync.
+// sync itself fails when no page is processed within pageTimeout, or when it takes longer than
+// syncTimeout altogether, so a sync that stops making progress releases the slot instead of blocking
+// every later sync.
 func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	select {
 	case c.syncSlot <- struct{}{}:
@@ -341,6 +351,11 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	defer func() { <-c.syncSlot }()
 	ctx, cancel := context.WithTimeoutCause(ctx, syncTimeout, errSyncTimeout)
 	defer cancel()
+	// The watchdog cancels the sync unless it is reset by a processed page within pageTimeout.
+	ctx, cancelStalled := context.WithCancelCause(ctx)
+	defer cancelStalled(nil)
+	watchdog := time.AfterFunc(pageTimeout, func() { cancelStalled(errPageTimeout) })
+	defer watchdog.Stop()
 
 	if c.config.QueryBaseUrl == "" {
 		return UpdateReport{Warnings: []string{}, Errors: []string{}}, errors.New("LRZA sync needs a query directory (lrza.querybaseurl)")
@@ -352,11 +367,15 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	}
 
 	run := c.newSyncRun(since)
+	run.pageDone = func() { watchdog.Reset(pageTimeout) }
 	slog.InfoContext(ctx, "Updating from central LRZA directory",
 		slog.Bool("incremental", run.incremental()))
 
 	if err := c.syncResourceTypes(ctx, run); err != nil {
-		if errors.Is(context.Cause(ctx), errSyncTimeout) {
+		switch cause := context.Cause(ctx); {
+		case errors.Is(cause, errPageTimeout):
+			err = fmt.Errorf("%w (%s): %w", errPageTimeout, pageTimeout, err)
+		case errors.Is(cause, errSyncTimeout):
 			err = fmt.Errorf("%w (%s): %w", errSyncTimeout, syncTimeout, err)
 		}
 		// Return progress tallied by already-applied pages rather than discarding it, and skip
@@ -418,7 +437,13 @@ func (c *Component) syncResourceTypes(ctx context.Context, run *syncRun) error {
 				run.sourceLastUpdated = page.Meta.LastUpdated
 			}
 			firstPage = false
-			return c.syncPage(ctx, run, dedup, page.Entry)
+			if err := c.syncPage(ctx, run, dedup, page.Entry); err != nil {
+				return err
+			}
+			if run.pageDone != nil {
+				run.pageDone()
+			}
+			return nil
 		})
 		if err != nil {
 			return fmt.Errorf("failed to query %s: %w", resourceType, err)
