@@ -3,6 +3,7 @@ package lrza
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -114,6 +115,25 @@ func TestRetryTransport(t *testing.T) {
 		})
 	}
 
+	t.Run("returns a 429 without retrying when Retry-After is longer than maxDelay", func(t *testing.T) {
+		stub := &stubRoundTripper{responses: []func() (*http.Response, error){
+			func() (*http.Response, error) {
+				return statusResponse(http.StatusTooManyRequests, http.Header{"Retry-After": []string{"3600"}}), nil
+			},
+		}}
+		// The deadline only keeps the test from waiting an hour if the transport does wait.
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://source.example/fhir/Organization", nil)
+		require.NoError(t, err)
+
+		resp, err := newTestTransport(stub).RoundTrip(req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.Equal(t, "3600", resp.Header.Get("Retry-After"), "the caller must be able to pass it on")
+		require.Equal(t, 1, stub.calls)
+	})
+
 	t.Run("stops retrying when the context is cancelled during backoff", func(t *testing.T) {
 		stub := &stubRoundTripper{responses: []func() (*http.Response, error){
 			func() (*http.Response, error) { return statusResponse(http.StatusServiceUnavailable, nil), nil },
@@ -131,6 +151,47 @@ func TestRetryTransport(t *testing.T) {
 		require.ErrorIs(t, err, context.Canceled)
 		require.Equal(t, 1, stub.calls)
 	})
+}
+
+func TestRetryTransport_RetryAfterLimit(t *testing.T) {
+	transport := &retryTransport{maxAttempts: maxRetryAttempts, baseDelay: retryBaseDelay, maxDelay: retryMaxDelay}
+	tooManyRequests := func(retryAfter string) *http.Response {
+		return statusResponse(http.StatusTooManyRequests, http.Header{"Retry-After": []string{retryAfter}})
+	}
+
+	t.Run("a Retry-After of maxDelay is waited for", func(t *testing.T) {
+		retryable, delay := transport.classifyResponse(0, http.MethodGet, tooManyRequests("30"), nil)
+		require.True(t, retryable)
+		require.Equal(t, 30*time.Second, delay)
+	})
+
+	t.Run("a longer Retry-After is not", func(t *testing.T) {
+		retryable, _ := transport.classifyResponse(0, http.MethodGet, tooManyRequests("31"), nil)
+		require.False(t, retryable)
+	})
+
+	t.Run("nor a Retry-After date further away than maxDelay", func(t *testing.T) {
+		date := time.Now().Add(time.Hour).UTC().Format(http.TimeFormat)
+		retryable, _ := transport.classifyResponse(0, http.MethodGet, tooManyRequests(date), nil)
+		require.False(t, retryable)
+	})
+}
+
+func TestRetryTransport_BackoffDelay(t *testing.T) {
+	transport := &retryTransport{maxAttempts: maxRetryAttempts, baseDelay: retryBaseDelay, maxDelay: retryMaxDelay}
+	// Without jitter the delays would be 1s, 2s, 4s, 8s, 16s, then capped at 30s.
+	for attempt, ceiling := range []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second, 30 * time.Second, 30 * time.Second} {
+		t.Run(fmt.Sprintf("attempt %d waits between %s and %s", attempt, ceiling/2, ceiling), func(t *testing.T) {
+			seen := map[time.Duration]bool{}
+			for range 100 {
+				delay := transport.backoffDelay(attempt)
+				require.GreaterOrEqual(t, delay, ceiling/2)
+				require.LessOrEqual(t, delay, ceiling)
+				seen[delay] = true
+			}
+			require.Greater(t, len(seen), 1, "the delay must vary, so clients that fail together don't retry together")
+		})
+	}
 }
 
 func TestParseRetryAfter(t *testing.T) {
