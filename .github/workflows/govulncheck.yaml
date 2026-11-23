@@ -1,0 +1,175 @@
+---
+name: 'govulncheck'
+
+# Reports known vulnerabilities in Go modules and the standard library that the
+# knooppunt binary can reach (static analysis, https://go.dev/blog/vuln; for an
+# advisory without symbol data, any use of the module counts). Only the knooppunt
+# itself is scanned (the root package), not the mocks, the sandbox or the test
+# harness that share its module. A reachable finding fails the job unless
+# .github/govulncheck-accepted.txt accepts it (that file says when an acceptance
+# holds). Only scheduled runs post to Slack; push and pull request runs show up
+# as checks. Errors only: nothing on success.
+on:
+  schedule:
+    # Weekdays at 08:15 UTC, after the smoke test.
+    - cron: '15 8 * * 1-5'
+  push:
+    branches:
+      - main
+  # On pull requests only when the dependencies or the check itself change, to
+  # any base branch, so a pull request stacked on another one is checked too.
+  pull_request:
+    paths:
+      - go.mod
+      - go.sum
+      - .github/workflows/govulncheck.yaml
+      - .github/govulncheck-accepted.txt
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # Explicitly, so that run steps get -o pipefail.
+    shell: bash
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          # Not cached: the Actions cache is shared with the image builds and
+          # runs out of space.
+          cache: false
+
+      # The govulncheck version is bumped by hand: Dependabot does not see run
+      # commands. In JSON mode govulncheck exits 0 whatever it finds, and
+      # non-zero only when it cannot run. The next step decides on the findings.
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 -format json . > govulncheck.json
+
+      - name: Check findings against the accepted list
+        run: |
+          export LC_ALL=C
+          # Output that is not symbol-level protocol v1 is not something this
+          # check understands; fail rather than report nothing.
+          if ! jq -e -s 'any(.[]; .config.scan_level? == "symbol" and ((.config.protocol_version? // "") | startswith("v1.")))' govulncheck.json > /dev/null; then
+            echo "::error::govulncheck.json is not symbol-level govulncheck output in protocol v1"
+            exit 1
+          fi
+
+          # Reachable findings (the symbol-level ones): ID, module and fixed
+          # version, empty when there is none. Separated by |, which read does
+          # not collapse the way it collapses tabs.
+          jq -r 'select(.finding.trace[0].function != null) | .finding | [.osv, .trace[0].module, (.fixed_version // "")] | join("|")' govulncheck.json | sort -u > findings.txt
+          cut -d'|' -f1 findings.txt | sort -u > found.txt
+
+          # Modules that are in the binary only because of the embedded nuts-node:
+          # walk the knooppunt's import graph without entering nuts-node packages,
+          # and whatever stays out of reach comes in through nuts-node alone.
+          # Findings that are all in those modules, or in nuts-node itself, are
+          # labelled "via nuts-node". The standard library and anything our own
+          # code imports are never labelled.
+          go list -deps -json . > deps.json
+          jq -r -s '
+            (map({key: .ImportPath, value: {m: (.Module.Path // "std"), i: (.Imports // [])}}) | from_entries) as $g
+            | {seen: {}, todo: (map(select(.Name == "main" and (.Module.Main // false))) | map(.ImportPath))}
+            | until((.todo | length) == 0;
+                .todo[0] as $p | .todo |= .[1:]
+                | if .seen[$p] then . else
+                    .seen[$p] = true
+                    | if $g[$p].m == "github.com/nuts-foundation/nuts-node" then . else .todo += $g[$p].i end
+                  end)
+            | ([.seen | keys[] | $g[.].m] | unique) as $without
+            | [$g[] | .m] | unique | map(select(. as $m | $without | index($m) | not)) | .[]' deps.json > via-nuts-node-modules.txt
+          echo "github.com/nuts-foundation/nuts-node" >> via-nuts-node-modules.txt
+          jq -r -s --rawfile mods via-nuts-node-modules.txt '
+            ($mods | split("\n")) as $vm
+            | [.[] | select(.finding.trace[0].function != null) | .finding | {id: .osv, m: .trace[0].module}]
+            | group_by(.id) | map(select(all(.[]; .m as $m | $vm | index($m))) | .[0].id) | .[]' govulncheck.json | sort -u > via-nuts-node.txt
+          via_label() { grep -qxF "$1" via-nuts-node.txt && echo " (via nuts-node)" || true; }
+
+          # Accepted entries: an ID, optionally followed by the last day it also
+          # holds when a fixed version is known.
+          sed -e 's/#.*//' .github/govulncheck-accepted.txt | awk 'NF { print $1 "|" $2 }' | sort -u > accepted-entries.txt
+          while IFS='|' read -r id until_date; do
+            if [ -n "$until_date" ] && [ "$(date -u -d "$until_date" +%F 2>/dev/null)" != "$until_date" ]; then
+              echo "::error::${until_date} after ${id} in .github/govulncheck-accepted.txt is not a YYYY-MM-DD date"
+              exit 1
+            fi
+          done < accepted-entries.txt
+          cut -d'|' -f1 accepted-entries.txt | sort -u > accepted.txt
+          today="$(date -u +%F)"
+
+          comm -13 found.txt accepted.txt | while read -r id; do
+            echo "::warning::${id} is no longer reported; remove it from .github/govulncheck-accepted.txt"
+          done
+
+          # A finding needs a change here when it is not accepted, or when a
+          # fixed version is known and the acceptance has no date or has expired.
+          : > failing.txt
+          while IFS='|' read -r id module fixed; do
+            if ! grep -qxF "$id" accepted.txt; then
+              echo "$id" >> failing.txt
+              continue
+            fi
+            until_date="$(awk -F'|' -v id="$id" '$1 == id { print $2; exit }' accepted-entries.txt)"
+            if [ -z "$fixed" ]; then
+              echo "::notice::${id}$(via_label "$id") is reachable but accepted in .github/govulncheck-accepted.txt"
+            elif [ -n "$until_date" ] && [[ ! "$today" > "$until_date" ]]; then
+              echo "::notice::${id}$(via_label "$id") has a fix in ${fixed} (${module}) but is accepted until ${until_date}"
+            else
+              echo "::error::${id}$(via_label "$id") is accepted, but ${module} has a fix in ${fixed}; bump it, or accept it until a date"
+              echo "$id" >> failing.txt
+            fi
+          done < findings.txt
+          sort -u -o failing.txt failing.txt
+
+          if [ -s failing.txt ]; then
+            jq -r --rawfile ids failing.txt --rawfile via via-nuts-node.txt '
+              .osv? // empty | .id as $id
+              | select($ids | split("\n") | index($id))
+              | (if ($via | split("\n") | index($id)) then " (via nuts-node)" else "" end) as $suffix
+              | "\($id)\($suffix) \(.summary) https://pkg.go.dev/vuln/\($id)"' govulncheck.json | sort -u > failing-details.txt
+            cat failing-details.txt
+            via_count="$(grep -c ' (via nuts-node) ' failing-details.txt || true)"
+            {
+              echo "### Reachable vulnerabilities that need a fix or an accepted-list entry"
+              echo
+              echo "${via_count} of them are in modules that only the embedded nuts-node brings in."
+              echo
+              sed 's/^/- /' failing-details.txt
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::$(wc -l < failing.txt | tr -d ' ') reachable vulnerabilities need a fix or an entry in .github/govulncheck-accepted.txt"
+            exit 1
+          fi
+
+      # SLACK_WEBHOOK is a Slack incoming webhook. Slack reads &, < and > as
+      # control characters, so they are escaped.
+      - name: Notify Slack on failure
+        if: failure() && github.event_name == 'schedule'
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -s failing-details.txt ]; then
+            count="$(wc -l < failing-details.txt | tr -d ' ')"
+            via_count="$(grep -c ' (via nuts-node) ' failing-details.txt || true)"
+            text=":warning: govulncheck: ${count} reachable vulnerabilities in the knooppunt need a fix or an accepted-list entry, ${via_count} of them through the embedded nuts-node. Run: ${RUN_URL}"$'\n'"$(head -n 10 failing-details.txt)"
+            if [ "$count" -gt 10 ]; then
+              text="${text}"$'\n'"... and $((count - 10)) more"
+            fi
+          else
+            text=":warning: govulncheck failed. Run: ${RUN_URL}"
+          fi
+          jq -n --arg text "$text" '{text: ($text | gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;"))}' |
+            curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK"

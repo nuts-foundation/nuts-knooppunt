@@ -1,0 +1,112 @@
+---
+name: 'Image scan'
+
+# Scans the images that the test environment deploys (ci.yaml) for known
+# vulnerabilities with Trivy, fixable findings only. Base image packages and the
+# Go toolchain a binary was built with are only visible in the image, and a
+# published image is not rebuilt when a new CVE appears. A finding at or above the
+# image's severity threshold (see the matrix) that is not accepted in
+# .trivyignore.yaml fails the scan of that image, and scheduled runs then post to
+# Slack. Errors only: nothing on success.
+on:
+  schedule:
+    # Weekdays at 08:30 UTC, after govulncheck.
+    - cron: '30 8 * * 1-5'
+  # On pull requests only when the scan or the accepted findings change. It
+  # always scans the published :main images, not the pull request.
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/image-scan.yaml
+      - .trivyignore.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # Explicitly, so that run steps get -o pipefail.
+    shell: bash
+
+jobs:
+  scan:
+    name: scan (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The images we maintain: high and critical findings.
+          - image: nuts-knooppunt
+            severity: HIGH,CRITICAL
+          - image: knooppunt-pep
+            severity: HIGH,CRITICAL
+          - image: gf-sandbox
+            severity: HIGH,CRITICAL
+          # The seed and the mocks run on the same cluster, so they are scanned too,
+          # but they are test tooling rather than something we ship: only critical
+          # findings fail them.
+          - image: knooppunt-sandbox-seed
+            severity: CRITICAL
+          - image: fake-nvi
+            severity: CRITICAL
+          - image: mock-vc-issuer
+            severity: CRITICAL
+          - image: mock-mitz
+            severity: CRITICAL
+          - image: mock-dezi
+            severity: CRITICAL
+          - image: mock-prs
+            severity: CRITICAL
+    steps:
+      # Only for .trivyignore.yaml.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Pinned to a commit: the trivy-action version tags were hijacked in
+      # March 2026 (CVE-2026-33634). Dependabot keeps the pin current; the
+      # Trivy version below is bumped by hand.
+      - name: Scan ghcr.io/nuts-foundation/${{ matrix.image }}:main
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.2
+          scan-type: image
+          image-ref: ghcr.io/nuts-foundation/${{ matrix.image }}:main
+          scanners: vuln
+          severity: ${{ matrix.severity }}
+          ignore-unfixed: true
+          trivyignores: .trivyignore.yaml
+          exit-code: '1'
+          format: table
+          # Not cached: the Actions cache is shared with the image builds and
+          # runs out of space.
+          cache: 'false'
+
+  # SLACK_WEBHOOK is a Slack incoming webhook. A scan that hits its timeout is
+  # cancelled rather than failed, so anything but success counts.
+  notify:
+    needs: scan
+    if: ${{ always() && github.event_name == 'schedule' && needs.scan.result != 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - name: Notify Slack
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          images="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs" \
+            --jq '[.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "cancelled") | .name | capture("^scan \\((?<image>[^)]+)\\)$").image] | join(", ")')" || {
+            echo "::warning::Could not list the failed scan jobs"
+            images=""
+          }
+          text=":warning: Image scan failed for ${images:-an unknown image}: fixable vulnerabilities at or above the image's severity threshold, or the scan failed, timed out or was cancelled. Run: ${RUN_URL}"
+          jq -n --arg text "$text" '{text: $text}' |
+            curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK"
