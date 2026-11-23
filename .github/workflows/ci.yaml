@@ -31,11 +31,6 @@ on:
         required: true
         type: string
 
-concurrency:
-  group: test-ci
-  cancel-in-progress: false
-  queue: max
-
 jobs:
   build-knooppunt:
     if: github.event_name != 'workflow_dispatch'
@@ -98,6 +93,15 @@ jobs:
     # collision (see d079c12) both block it - a cancelled build may never
     # have published its sha- image at all.
     if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    # A newer push cancels the builds of an older run that are still going
+    # (each build-*-image.yaml has its own cancel-in-progress group), which
+    # skips that run's deploy through the if: above. Deploys themselves run
+    # one at a time and are never cancelled halfway: an interrupted
+    # `helm upgrade` leaves the release stuck in pending-upgrade. A deploy
+    # still waiting its turn is dropped when a newer one queues up.
+    concurrency:
+      group: test-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: ovhcloud-test
     env:
