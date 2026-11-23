@@ -17,6 +17,7 @@ package lrza
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,7 +26,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
@@ -135,7 +135,9 @@ type Component struct {
 	fhirLRZAClient  fhirclient.Client
 	fhirQueryClient fhirclient.Client
 
-	updateMux *sync.Mutex
+	// syncSlot (capacity 1) lets one sync run at a time. Unlike a mutex, waiting for it can be cancelled
+	// through the context (see update).
+	syncSlot chan struct{}
 
 	// registrar serves the /lrza/fhir write operations.
 	registrar *registrar
@@ -150,6 +152,15 @@ type Component struct {
 // (an EHR registering a Location, its Endpoint and the link between them, say) leads to one sync of
 // the query directory rather than one per write.
 var syncAfterWriteDelay = 5 * time.Second
+
+// syncTimeout bounds one sync cycle, full or incremental. It is a guard against a sync that stops making
+// progress, not a size limit, so it must stay well above the duration of a full sync of the LRZA: at about
+// a second per page of searchPageSize resources (the GET plus the query directory's transaction), 30
+// minutes covers some 180,000 resources. Keep the interval of the cron job that triggers /lrza/update
+// above the duration of a full sync too, or its calls wait for each other.
+var syncTimeout = 30 * time.Minute
+
+var errSyncTimeout = errors.New("LRZA sync took longer than its timeout")
 
 // syncRun holds the state of a single sync cycle, threaded through each step (fetch -> build -> apply
 // -> record) so the steps take one argument instead of a growing parameter list. The search
@@ -188,8 +199,8 @@ func New(config Config) (*Component, error) {
 	result := &Component{
 		config:          config,
 		fhirLRZAClient:  fhirclient.New(sourceBaseURL, sourceHTTPClient, &fhirclient.Config{UsePostSearch: false}),
-		fhirQueryClient: fhirclient.New(queryBaseURL, tracing.NewHTTPClient(), &fhirclient.Config{UsePostSearch: false}),
-		updateMux:       &sync.Mutex{},
+		fhirQueryClient: fhirclient.New(queryBaseURL, newHTTPClient(tracing.WrapTransport(newTransport(nil))), &fhirclient.Config{UsePostSearch: false}),
+		syncSlot:        make(chan struct{}, 1),
 		syncRequests:    make(chan struct{}, 1),
 	}
 	// The write path shares the sync client's HTTP client: same mTLS certificate, tracing and OAuth2,
@@ -202,28 +213,37 @@ func New(config Config) (*Component, error) {
 }
 
 // newSourceHTTPClient builds the HTTP client used to talk to the trusted source directory. It layers,
-// from the bottom up: an optional mTLS transport when a client certificate is configured (required by
-// the national LRZA environment), then OpenTelemetry tracing, then retrying of transient failures (see
-// retryTransport), then optional OAuth2 client-credentials. The same base transport - including mTLS
-// and retrying - is reused for OAuth2 token requests.
+// from the bottom up: a transport with timeouts for every phase of an attempt (see newTransport), with
+// the mTLS client certificate when one is configured (required by the national LRZA environment), then
+// OpenTelemetry tracing, then retrying of transient failures (see retryTransport), then optional OAuth2
+// client-credentials. The same base transport - including mTLS and retrying - is reused for OAuth2 token
+// requests. The client bounds each request, retries included, by requestTimeout.
 func newSourceHTTPClient(config Config) (*http.Client, error) {
-	var baseTransport = http.DefaultTransport
+	var tlsConfig *tls.Config
 	if config.TLSCertFile != "" {
-		tlsConfig, err := tlsutil.CreateTLSConfig(config.Config)
+		var err error
+		tlsConfig, err = tlsutil.CreateTLSConfig(config.Config)
 		if err != nil {
 			return nil, fmt.Errorf("LRZA mTLS is configured but failed to load: %w", err)
 		}
-		baseTransport = &http.Transport{TLSClientConfig: tlsConfig}
 	}
 
-	tracedTransport := tracing.WrapTransport(baseTransport)
+	tracedTransport := tracing.WrapTransport(newTransport(tlsConfig))
 	retryingTransport := wrapRetryTransport(tracedTransport)
 
 	// The current implementation in the iRealisatie proeftuin does not use oAuth delegation, this is therefore untested
 	if config.Auth.IsConfigured() {
-		return httpauth.NewOAuth2HTTPClient(config.Auth, retryingTransport)
+		client, err := httpauth.NewOAuth2HTTPClient(config.Auth, retryingTransport)
+		if err != nil {
+			return nil, err
+		}
+		// x/oauth2 builds its own client and doesn't copy these. Its token requests have their own
+		// timeout (see NewOAuth2HTTPClient), since they don't run under the request's context.
+		client.Timeout = requestTimeout
+		client.CheckRedirect = refuseDowngrade
+		return client, nil
 	}
-	return &http.Client{Transport: retryingTransport}, nil
+	return newHTTPClient(retryingTransport), nil
 }
 
 func (c *Component) Start() error {
@@ -261,7 +281,7 @@ func (c *Component) requestSync() {
 
 // runRequestedSyncs runs a sync for requests on syncRequests until ctx is cancelled. Each sync waits
 // syncAfterWriteDelay first, so the writes of a burst are picked up by one sync; a write that comes in
-// while a sync runs schedules exactly one more. update holds updateMux, so these serialize with syncs
+// while a sync runs schedules exactly one more. update holds syncSlot, so these serialize with syncs
 // triggered through /lrza/update.
 func (c *Component) runRequestedSyncs(ctx context.Context) {
 	defer close(c.syncDone)
@@ -308,9 +328,19 @@ func (c *Component) TriggerLrzaSync(ctx context.Context, _ api.TriggerLrzaSyncRe
 // update runs one sync cycle: streams the trusted source's history page by page, applying each page as
 // its own transaction to the query directory, and records the timestamp for the next incremental sync
 // once everything has been applied successfully.
+//
+// Only one sync runs at a time. A caller that finds one running waits for it, until its ctx ends. The
+// sync itself is bounded by syncTimeout, so a sync that stops making progress releases the slot instead
+// of blocking every later sync.
 func (c *Component) update(ctx context.Context) (UpdateReport, error) {
-	c.updateMux.Lock()
-	defer c.updateMux.Unlock()
+	select {
+	case c.syncSlot <- struct{}{}:
+	case <-ctx.Done():
+		return UpdateReport{}, fmt.Errorf("waiting for a running LRZA sync: %w", ctx.Err())
+	}
+	defer func() { <-c.syncSlot }()
+	ctx, cancel := context.WithTimeoutCause(ctx, syncTimeout, errSyncTimeout)
+	defer cancel()
 
 	if c.config.QueryBaseUrl == "" {
 		return UpdateReport{Warnings: []string{}, Errors: []string{}}, errors.New("LRZA sync needs a query directory (lrza.querybaseurl)")
@@ -326,6 +356,9 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		slog.Bool("incremental", run.incremental()))
 
 	if err := c.syncResourceTypes(ctx, run); err != nil {
+		if errors.Is(context.Cause(ctx), errSyncTimeout) {
+			err = fmt.Errorf("%w (%s): %w", errSyncTimeout, syncTimeout, err)
+		}
 		// Return progress tallied by already-applied pages rather than discarding it, and skip
 		// saving the synced-up-to time below so the next sync retries the whole window from the old
 		// one instead of skipping past what never got applied. Safe to retry: every write
