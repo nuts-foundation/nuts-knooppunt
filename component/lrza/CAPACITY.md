@@ -58,6 +58,9 @@ While it runs it holds the sync lock, so syncs after a write wait for it.
 
 All in `component.go`:
 
+- `maxPagesPerResourceType` (10,000 pages, so 1,000,000 resources) bounds the pages read from one resource
+  type in a single sync: more than three times the largest type in the estimate. Like `syncTimeout`, it
+  guards against a server that keeps returning a `next` link; it is not a size limit.
 - `syncTimeout` (6 hours) bounds a whole sync: more than twice the upper estimate of a full sync. It guards
   against a sync that never ends, for example a server that keeps returning a `next` link.
 - `pageTimeout` (5 minutes) bounds the time between two processed pages, so a sync that stops making

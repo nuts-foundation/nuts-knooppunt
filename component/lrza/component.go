@@ -64,6 +64,14 @@ var resourceTypes = []string{"Organization", "Location", "HealthcareService", "E
 // target exists, so without one _include and chained search miss the link even after the target lands.
 const searchPageSize = 100
 
+// maxPagesPerResourceType bounds the pages read from one resource type's feed in a single sync. It is a
+// guard against a server that keeps returning a next link, not a size limit, so it must stay far above
+// the size of the LRZA: at searchPageSize 100 it allows 1,000,000 resources per type in a full sync, or
+// as many history entries (versions, not resources) in an incremental one. Without it, Paginate's default
+// of 100 iterations made the sync fail on every run for any type with more than 9,900 resources.
+// CAPACITY.md estimates the largest type at about 3,000 pages.
+var maxPagesPerResourceType = 10_000
+
 // clockSkewBuffer is subtracted from local time when a Bundle's meta.lastUpdated is not available,
 // to account for clock differences between this client and the FHIR server.
 var clockSkewBuffer = 2 * time.Second
@@ -505,12 +513,14 @@ func (c *Component) queryResourceType(ctx context.Context, run *syncRun, resourc
 		return fmt.Errorf("search of %s failed: %w", path, err)
 	}
 
+	// Paginate fails on iteration maxIterations-1, before consuming that page, so allow one more
+	// iteration than the number of pages we accept.
 	if err := fhirclient.Paginate(ctx, c.fhirLRZAClient, searchSet, func(page *fhir.Bundle) (bool, error) {
 		if err := onPage(page); err != nil {
 			return false, err
 		}
 		return true, nil
-	}); err != nil {
+	}, fhirclient.WithMaxIterations(maxPagesPerResourceType+1)); err != nil {
 		return fmt.Errorf("processing %s failed: %w", path, err)
 	}
 	return nil
