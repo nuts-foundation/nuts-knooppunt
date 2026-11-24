@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Smoke test
         run: infra/ovhcloud-test/smoke-test.sh | tee smoke-test.log
