@@ -22,7 +22,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/mitzmock ./mock-components/mitz/cmd
 
-FROM alpine:3.22.0
+FROM alpine:3.24.4
 
 RUN adduser -D -u 10000 mitzmock
 USER mitzmock

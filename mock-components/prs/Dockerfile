@@ -23,7 +23,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /out/mock-prs ./mock-components/prs/cmd
 
-FROM alpine:3.22.0
+FROM alpine:3.24.4
 
 # /keys holds the recipient and OPRF keys the service creates on first start;
 # compose mounts a named volume there and the chart a persistent volume, so

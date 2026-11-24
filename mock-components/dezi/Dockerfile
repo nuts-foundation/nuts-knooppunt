@@ -20,7 +20,7 @@ RUN go mod download && go mod verify
 COPY ./mock-components/dezi ./mock-components/dezi
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /mock-dezi ./mock-components/dezi/cmd
 
-FROM alpine:3.22.0
+FROM alpine:3.24.4
 COPY --from=builder /mock-dezi /mock-dezi
 
 RUN adduser -D -H -u 18092 dezi-usr
