@@ -14,7 +14,7 @@ RUN go mod download && go mod verify
 COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /gf-sandbox ./sandbox/app
 
-FROM alpine:3.22.0
+FROM alpine:3.24.4
 COPY --from=builder /gf-sandbox /gf-sandbox
 
 RUN adduser -D -H -u 18091 sandbox-usr

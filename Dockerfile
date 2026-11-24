@@ -20,7 +20,7 @@ RUN mkdir /app
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-w -s -X 'github.com/nuts-foundation/nuts-knooppunt/component/status.GitCommit=${GIT_COMMIT}' -X 'github.com/nuts-foundation/nuts-knooppunt/component/status.GitBranch=${GIT_BRANCH}' -X 'github.com/nuts-foundation/nuts-knooppunt/component/status.GitVersion=${GIT_VERSION}'" -o /app/bin .
 
 # alpine
-FROM alpine:3.22.0
+FROM alpine:3.24.4
 RUN apk update \
   && apk add --no-cache \
   tzdata \
