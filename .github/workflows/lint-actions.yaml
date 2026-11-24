@@ -33,10 +33,4 @@ jobs:
           # repo. Without this, actionlint lints every run: script in every
           # workflow file (not just the ones this PR touches), so a
           # pre-existing shellcheck nit anywhere blocks unrelated PRs.
-          #
-          # -ignore: actionlint doesn't know the concurrency.queue key yet -
-          # it's a genuine, documented GitHub Actions feature (ci.yaml uses
-          # queue: max), just not yet supported by actionlint's schema:
-          # https://github.com/rhysd/actionlint/issues/657. Drop this once
-          # that ships in a release.
-          ./actionlint -color -shellcheck= -ignore 'unexpected key "queue"'
+          ./actionlint -color -shellcheck=
