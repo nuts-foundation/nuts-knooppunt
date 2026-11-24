@@ -119,6 +119,7 @@ jobs:
           fetch-depth: 0
 
       - name: Validate commit
+        id: validate
         run: |
           [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::commit must be a full 40-character SHA, got '$COMMIT'"; exit 1; }
           git fetch origin main --quiet
@@ -128,7 +129,7 @@ jobs:
           # run would otherwise silently redeploy an old commit.
           if [ "${{ github.event_name }}" = "push" ]; then
             head="$(git rev-parse origin/main)"
-            [ "$COMMIT" = "$head" ] || { echo "::error::$COMMIT is no longer the head of main ($head) - this run is stale (likely a re-run of an old workflow run), refusing to deploy it"; exit 1; }
+            [ "$COMMIT" = "$head" ] || { echo "superseded=true" >> "$GITHUB_OUTPUT"; echo "::error::$COMMIT is no longer the head of main ($head) - this run is stale (likely a re-run of an old workflow run), refusing to deploy it"; exit 1; }
           fi
 
       - name: Verify images exist for this commit
@@ -194,7 +195,7 @@ jobs:
       # Errors only, nothing on success. SLACK_WEBHOOK is a Slack incoming
       # webhook.
       - name: Notify Slack on failure
-        if: failure()
+        if: failure() && steps.validate.outputs.superseded != 'true'
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
