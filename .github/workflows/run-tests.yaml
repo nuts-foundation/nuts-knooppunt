@@ -41,8 +41,21 @@ jobs:
 
     # The e2e tests run against this build of the HAPI image (mock-components/hapi) rather than the
     # published :main, so a change to the mock NVI or LRZA is tested in the pull request that makes it.
+    # The image layers are cached between runs, so the Maven dependencies are only downloaded again
+    # when a pom.xml changes. Without it every run downloads them from Maven Central, which rate
+    # limits the runners' shared IP addresses.
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
     - name: Build the HAPI image with the mock interceptors
-      run: docker build -t knooppunt-hapi:ci -f mock-components/hapi/Dockerfile mock-components
+      uses: docker/build-push-action@v6
+      with:
+        context: mock-components
+        file: mock-components/hapi/Dockerfile
+        load: true
+        tags: knooppunt-hapi:ci
+        cache-from: type=gha,scope=run-tests-hapi-image
+        cache-to: type=gha,mode=max,scope=run-tests-hapi-image,ignore-error=true
 
     - name: Set up Java
       uses: actions/setup-java@v4
