@@ -1,7 +1,7 @@
 # Knooppunt Policy Enforcement Point (PEP)
 # NGINX with JavaScript module for authorization
 
-FROM nginx:1.29.2-alpine
+FROM nginx:1.31.9-alpine
 
 # Copy NGINX configuration files
 COPY nginx.conf /etc/nginx/nginx.conf
