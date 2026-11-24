@@ -45,10 +45,10 @@ jobs:
     # when a pom.xml changes. Without it every run downloads them from Maven Central, which rate
     # limits the runners' shared IP addresses.
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@v4
 
     - name: Build the HAPI image with the mock interceptors
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: mock-components
         file: mock-components/hapi/Dockerfile
