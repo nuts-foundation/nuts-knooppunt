@@ -10,6 +10,7 @@ import (
 
 	fhirclient "github.com/SanteonNL/go-fhir-client"
 	"github.com/nuts-foundation/nuts-knooppunt/api"
+	lrzacomponent "github.com/nuts-foundation/nuts-knooppunt/component/lrza"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	"github.com/nuts-foundation/nuts-knooppunt/test/e2e/harness"
 	"github.com/nuts-foundation/nuts-knooppunt/test/testdata/vectors/lrza"
@@ -212,6 +213,31 @@ func Test_LRZASync(t *testing.T) {
 			assertReport(t, report, 0, 1)
 			local := readLocalCopy[fhir.HealthcareService](t, h, query, "HealthcareService", *healthcareService.Id)
 			assert.Equal(t, "Care2Cure Cardiology v3", *local.Name)
+		}},
+		{"sync after a restart is incremental and applies a deletion made while down", func(t *testing.T) {
+			// A new component starts with nothing in memory, as after a restart. It syncs the same
+			// LRZA into the same query directory, so it finds the time the Knooppunt saved there.
+			// A full sync would miss the deletion: it only returns resources that still exist.
+			config := lrzacomponent.DefaultConfig()
+			config.LRZABaseUrl = h.LRZaFHIRBaseURL.String()
+			config.QueryBaseUrl = h.MCSDQueryFHIRBaseURL.String()
+			restarted, err := lrzacomponent.New(config)
+			require.NoError(t, err)
+			local := readLocalCopy[fhir.HealthcareService](t, h, query, "HealthcareService", "lrza-e2e-healthcareservice")
+			require.NoError(t, source.Delete("HealthcareService/lrza-e2e-healthcareservice"))
+
+			response, err := restarted.TriggerLrzaSync(t.Context(), api.TriggerLrzaSyncRequestObject{})
+
+			require.NoError(t, err)
+			require.IsType(t, api.TriggerLrzaSync200JSONResponse{}, response, "sync failed: %+v", response)
+			report := api.DirectoryUpdateReport(response.(api.TriggerLrzaSync200JSONResponse))
+			assert.Equal(t, 0, *report.Created, "created")
+			assert.Equal(t, 0, *report.Updated, "updated: a full sync would rewrite every resource")
+			assert.Equal(t, 1, *report.Deleted, "deleted")
+			assert.Empty(t, *report.Warnings, "warnings")
+			assert.Empty(t, *report.Errors, "errors")
+			var deleted fhir.HealthcareService
+			assert.Error(t, query.Read("HealthcareService/"+*local.Id, &deleted), "the local copy is deleted")
 		}},
 	}
 	for _, step := range steps {

@@ -125,6 +125,9 @@ func (f *fakeLRZA) handle(w http.ResponseWriter, r *http.Request) {
 
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	switch {
+	case r.Method == http.MethodGet && len(parts) == 2 && parts[1] == "_history":
+		// Only the current version is kept, so a type's history is its current resources.
+		f.search(w, parts[0], r)
 	case r.Method == http.MethodGet && len(parts) == 2:
 		res, ok := f.resources[parts[0]+"/"+parts[1]]
 		if !ok {

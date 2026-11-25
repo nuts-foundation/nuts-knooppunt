@@ -136,7 +136,10 @@ type Component struct {
 	fhirQueryClient fhirclient.Client
 
 	lastUpdateTime string // _since value for the next incremental sync; empty means full sync
-	updateMux      *sync.Mutex
+	// syncStateLoaded is set once lastUpdateTime has been read from the query directory (see
+	// loadSyncState), which happens on the first sync after startup.
+	syncStateLoaded bool
+	updateMux       *sync.Mutex
 
 	// registrar serves the /lrza/fhir write operations.
 	registrar *registrar
@@ -313,6 +316,13 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
 
+	if !c.syncStateLoaded && c.config.QueryBaseUrl != "" {
+		if err := c.loadSyncState(ctx); err != nil {
+			return UpdateReport{Warnings: []string{}, Errors: []string{}}, err
+		}
+		c.syncStateLoaded = true
+	}
+
 	run := c.newSyncRun()
 	slog.InfoContext(ctx, "Updating from central LRZA directory",
 		slog.Bool("incremental", run.incremental()))
@@ -326,6 +336,14 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		return run.finalizedReport(), err
 	}
 	c.recordSyncTimestamp(ctx, run)
+	if c.config.QueryBaseUrl != "" {
+		// Not fatal: the time is still kept in memory, so only a restart before the next successful
+		// save falls back to a full sync.
+		if err := c.saveSyncState(ctx); err != nil {
+			slog.WarnContext(ctx, "Failed to persist LRZA sync state", logging.Error(err))
+			run.report.Warnings = append(run.report.Warnings, err.Error())
+		}
+	}
 
 	return run.finalizedReport(), nil
 }
