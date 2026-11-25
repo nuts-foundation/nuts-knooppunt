@@ -51,14 +51,18 @@ func TestSyncState(t *testing.T) {
 	})
 	t.Run("after a restart, the first sync is incremental from the saved time", func(t *testing.T) {
 		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
-		syncOK(t, newComponent(t, source, query))
+		first := newComponent(t, source, query)
+		syncOK(t, first)
 		require.Equal(t, 1, fullReads(source))
+		saved := storedSyncTime(t, first, query)
 
 		restarted := newComponent(t, source, query)
 		syncOK(t, restarted)
 
 		assert.Equal(t, 1, fullReads(source), "no second full sync")
-		assert.Equal(t, 1, historyReads(source))
+		require.Equal(t, 1, historyReads(source))
+		since := source.requestsTo(http.MethodGet, "/Organization/_history")[0].query.Get("_since")
+		assert.Equal(t, saved, since)
 	})
 	t.Run("a failed sync keeps the last successful time, also across a restart", func(t *testing.T) {
 		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
@@ -77,6 +81,20 @@ func TestSyncState(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, lastSuccess, since.Format(time.RFC3339Nano))
 	})
+	t.Run("failing to save the time fails the sync", func(t *testing.T) {
+		// One Organization, so the query directory sees: read the time, one transaction, save the time.
+		source, query := newFakeLRZA(t, testDirectory()[0]), newFakeLRZA(t)
+		c := newComponent(t, source, query)
+		query.failNext(0, 0, http.StatusInternalServerError)
+
+		report, err := c.update(t.Context())
+
+		require.ErrorContains(t, err, "failed to write LRZA sync time")
+		assert.Equal(t, 1, report.CountCreated, "the applied page is still reported")
+		id, err := c.syncStateID()
+		require.NoError(t, err)
+		assert.Nil(t, query.get("Basic/"+id))
+	})
 	t.Run("a query directory wiped while running means a full sync", func(t *testing.T) {
 		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
 		c := newComponent(t, source, query)
@@ -88,6 +106,24 @@ func TestSyncState(t *testing.T) {
 		syncOK(t, c)
 
 		assert.Equal(t, 2, fullReads(source))
+		assert.Zero(t, historyReads(source))
+	})
+	t.Run("an invalid saved time fails the sync, instead of a full sync that would miss deletions", func(t *testing.T) {
+		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
+		c := newComponent(t, source, query)
+		syncOK(t, c)
+		id, err := c.syncStateID()
+		require.NoError(t, err)
+		stored := query.get("Basic/" + id)
+		stored["extension"] = []any{map[string]any{"url": syncStateExtensionURL, "valueInstant": "not a time"}}
+		query.mux.Lock()
+		query.put(stored)
+		query.mux.Unlock()
+
+		_, err = c.update(t.Context())
+
+		require.ErrorContains(t, err, "invalid LRZA sync time")
+		assert.Equal(t, 1, fullReads(source), "no second full sync")
 		assert.Zero(t, historyReads(source))
 	})
 	t.Run("an empty query directory means a full sync", func(t *testing.T) {

@@ -5,8 +5,9 @@
 // to their contents - lrza syncs from one directory that is trusted wholesale. There is therefore no
 // discovery phase and no per-resource validation: every resource the source returns is imported into
 // the local query directory as-is, under ids derived from the source's (see localID). The first sync reads the current resources via a full search; once
-// a timestamp has been recorded, later syncs read changes incrementally via _history with _since
-// (which also propagates deletions). Each page of each resource type's feed is deduplicated to one
+// a sync has succeeded, its time is saved in the query directory (see syncstate.go) and later syncs,
+// also after a restart, read changes incrementally via _history with _since (which also propagates
+// deletions). Each page of each resource type's feed is deduplicated to one
 // entry per resource (a resource's versions can be split across pages, so dedup state spans the whole
 // feed) and applied to the query directory as its own FHIR transaction, so memory use and FHIR
 // transaction size are both bounded by the page size rather than by the size of the source directory.
@@ -335,11 +336,11 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		return run.finalizedReport(), err
 	}
 	if c.config.QueryBaseUrl != "" {
-		// Not fatal: everything has been applied. The next sync starts from the previously saved
-		// time, re-reading a window that has already been applied, which is harmless.
+		// An error even though everything has been applied: the next sync starts from the previously
+		// saved time again (harmless, it re-reads an applied window), but a save that keeps failing
+		// means every sync is a full sync, which never applies deletions. That must be noticed.
 		if err := c.saveSyncTime(ctx, c.nextSyncTime(ctx, run)); err != nil {
-			slog.WarnContext(ctx, "Failed to persist LRZA sync state", logging.Error(err))
-			run.report.Warnings = append(run.report.Warnings, err.Error())
+			return run.finalizedReport(), err
 		}
 	}
 

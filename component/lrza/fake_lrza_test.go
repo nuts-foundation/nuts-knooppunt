@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +39,7 @@ type fakeLRZA struct {
 type recordedRequest struct {
 	method string
 	path   string
+	query  url.Values
 	header http.Header
 	body   []byte
 }
@@ -112,7 +114,7 @@ func (f *fakeLRZA) handle(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	f.mux.Lock()
 	defer f.mux.Unlock()
-	f.requests = append(f.requests, recordedRequest{method: r.Method, path: r.URL.Path, header: r.Header.Clone(), body: body})
+	f.requests = append(f.requests, recordedRequest{method: r.Method, path: r.URL.Path, query: r.URL.Query(), header: r.Header.Clone(), body: body})
 
 	if len(f.failures) > 0 {
 		status := f.failures[0]

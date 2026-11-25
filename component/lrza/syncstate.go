@@ -27,8 +27,10 @@ func (c *Component) syncStateID() (string, error) {
 }
 
 // loadSyncTime reads the last sync time from the query directory: the _since value for the next
-// incremental sync. It's the zero time when none is saved (a new or wiped query directory), meaning a
-// full sync.
+// incremental sync. It's the zero time, meaning a full sync, only when none is saved (a new or wiped
+// query directory). A saved one that can't be used is an error rather than a full sync: a full sync
+// doesn't see deletions and saves a new time, so deletions made since the saved time would be lost
+// without anyone noticing. Deleting the Basic resource forces a full sync.
 func (c *Component) loadSyncTime(ctx context.Context) (time.Time, error) {
 	id, err := c.syncStateID()
 	if err != nil {
@@ -52,7 +54,7 @@ func (c *Component) loadSyncTime(ctx context.Context) (time.Time, error) {
 			return syncTime, nil
 		}
 	}
-	return time.Time{}, nil
+	return time.Time{}, fmt.Errorf("LRZA sync state in query directory has no sync time (Basic/%s)", id)
 }
 
 // saveSyncTime writes the last sync time to the query directory.
@@ -63,9 +65,6 @@ func (c *Component) saveSyncTime(ctx context.Context, syncTime time.Time) error 
 	}
 	basic := fhir.Basic{
 		Id: &id,
-		Meta: &fhir.Meta{
-			Source: &c.config.LRZABaseUrl,
-		},
 		Code: fhir.CodeableConcept{
 			Coding: []fhir.Coding{{System: new(syncStateCodeSystem), Code: new(syncStateCode)}},
 		},
