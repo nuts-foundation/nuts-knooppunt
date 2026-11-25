@@ -164,7 +164,7 @@ type syncRun struct {
 	// working state, filled as the run progresses
 	// sourceLastUpdated is the source server's meta.lastUpdated from the first resource type's search
 	// set (the server's own clock), recorded as the next _since timestamp. Nil if the server didn't
-	// report one, in which case nextSyncTime falls back to the local query start time.
+	// report one, in which case syncStartTime falls back to the local query start time.
 	sourceLastUpdated *string
 	tx                fhir.Bundle // transaction bundle applied to the query directory
 	report            UpdateReport
@@ -313,12 +313,12 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
 
-	// The last sync time is read from the query directory at the start of every sync, not kept in
-	// memory, so the query directory holds the only copy (see loadSyncTime).
+	// The last change sync time is read from the query directory at the start of every sync, not kept
+	// in memory, so the query directory holds the only copy (see loadLastChangeSyncTime).
 	var since time.Time
 	if c.config.QueryBaseUrl != "" {
 		var err error
-		if since, err = c.loadSyncTime(ctx); err != nil {
+		if since, err = c.loadLastChangeSyncTime(ctx); err != nil {
 			return UpdateReport{Warnings: []string{}, Errors: []string{}}, err
 		}
 	}
@@ -329,17 +329,22 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 
 	if err := c.syncResourceTypes(ctx, run); err != nil {
 		// Return progress tallied by already-applied pages rather than discarding it, and skip
-		// saving the sync time below so the next sync retries the whole window from the last
-		// successful one instead of skipping past what never got applied. Safe to retry: every write
+		// saving the last change sync time below so the next sync retries the whole window from the
+		// last successful one instead of skipping past what never got applied. Safe to retry: every write
 		// is a PUT or DELETE by an id derived from the source's, so re-applying already-applied pages
 		// is a no-op.
 		return run.finalizedReport(), err
 	}
-	if c.config.QueryBaseUrl != "" {
+	// Only a sync that applied changes saves its start time. Saving after every sync would add a version
+	// of the Basic resource each time (288 a day with a sync every 5 minutes), which the FHIR server keeps
+	// forever. Keeping the older time after a sync without changes is safe: that sync saw no changes since
+	// it, so the next one only re-reads that empty window.
+	appliedChanges := run.report.CountCreated+run.report.CountUpdated+run.report.CountDeleted > 0
+	if c.config.QueryBaseUrl != "" && appliedChanges {
 		// An error even though everything has been applied: the next sync starts from the previously
 		// saved time again (harmless, it re-reads an applied window), but a save that keeps failing
 		// means every sync is a full sync, which never applies deletions. That must be noticed.
-		if err := c.saveSyncTime(ctx, c.nextSyncTime(ctx, run)); err != nil {
+		if err := c.saveLastChangeSyncTime(ctx, c.syncStartTime(ctx, run)); err != nil {
 			return run.finalizedReport(), err
 		}
 	}
@@ -612,10 +617,11 @@ func requestMethodAt(tx fhir.Bundle, i int) (method fhir.HTTPVerb, ok bool) {
 	return method, false
 }
 
-// nextSyncTime returns the timestamp used as the _since value for the next incremental sync.
-// It prefers the search result Bundle's meta.lastUpdated (the FHIR server's own clock, avoiding
-// skew) and falls back to the local query start time minus a buffer.
-func (c *Component) nextSyncTime(ctx context.Context, run *syncRun) time.Time {
+// syncStartTime returns the LRZA's time at the start of this sync: once the sync has applied all
+// changes, every change before it is in the query directory, so it's the _since value for the next
+// incremental sync. It prefers the search result Bundle's meta.lastUpdated (the FHIR server's own
+// clock, avoiding skew) and falls back to the local query start time minus a buffer.
+func (c *Component) syncStartTime(ctx context.Context, run *syncRun) time.Time {
 	if run.sourceLastUpdated != nil {
 		sourceTime, err := time.Parse(time.RFC3339Nano, *run.sourceLastUpdated)
 		if err == nil {
