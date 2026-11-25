@@ -5,9 +5,8 @@
 // to their contents - lrza syncs from one directory that is trusted wholesale. There is therefore no
 // discovery phase and no per-resource validation: every resource the source returns is imported into
 // the local query directory as-is, under ids derived from the source's (see localID). The first sync reads the current resources via a full search; once
-// a sync has succeeded, its time is saved in the query directory (see syncstate.go) and later syncs,
-// also after a restart, read changes incrementally via _history with _since (which also propagates
-// deletions). Each page of each resource type's feed is deduplicated to one
+// a timestamp has been recorded, later syncs read changes incrementally via _history with _since
+// (which also propagates deletions). Each page of each resource type's feed is deduplicated to one
 // entry per resource (a resource's versions can be split across pages, so dedup state spans the whole
 // feed) and applied to the query directory as its own FHIR transaction, so memory use and FHIR
 // transaction size are both bounded by the page size rather than by the size of the source directory.
@@ -313,8 +312,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
 
-	// The synced-up-to time is read from the query directory at the start of every sync, not kept in
-	// memory, so the query directory holds the only copy (see loadSyncedUpTo).
+	// Read on every sync rather than kept in memory: the query directory holds the only copy.
 	var since time.Time
 	if c.config.QueryBaseUrl != "" {
 		var err error
@@ -329,21 +327,17 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 
 	if err := c.syncResourceTypes(ctx, run); err != nil {
 		// Return progress tallied by already-applied pages rather than discarding it, and skip
-		// saving the synced-up-to time below so the next sync retries the whole window from the
-		// last successful one instead of skipping past what never got applied. Safe to retry: every write
+		// saving the synced-up-to time below so the next sync retries the whole window from the old
+		// one instead of skipping past what never got applied. Safe to retry: every write
 		// is a PUT or DELETE by an id derived from the source's, so re-applying already-applied pages
 		// is a no-op.
 		return run.finalizedReport(), err
 	}
-	// Only a sync that applied changes saves its start time as the synced-up-to time. Saving after every sync would add a version
-	// of the Basic resource each time (288 a day with a sync every 5 minutes), which the FHIR server keeps
-	// forever. Keeping the older time after a sync without changes is safe: that sync saw no changes since
-	// it, so the next one only re-reads that empty window.
+	// Only save after changes: every save adds a version of the Basic resource, which the FHIR server
+	// keeps. After a sync without changes the old time is still correct. A failed save is an error, so a
+	// save that keeps failing (and so keeps every sync a full sync) gets noticed.
 	appliedChanges := run.report.CountCreated+run.report.CountUpdated+run.report.CountDeleted > 0
 	if c.config.QueryBaseUrl != "" && appliedChanges {
-		// An error even though everything has been applied: the next sync starts from the previously
-		// saved time again (harmless, it re-reads an applied window), but a save that keeps failing
-		// means every sync is a full sync, which never applies deletions. That must be noticed.
 		if err := c.saveSyncedUpTo(ctx, c.syncStartTime(ctx, run)); err != nil {
 			return run.finalizedReport(), err
 		}
@@ -617,21 +611,16 @@ func requestMethodAt(tx fhir.Bundle, i int) (method fhir.HTTPVerb, ok bool) {
 	return method, false
 }
 
-// syncStartTime returns the LRZA's time at the start of this sync: once the sync has applied all
-// changes, every change before it is in the query directory, so it's the _since value for the next
-// incremental sync. It prefers the search result Bundle's meta.lastUpdated (the FHIR server's own
-// clock, avoiding skew) and falls back to the local query start time minus a buffer.
+// syncStartTime returns the timestamp used as the _since value for the next incremental sync.
+// It prefers the search result Bundle's meta.lastUpdated (the FHIR server's own clock, avoiding
+// skew) and falls back to the local query start time minus a buffer.
 func (c *Component) syncStartTime(ctx context.Context, run *syncRun) time.Time {
 	if run.sourceLastUpdated != nil {
-		sourceTime, err := time.Parse(time.RFC3339Nano, *run.sourceLastUpdated)
-		if err == nil {
+		if sourceTime, err := time.Parse(time.RFC3339Nano, *run.sourceLastUpdated); err == nil {
 			return sourceTime
 		}
-		slog.WarnContext(ctx, "Bundle meta.lastUpdated is not a valid instant, using local time with buffer - may cause clock skew issues",
-			logging.FHIRServer(c.config.LRZABaseUrl), slog.String("lastUpdated", *run.sourceLastUpdated))
-	} else {
-		slog.WarnContext(ctx, "Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues", logging.FHIRServer(c.config.LRZABaseUrl))
 	}
+	slog.WarnContext(ctx, "Bundle meta.lastUpdated not available or invalid, using local time with buffer - may cause clock skew issues", logging.FHIRServer(c.config.LRZABaseUrl))
 	return run.queryStart.Add(-clockSkewBuffer)
 }
 

@@ -124,29 +124,15 @@ Because a placeholder already exists when its target arrives, the synchronizatio
 
 ### LRZA synchronization and restarts
 
-The LRZA is synced into the Query Directory with `POST /lrza/update` on the internal interface, and after every write
-through the Knooppunt (see [After a write](#after-a-write)).
-
-- **First sync:** into a Query Directory that has never been synced, it's a full sync: all resources that currently
-  exist in the LRZA.
-- **Later syncs:** only the changes since the last sync that applied changes, including deletions.
-- **Synced-up-to time:** all LRZA changes up to this time are in the Query Directory. It's the LRZA's time at the start
-  of the last sync that applied changes. The Knooppunt saves it in the Query Directory itself, as a `Basic` resource
-  with code `http://nuts-foundation.github.io/nuts-knooppunt/CodeSystem/lrza|sync-state`. A sync without changes
-  doesn't save it, so frequent syncs don't pile up versions of that resource. So:
-  - After a restart, the next sync continues with the changes, instead of starting over.
-  - If the Query Directory is wiped, the time goes with it and the next sync is a full sync.
-  - A sync that fails partway doesn't save a time, so the next sync starts from the last successful one again.
-  - A sync whose time can't be saved fails too, even though its changes were applied: until the save works, every sync
-    starts from the old time, or is a full sync if none was saved yet.
-- **Forcing a full sync:** delete that `Basic` resource, e.g.
+- **First sync** into an empty Query Directory is a full sync. **Later syncs**, also after a restart, read only the
+  changes since then, including deletions.
+- The Knooppunt keeps track of this in the Query Directory itself, in a `Basic` resource with code
+  `http://nuts-foundation.github.io/nuts-knooppunt/CodeSystem/lrza|sync-state`. Applications reading the Query
+  Directory can ignore it.
+- **To force a full sync**, delete that resource:
   `DELETE <query directory>/Basic?code=http://nuts-foundation.github.io/nuts-knooppunt/CodeSystem/lrza|sync-state`.
-  A full sync doesn't remove resources that were deleted from the LRZA earlier; for that, empty the Query Directory
-  first. If the saved time is unreadable, syncs fail with an error naming the `Basic` resource rather than falling back
-  to a full sync on their own, because that full sync would silently skip the deletions since the saved time.
-- **Applications reading the Query Directory** can find this `Basic` resource there. It isn't addressing data; ignore it.
-- **One Knooppunt per Query Directory:** two syncs into the same Query Directory at the same time can put back an older
-  version of a resource. Don't let several Knooppunt instances sync the LRZA into the same Query Directory.
+  Do the same when syncs fail because the saved time is invalid. A full sync doesn't remove resources that were
+  deleted from the LRZA before; for that, empty the Query Directory first.
 
 ### Registering addressing resources in the LRZA
 

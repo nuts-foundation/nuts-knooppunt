@@ -10,30 +10,24 @@ import (
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
-// The synced-up-to time is the LRZA time up to which all LRZA changes are in the query directory, so
-// the next sync reads the changes since then. It's the LRZA's time at the start of the last sync that
-// applied changes: a sync without changes doesn't move it forward (see update). It's stored in the
-// query directory itself, as a Basic resource, so it survives a restart and stays in step with the
-// data it describes: if the query directory is wiped, the time goes with it and the next sync is a
-// full one.
+// The synced-up-to time is the LRZA time up to which all LRZA changes are in the query directory: the
+// _since value for the next sync. It's stored in the query directory as a Basic resource, so it survives
+// a restart, and wiping the query directory also removes it (so the next sync is a full one).
 const (
 	syncStateCodeSystem   = "http://nuts-foundation.github.io/nuts-knooppunt/CodeSystem/lrza"
 	syncStateCode         = "sync-state"
 	syncStateExtensionURL = "http://nuts-foundation.github.io/nuts-knooppunt/StructureDefinition/lrza-synced-up-to"
 )
 
-// syncStateID is the id of the Basic resource holding the synced-up-to time. It's derived from the
-// LRZA base URL like the ids of synced resources (see localID), so it's unique per source.
+// syncStateID is the id of the Basic resource, derived from the LRZA base URL (see localID).
 func (c *Component) syncStateID() (string, error) {
 	_, id, err := localID(c.config.LRZABaseUrl, "Basic", syncStateCode)
 	return id, err
 }
 
-// loadSyncedUpTo reads the synced-up-to time from the query directory: the _since value for the next
-// incremental sync. It's the zero time, meaning a full sync, only when none is saved (a new or wiped
-// query directory). A saved one that can't be used is an error rather than a full sync: a full sync
-// doesn't see deletions and saves a new time, so deletions made since the saved time would be lost
-// without anyone noticing. Deleting the Basic resource forces a full sync.
+// loadSyncedUpTo reads the synced-up-to time. It's the zero time (a full sync) when none is saved. An
+// unusable saved time is an error, not a full sync: a full sync misses deletions, then saves a new time,
+// so deletions since the saved time would be lost silently.
 func (c *Component) loadSyncedUpTo(ctx context.Context) (time.Time, error) {
 	id, err := c.syncStateID()
 	if err != nil {
@@ -50,14 +44,12 @@ func (c *Component) loadSyncedUpTo(ctx context.Context) (time.Time, error) {
 	}
 	for _, ext := range basic.Extension {
 		if ext.Url == syncStateExtensionURL && ext.ValueInstant != nil {
-			syncTime, err := time.Parse(time.RFC3339Nano, *ext.ValueInstant)
-			if err != nil {
-				return time.Time{}, fmt.Errorf("invalid LRZA synced-up-to time in query directory (Basic/%s): %w", id, err)
+			if syncedUpTo, err := time.Parse(time.RFC3339Nano, *ext.ValueInstant); err == nil {
+				return syncedUpTo, nil
 			}
-			return syncTime, nil
 		}
 	}
-	return time.Time{}, fmt.Errorf("LRZA sync state in query directory has no synced-up-to time (Basic/%s)", id)
+	return time.Time{}, fmt.Errorf("invalid LRZA synced-up-to time in query directory (Basic/%s)", id)
 }
 
 // saveSyncedUpTo writes the synced-up-to time to the query directory.
