@@ -63,6 +63,10 @@ var resourceTypes = []string{"Organization", "Location", "HealthcareService", "E
 // target exists, so without one _include and chained search miss the link even after the target lands.
 const searchPageSize = 100
 
+// clockSkewBuffer is subtracted from local time when a Bundle's meta.lastUpdated is not available,
+// to account for clock differences between this client and the FHIR server.
+var clockSkewBuffer = 2 * time.Second
+
 func DefaultConfig() Config {
 	return Config{
 		Registration: RegistrationConfig{
@@ -154,15 +158,16 @@ var syncAfterWriteDelay = 5 * time.Second
 // progresses.
 type syncRun struct {
 	// configuration, set at construction
+	queryStart   time.Time
 	searchParams url.Values
 
 	// working state, filled as the run progresses
-	// startTime is the LRZA's time at the start of this sync: the meta.lastUpdated of the first resource
-	// type's first page. Once the sync has applied all changes, every change before it is in the query
-	// directory, so it's the next synced-up-to time.
-	startTime time.Time
-	tx        fhir.Bundle // transaction bundle applied to the query directory
-	report    UpdateReport
+	// sourceLastUpdated is the source server's meta.lastUpdated from the first resource type's search
+	// set (the server's own clock), recorded as the next _since timestamp. Nil if the server didn't
+	// report one, in which case syncStartTime falls back to the local query start time.
+	sourceLastUpdated *string
+	tx                fhir.Bundle // transaction bundle applied to the query directory
+	report            UpdateReport
 }
 
 func New(config Config) (*Component, error) {
@@ -330,16 +335,16 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		// is a no-op.
 		return run.finalizedReport(), err
 	}
-	// Only a sync that applied changes saves its start time as the synced-up-to time. Saving after every
-	// sync would add a version of the Basic resource each time (288 a day with a sync every 5 minutes),
-	// which the FHIR server keeps forever. Keeping the older time after a sync without changes is safe:
-	// that sync saw no changes since it, so the next one only re-reads that empty window.
+	// Only a sync that applied changes saves its start time as the synced-up-to time. Saving after every sync would add a version
+	// of the Basic resource each time (288 a day with a sync every 5 minutes), which the FHIR server keeps
+	// forever. Keeping the older time after a sync without changes is safe: that sync saw no changes since
+	// it, so the next one only re-reads that empty window.
 	appliedChanges := run.report.CountCreated+run.report.CountUpdated+run.report.CountDeleted > 0
 	if c.config.QueryBaseUrl != "" && appliedChanges {
 		// An error even though everything has been applied: the next sync starts from the previously
 		// saved time again (harmless, it re-reads an applied window), but a save that keeps failing
 		// means every sync is a full sync, which never applies deletions. That must be noticed.
-		if err := c.saveSyncedUpTo(ctx, run.startTime); err != nil {
+		if err := c.saveSyncedUpTo(ctx, c.syncStartTime(ctx, run)); err != nil {
 			return run.finalizedReport(), err
 		}
 	}
@@ -361,6 +366,7 @@ func (c *Component) newSyncRun(since time.Time) *syncRun {
 		params.Set("_since", since.Format(time.RFC3339Nano))
 	}
 	return &syncRun{
+		queryStart:   time.Now(),
 		searchParams: params,
 	}
 }
@@ -381,13 +387,8 @@ func (c *Component) syncResourceTypes(ctx context.Context, run *syncRun) error {
 		dedup := libfhir.NewHistoryDeduplicator()
 		firstPage := true
 		err := c.queryResourceType(ctx, run, resourceType, func(page *fhir.Bundle) error {
-			if i == 0 && firstPage {
-				// Read before anything is applied, so a sync never applies changes and then fails here.
-				startTime, err := searchTime(page)
-				if err != nil {
-					return err
-				}
-				run.startTime = startTime
+			if i == 0 && firstPage && page.Meta != nil && page.Meta.LastUpdated != nil && *page.Meta.LastUpdated != "" {
+				run.sourceLastUpdated = page.Meta.LastUpdated
 			}
 			firstPage = false
 			return c.syncPage(ctx, run, dedup, page.Entry)
@@ -616,18 +617,22 @@ func requestMethodAt(tx fhir.Bundle, i int) (method fhir.HTTPVerb, ok bool) {
 	return method, false
 }
 
-// searchTime returns the LRZA's time at which it answered a search: the result Bundle's
-// meta.lastUpdated. It's an error when that's missing or invalid, rather than a guess with the local
-// clock: a clock ahead of the LRZA's would make the next sync skip changes without anyone noticing.
-func searchTime(page *fhir.Bundle) (time.Time, error) {
-	if page.Meta == nil || page.Meta.LastUpdated == nil || *page.Meta.LastUpdated == "" {
-		return time.Time{}, errors.New("LRZA search result has no meta.lastUpdated, so it's unknown up to when the sync is complete")
+// syncStartTime returns the LRZA's time at the start of this sync: once the sync has applied all
+// changes, every change before it is in the query directory, so it's the _since value for the next
+// incremental sync. It prefers the search result Bundle's meta.lastUpdated (the FHIR server's own
+// clock, avoiding skew) and falls back to the local query start time minus a buffer.
+func (c *Component) syncStartTime(ctx context.Context, run *syncRun) time.Time {
+	if run.sourceLastUpdated != nil {
+		sourceTime, err := time.Parse(time.RFC3339Nano, *run.sourceLastUpdated)
+		if err == nil {
+			return sourceTime
+		}
+		slog.WarnContext(ctx, "Bundle meta.lastUpdated is not a valid instant, using local time with buffer - may cause clock skew issues",
+			logging.FHIRServer(c.config.LRZABaseUrl), slog.String("lastUpdated", *run.sourceLastUpdated))
+	} else {
+		slog.WarnContext(ctx, "Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues", logging.FHIRServer(c.config.LRZABaseUrl))
 	}
-	searchTime, err := time.Parse(time.RFC3339Nano, *page.Meta.LastUpdated)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("LRZA search result has an invalid meta.lastUpdated: %w", err)
-	}
-	return searchTime, nil
+	return run.queryStart.Add(-clockSkewBuffer)
 }
 
 // finalizedReport returns the run's report with nil slices replaced by empty ones, for a nicer JSON

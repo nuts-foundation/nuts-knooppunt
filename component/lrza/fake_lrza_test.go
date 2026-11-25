@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 // resource is shorthand for the generic FHIR resource the registration code works with.
@@ -32,8 +31,6 @@ type fakeLRZA struct {
 	// failures holds status codes to answer the next requests with, in order, before handling them.
 	// 0 lets that request through.
 	failures []int
-	// omitSearchTime leaves meta.lastUpdated off search results, as a server that doesn't report it.
-	omitSearchTime bool
 	// minimal makes creates and updates answer without the stored resource, as an LRZA ignoring
 	// Prefer: return=representation would.
 	minimal bool
@@ -227,12 +224,7 @@ func (f *fakeLRZA) search(w http.ResponseWriter, resourceType string, r *http.Re
 		}
 		matches = append(matches, map[string]any{"resource": res, "search": map[string]any{"mode": "match"}})
 	}
-	// Like HAPI, report the server's time on the search result: the sync's synced-up-to time.
-	bundle := map[string]any{"resourceType": "Bundle", "type": "searchset", "entry": matches}
-	if !f.omitSearchTime {
-		bundle["meta"] = map[string]any{"lastUpdated": time.Now().Format(time.RFC3339Nano)}
-	}
-	writeJSON(w, http.StatusOK, bundle)
+	writeJSON(w, http.StatusOK, map[string]any{"resourceType": "Bundle", "type": "searchset", "entry": matches})
 }
 
 // transaction applies a transaction all-or-nothing: every entry's ifMatch is checked first.

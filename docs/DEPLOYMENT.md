@@ -73,16 +73,6 @@ unresolved references. For HAPI FHIR, set:
 The Helm chart sets both in `fhir.configExtra`. Both are server-wide HAPI settings, so they apply to every tenant on the
 same server.
 
-Only one Knooppunt should sync the LRZA into a given Query Directory: two syncs into it at the same time can put back an
-older version of a resource. In the Helm chart:
-
-- Keep `replicaCount: 1` (the default) and leave `autoscaling` off.
-- Without `persistence`, an upgrade is a rolling update, so the old and new Knooppunt run side by side for a moment.
-  The risk is small, because a sync only runs on `POST /lrza/update` or after a write. Enabling `persistence` switches
-  the chart to the `Recreate` strategy, which rules it out.
-
-See [LRZA synchronization and restarts](./INTEGRATION.md#lrza-synchronization-and-restarts).
-
 #### Using the mCSD Administration Application
 
 The Knooppunt contains a web-application to manually manage the mCSD Administration Directory entries (e.g. create organizations and endpoints).

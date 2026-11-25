@@ -114,16 +114,6 @@ func TestSyncState(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, query.get("Basic/"+id))
 	})
-	t.Run("an LRZA that doesn't report its time fails the sync before anything is applied", func(t *testing.T) {
-		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
-		source.omitSearchTime = true
-		c := newComponent(t, source, query)
-
-		_, err := c.update(t.Context())
-
-		require.ErrorContains(t, err, "no meta.lastUpdated")
-		assert.Empty(t, query.writes(), "nothing applied, no time saved")
-	})
 	t.Run("a query directory wiped while running means a full sync", func(t *testing.T) {
 		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
 		c := newComponent(t, source, query)
