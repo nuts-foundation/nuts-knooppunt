@@ -40,6 +40,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
+	"golang.org/x/sync/semaphore"
 )
 
 var _ component.Lifecycle = &Component{}
@@ -136,9 +137,9 @@ type Component struct {
 	fhirLRZAClient  fhirclient.Client
 	fhirQueryClient fhirclient.Client
 
-	// syncSlot (capacity 1) lets one sync run at a time. Unlike a mutex, waiting for it can be cancelled
-	// through the context (see update).
-	syncSlot chan struct{}
+	// syncLock lets one sync run at a time. It is a semaphore of weight 1 rather than a sync.Mutex,
+	// because waiting for it can be given up when the caller's context ends (see update).
+	syncLock *semaphore.Weighted
 
 	// registrar serves the /lrza/fhir write operations.
 	registrar *registrar
@@ -210,7 +211,7 @@ func New(config Config) (*Component, error) {
 		config:          config,
 		fhirLRZAClient:  fhirclient.New(sourceBaseURL, sourceHTTPClient, &fhirclient.Config{UsePostSearch: false}),
 		fhirQueryClient: fhirclient.New(queryBaseURL, newQueryHTTPClient(), &fhirclient.Config{UsePostSearch: false}),
-		syncSlot:        make(chan struct{}, 1),
+		syncLock:        semaphore.NewWeighted(1),
 		syncRequests:    make(chan struct{}, 1),
 	}
 	// The write path shares the sync client's HTTP client: same mTLS certificate, tracing and OAuth2,
@@ -309,7 +310,7 @@ func (c *Component) requestSync() {
 
 // runRequestedSyncs runs a sync for requests on syncRequests until ctx is cancelled. Each sync waits
 // syncAfterWriteDelay first, so the writes of a burst are picked up by one sync; a write that comes in
-// while a sync runs schedules exactly one more. update holds syncSlot, so these serialize with syncs
+// while a sync runs schedules exactly one more. update holds syncLock, so these serialize with syncs
 // triggered through /lrza/update.
 func (c *Component) runRequestedSyncs(ctx context.Context) {
 	defer close(c.syncDone)
@@ -357,23 +358,26 @@ func (c *Component) TriggerLrzaSync(ctx context.Context, _ api.TriggerLrzaSyncRe
 // its own transaction to the query directory, and records the timestamp for the next incremental sync
 // once everything has been applied successfully.
 //
-// Only one sync runs at a time. A caller that finds one running waits for it, until its ctx ends. The
-// sync itself fails when no page is processed within pageTimeout, or when it takes longer than
-// syncTimeout altogether, so a sync that stops making progress releases the slot instead of blocking
-// every later sync.
+// Only one sync runs at a time, and a sync that stops making progress must not block every later one.
+// The comments below walk through how update makes sure of both.
 func (c *Component) update(ctx context.Context) (UpdateReport, error) {
-	select {
-	case c.syncSlot <- struct{}{}:
-	case <-ctx.Done():
-		return UpdateReport{}, fmt.Errorf("waiting for a running LRZA sync: %w", ctx.Err())
+	// Wait for a running sync to finish, but no longer than the caller is willing to: a request to
+	// /lrza/update gives up when its client does, and the sync after a write when the component stops.
+	if err := c.syncLock.Acquire(ctx, 1); err != nil {
+		return UpdateReport{}, fmt.Errorf("waiting for a running LRZA sync: %w", err)
 	}
-	defer func() { <-c.syncSlot }()
-	ctx, cancel := context.WithTimeoutCause(ctx, syncTimeout, errSyncTimeout)
-	defer cancel()
-	// The watchdog cancels the sync unless it is reset by a processed page within pageTimeout.
-	ctx, cancelStalled := context.WithCancelCause(ctx)
-	defer cancelStalled(nil)
-	watchdog := time.AfterFunc(pageTimeout, func() { cancelStalled(errPageTimeout) })
+	defer c.syncLock.Release(1)
+
+	// Give up on a sync that takes too long altogether, or that stops making progress. Two timers can
+	// cancel the sync's context, each with its own cause, so the error says which limit was hit:
+	//   - deadline fires once, syncTimeout after the start;
+	//   - watchdog fires pageTimeout after the last processed page. Every page resets it (see
+	//     run.pageDone below), so it only fires when no page completes for that long.
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	deadline := time.AfterFunc(syncTimeout, func() { cancel(fmt.Errorf("%w (%s)", errSyncTimeout, syncTimeout)) })
+	defer deadline.Stop()
+	watchdog := time.AfterFunc(pageTimeout, func() { cancel(fmt.Errorf("%w (%s)", errPageTimeout, pageTimeout)) })
 	defer watchdog.Stop()
 
 	if c.config.QueryBaseUrl == "" {
@@ -391,11 +395,9 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		slog.Bool("incremental", run.incremental()))
 
 	if err := c.syncResourceTypes(ctx, run); err != nil {
-		switch cause := context.Cause(ctx); {
-		case errors.Is(cause, errPageTimeout):
-			err = fmt.Errorf("%w (%s): %w", errPageTimeout, pageTimeout, err)
-		case errors.Is(cause, errSyncTimeout):
-			err = fmt.Errorf("%w (%s): %w", errSyncTimeout, syncTimeout, err)
+		// When the context was cancelled, the cause says why: one of the timers above, or the caller.
+		if cause := context.Cause(ctx); cause != nil {
+			err = fmt.Errorf("%w: %w", cause, err)
 		}
 		// Return progress tallied by already-applied pages rather than discarding it, and skip
 		// saving the synced-up-to time below so the next sync retries the whole window from the old

@@ -42,6 +42,7 @@ require (
 	go.uber.org/mock v0.6.0
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba
 	golang.org/x/oauth2 v0.37.0
+	golang.org/x/sync v0.24.0
 	google.golang.org/protobuf v1.36.12
 	software.sslmate.com/src/go-pkcs12 v0.7.4
 )
@@ -291,7 +292,6 @@ require (
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/text v0.43.0 // indirect

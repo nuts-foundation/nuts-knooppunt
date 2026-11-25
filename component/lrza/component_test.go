@@ -281,7 +281,7 @@ func TestUpdate_Bounded(t *testing.T) {
 	t.Run("waiting for a running sync ends with the caller's context", func(t *testing.T) {
 		c, err := New(Config{LRZABaseUrl: "http://lrza.example/fhir", QueryBaseUrl: "http://query.example/fhir"})
 		require.NoError(t, err)
-		c.syncSlot <- struct{}{} // a sync is running
+		require.NoError(t, c.syncLock.Acquire(context.Background(), 1)) // a sync is running
 
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
@@ -291,7 +291,7 @@ func TestUpdate_Bounded(t *testing.T) {
 		require.ErrorContains(t, err, "waiting for a running LRZA sync")
 	})
 
-	t.Run("a sync that stops making progress ends after pageTimeout and frees the slot", func(t *testing.T) {
+	t.Run("a sync that stops making progress ends after pageTimeout and frees the lock", func(t *testing.T) {
 		setDuration(t, &pageTimeout, 100*time.Millisecond)
 		source := newHangingServer(t)
 		c, err := New(Config{LRZABaseUrl: source.URL, QueryBaseUrl: "http://query.example/fhir"})
@@ -300,7 +300,7 @@ func TestUpdate_Bounded(t *testing.T) {
 		_, err = c.update(context.Background())
 
 		require.ErrorIs(t, err, errPageTimeout)
-		assert.Empty(t, c.syncSlot, "the next sync must be able to run")
+		assert.True(t, c.syncLock.TryAcquire(1), "the next sync must be able to run")
 	})
 
 	t.Run("a slow sync that keeps making progress is not cut off by pageTimeout", func(t *testing.T) {
@@ -338,7 +338,7 @@ func TestUpdate_Bounded(t *testing.T) {
 		assert.Greater(t, time.Since(start), 2*pageTimeout, "the test must outlast pageTimeout to show anything")
 	})
 
-	t.Run("a sync that never ends stops after syncTimeout and frees the slot", func(t *testing.T) {
+	t.Run("a sync that never ends stops after syncTimeout and frees the lock", func(t *testing.T) {
 		setDuration(t, &syncTimeout, 100*time.Millisecond)
 		source := newHangingServer(t)
 		c, err := New(Config{LRZABaseUrl: source.URL, QueryBaseUrl: "http://query.example/fhir"})
@@ -347,6 +347,6 @@ func TestUpdate_Bounded(t *testing.T) {
 		_, err = c.update(context.Background())
 
 		require.ErrorIs(t, err, errSyncTimeout)
-		assert.Empty(t, c.syncSlot, "the next sync must be able to run")
+		assert.True(t, c.syncLock.TryAcquire(1), "the next sync must be able to run")
 	})
 }

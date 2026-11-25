@@ -52,7 +52,7 @@ about 1 second per page (not yet measured), a full sync takes **1.5 to 2.5 hours
 slower query directory, or a smaller maximum page size on the LRZA side make it longer.
 
 A full sync runs on the first sync after every start, because the sync timestamp is kept in memory only.
-While it runs it holds the sync slot, so syncs after a write wait for it.
+While it runs it holds the sync lock, so syncs after a write wait for it.
 
 ## Settings derived from this estimate
 
