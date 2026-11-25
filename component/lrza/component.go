@@ -314,7 +314,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 
 	// The last sync time is read from the query directory at the start of every sync, not kept in
 	// memory, so the query directory holds the only copy (see loadSyncTime).
-	var since string
+	var since time.Time
 	if c.config.QueryBaseUrl != "" {
 		var err error
 		if since, err = c.loadSyncTime(ctx); err != nil {
@@ -349,15 +349,15 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 // newSyncRun creates a run with the search parameters for this cycle. The first sync (no timestamp
 // known) is a full search of current resources; later syncs are incremental _history queries with
 // _since. Both pin newest-first ordering so deduplication can keep the first entry per resource.
-func (c *Component) newSyncRun(since string) *syncRun {
+func (c *Component) newSyncRun(since time.Time) *syncRun {
 	params := url.Values{
 		"_count": []string{strconv.Itoa(searchPageSize)},
 		// Pin newest-first ordering: deduplication relies on it (a history Bundle is sorted with
 		// oldest versions last). Don't trust the server default.
 		"_sort": []string{"-_lastUpdated"},
 	}
-	if since != "" {
-		params.Set("_since", since)
+	if !since.IsZero() {
+		params.Set("_since", since.Format(time.RFC3339Nano))
 	}
 	return &syncRun{
 		queryStart:   time.Now(),
@@ -614,12 +614,18 @@ func requestMethodAt(tx fhir.Bundle, i int) (method fhir.HTTPVerb, ok bool) {
 // nextSyncTime returns the timestamp used as the _since value for the next incremental sync.
 // It prefers the search result Bundle's meta.lastUpdated (the FHIR server's own clock, avoiding
 // skew) and falls back to the local query start time minus a buffer.
-func (c *Component) nextSyncTime(ctx context.Context, run *syncRun) string {
+func (c *Component) nextSyncTime(ctx context.Context, run *syncRun) time.Time {
 	if run.sourceLastUpdated != nil {
-		return *run.sourceLastUpdated
+		sourceTime, err := time.Parse(time.RFC3339Nano, *run.sourceLastUpdated)
+		if err == nil {
+			return sourceTime
+		}
+		slog.WarnContext(ctx, "Bundle meta.lastUpdated is not a valid instant, using local time with buffer - may cause clock skew issues",
+			logging.FHIRServer(c.config.LRZABaseUrl), slog.String("lastUpdated", *run.sourceLastUpdated))
+	} else {
+		slog.WarnContext(ctx, "Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues", logging.FHIRServer(c.config.LRZABaseUrl))
 	}
-	slog.WarnContext(ctx, "Bundle meta.lastUpdated not available, using local time with buffer - may cause clock skew issues", logging.FHIRServer(c.config.LRZABaseUrl))
-	return run.queryStart.Add(-clockSkewBuffer).Format(time.RFC3339Nano)
+	return run.queryStart.Add(-clockSkewBuffer)
 }
 
 // finalizedReport returns the run's report with nil slices replaced by empty ones, for a nicer JSON

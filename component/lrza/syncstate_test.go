@@ -3,6 +3,7 @@ package lrza
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +31,7 @@ func TestSyncState(t *testing.T) {
 		require.Len(t, extensions, 1)
 		extension := extensions[0].(map[string]any)
 		assert.Equal(t, syncStateExtensionURL, extension["url"])
-		return extension["valueString"].(string)
+		return extension["valueInstant"].(string)
 	}
 	// fullReads and historyReads count the full searches and incremental _history reads of the LRZA.
 	fullReads := func(source *fakeLRZA) int {
@@ -74,7 +75,7 @@ func TestSyncState(t *testing.T) {
 		restarted := newComponent(t, source, query)
 		since, err := restarted.loadSyncTime(t.Context())
 		require.NoError(t, err)
-		assert.Equal(t, lastSuccess, since)
+		assert.Equal(t, lastSuccess, since.Format(time.RFC3339Nano))
 	})
 	t.Run("a query directory wiped while running means a full sync", func(t *testing.T) {
 		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
@@ -96,7 +97,7 @@ func TestSyncState(t *testing.T) {
 		since, err := c.loadSyncTime(t.Context())
 
 		require.NoError(t, err)
-		assert.Empty(t, since)
+		assert.True(t, since.IsZero())
 	})
 	t.Run("failing to read the saved time fails the sync before reading the LRZA", func(t *testing.T) {
 		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
