@@ -36,6 +36,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/lib/coding"
 	libfhir "github.com/nuts-foundation/nuts-knooppunt/lib/fhirutil"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/httpauth"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/httpclient"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/tlsutil"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -160,8 +161,8 @@ var syncAfterWriteDelay = 5 * time.Second
 var syncTimeout = 6 * time.Hour
 
 // pageTimeout bounds the time between two processed pages: fetching a page from the LRZA and applying it
-// to the query directory. Each of those is one request bounded by requestTimeout, so this leaves room for
-// both to take their full time.
+// to the query directory. Each of those is one request bounded by httpclient.DefaultRequestTimeout, so this
+// leaves room for both to take their full time.
 var pageTimeout = 5 * time.Minute
 
 var (
@@ -208,7 +209,7 @@ func New(config Config) (*Component, error) {
 	result := &Component{
 		config:          config,
 		fhirLRZAClient:  fhirclient.New(sourceBaseURL, sourceHTTPClient, &fhirclient.Config{UsePostSearch: false}),
-		fhirQueryClient: fhirclient.New(queryBaseURL, newHTTPClient(tracing.WrapTransport(newTransport(nil))), &fhirclient.Config{UsePostSearch: false}),
+		fhirQueryClient: fhirclient.New(queryBaseURL, newQueryHTTPClient(), &fhirclient.Config{UsePostSearch: false}),
 		syncSlot:        make(chan struct{}, 1),
 		syncRequests:    make(chan struct{}, 1),
 	}
@@ -221,12 +222,37 @@ func New(config Config) (*Component, error) {
 	return result, nil
 }
 
+// maxConnsPerHost bounds the connections to one host. The sync is sequential, so this is mostly for the
+// registration path, where every EHR request makes its own calls: beyond the limit, a request waits for
+// a free connection (or for its context to end) instead of opening yet another one to the LRZA.
+const maxConnsPerHost = 8
+
+// newTransport returns the base transport for the clients to the LRZA and the query directory: the
+// shared one from httpclient.NewTransport, with at most maxConnsPerHost connections to one host.
+// tlsConfig carries the mTLS client certificate; nil means the default TLS settings.
+//
+// The timeouts of httpclient suit the sync as they are: DefaultResponseHeaderTimeout (30 s) leaves room
+// for the query directory applying a transaction of searchPageSize entries, and DefaultRequestTimeout
+// (2 minutes) for several slow attempts on top of retryTransport's own backoff of up to about 31 s.
+func newTransport(tlsConfig *tls.Config) *http.Transport {
+	transport := httpclient.NewTransport(tlsConfig)
+	transport.MaxConnsPerHost = maxConnsPerHost
+	return transport
+}
+
+// newQueryHTTPClient builds the HTTP client used to talk to the query directory: the base transport with
+// timeouts (see newTransport) and OpenTelemetry tracing. It doesn't retry: a failed page fails the sync,
+// and the next sync applies it again.
+func newQueryHTTPClient() *http.Client {
+	return httpclient.New(tracing.WrapTransport(newTransport(nil)))
+}
+
 // newSourceHTTPClient builds the HTTP client used to talk to the trusted source directory. It layers,
 // from the bottom up: a transport with timeouts for every phase of an attempt (see newTransport), with
 // the mTLS client certificate when one is configured (required by the national LRZA environment), then
 // OpenTelemetry tracing, then retrying of transient failures (see retryTransport), then optional OAuth2
 // client-credentials. The same base transport - including mTLS and retrying - is reused for OAuth2 token
-// requests. The client bounds each request, retries included, by requestTimeout.
+// requests. The client bounds each request, retries included, by httpclient.DefaultRequestTimeout.
 func newSourceHTTPClient(config Config) (*http.Client, error) {
 	var tlsConfig *tls.Config
 	if config.TLSCertFile != "" {
@@ -242,17 +268,10 @@ func newSourceHTTPClient(config Config) (*http.Client, error) {
 
 	// The current implementation in the iRealisatie proeftuin does not use oAuth delegation, this is therefore untested
 	if config.Auth.IsConfigured() {
-		client, err := httpauth.NewOAuth2HTTPClient(config.Auth, retryingTransport)
-		if err != nil {
-			return nil, err
-		}
-		// x/oauth2 builds its own client and doesn't copy these. Its token requests have their own
-		// timeout (see NewOAuth2HTTPClient), since they don't run under the request's context.
-		client.Timeout = requestTimeout
-		client.CheckRedirect = refuseDowngrade
-		return client, nil
+		// The client gets the timeout and redirect policy of httpclient.New (see NewOAuth2HTTPClient).
+		return httpauth.NewOAuth2HTTPClient(config.Auth, retryingTransport)
 	}
-	return newHTTPClient(retryingTransport), nil
+	return httpclient.New(retryingTransport), nil
 }
 
 func (c *Component) Start() error {

@@ -3,8 +3,16 @@ package lrza
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"testing"
+	"time"
 
+	"github.com/nuts-foundation/nuts-knooppunt/lib/httpauth"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/httpclient"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
@@ -218,5 +226,127 @@ func TestTallyTransactionResult(t *testing.T) {
 		run := build(pair(req, resp))
 		require.Equal(t, 0, run.report.CountCreated+run.report.CountUpdated+run.report.CountDeleted)
 		require.Len(t, run.report.Warnings, 1)
+	})
+}
+
+// newHangingServer returns a server that accepts requests and never answers them, until the test ends or
+// the client gives up on the request.
+func newHangingServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	// Cleanups run last-in first-out: release the handlers before Close waits for them.
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { close(release) })
+	return server
+}
+
+// setDuration sets *target to value for the duration of the test.
+func setDuration(t *testing.T, target *time.Duration, value time.Duration) {
+	t.Helper()
+	original := *target
+	*target = value
+	t.Cleanup(func() { *target = original })
+}
+
+func TestNewTransport(t *testing.T) {
+	t.Run("limits the connections to one host", func(t *testing.T) {
+		assert.Equal(t, maxConnsPerHost, newTransport(nil).MaxConnsPerHost)
+	})
+}
+
+func TestNew_ClientsAreBounded(t *testing.T) {
+	source, err := newSourceHTTPClient(Config{LRZABaseUrl: "http://lrza.example/fhir"})
+	require.NoError(t, err)
+	// x/oauth2 builds its own client, which takes its limits from the token client in NewOAuth2HTTPClient.
+	sourceWithOAuth2, err := newSourceHTTPClient(Config{LRZABaseUrl: "http://lrza.example/fhir", Auth: httpauth.OAuth2Config{
+		TokenEndpoint: "http://auth.example/token", ClientID: "client", ClientSecret: "secret",
+	}})
+	require.NoError(t, err)
+
+	for name, client := range map[string]*http.Client{"source": source, "source with OAuth2": sourceWithOAuth2, "query": newQueryHTTPClient()} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, httpclient.DefaultRequestTimeout, client.Timeout)
+			assert.NotNil(t, client.CheckRedirect)
+		})
+	}
+}
+
+func TestUpdate_Bounded(t *testing.T) {
+	t.Run("waiting for a running sync ends with the caller's context", func(t *testing.T) {
+		c, err := New(Config{LRZABaseUrl: "http://lrza.example/fhir", QueryBaseUrl: "http://query.example/fhir"})
+		require.NoError(t, err)
+		c.syncSlot <- struct{}{} // a sync is running
+
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		_, err = c.update(ctx)
+
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorContains(t, err, "waiting for a running LRZA sync")
+	})
+
+	t.Run("a sync that stops making progress ends after pageTimeout and frees the slot", func(t *testing.T) {
+		setDuration(t, &pageTimeout, 100*time.Millisecond)
+		source := newHangingServer(t)
+		c, err := New(Config{LRZABaseUrl: source.URL, QueryBaseUrl: "http://query.example/fhir"})
+		require.NoError(t, err)
+
+		_, err = c.update(context.Background())
+
+		require.ErrorIs(t, err, errPageTimeout)
+		assert.Empty(t, c.syncSlot, "the next sync must be able to run")
+	})
+
+	t.Run("a slow sync that keeps making progress is not cut off by pageTimeout", func(t *testing.T) {
+		// Every page takes 30 ms and there are 14 of them (10 Organization pages, plus one empty page for
+		// each other type), so the sync as a whole takes several times pageTimeout.
+		setDuration(t, &pageTimeout, 200*time.Millisecond)
+		const organizationPages = 10
+		var source *httptest.Server
+		source = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(30 * time.Millisecond)
+			bundle := map[string]any{"resourceType": "Bundle", "type": "searchset"}
+			if r.URL.Path == "/Organization" {
+				page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+				bundle["entry"] = []any{map[string]any{"resource": map[string]any{"resourceType": "Organization", "id": fmt.Sprintf("org-%d", page)}}}
+				if page+1 < organizationPages {
+					bundle["link"] = []any{map[string]any{"relation": "next", "url": fmt.Sprintf("%s/Organization?page=%d", source.URL, page+1)}}
+				}
+			}
+			writeJSON(w, http.StatusOK, bundle)
+		}))
+		t.Cleanup(source.Close)
+		query := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusOK, map[string]any{"resourceType": "Bundle", "type": "transaction-response",
+				"entry": []any{map[string]any{"response": map[string]any{"status": "201 Created"}}}})
+		}))
+		t.Cleanup(query.Close)
+		c, err := New(Config{LRZABaseUrl: source.URL, QueryBaseUrl: query.URL})
+		require.NoError(t, err)
+
+		start := time.Now()
+		report, err := c.update(context.Background())
+
+		require.NoError(t, err)
+		assert.Equal(t, organizationPages, report.CountCreated)
+		assert.Greater(t, time.Since(start), 2*pageTimeout, "the test must outlast pageTimeout to show anything")
+	})
+
+	t.Run("a sync that never ends stops after syncTimeout and frees the slot", func(t *testing.T) {
+		setDuration(t, &syncTimeout, 100*time.Millisecond)
+		source := newHangingServer(t)
+		c, err := New(Config{LRZABaseUrl: source.URL, QueryBaseUrl: "http://query.example/fhir"})
+		require.NoError(t, err)
+
+		_, err = c.update(context.Background())
+
+		require.ErrorIs(t, err, errSyncTimeout)
+		assert.Empty(t, c.syncSlot, "the next sync must be able to run")
 	})
 }

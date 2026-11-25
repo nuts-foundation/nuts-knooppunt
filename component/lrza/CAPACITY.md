@@ -61,8 +61,8 @@ All in `component.go`:
 - `syncTimeout` (6 hours) bounds a whole sync: more than twice the upper estimate of a full sync. It guards
   against a sync that never ends, for example a server that keeps returning a `next` link.
 - `pageTimeout` (5 minutes) bounds the time between two processed pages, so a sync that stops making
-  progress fails long before `syncTimeout`. One page is at most two requests of `requestTimeout` (2 minutes)
-  each.
+  progress fails long before `syncTimeout`. One page is at most two requests of
+  `httpclient.DefaultRequestTimeout` (2 minutes) each.
 
 The cron job that triggers `/lrza/update` can run more often than a full sync takes: a call that comes in
 while a sync runs waits for it, until the caller's request times out.

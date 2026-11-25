@@ -4,15 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
+	"github.com/nuts-foundation/nuts-knooppunt/lib/httpclient"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
-
-// tokenRequestTimeout bounds a single token request, including any retries the base
-// transport does.
-const tokenRequestTimeout = 2 * time.Minute
 
 // OAuth2Config holds the configuration for OAuth2 client credentials authentication.
 type OAuth2Config struct {
@@ -49,11 +45,13 @@ func NewOAuth2HTTPClient(config OAuth2Config, baseTransport http.RoundTripper) (
 	}
 
 	// Inject the base transport via context so x/oauth2 uses it for both
-	// token requests and the returned client's underlying transport.
+	// token requests and the returned client's underlying transport. The returned
+	// client also takes over tokenClient's Timeout and CheckRedirect (see
+	// oauth2.NewClient), so both get the limits of httpclient.New.
 	// Token requests run under this context, not the caller's request context, so
 	// without a timeout here a token endpoint that stops answering blocks the caller's
 	// request forever, whatever timeout the caller set on the returned client.
-	tokenClient := &http.Client{Transport: baseTransport, Timeout: tokenRequestTimeout}
+	tokenClient := httpclient.New(baseTransport)
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, tokenClient)
 
 	return conf.Client(ctx), nil
