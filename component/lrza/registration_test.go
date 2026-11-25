@@ -773,7 +773,7 @@ func TestRegistration_SyncAfterWrite(t *testing.T) {
 		t.Cleanup(func() { syncAfterWriteDelay = original })
 		query := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodGet {
-				// No saved last change sync time, as in an empty query directory.
+				// No saved synced-up-to time, as in an empty query directory.
 				writeOutcome(w, http.StatusNotFound, "not found")
 				return
 			}

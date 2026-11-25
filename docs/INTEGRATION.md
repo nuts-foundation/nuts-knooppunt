@@ -130,10 +130,10 @@ through the Knooppunt (see [After a write](#after-a-write)).
 - **First sync:** into a Query Directory that has never been synced, it's a full sync: all resources that currently
   exist in the LRZA.
 - **Later syncs:** only the changes since the last sync that applied changes, including deletions.
-- **Last change sync time:** the LRZA's time at the start of the last sync that applied changes. The Knooppunt saves it
-  in the Query Directory itself, as a `Basic` resource with code
-  `http://nuts-foundation.github.io/nuts-knooppunt/CodeSystem/lrza|sync-state`. A sync without changes doesn't save
-  it, so frequent syncs don't pile up versions of that resource. So:
+- **Synced-up-to time:** all LRZA changes up to this time are in the Query Directory. It's the LRZA's time at the start
+  of the last sync that applied changes. The Knooppunt saves it in the Query Directory itself, as a `Basic` resource
+  with code `http://nuts-foundation.github.io/nuts-knooppunt/CodeSystem/lrza|sync-state`. A sync without changes
+  doesn't save it, so frequent syncs don't pile up versions of that resource. So:
   - After a restart, the next sync continues with the changes, instead of starting over.
   - If the Query Directory is wiped, the time goes with it and the next sync is a full sync.
   - A sync that fails partway doesn't save a time, so the next sync starts from the last successful one again.

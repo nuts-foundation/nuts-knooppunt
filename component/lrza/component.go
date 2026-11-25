@@ -313,12 +313,12 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
 
-	// The last change sync time is read from the query directory at the start of every sync, not kept
-	// in memory, so the query directory holds the only copy (see loadLastChangeSyncTime).
+	// The synced-up-to time is read from the query directory at the start of every sync, not kept in
+	// memory, so the query directory holds the only copy (see loadSyncedUpTo).
 	var since time.Time
 	if c.config.QueryBaseUrl != "" {
 		var err error
-		if since, err = c.loadLastChangeSyncTime(ctx); err != nil {
+		if since, err = c.loadSyncedUpTo(ctx); err != nil {
 			return UpdateReport{Warnings: []string{}, Errors: []string{}}, err
 		}
 	}
@@ -329,13 +329,13 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 
 	if err := c.syncResourceTypes(ctx, run); err != nil {
 		// Return progress tallied by already-applied pages rather than discarding it, and skip
-		// saving the last change sync time below so the next sync retries the whole window from the
+		// saving the synced-up-to time below so the next sync retries the whole window from the
 		// last successful one instead of skipping past what never got applied. Safe to retry: every write
 		// is a PUT or DELETE by an id derived from the source's, so re-applying already-applied pages
 		// is a no-op.
 		return run.finalizedReport(), err
 	}
-	// Only a sync that applied changes saves its start time. Saving after every sync would add a version
+	// Only a sync that applied changes saves its start time as the synced-up-to time. Saving after every sync would add a version
 	// of the Basic resource each time (288 a day with a sync every 5 minutes), which the FHIR server keeps
 	// forever. Keeping the older time after a sync without changes is safe: that sync saw no changes since
 	// it, so the next one only re-reads that empty window.
@@ -344,7 +344,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		// An error even though everything has been applied: the next sync starts from the previously
 		// saved time again (harmless, it re-reads an applied window), but a save that keeps failing
 		// means every sync is a full sync, which never applies deletions. That must be noticed.
-		if err := c.saveLastChangeSyncTime(ctx, c.syncStartTime(ctx, run)); err != nil {
+		if err := c.saveSyncedUpTo(ctx, c.syncStartTime(ctx, run)); err != nil {
 			return run.finalizedReport(), err
 		}
 	}
