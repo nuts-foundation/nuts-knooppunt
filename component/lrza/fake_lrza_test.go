@@ -28,6 +28,7 @@ type fakeLRZA struct {
 	nextID    int
 	requests  []recordedRequest
 	// failures holds status codes to answer the next requests with, in order, before handling them.
+	// 0 lets that request through.
 	failures []int
 	// minimal makes creates and updates answer without the stored resource, as an LRZA ignoring
 	// Prefer: return=representation would.
@@ -116,11 +117,13 @@ func (f *fakeLRZA) handle(w http.ResponseWriter, r *http.Request) {
 	if len(f.failures) > 0 {
 		status := f.failures[0]
 		f.failures = f.failures[1:]
-		if status == http.StatusTooManyRequests {
-			w.Header().Set("Retry-After", "0")
+		if status != 0 {
+			if status == http.StatusTooManyRequests {
+				w.Header().Set("Retry-After", "0")
+			}
+			writeOutcome(w, status, "injected failure")
+			return
 		}
-		writeOutcome(w, status, "injected failure")
-		return
 	}
 
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")

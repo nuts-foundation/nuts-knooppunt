@@ -46,8 +46,7 @@ func TestSyncState(t *testing.T) {
 
 		syncOK(t, c)
 
-		require.NotEmpty(t, c.lastUpdateTime)
-		assert.Equal(t, c.lastUpdateTime, storedSyncTime(t, c, query))
+		assert.NotEmpty(t, storedSyncTime(t, c, query))
 	})
 	t.Run("after a restart, the first sync is incremental from the saved time", func(t *testing.T) {
 		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
@@ -64,26 +63,40 @@ func TestSyncState(t *testing.T) {
 		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
 		c := newComponent(t, source, query)
 		syncOK(t, c)
-		lastSuccess := c.lastUpdateTime
+		lastSuccess := storedSyncTime(t, c, query)
 
-		// The query directory rejects the first page's transaction.
-		query.failNext(http.StatusInternalServerError)
+		// The query directory lets the sync time be read, then rejects the first page's transaction.
+		query.failNext(0, http.StatusInternalServerError)
 		_, err := c.update(t.Context())
 		require.Error(t, err)
 
-		assert.Equal(t, lastSuccess, c.lastUpdateTime)
 		assert.Equal(t, lastSuccess, storedSyncTime(t, c, query))
 		restarted := newComponent(t, source, query)
-		require.NoError(t, restarted.loadSyncState(t.Context()))
-		assert.Equal(t, lastSuccess, restarted.lastUpdateTime)
+		since, err := restarted.loadSyncTime(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, lastSuccess, since)
+	})
+	t.Run("a query directory wiped while running means a full sync", func(t *testing.T) {
+		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
+		c := newComponent(t, source, query)
+		syncOK(t, c)
+		query.mux.Lock()
+		query.resources = map[string]resource{}
+		query.mux.Unlock()
+
+		syncOK(t, c)
+
+		assert.Equal(t, 2, fullReads(source))
+		assert.Zero(t, historyReads(source))
 	})
 	t.Run("an empty query directory means a full sync", func(t *testing.T) {
 		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
 		c := newComponent(t, source, query)
 
-		require.NoError(t, c.loadSyncState(t.Context()))
+		since, err := c.loadSyncTime(t.Context())
 
-		assert.Empty(t, c.lastUpdateTime)
+		require.NoError(t, err)
+		assert.Empty(t, since)
 	})
 	t.Run("failing to read the saved time fails the sync before reading the LRZA", func(t *testing.T) {
 		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
