@@ -144,6 +144,8 @@ through the Knooppunt (see [After a write](#after-a-write)).
   A full sync doesn't remove resources that were deleted from the LRZA earlier; for that, empty the Query Directory
   first. If the saved time is unreadable, syncs fail with an error naming the `Basic` resource rather than falling back
   to a full sync on their own, because that full sync would silently skip the deletions since the saved time.
+- **The LRZA's time:** the synced-up-to time comes from the LRZA's own clock: `meta.lastUpdated` of its search results.
+  If the LRZA doesn't report it, the sync fails rather than guess with the Knooppunt's clock, which could skip changes.
 - **Applications reading the Query Directory** can find this `Basic` resource there. It isn't addressing data; ignore it.
 - **One Knooppunt per Query Directory:** two syncs into the same Query Directory at the same time can put back an older
   version of a resource. Don't let several Knooppunt instances sync the LRZA into the same Query Directory.
