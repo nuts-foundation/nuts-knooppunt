@@ -772,6 +772,11 @@ func TestRegistration_SyncAfterWrite(t *testing.T) {
 		syncAfterWriteDelay = delay
 		t.Cleanup(func() { syncAfterWriteDelay = original })
 		query := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet {
+				// No saved synced-up-to time, as in an empty query directory.
+				writeOutcome(w, http.StatusNotFound, "not found")
+				return
+			}
 			writeJSON(w, http.StatusOK, map[string]any{"resourceType": "Bundle", "type": "transaction-response"})
 		}))
 		t.Cleanup(query.Close)

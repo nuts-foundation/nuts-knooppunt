@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ type fakeLRZA struct {
 	nextID    int
 	requests  []recordedRequest
 	// failures holds status codes to answer the next requests with, in order, before handling them.
+	// 0 lets that request through.
 	failures []int
 	// minimal makes creates and updates answer without the stored resource, as an LRZA ignoring
 	// Prefer: return=representation would.
@@ -37,6 +39,7 @@ type fakeLRZA struct {
 type recordedRequest struct {
 	method string
 	path   string
+	query  url.Values
 	header http.Header
 	body   []byte
 }
@@ -111,20 +114,25 @@ func (f *fakeLRZA) handle(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	f.mux.Lock()
 	defer f.mux.Unlock()
-	f.requests = append(f.requests, recordedRequest{method: r.Method, path: r.URL.Path, header: r.Header.Clone(), body: body})
+	f.requests = append(f.requests, recordedRequest{method: r.Method, path: r.URL.Path, query: r.URL.Query(), header: r.Header.Clone(), body: body})
 
 	if len(f.failures) > 0 {
 		status := f.failures[0]
 		f.failures = f.failures[1:]
-		if status == http.StatusTooManyRequests {
-			w.Header().Set("Retry-After", "0")
+		if status != 0 {
+			if status == http.StatusTooManyRequests {
+				w.Header().Set("Retry-After", "0")
+			}
+			writeOutcome(w, status, "injected failure")
+			return
 		}
-		writeOutcome(w, status, "injected failure")
-		return
 	}
 
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 	switch {
+	case r.Method == http.MethodGet && len(parts) == 2 && parts[1] == "_history":
+		// Only the current version is kept, so a type's history is its current resources.
+		f.search(w, parts[0], r)
 	case r.Method == http.MethodGet && len(parts) == 2:
 		res, ok := f.resources[parts[0]+"/"+parts[1]]
 		if !ok {
