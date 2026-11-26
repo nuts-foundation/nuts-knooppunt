@@ -1,9 +1,10 @@
 # Reachable govulncheck findings that are accepted, each with the reason above
-# it. The govulncheck workflow fails on any reachable finding that is not listed
-# here. An entry holds while the vulnerability database knows no fixed version;
-# to accept a finding whose fix cannot be applied yet, put the last day of the
-# acceptance after the ID (GO-2026-0000 2027-01-31). Remove an entry when the
-# workflow warns that it is no longer reported.
+# it. A reachable finding that is not listed here fails the pull request that
+# adds it, and has an open issue while main reports it. An entry holds while the
+# vulnerability database knows no fixed version; to accept a finding whose fix
+# cannot be applied yet, put the last day of the acceptance after the ID
+# (GO-2026-0000 2027-01-31). Remove an entry when the workflow warns that it is
+# no longer reported.
 
 # nuts-node advisory GHSA-9hmg-827w-9rhj. The Go vulnerability database lists no
 # fixed version for this module path, but the pinned nuts-node commit (22ceb753)

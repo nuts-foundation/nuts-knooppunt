@@ -7,19 +7,36 @@ name: 'govulncheck'
 # itself is scanned (the root package), not the mocks, the sandbox or the test
 # harness that share its module.
 #
-# The scheduled run checks main as a whole: a reachable finding fails it unless
-# .github/govulncheck-accepted.txt accepts it (that file says when an acceptance
-# holds), and then posts to Slack. Errors only: nothing on success. A pull request
-# only fails on what it adds: reachable findings that its base branch does not
-# have. Findings that are on the base branch already are left to the scheduled run.
+# A pull request only fails on what it adds: reachable findings that its base
+# branch does not have. Findings on the base branch already are tracked on main.
+#
+# On main (pushes, the weekday schedule and manual runs) the track job scans the
+# whole binary and keeps one open issue with the govulncheck label for every
+# advisory that needs attention: a new advisory opens one and posts to Slack, and
+# an issue is closed once main no longer reports its advisory. An advisory
+# accepted in .github/govulncheck-accepted.txt gets no issue (that file says when
+# an acceptance holds). Each run compares a fresh scan of main with the open
+# issues, not with an earlier run, so a run that is cancelled or fails loses
+# nothing: the next run catches up, Slack message included. On main only errors
+# fail the workflow.
 on:
   schedule:
     # Weekdays at 08:15 UTC, after the smoke test.
     - cron: '15 8 * * 1-5'
-  # On pull requests that change Go code, the dependencies or the check itself,
-  # to any base branch, so a pull request stacked on another one is checked too.
-  # Go code counts as well: a call can make a vulnerable function reachable
-  # without a change to go.mod.
+  # Pushes to main and pull requests run when Go code, the dependencies or the
+  # check itself change. Go code counts as well: a call can make a vulnerable
+  # function reachable without a change to go.mod.
+  push:
+    branches:
+      - main
+    paths:
+      - '**.go'
+      - go.mod
+      - go.sum
+      - .github/workflows/govulncheck.yaml
+      - .github/govulncheck-accepted.txt
+  # To any base branch, so that a pull request stacked on another one is checked
+  # too.
   pull_request:
     paths:
       - '**.go'
@@ -38,8 +55,14 @@ defaults:
     shell: bash
 
 jobs:
-  govulncheck:
+  # Pull requests, and manual runs on a branch other than main.
+  scan:
+    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
+    # A newer run for the same pull request or branch replaces this one.
+    concurrency:
+      group: govulncheck-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -49,7 +72,9 @@ jobs:
           # is the base branch.
           fetch-depth: 2
 
-      - name: Set up Go
+      # The steps with an anchor (&name) run in the track job as well.
+      - &setup-go
+        name: Set up Go
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -59,23 +84,25 @@ jobs:
 
       # The govulncheck version is bumped by hand: Dependabot does not see run
       # commands. In JSON mode govulncheck exits 0 whatever it finds, and
-      # non-zero only when it cannot run. The next step decides on the findings.
-      - name: Run govulncheck
+      # non-zero only when it cannot run. The check step decides on the findings.
+      - &govulncheck
+        name: Run govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 -format json . > govulncheck.json
 
       # On a pull request, the base branch is scanned as well, so that only what
       # the pull request adds counts. Both scans start from the Go toolchain set up
       # from the pull request's go.mod (Go switches to a newer one if the base asks
       # for it), not from the base's own, so a pull request that only changes the
-      # Go version may show no difference here; the scheduled run reports standard
-      # library findings either way.
+      # Go version may show no difference here; main reports standard library
+      # findings either way.
       - name: Run govulncheck on the base branch
         if: github.event_name == 'pull_request'
         run: |
           git worktree add --detach "$RUNNER_TEMP/base" HEAD^1
           (cd "$RUNNER_TEMP/base" && go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 -format json .) > base.json
 
-      - name: Check findings against the accepted list
+      - &check
+        name: Check findings against the accepted list
         run: |
           export LC_ALL=C
           # Output that is not symbol-level protocol v1 is not something this
@@ -98,9 +125,9 @@ jobs:
           cut -d'|' -f1 findings.txt | sort -u > found.txt
 
           # On a pull request, only findings that the base branch does not have
-          # count; the scheduled run reports the others. A finding is an advisory
-          # in a module: an advisory that the base reaches in one module and the
-          # pull request reaches in another counts as new.
+          # count; main tracks the others. A finding is an advisory in a module:
+          # an advisory that the base reaches in one module and the pull request
+          # reaches in another counts as new.
           : > new-pairs.txt
           if [ -f base.json ]; then
             jq -r 'select(.finding.trace[0].function != null) | .finding | [.osv, .trace[0].module] | join("|")' base.json | sort -u > base-pairs.txt
@@ -108,7 +135,7 @@ jobs:
             comm -23 base-pairs.txt head-pairs.txt | while IFS='|' read -r id module; do
               echo "::notice::${id} in ${module} is no longer reported with this pull request"
             done
-            echo "::notice::$(comm -12 base-pairs.txt head-pairs.txt | cut -d'|' -f1 | sort -u | wc -l | tr -d ' ') reachable vulnerabilities are on the base branch already; the scheduled run reports those"
+            echo "::notice::$(comm -12 base-pairs.txt head-pairs.txt | cut -d'|' -f1 | sort -u | wc -l | tr -d ' ') reachable vulnerabilities are on the base branch already; main tracks those"
             comm -13 base-pairs.txt head-pairs.txt > new-pairs.txt
             awk -F'|' 'NR == FNR { new[$1 "|" $2]; next } ($1 "|" $2) in new' new-pairs.txt findings.txt > new-findings.txt
             mv new-findings.txt findings.txt
@@ -155,8 +182,14 @@ jobs:
             echo "::warning::${id} is no longer reported; remove it from .github/govulncheck-accepted.txt"
           done
 
-          # A finding needs a change here when it is not accepted, or when a
-          # fixed version is known and the acceptance has no date or has expired.
+          # A finding needs attention when it is not accepted, or when a fixed
+          # version is known and the acceptance has no date or has expired. On a
+          # pull request that fails the check; on main it gets an issue.
+          if [ -f base.json ]; then
+            level=error
+          else
+            level=warning
+          fi
           : > failing.txt
           while IFS='|' read -r id module fixed; do
             if ! grep -qxF "$id" accepted.txt; then
@@ -169,14 +202,33 @@ jobs:
             elif [ -n "$until_date" ] && [[ ! "$today" > "$until_date" ]]; then
               echo "::notice::${id}$(via_label "$id") has a fix in ${fixed} (${module}) but is accepted until ${until_date}"
             else
-              echo "::error::${id}$(via_label "$id") is accepted, but ${module} has a fix in ${fixed}; bump it, or accept it until a date"
+              echo "::${level}::${id}$(via_label "$id") is accepted, but ${module} has a fix in ${fixed}; bump it, or accept it until a date"
               echo "$id" >> failing.txt
             fi
           done < findings.txt
           sort -u -o failing.txt failing.txt
 
+          # Outside a pull request, list the advisories that need attention in
+          # tracked.json, from which the track job keeps the issues on main.
+          if [ ! -f base.json ]; then
+            jq -n --rawfile ids failing.txt --rawfile via via-nuts-node.txt --rawfile rows findings.txt \
+              --slurpfile osv <(jq -c 'select(.osv) | .osv | {id, summary}' govulncheck.json) '
+              ($osv | map({key: .id, value: .summary}) | from_entries) as $summaries
+              | ($rows | split("\n") | map(select(length > 0) | split("|"))) as $rows
+              | ($via | split("\n")) as $via
+              | [$ids | split("\n")[] | select(length > 0) | . as $id
+                  | {id: $id, summary: ($summaries[$id] // ""), via: (($via | index($id)) != null),
+                     modules: ([$rows[] | select(.[0] == $id) | {module: .[1], fixed: .[2]}] | unique)}]' > tracked.json
+            {
+              echo "### Reachable advisories that need attention: $(jq length tracked.json)"
+              echo
+              jq -r '.[] | "- \(.id)\(if .via then " (via nuts-node)" else "" end) \(.summary) https://pkg.go.dev/vuln/\(.id)"' tracked.json
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
           if [ -s failing.txt ]; then
-            # On a pull request, name the modules in which the advisory is new.
+            # Name the modules in which the advisory is new.
             jq -r --rawfile ids failing.txt --rawfile via via-nuts-node.txt --rawfile newpairs new-pairs.txt '
               .osv? // empty | .id as $id
               | select($ids | split("\n") | index($id))
@@ -187,41 +239,139 @@ jobs:
             cat failing-details.txt
             count="$(wc -l < failing.txt | tr -d ' ')"
             via_count="$(grep -c ' (via nuts-node) ' failing-details.txt || true)"
-            if [ -f base.json ]; then
-              heading="Reachable vulnerabilities that this pull request adds"
-              message="This pull request adds ${count} reachable vulnerabilities; fix them or add an entry to .github/govulncheck-accepted.txt"
-            else
-              heading="Reachable vulnerabilities that need a fix or an accepted-list entry"
-              message="${count} reachable vulnerabilities need a fix or an entry in .github/govulncheck-accepted.txt"
-            fi
             {
-              echo "### ${heading}"
+              echo "### Reachable vulnerabilities that this pull request adds"
               echo
               echo "${via_count} of them are in modules that only the embedded nuts-node brings in."
               echo
               sed 's/^/- /' failing-details.txt
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::${message}"
+            echo "::error::This pull request adds ${count} reachable vulnerabilities; fix them or add an entry to .github/govulncheck-accepted.txt"
             exit 1
           fi
 
+  # Main: one open issue for every advisory that needs attention.
+  track:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    # One run at a time, so that two runs never open the same issue twice. Each
+    # run scans main as it is when the run starts, also on a re-run, so the last
+    # run always applies the newest scan. A run that has to wait can be replaced
+    # by a newer one; that loses nothing.
+    concurrency:
+      group: govulncheck-track
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: main
+
+      - *setup-go
+      - *govulncheck
+      - *check
+
+      # Each advisory has one open issue with the govulncheck label, found by the
+      # marker in its body. The REST API lists them: gh issue list searches when
+      # it filters on a label, and the search index can lag behind. A new issue
+      # keeps the govulncheck-unannounced label until Slack has the message about
+      # it, so a run that fails in between leaves the message to the next run.
       # SLACK_WEBHOOK is a Slack incoming webhook. Slack reads &, < and > as
       # control characters, so they are escaped.
+      - name: Update the govulncheck issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          export LC_ALL=C
+          jq -e 'type == "array"' tracked.json > /dev/null
+          sha="$(git rev-parse --short=7 HEAD)"
+          label=govulncheck
+          unannounced=govulncheck-unannounced
+          gh label create "$label" --color B60205 --description "Reachable vulnerability that govulncheck reports on main" --force > /dev/null
+          gh label create "$unannounced" --color FBCA04 --description "govulncheck issue that Slack has not heard about yet" --force > /dev/null
+
+          gh api --paginate "repos/${GH_REPO}/issues?labels=${label}&state=open&per_page=100" \
+            --jq '.[] | select(.pull_request | not) | {number, title, url: .html_url, body: (.body // ""), labels: [.labels[].name]}' |
+            jq -s . > open-issues.json
+          jq -r '.[] | (.body | capture("<!-- govulncheck:(?<id>GO-[0-9]+-[0-9]+) -->").id) as $id | "\($id) \(.number)"' open-issues.json | sort > open.txt
+
+          # The issues that Slack has to hear about, as number, URL and title
+          # separated by tabs: the ones that an earlier run could not announce,
+          # and the ones opened below.
+          jq -r --arg unannounced "$unannounced" '.[] | select(.labels | index($unannounced)) | [.number, .url, .title] | @tsv' open-issues.json > announce.txt
+
+          jq -c '.[]' tracked.json | while read -r advisory; do
+            id="$(jq -r .id <<< "$advisory")"
+            jq -r '
+              "<!-- govulncheck:\(.id) -->",
+              "**\(.id)**: \(.summary)",
+              "",
+              "https://pkg.go.dev/vuln/\(.id)",
+              "",
+              "The knooppunt binary on main reaches it in:",
+              "",
+              (.modules[] | "- \(.module)" + (if .fixed != "" then ", fixed in \(.fixed)" else ", no fixed version known yet" end)),
+              "",
+              (if .via then "These modules come in through the embedded nuts-node only.\n" else empty end),
+              "Bump the module, or accept the advisory in `.github/govulncheck-accepted.txt` with a reason. The govulncheck workflow updates this issue on every run on main and closes it once main no longer reports the advisory; closing it by hand does not keep it closed."' <<< "$advisory" > body.md
+            number="$(awk -v id="$id" '$1 == id { print $2; exit }' open.txt)"
+            if [ -n "$number" ]; then
+              # Only when something changed, so that the issue's history shows
+              # real changes.
+              current="$(jq -r --argjson number "$number" '.[] | select(.number == $number) | .body' open-issues.json)"
+              if [ "$current" != "$(cat body.md)" ]; then
+                gh issue edit "$number" --body-file body.md > /dev/null
+              fi
+            else
+              # GitHub allows 256 characters in a title.
+              title="$(jq -r '"govulncheck: \(.id) \(.summary)" | .[0:250]' <<< "$advisory")"
+              url="$(gh issue create --title "$title" --label "$label" --label "$unannounced" --body-file body.md)"
+              printf '%s\t%s\t%s\n' "${url##*/}" "$url" "$title" >> announce.txt
+            fi
+          done
+
+          # Close the issues of advisories that main no longer reports: fixed,
+          # no longer reachable, or accepted.
+          jq -r '.[].id' tracked.json | sort -u > tracked-ids.txt
+          : > closed.txt
+          cut -d' ' -f1 open.txt | sort -u | comm -23 - tracked-ids.txt | while read -r id; do
+            awk -v id="$id" '$1 == id { print $2 }' open.txt | while read -r number; do
+              gh issue close "$number" --comment "Main no longer reports ${id} at ${sha}: it is fixed, no longer reachable, or accepted in .github/govulncheck-accepted.txt." > /dev/null
+              echo "$number" >> closed.txt
+            done
+          done
+
+          # A closed issue needs no announcement. The label comes off once Slack
+          # has the message. Slack truncates a message above 40,000 characters, so
+          # a message lists at most 25 issues: with titles of at most 250
+          # characters, that stays below the limit even when escaped.
+          awk -F'\t' 'FILENAME == ARGV[1] { closed[$1]; next } !($1 in closed)' closed.txt announce.txt > announce-open.txt
+          if [ -s announce-open.txt ]; then
+            count="$(wc -l < announce-open.txt | tr -d ' ')"
+            split -l 25 announce-open.txt announce-part-
+            for part in announce-part-*; do
+              text=":warning: govulncheck: ${count} new reachable vulnerabilities on main. Run: ${RUN_URL}"$'\n'"$(awk -F'\t' '{ sub(/^govulncheck: /, "", $3); print $3 " " $2 }' "$part")"
+              jq -n --arg text "$text" '{text: ($text | gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;"))}' |
+                curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK"
+              cut -f1 "$part" | while read -r number; do
+                gh issue edit "$number" --remove-label "$unannounced" > /dev/null
+              done
+            done
+          fi
+
+      # SLACK_WEBHOOK is a Slack incoming webhook.
       - name: Notify Slack on failure
-        if: failure() && github.event_name == 'schedule'
+        if: failure()
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          if [ -s failing-details.txt ]; then
-            count="$(wc -l < failing-details.txt | tr -d ' ')"
-            via_count="$(grep -c ' (via nuts-node) ' failing-details.txt || true)"
-            text=":warning: govulncheck: ${count} reachable vulnerabilities in the knooppunt need a fix or an accepted-list entry, ${via_count} of them through the embedded nuts-node. Run: ${RUN_URL}"$'\n'"$(head -n 10 failing-details.txt)"
-            if [ "$count" -gt 10 ]; then
-              text="${text}"$'\n'"... and $((count - 10)) more"
-            fi
-          else
-            text=":warning: govulncheck failed. Run: ${RUN_URL}"
-          fi
-          jq -n --arg text "$text" '{text: ($text | gsub("&"; "&amp;") | gsub("<"; "&lt;") | gsub(">"; "&gt;"))}' |
+          jq -n --arg text ":warning: govulncheck failed on main. Run: ${RUN_URL}" '{text: $text}' |
             curl -sS --fail -X POST -H 'Content-Type: application/json' --data @- "$SLACK_WEBHOOK"
