@@ -17,6 +17,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 // errComponentDisabled is returned by a forwarding method when the component that owns the
@@ -228,14 +229,7 @@ func (s *strictAPIServer) RegisterHttpHandlers(_ *http.ServeMux, internalMux *ht
 				Outcome:    fhirapi.OperationOutcomeForError(fhirapi.BadRequestError(message, nil)),
 			}.Write(w)
 		},
-		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-			if errors.Is(err, errComponentDisabled) {
-				http.NotFound(w, r)
-				return
-			}
-			slog.ErrorContext(r.Context(), "API operation failed", slog.String("method", r.Method), slog.String("path", r.URL.Path), logging.Error(err))
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-		},
+		ResponseErrorHandlerFunc: responseErrorHandler,
 	})
 	api.HandlerWithOptions(handler, api.StdHTTPServerOptions{
 		BaseRouter: internalMux,
@@ -243,6 +237,11 @@ func (s *strictAPIServer) RegisterHttpHandlers(_ *http.ServeMux, internalMux *ht
 		// search query params) are the only ones declared in openapi.yaml, so this is only ever
 		// hit for those components' routes; respond the same way their own code does for a
 		// bad/missing request: a FHIR OperationOutcome, not the framework's plain-text default.
+		//
+		// The generated wrapper calls this only when it can't bind a parameter: a required one is
+		// missing, a single-valued one is repeated, or a value has the wrong format. Body decode
+		// errors go to RequestErrorHandlerFunc and errors returned by a component to
+		// ResponseErrorHandlerFunc, above.
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
 			// The binding error's own text may quote the parameter value (e.g. a search token
 			// holding a BSN), so neither the response nor the log uses it.
@@ -254,6 +253,22 @@ func (s *strictAPIServer) RegisterHttpHandlers(_ *http.ServeMux, internalMux *ht
 			}.Write(w)
 		},
 	})
+}
+
+// responseErrorHandler handles an error a component's operation returns, rather than a response
+// object. Components answer expected failures with their own response objects, so this is the
+// fallback for unexpected ones: a 500 with an OperationOutcome, like every other error response of
+// the API. The error itself is only logged. errComponentDisabled is the exception: it gets a 404.
+func responseErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, errComponentDisabled) {
+		http.NotFound(w, r)
+		return
+	}
+	slog.ErrorContext(r.Context(), "API operation failed", slog.String("method", r.Method), slog.String("path", r.URL.Path), logging.Error(err))
+	_ = api.OperationOutcomeResponse{
+		StatusCode: http.StatusInternalServerError,
+		Outcome:    fhirapi.OperationOutcomeForError(&fhirapi.Error{Message: "Internal server error", IssueType: fhir.IssueTypeException}),
+	}.Write(w)
 }
 
 // paramErrorMessage describes a parameter binding error by the parameter's name only. A

@@ -15,8 +15,9 @@ func ClientConfig() *fhirclient.Config {
 			"Cache-Control": {"no-cache"},
 		}),
 	}
-	// The response body and the request query are not logged: both may carry patient data (search
-	// values, resource contents echoed in an OperationOutcome).
+	// Neither the response body nor the request's query values are logged: both may carry patient
+	// data (search values, resource contents). An OperationOutcome in the body reaches the log
+	// through the client's error instead, redacted by RedactClientError.
 	config.Non2xxStatusHandler = func(response *http.Response, _ []byte) {
 		slog.DebugContext(response.Request.Context(), "Non-2xx status code from FHIR server",
 			slog.String("method", response.Request.Method),

@@ -89,6 +89,7 @@ func (c Component) RegisterHttpHandlers(publicMux *http.ServeMux, internalMux *h
 // is forwarded to the upstream NVI FHIR server.
 func (c Component) registerBundle(ctx context.Context, tenantURA string, bundle fhir.Bundle) (*fhir.Bundle, error) {
 	// Use BSN transport tokens to NVI, instead of BSNs
+	var sentIdentifiers []string
 	for i, entry := range bundle.Entry {
 		if entry.Resource == nil {
 			continue
@@ -112,6 +113,7 @@ func (c Component) registerBundle(ctx context.Context, tenantURA string, bundle 
 			return nil, err
 		}
 		bundle.Entry[i].Resource = tokenizedJSON
+		sentIdentifiers = append(sentIdentifiers, listIdentifierValues(tokenizedList)...)
 	}
 
 	fhirClient, err := c.fhirClientFn(ctx, tenantURA)
@@ -124,7 +126,7 @@ func (c Component) registerBundle(ctx context.Context, tenantURA string, bundle 
 	if err != nil {
 		return nil, &fhirapi.Error{
 			Message:   "Failed to register Bundle at NVI",
-			Cause:     fhirutil.RedactClientError(err),
+			Cause:     fhirutil.RedactClientError(err, sentIdentifiers...),
 			IssueType: fhir.IssueTypeTransient,
 		}
 	}
@@ -150,7 +152,7 @@ func (c Component) registerList(ctx context.Context, tenantURA string, list fhir
 	if err != nil {
 		return nil, &fhirapi.Error{
 			Message:   "Failed to register List at NVI",
-			Cause:     fhirutil.RedactClientError(err),
+			Cause:     fhirutil.RedactClientError(err, listIdentifierValues(tokenizedList)...),
 			IssueType: fhir.IssueTypeTransient,
 		}
 	}
@@ -209,7 +211,7 @@ func (c Component) deleteListByParams(ctx context.Context, tenantURA string, par
 	if err := fhirClient.DeleteWithContext(ctx, "List?"+deleteParams.Encode()); err != nil {
 		return &fhirapi.Error{
 			Message:   "Failed to delete List at NVI",
-			Cause:     fhirutil.RedactClientError(err),
+			Cause:     fhirutil.RedactClientError(err, identifierValues(deleteParams)...),
 			IssueType: fhir.IssueTypeTransient,
 		}
 	}
@@ -234,7 +236,7 @@ func (c Component) searchList(ctx context.Context, tenantURA string, params url.
 	if err != nil {
 		return nil, &fhirapi.Error{
 			Message:   "Failed to search for List resources at NVI",
-			Cause:     fhirutil.RedactClientError(err),
+			Cause:     fhirutil.RedactClientError(err, identifierValues(searchParams)...),
 			IssueType: fhir.IssueTypeTransient,
 		}
 	}
@@ -290,6 +292,31 @@ func (c Component) tokenizeSearchParams(ctx context.Context, params url.Values, 
 		tokenizedParams[nviKey] = append(tokenizedParams[nviKey], newValues...)
 	}
 	return tokenizedParams, nil
+}
+
+// identifierValues returns the subject:identifier values of tokenized search params, each as a
+// whole and its value part (after the '|'), for fhirutil.RedactClientError: they are the
+// patient's transport tokens (or identifiers that weren't tokenized), which the NVI may echo in an
+// error. source:identifier is the source organization's URA, so it's kept.
+func identifierValues(params url.Values) []string {
+	var values []string
+	for _, value := range params["subject:identifier"] {
+		values = append(values, value)
+		if _, tokenValue, isToken := strings.Cut(value, "|"); isToken {
+			values = append(values, tokenValue)
+		}
+	}
+	return values
+}
+
+// listIdentifierValues returns the List's subject identifier value, for
+// fhirutil.RedactClientError: it is the patient's transport token, which the NVI may echo in an
+// error.
+func listIdentifierValues(list *fhir.List) []string {
+	if list == nil || list.Subject == nil || list.Subject.Identifier == nil || list.Subject.Identifier.Value == nil {
+		return nil
+	}
+	return []string{*list.Subject.Identifier.Value}
 }
 
 func (c Component) tokenizeListIdentifiers(ctx context.Context, resource fhir.List, localOrganizationURA string, audience string) (*fhir.List, error) {
@@ -465,8 +492,8 @@ type loggingTransport struct {
 	next http.RoundTripper
 }
 
-// RoundTrip logs the request without its query: NVI search and delete parameters carry patient
-// identifiers (transport tokens, or values that were not tokenized at all).
+// RoundTrip logs the request with its query values redacted: NVI search and delete parameters
+// carry patient identifiers (transport tokens, or values that were not tokenized at all).
 func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	requestURL := logging.RedactURL(req.URL)
 	slog.DebugContext(req.Context(), "NVI request", "method", req.Method, "url", requestURL)

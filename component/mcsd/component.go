@@ -169,7 +169,7 @@ func (c *Component) RegisterHttpHandlers(publicMux, internalMux *http.ServeMux) 
 		result, err := c.update(ctx)
 		if err != nil {
 			slog.ErrorContext(ctx, "mCSD update failed", logging.Error(err))
-			http.Error(w, "Failed to update mCSD", http.StatusInternalServerError)
+			http.Error(w, "Failed to update mCSD: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -253,8 +253,7 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 		report, err := c.updateFromDirectory(ctx, adminDirectory.fhirBaseURL, adminDirectory.resourceTypes, adminDirectory.discover, adminDirectory.authoritativeUra)
 		if err != nil {
 			slog.ErrorContext(ctx, "mCSD Directory update failed", logging.FHIRServer(adminDirectory.fhirBaseURL), logging.Error(err))
-			// The report is returned to the caller: keep upstream URLs and OperationOutcome diagnostics out of it.
-			report.Errors = append(report.Errors, libfhir.RedactClientError(err).Error())
+			report.Errors = append(report.Errors, err.Error())
 		}
 		// Return empty slices instead of null ones, makes a nicer REST API
 		if report.Warnings == nil {
@@ -325,7 +324,7 @@ func (c *Component) discoverAndRegisterEndpoints(ctx context.Context, entries []
 
 				err := c.registerAdministrationDirectory(ctx, endpoint.Address, c.directoryResourceTypes, false, fullUrl, authoritativeUra)
 				if err != nil {
-					report.Warnings = append(report.Warnings, fmt.Sprintf("failed to register discovered mCSD Directory at %s: %s", endpoint.Address, libfhir.RedactClientError(err).Error()))
+					report.Warnings = append(report.Warnings, fmt.Sprintf("failed to register discovered mCSD Directory at %s: %s", endpoint.Address, err.Error()))
 				}
 			}
 		}

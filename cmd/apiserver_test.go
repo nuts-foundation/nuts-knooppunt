@@ -13,6 +13,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/lrza"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 func TestStrictAPIServer_LrzaRegistration(t *testing.T) {
@@ -115,4 +116,28 @@ func TestDescribeDecodeError(t *testing.T) {
 	assert.Equal(t, `JSON field "value" has the wrong type, expected int16`, description)
 
 	assert.Equal(t, "body could not be decoded", describeDecodeError(fmt.Errorf("can't decode formdata: %w", errors.New("form value 900186021"))))
+}
+
+func TestResponseErrorHandler(t *testing.T) {
+	handle := func(err error) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		responseErrorHandler(recorder, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nvi/List", nil), err)
+		return recorder
+	}
+
+	t.Run("an unexpected error is a 500 OperationOutcome without the error's text", func(t *testing.T) {
+		recorder := handle(errors.New("connection to db.internal refused"))
+
+		assert.Equal(t, http.StatusInternalServerError, recorder.Code)
+		assert.Equal(t, "application/fhir+json", recorder.Header().Get("Content-Type"))
+		var outcome fhir.OperationOutcome
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &outcome))
+		require.Len(t, outcome.Issue, 1)
+		assert.Equal(t, fhir.IssueTypeException, outcome.Issue[0].Code)
+		assert.Equal(t, "Internal server error", *outcome.Issue[0].Diagnostics)
+		assert.NotContains(t, recorder.Body.String(), "db.internal")
+	})
+	t.Run("a disabled component is a 404", func(t *testing.T) {
+		assert.Equal(t, http.StatusNotFound, handle(errComponentDisabled).Code)
+	})
 }

@@ -1007,6 +1007,7 @@ func TestComponent_NoPatientDataInLogsOrResponses(t *testing.T) {
 		logOutput, responseBody := search(t, nviServer.URL)
 
 		assertNoPatientData(t, logOutput, responseBody)
+		assert.Contains(t, logOutput, "Invalid search: subject%3Aidentifier=[redacted] ([redacted])", "the NVI's diagnostics are kept for the operator")
 	})
 	t.Run("NVI is unreachable", func(t *testing.T) {
 		nviServer := httptest.NewServer(http.NotFoundHandler())

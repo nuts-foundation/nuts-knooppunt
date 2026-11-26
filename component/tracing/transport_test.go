@@ -40,9 +40,9 @@ func TestWrapTransport_RedactsURLInSpan(t *testing.T) {
 		return urlFull
 	}
 
-	t.Run("query is redacted", func(t *testing.T) {
+	t.Run("query values are redacted, names kept", func(t *testing.T) {
 		urlFull := get(t, NewHTTPClient(), "/fhir/List?subject:identifier=system|900186021")
-		assert.Equal(t, server.URL+"/fhir/List?[redacted]", urlFull)
+		assert.Equal(t, server.URL+"/fhir/List?subject:identifier=[redacted]", urlFull)
 	})
 	t.Run("path is left out with WithoutURLPath", func(t *testing.T) {
 		urlFull := get(t, NewHTTPClient(WithoutURLPath()), "/fhir/Patient/900186021?_elements=identifier")

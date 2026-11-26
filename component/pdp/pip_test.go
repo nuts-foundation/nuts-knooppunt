@@ -126,10 +126,12 @@ func TestEnrichResourceContent(t *testing.T) {
 }
 
 // TestEnrichPolicyInputWithPIP_NoPatientDataInLogsOrReasons runs every PIP lookup against a PIP
-// that fails, and checks that the patient's id (in the request paths and queries) ends up neither
-// in the log nor in the result reasons.
+// that fails. The log keeps what an operator needs (the PIP's diagnostics), but no BSN the PIP
+// echoes; the result reasons, which go back to the caller, carry neither the BSN nor the patient's
+// id.
 func TestEnrichPolicyInputWithPIP_NoPatientDataInLogsOrReasons(t *testing.T) {
-	const patientID = "patient-900186021"
+	const patientID = "patient-abc"
+	const bsn = "900186021"
 	enrich := func(t *testing.T, pipURL string) (logOutput string, reasons []ResultReason) {
 		t.Helper()
 		var logs bytes.Buffer
@@ -158,20 +160,21 @@ func TestEnrichPolicyInputWithPIP_NoPatientDataInLogsOrReasons(t *testing.T) {
 		assert.Contains(t, logOutput, "Failed to get patient identifiers from PIP")
 		assert.Contains(t, logOutput, "PIP consent retrieval failed")
 		assert.Contains(t, logOutput, "Failed to get resource content from PIP")
-		assert.NotContains(t, logOutput, "900186021")
+		assert.NotContains(t, logOutput, bsn)
 		for _, reason := range reasons {
-			assert.NotContains(t, reason.Description, "900186021")
+			assert.NotContains(t, reason.Description, bsn)
+			assert.NotContains(t, reason.Description, patientID)
 		}
 	}
 
-	t.Run("PIP answers with an OperationOutcome that echoes the request", func(t *testing.T) {
+	t.Run("PIP answers with an OperationOutcome that echoes a BSN", func(t *testing.T) {
 		pip := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/fhir+json")
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(fhir.OperationOutcome{Issue: []fhir.OperationOutcomeIssue{{
 				Severity:    fhir.IssueSeverityError,
 				Code:        fhir.IssueTypeInvalid,
-				Diagnostics: to.Ptr("Invalid request: " + r.URL.String()),
+				Diagnostics: to.Ptr("Invalid request " + r.URL.String() + " for patient with BSN " + bsn),
 			}}})
 		}))
 		t.Cleanup(pip.Close)
@@ -179,6 +182,7 @@ func TestEnrichPolicyInputWithPIP_NoPatientDataInLogsOrReasons(t *testing.T) {
 		logOutput, reasons := enrich(t, pip.URL)
 
 		assertNoPatientData(t, logOutput, reasons)
+		assert.Contains(t, logOutput, "for patient with BSN [redacted BSN]", "the PIP's diagnostics are kept for the operator")
 	})
 	t.Run("PIP is unreachable", func(t *testing.T) {
 		pip := httptest.NewServer(http.NotFoundHandler())

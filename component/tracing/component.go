@@ -174,7 +174,7 @@ func WithoutURLPath() TransportOption {
 // WrapTransport wraps an http.RoundTripper with OpenTelemetry instrumentation.
 // If transport is nil, http.DefaultTransport is used.
 // This wrapper centralizes tracing configuration for outbound HTTP calls. The client spans it
-// creates record the request URL without its query (see urlRedactingTransport).
+// creates record the request URL with its query values redacted (see urlRedactingTransport).
 func WrapTransport(transport http.RoundTripper, opts ...TransportOption) http.RoundTripper {
 	if transport == nil {
 		transport = http.DefaultTransport
@@ -194,7 +194,7 @@ func NewHTTPClient(opts ...TransportOption) *http.Client {
 }
 
 // urlRedactingTransport overwrites the url.full attribute that otelhttp puts on the client span
-// with the URL without its query: query parameters carry search values such as patient
+// with the URL redacted by logging.RedactURL: query values carry search values such as patient
 // identifiers. otelhttp sets the attribute before calling this transport with the span's
 // context, and setting an attribute again replaces it.
 type urlRedactingTransport struct {
