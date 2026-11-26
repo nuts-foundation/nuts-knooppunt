@@ -114,40 +114,94 @@ test_redacts_leading_zero_valid_checksum if {
 	has_redaction(patches, enrollment_path)
 }
 
-# --- search_params.identifier ---------------------------------------------
+# --- search_params ----------------------------------------------------------
+# Every value is redacted; the keys stay unless they don't look like a search
+# parameter name.
 
-search_identifier_path := "/input/action/fhir_rest/search_params/identifier"
+search_params_path := "/input/action/fhir_rest/search_params"
 
-search_params(values) := {"action": {"fhir_rest": {"search_params": {"identifier": values}}}}
+search_params(params) := {"action": {"fhir_rest": {"search_params": params}}}
 
-test_redacts_search_params_identifier_uri_system if {
-	patches := log.mask with input as evt(search_params([["http://fhir.nl/fhir/NamingSystem/bsn|123456789"]]))
-	has_redaction(patches, search_identifier_path)
+has_search_params_redaction(patches, keys) if {
+	some patch in patches
+	patch.path == search_params_path
+	patch.value == {key: "[REDACTED]" | some key in keys}
 }
 
-test_redacts_search_params_identifier_oid_system if {
-	patches := log.mask with input as evt(search_params([["urn:oid:2.16.840.1.113883.2.4.6.3|123456789"]]))
-	has_redaction(patches, search_identifier_path)
+test_redacts_bsn_identifier_search if {
+	patches := log.mask with input as evt(search_params({"identifier": [["http://fhir.nl/fhir/NamingSystem/bsn|123456789"]]}))
+	has_search_params_redaction(patches, {"identifier"})
 }
 
-test_redacts_identifier_when_bsn_is_second_or_value if {
-	values := [[
-		"http://fhir.nl/fhir/NamingSystem/ura|12345",
-		"http://fhir.nl/fhir/NamingSystem/bsn|123456789",
-	]]
-	patches := log.mask with input as evt(search_params(values))
-	has_redaction(patches, search_identifier_path)
+test_redacts_non_bsn_identifier_search if {
+	patches := log.mask with input as evt(search_params({"identifier": [["http://fhir.nl/fhir/NamingSystem/ura|12345"]]}))
+	has_search_params_redaction(patches, {"identifier"})
 }
 
-test_keeps_non_bsn_identifier_search_untouched if {
-	patches := log.mask with input as evt(search_params([["http://fhir.nl/fhir/NamingSystem/ura|12345"]]))
-	not any_patch_for_path(patches, search_identifier_path)
+test_redacts_chained_and_other_search_params if {
+	params := {
+		"subject:Patient.identifier": [["http://fhir.nl/fhir/NamingSystem/bsn|123456789"]],
+		"patient": [["Patient/123"]],
+		"_lastUpdated": [["2024-01-01"]],
+	}
+	patches := log.mask with input as evt(search_params(params))
+	has_search_params_redaction(patches, {"subject:Patient.identifier", "patient", "_lastUpdated"})
 }
 
-test_keeps_other_search_params_untouched if {
-	other := {"action": {"fhir_rest": {"search_params": {"_lastUpdated": [["2024-01-01"]]}}}}
-	patches := log.mask with input as evt(other)
-	not any_patch_for_path(patches, search_identifier_path)
+test_keeps_modifier_and_reverse_chain_keys if {
+	params := {"identifier:of-type": [["x"]], "_has:Observation:patient:code": [["y"]]}
+	patches := log.mask with input as evt(search_params(params))
+	has_search_params_redaction(patches, {"identifier:of-type", "_has:Observation:patient:code"})
+}
+
+test_redacts_search_param_keys_that_need_escaping if {
+	patches := log.mask with input as evt(search_params({"a/b~c d": [["123456789"]]}))
+	has_search_params_redaction(patches, {"[REDACTED]"})
+}
+
+# A malformed query ("?<system>|<bsn>" or "?<bsn>") makes the BSN the key.
+test_redacts_search_param_keys_holding_a_bsn if {
+	params := {
+		"http://fhir.nl/fhir/NamingSystem/bsn|123456782": [[""]],
+		"123456782": [[""]],
+		"patient": [["Patient/123"]],
+	}
+	patches := log.mask with input as evt(search_params(params))
+	has_search_params_redaction(patches, {"[REDACTED]", "patient"})
+}
+
+test_redacts_non_string_search_param_values if {
+	patches := log.mask with input as evt(search_params({"identifier": [[{"unexpected": "shape"}]]}))
+	has_search_params_redaction(patches, {"identifier"})
+}
+
+test_no_search_params_patch_when_absent_or_empty if {
+	not any_patch_for_path(log.mask, search_params_path) with input as base_event
+	not any_patch_for_path(log.mask, search_params_path) with input as evt(search_params({}))
+}
+
+# --- Patient-linked fields --------------------------------------------------
+
+test_redacts_patient_id if {
+	patches := log.mask with input as evt({"context": {"patient_id": "123"}})
+	has_redaction(patches, "/input/context/patient_id")
+}
+
+test_redacts_resource_id if {
+	patches := log.mask with input as evt({"resource": {"id": "123"}})
+	has_redaction(patches, "/input/resource/id")
+}
+
+test_redacts_request_path if {
+	patches := log.mask with input as evt({"action": {"request": {"path": "/Patient/123"}}})
+	has_redaction(patches, "/input/action/request/path")
+}
+
+test_no_patient_linked_patches_when_empty if {
+	patches := log.mask with input as evt({"context": {"patient_id": ""}, "resource": {"id": ""}, "action": {"request": {"path": ""}}})
+	not any_patch_for_path(patches, "/input/context/patient_id")
+	not any_patch_for_path(patches, "/input/resource/id")
+	not any_patch_for_path(patches, "/input/action/request/path")
 }
 
 # --- Wholesale redactions: query, body, header, resource.content ----------
@@ -211,11 +265,6 @@ test_empty_event_produces_no_patches if {
 test_non_string_enrollment_identifier_does_not_break_mask if {
 	patches := log.mask with input as evt(enrollment({"unexpected": "shape"}))
 	not any_patch_for_path(patches, enrollment_path)
-}
-
-test_non_string_search_params_identifier_does_not_break_mask if {
-	patches := log.mask with input as evt(search_params([[{"unexpected": "shape"}]]))
-	not any_patch_for_path(patches, search_identifier_path)
 }
 
 # URN OID is case-insensitive per RFC 8141; a system URI uppercased should

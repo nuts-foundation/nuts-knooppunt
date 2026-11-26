@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/SanteonNL/go-fhir-client"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 )
 
 func ClientConfig() *fhirclient.Config {
@@ -14,12 +15,14 @@ func ClientConfig() *fhirclient.Config {
 			"Cache-Control": {"no-cache"},
 		}),
 	}
-	config.Non2xxStatusHandler = func(response *http.Response, responseBody []byte) {
+	// Neither the response body nor the request's query values are logged: both may carry patient
+	// data (search values, resource contents). An OperationOutcome in the body reaches the log
+	// through the client's error instead, redacted by RedactClientError.
+	config.Non2xxStatusHandler = func(response *http.Response, _ []byte) {
 		slog.DebugContext(response.Request.Context(), "Non-2xx status code from FHIR server",
 			slog.String("method", response.Request.Method),
-			slog.String("url", response.Request.URL.String()),
-			slog.Int("status", response.StatusCode),
-			slog.String("content", string(responseBody)))
+			slog.String("url", logging.RedactURL(response.Request.URL)),
+			slog.Int("status", response.StatusCode))
 	}
 	return &config
 }

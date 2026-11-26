@@ -44,7 +44,8 @@ func New(config Config, consentChecker mitz.ConsentChecker) (*Component, error) 
 		if err != nil {
 			return &Component{}, err
 		}
-		pipClient := fhirclient.New(url, tracing.NewHTTPClient(), &fhirclient.Config{
+		// Request paths hold the patient's id (Patient/<id>), so spans leave the path out.
+		pipClient := fhirclient.New(url, tracing.NewHTTPClient(tracing.WithoutURLPath()), &fhirclient.Config{
 			UsePostSearch: false,
 		})
 		comp.pipClient = pipClient
@@ -146,7 +147,7 @@ func (c *Component) Evaluate(ctx context.Context, reqBody APIRequest) (APIRespon
 				slog.ErrorContext(ctx, "failed to check if policy exists", logging.Error(err), slog.String("policy", policyName))
 				policyResult.Reasons = append(policyResult.Reasons, ResultReason{
 					Code:        TypeResultCodeInternalError,
-					Description: fmt.Sprintf("failed to check if policy exists: %v", err),
+					Description: "failed to check if policy exists",
 				})
 				response.Policies[policyName] = policyResult
 				continue
@@ -175,7 +176,7 @@ func (c *Component) Evaluate(ctx context.Context, reqBody APIRequest) (APIRespon
 				slog.ErrorContext(ctx, "failed to evaluate rego policy", logging.Error(err), slog.String("policy", policyName))
 				policyResult.Reasons = append(policyResult.Reasons, ResultReason{
 					Code:        TypeResultCodeInternalError,
-					Description: "failed to evaluate rego policy: " + err.Error(),
+					Description: "failed to evaluate rego policy",
 				})
 			} else {
 				policyResult.Reasons = append(policyResult.Reasons, regoPolicyResult.Reasons...)

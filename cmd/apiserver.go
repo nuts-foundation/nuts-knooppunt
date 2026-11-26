@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/nuts-foundation/nuts-knooppunt/component/status"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
 // errComponentDisabled is returned by a forwarding method when the component that owns the
@@ -211,15 +214,22 @@ func (s *strictAPIServer) Stop(_ context.Context) error {
 // returns errComponentDisabled instead, which ResponseErrorHandlerFunc below turns into a 404 —
 // matching the previous behavior of not registering the route at all.
 func (s *strictAPIServer) RegisterHttpHandlers(_ *http.ServeMux, internalMux *http.ServeMux) {
+	// None of the handlers below echo an error's text to the client: it may hold request values
+	// (patient identifiers) or internal details. The client gets a static message or a description
+	// that quotes nothing from the request; the operator gets the details in the log, as far as
+	// they are safe to log.
 	handler := api.NewStrictHandlerWithOptions(s, nil, api.StrictHTTPServerOptions{
-		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-			if errors.Is(err, errComponentDisabled) {
-				http.NotFound(w, r)
-				return
-			}
-			slog.ErrorContext(r.Context(), "API operation failed", slog.String("method", r.Method), slog.String("path", r.URL.Path), logging.Error(err))
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			// Body decode errors: JSON type errors quote number literals from the body, so only
+			// describe the error.
+			message := "Invalid request body: " + describeDecodeError(err)
+			slog.InfoContext(r.Context(), "Invalid API request body", slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.String("reason", message), logging.TypeOf("error_type", errors.Unwrap(err)))
+			_ = api.OperationOutcomeResponse{
+				StatusCode: http.StatusBadRequest,
+				Outcome:    fhirapi.OperationOutcomeForError(fhirapi.BadRequestError(message, nil)),
+			}.Write(w)
 		},
+		ResponseErrorHandlerFunc: responseErrorHandler,
 	})
 	api.HandlerWithOptions(handler, api.StdHTTPServerOptions{
 		BaseRouter: internalMux,
@@ -227,13 +237,84 @@ func (s *strictAPIServer) RegisterHttpHandlers(_ *http.ServeMux, internalMux *ht
 		// search query params) are the only ones declared in openapi.yaml, so this is only ever
 		// hit for those components' routes; respond the same way their own code does for a
 		// bad/missing request: a FHIR OperationOutcome, not the framework's plain-text default.
+		//
+		// The generated wrapper calls this only when it can't bind a parameter: a required one is
+		// missing, a single-valued one is repeated, or a value has the wrong format. Body decode
+		// errors go to RequestErrorHandlerFunc and errors returned by a component to
+		// ResponseErrorHandlerFunc, above.
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
-			badRequestErr := fhirapi.BadRequestError(err.Error(), err)
-			slog.ErrorContext(r.Context(), "FHIR API error", logging.Error(badRequestErr))
+			// The binding error's own text may quote the parameter value (e.g. a search token
+			// holding a BSN), so neither the response nor the log uses it.
+			message := paramErrorMessage(err)
+			slog.InfoContext(r.Context(), "Invalid API request parameter", slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.String("reason", message))
 			_ = api.OperationOutcomeResponse{
 				StatusCode: http.StatusBadRequest,
-				Outcome:    fhirapi.OperationOutcomeForError(badRequestErr),
+				Outcome:    fhirapi.OperationOutcomeForError(fhirapi.BadRequestError(message, nil)),
 			}.Write(w)
 		},
 	})
+}
+
+// responseErrorHandler handles an error a component's operation returns, rather than a response
+// object. Components answer expected failures with their own response objects, so this is the
+// fallback for unexpected ones: a 500 with an OperationOutcome, like every other error response of
+// the API. The error itself is only logged. errComponentDisabled is the exception: it gets a 404.
+func responseErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, errComponentDisabled) {
+		http.NotFound(w, r)
+		return
+	}
+	slog.ErrorContext(r.Context(), "API operation failed", slog.String("method", r.Method), slog.String("path", r.URL.Path), logging.Error(err))
+	_ = api.OperationOutcomeResponse{
+		StatusCode: http.StatusInternalServerError,
+		Outcome:    fhirapi.OperationOutcomeForError(&fhirapi.Error{Message: "Internal server error", IssueType: fhir.IssueTypeException}),
+	}.Write(w)
+}
+
+// paramErrorMessage describes a parameter binding error by the parameter's name only. A
+// *fhirapi.Error raised by a parameter type's own validation (e.g. tenants.ID) has a Message that
+// is safe to return by construction, so it's included.
+func paramErrorMessage(err error) string {
+	var (
+		required      *api.RequiredParamError
+		requiredHdr   *api.RequiredHeaderError
+		tooMany       *api.TooManyValuesForParamError
+		invalidFormat *api.InvalidParamFormatError
+		unmarshaling  *api.UnmarshalingParamError
+		fhirErr       *fhirapi.Error
+	)
+	switch {
+	case errors.As(err, &required):
+		return required.Error()
+	case errors.As(err, &requiredHdr):
+		return requiredHdr.Error()
+	case errors.As(err, &tooMany):
+		return tooMany.Error()
+	case errors.As(err, &invalidFormat):
+		if errors.As(err, &fhirErr) {
+			return fmt.Sprintf("Invalid format for parameter %s: %s", invalidFormat.ParamName, fhirErr.Message)
+		}
+		return fmt.Sprintf("Invalid format for parameter %s", invalidFormat.ParamName)
+	case errors.As(err, &unmarshaling):
+		return fmt.Sprintf("Invalid format for parameter %s", unmarshaling.ParamName)
+	default:
+		return "Invalid request parameters"
+	}
+}
+
+// describeDecodeError describes a request body decode error without quoting any of the body, so
+// the description is safe to return to the client.
+func describeDecodeError(err error) string {
+	var (
+		syntaxErr *json.SyntaxError
+		typeErr   *json.UnmarshalTypeError
+	)
+	switch {
+	case errors.As(err, &syntaxErr):
+		return fmt.Sprintf("invalid JSON at offset %d", syntaxErr.Offset)
+	case errors.As(err, &typeErr):
+		return fmt.Sprintf("JSON field %q has the wrong type, expected %s", typeErr.Field, typeErr.Type)
+	default:
+		return "body could not be decoded"
+	}
 }

@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/mitz/xacml"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/fhirapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zorgbijjou/golang-fhir-models/fhir-models/caramel/to"
 	"github.com/zorgbijjou/golang-fhir-models/fhir-models/fhir"
 )
 
@@ -187,6 +190,40 @@ func TestCheckConsent(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "consent check failed with status 500")
 	})
+}
+
+// TestCreateSubscription_NoPatientDataInError has MITZ reject a subscription with an
+// OperationOutcome that echoes the request, and checks that the BSN in the criteria ends up neither
+// in the error (which is logged) nor in the OperationOutcome returned to the client.
+func TestCreateSubscription_NoPatientDataInError(t *testing.T) {
+	const bsn = "900186021"
+	mitzServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/fhir+json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(fhir.OperationOutcome{Issue: []fhir.OperationOutcomeIssue{{
+			Severity:    fhir.IssueSeverityError,
+			Code:        fhir.IssueTypeBusinessRule,
+			Diagnostics: to.Ptr("Rejected " + r.URL.String() + ": " + string(body)),
+		}}})
+	}))
+	t.Cleanup(mitzServer.Close)
+	component, err := New(Config{MitzBase: mitzServer.URL, NotifyEndpoint: "https://knooppunt.example/mitz/notify"})
+	require.NoError(t, err)
+
+	_, err = component.CreateSubscription(context.Background(), fhir.Subscription{
+		Status:   fhir.SubscriptionStatusRequested,
+		Reason:   "OTV",
+		Criteria: "Consent?_query=otv&patientid=" + bsn + "&providerid=00000020&providertype=Z3",
+		Channel:  fhir.SubscriptionChannel{Type: fhir.SubscriptionChannelTypeRestHook},
+	})
+
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), bsn)
+	assert.Contains(t, err.Error(), "OperationOutcome (status=422)")
+	outcome, _ := json.Marshal(fhirapi.OperationOutcomeForError(err))
+	assert.NotContains(t, string(outcome), bsn)
+	assert.Contains(t, string(outcome), "MITZ business rules are not met")
 }
 
 func TestParseXACMLResponse(t *testing.T) {
