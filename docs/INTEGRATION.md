@@ -132,7 +132,8 @@ Because a placeholder already exists when its target arrives, the synchronizatio
 - **To force a full sync**, delete that resource:
   `DELETE <query directory>/Basic?code=http://nuts-foundation.github.io/nuts-knooppunt/CodeSystem/lrza|sync-state`.
   Do the same when syncs fail because the saved time is invalid. A full sync doesn't remove resources that were
-  deleted from the LRZA before; for that, empty the Query Directory first.
+  deleted from the LRZA before; for that, delete all resources in the Query Directory, including this `Basic`
+  resource (otherwise the next sync only reads the changes since the saved time).
 
 ### Registering addressing resources in the LRZA
 

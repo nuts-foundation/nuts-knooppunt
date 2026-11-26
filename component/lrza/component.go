@@ -163,7 +163,7 @@ type syncRun struct {
 	// working state, filled as the run progresses
 	// sourceLastUpdated is the source server's meta.lastUpdated from the first resource type's search
 	// set (the server's own clock), recorded as the next _since timestamp. Nil if the server didn't
-	// report one, in which case syncStartTime falls back to the local query start time.
+	// report one, in which case syncedUpToTime falls back to the local query start time.
 	sourceLastUpdated *string
 	tx                fhir.Bundle // transaction bundle applied to the query directory
 	report            UpdateReport
@@ -312,13 +312,13 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	c.updateMux.Lock()
 	defer c.updateMux.Unlock()
 
+	if c.config.QueryBaseUrl == "" {
+		return UpdateReport{Warnings: []string{}, Errors: []string{}}, errors.New("LRZA sync needs a query directory (lrza.querybaseurl)")
+	}
 	// Read on every sync rather than kept in memory: the query directory holds the only copy.
-	var since time.Time
-	if c.config.QueryBaseUrl != "" {
-		var err error
-		if since, err = c.loadSyncedUpTo(ctx); err != nil {
-			return UpdateReport{Warnings: []string{}, Errors: []string{}}, err
-		}
+	since, err := c.loadSyncedUpTo(ctx)
+	if err != nil {
+		return UpdateReport{Warnings: []string{}, Errors: []string{}}, err
 	}
 
 	run := c.newSyncRun(since)
@@ -337,8 +337,8 @@ func (c *Component) update(ctx context.Context) (UpdateReport, error) {
 	// keeps. After a sync without changes the old time is still correct. A failed save is an error, so a
 	// save that keeps failing (and so keeps every sync a full sync) gets noticed.
 	appliedChanges := run.report.CountCreated+run.report.CountUpdated+run.report.CountDeleted > 0
-	if c.config.QueryBaseUrl != "" && appliedChanges {
-		if err := c.saveSyncedUpTo(ctx, c.syncStartTime(ctx, run)); err != nil {
+	if appliedChanges {
+		if err := c.saveSyncedUpTo(ctx, c.syncedUpToTime(ctx, run)); err != nil {
 			return run.finalizedReport(), err
 		}
 	}
@@ -611,10 +611,10 @@ func requestMethodAt(tx fhir.Bundle, i int) (method fhir.HTTPVerb, ok bool) {
 	return method, false
 }
 
-// syncStartTime returns the timestamp used as the _since value for the next incremental sync.
-// It prefers the search result Bundle's meta.lastUpdated (the FHIR server's own clock, avoiding
-// skew) and falls back to the local query start time minus a buffer.
-func (c *Component) syncStartTime(ctx context.Context, run *syncRun) time.Time {
+// syncedUpToTime returns the time to save as "synced up to": the _since value for the next incremental
+// sync. It prefers the search result Bundle's meta.lastUpdated (the LRZA's own clock, avoiding skew)
+// and falls back to the local query start time minus a buffer.
+func (c *Component) syncedUpToTime(ctx context.Context, run *syncRun) time.Time {
 	if run.sourceLastUpdated != nil {
 		if sourceTime, err := time.Parse(time.RFC3339Nano, *run.sourceLastUpdated); err == nil {
 			return sourceTime

@@ -17,6 +17,9 @@ const (
 	syncStateCodeSystem   = "http://nuts-foundation.github.io/nuts-knooppunt/CodeSystem/lrza"
 	syncStateCode         = "sync-state"
 	syncStateExtensionURL = "http://nuts-foundation.github.io/nuts-knooppunt/StructureDefinition/lrza-synced-up-to"
+	// syncStateSource is the Basic resource's meta.source: the Knooppunt's LRZA component wrote it, it isn't
+	// copied from the LRZA.
+	syncStateSource = "http://nuts-foundation.github.io/nuts-knooppunt/lrza"
 )
 
 // syncStateID is the id of the Basic resource, derived from the LRZA base URL (see localID).
@@ -59,7 +62,8 @@ func (c *Component) saveSyncedUpTo(ctx context.Context, syncedUpTo time.Time) er
 		return err
 	}
 	basic := fhir.Basic{
-		Id: &id,
+		Id:   &id,
+		Meta: &fhir.Meta{Source: new(syncStateSource)},
 		Code: fhir.CodeableConcept{
 			Coding: []fhir.Coding{{System: new(syncStateCodeSystem), Code: new(syncStateCode)}},
 		},

@@ -31,6 +31,8 @@ func TestSyncState(t *testing.T) {
 		require.Len(t, extensions, 1)
 		extension := extensions[0].(map[string]any)
 		assert.Equal(t, syncStateExtensionURL, extension["url"])
+		meta, _ := stored["meta"].(map[string]any)
+		assert.Equal(t, syncStateSource, meta["source"])
 		return extension["valueInstant"].(string)
 	}
 	// fullReads and historyReads count the full searches and incremental _history reads of the LRZA.
@@ -131,6 +133,15 @@ func TestSyncState(t *testing.T) {
 		require.ErrorContains(t, err, "invalid LRZA synced-up-to time")
 		assert.Equal(t, 1, fullReads(source), "no second full sync")
 		assert.Zero(t, historyReads(source))
+	})
+	t.Run("without a query directory, the sync fails before reading the LRZA", func(t *testing.T) {
+		source := newFakeLRZA(t, testDirectory()...)
+		c := newTestComponent(t, source)
+
+		_, err := c.update(t.Context())
+
+		require.ErrorContains(t, err, "LRZA sync needs a query directory")
+		assert.Zero(t, fullReads(source)+historyReads(source))
 	})
 	t.Run("failing to read the saved time fails the sync before reading the LRZA", func(t *testing.T) {
 		source, query := newFakeLRZA(t, testDirectory()...), newFakeLRZA(t)
