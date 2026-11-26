@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -513,14 +514,19 @@ func (c *Component) queryResourceType(ctx context.Context, run *syncRun, resourc
 		return fmt.Errorf("search of %s failed: %w", path, err)
 	}
 
-	// Paginate fails on iteration maxIterations-1, before consuming that page, so allow one more
-	// iteration than the number of pages we accept.
+	// Paginate has a page cap of its own, with an error that calls hitting it a possible bug. Lift it and
+	// enforce maxPagesPerResourceType here, so the error says which cap was hit.
+	pages := 0
 	if err := fhirclient.Paginate(ctx, c.fhirLRZAClient, searchSet, func(page *fhir.Bundle) (bool, error) {
+		if pages == maxPagesPerResourceType {
+			return false, fmt.Errorf("more than %d pages, the page cap (maxPagesPerResourceType)", maxPagesPerResourceType)
+		}
+		pages++
 		if err := onPage(page); err != nil {
 			return false, err
 		}
 		return true, nil
-	}, fhirclient.WithMaxIterations(maxPagesPerResourceType+1)); err != nil {
+	}, fhirclient.WithMaxIterations(math.MaxInt)); err != nil {
 		return fmt.Errorf("processing %s failed: %w", path, err)
 	}
 	return nil

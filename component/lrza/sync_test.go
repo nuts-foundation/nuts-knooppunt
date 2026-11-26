@@ -99,7 +99,7 @@ func TestUpdate_Pagination(t *testing.T) {
 
 		_, err = c.update(context.Background())
 
-		require.ErrorContains(t, err, "max. search iterations reached")
+		require.ErrorContains(t, err, "Organization failed: more than 5 pages, the page cap")
 		assert.Equal(t, 5, organizations(query), "pages before the limit are applied")
 		syncedUpTo, err := c.loadSyncedUpTo(context.Background())
 		require.NoError(t, err)
