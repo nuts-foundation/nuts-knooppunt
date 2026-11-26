@@ -5,21 +5,24 @@ name: 'govulncheck'
 # knooppunt binary can reach (static analysis, https://go.dev/blog/vuln; for an
 # advisory without symbol data, any use of the module counts). Only the knooppunt
 # itself is scanned (the root package), not the mocks, the sandbox or the test
-# harness that share its module. A reachable finding fails the job unless
+# harness that share its module.
+#
+# The scheduled run checks main as a whole: a reachable finding fails it unless
 # .github/govulncheck-accepted.txt accepts it (that file says when an acceptance
-# holds). Only scheduled runs post to Slack; push and pull request runs show up
-# as checks. Errors only: nothing on success.
+# holds), and then posts to Slack. Errors only: nothing on success. A pull request
+# only fails on what it adds: reachable findings that its base branch does not
+# have. Findings that are on the base branch already are left to the scheduled run.
 on:
   schedule:
     # Weekdays at 08:15 UTC, after the smoke test.
     - cron: '15 8 * * 1-5'
-  push:
-    branches:
-      - main
-  # On pull requests only when the dependencies or the check itself change, to
-  # any base branch, so a pull request stacked on another one is checked too.
+  # On pull requests that change Go code, the dependencies or the check itself,
+  # to any base branch, so a pull request stacked on another one is checked too.
+  # Go code counts as well: a call can make a vulnerable function reachable
+  # without a change to go.mod.
   pull_request:
     paths:
+      - '**.go'
       - go.mod
       - go.sum
       - .github/workflows/govulncheck.yaml
@@ -42,6 +45,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          # On a pull request this is the test merge commit, whose first parent
+          # is the base branch.
+          fetch-depth: 2
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -57,21 +63,56 @@ jobs:
       - name: Run govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 -format json . > govulncheck.json
 
+      # On a pull request, the base branch is scanned as well, so that only what
+      # the pull request adds counts. Both scans start from the Go toolchain set up
+      # from the pull request's go.mod (Go switches to a newer one if the base asks
+      # for it), not from the base's own, so a pull request that only changes the
+      # Go version may show no difference here; the scheduled run reports standard
+      # library findings either way.
+      - name: Run govulncheck on the base branch
+        if: github.event_name == 'pull_request'
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/base" HEAD^1
+          (cd "$RUNNER_TEMP/base" && go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 -format json .) > base.json
+
       - name: Check findings against the accepted list
         run: |
           export LC_ALL=C
           # Output that is not symbol-level protocol v1 is not something this
           # check understands; fail rather than report nothing.
-          if ! jq -e -s 'any(.[]; .config.scan_level? == "symbol" and ((.config.protocol_version? // "") | startswith("v1.")))' govulncheck.json > /dev/null; then
-            echo "::error::govulncheck.json is not symbol-level govulncheck output in protocol v1"
-            exit 1
+          outputs=(govulncheck.json)
+          if [ -f base.json ]; then
+            outputs+=(base.json)
           fi
+          for output in "${outputs[@]}"; do
+            if ! jq -e -s 'any(.[]; .config.scan_level? == "symbol" and ((.config.protocol_version? // "") | startswith("v1.")))' "$output" > /dev/null; then
+              echo "::error::${output} is not symbol-level govulncheck output in protocol v1"
+              exit 1
+            fi
+          done
 
           # Reachable findings (the symbol-level ones): ID, module and fixed
           # version, empty when there is none. Separated by |, which read does
           # not collapse the way it collapses tabs.
           jq -r 'select(.finding.trace[0].function != null) | .finding | [.osv, .trace[0].module, (.fixed_version // "")] | join("|")' govulncheck.json | sort -u > findings.txt
           cut -d'|' -f1 findings.txt | sort -u > found.txt
+
+          # On a pull request, only findings that the base branch does not have
+          # count; the scheduled run reports the others. A finding is an advisory
+          # in a module: an advisory that the base reaches in one module and the
+          # pull request reaches in another counts as new.
+          : > new-pairs.txt
+          if [ -f base.json ]; then
+            jq -r 'select(.finding.trace[0].function != null) | .finding | [.osv, .trace[0].module] | join("|")' base.json | sort -u > base-pairs.txt
+            cut -d'|' -f1,2 findings.txt | sort -u > head-pairs.txt
+            comm -23 base-pairs.txt head-pairs.txt | while IFS='|' read -r id module; do
+              echo "::notice::${id} in ${module} is no longer reported with this pull request"
+            done
+            echo "::notice::$(comm -12 base-pairs.txt head-pairs.txt | cut -d'|' -f1 | sort -u | wc -l | tr -d ' ') reachable vulnerabilities are on the base branch already; the scheduled run reports those"
+            comm -13 base-pairs.txt head-pairs.txt > new-pairs.txt
+            awk -F'|' 'NR == FNR { new[$1 "|" $2]; next } ($1 "|" $2) in new' new-pairs.txt findings.txt > new-findings.txt
+            mv new-findings.txt findings.txt
+          fi
 
           # Modules that are in the binary only because of the embedded nuts-node:
           # walk the knooppunt's import graph without entering nuts-node packages,
@@ -135,21 +176,32 @@ jobs:
           sort -u -o failing.txt failing.txt
 
           if [ -s failing.txt ]; then
-            jq -r --rawfile ids failing.txt --rawfile via via-nuts-node.txt '
+            # On a pull request, name the modules in which the advisory is new.
+            jq -r --rawfile ids failing.txt --rawfile via via-nuts-node.txt --rawfile newpairs new-pairs.txt '
               .osv? // empty | .id as $id
               | select($ids | split("\n") | index($id))
               | (if ($via | split("\n") | index($id)) then " (via nuts-node)" else "" end) as $suffix
-              | "\($id)\($suffix) \(.summary) https://pkg.go.dev/vuln/\($id)"' govulncheck.json | sort -u > failing-details.txt
+              | [$newpairs | split("\n")[] | split("|") | select(.[0] == $id) | .[1]] as $modules
+              | (if ($modules | length) > 0 then " (new in \($modules | join(", ")))" else "" end) as $where
+              | "\($id)\($suffix)\($where) \(.summary) https://pkg.go.dev/vuln/\($id)"' govulncheck.json | sort -u > failing-details.txt
             cat failing-details.txt
+            count="$(wc -l < failing.txt | tr -d ' ')"
             via_count="$(grep -c ' (via nuts-node) ' failing-details.txt || true)"
+            if [ -f base.json ]; then
+              heading="Reachable vulnerabilities that this pull request adds"
+              message="This pull request adds ${count} reachable vulnerabilities; fix them or add an entry to .github/govulncheck-accepted.txt"
+            else
+              heading="Reachable vulnerabilities that need a fix or an accepted-list entry"
+              message="${count} reachable vulnerabilities need a fix or an entry in .github/govulncheck-accepted.txt"
+            fi
             {
-              echo "### Reachable vulnerabilities that need a fix or an accepted-list entry"
+              echo "### ${heading}"
               echo
               echo "${via_count} of them are in modules that only the embedded nuts-node brings in."
               echo
               sed 's/^/- /' failing-details.txt
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::$(wc -l < failing.txt | tr -d ' ') reachable vulnerabilities need a fix or an entry in .github/govulncheck-accepted.txt"
+            echo "::error::${message}"
             exit 1
           fi
 
