@@ -10,16 +10,3 @@
 # already contains the fix (41eecd456c90). Goes away when the knooppunt moves to
 # github.com/nuts-foundation/nuts-node/v6.
 GO-2026-5291
-
-# Fixed in echo v4.16.3 (GHSA-246p-cpwv-v3jq), but the Go vulnerability database
-# lists no fixed version for echo/v4, so govulncheck reports every v4 release.
-# It does not apply here either: the embedded nuts-node uses the echo rate
-# limiter only for internal paths and does not identify callers by IP, so a
-# spoofed X-Forwarded-For changes nothing.
-GO-2026-6872
-
-# Fixed in echo v4.16.3 (GHSA-99jh-6h7p-pp36), but the Go vulnerability database
-# lists no fixed version for echo/v4, so govulncheck reports every v4 release.
-# It does not apply here either: it concerns the echo reverse proxy middleware,
-# which neither the knooppunt nor the embedded nuts-node uses.
-GO-2026-6875
