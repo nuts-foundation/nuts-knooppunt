@@ -54,7 +54,7 @@ func main() {
 			}
 		}()
 	} else {
-		log.Print("mock-dezi: TLS disabled, the Nuts node will not be able to fetch the jku")
+		log.Printf("mock-dezi: TLS disabled, nothing listens on :%s for the jku %s", tlsPort, jku)
 	}
 
 	log.Printf("mock-dezi listening on :%s", httpPort)

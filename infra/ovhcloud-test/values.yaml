@@ -283,16 +283,12 @@ mock-dezi:
     # a host has a tls: block, ingress-nginx redirects http to https by
     # default, and this is matched exactly by the OAuth2 redirect check.
     deziAllowedRedirectUris: "https://sandbox.test.gf.nuts.nl/demo/auth/callback"
-    # The chart default (mock-dezi:8443) is served over mock-dezi's own
-    # self-signed cert ("GF Sandbox Demo CA" - see helm/mock-dezi's
-    # certsSecretName), which the node doesn't trust, failing every
-    # retrieve with "certificate signed by unknown authority". /dezi/jwks.json
-    # is on the same mux as /authorize (mock-components/dezi/cmd/main.go) - it
-    # was already reachable on the plain HTTP port, just never exposed
-    # there - so routing it through the public ingress instead gets a real,
-    # already-trusted Let's Encrypt cert for free, with no cert-trust
-    # wiring needed at all. Confirmed hairpin routing (pod -> public
-    # ingress -> back into the cluster) works on this LoadBalancer.
+    # The jku each attestation names. The chart default (mock-dezi:8443) is
+    # in-cluster only, behind mock-dezi's self-signed cert ("GF Sandbox Demo
+    # CA" - see helm/mock-dezi's certsSecretName). /dezi/jwks.json is on the
+    # same mux as /authorize (mock-components/dezi/cmd/main.go), so this
+    # address serves the key set through the public ingress, under the public
+    # host's certificate. Nothing in the stack fetches it.
     deziJku: "https://mock-dezi.test.gf.nuts.nl/dezi/jwks.json"
 
 # The PRS the knooppunt's config.pseudo points at and the NVI's PRS_MOCK_URL

@@ -84,7 +84,7 @@ stale one survives and nothing between here and the token request notices. Makin
 compare the wallet credential's own CA fingerprint against `sandbox/.certs/ca.pem`, so that it
 re-issues instead of reporting success, is the durable fix and is not implemented.
 
-The overlay carries the knooppunt settings the sandbox needs, such as the demo CA. They live there
+The overlay carries the knooppunt settings the sandbox needs, such as the bgz policy. They live there
 rather than in `docker-compose.yml` because the knooppunt service is not profile-gated, so anything
 set on it would also apply to a plain `docker compose up`.
 

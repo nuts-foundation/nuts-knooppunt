@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/nuts-foundation/go-did/vc"
@@ -170,19 +171,28 @@ func fakeNode(t *testing.T) *httptest.Server {
 			// populates the form when the type is form-encoded.
 			require.Equal(t, "application/json", r.Header.Get("Content-Type"))
 			var body struct {
-				AuthorizationServer string           `json:"authorization_server"`
-				Scope               string           `json:"scope"`
-				TokenType           string           `json:"token_type"`
-				IdToken             *string          `json:"id_token"`
-				Credentials         []map[string]any `json:"credentials"`
+				AuthorizationServer string  `json:"authorization_server"`
+				Scope               string  `json:"scope"`
+				TokenType           string  `json:"token_type"`
+				IdToken             *string `json:"id_token"`
+				Credentials         []struct {
+					Type              []string       `json:"type"`
+					CredentialSubject map[string]any `json:"credentialSubject"`
+				} `json:"credentials"`
 			}
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 			require.Equal(t, fakeNodeAuthorizationServer, body.AuthorizationServer)
 			require.Equal(t, "bgz", body.Scope)
 			require.Equal(t, "Bearer", body.TokenType, "omitting this yields DPoP")
-			require.Nil(t, body.IdToken, "the node does not take the Dezi attestation")
+			require.Nil(t, body.IdToken, "the sandbox does not hand the node the Dezi attestation")
 			require.Len(t, body.Credentials, 2, "the organization context and the practitioner context")
-			require.Equal(t, map[string]any{"identifier": "900001234", "role": "01.022"}, body.Credentials[1]["credentialSubject"],
+			var practitioner map[string]any
+			for _, credential := range body.Credentials {
+				if slices.Contains(credential.Type, "SandboxPractitionerContextCredential") {
+					practitioner = credential.CredentialSubject
+				}
+			}
+			require.Equal(t, map[string]any{"identifier": "900001234", "role": "01.022"}, practitioner,
 				"the practitioner must be the one the session signed in as")
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "the-token", "token_type": "Bearer"})

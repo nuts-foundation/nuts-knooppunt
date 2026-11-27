@@ -62,6 +62,10 @@ func TestAcceptance_FullChain(t *testing.T) {
 			require.Equal(t, chain.patient.BSN, question.PatientID)
 			require.Equal(t, "00000010", question.RequesterURA)
 			require.Equal(t, chain.SunflowerURA, question.DataHolderURA)
+			// The practitioner the sandbox stated in its token request, as it
+			// reached the closed question.
+			require.Contains(t, question.Request, dezimock.DrElAmrani.DeziNumber)
+			require.Contains(t, question.Request, dezimock.DrElAmrani.RoleCode)
 		}
 		checks := 0
 		for _, event := range sandbox.runEvents(t) {

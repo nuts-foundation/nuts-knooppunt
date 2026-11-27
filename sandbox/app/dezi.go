@@ -152,7 +152,10 @@ func (c *deziClient) exchange(ctx context.Context, code, verifier string) (authS
 	return sessionFromAttestation(envelope.Verklaring)
 }
 
-// sessionFromAttestation reads the claims the interface and E4 need. Nothing
+// sessionFromAttestation reads the claims the interface and E4 need. It refuses
+// an attestation without the Dezi number, the organization or the role: the
+// practitioner context states the number and the role, and the source's Mitz
+// check refuses a request that lacks either (component/pdp/mitz.go). Nothing
 // verifies the signature: the attestation comes from this backend's own
 // back-channel call to the Dezi userinfo endpoint, and the practitioner it names
 // reaches the Nuts node only as the requesting organization's own statement
@@ -181,8 +184,8 @@ func sessionFromAttestation(attestation string) (authSession, error) {
 	if err := json.Unmarshal(raw, &claims); err != nil {
 		return authSession{}, fmt.Errorf("parse attestation claims: %w", err)
 	}
-	if claims.DeziNumber == "" || claims.OrgURA == "" {
-		return authSession{}, fmt.Errorf("attestation is missing dezi_nummer or abonnee_nummer")
+	if claims.DeziNumber == "" || claims.OrgURA == "" || claims.RoleCode == "" {
+		return authSession{}, fmt.Errorf("attestation is missing dezi_nummer, abonnee_nummer or rol_code")
 	}
 	expires := time.Unix(claims.Expiry, 0)
 	if claims.Expiry == 0 {

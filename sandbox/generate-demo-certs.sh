@@ -33,30 +33,22 @@ STAGE="$OUT/.staging"
 trap 'rm -rf "$STAGE"' EXIT
 
 # Docker creates a directory wherever a bind-mount source is missing, and
-# compose mounts four paths out of this directory: mock-dezi.pem,
-# mock-dezi.key and dezi-signing.key from docker-compose.yml, and
-# ca-only/gf-sandbox-demo-ca.pem from docker-compose.sandbox.yml. A stack
-# brought up before this script has ever run therefore leaves a directory at
-# each of them.
+# docker-compose.yml mounts three paths out of this directory: mock-dezi.pem,
+# mock-dezi.key and dezi-signing.key. A stack brought up before this script has
+# ever run therefore leaves a directory at each of them.
 #
 # The presence probe below is -f, which a directory fails, so without this the
 # script reads the material as absent and generates a replacement set. Staging
 # keeps that off the live files, but installing it does not: the renames go one
 # at a time, so ca.key and ca.pem land and then the first directory stops the
 # rest, leaving half a rotated PKI and a directory the operator has to know to
-# delete. The ca-only case is worse still, because mv writes *into* a directory
-# rather than failing, so that one exits 0 with the knooppunt's trust path
-# mounted from a directory. -f rather than -r for the reason bootstrap-nuts.sh
-# used to give for its own copy of this guard: a directory is perfectly
-# readable, and a directory is the state this exists to keep out.
+# delete. -f rather than -r for the reason bootstrap-nuts.sh used to give for
+# its own copy of this guard: a directory is perfectly readable, and a
+# directory is the state this exists to keep out.
 #
 # It refuses rather than repairs. Nothing here can tell a directory Docker
 # created from one the operator cares about, and rm -rf of a path this script
 # did not create is not its call to make.
-#
-# ca-only is the asymmetry: it is legitimately a directory while everything
-# else this script writes is a file, so the two kinds are checked separately.
-# A blanket -d test over the output would reject a healthy tree.
 #
 # Every path this script installs is listed, not just the three compose mounts
 # and not just the material apply_modes carries modes for: ca.srl is here too,
@@ -74,13 +66,9 @@ refuse_wrong_kind() {
 }
 
 require_expected_kinds() {
-  if [[ -e $OUT/ca-only && ! -d $OUT/ca-only ]]; then
-    refuse_wrong_kind "$OUT/ca-only" "a directory"
-  fi
-
   local name
   for name in ca.pem ca.key ca.srl mock-dezi.pem mock-dezi.key \
-    dezi-signing.key ca-only/gf-sandbox-demo-ca.pem; do
+    dezi-signing.key; do
     if [[ -e $OUT/$name && ! -f $OUT/$name ]]; then
       refuse_wrong_kind "$OUT/$name" "a regular file"
     fi
@@ -91,12 +79,12 @@ require_expected_kinds() {
 # neither a chmod nor a key.
 require_expected_kinds
 
-# The containers read these files as fixed non-root UIDs (18092 for mock-dezi,
-# 18081 for the knooppunt), while a bind mount on Linux passes the host file's
-# owner and mode straight through. Anything left at 0600 owned by the host user
-# is therefore unreadable inside the container, and mock-dezi exits fatally on
-# its signing key. Docker Desktop on macOS hides this by remapping the owner,
-# which is why it only shows up on Linux and rootless Docker.
+# The mock-dezi container reads these files as a fixed non-root UID (18092),
+# while a bind mount on Linux passes the host file's owner and mode straight
+# through. Anything left at 0600 owned by the host user is therefore unreadable
+# inside the container, and mock-dezi exits fatally on its signing key. Docker
+# Desktop on macOS hides this by remapping the owner, which is why it only shows
+# up on Linux and rootless Docker.
 #
 # So: certificates are public and get 0644, and exactly two private keys follow
 # them, mock-dezi.key and dezi-signing.key. Those two are widened because
@@ -122,14 +110,11 @@ require_expected_kinds
 # chmod fail mid-command, which under `set -e` would abandon the rest of this
 # function and leave the very outage it exists to repair.
 #
-# Directories are made searchable first, before anything tests for or changes a
-# file inside them. An older run could leave $OUT or ca-only at 0700, and a
-# directory that cannot be traversed makes every probe below it fail.
+# The directory is made searchable first, before anything tests for or changes
+# a file inside it. An older run could leave $OUT at 0700, and a directory that
+# cannot be traversed makes every probe below it fail.
 apply_modes() {
   chmod 755 "$OUT"
-  if [[ -d $OUT/ca-only ]]; then
-    chmod 755 "$OUT/ca-only"
-  fi
 
   local name
   for name in ca.pem mock-dezi.pem mock-dezi.key dezi-signing.key; do
@@ -137,9 +122,6 @@ apply_modes() {
       chmod 644 "$OUT/$name"
     fi
   done
-  if [[ -f $OUT/ca-only/gf-sandbox-demo-ca.pem ]]; then
-    chmod 644 "$OUT/ca-only/gf-sandbox-demo-ca.pem"
-  fi
   if [[ -f $OUT/ca.key ]]; then
     chmod 600 "$OUT/ca.key"
   fi
@@ -243,8 +225,7 @@ check() {
 
 material_present() {
   local dir=$1 name
-  for name in ca.pem ca.key mock-dezi.pem mock-dezi.key dezi-signing.key \
-    ca-only/gf-sandbox-demo-ca.pem; do
+  for name in ca.pem ca.key mock-dezi.pem mock-dezi.key dezi-signing.key; do
     [[ -f $dir/$name ]] || return 1
   done
 }
@@ -277,26 +258,24 @@ validate_material() {
     certificate_matches_key "$dir/mock-dezi.pem" "$dir/mock-dezi.key" || return 1
   check "mock-dezi.pem was not issued by ca.pem" \
     certificate_issued_by "$dir/mock-dezi.pem" "$dir/ca.pem" || return 1
-  check "ca-only/gf-sandbox-demo-ca.pem is not a copy of ca.pem" \
-    cmp -s "$dir/ca-only/gf-sandbox-demo-ca.pem" "$dir/ca.pem" || return 1
   check "dezi-signing.key is not an RSA private key" \
     is_rsa_private_key "$dir/dezi-signing.key" || return 1
 }
 
 # Moves the validated set into place. One rename at a time, so an interruption
 # here still leaves a mixture of old and new files behind. What it cannot
-# leave behind is a mixture that the run after it calls healthy: every file in
-# the set is tied to the root by one of the checks above, so any prefix of
-# these renames fails at least one of them and regenerates. Detecting the
-# broken state is the property that was missing, not atomicity of the swap,
-# and bash has no way to rename several paths as one operation regardless.
+# leave behind is a broken mixture that the run after it calls healthy: every
+# certificate and its key is tied to the root by one of the checks above, so
+# an interruption before the new mock-dezi pair is complete fails at least one
+# of them and regenerates. The signing key is the last rename and stands alone:
+# a complete new TLS set with the old signing key still works. Detecting the
+# broken state is the property that was missing, not atomicity of the swap, and
+# bash has no way to rename several paths as one operation regardless.
 install_material() {
   local name
   for name in ca.key ca.pem ca.srl mock-dezi.pem mock-dezi.key dezi-signing.key; do
     mv -f "$STAGE/$name" "$OUT/$name"
   done
-  mkdir -p "$OUT/ca-only"
-  mv -f "$STAGE/ca-only/gf-sandbox-demo-ca.pem" "$OUT/ca-only/gf-sandbox-demo-ca.pem"
 }
 
 if material_present "$OUT" && validate_material "$OUT"; then
@@ -315,7 +294,7 @@ if [[ -n $MATERIAL_PROBLEM ]]; then
 fi
 
 rm -rf "$STAGE"
-mkdir -p "$STAGE/ca-only"
+mkdir -p "$STAGE"
 
 echo "Generating demo CA..."
 openssl genrsa -out "$STAGE/ca.key" 4096
@@ -363,12 +342,6 @@ else
   openssl genrsa -out "$STAGE/dezi-signing.key" 2048
 fi
 
-# The knooppunt container mounts the file below into its certificate path.
-# Keep private keys out of this directory: Go reads every file it finds in
-# /etc/ssl/certs, and a future mount of the whole directory should not be able
-# to pull one in.
-cp "$STAGE/ca.pem" "$STAGE/ca-only/gf-sandbox-demo-ca.pem"
-
 # This script is the only thing that can produce a set it will accept, so it
 # holds itself to the same check. Failing here means openssl did something
 # other than what the lines above say, and the right answer to that is to
@@ -387,4 +360,3 @@ echo "Written to $OUT (gitignored):"
 echo "  ca.pem, ca.key             demo certificate authority"
 echo "  mock-dezi.pem, .key        TLS server certificate, SAN mock-dezi + localhost"
 echo "  dezi-signing.key           attestation signing key"
-echo "  ca-only/                   CA alone, mounted into the knooppunt trust path"

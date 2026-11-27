@@ -70,8 +70,8 @@ func organizationContextCredential(cfg nutsConfig) map[string]any {
 // no issuer and no credentialSubject.id, for the same reason.
 //
 // This is a caller assertion too: the requesting organization vouches for its
-// practitioner, and nothing checks the claim against Dezi, since the node does
-// not take the Dezi attestation.
+// practitioner, and nothing checks the claim against Dezi: the sandbox does not
+// hand the node the attestation.
 func practitionerContextCredential(session authSession) map[string]any {
 	return map[string]any{
 		"@context":          []string{"https://www.w3.org/2018/credentials/v1"},

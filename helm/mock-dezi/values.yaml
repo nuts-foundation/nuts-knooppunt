@@ -31,8 +31,8 @@ service:
   httpsPort: 8443
 
 # Ingress for the http port only (8092: /authorize, the browser-facing
-# redirect target). The https port (8443, JWKS) is reached over the
-# in-cluster Service by knooppunt, never a browser, so it stays ClusterIP-only.
+# redirect target). The https port (8443) serves the JWK Set at the default
+# deziJku below and stays ClusterIP-only.
 ingress:
   enabled: false
   className: ""

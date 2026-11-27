@@ -160,8 +160,9 @@ cross-cutting below). Screens (the wireframe numbers these 1-8, splitting record
    system Y", the resolved endpoint).
 3. The practitioner explicitly confirms retrieval from that source before anything is pulled.
 5. **Authorization result page**: the GF Autorisatie outcome, top-level result plus all sub-checks performed under the
-   use-case policy: authentication check passed (Dezi VC, URA VC, RoletypeVC), practitioner role check passed (Dezi
-   info), consent check passed (verified via Mitz), data request scope check passed (within what the use case permits).
+   use-case policy: authentication check passed (De Plataan's organization credential, with the practitioner as De
+   Plataan states it), practitioner role check passed (the Dezi role as De Plataan states it), consent check passed
+   (verified via Mitz), data request scope check passed (within what the use case permits).
    **Demo disclaimer at the top**: in production these checks run on the source side and only a yes/no comes back; the
    breakdown is shown for demo purposes only.
 6. **Enriched home screen**: the overview now shows data from two sources, De Plataan and Zonnebloem, with source

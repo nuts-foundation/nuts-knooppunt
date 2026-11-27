@@ -980,6 +980,8 @@ func TestAuthorizeRejectsAPartialIntrospection(t *testing.T) {
 			`"organization_name":"Ziekenhuis De Plataan","organization_facility_type":null}`, "organization_facility_type"},
 		"the claim the PDP reads as the organisation's name": {`{"active":true,"user_id":"900001234","user_role":"01.022",` +
 			`"organization_ura":"00000010","organization_facility_type":"Z3"}`, "organization_name"},
+		"the practitioner's role, which the Mitz check needs": {`{"active":true,"user_id":"900001234",` +
+			`"organization_ura":"00000010","organization_name":"Ziekenhuis De Plataan","organization_facility_type":"Z3"}`, "user_role"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			srv, client := authorizeSandbox(t, nodeIntrospecting(t, http.StatusOK, tc.response).URL)

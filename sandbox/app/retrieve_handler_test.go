@@ -182,6 +182,10 @@ func TestRetrieve_RendersTheGrantedDecision(t *testing.T) {
 	// The disclaimer is an acceptance criterion, not decoration: the breakdown
 	// below it is narration, and the screen has to say so.
 	require.Contains(t, body, "demonstration purposes")
+	// The practitioner travels as De Plataan's own statement, and the narration
+	// must not suggest that anything checked it against Dezi.
+	require.Contains(t, strings.Join(strings.Fields(body), " "),
+		"Nothing in this sandbox verifies the Dezi attestation's signature.")
 	// This page reports the decision; the data itself lives on the record, and a
 	// granted decision has to offer the way there.
 	require.Contains(t, body, `href="/demo/ehr/patients/`+key+`"`)

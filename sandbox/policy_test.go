@@ -8,9 +8,11 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -25,18 +27,18 @@ import (
 )
 
 // The definition lives here as a template rather than in config/policy because
-// it has to pin the demo CA's did:x509 fingerprint, and that CA is regenerated
-// on every rotation. A committed file cannot carry a value that changes, and a
-// committed file without the pin is worse than none: the did:x509 resolver
-// builds its trust store out of the credential's own chain
-// (nuts-node vdr/didx509/resolver.go), so a definition that does not constrain
-// $.issuer accepts a chain the requester minted itself. config/policy is
-// mounted into a knooppunt that is not profile-gated, so leaving one there
-// would arm that on every plain `docker compose up`.
+// it has to pin a CA's did:x509 fingerprint, and a definition without the pin is
+// worse than none: the did:x509 resolver builds its trust store out of the
+// credential's own chain (nuts-node vdr/didx509/resolver.go), so a definition
+// that does not constrain $.issuer accepts a chain the requester generated
+// itself. config/policy is mounted into a knooppunt that is not profile-gated,
+// so leaving one there would arm that on every plain `docker compose up`.
 //
-// sandbox/generate-demo-certs.sh renders sandbox/.certs/policy/bgz.json from
-// this file with the real fingerprint substituted in, and the sandbox overlay
-// points NUTS_POLICY_DIRECTORY at a mount of that directory. The .template
+// The deployments use this file rendered for the Fake UZI CA (test/e2e/pep/certs),
+// the fixed CA the seed issues De Plataan's X509Credential from:
+// sandbox/policy/bgz.json, which the sandbox overlay mounts, and
+// infra/ovhcloud-test/policy/bgz.json for the hosted environment. The e2e
+// harness renders its own (renderBGZPolicy in test/e2e/harness). The .template
 // suffix is what keeps this file inert: loadFromDirectory loads only names
 // ending in .json (nuts-node policy/local.go), so even dropped into a policy
 // directory it is skipped.
@@ -250,14 +252,38 @@ func TestBGZPolicyIssuerFieldIsUnnamedAndGroupFree(t *testing.T) {
 		"no capture group: see this test's comment for why organization_id needs the opposite")
 }
 
-// caFingerprintPlaceholder is the token generate-demo-certs.sh substitutes for
-// the real fingerprint when it renders the live definition. Named once here so
-// a test cannot drift from the script by editing only one of them.
+// The committed renderings are read by no code: compose mounts one and the
+// hosted environment deploys the other. An edit to the template that misses
+// either of them leaves that deployment answering every token request with a
+// 412 while every other test, the harness included, renders the template itself
+// and passes.
+func TestBGZPolicyRenderingsMatchTheTemplate(t *testing.T) {
+	raw, err := os.ReadFile(bgzPolicyTemplate)
+	require.NoError(t, err)
+	caPEM, err := os.ReadFile(filepath.Join("..", "test", "e2e", "pep", "certs", "ca.pem"))
+	require.NoError(t, err)
+	block, _ := pem.Decode(caPEM)
+	require.NotNil(t, block, "the Fake UZI CA certificate is not PEM encoded")
+	rendered := strings.ReplaceAll(string(raw), caFingerprintPlaceholder, caFingerprintOf(block.Bytes))
+
+	for _, path := range []string{
+		filepath.Join("policy", "bgz.json"),
+		filepath.Join("..", "infra", "ovhcloud-test", "policy", "bgz.json"),
+	} {
+		committed, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, rendered, string(committed), "%s is not the template rendered for the Fake UZI CA", path)
+	}
+}
+
+// caFingerprintPlaceholder is the token in the template where a rendering puts
+// the real fingerprint. test/e2e/harness spells it separately
+// (bgzFingerprintPlaceholder).
 const caFingerprintPlaceholder = "__GF_SANDBOX_DEMO_CA_FINGERPRINT__"
 
-// bgzDefinition renders the template the way the generator does and returns the
-// organization definition out of it. Passing caFingerprintPlaceholder yields
-// the file exactly as committed.
+// bgzDefinition renders the template the way the committed renderings were made
+// and returns the organization definition out of it. Passing
+// caFingerprintPlaceholder yields the template exactly as committed.
 func bgzDefinition(t *testing.T, fingerprint string) pe.PresentationDefinition {
 	t.Helper()
 	raw, err := os.ReadFile(bgzPolicyTemplate)

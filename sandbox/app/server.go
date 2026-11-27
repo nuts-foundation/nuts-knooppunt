@@ -533,12 +533,11 @@ func newHandlers(cfg Config) (app http.Handler, intake http.Handler) {
 
 		// The claims are the node's answer about the credential behind the token,
 		// so they are asked for only once it has vouched for the token itself.
-		// The set is the one the bgz presentation definition emits, and each of
-		// them is a name component/pdp reads into PolicySubject, so a name absent
-		// here is one the PDP would never receive. Indexing rather than sizing
-		// also keeps a JSON null off the page, where fmt.Sprint would render it
-		// as the "<nil>" no reader can tell from a claim the node really
-		// returned.
+		// Each of them is a name component/pdp reads into PolicySubject, so a
+		// name absent here is one the PDP would never receive. Indexing rather
+		// than sizing also keeps a JSON null off the page, where fmt.Sprint
+		// would render it as the "<nil>" no reader can tell from a claim the
+		// node really returned.
 		claimNames := []string{"user_id", "user_role", "organization_ura", "organization_name", "organization_facility_type"}
 		var missing []string
 		for _, name := range claimNames {

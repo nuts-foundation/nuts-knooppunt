@@ -64,7 +64,7 @@ func stageScript(t *testing.T) string {
 	return script
 }
 
-// stageStaleMaterial writes placeholders at six of the paths the generator
+// stageStaleMaterial writes placeholders at five of the paths the generator
 // writes, in the owner-only modes an older version of the script produced.
 // None of it is certificate material, so the generator regenerates the set
 // rather than accepting it: these tests are about what apply_modes and the
@@ -73,11 +73,10 @@ func stageScript(t *testing.T) string {
 func stageStaleMaterial(t *testing.T, script string) string {
 	t.Helper()
 	out := filepath.Join(filepath.Dir(script), ".certs")
-	require.NoError(t, os.MkdirAll(filepath.Join(out, "ca-only"), 0o700))
+	require.NoError(t, os.MkdirAll(out, 0o700))
 	for _, name := range []string{"ca.pem", "ca.key", "mock-dezi.pem", "mock-dezi.key", "dezi-signing.key"} {
 		require.NoError(t, os.WriteFile(filepath.Join(out, name), []byte("stale\n"), 0o600))
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"), []byte("stale\n"), 0o600))
 	require.NoError(t, os.Chmod(out, 0o700))
 	return out
 }
@@ -92,11 +91,9 @@ func mode(t *testing.T, path string) os.FileMode {
 func requireContainerReadable(t *testing.T, out string) {
 	t.Helper()
 	require.Equal(t, os.FileMode(wantDir), mode(t, out), ".certs must be traversable by the container UID")
-	require.Equal(t, os.FileMode(wantDir), mode(t, filepath.Join(out, "ca-only")))
 	for _, name := range []string{"ca.pem", "mock-dezi.pem", "mock-dezi.key", "dezi-signing.key"} {
 		require.Equal(t, os.FileMode(wantPublic), mode(t, filepath.Join(out, name)), "%s is mounted and must be readable", name)
 	}
-	require.Equal(t, os.FileMode(wantPublic), mode(t, filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem")))
 	require.Equal(t, os.FileMode(wantKey), mode(t, filepath.Join(out, "ca.key")), "the CA key is mounted nowhere and must stay owner-only")
 }
 
@@ -125,12 +122,12 @@ func runScriptExpectingRefusal(t *testing.T, script string) string {
 // distinction visible at the call site instead of buried in duplicated
 // certificate boilerplate.
 //
-// The root's own key and the trust store copy are rewritten along with it, so
-// the result is broken in one way rather than several: with isCA true the
-// only relationship left false is that this root issued nothing around it,
-// and with isCA false the missing CA:TRUE joins it. A fixture that trips every
-// check at once cannot show that the particular check it aims at is still
-// there, because any of the others would catch it.
+// The root's own key is rewritten along with it, so the result is broken in
+// one way rather than several: with isCA true the only relationship left false
+// is that this root issued nothing around it, and with isCA false the missing
+// CA:TRUE joins it. A fixture that trips every check at once cannot show that
+// the particular check it aims at is still there, because any of the others
+// would catch it.
 //
 // The root and its key come back so a caller can re-issue material underneath
 // it, which is how mock-dezi's issuance gets isolated from the root's own.
@@ -157,7 +154,6 @@ func stageForeignRoot(t *testing.T, out string, isCA bool) (*x509.Certificate, c
 	root := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 
 	require.NoError(t, os.WriteFile(filepath.Join(out, "ca.pem"), root, 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"), root, 0o600))
 	writeECKey(t, filepath.Join(out, "ca.key"), key)
 
 	parsed, err := x509.ParseCertificate(der)
@@ -188,7 +184,6 @@ func stageRootClaimingCAInItsSubject(t *testing.T, out string) {
 	root := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 
 	require.NoError(t, os.WriteFile(filepath.Join(out, "ca.pem"), root, 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"), root, 0o600))
 	writeECKey(t, filepath.Join(out, "ca.key"), key)
 
 	parsed, err := x509.ParseCertificate(der)
@@ -244,11 +239,8 @@ func writeECKey(t *testing.T, path string, key *ecdsa.PrivateKey) {
 // was fine apart from its modes, and a script that answered "nothing to do"
 // while changing nothing. What the earlier version of this test never checked
 // is the other half of the promise in its name. Repairing in place means the
-// material survives the repair, and rotation is not a harmless extra here:
-// the knooppunt trusts ca-only/gf-sandbox-demo-ca.pem as a fixed root, so a
-// rotated CA invalidates every certificate the browser or the node already
-// holds a session against, and the demo fails at the next TLS handshake
-// rather than at this script.
+// material survives the repair: a run that only had modes to fix must not hand
+// the operator a new CA and new keys.
 func TestGeneratorRepairsPermissionsWithoutRotatingMaterial(t *testing.T) {
 	healthy := healthyMaterial(t)
 	script := stageScript(t)
@@ -292,23 +284,10 @@ func TestGeneratorRegeneratesMaterialThatDoesNotHangTogether(t *testing.T) {
 		{
 			// mock-dezi's certificate is the one piece of this set nothing
 			// else refers to, so nothing else notices when it stops
-			// descending from the root: the knooppunt trusts the root and
-			// then rejects the TLS handshake.
+			// descending from the root: a client that trusts the root
+			// rejects the TLS handshake.
 			name:   "the root did not issue the mock-dezi certificate",
 			mutate: func(t *testing.T, out string) { stageMockDezi(t, out, nil, nil) },
-		},
-		{
-			// A real certificate, not a placeholder: the knooppunt trusts
-			// whatever sits here, so "it parses" is not the property that
-			// matters. Anchoring the demo on a certificate that signs nothing
-			// rejects every chain the node is given.
-			name: "the trust store copy is not the root",
-			mutate: func(t *testing.T, out string) {
-				dezi, err := os.ReadFile(filepath.Join(out, "mock-dezi.pem"))
-				require.NoError(t, err)
-				require.NoError(t, os.WriteFile(
-					filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"), dezi, 0o600))
-			},
 		},
 		{
 			// mock-dezi reads this key at startup and exits fatally on a key
@@ -436,17 +415,15 @@ func TestGeneratorReplacesANonCARoot(t *testing.T) {
 // guard it read the material as absent and took the generation path: it
 // rewrote ca.key and ca.pem and only then died on the first directory it could
 // not overwrite. Asserting a non-zero exit alone would not catch that, because
-// three of these four cases exited non-zero already; what was wrong was that
-// the CA had been rotated by the time they did. Hence the ca.key assertion,
-// which is the regression that actually costs the operator something.
+// each of these cases exited non-zero already; what was wrong was that the CA
+// had been rotated by the time they did. Hence the ca.key assertion, which is
+// the regression that actually costs the operator something.
 func TestGeneratorRefusesADirectoryWhereAFileBelongs(t *testing.T) {
-	// docker-compose.yml mounts the first three, docker-compose.sandbox.yml
-	// the fourth.
+	// All three are docker-compose.yml's mounts.
 	for _, mounted := range []string{
 		"mock-dezi.pem",
 		"mock-dezi.key",
 		"dezi-signing.key",
-		"ca-only/gf-sandbox-demo-ca.pem",
 	} {
 		t.Run(mounted, func(t *testing.T) {
 			script := stageScript(t)
@@ -562,12 +539,6 @@ func requireMaterialHangsTogether(t *testing.T, out string) {
 	dezi := parseCert(t, filepath.Join(out, "mock-dezi.pem"))
 	requireKeyBelongsTo(t, filepath.Join(out, "mock-dezi.key"), dezi)
 	require.NoError(t, dezi.CheckSignatureFrom(root), "mock-dezi.pem must be issued by the root")
-
-	root0, err := os.ReadFile(filepath.Join(out, "ca.pem"))
-	require.NoError(t, err)
-	trusted, err := os.ReadFile(filepath.Join(out, "ca-only", "gf-sandbox-demo-ca.pem"))
-	require.NoError(t, err)
-	require.Equal(t, root0, trusted, "the knooppunt's trust store copy must be the root itself")
 
 	// The type, not merely that it parses: mock-components/dezi/cmd/keys.go
 	// type-asserts *rsa.PrivateKey and exits fatally on anything else, so an

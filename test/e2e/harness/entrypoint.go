@@ -90,7 +90,7 @@ func StartWithNuts(t *testing.T, dataHolder hapi.Tenant) Details {
 	caPath := filepath.Join(PEPCertsDir(t), "ca.pem")
 	policyDir := setupNutsEnvironment(t, caPath)
 
-	dezi := StartMockDezi(t)
+	dezi := NewMockDezi(t)
 
 	// The bgz scope is not in config/policy: its presentation definition pins a
 	// certificate authority fingerprint, so it is rendered per deployment rather
