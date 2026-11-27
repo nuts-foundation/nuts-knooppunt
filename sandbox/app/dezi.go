@@ -152,9 +152,11 @@ func (c *deziClient) exchange(ctx context.Context, code, verifier string) (authS
 	return sessionFromAttestation(envelope.Verklaring)
 }
 
-// sessionFromAttestation reads the claims the interface and E4 need. The
-// signature is verified by the Nuts node when the attestation is presented, not
-// here; this backend is not the trust boundary.
+// sessionFromAttestation reads the claims the interface and E4 need. Nothing
+// verifies the signature: the attestation comes from this backend's own
+// back-channel call to the Dezi userinfo endpoint, and the practitioner it names
+// reaches the Nuts node only as the requesting organization's own statement
+// (practitionerContextCredential).
 func sessionFromAttestation(attestation string) (authSession, error) {
 	parts := strings.Split(attestation, ".")
 	if len(parts) != 3 {
@@ -196,7 +198,6 @@ func sessionFromAttestation(attestation string) (authSession, error) {
 		RoleCode:      claims.RoleCode,
 		RoleName:      claims.RoleName,
 		RoleRegistry:  claims.RoleRegistry,
-		Attestation:   attestation,
 		ExpiresAt:     expires,
 	}, nil
 }

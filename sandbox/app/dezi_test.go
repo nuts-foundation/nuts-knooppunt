@@ -82,7 +82,6 @@ func TestExchangeBuildsASessionFromTheAttestation(t *testing.T) {
 	// this couples rol_naam ingestion to what the top bar shows. Without it the
 	// two halves are tested separately and a dropped claim renders as a blank.
 	require.Equal(t, "Klinisch geriater", session.RoleName)
-	require.Equal(t, fixtureAttestation, session.Attestation, "the raw attestation is kept for E4")
 	require.False(t, session.ExpiresAt.IsZero())
 }
 

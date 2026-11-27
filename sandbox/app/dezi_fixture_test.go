@@ -6,9 +6,9 @@ import (
 )
 
 // fixtureAttestation is a syntactically valid compact JWS carrying the canonical
-// persona claims. Its signature is meaningless on purpose: this backend is not
-// the trust boundary, so it never verifies one. Real signature verification is
-// the Nuts node's job and is covered by mock-components/dezi/contract_test.go.
+// persona claims. Its signature is meaningless on purpose: these tests exercise
+// claim decoding, and the sandbox does not verify the Dezi signature (see
+// sessionFromAttestation).
 var fixtureAttestation = buildFixtureAttestation()
 
 func buildFixtureAttestation() string {

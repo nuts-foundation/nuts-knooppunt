@@ -84,11 +84,9 @@ stale one survives and nothing between here and the token request notices. Makin
 compare the wallet credential's own CA fingerprint against `sandbox/.certs/ca.pem`, so that it
 re-issues instead of reporting success, is the durable fix and is not implemented.
 
-The overlay carries the knooppunt settings the sandbox needs: the demo CA and the Dezi JWK Set
-allowlist. They live there rather than in `docker-compose.yml` because the knooppunt service is
-not profile-gated, so anything set on it would also apply to a plain `docker compose up`. The
-allowlist matters in particular: configuring it replaces the built-in production and acceptance
-defaults instead of extending them.
+The overlay carries the knooppunt settings the sandbox needs, such as the demo CA. They live there
+rather than in `docker-compose.yml` because the knooppunt service is not profile-gated, so anything
+set on it would also apply to a plain `docker compose up`.
 
 ## Configuration
 
@@ -173,7 +171,7 @@ and retrieves data. The E6 viewer gives each action its own entry in the run's t
    directory but exposes no query API, so the sandbox reads the replica directly, which is what the
    Addressing spec has a Query Client do.
 3. **Authentication.** An access token is requested from the *source's* authorization server, with the
-   session's Dezi attestation as `id_token`. The requester stays De Plataan's subject, which is the
+   practitioner from the session's Dezi sign-in as a self-asserted credential. The requester stays De Plataan's subject, which is the
    wallet holding the credential the source's presentation definition asks for.
 4. **Retrieval.** The Patient search both opens the BGZ and resolves the source's own id for this
    patient, which every later search is scoped to. Which categories are asked for comes from the NVI;
@@ -680,20 +678,18 @@ should compose these primitives and partials.
 
 - Dezi sign-in (E2): `POST /demo/login` starts the flow against `mock-components/dezi`,
   `GET /demo/auth/callback` creates the session, `POST /demo/logout` ends it. `authSession` in
-  `session.go` holds the raw attestation that E4 sends to the Nuts node as `id_token`; templates
-  only ever see the derived `Session` view model.
+  `session.go` holds the practitioner claims read from the attestation; templates only ever see the
+  derived `Session` view model.
 - `page.Session` and the `topbar` partial (E2).
-- The service access token (E4): `POST /demo/authorize` sends the session's attestation to the Nuts
-  node as `id_token` with one self-asserted organization context credential, introspects the token
-  it gets back, and requires and renders `user_id`, `user_role`, `organization_ura`,
-  `organization_ura_dezi`, `organization_name` and `organization_facility_type`. Compose only; see
-  the note under Configuration.
+- The service access token (E4): `POST /demo/authorize` asks the Nuts node for a token with two
+  self-asserted credentials, the organization context and the practitioner context from the
+  session, introspects the token it gets back, and requires and renders `user_id`, `user_role`,
+  `organization_ura`, `organization_name` and `organization_facility_type`. Compose only; see the
+  note under Configuration.
 
-  `organization_ura` comes from the X509 credential in the wallet and `organization_ura_dezi` from
-  the Dezi attestation, so the two are independently established and can disagree. Nothing rejects a
-  disagreement: a presentation definition filters one path in one credential and cannot compare two,
-  and the policy decision point does not make the comparison yet. Both are rendered so the reader can
-  make it by eye, which is the only place it currently happens.
+  `organization_ura` comes from the X509 credential in the wallet. `user_id` and `user_role` are the
+  requesting organization's own statement about its practitioner, and nothing checks them against
+  Dezi or against that organization.
 - Reset/recycle (E5, landed): `POST /demo/reset` (global, `override=true` past active locks),
   `POST /demo/patients/{key}/recycle` (per-patient, 409 if locked), `POST /demo/patients/{key}/lock` and
   `/release` (manual lock control), and `GET /demo/patients` (pool + lock status JSON). These call

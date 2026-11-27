@@ -90,10 +90,7 @@ func StartWithNuts(t *testing.T, dataHolder hapi.Tenant) Details {
 	caPath := filepath.Join(PEPCertsDir(t), "ca.pem")
 	policyDir := setupNutsEnvironment(t, caPath)
 
-	// Before the node starts: it copies the allowed list into its validator at
-	// configuration time and compares whole URLs.
 	dezi := StartMockDezi(t)
-	t.Setenv("NUTS_VCR_DEZI_ALLOWEDJKU", dezi.JKU)
 
 	// The bgz scope is not in config/policy: its presentation definition pins a
 	// certificate authority fingerprint, so it is rendered per deployment rather

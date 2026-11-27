@@ -23,8 +23,8 @@ func main() {
 		certFile = env("TLS_CERT_FILE", "")
 		keyFile  = env("TLS_KEY_FILE", "")
 		issuer   = env("DEZI_ISSUER", "https://abonnee.dezi.nl")
-		// The Nuts node fetches this URL to verify the attestation signature.
-		// It must be HTTPS and must appear in the node's vcr.dezi.allowedjku.
+		// Each attestation names this URL in its jku header, as Dezi's do, and
+		// the mock serves its key set there.
 		jku = env("DEZI_JKU", "https://mock-dezi:8443/dezi/jwks.json")
 		// Empty means "generate in memory", which is what `go run` uses.
 		keyFileForSigning = env("DEZI_SIGNING_KEY_FILE", "")

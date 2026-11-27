@@ -46,8 +46,7 @@ func clearSessionCookie(w http.ResponseWriter, secure bool) {
 	})
 }
 
-// authSession is the internal record of a signed-in practitioner. It holds the
-// raw attestation, which E4 sends to the Nuts node as id_token. It is never
+// authSession is the internal record of a signed-in practitioner. It is never
 // rendered and never logged; templates receive the Session view model instead.
 type authSession struct {
 	// ID is the session's own store key, set by sessionStore.create. It is the
@@ -63,7 +62,6 @@ type authSession struct {
 	RoleCode      string
 	RoleName      string
 	RoleRegistry  string
-	Attestation   string
 	ExpiresAt     time.Time
 }
 

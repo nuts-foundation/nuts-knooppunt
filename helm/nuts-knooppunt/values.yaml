@@ -129,7 +129,7 @@ autoscaling:
 # Extra container env vars, e.g. NUTS_URL (the embedded nuts-node's own
 # public base URL, used for did:web identifiers - the nutsnode component
 # sets several other NUTS_* vars itself, but not this one) or sandbox-only
-# settings like NUTS_VCR_DEZI_ALLOWEDJKU / SSL_CERT_FILE.
+# settings like SSL_CERT_FILE.
 extraEnv: []
 # - name: NUTS_URL
 #   value: "https://knooppunt.example.com"

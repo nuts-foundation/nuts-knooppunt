@@ -617,7 +617,7 @@ func TestCaptureRealClientWiring(t *testing.T) {
 		t.Fatal("expected no matching organization")
 	}
 	nuts := newNutsClient(nutsConfig{InternalBaseURL: server.URL, Subject: "example", Scope: "bgz"})
-	if token, err := nuts.requestToken(ctx, authSession{Attestation: "private-attestation"}, server.URL); err != nil || token != "private-token" {
+	if token, err := nuts.requestToken(ctx, testSession(), server.URL); err != nil || token != "private-token" {
 		t.Fatalf("token = %q, %v", token, err)
 	}
 	if _, err := nuts.introspect(ctx, "private-token"); err != nil {

@@ -458,9 +458,8 @@ func fullChainSandbox(t *testing.T, cfg Config, dezi harness.MockDezi) (*httptes
 // runs discovery against the real NVI and directory; confirming it is where the
 // sandbox asks the Nuts node for a token.
 //
-// The sandbox signs in through the mock Dezi the harness runs in process, so the
-// attestation it sends as id_token carries a signature and a jku the node can
-// resolve.
+// The sandbox signs in through the mock Dezi the harness runs in process, and
+// states the practitioner from that sign-in in the token request.
 func (s sandbox) retrieve(t *testing.T) (int, string) {
 	t.Helper()
 	confirmation := sourceConfirmation(t, s.client, s.server, s.key, s.ura)

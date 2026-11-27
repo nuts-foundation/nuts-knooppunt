@@ -9,15 +9,14 @@ import (
 
 func testSession() authSession {
 	return authSession{
-		DeziNumber:  "900001234",
-		Initials:    "S.",
-		Surname:     "el Amrani",
-		OrgURA:      "00000010",
-		OrgName:     "Ziekenhuis De Plataan",
-		RoleCode:    "01.022",
-		RoleName:    "Klinisch geriater",
-		Attestation: "header.payload.signature",
-		ExpiresAt:   time.Now().Add(time.Hour),
+		DeziNumber: "900001234",
+		Initials:   "S.",
+		Surname:    "el Amrani",
+		OrgURA:     "00000010",
+		OrgName:    "Ziekenhuis De Plataan",
+		RoleCode:   "01.022",
+		RoleName:   "Klinisch geriater",
+		ExpiresAt:  time.Now().Add(time.Hour),
 	}
 }
 

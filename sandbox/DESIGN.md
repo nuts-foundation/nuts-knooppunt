@@ -268,7 +268,7 @@ it.
 | Anna's consent (share with treating physicians: yes) | mock Mitz, one answer per patient: the mock's configured answer until the demo's consent control on the enriched record changes it, and again once reset or recycle restores it | PDP during the authorization step                       |
 | De Plataan's Mitz subscription for Anna              | mock Mitz, created during the patiëntaanmelding. It carries the Knooppunt's `/mitz/notify` as `channel.endpoint` (the Knooppunt's `notifyendpoint`), so the mock delivers a notification there and the Knooppunt forwards it to the sandbox's private intake (its `notifyforwardurl`). A stack that sets neither creates the subscription without an endpoint and nothing is delivered; the share screen says whether this sandbox has an intake                                                                                                                                                                                                                                                                                                                                                                                            | sandbox backend (renders the step 7 notification)       |
 | Access policy (BGZ scope requires Mitz consent)      | OPA bundles in the PDP                                                                                                                                                                                                                                                                                                                                                                                                                                                             | PEP and PDP on inbound retrieval                        |
-| Dezi session claims of S. el Amrani                 | mock Dezi login; the attestation becomes a `DeziUserCredential` inside the Nuts node                                                                                                                                                                                                                                                                                                                                                                                                                     | top bar display, PDP authentication and role sub-checks |
+| Dezi session claims of S. el Amrani                 | mock Dezi login; the sandbox states the practitioner as a self-asserted credential                                                                                                                                                                                                                                                                                                                                                                                                                       | top bar display, PDP authentication and role sub-checks |
 
 ### 5.5 The marker record (path 0b)
 
@@ -518,13 +518,12 @@ section 3 fallback triggers occur.
 ### E2 Dezi login and session (GF Authentication)
 
 The split-screen mock Dezi login and a backend session carrying the practitioner claims (name, role, UZI number, URA),
-displayed permanently in the top bar. The session holds the signed Dezi attestation, which the access-token request
-submits as `id_token`; the resulting claims feed the PDP input downstream.
+displayed permanently in the top bar. The access-token request states the practitioner's Dezi number and role code as
+a self-asserted `SandboxPractitionerContextCredential`, next to the organization context; the resulting claims feed the
+PDP input downstream, where the Mitz consent check needs them. Nothing checks that statement against Dezi: the
+requesting organization vouches for its practitioner.
 
-The mock VC issuer is not involved. The Nuts node builds the Dezi credential itself from the submitted attestation,
-through `credential.CreateDeziUserCredential` in the nuts-node dependency (`vcr/credential/dezi.go` in that module, not
-a path in this repository); `mock-components/dezi/contract_test.go` calls it here against the real validator.
-Request-scoped credentials are passed as unsigned self-asserted JSON and rejected if they carry an issuer, and the
+The mock VC issuer is not involved. Request-scoped credentials are passed as unsigned self-asserted JSON and rejected if they carry an issuer, and the
 organization identity is a wallet-held `X509Credential` derived from a UZI certificate, which cannot be self-asserted
 because the validator requires a `did:x509` issuer. `NUTS_ISSUER_DID` belongs to the vektis-issuer's own Nuts-delegated
 signing mode and nothing on this path reads it. Should a BGZ presentation definition later require the issuer's
