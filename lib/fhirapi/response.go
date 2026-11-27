@@ -29,6 +29,8 @@ func StatusCodeForError(err error) int {
 			return http.StatusServiceUnavailable
 		case fhir.IssueTypeTooCostly:
 			return http.StatusUnprocessableEntity
+		case fhir.IssueTypeTooLong:
+			return http.StatusRequestEntityTooLarge
 		}
 	}
 	return http.StatusInternalServerError

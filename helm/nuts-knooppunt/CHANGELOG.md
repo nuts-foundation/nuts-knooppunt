@@ -13,6 +13,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `hapi.fhir.auto_create_placeholder_reference_targets: true` - Create a placeholder for a missing reference target,
     so the reference is indexed for `_include` and chained search. Placeholders carry the
     `http://hapifhir.io/fhir/StructureDefinition/resource-placeholder` extension.
+- Limits on inbound requests:
+  - `config.http.public.maxbodysize` and `config.http.internal.maxbodysize` - Largest request body in bytes
+    (defaults: 1 MiB public, 10 MiB internal). Larger bodies get `413`, also through the `/nuts` proxy.
+  - Both HTTP servers now have fixed timeouts (10s to read headers, 60s to read the request, 120s idle) and a 64 KiB
+    header limit (`431` above it). The public server also has a 60s write timeout.
+  - The internal API now checks the request Content-Type against `openapi.yaml`.
+- README: "Ingress hardening" section on body size and rate-limit annotations for ingress-nginx.
+
+### Changed
+- Internal API: a body over the limit now gets `413` with a FHIR OperationOutcome (issue code `too-long`) instead of
+  the `400` for a body that cannot be decoded.
+- Internal API: a missing or wrong Content-Type on an operation that takes a body now gets `415` with an
+  OperationOutcome. `application/json` is accepted wherever `application/fhir+json` is declared.
 
 ## [0.1.3] - 2025-01-12
 

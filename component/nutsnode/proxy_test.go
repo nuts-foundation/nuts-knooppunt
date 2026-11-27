@@ -1,9 +1,12 @@
 package nutsnode
 
 import (
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -69,4 +72,38 @@ func Test_createProxy_URLRewriting(t *testing.T) {
 			assert.Equal(t, tt.wantPath, pr.Out.URL.Path)
 		})
 	}
+}
+
+func Test_createProxy_BodyLimit(t *testing.T) {
+	const limit = 1024
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+	}))
+	defer upstream.Close()
+	target, _ := url.Parse(upstream.URL)
+	proxy := createProxy(target, nil)
+	// Stand-in for the body ceiling the HTTP component puts in front of the mux.
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, limit)
+		proxy.ServeHTTP(w, r)
+	})
+	post := func(size int) int {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/foo", strings.NewReader(strings.Repeat("a", size))))
+		return recorder.Code
+	}
+
+	t.Run("body at the limit is proxied", func(t *testing.T) {
+		assert.Equal(t, http.StatusOK, post(limit))
+	})
+	t.Run("body over the limit is a 413, not a 502", func(t *testing.T) {
+		// The MaxBytesError must survive http.Transport and the otelhttp transport around it.
+		assert.Equal(t, http.StatusRequestEntityTooLarge, post(limit+1))
+	})
+	t.Run("an unreachable upstream is still a 502", func(t *testing.T) {
+		unreachable, _ := url.Parse("http://127.0.0.1:1")
+		recorder := httptest.NewRecorder()
+		createProxy(unreachable, nil).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/foo", nil))
+		assert.Equal(t, http.StatusBadGateway, recorder.Code)
+	})
 }

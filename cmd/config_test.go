@@ -20,6 +20,21 @@ func TestLoadConfig_Default(t *testing.T) {
 	// MCSD should have default DirectoryResourceTypes
 	expectedResourceTypes := []string{"Organization", "Endpoint", "Location", "HealthcareService", "PractitionerRole", "Practitioner"}
 	assert.Equal(t, expectedResourceTypes, config.MCSD.DirectoryResourceTypes)
+
+	// HTTP body limits: 1 MiB public, 10 MiB internal
+	assert.Equal(t, int64(1<<20), config.HTTP.PublicInterface.MaxBodySize)
+	assert.Equal(t, int64(10<<20), config.HTTP.InternalInterface.MaxBodySize)
+}
+
+func TestLoadConfig_HTTPMaxBodySizeFromEnvironment(t *testing.T) {
+	t.Setenv("KNPT_HTTP_INTERNAL_MAXBODYSIZE", "20971520")
+	t.Setenv("KNPT_HTTP_PUBLIC_MAXBODYSIZE", "2097152")
+
+	config, err := LoadConfig()
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(20<<20), config.HTTP.InternalInterface.MaxBodySize)
+	assert.Equal(t, int64(2<<20), config.HTTP.PublicInterface.MaxBodySize)
 }
 
 func TestLoadConfig_FromYAML(t *testing.T) {

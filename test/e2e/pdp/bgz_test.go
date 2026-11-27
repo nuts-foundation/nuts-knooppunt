@@ -52,6 +52,7 @@ func Test_BGZAuthorization(t *testing.T) {
 			strings.NewReader(pdpJSON),
 		)
 		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)

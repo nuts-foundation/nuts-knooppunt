@@ -9,6 +9,7 @@ require (
 	github.com/beevik/etree v1.8.1
 	github.com/cloudflare/circl v1.6.5
 	github.com/docker/docker v28.5.2+incompatible
+	github.com/getkin/kin-openapi v0.142.0
 	github.com/google/uuid v1.6.0
 	github.com/gowebpki/jcs v1.0.2
 	github.com/knadh/koanf/parsers/yaml v1.1.1
@@ -120,7 +121,6 @@ require (
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fxamacker/cbor v1.5.1 // indirect
-	github.com/getkin/kin-openapi v0.142.0 // indirect
 	github.com/go-chi/chi/v5 v5.2.3 // indirect
 	github.com/go-co-op/gocron v1.28.3 // indirect
 	github.com/go-errors/errors v1.4.2 // indirect

@@ -1,12 +1,15 @@
 package nutsnode
 
 import (
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component/tracing"
+	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 )
@@ -15,6 +18,8 @@ import (
 // It can do the following URL rewriting (in the following order):
 // - if removeRoutePrefix is set, it is stripped from the request URL path before forwarding
 // - if addRoutePrefix is set, it is prepended to the request URL path before forwarding (this can be useful for /.well-known routes)
+//
+// A request body over the HTTP component's limit gets 413; any other proxy error gets 502.
 func createProxy(targetAddress *url.URL, rewriter ProxyRequestRewriter) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		// Use the tracing transport for automatic client span creation on outgoing requests.
@@ -31,7 +36,18 @@ func createProxy(targetAddress *url.URL, rewriter ProxyRequestRewriter) *httputi
 			// but we need to propagate the trace from the incoming request's context.
 			otel.GetTextMapPropagator().Inject(request.In.Context(), propagation.HeaderCarrier(request.Out.Header))
 		},
+		ErrorHandler: proxyErrorHandler,
 	}
+}
+
+func proxyErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		http.Error(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+		return
+	}
+	slog.ErrorContext(r.Context(), "Proxy error", slog.String("method", r.Method), slog.String("url", logging.RedactURL(r.URL)), logging.Error(err))
+	w.WriteHeader(http.StatusBadGateway)
 }
 
 func RemovePrefixRewriter(prefix string) ProxyRequestRewriter {

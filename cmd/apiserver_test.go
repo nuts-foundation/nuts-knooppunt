@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/nuts-foundation/nuts-knooppunt/component/lrza"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -140,4 +143,126 @@ func TestResponseErrorHandler(t *testing.T) {
 	t.Run("a disabled component is a 404", func(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, handle(errComponentDisabled).Code)
 	})
+}
+
+func TestStrictAPIServer_RequestLimits(t *testing.T) {
+	const bodyLimit = 1024
+	const tenantID = "http://fhir.nl/fhir/NamingSystem/ura|00000020"
+	// The components are left disabled, so a request that passes the Content-Type check and body
+	// decoding ends in a 404 (errComponentDisabled) without contacting anything.
+	serve := func(t *testing.T, method, path, contentType string, body io.Reader) *httptest.ResponseRecorder {
+		t.Helper()
+		mux := http.NewServeMux()
+		(&strictAPIServer{}).RegisterHttpHandlers(http.NewServeMux(), mux)
+		// Stand-in for the body ceiling the HTTP component puts in front of the mux.
+		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, bodyLimit)
+			mux.ServeHTTP(w, r)
+		})
+		request := httptest.NewRequestWithContext(context.Background(), method, path, body)
+		request.Header.Set("X-Tenant-ID", tenantID)
+		if contentType != "" {
+			request.Header.Set("Content-Type", contentType)
+		}
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, request)
+		return recorder
+	}
+	operationOutcome := func(t *testing.T, recorder *httptest.ResponseRecorder) fhir.OperationOutcome {
+		t.Helper()
+		assert.Equal(t, "application/fhir+json", recorder.Header().Get("Content-Type"))
+		var outcome fhir.OperationOutcome
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &outcome))
+		require.Len(t, outcome.Issue, 1)
+		return outcome
+	}
+	const bundle = `{"resourceType":"Bundle","type":"transaction"}`
+
+	t.Run("body over the limit is a 413 OperationOutcome", func(t *testing.T) {
+		body := `{"resourceType":"Bundle","type":"transaction","id":"` + strings.Repeat("a", bodyLimit) + `"}`
+		recorder := serve(t, http.MethodPost, "/lrza/fhir", "application/fhir+json", strings.NewReader(body))
+		assert.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+		outcome := operationOutcome(t, recorder)
+		assert.Equal(t, fhir.IssueTypeTooLong, outcome.Issue[0].Code)
+		assert.Equal(t, "Request body exceeds 1024 bytes", *outcome.Issue[0].Diagnostics)
+	})
+	t.Run("form body over the limit is a 413 OperationOutcome", func(t *testing.T) {
+		body := "code=" + strings.Repeat("a", bodyLimit)
+		recorder := serve(t, http.MethodPost, "/nvi/List/_search", "application/x-www-form-urlencoded", strings.NewReader(body))
+		assert.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+		assert.Equal(t, fhir.IssueTypeTooLong, operationOutcome(t, recorder).Issue[0].Code)
+	})
+	t.Run("malformed JSON is a 400 OperationOutcome", func(t *testing.T) {
+		recorder := serve(t, http.MethodPost, "/lrza/fhir", "application/fhir+json", strings.NewReader(`{"resourceType":`))
+		assert.Equal(t, http.StatusBadRequest, recorder.Code)
+		outcome := operationOutcome(t, recorder)
+		assert.Equal(t, fhir.IssueTypeInvalid, outcome.Issue[0].Code)
+		assert.True(t, strings.HasPrefix(*outcome.Issue[0].Diagnostics, "Invalid request body: "), *outcome.Issue[0].Diagnostics)
+	})
+	t.Run("Content-Type", func(t *testing.T) {
+		testCases := []struct {
+			name        string
+			method      string
+			path        string
+			contentType string
+			body        string
+			wantCode    int
+		}{
+			{"text/plain is rejected", http.MethodPost, "/lrza/fhir", "text/plain", bundle, http.StatusUnsupportedMediaType},
+			{"missing is rejected", http.MethodPost, "/lrza/fhir", "", bundle, http.StatusUnsupportedMediaType},
+			{"unparsable is rejected", http.MethodPost, "/lrza/fhir", "application/fhir+json; charset", bundle, http.StatusUnsupportedMediaType},
+			{"application/json passes", http.MethodPost, "/lrza/fhir", "application/json", bundle, http.StatusNotFound},
+			{"application/fhir+json with charset passes", http.MethodPost, "/lrza/fhir", "application/fhir+json; charset=utf-8", bundle, http.StatusNotFound},
+			{"FHIR JSON on a path parameter route passes", http.MethodPut, "/lrza/fhir/Endpoint/1", "application/fhir+json", `{"resourceType":"Endpoint"}`, http.StatusNotFound},
+			{"text/plain on a path parameter route is rejected", http.MethodPut, "/lrza/fhir/Endpoint/1", "text/plain", `{"resourceType":"Endpoint"}`, http.StatusUnsupportedMediaType},
+			{"JSON on the form search is rejected", http.MethodPost, "/nvi/List/_search", "application/json", `{}`, http.StatusUnsupportedMediaType},
+			{"a form on the form search passes", http.MethodPost, "/nvi/List/_search", "application/x-www-form-urlencoded", "code=x", http.StatusNotFound},
+			{"FHIR JSON on the PDP is rejected", http.MethodPost, "/pdp", "application/fhir+json", `{}`, http.StatusUnsupportedMediaType},
+			{"JSON on the PDP passes", http.MethodPost, "/pdp", "application/json", `{}`, http.StatusNotFound},
+			{"a GET without Content-Type passes", http.MethodGet, "/nvi/List", "", "", http.StatusNotFound},
+		}
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				recorder := serve(t, tc.method, tc.path, tc.contentType, strings.NewReader(tc.body))
+				assert.Equal(t, tc.wantCode, recorder.Code, recorder.Body.String())
+				if tc.wantCode == http.StatusUnsupportedMediaType {
+					outcome := operationOutcome(t, recorder)
+					assert.Equal(t, fhir.IssueTypeNotSupported, outcome.Issue[0].Code)
+					assert.Contains(t, *outcome.Issue[0].Diagnostics, "Content-Type must be one of: ")
+				}
+			})
+		}
+	})
+}
+
+// TestRequestContentTypes_MatchOpenAPISpec fails when requestContentTypes drifts from the request
+// bodies declared in openapi.yaml, e.g. when an operation with a body is added to the spec.
+func TestRequestContentTypes_MatchOpenAPISpec(t *testing.T) {
+	doc, err := openapi3.NewLoader().LoadFromFile("../openapi.yaml")
+	require.NoError(t, err)
+
+	expected := map[string][]string{}
+	for path, pathItem := range doc.Paths.Map() {
+		for method, operation := range pathItem.Operations() {
+			if operation.RequestBody == nil || operation.RequestBody.Value == nil {
+				continue
+			}
+			var contentTypes []string
+			for contentType := range operation.RequestBody.Value.Content {
+				contentTypes = append(contentTypes, contentType)
+			}
+			if slices.Contains(contentTypes, "application/fhir+json") && !slices.Contains(contentTypes, "application/json") {
+				contentTypes = append(contentTypes, "application/json")
+			}
+			slices.Sort(contentTypes)
+			expected[method+" "+path] = contentTypes
+		}
+	}
+	require.NotEmpty(t, expected)
+
+	actual := map[string][]string{}
+	for pattern, contentTypes := range requestContentTypes {
+		actual[pattern] = slices.Sorted(slices.Values(contentTypes))
+	}
+	assert.Equal(t, expected, actual)
 }
