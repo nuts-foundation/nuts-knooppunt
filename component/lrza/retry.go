@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"strconv"
 	"time"
@@ -18,7 +19,8 @@ import (
 const maxRetryAttempts = 5
 
 // retryBaseDelay and retryMaxDelay bound the exponential backoff used for 5xx/network failures and for
-// 429 when the server doesn't advertise a Retry-After duration: 1s, 2s, 4s, 8s, 16s, capped at 30s.
+// 429 when the server doesn't advertise a Retry-After duration: 1s, 2s, 4s, 8s, 16s, capped at 30s, each
+// with jitter (see backoffDelay). retryMaxDelay is also the longest Retry-After a 429 is retried for.
 const (
 	retryBaseDelay = 1 * time.Second
 	retryMaxDelay  = 30 * time.Second
@@ -36,11 +38,15 @@ const (
 // method, but a 5xx or network error may have come after the server applied it. Only idempotent
 // methods (GET, PUT, DELETE) are retried then; a POST (a create or a transaction) is not, so a retry
 // can't register a resource twice.
+//
+// A 429 whose Retry-After asks for a longer wait than maxDelay is not retried, but returned to the
+// caller: waiting that long would hold a sync or an EHR request for longer than we're willing to, and on
+// the registration path the EHR gets the 429 with its Retry-After (see upstreamError) instead.
 type retryTransport struct {
 	next        http.RoundTripper
 	maxAttempts int           // retries on top of the initial attempt
 	baseDelay   time.Duration // exponential backoff starting point
-	maxDelay    time.Duration // exponential backoff cap
+	maxDelay    time.Duration // exponential backoff cap, and the longest Retry-After that is waited for
 }
 
 func wrapRetryTransport(next http.RoundTripper) http.RoundTripper {
@@ -147,6 +153,9 @@ func (t *retryTransport) classifyResponse(attempt int, method string, resp *http
 	switch {
 	case resp.StatusCode == http.StatusTooManyRequests:
 		if d, ok := parseRetryAfter(resp.Header.Get("Retry-After")); ok {
+			if d > t.maxDelay {
+				return false, 0
+			}
 			return true, d
 		}
 		return true, t.backoffDelay(attempt)
@@ -157,12 +166,15 @@ func (t *retryTransport) classifyResponse(attempt int, method string, resp *http
 	}
 }
 
+// backoffDelay returns the wait before retry attempt+1: exponential from baseDelay, capped at maxDelay,
+// with "equal jitter" (a random delay between half and all of it). Without jitter, every Knooppunt that
+// gets an error from the LRZA at the same moment would retry at the same moment too.
 func (t *retryTransport) backoffDelay(attempt int) time.Duration {
 	delay := t.baseDelay << attempt // 1<<attempt doublings; attempt is always small (<= maxAttempts)
 	if delay <= 0 || delay > t.maxDelay {
-		return t.maxDelay
+		delay = t.maxDelay
 	}
-	return delay
+	return delay/2 + rand.N(delay/2+1)
 }
 
 // parseRetryAfter parses the Retry-After header per RFC 9110: either a non-negative number of seconds
