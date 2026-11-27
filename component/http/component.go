@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/nuts-foundation/nuts-knooppunt/component"
 	"github.com/nuts-foundation/nuts-knooppunt/lib/logging"
@@ -32,6 +33,9 @@ type Config struct {
 type InterfaceConfig struct {
 	Address string `koanf:"address"`
 	BaseURL string `koanf:"url"`
+	// MaxBodySize is the largest request body, in bytes, any route on this interface reads.
+	// Routes may apply a tighter limit of their own, but cannot raise it.
+	MaxBodySize int64 `koanf:"maxbodysize"`
 }
 
 func (c InterfaceConfig) URL() *url.URL {
@@ -57,10 +61,12 @@ func (c InterfaceConfig) URL() *url.URL {
 func DefaultConfig() Config {
 	return Config{
 		InternalInterface: InterfaceConfig{
-			Address: ":8081",
+			Address:     ":8081",
+			MaxBodySize: 10 << 20,
 		},
 		PublicInterface: InterfaceConfig{
-			Address: ":8080",
+			Address:     ":8080",
+			MaxBodySize: 1 << 20,
 		},
 	}
 }
@@ -85,6 +91,12 @@ func New(config Config, publicMux *http.ServeMux, internalMux *http.ServeMux) *C
 func (c *Component) Start() error {
 	publicAddr := c.config.PublicInterface.Address
 	internalAddr := c.config.InternalInterface.Address
+	if c.config.PublicInterface.MaxBodySize <= 0 {
+		return fmt.Errorf("http.public.maxbodysize must be greater than 0, got %d", c.config.PublicInterface.MaxBodySize)
+	}
+	if c.config.InternalInterface.MaxBodySize <= 0 {
+		return fmt.Errorf("http.internal.maxbodysize must be greater than 0, got %d", c.config.InternalInterface.MaxBodySize)
+	}
 	slog.Info("Starting HTTP servers", slog.String("public-address", publicAddr), slog.String("internal-address", internalAddr))
 
 	// Wrap muxes with OpenTelemetry instrumentation for automatic span creation
@@ -96,15 +108,16 @@ func (c *Component) Start() error {
 	spanNameFormatter := otelhttp.WithSpanNameFormatter(func(operation string, r *http.Request) string {
 		return fmt.Sprintf("%s %s", r.Method, r.URL.Path)
 	})
-	publicHandler := otelhttp.NewHandler(c.publicMux, "public-api", healthCheckFilter, spanNameFormatter)
-	internalHandler := otelhttp.NewHandler(c.internalMux, "internal-api", healthCheckFilter, spanNameFormatter)
+	// The body limit sits inside otelhttp, so the spans record the resulting 413s.
+	publicHandler := otelhttp.NewHandler(limitBody(c.publicMux, c.config.PublicInterface.MaxBodySize), "public-api", healthCheckFilter, spanNameFormatter)
+	internalHandler := otelhttp.NewHandler(limitBody(c.internalMux, c.config.InternalInterface.MaxBodySize), "internal-api", healthCheckFilter, spanNameFormatter)
 
 	var err error
-	c.publicServer, err = createServer(publicAddr, publicHandler)
+	c.publicServer, err = createServer(publicAddr, publicHandler, publicWriteTimeout)
 	if err != nil {
 		return fmt.Errorf("create public HTTP server: %w", err)
 	}
-	c.internalServer, err = createServer(internalAddr, internalHandler)
+	c.internalServer, err = createServer(internalAddr, internalHandler, internalWriteTimeout)
 	if err != nil {
 		return fmt.Errorf("create internal HTTP server: %w", err)
 	}
@@ -137,10 +150,17 @@ func (c *Component) RegisterHttpHandlers(_ *http.ServeMux, _ *http.ServeMux) {
 	// Nothing to do here
 }
 
-func createServer(addr string, handler http.Handler) (*http.Server, error) {
+// createServer starts an HTTP server on addr with the timeouts and header limit from limits.go.
+// writeTimeout differs per interface, see internalWriteTimeout.
+func createServer(addr string, handler http.Handler, writeTimeout time.Duration) (*http.Server, error) {
 	server := &http.Server{
-		Addr:    addr,
-		Handler: handler,
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    maxHeaderBytes,
 	}
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {

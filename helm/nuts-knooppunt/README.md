@@ -159,6 +159,29 @@ helm upgrade my-nuts-knooppunt . -f values.yaml
 
 **Note**: The database password is auto-generated during installation. You must retrieve it from the secret after the first install and then upgrade the release with the connection string configured.
 
+### Ingress hardening
+
+The Knooppunt bounds every request itself: request bodies are limited to `config.http.public.maxbodysize` (1 MiB by
+default) on the public interface and `config.http.internal.maxbodysize` (10 MiB) on the internal one, and both
+interfaces have fixed header and read timeouts. It does not rate-limit; do that at the ingress.
+
+For ingress-nginx on the public host:
+
+- Set `nginx.ingress.kubernetes.io/proxy-body-size` to at least the public body limit. Its default, `1m`, already
+  matches the Knooppunt's default. If you raise `config.http.public.maxbodysize`, raise this too, or the ingress
+  answers `413` first.
+- Limit the request rate and concurrent connections per client IP, for example:
+
+```yaml
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/limit-rps: "20"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
+```
+
+Tune the numbers to the traffic you expect from other organisations' Nuts nodes, MITZ and browsers.
+
 ## Uninstallation
 
 ```bash

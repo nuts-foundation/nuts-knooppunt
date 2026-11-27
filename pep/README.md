@@ -127,6 +127,7 @@ The PEP sends requests matching the Go `PDPInput` struct:
 
 ```json
 POST /pdp
+Content-Type: application/json
 
 {
   "input": {

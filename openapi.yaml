@@ -10,6 +10,15 @@ info:
     OperationOutcome) but not redefined in full — each schema links to its
     definition in the FHIR R4 spec.
 
+    Request limits: a request body may be at most 10 MiB (configurable with
+    `http.internal.maxbodysize`); a larger body gets `413` with an
+    OperationOutcome (issue code `too-long`). An operation that takes a body
+    accepts only the Content-Types declared for it, plus `application/json`
+    wherever `application/fhir+json` is declared; media type parameters such
+    as `charset` are ignored. A missing or other Content-Type gets `415` with
+    an OperationOutcome (issue code `not-supported`). A body that cannot be
+    decoded gets `400` with an OperationOutcome (issue code `invalid`).
+
     Out of scope here: `/mitz/notify`, the public-interface endpoint MITZ
     calls directly (not integrated against by Knooppunt users) — see
     [mitz-public.openapi.yaml](https://github.com/nuts-foundation/nuts-knooppunt/blob/main/mitz-public.openapi.yaml).

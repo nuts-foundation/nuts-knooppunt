@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/nuts-foundation/nuts-knooppunt/api"
 	"github.com/nuts-foundation/nuts-knooppunt/component"
@@ -220,6 +223,18 @@ func (s *strictAPIServer) RegisterHttpHandlers(_ *http.ServeMux, internalMux *ht
 	// they are safe to log.
 	handler := api.NewStrictHandlerWithOptions(s, nil, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			// A body over the interface's limit (set by the HTTP component) is a 413, not a
+			// decode error.
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				message := fmt.Sprintf("Request body exceeds %d bytes", tooLarge.Limit)
+				slog.InfoContext(r.Context(), "API request body too large", slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.Int64("limit", tooLarge.Limit))
+				_ = api.OperationOutcomeResponse{
+					StatusCode: http.StatusRequestEntityTooLarge,
+					Outcome:    fhirapi.OperationOutcomeForError(&fhirapi.Error{Message: message, IssueType: fhir.IssueTypeTooLong}),
+				}.Write(w)
+				return
+			}
 			// Body decode errors: JSON type errors quote number literals from the body, so only
 			// describe the error.
 			message := "Invalid request body: " + describeDecodeError(err)
@@ -232,7 +247,8 @@ func (s *strictAPIServer) RegisterHttpHandlers(_ *http.ServeMux, internalMux *ht
 		ResponseErrorHandlerFunc: responseErrorHandler,
 	})
 	api.HandlerWithOptions(handler, api.StdHTTPServerOptions{
-		BaseRouter: internalMux,
+		BaseRouter:  internalMux,
+		Middlewares: []api.MiddlewareFunc{requireContentType},
 		// NVI/MITZ/LRZA registration params (the X-Tenant-ID and If-Match headers, path and
 		// search query params) are the only ones declared in openapi.yaml, so this is only ever
 		// hit for those components' routes; respond the same way their own code does for a
@@ -317,4 +333,47 @@ func describeDecodeError(err error) string {
 	default:
 		return "body could not be decoded"
 	}
+}
+
+// requestContentTypes lists, per route pattern as registered by api.HandlerWithOptions, the
+// Content-Types a request body may have. It mirrors each operation's requestBody.content in
+// openapi.yaml, plus application/json wherever application/fhir+json is declared: FHIR servers
+// should accept both. TestRequestContentTypes_MatchOpenAPISpec keeps it in sync with the spec.
+//
+// Operations without a request body are not listed and pass requireContentType unchecked.
+var requestContentTypes = map[string][]string{
+	"POST /lrza/fhir":                    {"application/fhir+json", "application/json"},
+	"POST /lrza/fhir/{resourceType}":     {"application/fhir+json", "application/json"},
+	"PUT /lrza/fhir/{resourceType}/{id}": {"application/fhir+json", "application/json"},
+	"POST /nvi":                          {"application/fhir+json", "application/json"},
+	"POST /nvi/List":                     {"application/fhir+json", "application/json"},
+	"POST /mitz/Subscription":            {"application/fhir+json", "application/json"},
+	"POST /pdp":                          {"application/json"},
+	"POST /pdp/v1/data/knooppunt/authz":  {"application/json"},
+	"POST /nvi/List/_search":             {"application/x-www-form-urlencoded"},
+}
+
+// requireContentType answers 415 with an OperationOutcome when a request to an operation that
+// takes a body has a missing, unparsable or undeclared Content-Type. Media type parameters, such
+// as charset, are ignored. It runs after routing, so r.Pattern identifies the operation.
+func requireContentType(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accepted, ok := requestContentTypes[r.Pattern]
+		if !ok {
+			next.ServeHTTP(w, r)
+			return
+		}
+		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil || !slices.Contains(accepted, mediaType) {
+			// The message lists the accepted types only, quoting nothing from the request.
+			message := "Content-Type must be one of: " + strings.Join(accepted, ", ")
+			slog.InfoContext(r.Context(), "Unsupported API request Content-Type", slog.String("method", r.Method), slog.String("path", r.URL.Path), slog.String("media_type", mediaType))
+			_ = api.OperationOutcomeResponse{
+				StatusCode: http.StatusUnsupportedMediaType,
+				Outcome:    fhirapi.OperationOutcomeForError(&fhirapi.Error{Message: message, IssueType: fhir.IssueTypeNotSupported}),
+			}.Write(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

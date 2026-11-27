@@ -25,6 +25,11 @@ func TestStatusCodeForError(t *testing.T) {
 		assert.Equal(t, http.StatusUnprocessableEntity, StatusCodeForError(err))
 	})
 
+	t.Run("too long issue type maps to 413", func(t *testing.T) {
+		err := &Error{Message: "request body exceeds 1024 bytes", IssueType: fhir.IssueTypeTooLong}
+		assert.Equal(t, http.StatusRequestEntityTooLarge, StatusCodeForError(err))
+	})
+
 	t.Run("unmapped issue type maps to 500", func(t *testing.T) {
 		err := &Error{Message: "not authorized", IssueType: fhir.IssueTypeSecurity}
 		assert.Equal(t, http.StatusInternalServerError, StatusCodeForError(err))
