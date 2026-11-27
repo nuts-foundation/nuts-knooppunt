@@ -7,21 +7,20 @@ name: 'govulncheck'
 # itself is scanned (the root package), not the mocks, the sandbox or the test
 # harness that share its module. A reachable finding fails the job unless
 # .github/govulncheck-accepted.txt accepts it (that file says when an acceptance
-# holds). Only scheduled runs post to Slack; push and pull request runs show up
-# as checks. Errors only: nothing on success.
+# holds). Only scheduled runs post to Slack; pull request runs show up as checks.
+# Errors only: nothing on success.
+#
+# Main is checked on a schedule rather than in every pull request: govulncheck
+# has no baseline (https://github.com/golang/go/issues/61211), so a pull request
+# check would also fail on findings that are on main already.
 on:
   schedule:
     # Weekdays at 08:15 UTC, after the smoke test.
     - cron: '15 8 * * 1-5'
-  push:
-    branches:
-      - main
-  # On pull requests only when the dependencies or the check itself change, to
+  # On pull requests only when the check itself or the accepted list changes, to
   # any base branch, so a pull request stacked on another one is checked too.
   pull_request:
     paths:
-      - go.mod
-      - go.sum
       - .github/workflows/govulncheck.yaml
       - .github/govulncheck-accepted.txt
   workflow_dispatch:
