@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/nuts-foundation/go-did/vc"
@@ -80,14 +81,50 @@ func TestNutsConfigFromEnvReadsEachVariable(t *testing.T) {
 	require.Equal(t, "sentinel-facility-type", cfg.FacilityType)
 }
 
-// sandbox/policy_test.go checks the id_sandbox_organization_context
-// descriptor against its own hand-written credential fixture, not this
-// function's output. Editing the definition and that fixture together — the
-// obvious way to change what the descriptor selects — leaves both packages
-// green while the credential this code actually produces no longer matches
-// it. This test runs the real matcher (vcr/pe) over the real output of
-// organizationContextCredential instead of a fixture.
 func TestOrganizationContextCredentialMatchesBGZPolicy(t *testing.T) {
+	const configuredFacilityType = "outpatient-clinic"
+	fields := resolveBGZDescriptor(t, "id_sandbox_organization_context",
+		organizationContextCredential(nutsConfig{FacilityType: configuredFacilityType}))
+	require.Equal(t, configuredFacilityType, fields["organization_facility_type"])
+}
+
+func TestPractitionerContextCredentialShape(t *testing.T) {
+	// Values unlike the fixture persona's, so a credential that ignored the
+	// session and stated a default would not pass.
+	cred := practitionerContextCredential(authSession{DeziNumber: "900009999", RoleCode: "30.000"})
+
+	require.Equal(t, []string{"https://www.w3.org/2018/credentials/v1"}, cred["@context"])
+	require.Equal(t, []string{"VerifiableCredential", "SandboxPractitionerContextCredential"}, cred["type"])
+	require.Equal(t, map[string]any{"identifier": "900009999", "role": "30.000"}, cred["credentialSubject"])
+}
+
+// The same rule as the organization context: the node fills in both fields.
+func TestPractitionerContextCredentialOmitsIssuerAndSubjectID(t *testing.T) {
+	cred := practitionerContextCredential(testSession())
+
+	require.NotContains(t, cred, "issuer", "the node rejects a caller-supplied issuer")
+	subject, ok := cred["credentialSubject"].(map[string]any)
+	require.True(t, ok)
+	require.NotContains(t, subject, "id", "the node rejects a caller-supplied credentialSubject.id")
+}
+
+// The PDP needs user_id and user_role for the Mitz consent check, and the
+// practitioner context is the only credential on this path that carries them.
+func TestPractitionerContextCredentialMatchesBGZPolicy(t *testing.T) {
+	fields := resolveBGZDescriptor(t, "id_sandbox_practitioner_context",
+		practitionerContextCredential(authSession{DeziNumber: "900009999", RoleCode: "30.000"}))
+	require.Equal(t, "900009999", fields["user_id"])
+	require.Equal(t, "30.000", fields["user_role"])
+}
+
+// resolveBGZDescriptor runs the real matcher (vcr/pe) over a credential this
+// code produces, against the one descriptor of the bgz definition that selects
+// it, and returns the claims it resolves to. sandbox/policy_test.go checks the
+// descriptors against hand-written fixtures instead, so editing a definition
+// and its fixture together would leave both packages green while the
+// credential this code produces does not match.
+func resolveBGZDescriptor(t *testing.T, descriptorID string, cred map[string]any) map[string]interface{} {
+	t.Helper()
 	policyRaw, err := os.ReadFile("../policy/bgz.json.template")
 	require.NoError(t, err)
 
@@ -97,28 +134,25 @@ func TestOrganizationContextCredentialMatchesBGZPolicy(t *testing.T) {
 
 	var descriptor *pe.InputDescriptor
 	for _, d := range definition.InputDescriptors {
-		if d.Id == "id_sandbox_organization_context" {
+		if d.Id == descriptorID {
 			descriptor = d
 		}
 	}
-	require.NotNil(t, descriptor, "id_sandbox_organization_context must still be defined in bgz.json")
+	require.NotNil(t, descriptor, "%s must still be defined in bgz.json", descriptorID)
 	definition.InputDescriptors = []*pe.InputDescriptor{descriptor}
 
-	const configuredFacilityType = "outpatient-clinic"
-	cred := organizationContextCredential(nutsConfig{FacilityType: configuredFacilityType})
 	credRaw, err := json.Marshal(cred)
 	require.NoError(t, err)
 	parsed, err := vc.ParseVerifiableCredential(string(credRaw))
 	require.NoError(t, err)
 
 	matched, descriptors, err := definition.Match([]vc.VerifiableCredential{*parsed})
-	require.NoError(t, err, "the credential organizationContextCredential produces must satisfy the descriptor bgz.json selects it with")
+	require.NoError(t, err, "the credential this code produces must satisfy the descriptor bgz.json selects it with")
 	require.Len(t, matched, 1)
 
-	credentialMap := map[string]vc.VerifiableCredential{descriptors[0].Id: matched[0]}
-	fields, err := definition.ResolveConstraintsFields(credentialMap)
+	fields, err := definition.ResolveConstraintsFields(map[string]vc.VerifiableCredential{descriptors[0].Id: matched[0]})
 	require.NoError(t, err)
-	require.Equal(t, configuredFacilityType, fields["organization_facility_type"])
+	return fields
 }
 
 // fakeNode stands in for the knooppunt-proxied Nuts internal mux. It asserts
@@ -137,18 +171,29 @@ func fakeNode(t *testing.T) *httptest.Server {
 			// populates the form when the type is form-encoded.
 			require.Equal(t, "application/json", r.Header.Get("Content-Type"))
 			var body struct {
-				AuthorizationServer string           `json:"authorization_server"`
-				Scope               string           `json:"scope"`
-				TokenType           string           `json:"token_type"`
-				IdToken             string           `json:"id_token"`
-				Credentials         []map[string]any `json:"credentials"`
+				AuthorizationServer string  `json:"authorization_server"`
+				Scope               string  `json:"scope"`
+				TokenType           string  `json:"token_type"`
+				IdToken             *string `json:"id_token"`
+				Credentials         []struct {
+					Type              []string       `json:"type"`
+					CredentialSubject map[string]any `json:"credentialSubject"`
+				} `json:"credentials"`
 			}
 			require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 			require.Equal(t, fakeNodeAuthorizationServer, body.AuthorizationServer)
 			require.Equal(t, "bgz", body.Scope)
 			require.Equal(t, "Bearer", body.TokenType, "omitting this yields DPoP")
-			require.Equal(t, fixtureAttestation, body.IdToken)
-			require.Len(t, body.Credentials, 1)
+			require.Nil(t, body.IdToken, "the sandbox does not hand the node the Dezi attestation")
+			require.Len(t, body.Credentials, 2, "the organization context and the practitioner context")
+			var practitioner map[string]any
+			for _, credential := range body.Credentials {
+				if slices.Contains(credential.Type, "SandboxPractitionerContextCredential") {
+					practitioner = credential.CredentialSubject
+				}
+			}
+			require.Equal(t, map[string]any{"identifier": "900001234", "role": "01.022"}, practitioner,
+				"the practitioner must be the one the session signed in as")
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "the-token", "token_type": "Bearer"})
 		})
@@ -200,7 +245,7 @@ func testNutsClient(t *testing.T, base string) *nutsClient {
 	return newNutsClient(cfg)
 }
 
-func TestRequestTokenSendsTheAttestationAsIdToken(t *testing.T) {
+func TestRequestTokenStatesThePractitioner(t *testing.T) {
 	node := fakeNode(t)
 	session, err := sessionFromAttestation(fixtureAttestation)
 	require.NoError(t, err)
@@ -247,7 +292,7 @@ func TestNutsRejectsAMalformedBaseURL(t *testing.T) {
 	cfg.InternalBaseURL = "http://\x7f-control-char"
 	client := newNutsClient(cfg)
 
-	_, err := client.requestToken(context.Background(), authSession{Attestation: fixtureAttestation}, fakeNodeAuthorizationServer)
+	_, err := client.requestToken(context.Background(), testSession(), fakeNodeAuthorizationServer)
 	require.ErrorContains(t, err, "request service access token")
 
 	_, err = client.introspect(context.Background(), "the-token")
@@ -306,11 +351,15 @@ func TestRequestTokenSendsTheConfiguredValues(t *testing.T) {
 
 	credentials, ok := recorded.body["credentials"].([]any)
 	require.True(t, ok)
-	require.Len(t, credentials, 1)
-	credential, ok := credentials[0].(map[string]any)
+	require.Len(t, credentials, 2)
+	organization, ok := credentials[0].(map[string]any)
 	require.True(t, ok)
-	require.Equal(t, map[string]any{"facilityType": "sentinel-facility-type"}, credential["credentialSubject"],
+	require.Equal(t, map[string]any{"facilityType": "sentinel-facility-type"}, organization["credentialSubject"],
 		"the credential must be built from this client's config, not from a default one")
+	practitioner, ok := credentials[1].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, map[string]any{"identifier": session.DeziNumber, "role": session.RoleCode}, practitioner["credentialSubject"],
+		"the practitioner must come from the session the request is made for")
 }
 
 // The node answers 412 when the wallet lacks a credential the authorizer

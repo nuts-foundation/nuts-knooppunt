@@ -46,8 +46,8 @@ func nutsConfigFromEnv() nutsConfig {
 }
 
 // organizationContextCredential carries the one claim nothing else on this
-// path supplies. The UZI certificate's SAN holds the URA and the Dezi
-// attestation holds the practitioner, but neither knows a facility type.
+// path supplies. The UZI certificate's SAN holds the URA and the practitioner
+// context holds the practitioner, but neither knows a facility type.
 //
 // It deliberately sets no issuer and no credentialSubject.id: the token
 // endpoint rejects a request credential carrying either, and the node's client
@@ -64,6 +64,22 @@ func organizationContextCredential(cfg nutsConfig) map[string]any {
 	}
 }
 
+// practitionerContextCredential states who is acting: the Dezi number and role
+// code from the practitioner's Dezi sign-in, which the PDP needs for the Mitz
+// consent check (component/pdp/mitz.go). Like the organization context, it sets
+// no issuer and no credentialSubject.id, for the same reason.
+//
+// This is a caller assertion too: the requesting organization vouches for its
+// practitioner, and nothing checks the claim against Dezi: the sandbox does not
+// hand the node the attestation.
+func practitionerContextCredential(session authSession) map[string]any {
+	return map[string]any{
+		"@context":          []string{"https://www.w3.org/2018/credentials/v1"},
+		"type":              []string{"VerifiableCredential", "SandboxPractitionerContextCredential"},
+		"credentialSubject": map[string]any{"identifier": session.DeziNumber, "role": session.RoleCode},
+	}
+}
+
 type nutsClient struct {
 	cfg  nutsConfig
 	http *http.Client
@@ -74,9 +90,9 @@ func newNutsClient(cfg nutsConfig) *nutsClient {
 }
 
 // requestToken exchanges the practitioner's session for a service access token
-// at the given authorization server. The attestation goes in as id_token, from
-// which the node builds the Dezi credential itself; the practitioner and role are
-// therefore not restated here.
+// at the given authorization server. The practitioner goes in as a request
+// credential next to the organization context, and the node presents both
+// alongside the X509 credential from its wallet.
 //
 // The server is an address the directory published. The wallet the request is
 // made from is a separate choice, the subject in the path below, which is what
@@ -88,9 +104,11 @@ func (c *nutsClient) requestToken(ctx context.Context, session authSession, auth
 		"scope":                c.cfg.Scope,
 		// Bearer is explicit: the node defaults to DPoP, which would need a
 		// possession proof bound to method, URL and token.
-		"token_type":  "Bearer",
-		"id_token":    session.Attestation,
-		"credentials": []map[string]any{organizationContextCredential(c.cfg)},
+		"token_type": "Bearer",
+		"credentials": []map[string]any{
+			organizationContextCredential(c.cfg),
+			practitionerContextCredential(session),
+		},
 	})
 	if err != nil {
 		return "", fmt.Errorf("request service access token: %w", err)

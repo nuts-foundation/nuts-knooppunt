@@ -13,9 +13,8 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
-// Signer mints Dezi v0.7 "verklaring" attestations and publishes its public key
-// as a JWK Set. The claim and header shape follows the Dezi v0.7 subject that
-// the Nuts node reads in vcr/credential/dezi.go.
+// Signer issues Dezi v0.7 "verklaring" attestations and publishes its public key
+// as the JWK Set their jku header names.
 type Signer struct {
 	key    *rsa.PrivateKey
 	keyID  string
@@ -27,9 +26,7 @@ func NewSigner(key *rsa.PrivateKey, keyID, issuer, jku string) *Signer {
 	return &Signer{key: key, keyID: keyID, issuer: issuer, jku: jku}
 }
 
-// Attestation returns a signed v0.7 verklaring JWT. iss, jti, nbf and exp are
-// mandatory: the Nuts node maps them onto the credential issuer, id,
-// issuanceDate and expirationDate, and rejects the credential if they disagree.
+// Attestation returns a signed v0.7 verklaring JWT, valid from now for validity.
 func (s *Signer) Attestation(p Practitioner, now time.Time, validity time.Duration) (string, error) {
 	claims := map[string]any{
 		jwt.JwtIDKey:      uuid.NewString(),

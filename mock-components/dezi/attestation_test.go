@@ -38,7 +38,7 @@ func TestAttestationCarriesRequiredClaims(t *testing.T) {
 	token, err := jwt.Parse([]byte(serialized), jwt.WithVerify(false), jwt.WithValidate(false))
 	require.NoError(t, err)
 
-	require.NotEmpty(t, token.JwtID(), "jti becomes the credential id")
+	require.NotEmpty(t, token.JwtID(), "every attestation carries an id of its own")
 	require.Equal(t, "https://abonnee.dezi.nl", token.Issuer())
 	require.Equal(t, now.Unix(), token.NotBefore().Unix())
 	require.Equal(t, now.Add(time.Hour).Unix(), token.Expiration().Unix())
@@ -70,6 +70,21 @@ func TestAttestationHeaderHasKidAndHTTPSJKU(t *testing.T) {
 	headers := msg.Signatures()[0].ProtectedHeaders()
 	require.Equal(t, "sandbox-dezi-1", headers.KeyID(), "jwx requires kid when jku is used")
 	require.Equal(t, testJKU, headers.JWKSetURL())
+}
+
+// What the README promises for the TLS listener: a verifier that resolves the
+// jku gets this set and checks the signature with the key the kid names.
+func TestAttestationVerifiesAgainstTheJWKSet(t *testing.T) {
+	signer := testSigner(t)
+	serialized, err := signer.Attestation(DrElAmrani, time.Now(), time.Hour)
+	require.NoError(t, err)
+	raw, err := signer.JWKSet()
+	require.NoError(t, err)
+	set, err := jwk.Parse(raw)
+	require.NoError(t, err)
+
+	_, err = jws.Verify([]byte(serialized), jws.WithKeySet(set))
+	require.NoError(t, err)
 }
 
 func TestJWKSetContainsTheSigningKey(t *testing.T) {

@@ -62,6 +62,10 @@ func TestAcceptance_FullChain(t *testing.T) {
 			require.Equal(t, chain.patient.BSN, question.PatientID)
 			require.Equal(t, "00000010", question.RequesterURA)
 			require.Equal(t, chain.SunflowerURA, question.DataHolderURA)
+			// The practitioner the sandbox stated in its token request, as it
+			// reached the closed question.
+			require.Contains(t, question.Request, dezimock.DrElAmrani.DeziNumber)
+			require.Contains(t, question.Request, dezimock.DrElAmrani.RoleCode)
 		}
 		checks := 0
 		for _, event := range sandbox.runEvents(t) {
@@ -458,9 +462,8 @@ func fullChainSandbox(t *testing.T, cfg Config, dezi harness.MockDezi) (*httptes
 // runs discovery against the real NVI and directory; confirming it is where the
 // sandbox asks the Nuts node for a token.
 //
-// The sandbox signs in through the mock Dezi the harness runs in process, so the
-// attestation it sends as id_token carries a signature and a jku the node can
-// resolve.
+// The sandbox signs in through the mock Dezi the harness runs in process, and
+// states the practitioner from that sign-in in the token request.
 func (s sandbox) retrieve(t *testing.T) (int, string) {
 	t.Helper()
 	confirmation := sourceConfirmation(t, s.client, s.server, s.key, s.ura)

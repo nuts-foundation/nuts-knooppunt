@@ -8,9 +8,11 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -25,18 +27,18 @@ import (
 )
 
 // The definition lives here as a template rather than in config/policy because
-// it has to pin the demo CA's did:x509 fingerprint, and that CA is regenerated
-// on every rotation. A committed file cannot carry a value that changes, and a
-// committed file without the pin is worse than none: the did:x509 resolver
-// builds its trust store out of the credential's own chain
-// (nuts-node vdr/didx509/resolver.go), so a definition that does not constrain
-// $.issuer accepts a chain the requester minted itself. config/policy is
-// mounted into a knooppunt that is not profile-gated, so leaving one there
-// would arm that on every plain `docker compose up`.
+// it has to pin a CA's did:x509 fingerprint, and a definition without the pin is
+// worse than none: the did:x509 resolver builds its trust store out of the
+// credential's own chain (nuts-node vdr/didx509/resolver.go), so a definition
+// that does not constrain $.issuer accepts a chain the requester generated
+// itself. config/policy is mounted into a knooppunt that is not profile-gated,
+// so leaving one there would arm that on every plain `docker compose up`.
 //
-// sandbox/generate-demo-certs.sh renders sandbox/.certs/policy/bgz.json from
-// this file with the real fingerprint substituted in, and the sandbox overlay
-// points NUTS_POLICY_DIRECTORY at a mount of that directory. The .template
+// The deployments use this file rendered for the Fake UZI CA (test/e2e/pep/certs),
+// the fixed CA the seed issues De Plataan's X509Credential from:
+// sandbox/policy/bgz.json, which the sandbox overlay mounts, and
+// infra/ovhcloud-test/policy/bgz.json for the hosted environment. The e2e
+// harness renders its own (renderBGZPolicy in test/e2e/harness). The .template
 // suffix is what keeps this file inert: loadFromDirectory loads only names
 // ending in .json (nuts-node policy/local.go), so even dropped into a policy
 // directory it is skipped.
@@ -75,25 +77,9 @@ func TestBGZPolicyIsValid(t *testing.T) {
 	}
 	require.Equal(t, map[string]bool{
 		"id_uzicert_uracredential":        true,
-		"id_dezicredential":               true,
+		"id_sandbox_practitioner_context": true,
 		"id_sandbox_organization_context": true,
 	}, ids, "all three credentials must be selected by one definition")
-}
-
-// The derived Dezi credential is an LDP VC whose proof type is DeziIDJWT07 for
-// the mock's v0.7 attestation. Presentation matching checks the format, so a
-// definition that only allows JsonWebSignature2020 silently excludes it.
-func TestBGZPolicyAcceptsTheDeziProofType(t *testing.T) {
-	raw, err := os.ReadFile(bgzPolicyTemplate)
-	require.NoError(t, err)
-	var mapping map[string]pe.WalletOwnerMapping
-	require.NoError(t, json.Unmarshal(raw, &mapping))
-
-	format := mapping["bgz"]["organization"].Format
-	require.NotNil(t, format, "the definition must pin its accepted formats")
-	proofTypes := (*format)["ldp_vc"]["proof_type"]
-	require.Contains(t, proofTypes, "DeziIDJWT07")
-	require.Contains(t, (*format)["jwt_vc"]["alg"], "PS256", "the X509 credential is a JWT VC")
 }
 
 // Field ids become introspection claim names verbatim. The PDP reads user_id,
@@ -134,7 +120,7 @@ func TestBGZPolicyMatchesRealCredentials(t *testing.T) {
 
 	fields := resolveClaims(t, definition,
 		x509Credential(t, didX509(fingerprint), "did:web:example.com:org", "Test Care Org", plataanOtherName),
-		deziCredential(t, "00000010", "12345", "nurse"),
+		practitionerCredential(t, "12345", "nurse"),
 		contextCredential(t, "hospital"),
 	)
 
@@ -142,75 +128,10 @@ func TestBGZPolicyMatchesRealCredentials(t *testing.T) {
 		"organization_id":            "did:web:example.com:org",
 		"organization_name":          "Test Care Org",
 		"organization_ura":           "00000010",
-		"organization_ura_dezi":      "00000010",
 		"user_id":                    "12345",
 		"user_role":                  "nurse",
 		"organization_facility_type": "hospital",
 	}, fields, "organization_ura must be extracted from the SAN's URA capture group")
-}
-
-// The Dezi attestation carries its own organization URA: the node's conversion
-// puts the required abonnee_nummer claim in credentialSubject.identifier
-// (nuts-node vcr/credential/dezi.go). Dropping it leaves the token asserting
-// one organization, taken entirely from the X509 credential, while the
-// practitioner was authenticated for another. The node's own Dezi end-to-end
-// policy keeps this as organization_ura_dezi, and that name is what this
-// follows (nuts-node e2e-tests/oauth-flow/dezi_idtoken/accesspolicy.json).
-//
-// The claim lands in the introspection response's unmapped properties
-// (component/pdp/shared.go keeps everything it does not name in OtherProps and
-// marshals it back), so a PDP can read it without a change here.
-func TestBGZPolicyCarriesTheDeziOrganization(t *testing.T) {
-	fingerprint := mintCAFingerprint(t)
-	definition := bgzDefinition(t, fingerprint)
-
-	fields := resolveClaims(t, definition,
-		x509Credential(t, didX509(fingerprint), "did:web:example.com:org", "Test Care Org", plataanOtherName),
-		deziCredential(t, "87654321", "12345", "nurse"),
-		contextCredential(t, "hospital"),
-	)
-
-	require.Equal(t, "87654321", fields["organization_ura_dezi"],
-		"the organization the practitioner was authenticated for must survive into the token")
-}
-
-// The limitation, asserted rather than described, because describing it in a
-// comment alone invites the next reader to assume the descriptor above rejects
-// what it merely reports.
-//
-// A presentation definition cannot compare two fields against each other. Its
-// filters are JSON Schema fragments evaluated against one JSON path in one
-// credential (nuts-node vcr/pe/presentation_definition.go, matchField), so
-// there is no expressible constraint of the form "$.credentialSubject.identifier
-// on the Dezi credential must equal the URA in the X509 credential's SAN".
-//
-// So this is what carrying organization_ura_dezi buys: a token in which the
-// mismatch is visible. It does not buy rejection. A practitioner attestation
-// for organization B combined with the Plataan wallet credential still yields a
-// token, and it is the policy decision point that has to compare the two and
-// refuse. That comparison does not exist yet; it belongs to the PDP epic. Until
-// it does, any consumer treating organization_ura as "the organization this
-// practitioner acts for" is trusting something nothing has checked.
-//
-// If this test ever starts failing because Match returned an error, the
-// comparison has been implemented somewhere and this comment is what needs
-// rewriting.
-func TestBGZPolicyCannotRejectAnOrganizationMismatch(t *testing.T) {
-	fingerprint := mintCAFingerprint(t)
-	definition := bgzDefinition(t, fingerprint)
-
-	fields := resolveClaims(t, definition,
-		x509Credential(t, didX509(fingerprint), "did:web:example.com:org", "Test Care Org", plataanOtherName),
-		deziCredential(t, "87654321", "12345", "nurse"),
-		contextCredential(t, "hospital"),
-	)
-
-	require.NotEqual(t, fields["organization_ura"], fields["organization_ura_dezi"],
-		"the fixture is only meaningful while the two organizations differ")
-	require.Equal(t, "00000010", fields["organization_ura"],
-		"the X509 credential's URA is emitted unchanged, mismatch or not")
-	require.Equal(t, "87654321", fields["organization_ura_dezi"],
-		"and so is the Dezi credential's, which is what makes the mismatch visible downstream")
 }
 
 // The property that would have caught the defect this file was moved for.
@@ -238,14 +159,14 @@ func TestBGZPolicyPinsTheCAItWasRenderedFor(t *testing.T) {
 	const attackerURA = "2.16.528.1.1007.99.2110-1-0-S-99999999-00.000-0"
 	attackersCredentials := []vc.VerifiableCredential{
 		x509Credential(t, didX509(attackerCA), "did:web:attacker.example:org", "Ziekenhuis De Plataan", attackerURA),
-		deziCredential(t, "99999999", "12345", "nurse"),
+		practitionerCredential(t, "12345", "nurse"),
 		contextCredential(t, "hospital"),
 	}
 
 	t.Run("a credential issued under the pinned CA is accepted", func(t *testing.T) {
 		fields := resolveClaims(t, bgzDefinition(t, demoCA),
 			x509Credential(t, didX509(demoCA), "did:web:example.com:org", "Ziekenhuis De Plataan", plataanOtherName),
-			deziCredential(t, "00000010", "12345", "nurse"),
+			practitionerCredential(t, "12345", "nurse"),
 			contextCredential(t, "hospital"),
 		)
 		require.Equal(t, "00000010", fields["organization_ura"])
@@ -275,7 +196,7 @@ func TestBGZPolicyTemplateAsCommittedAcceptsNothing(t *testing.T) {
 
 	_, _, err := bgzDefinition(t, caFingerprintPlaceholder).Match([]vc.VerifiableCredential{
 		x509Credential(t, didX509(demoCA), "did:web:example.com:org", "Ziekenhuis De Plataan", plataanOtherName),
-		deziCredential(t, "00000010", "12345", "nurse"),
+		practitionerCredential(t, "12345", "nurse"),
 		contextCredential(t, "hospital"),
 	})
 
@@ -331,14 +252,38 @@ func TestBGZPolicyIssuerFieldIsUnnamedAndGroupFree(t *testing.T) {
 		"no capture group: see this test's comment for why organization_id needs the opposite")
 }
 
-// caFingerprintPlaceholder is the token generate-demo-certs.sh substitutes for
-// the real fingerprint when it renders the live definition. Named once here so
-// a test cannot drift from the script by editing only one of them.
+// The committed renderings are read by no code: compose mounts one and the
+// hosted environment deploys the other. An edit to the template that misses
+// either of them leaves that deployment answering every token request with a
+// 412 while every other test, the harness included, renders the template itself
+// and passes.
+func TestBGZPolicyRenderingsMatchTheTemplate(t *testing.T) {
+	raw, err := os.ReadFile(bgzPolicyTemplate)
+	require.NoError(t, err)
+	caPEM, err := os.ReadFile(filepath.Join("..", "test", "e2e", "pep", "certs", "ca.pem"))
+	require.NoError(t, err)
+	block, _ := pem.Decode(caPEM)
+	require.NotNil(t, block, "the Fake UZI CA certificate is not PEM encoded")
+	rendered := strings.ReplaceAll(string(raw), caFingerprintPlaceholder, caFingerprintOf(block.Bytes))
+
+	for _, path := range []string{
+		filepath.Join("policy", "bgz.json"),
+		filepath.Join("..", "infra", "ovhcloud-test", "policy", "bgz.json"),
+	} {
+		committed, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, rendered, string(committed), "%s is not the template rendered for the Fake UZI CA", path)
+	}
+}
+
+// caFingerprintPlaceholder is the token in the template where a rendering puts
+// the real fingerprint. test/e2e/harness spells it separately
+// (bgzFingerprintPlaceholder).
 const caFingerprintPlaceholder = "__GF_SANDBOX_DEMO_CA_FINGERPRINT__"
 
-// bgzDefinition renders the template the way the generator does and returns the
-// organization definition out of it. Passing caFingerprintPlaceholder yields
-// the file exactly as committed.
+// bgzDefinition renders the template the way the committed renderings were made
+// and returns the organization definition out of it. Passing
+// caFingerprintPlaceholder yields the template exactly as committed.
 func bgzDefinition(t *testing.T, fingerprint string) pe.PresentationDefinition {
 	t.Helper()
 	raw, err := os.ReadFile(bgzPolicyTemplate)
@@ -421,23 +366,17 @@ var credentialSigningKey = sync.OnceValue(func() *rsa.PrivateKey {
 	return key
 })
 
-// deziCredential builds the ldp_vc the node derives from a v0.7 attestation:
-// credentialSubject.identifier carries the organization's URA (abonnee_nummer)
-// and employee.identifier the practitioner's, with a DeziIDJWT07 proof.
-func deziCredential(t *testing.T, organizationURA, userID, role string) vc.VerifiableCredential {
+// practitionerCredential builds the caller's self-asserted practitioner
+// context, shaped like contextCredential below and admitted the same way.
+func practitionerCredential(t *testing.T, userID, role string) vc.VerifiableCredential {
 	t.Helper()
 	cred, err := vc.ParseVerifiableCredential(fmt.Sprintf(`{
 		"@context": ["https://www.w3.org/2018/credentials/v1"],
-		"type": ["VerifiableCredential", "DeziUserCredential"],
-		"issuer": "did:web:example.com:dezi",
+		"type": ["VerifiableCredential", "SandboxPractitionerContextCredential"],
+		"issuer": "did:web:example.com:org",
 		"issuanceDate": "2024-01-01T00:00:00Z",
-		"credentialSubject": {
-			"id": "did:web:example.com:practitioner",
-			"identifier": %q,
-			"employee": {"identifier": %q, "role": %q}
-		},
-		"proof": {"type": "DeziIDJWT07", "proofPurpose": "assertionMethod", "verificationMethod": "did:web:example.com:dezi#key-1", "created": "2024-01-01T00:00:00Z"}
-	}`, organizationURA, userID, role))
+		"credentialSubject": {"id": "did:web:example.com:org", "identifier": %q, "role": %q}
+	}`, userID, role))
 	require.NoError(t, err)
 	return *cred
 }

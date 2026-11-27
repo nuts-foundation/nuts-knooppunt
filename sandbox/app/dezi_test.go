@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -82,8 +84,32 @@ func TestExchangeBuildsASessionFromTheAttestation(t *testing.T) {
 	// this couples rol_naam ingestion to what the top bar shows. Without it the
 	// two halves are tested separately and a dropped claim renders as a blank.
 	require.Equal(t, "Klinisch geriater", session.RoleName)
-	require.Equal(t, fixtureAttestation, session.Attestation, "the raw attestation is kept for E4")
 	require.False(t, session.ExpiresAt.IsZero())
+}
+
+// The practitioner context states the Dezi number and the role, and the
+// source's Mitz check refuses a request without either, so a sign-in that
+// lacks one is refused here rather than as a denial at the source.
+func TestSessionFromAttestationRequiresTheClaimsItStates(t *testing.T) {
+	for _, claim := range []string{"dezi_nummer", "abonnee_nummer", "rol_code"} {
+		t.Run(claim, func(t *testing.T) {
+			_, err := sessionFromAttestation(attestationWithout(t, claim))
+			require.ErrorContains(t, err, claim)
+		})
+	}
+}
+
+func attestationWithout(t *testing.T, claim string) string {
+	t.Helper()
+	parts := strings.Split(fixtureAttestation, ".")
+	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+	require.NoError(t, err)
+	var claims map[string]any
+	require.NoError(t, json.Unmarshal(raw, &claims))
+	delete(claims, claim)
+	payload, err := json.Marshal(claims)
+	require.NoError(t, err)
+	return parts[0] + "." + base64.RawURLEncoding.EncodeToString(payload) + "." + parts[2]
 }
 
 func TestExchangeFailsOnBadCode(t *testing.T) {
