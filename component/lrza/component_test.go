@@ -294,7 +294,7 @@ func TestUpdate_Bounded(t *testing.T) {
 	t.Run("a sync that stops making progress ends after pageTimeout and frees the lock", func(t *testing.T) {
 		setDuration(t, &pageTimeout, 100*time.Millisecond)
 		source := newHangingServer(t)
-		c, err := New(Config{LRZABaseUrl: source.URL, QueryBaseUrl: "http://query.example/fhir"})
+		c, err := New(Config{LRZABaseUrl: source.URL, QueryBaseUrl: newFakeLRZA(t).server.URL})
 		require.NoError(t, err)
 
 		_, err = c.update(context.Background())
@@ -322,12 +322,7 @@ func TestUpdate_Bounded(t *testing.T) {
 			writeJSON(w, http.StatusOK, bundle)
 		}))
 		t.Cleanup(source.Close)
-		query := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusOK, map[string]any{"resourceType": "Bundle", "type": "transaction-response",
-				"entry": []any{map[string]any{"response": map[string]any{"status": "201 Created"}}}})
-		}))
-		t.Cleanup(query.Close)
-		c, err := New(Config{LRZABaseUrl: source.URL, QueryBaseUrl: query.URL})
+		c, err := New(Config{LRZABaseUrl: source.URL, QueryBaseUrl: newFakeLRZA(t).server.URL})
 		require.NoError(t, err)
 
 		start := time.Now()
@@ -341,7 +336,7 @@ func TestUpdate_Bounded(t *testing.T) {
 	t.Run("a sync that never ends stops after syncTimeout and frees the lock", func(t *testing.T) {
 		setDuration(t, &syncTimeout, 100*time.Millisecond)
 		source := newHangingServer(t)
-		c, err := New(Config{LRZABaseUrl: source.URL, QueryBaseUrl: "http://query.example/fhir"})
+		c, err := New(Config{LRZABaseUrl: source.URL, QueryBaseUrl: newFakeLRZA(t).server.URL})
 		require.NoError(t, err)
 
 		_, err = c.update(context.Background())
